@@ -688,9 +688,9 @@ class ContinuousEASMonitor:
                         last_scan_time = current_time  # Still update to avoid rapid retry
                 
                 # Brief sleep only if we didn't get audio samples (prevents tight loop when audio unavailable)
-                # Use 20ms sleep to balance CPU usage with responsiveness
+                # Combined with 100ms timeout in get_audio_chunk(), creates ~120ms cycle (8.3 Hz) when idle
                 if samples is None:
-                    time.sleep(0.02)  # 20ms sleep when no audio available (50 Hz polling)
+                    time.sleep(0.02)  # 20ms sleep when no audio available
 
             except Exception as e:
                 logger.error(f"Unexpected error in EAS monitor loop: {e}", exc_info=True)
