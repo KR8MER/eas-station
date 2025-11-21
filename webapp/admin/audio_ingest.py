@@ -1285,9 +1285,18 @@ def api_update_audio_source(source_name: str):
 
         if adapter is None:
             if db_config:
+                # Provide more helpful error with recovery options
                 return jsonify({
                     'error': 'Source exists in database but could not be loaded',
-                    'hint': 'Check audio ingest logs for initialization errors',
+                    'hint': 'The audio source failed to initialize. Check logs for details. You can try restarting the source or deleting and recreating it.',
+                    'source_name': source_name,
+                    'recoverable': True,
+                    'recovery_actions': [
+                        'Check audio ingest logs for errors',
+                        'Verify device/stream is accessible',
+                        'Try restarting the application',
+                        'Delete and recreate the source if problem persists'
+                    ]
                 }), 503
             return jsonify({
                 'error': f'Audio source "{source_name}" not found',
@@ -1474,14 +1483,21 @@ def api_stop_audio_source(source_name: str):
 
 @audio_ingest_bp.route('/api/audio/metrics', methods=['GET'])
 def api_get_audio_metrics():
-    """Get real-time metrics for all audio sources."""
+    """Get real-time metrics for all audio sources.
+    
+    Returns metrics for all configured sources, including default/zero values
+    for sources that haven't started or don't have active metrics yet.
+    This ensures VU meters always display, even for inactive sources.
+    """
     try:
         # Get in-memory metrics from controller
         controller = _get_audio_controller()
         source_metrics = []
 
         for source_name, adapter in controller._sources.items():
+            # Always include metrics for every source, even if not running
             if adapter.metrics:
+                # Source has active metrics - use real data
                 source_metrics.append({
                     'source_id': source_name,
                     'source_name': adapter.config.name,
@@ -1494,6 +1510,45 @@ def api_get_audio_metrics():
                     'frames_captured': adapter.metrics.frames_captured,
                     'silence_detected': _sanitize_bool(adapter.metrics.silence_detected),
                     'buffer_utilization': _sanitize_float(adapter.metrics.buffer_utilization),
+                })
+            else:
+                # Source exists but has no metrics - return default values
+                # This ensures VU meters display correctly even for stopped/inactive sources
+                source_metrics.append({
+                    'source_id': source_name,
+                    'source_name': adapter.config.name,
+                    'source_type': adapter.config.source_type.value,
+                    'timestamp': time.time(),
+                    'peak_level_db': -120.0,  # Silence floor
+                    'rms_level_db': -120.0,   # Silence floor
+                    'sample_rate': adapter.config.sample_rate,
+                    'channels': adapter.config.channels,
+                    'frames_captured': 0,
+                    'silence_detected': True,
+                    'buffer_utilization': 0.0,
+                })
+
+        # Also check for database configs that couldn't load into memory
+        # These may have failed to initialize but still exist in DB
+        db_configs = AudioSourceConfigDB.query.all()
+        loaded_source_names = set(controller._sources.keys())
+        
+        for db_config in db_configs:
+            if db_config.name not in loaded_source_names:
+                # Source exists in DB but failed to load - include with error state
+                logger.warning(f'Audio source {db_config.name} exists in database but is not loaded in memory')
+                source_metrics.append({
+                    'source_id': db_config.name,
+                    'source_name': db_config.name,
+                    'source_type': db_config.source_type,
+                    'timestamp': time.time(),
+                    'peak_level_db': -120.0,
+                    'rms_level_db': -120.0,
+                    'sample_rate': (db_config.config_params or {}).get('sample_rate', 44100),
+                    'channels': (db_config.config_params or {}).get('channels', 1),
+                    'frames_captured': 0,
+                    'silence_detected': True,
+                    'buffer_utilization': 0.0,
                 })
 
         # Also get recent database metrics
@@ -2057,10 +2112,16 @@ def api_stream_audio(source_name: str):
 
         if adapter is None:
             if db_config:
-                return jsonify({'error': 'Source exists in database but could not be loaded'}), 503
+                return jsonify({
+                    'error': 'Source exists in database but could not be loaded',
+                    'hint': 'The audio source failed to initialize. Try starting it first using POST /api/audio/sources/{source_name}/start',
+                    'source_name': source_name
+                }), 503
             return jsonify({'error': 'Source not found'}), 404
 
         if adapter.status != AudioSourceStatus.RUNNING:
+            # Try to recover by starting the source
+            logger.info(f'Attempting to auto-start audio source {source_name} for live stream request')
             recovered = controller.ensure_source_running(
                 source_name,
                 reason="live stream request",
@@ -2068,13 +2129,19 @@ def api_stream_audio(source_name: str):
             )
             if recovered:
                 adapter = controller._sources.get(source_name)
+                logger.info(f'Successfully auto-started audio source {source_name}')
             else:
                 detail = (
                     adapter.error_message
                     or getattr(adapter, '_last_error', None)
-                    or 'Source not running. Please start the source first.'
+                    or 'Source not running. Please start the source first using POST /api/audio/sources/{source_name}/start'
                 )
-                return jsonify({'error': detail}), 503
+                logger.warning(f'Failed to auto-start audio source {source_name}: {detail}')
+                return jsonify({
+                    'error': detail,
+                    'hint': 'Try manually starting the source first',
+                    'source_name': source_name
+                }), 503
 
         return Response(
             stream_with_context(generate_wav_stream(adapter)),
