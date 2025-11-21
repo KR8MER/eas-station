@@ -1665,7 +1665,11 @@ class CAPPoller:
             return True
 
     def process_intersections(self, alert: CAPAlert):
-        """Calculate and store intersections with proper transaction handling."""
+        """Calculate and store intersections with proper transaction handling.
+        
+        Optimized to use a single bulk query instead of N+1 queries (one per boundary).
+        This dramatically reduces CPU usage when processing alerts with many boundaries.
+        """
         try:
             if not alert.geom:
                 return
@@ -1673,32 +1677,44 @@ class CAPPoller:
             # Delete old intersections
             self.db_session.query(Intersection).filter_by(cap_alert_id=alert.id).delete()
 
-            # Query all boundaries with valid geometries
-            boundaries = self.db_session.query(Boundary).filter(Boundary.geom.isnot(None)).all()
+            # OPTIMIZED: Calculate ALL intersections in a single query instead of N queries
+            # This uses a SQL subquery to compute ST_Intersects and ST_Area for all boundaries at once
+            # OLD: N+1 queries (1 to fetch boundaries + N queries for intersections)
+            # NEW: 1 query that calculates all intersections
+            intersection_query = text("""
+                SELECT 
+                    b.id as boundary_id,
+                    ST_Intersects(:alert_geom, b.geom) as intersects,
+                    ST_Area(ST_Intersection(:alert_geom, b.geom)) as intersection_area
+                FROM boundaries b
+                WHERE b.geom IS NOT NULL
+                  AND ST_Intersects(:alert_geom, b.geom)
+            """)
+            
+            results = self.db_session.execute(
+                intersection_query,
+                {'alert_geom': alert.geom}
+            ).fetchall()
 
-            # Build list of new intersections (don't commit until all are calculated)
+            # Build list of new intersections from bulk query results
             new_intersections = []
             with_area = 0
 
-            for boundary in boundaries:
+            for row in results:
                 try:
-                    res = self.db_session.query(
-                        func.ST_Intersects(alert.geom, boundary.geom).label('intersects'),
-                        func.ST_Area(func.ST_Intersection(alert.geom, boundary.geom)).label('ia')
-                    ).first()
-
-                    if res and res.intersects:
-                        ia = float(res.ia or 0)
-                        new_intersections.append(Intersection(
-                            cap_alert_id=alert.id,
-                            boundary_id=boundary.id,
-                            intersection_area=ia,
-                            created_at=utc_now()
-                        ))
-                        if ia > 0:
-                            with_area += 1
+                    boundary_id = row.boundary_id
+                    ia = float(row.intersection_area or 0)
+                    
+                    new_intersections.append(Intersection(
+                        cap_alert_id=alert.id,
+                        boundary_id=boundary_id,
+                        intersection_area=ia,
+                        created_at=utc_now()
+                    ))
+                    if ia > 0:
+                        with_area += 1
                 except Exception as be:
-                    self.logger.warning(f"Intersection error with boundary {boundary.id}: {be}")
+                    self.logger.warning(f"Intersection error with boundary {boundary_id}: {be}")
                     # Continue processing other boundaries
 
             # Bulk insert all intersections atomically
