@@ -1594,11 +1594,11 @@ function updateLevelMetersFromSnapshot(snapshot) {
         const targetPeak = metric.peak_level_db;
         let smoothedPeak;
         if (targetPeak > state.lastPeak) {
-            // Rise quickly (attack) - use pre-calculated attack factor
-            smoothedPeak = targetPeak * (1 - PEAK_ATTACK_FACTOR) + state.lastPeak * PEAK_ATTACK_FACTOR;
+            // Rise quickly (attack) - less smoothing (lower weight on old value)
+            smoothedPeak = targetPeak * PEAK_ATTACK_FACTOR + state.lastPeak * (1 - PEAK_ATTACK_FACTOR);
         } else {
-            // Fall slowly (release)
-            smoothedPeak = targetPeak * (1 - PEAK_SMOOTHING) + state.lastPeak * PEAK_SMOOTHING;
+            // Fall slowly (release) - more smoothing (higher weight on old value)
+            smoothedPeak = targetPeak * PEAK_SMOOTHING + state.lastPeak * (1 - PEAK_SMOOTHING);
         }
 
         // Update peak hold: hold the highest peak, reset after timeout
@@ -1612,8 +1612,8 @@ function updateLevelMetersFromSnapshot(snapshot) {
             state.peakHoldTime = now;
         }
 
-        // Smooth RMS value
-        const smoothedRms = metric.rms_level_db * (1 - RMS_SMOOTHING) + state.lastRms * RMS_SMOOTHING;
+        // Smooth RMS value using exponential moving average
+        const smoothedRms = metric.rms_level_db * RMS_SMOOTHING + state.lastRms * (1 - RMS_SMOOTHING);
 
         // Update state
         state.lastPeak = smoothedPeak;
