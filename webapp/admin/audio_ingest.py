@@ -1530,7 +1530,8 @@ def api_get_audio_metrics():
 
         # Also check for database configs that couldn't load into memory
         # These may have failed to initialize but still exist in DB
-        db_configs = AudioSourceConfigDB.query.all()
+        # Only query enabled sources to reduce overhead
+        db_configs = AudioSourceConfigDB.query.filter_by(enabled=True).limit(50).all()
         loaded_source_names = set(controller._sources.keys())
         
         for db_config in db_configs:
@@ -2134,7 +2135,7 @@ def api_stream_audio(source_name: str):
                 detail = (
                     adapter.error_message
                     or getattr(adapter, '_last_error', None)
-                    or 'Source not running. Please start the source first using POST /api/audio/sources/{source_name}/start'
+                    or f'Source not running. Please start the source first using POST /api/audio/sources/{source_name}/start'
                 )
                 logger.warning(f'Failed to auto-start audio source {source_name}: {detail}')
                 return jsonify({
