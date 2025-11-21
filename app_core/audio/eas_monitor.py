@@ -688,7 +688,7 @@ class ContinuousEASMonitor:
                         last_scan_time = current_time  # Still update to avoid rapid retry
                 else:
                     # Brief sleep to avoid busy-waiting
-                    time.sleep(0.01)
+                    time.sleep(0.1)  # 100ms sleep to reduce CPU usage significantly
 
             except Exception as e:
                 logger.error(f"Unexpected error in EAS monitor loop: {e}", exc_info=True)
