@@ -12,6 +12,9 @@
     margin: 1rem 0;
 }
 
+/* Dark mode with semi-transparent background 
+   Note: rgba values approximate the danger color with 15% opacity
+   Future enhancement: Use color-mix() when browser support improves */
 [data-theme-mode="dark"] .error-container {
     background-color: rgba(239, 68, 68, 0.15);
     border-color: var(--danger-color);
@@ -57,6 +60,8 @@
     margin: 1rem 0;
 }
 
+/* Dark mode with semi-transparent background 
+   Note: rgba values approximate the warning color with 15% opacity */
 [data-theme-mode="dark"] .warning-container {
     background-color: rgba(245, 158, 11, 0.15);
     border-color: var(--warning-color);
@@ -95,6 +100,8 @@
     margin: 1rem 0;
 }
 
+/* Dark mode with semi-transparent background 
+   Note: rgba values approximate the success color with 15% opacity */
 [data-theme-mode="dark"] .success-container {
     background-color: rgba(16, 185, 129, 0.15);
     border-color: var(--success-color);
@@ -133,6 +140,8 @@
     margin: 1rem 0;
 }
 
+/* Dark mode with semi-transparent background 
+   Note: rgba values approximate the info color with 15% opacity */
 [data-theme-mode="dark"] .info-container {
     background-color: rgba(59, 130, 246, 0.15);
     border-color: var(--info-color);

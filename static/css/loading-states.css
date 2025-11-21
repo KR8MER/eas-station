@@ -56,7 +56,7 @@
 }
 
 /* Skeleton Screens - using CSS variables that automatically adapt to theme 
-   Note: neutral colors are inverted in dark mode via design-system.css,
+   Note: neutral colors are redefined in dark mode via base.css theme definitions,
    so skeleton appearance automatically adjusts for light/dark themes */
 .skeleton {
     background: linear-gradient(90deg, 

@@ -93,22 +93,23 @@
         margin-bottom: 0;
     }
 
-    /* Prominent dashboard logo - larger for visual impact */
+    /* Prominent dashboard logo - larger for visual impact
+       Note: White fill is intentional for visibility on gradient background */
     .dashboard-page-logo {
         height: auto;
         width: 100%;
         max-width: 360px;
         display: block;
-        filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.15));
+        filter: drop-shadow(0 4px 12px var(--shadow-color));
     }
 
     .dashboard-page-logo .logo-text-primary,
     .dashboard-page-logo .logo-text-secondary {
-        fill: #ffffff;
+        fill: #ffffff; /* White for visibility on colored gradient header */
     }
 
     .dashboard-page-logo .logo-bar {
-        fill: #ffffff;
+        fill: #ffffff; /* White for visibility on colored gradient header */
     }
     
     /* Responsive logo sizing for dashboard */
