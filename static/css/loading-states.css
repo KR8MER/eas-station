@@ -290,11 +290,12 @@
     gap: 4px;
 }
 
+/* Loading dots - using CSS variable for theme consistency */
 .loading-dots span {
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background-color: #007bff;
+    background-color: var(--primary-color);
     animation: loading-dots 1.5s ease-in-out infinite;
 }
 
@@ -319,12 +320,13 @@
 
 /* Dark Mode Support - skeleton styles defined above */
 
+/* Dark mode skeleton borders - using CSS variables */
 [data-theme-mode="dark"] .skeleton-table-row {
-    border-bottom-color: #4a5568;
+    border-bottom-color: var(--border-color);
 }
 
 [data-theme-mode="dark"] .skeleton-metric {
-    border-color: #4a5568;
+    border-color: var(--border-color);
 }
 
 [data-theme-mode="dark"] .spinner-overlay {

@@ -165,11 +165,11 @@
         color: var(--text-inverse);
     }
 
-    /* Using CSS variables for metric icons */
+    /* Using CSS variables for metric icons - all colors from theme variables */
     .metric-icon.metric-alert { background: var(--danger-color); }
     .metric-icon.metric-boundary { background: var(--success-color); }
-    .metric-icon.metric-clock { background: #f6b968; color: #1c2233; }
-    .metric-icon.metric-map { background: #2f5aa1; }
+    .metric-icon.metric-clock { background: var(--warning-color); color: var(--text-color); }
+    .metric-icon.metric-map { background: var(--info-color); }
 
     .metric-label {
         font-size: 0.78rem;
