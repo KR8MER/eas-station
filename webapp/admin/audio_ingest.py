@@ -110,8 +110,12 @@ def _get_audio_controller() -> AudioIngestController:
     global _audio_controller, _initialization_started
 
     if _audio_controller is None:
+        # Capture Flask app for background thread context
+        app = current_app._get_current_object()
+        
         # Create the controller immediately (lightweight)
-        _audio_controller = AudioIngestController()
+        # Pass Flask app so background threads can use app context
+        _audio_controller = AudioIngestController(flask_app=app)
 
         # Load audio source configs from database (fast - just DB query)
         # This makes sources visible in UI immediately
@@ -121,8 +125,6 @@ def _get_audio_controller() -> AudioIngestController:
         if not _initialization_started:
             _initialization_started = True
             import threading
-            # Capture Flask app for background thread context
-            app = current_app._get_current_object()
             init_thread = threading.Thread(
                 target=_start_audio_sources_background,
                 args=(app,),

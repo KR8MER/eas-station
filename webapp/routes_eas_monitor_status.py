@@ -82,19 +82,43 @@ def register_eas_monitor_routes(app: Flask, logger_instance) -> None:
             status = monitor.get_status()
 
             return jsonify({
+                # Basic status
                 "running": status.get("running", False),
+                "audio_flowing": status.get("audio_flowing", False),
+                "sample_rate": status.get("sample_rate", 0),
+                
+                # Buffer metrics
                 "buffer_duration": status.get("buffer_duration", 0),
-                "scan_interval": status.get("scan_interval", 0),
                 "buffer_utilization": status.get("buffer_utilization", 0),
                 "buffer_fill_seconds": status.get("buffer_fill_seconds", 0),
+                
+                # Scan configuration (configured vs actual)
+                "scan_interval": status.get("scan_interval", 0),
+                "effective_scan_interval": status.get("effective_scan_interval", 0),
+                "scan_interval_auto_adjusted": status.get("scan_interval_auto_adjusted", False),
+                "max_concurrent_scans": status.get("max_concurrent_scans", 0),
+                
+                # Scan performance metrics
                 "scans_performed": status.get("scans_performed", 0),
+                "scans_skipped": status.get("scans_skipped", 0),
+                "scan_warnings": status.get("scan_warnings", 0),  # Alias for backward compat
+                "active_scans": status.get("active_scans", 0),
+                "avg_scan_duration_seconds": status.get("avg_scan_duration_seconds"),
+                "min_scan_duration_seconds": status.get("min_scan_duration_seconds"),
+                "max_scan_duration_seconds": status.get("max_scan_duration_seconds"),
+                "last_scan_duration_seconds": status.get("last_scan_duration_seconds"),
+                "scan_history_size": status.get("scan_history_size", 0),
+                
+                # Alert detection
                 "alerts_detected": status.get("alerts_detected", 0),
                 "last_scan_time": status.get("last_scan_time"),
                 "last_alert_time": status.get("last_alert_time"),
-                "active_scans": status.get("active_scans", 0),
-                "audio_flowing": status.get("audio_flowing", False),
-                "sample_rate": status.get("sample_rate", 0),
-                "scan_warnings": status.get("scan_warnings", 0)
+                
+                # Health metrics
+                "last_activity": status.get("last_activity"),
+                "time_since_activity": status.get("time_since_activity", 0),
+                "restart_count": status.get("restart_count", 0),
+                "watchdog_timeout": status.get("watchdog_timeout", 0)
             })
 
         except Exception as e:

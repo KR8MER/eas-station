@@ -430,6 +430,19 @@ class ContinuousEASMonitor:
         self._max_scan_history = 100  # Keep last 100 scan times
         self._scans_skipped = 0  # Track how many scans were skipped due to concurrency limit
         
+        # Self-regulating feedback loop state
+        self._configured_max_scans = max_concurrent_scans  # Store original config
+        self._configured_scan_interval = scan_interval  # Store original config
+        self._dynamic_max_scans = max_concurrent_scans  # Current effective value
+        self._dynamic_scan_interval = scan_interval  # Current effective value
+        self._last_adjustment_time = 0.0  # When we last adjusted parameters
+        self._adjustment_cooldown = 30.0  # Wait 30s between adjustments to let changes stabilize
+        
+        # Auto-tuning constants
+        self.SCAN_BUFFER_FACTOR = 1.15  # Add 15% buffer to scan time for interval
+        self.MAX_DYNAMIC_SCANS = 8  # Cap on concurrent scans
+        self.MIN_SCAN_INTERVAL = 1.5  # Hard floor on scan interval (seconds)
+        
         # Watchdog/heartbeat tracking
         self._last_activity: float = time.time()
         self._activity_lock = threading.Lock()
@@ -554,10 +567,16 @@ class ContinuousEASMonitor:
             last_activity = self._last_activity
             time_since_activity = time.time() - last_activity
 
+        # Calculate effective interval (may be higher than configured if scans are slow)
+        effective_interval = self._get_effective_scan_interval()
+        is_auto_adjusted = effective_interval > self.scan_interval
+        
         return {
             "running": is_running,
             "buffer_duration": self.buffer_duration,
             "scan_interval": self.scan_interval,
+            "effective_scan_interval": effective_interval,
+            "scan_interval_auto_adjusted": is_auto_adjusted,
             "buffer_utilization": buffer_utilization,
             "buffer_fill_seconds": buffer_fill_seconds,
             "scans_performed": self._scans_performed,
@@ -604,6 +623,129 @@ class ContinuousEASMonitor:
         """Update the last activity timestamp (heartbeat)."""
         with self._activity_lock:
             self._last_activity = time.time()
+
+    def _update_scan_parameters(self) -> None:
+        """Self-regulating feedback loop that adjusts scan parameters based on performance.
+        
+        This implements a control system that:
+        1. Monitors scan performance (duration, skip rate, queue depth)
+        2. Adjusts concurrency and interval to maintain optimal performance
+        3. Prevents oscillation with cooldown periods
+        4. Logs adjustments for visibility
+        
+        Goals:
+        - Zero skipped scans (all alerts detected)
+        - Minimize scan interval (fast detection)
+        - Minimize resource usage
+        """
+        with self._scan_lock:
+            # Need enough history to make informed decisions
+            if not self._scan_durations or self._scans_performed < 10:
+                return
+            
+            current_time = time.time()
+            
+            # Don't adjust too frequently - let changes stabilize
+            if current_time - self._last_adjustment_time < self._adjustment_cooldown:
+                return
+            
+            # Calculate performance metrics
+            recent_scans = self._scan_durations[-20:]  # Last 20 scans
+            avg_scan_duration = sum(recent_scans) / len(recent_scans)
+            max_scan_duration = max(recent_scans)
+            min_scan_duration = min(recent_scans)
+            
+            # Calculate skip rate (recent history) 
+            # Use ratio of skips to total attempts (skips + performed)
+            # This gives true skip rate for recent operations
+            total_recent_attempts = self._scans_performed + self._scans_skipped
+            if total_recent_attempts > 20:
+                # For long-running monitors, estimate recent skip rate
+                # by assuming last 20 attempts follow overall ratio
+                skip_rate = self._scans_skipped / total_recent_attempts if total_recent_attempts > 0 else 0
+            else:
+                # For new monitors, use actual totals
+                skip_rate = self._scans_skipped / total_recent_attempts if total_recent_attempts > 0 else 0
+            
+            # Calculate queue pressure (how often are all slots full?)
+            queue_pressure = self._active_scans / self._dynamic_max_scans if self._dynamic_max_scans > 0 else 0
+            
+            # Determine optimal interval: scan_duration + buffer for safety
+            optimal_interval = avg_scan_duration * self.SCAN_BUFFER_FACTOR
+            
+            # Determine if we need to adjust
+            needs_adjustment = False
+            adjustment_reason = []
+            
+            # CONDITION 1: Scans are being skipped - we're overloaded
+            if skip_rate > 0.05:  # More than 5% skip rate
+                adjustment_reason.append(f"high skip rate ({skip_rate:.1%})")
+                needs_adjustment = True
+                
+                # Option A: Increase interval if scans are slow
+                if avg_scan_duration > self._dynamic_scan_interval * 0.9:
+                    self._dynamic_scan_interval = max(optimal_interval, self._dynamic_scan_interval * 1.2)
+                    adjustment_reason.append(f"increased interval to {self._dynamic_scan_interval:.2f}s")
+                
+                # Option B: Reduce concurrency if we're thrashing
+                elif self._dynamic_max_scans > 1:
+                    self._dynamic_max_scans -= 1
+                    adjustment_reason.append(f"reduced concurrency to {self._dynamic_max_scans}")
+            
+            # CONDITION 2: Scans completing much faster than interval - we have headroom
+            elif avg_scan_duration < self._dynamic_scan_interval * 0.6 and skip_rate < 0.01:
+                adjustment_reason.append(f"fast scans ({avg_scan_duration:.2f}s < {self._dynamic_scan_interval * 0.6:.2f}s)")
+                needs_adjustment = True
+                
+                # Option A: Increase concurrency if we're not maxed out
+                if self._dynamic_max_scans < self.MAX_DYNAMIC_SCANS and queue_pressure > 0.5:
+                    self._dynamic_max_scans += 1
+                    adjustment_reason.append(f"increased concurrency to {self._dynamic_max_scans}")
+                
+                # Option B: Decrease interval to scan more frequently
+                elif self._dynamic_scan_interval > self.MIN_SCAN_INTERVAL:
+                    new_interval = max(optimal_interval, self._dynamic_scan_interval * 0.8)
+                    new_interval = max(new_interval, self.MIN_SCAN_INTERVAL)  # Hard floor
+                    if new_interval < self._dynamic_scan_interval:
+                        self._dynamic_scan_interval = new_interval
+                        adjustment_reason.append(f"decreased interval to {self._dynamic_scan_interval:.2f}s")
+            
+            # CONDITION 3: System is stable but not optimal - fine tune
+            elif abs(avg_scan_duration - self._dynamic_scan_interval) > 1.0:
+                # Interval is significantly different from actual scan time
+                new_interval = optimal_interval
+                # Don't go below configured minimum
+                new_interval = max(new_interval, self._configured_scan_interval)
+                if abs(new_interval - self._dynamic_scan_interval) > 0.5:
+                    self._dynamic_scan_interval = new_interval
+                    needs_adjustment = True
+                    adjustment_reason.append(f"fine-tuned interval to {self._dynamic_scan_interval:.2f}s")
+            
+            if needs_adjustment:
+                self._last_adjustment_time = current_time
+                logger.info(
+                    f"🔄 Auto-tuning EAS scanner: {' + '.join(adjustment_reason)}. "
+                    f"Performance: avg_scan={avg_scan_duration:.2f}s, skip_rate={skip_rate:.1%}, "
+                    f"queue_pressure={queue_pressure:.0%}. "
+                    f"Current: interval={self._dynamic_scan_interval:.2f}s, "
+                    f"max_scans={self._dynamic_max_scans}."
+                )
+    
+    def _get_effective_scan_interval(self) -> float:
+        """Get the current dynamically-adjusted scan interval.
+        
+        Returns:
+            Current effective scan interval in seconds
+        """
+        return self._dynamic_scan_interval
+    
+    def _get_effective_max_concurrent_scans(self) -> int:
+        """Get the current dynamically-adjusted max concurrent scans.
+        
+        Returns:
+            Current effective max concurrent scans
+        """
+        return self._dynamic_max_scans
 
     def _watchdog_loop(self) -> None:
         """Watchdog thread that monitors decoder thread health and restarts if stalled."""
@@ -707,8 +849,17 @@ class ContinuousEASMonitor:
                     except Exception as buffer_error:
                         logger.error(f"Error adding samples to buffer: {buffer_error}", exc_info=True)
 
+                # Update scan parameters based on performance feedback (self-regulating)
+                # This happens continuously to adapt to system conditions
+                try:
+                    self._update_scan_parameters()
+                except Exception as feedback_error:
+                    logger.error(f"Error in feedback loop: {feedback_error}", exc_info=True)
+                
                 # Check if it's time to scan for alerts
-                if current_time - last_scan_time >= self.scan_interval:
+                # Use dynamically-adjusted interval
+                effective_scan_interval = self._get_effective_scan_interval()
+                if current_time - last_scan_time >= effective_scan_interval:
                     try:
                         self._scan_for_alerts()
                         last_scan_time = current_time
@@ -843,15 +994,27 @@ class ContinuousEASMonitor:
         Launches scan in background thread to prevent blocking audio stream.
         Uses a fast pre-filter to skip expensive decoding on audio without SAME tones.
         """
-        # Check if too many scans are running
+        # Check if too many scans are running (use dynamic value from feedback loop)
+        effective_max_scans = self._get_effective_max_concurrent_scans()
+        
         with self._scan_lock:
-            if self._active_scans >= self.max_concurrent_scans:
+            if self._active_scans >= effective_max_scans:
                 self._scans_skipped += 1
+                
+                # Get performance stats for diagnostic message
+                if self._scan_durations:
+                    recent_scans = self._scan_durations[-10:]
+                    avg_duration = sum(recent_scans) / len(recent_scans)
+                    max_duration = max(recent_scans)
+                    perf_info = f"avg scan: {avg_duration:.2f}s, max: {max_duration:.2f}s"
+                else:
+                    perf_info = "no scan history yet"
+                
                 logger.warning(
-                    f"Skipping EAS scan #{self._scans_skipped}: {self._active_scans} scans already active "
-                    f"(max={self.max_concurrent_scans}). "
-                    "Consider increasing scan_interval, reducing buffer_duration, "
-                    "or increasing max_concurrent_scans."
+                    f"⚠️ Skipping EAS scan #{self._scans_skipped}: {self._active_scans} scans already active "
+                    f"(max={effective_max_scans}, configured={self.max_concurrent_scans}). "
+                    f"Performance: {perf_info}, interval={self._dynamic_scan_interval:.2f}s. "
+                    f"System is self-regulating - if this persists, hardware may be overloaded."
                 )
                 return
 

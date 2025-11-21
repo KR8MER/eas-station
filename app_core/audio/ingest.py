@@ -428,6 +428,7 @@ class AudioIngestController:
         enable_monitor: bool = True,
         monitor_interval: float = 1.0,
         stall_seconds: float = 5.0,
+        flask_app=None,
     ) -> None:
         self._sources: Dict[str, AudioSourceAdapter] = {}
         self._active_source: Optional[str] = None
@@ -438,6 +439,7 @@ class AudioIngestController:
         self._monitor_grace_period = 5.0
         self._monitor_stop = threading.Event()
         self._monitor_thread: Optional[threading.Thread] = None
+        self._flask_app = flask_app  # Store Flask app for app context in background threads
 
         # Broadcast queue for pub/sub audio distribution
         self._broadcast_queue = BroadcastQueue(name="audio-ingest-broadcast", max_queue_size=100)
@@ -672,8 +674,17 @@ class AudioIngestController:
             now = time.time()
             with self._lock:
                 snapshot = list(self._sources.items())
-            for name, adapter in snapshot:
-                self._evaluate_source_health(name, adapter, now)
+            
+            # Wrap health evaluation in Flask app context if available
+            # This allows database operations during source restarts
+            if self._flask_app:
+                with self._flask_app.app_context():
+                    for name, adapter in snapshot:
+                        self._evaluate_source_health(name, adapter, now)
+            else:
+                for name, adapter in snapshot:
+                    self._evaluate_source_health(name, adapter, now)
+            
             self._monitor_stop.wait(timeout=self._monitor_interval)
 
     def _evaluate_source_health(

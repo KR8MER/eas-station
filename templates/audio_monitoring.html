@@ -148,8 +148,60 @@
                         <div><strong id="eas-last-alert">--</strong></div>
                     </div>
                     <div class="col-md-4 col-sm-6">
-                        <small class="text-muted">Scan Warnings:</small>
+                        <small class="text-muted">Scans Skipped:</small>
                         <div><strong id="eas-scan-warnings">--</strong></div>
+                    </div>
+                </div>
+
+                <!-- Performance Metrics Section -->
+                <div class="mt-3 pt-3 border-top">
+                    <h6 class="mb-3">
+                        <i class="fas fa-tachometer-alt"></i> Performance Metrics
+                        <span id="auto-tune-badge" class="badge bg-info ms-2 d-none" title="System is automatically adjusting scan parameters">
+                            <i class="fas fa-magic"></i> Auto-tuning
+                        </span>
+                    </h6>
+                    
+                    <div class="row g-3">
+                        <div class="col-md-3 col-sm-6">
+                            <div class="metric-item bg-light">
+                                <div class="metric-label">Scan Interval</div>
+                                <div class="metric-value">
+                                    <span id="eas-effective-interval">--</span>
+                                    <small id="eas-configured-interval" class="text-muted d-block" style="font-size: 0.7rem;">--</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-sm-6">
+                            <div class="metric-item bg-light">
+                                <div class="metric-label">Max Workers</div>
+                                <div class="metric-value" id="eas-max-workers">--</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-sm-6">
+                            <div class="metric-item bg-light">
+                                <div class="metric-label">Avg Scan Time</div>
+                                <div class="metric-value" id="eas-avg-scan-time">--</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-sm-6">
+                            <div class="metric-item bg-light">
+                                <div class="metric-label">Scan Range</div>
+                                <div class="metric-value">
+                                    <small id="eas-scan-range" style="font-size: 0.9rem;">--</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row g-3 mt-2">
+                        <div class="col-12">
+                            <small class="text-muted">
+                                <i class="fas fa-info-circle"></i>
+                                <strong>System Auto-tuning:</strong>
+                                <span id="performance-status">Loading...</span>
+                            </small>
+                        </div>
                     </div>
                 </div>
 
@@ -1823,6 +1875,102 @@ function updateEASMonitorDisplay(status) {
             scanOverlap.style.color = '#ffc107'; // yellow
         } else {
             scanOverlap.style.color = '#dc3545'; // red
+        }
+    }
+
+    // Update performance metrics
+    const effectiveInterval = document.getElementById('eas-effective-interval');
+    const configuredInterval = document.getElementById('eas-configured-interval');
+    const autoTuneBadge = document.getElementById('auto-tune-badge');
+    
+    if (effectiveInterval && status.effective_scan_interval) {
+        effectiveInterval.textContent = `${status.effective_scan_interval.toFixed(1)}s`;
+        
+        // Show if auto-adjusted
+        if (status.scan_interval_auto_adjusted) {
+            effectiveInterval.style.color = '#0d6efd';
+            if (autoTuneBadge) {
+                autoTuneBadge.classList.remove('d-none');
+            }
+        } else {
+            effectiveInterval.style.color = '';
+            if (autoTuneBadge) {
+                autoTuneBadge.classList.add('d-none');
+            }
+        }
+    }
+    
+    if (configuredInterval && status.scan_interval) {
+        if (status.scan_interval_auto_adjusted) {
+            configuredInterval.textContent = `(configured: ${status.scan_interval.toFixed(1)}s)`;
+        } else {
+            configuredInterval.textContent = '';
+        }
+    }
+    
+    const maxWorkers = document.getElementById('eas-max-workers');
+    if (maxWorkers) {
+        maxWorkers.textContent = status.max_concurrent_scans || '--';
+    }
+    
+    const avgScanTime = document.getElementById('eas-avg-scan-time');
+    if (avgScanTime && status.avg_scan_duration_seconds != null) {
+        const avg = status.avg_scan_duration_seconds;
+        avgScanTime.textContent = `${avg.toFixed(2)}s`;
+        
+        // Color code: green if < interval, yellow if close, red if over
+        if (status.effective_scan_interval) {
+            if (avg < status.effective_scan_interval * 0.8) {
+                avgScanTime.style.color = '#28a745'; // Fast enough
+            } else if (avg < status.effective_scan_interval) {
+                avgScanTime.style.color = '#ffc107'; // Close
+            } else {
+                avgScanTime.style.color = '#dc3545'; // Too slow
+            }
+        }
+    } else if (avgScanTime) {
+        avgScanTime.textContent = '--';
+    }
+    
+    const scanRange = document.getElementById('eas-scan-range');
+    if (scanRange && status.min_scan_duration_seconds != null && status.max_scan_duration_seconds != null) {
+        scanRange.textContent = `${status.min_scan_duration_seconds.toFixed(1)}s - ${status.max_scan_duration_seconds.toFixed(1)}s`;
+    } else if (scanRange) {
+        scanRange.textContent = '--';
+    }
+    
+    // Performance status message
+    const perfStatus = document.getElementById('performance-status');
+    if (perfStatus) {
+        const skipped = status.scans_skipped || 0;
+        const performed = status.scans_performed || 0;
+        const skipRate = performed > 0 ? (skipped / performed * 100) : 0;
+        
+        if (!running) {
+            perfStatus.textContent = 'Monitor is stopped.';
+            perfStatus.className = 'text-muted';
+        } else if (status.scan_interval_auto_adjusted) {
+            // Build message safely without innerHTML
+            perfStatus.textContent = '';
+            perfStatus.className = 'text-info';
+            perfStatus.appendChild(document.createTextNode('System detected slower hardware and auto-adjusted scan interval from '));
+            const fromSpan = document.createElement('strong');
+            fromSpan.textContent = status.scan_interval.toFixed(1) + 's';
+            perfStatus.appendChild(fromSpan);
+            perfStatus.appendChild(document.createTextNode(' to '));
+            const toSpan = document.createElement('strong');
+            toSpan.textContent = status.effective_scan_interval.toFixed(1) + 's';
+            perfStatus.appendChild(toSpan);
+            perfStatus.appendChild(document.createTextNode(' for optimal performance.'));
+        } else if (skipRate > 5) {
+            perfStatus.textContent = `Scan queue is backing up (${skipRate.toFixed(1)}% skip rate). System will auto-tune.`;
+            perfStatus.className = 'text-warning';
+        } else if (skipped > 0) {
+            perfStatus.textContent = `Operating normally with occasional queue pressure (${skipped} skipped).`;
+            perfStatus.className = 'text-success';
+        } else {
+            perfStatus.textContent = 'System running optimally with no skipped scans.';
+            perfStatus.className = 'text-success';
         }
     }
 

@@ -66,14 +66,4 @@ EXPOSE 5000
 
 ENTRYPOINT ["docker-entrypoint.sh"]
 
-CMD ["gunicorn", \
-    "--bind", "0.0.0.0:5000", \
-    "--workers", "1", \
-    "--threads", "2", \
-    "--timeout", "300", \
-    "--worker-class", "gthread", \
-    "--worker-tmp-dir", "/dev/shm", \
-    "--log-level", "info", \
-    "--access-logfile", "-", \
-    "--error-logfile", "-", \
-    "app:app"]
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:5000 --workers ${MAX_WORKERS:-1} --threads 2 --timeout 300 --worker-class gthread --worker-tmp-dir /dev/shm --log-level info --access-logfile - --error-logfile - app:app"]
