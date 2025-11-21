@@ -7,21 +7,23 @@
    CSS VARIABLES (Light & Dark Theme)
    ============================================ */
 
-/* Cosmo Theme (Default Light Theme) */
+/* Cosmo Theme (Default Light Theme) 
+ * Updated to use unified color palette from design-system.css
+ */
 :root,
 [data-theme="cosmo"] {
-    /* Primary Brand Colors */
-    --primary-color: #204885; /* Aegean Blue */
+    /* Primary Brand Colors - using unified palette */
+    --primary-color: #0B66FF; /* Updated to match unified primary */
     --primary-soft: #2f5fa4;
-    --secondary-color: #872a96; /* Plum Crazy */
+    --secondary-color: #872a96; /* Plum Crazy - preserved for theme compatibility */
     --secondary-soft: #9d5bb1;
-    --accent-color: #4f6fb3;
+    --accent-color: #FF6B35; /* Updated to match unified accent */
 
-    /* Status Colors */
-    --success-color: #2eb08d;
-    --danger-color: #e05263;
-    --warning-color: #f6b968;
-    --info-color: #2f5aa1;
+    /* Status Colors - using unified palette */
+    --success-color: #10b981;
+    --danger-color: #ef4444;
+    --warning-color: #f59e0b;
+    --info-color: #3b82f6;
     --critical-color: #ff4f8b;
 
     /* Background Colors */
@@ -39,16 +41,16 @@
 
     /* Borders & Shadows */
     --border-color: #ced7ea;
-    --shadow-color: rgba(32, 72, 133, 0.12);
-    --shadow: rgba(32, 72, 133, 0.12);
+    --shadow-color: rgba(11, 102, 255, 0.12); /* Updated to match new primary */
+    --shadow: rgba(11, 102, 255, 0.12);
 
-    /* Semantic Aliases */
-    --accent-primary: #4f6fb3;
-    --accent-secondary: #872a96;
-    --info: #2f5aa1;
-    --success: #2eb08d;
-    --warning: #f6b968;
-    --danger: #e05263;
+    /* Semantic Aliases - using unified colors */
+    --accent-primary: var(--primary-color);
+    --accent-secondary: var(--accent-color);
+    --info: var(--info-color);
+    --success: var(--success-color);
+    --warning: var(--warning-color);
+    --danger: var(--danger-color);
 
     /* Border Radius */
     --radius-sm: 6px;
@@ -80,47 +82,49 @@
     --footer-margin-top: 60px;
 }
 
-/* Dark Theme - Enhanced for Better Readability */
+/* Dark Theme - Enhanced for Better Readability
+ * Updated to use unified color palette from design-system.css
+ */
 [data-theme="dark"] {
-    /* Primary Brand Colors - Brighter and more vibrant */
-    --primary-color: #6b96ff;
+    /* Primary Brand Colors - using unified dark theme palette */
+    --primary-color: #5a88d5; /* Updated to match unified dark primary */
     --primary-soft: #5580d8;
     --secondary-color: #c9a8ff;
     --secondary-soft: #d5b5ff;
-    --accent-color: #a8c6ff;
+    --accent-color: #FF8C5A; /* Updated to match unified dark accent */
 
-    /* Status Colors - Enhanced contrast */
-    --success-color: #67ffd6;
-    --danger-color: #ffafbf;
-    --warning-color: #ffe3ad;
-    --info-color: #adcfff;
+    /* Status Colors - using unified dark theme palette */
+    --success-color: #34d399;
+    --danger-color: #f87171;
+    --warning-color: #fbbf24;
+    --info-color: #60a5fa;
     --critical-color: #ffb0d4;
 
-    /* Background Colors - Lifted for better contrast */
+    /* Background Colors - using unified dark theme */
     --light-color: #455169;
     --dark-color: #161d2b;
-    --bg-color: #1b2434;
-    --surface-color: #243046;
-    --bg-card: #243046;
+    --bg-color: #0F1724; /* Updated to match unified dark bg */
+    --surface-color: #111827; /* Updated to match unified dark surface */
+    --bg-card: #111827;
     --bg-primary: #161d2b;
 
-    /* Text Colors - Maximum readability with high contrast */
-    --text-color: #ffffff;
+    /* Text Colors - using unified dark theme */
+    --text-color: #E5E7EB; /* Updated to match unified dark text */
     --text-secondary: #dbe4f8;
-    --text-muted: #acbad8;
+    --text-muted: #9CA3AF; /* Updated to match unified dark muted */
 
     /* Borders & Shadows */
     --border-color: #40516c;
     --shadow-color: rgba(8, 11, 19, 0.55);
     --shadow: rgba(8, 11, 19, 0.55);
 
-    /* Semantic Aliases */
-    --accent-primary: #a8c6ff;
-    --accent-secondary: #d5b5ff;
-    --info: #adcfff;
-    --success: #67ffd6;
-    --warning: #ffe3ad;
-    --danger: #ffafbf;
+    /* Semantic Aliases - using unified colors */
+    --accent-primary: var(--primary-color);
+    --accent-secondary: var(--accent-color);
+    --info: var(--info-color);
+    --success: var(--success-color);
+    --warning: var(--warning-color);
+    --danger: var(--danger-color);
 
     /* Branding */
     --logo-backdrop: rgba(255, 255, 255, 0.95);
@@ -743,18 +747,26 @@ main {
 }
 
 /* ============================================
-   LINKS
+   LINKS - using unified theme colors
    ============================================ */
 
 a {
-    color: var(--primary-color);
-    transition: color var(--transition-fast);
+    color: var(--color-primary);
+    transition: color var(--transition-fast), text-decoration var(--transition-fast);
     text-decoration: none;
 }
 
-a:hover,
-a:focus {
-    color: var(--accent-color);
+a:hover {
+    color: var(--color-accent);
+    text-decoration: underline;
+}
+
+/* Enhanced focus styles for accessibility */
+a:focus-visible {
+    color: var(--color-accent);
+    outline: 3px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 2px;
 }
 
 /* ============================================

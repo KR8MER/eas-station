@@ -14,7 +14,7 @@
         width: 100%;
         border-radius: var(--radius-md);
         border: 1px solid var(--border-color);
-        box-shadow: 0 12px 30px rgba(32, 72, 133, 0.16);
+        box-shadow: 0 12px 30px rgba(11, 102, 255, 0.16); /* Updated to use unified primary color */
         overflow: hidden;
     }
     
@@ -40,7 +40,7 @@
     }
 
     .page-header {
-        background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+        background: linear-gradient(135deg, var(--color-primary), var(--secondary-color)); /* Using unified primary */
         border-radius: var(--radius-md);
         color: #fff;
         padding: var(--spacing-lg);
@@ -51,7 +51,7 @@
         gap: var(--spacing-md);
         position: relative;
         overflow: hidden;
-        box-shadow: 0 18px 40px rgba(32, 72, 133, 0.28);
+        box-shadow: 0 18px 40px rgba(11, 102, 255, 0.28); /* Updated to use unified primary color */
     }
 
     .page-header::after {
@@ -106,7 +106,7 @@
     }
 
     .dashboard-page-logo .logo-bar {
-        fill: #ffffff;
+        fill: var(--color-accent); /* Use accent color for logo bars */
     }
 
     .page-header-actions {

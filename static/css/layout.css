@@ -180,9 +180,10 @@
     gap: 10px;
 }
 
+/* Logo styling - enhanced prominence with unified theme colors */
 .brand-logo {
-    height: 96px;
-    max-height: 96px;
+    height: auto;
+    max-height: 56px; /* Increased from 96px for better navbar prominence */
     width: auto;
     display: block;
     padding: var(--logo-padding);
@@ -192,7 +193,13 @@
     box-shadow: none;
     transition: background-color var(--transition-medium),
                 box-shadow var(--transition-medium),
-                border-color var(--transition-medium);
+                border-color var(--transition-medium),
+                transform var(--transition-fast);
+}
+
+/* Add subtle hover effect to logo for interactivity */
+.navbar-brand:hover .brand-logo {
+    transform: scale(1.05);
 }
 
 .logo-wordmark {
@@ -205,29 +212,56 @@
     height: auto;
 }
 
+/* Logo colors using unified theme palette */
 .logo-wordmark .logo-bar {
-    fill: var(--accent-primary, var(--accent-color, #ef4444));
+    fill: var(--color-accent); /* Use accent color for logo bars */
 }
 
 .logo-wordmark .logo-text-primary {
-    fill: var(--text-color, #1e293b);
+    fill: var(--color-text, #1e293b);
 }
 
 .logo-wordmark .logo-text-secondary {
-    fill: var(--text-secondary, #64748b);
+    fill: var(--color-muted, #64748b);
 }
 
-/* Navbar logo - ensure text is always readable on navbar gradient */
+/* Navbar logo - ensure text is always readable on navbar with unified colors */
 .navbar .brand-logo .logo-text-primary {
     fill: #ffffff;
 }
 
 .navbar .brand-logo .logo-text-secondary {
-    fill: rgba(255, 255, 255, 0.85);
+    fill: rgba(255, 255, 255, 0.90); /* Increased opacity for better readability */
 }
 
 .navbar .brand-logo .logo-bar {
-    fill: #ffffff;
+    fill: var(--color-accent); /* Use accent color for brand recognition */
+}
+
+/* Hero logo variant for landing page - larger and more prominent */
+.hero-logo,
+.dashboard-page-logo {
+    height: auto;
+    max-height: 120px; /* Large hero size for landing page */
+    width: auto;
+    max-width: 100%;
+    display: block;
+    transition: transform var(--transition-medium);
+}
+
+/* Responsive sizing for hero logo */
+@media (max-width: 768px) {
+    .hero-logo,
+    .dashboard-page-logo {
+        max-height: 96px;
+    }
+}
+
+@media (max-width: 576px) {
+    .hero-logo,
+    .dashboard-page-logo {
+        max-height: 80px;
+    }
 }
 
 /* Hide brand text on mobile devices */

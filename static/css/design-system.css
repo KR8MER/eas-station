@@ -1,6 +1,16 @@
 /**
  * EAS Station - Design System
  * Modern, consistent design foundation for all components
+ * 
+ * UNIFIED COLOR PALETTE
+ * Use these theme variables for all new UI components to ensure consistency:
+ * - --color-primary: Main brand color for primary actions and branding
+ * - --color-accent: Secondary accent color for highlights and CTAs
+ * - --color-bg: Page background color
+ * - --color-surface: Card and surface backgrounds
+ * - --color-text: Primary text color
+ * - --color-muted: Muted/secondary text color
+ * - --color-success, --color-warning, --color-error: Status colors
  */
 
 /* ============================================
@@ -8,7 +18,21 @@
    ============================================ */
 
 :root {
-    /* ===== COLOR SYSTEM ===== */
+    /* ===== UNIFIED THEME COLORS (Light Mode) ===== */
+    /* Use these variables for consistent theming across components */
+    --color-primary: #0B66FF;      /* Primary brand color - vibrant blue */
+    --color-accent: #FF6B35;        /* Accent color - warm orange */
+    --color-bg: #e8ecf7;            /* Page background */
+    --color-surface: #ffffff;       /* Cards and elevated surfaces */
+    --color-text: #1c2233;          /* Primary text */
+    --color-muted: #8892a6;         /* Secondary/muted text */
+    
+    /* Status Colors - WCAG AA compliant */
+    --color-success: #10b981;       /* Success/positive states */
+    --color-warning: #f59e0b;       /* Warning/caution states */
+    --color-error: #ef4444;         /* Error/danger states */
+    
+    /* ===== COLOR SYSTEM (Extended Palette) ===== */
     
     /* Primary Brand Colors */
     --color-primary-50: #e8eef9;
@@ -16,11 +40,11 @@
     --color-primary-200: #9eb9e6;
     --color-primary-300: #779ddc;
     --color-primary-400: #5a88d5;
-    --color-primary-500: #3d73cd;
-    --color-primary-600: #376bc8;
-    --color-primary-700: #2f60c1;
-    --color-primary-800: #2756ba;
-    --color-primary-900: #1a43ad;
+    --color-primary-500: #0B66FF;    /* Updated to match unified primary */
+    --color-primary-600: #0a5ae6;
+    --color-primary-700: #084dcc;
+    --color-primary-800: #0741b3;
+    --color-primary-900: #053499;
     
     /* Neutral Colors */
     --color-neutral-50: #f8f9fa;
@@ -34,16 +58,14 @@
     --color-neutral-800: #343a40;
     --color-neutral-900: #212529;
     
-    /* Status Colors */
-    --color-success: #10b981;
+    /* Status Colors (Aliased from unified palette) */
     --color-success-light: #d1fae5;
     --color-success-dark: #065f46;
     
-    --color-warning: #f59e0b;
     --color-warning-light: #fef3c7;
     --color-warning-dark: #92400e;
     
-    --color-danger: #ef4444;
+    --color-danger: var(--color-error);  /* Alias for consistency */
     --color-danger-light: #fee2e2;
     --color-danger-dark: #991b1b;
     
@@ -154,13 +176,26 @@
    ============================================ */
 
 [data-theme-mode="dark"] {
+    /* ===== UNIFIED THEME COLORS (Dark Mode) ===== */
+    --color-primary: #5a88d5;       /* Lightened primary for dark backgrounds */
+    --color-accent: #FF8C5A;        /* Lightened accent for dark backgrounds */
+    --color-bg: #0F1724;            /* Dark page background */
+    --color-surface: #111827;       /* Dark card surfaces */
+    --color-text: #E5E7EB;          /* Light text on dark */
+    --color-muted: #9CA3AF;         /* Muted text on dark */
+    
+    /* Status Colors - adjusted for dark mode visibility */
+    --color-success: #34d399;
+    --color-warning: #fbbf24;
+    --color-error: #f87171;
+    
     /* Primary Colors (Lightened for dark backgrounds) */
     --color-primary-50: #1a43ad;
     --color-primary-100: #2756ba;
     --color-primary-200: #2f60c1;
     --color-primary-300: #376bc8;
     --color-primary-400: #3d73cd;
-    --color-primary-500: #5a88d5;
+    --color-primary-500: #5a88d5;    /* Updated to match unified primary */
     --color-primary-600: #779ddc;
     --color-primary-700: #9eb9e6;
     --color-primary-800: #c5d5f0;
@@ -179,15 +214,13 @@
     --color-neutral-900: #f8f9fa;
     
     /* Status Colors (Adjusted for dark mode) */
-    --color-success: #34d399;
     --color-success-light: #065f46;
     --color-success-dark: #d1fae5;
     
-    --color-warning: #fbbf24;
     --color-warning-light: #92400e;
     --color-warning-dark: #fef3c7;
     
-    --color-danger: #f87171;
+    --color-danger: var(--color-error);  /* Alias for consistency */
     --color-danger-light: #991b1b;
     --color-danger-dark: #fee2e2;
     
@@ -196,11 +229,11 @@
     --color-info-dark: #dbeafe;
     
     /* Semantic Colors */
-    --color-background: var(--bg-color, #141b29);
-    --color-surface: var(--surface-color, #1f2736);
-    --color-surface-elevated: var(--bg-card, var(--surface-color, #283142));
+    --color-background: var(--color-bg);
+    --color-surface: var(--color-surface);
+    --color-surface-elevated: var(--bg-card, #1a2332);
 
-    --color-text-primary: var(--text-color, #f5f8ff);
+    --color-text-primary: var(--color-text);
     --color-text-secondary: var(--text-secondary, #d5deed);
     --color-text-muted: var(--text-muted, #a8b4cc);
     --color-text-inverse: var(--text-inverse, #212529);

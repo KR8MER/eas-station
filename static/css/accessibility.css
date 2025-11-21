@@ -1,33 +1,44 @@
 /* ============================================
    ACCESSIBILITY IMPROVEMENTS (WCAG 2.1 AA COMPLIANCE)
+   Enhanced with unified theme colors for better visibility
    ============================================ */
 
-/* Focus Management */
+/* Focus Management - using accent color for high visibility */
 .focus-visible {
-    outline: 2px solid var(--color-primary-500);
+    outline: 3px solid var(--color-accent);
     outline-offset: 2px;
 }
 
-/* Ensure all interactive elements have visible focus */
-*:focus {
-    outline: 2px solid var(--color-primary-500);
+/* Ensure all interactive elements have visible focus using :focus-visible */
+*:focus-visible {
+    outline: 3px solid var(--color-accent);
     outline-offset: 2px;
 }
 
-/* Better focus for interactive elements */
-a:focus,
-button:focus,
-input:focus,
-textarea:focus,
-select:focus,
-[tabindex]:focus {
-    outline: 2px solid var(--color-primary-500);
+/* Better focus for interactive elements - prioritize :focus-visible for modern browsers */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible {
+    outline: 3px solid var(--color-accent);
     outline-offset: 2px;
+}
+
+/* Remove default focus outline when using :focus-visible */
+a:focus:not(:focus-visible),
+button:focus:not(:focus-visible),
+input:focus:not(:focus-visible),
+textarea:focus:not(:focus-visible),
+select:focus:not(:focus-visible),
+[tabindex]:focus:not(:focus-visible) {
+    outline: none;
 }
 
 /* High contrast focus for better visibility */
 @media (prefers-contrast: high) {
-    *:focus {
+    *:focus-visible {
         outline: 3px solid #000;
         outline-offset: 2px;
     }

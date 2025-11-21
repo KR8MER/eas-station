@@ -104,8 +104,9 @@
     transition: all var(--transition-fast);
 }
 
-.btn:focus {
-    outline: 2px solid var(--color-primary-500);
+/* Enhanced focus styles for accessibility - using accent color for visibility */
+.btn:focus-visible {
+    outline: 3px solid var(--color-accent);
     outline-offset: 2px;
 }
 
@@ -114,21 +115,24 @@
     cursor: not-allowed;
 }
 
-/* Button Variants */
+/* Button Variants - using unified theme colors */
 .btn-primary {
     color: white;
-    background-color: var(--color-primary-500);
-    border-color: var(--color-primary-500);
+    background-color: var(--color-primary);
+    border-color: var(--color-primary);
 }
 
 .btn-primary:hover:not(:disabled) {
     background-color: var(--color-primary-600);
     border-color: var(--color-primary-600);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(11, 102, 255, 0.3);
 }
 
 .btn-primary:active:not(:disabled) {
     background-color: var(--color-primary-700);
     border-color: var(--color-primary-700);
+    transform: translateY(0);
 }
 
 .btn-secondary {
