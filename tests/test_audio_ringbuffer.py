@@ -72,57 +72,57 @@ class TestAudioRingBuffer:
 
     def test_wraparound_write(self):
         """Test write that wraps around buffer end."""
-        buffer = AudioRingBuffer(capacity_samples=16, dtype=np.float32)
+        buffer = AudioRingBuffer(capacity_samples=1024, dtype=np.float32)
 
-        # Fill most of buffer
-        data1 = np.ones(12, dtype=np.float32)
+        # Fill most of buffer (leave room for wraparound)
+        data1 = np.ones(900, dtype=np.float32)
         buffer.write(data1, block=False)
 
         # Read some to make space at start
-        buffer.read(8, block=False)
+        buffer.read(600, block=False)
 
         # Write data that will wrap around
-        data2 = np.full(10, 2.0, dtype=np.float32)
+        data2 = np.full(700, 2.0, dtype=np.float32)
         written = buffer.write(data2, block=False)
 
-        assert written == 10
+        assert written == 700
 
         # Read and verify order is correct
-        result = buffer.read(14, block=False)  # 4 from data1 + 10 from data2
+        result = buffer.read(1000, block=False)  # 300 from data1 + 700 from data2
         assert result is not None
 
         expected = np.concatenate([
-            np.ones(4, dtype=np.float32),  # Remaining from data1
-            np.full(10, 2.0, dtype=np.float32)  # All of data2
+            np.ones(300, dtype=np.float32),  # Remaining from data1
+            np.full(700, 2.0, dtype=np.float32)  # All of data2
         ])
         assert np.array_equal(result, expected)
 
     def test_wraparound_read(self):
         """Test read that wraps around buffer end."""
-        buffer = AudioRingBuffer(capacity_samples=16, dtype=np.float32)
+        buffer = AudioRingBuffer(capacity_samples=1024, dtype=np.float32)
 
         # Write, read, write pattern to position read pointer near end
-        buffer.write(np.ones(12, dtype=np.float32), block=False)
-        buffer.read(8, block=False)
-        buffer.write(np.full(8, 2.0, dtype=np.float32), block=False)
+        buffer.write(np.ones(900, dtype=np.float32), block=False)
+        buffer.read(600, block=False)
+        buffer.write(np.full(700, 2.0, dtype=np.float32), block=False)
 
         # Now read more than fits before wraparound
-        result = buffer.read(12, block=False)
+        result = buffer.read(1000, block=False)
 
         assert result is not None
-        assert len(result) == 12
+        assert len(result) == 1000
 
     def test_overflow_non_blocking(self):
         """Test overflow behavior in non-blocking mode."""
-        buffer = AudioRingBuffer(capacity_samples=16, dtype=np.float32)
+        buffer = AudioRingBuffer(capacity_samples=1024, dtype=np.float32)
 
         # Fill buffer to capacity - 1 (one slot always reserved)
-        data = np.ones(15, dtype=np.float32)
+        data = np.ones(1023, dtype=np.float32)
         written = buffer.write(data, block=False)
-        assert written == 15
+        assert written == 1023
 
         # Try to write more (should fail)
-        overflow_data = np.ones(5, dtype=np.float32)
+        overflow_data = np.ones(100, dtype=np.float32)
         written = buffer.write(overflow_data, block=False)
         assert written == 0  # Nothing written
 

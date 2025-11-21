@@ -614,6 +614,10 @@ class ContinuousEASMonitor:
         last_heartbeat_time = time.time()
         heartbeat_interval = 5.0  # Update activity every 5 seconds
 
+        read_error_count = 0
+        last_error_log_time = 0
+        error_log_interval = 10.0  # Only log repeated errors every 10 seconds
+        
         while not self._stop_event.is_set():
             try:
                 # Update activity heartbeat periodically
@@ -622,25 +626,44 @@ class ContinuousEASMonitor:
                     self._update_activity()
                     last_heartbeat_time = current_time
 
-                # Read audio from manager
-                samples = self.audio_manager.read_audio(chunk_samples)
+                # Read audio from manager with error protection
+                samples = None
+                try:
+                    samples = self.audio_manager.read_audio(chunk_samples)
+                    read_error_count = 0  # Reset error count on success
+                except Exception as read_error:
+                    read_error_count += 1
+                    if current_time - last_error_log_time > error_log_interval:
+                        logger.error(
+                            f"Error reading audio from manager (error #{read_error_count}): {read_error}",
+                            exc_info=True
+                        )
+                        last_error_log_time = current_time
+                    samples = None
 
                 if samples is not None:
                     # Add to circular buffer
-                    self._add_to_buffer(samples)
+                    try:
+                        self._add_to_buffer(samples)
+                    except Exception as buffer_error:
+                        logger.error(f"Error adding samples to buffer: {buffer_error}", exc_info=True)
 
                 # Check if it's time to scan for alerts
                 if current_time - last_scan_time >= self.scan_interval:
-                    self._scan_for_alerts()
-                    last_scan_time = current_time
-                    self._last_scan_time = current_time
-                    self._update_activity()  # Update on successful scan
+                    try:
+                        self._scan_for_alerts()
+                        last_scan_time = current_time
+                        self._last_scan_time = current_time
+                        self._update_activity()  # Update on successful scan
+                    except Exception as scan_error:
+                        logger.error(f"Error initiating scan for alerts: {scan_error}", exc_info=True)
+                        last_scan_time = current_time  # Still update to avoid rapid retry
                 else:
                     # Brief sleep to avoid busy-waiting
                     time.sleep(0.01)
 
             except Exception as e:
-                logger.error(f"Error in EAS monitor loop: {e}", exc_info=True)
+                logger.error(f"Unexpected error in EAS monitor loop: {e}", exc_info=True)
                 # Still update activity to show loop is running, even with errors
                 self._update_activity()
                 time.sleep(1.0)  # Back off on error
@@ -743,22 +766,26 @@ class ContinuousEASMonitor:
                 self._active_scans -= 1
 
     def _save_to_temp_wav(self, samples: np.ndarray) -> str:
-        """Save samples to temporary WAV file."""
-        # Create temp file
-        fd, temp_path = tempfile.mkstemp(suffix=".wav", prefix="eas_scan_")
-        os.close(fd)
+        """Save samples to temporary WAV file with error handling."""
+        try:
+            # Create temp file
+            fd, temp_path = tempfile.mkstemp(suffix=".wav", prefix="eas_scan_")
+            os.close(fd)
 
-        # Write WAV file
-        with wave.open(temp_path, 'wb') as wf:
-            wf.setnchannels(1)  # Mono
-            wf.setsampwidth(2)  # 16-bit
-            wf.setframerate(self.sample_rate)
+            # Write WAV file
+            with wave.open(temp_path, 'wb') as wf:
+                wf.setnchannels(1)  # Mono
+                wf.setsampwidth(2)  # 16-bit
+                wf.setframerate(self.sample_rate)
 
-            # Convert float32 [-1, 1] to int16 PCM
-            pcm_data = (samples * 32767).astype(np.int16)
-            wf.writeframes(pcm_data.tobytes())
+                # Convert float32 [-1, 1] to int16 PCM
+                pcm_data = (samples * 32767).astype(np.int16)
+                wf.writeframes(pcm_data.tobytes())
 
-        return temp_path
+            return temp_path
+        except Exception as e:
+            logger.error(f"Failed to save temporary WAV file for EAS scan: {e}", exc_info=True)
+            raise  # Re-raise so scan_worker can handle it
 
     def _handle_alert_detected(
         self,
