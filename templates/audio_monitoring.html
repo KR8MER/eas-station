@@ -1017,25 +1017,27 @@ function updateStreamStatus(sourceName, audioEl) {
     const isSecureContext = window.location.protocol === 'https:';
     const icecastIsHttp = icecastUrl && /^http:\/\//i.test(icecastUrl);
 
+    // Case 1: No Icecast configured - always use built-in player
     if (!icecastUrl) {
-        // No Icecast configured
         statusEl.innerHTML = `<span class="text-muted"><i class="fas fa-lock"></i> Using built-in secure player</span>`;
         return;
     }
 
-    if (streamType === 'icecast' || (icecastUrl && !icecastIsHttp)) {
-        // Using or can use Icecast
-        statusEl.innerHTML = `
-            <a href="${escapeHtml(icecastUrl)}" target="_blank" rel="noopener" class="text-success text-decoration-none">
-                <i class="fas fa-broadcast-tower"></i> Icecast stream available
-            </a>
-        `;
-    } else if (isSecureContext && icecastIsHttp) {
-        // HTTPS page with HTTP Icecast - fallback active
-        statusEl.innerHTML = `<span class="text-muted"><i class="fas fa-lock"></i> Using built-in secure player <small>(Icecast is HTTP-only)</small></span>`;
-    } else {
-        statusEl.innerHTML = `<span class="text-muted"><i class="fas fa-lock"></i> Using built-in secure player</span>`;
+    // Case 2: Icecast is configured and compatible (currently using it OR it's HTTPS-compatible)
+    const canUseIcecast = !icecastIsHttp || !isSecureContext;
+    if (streamType === 'icecast' || canUseIcecast) {
+        statusEl.innerHTML = `<a href="${escapeHtml(icecastUrl)}" target="_blank" rel="noopener" class="text-success text-decoration-none"><i class="fas fa-broadcast-tower"></i> Icecast stream available</a>`;
+        return;
     }
+
+    // Case 3: HTTPS page with HTTP-only Icecast - using fallback
+    if (isSecureContext && icecastIsHttp) {
+        statusEl.innerHTML = `<span class="text-muted"><i class="fas fa-lock"></i> Using built-in secure player <small>(Icecast is HTTP-only)</small></span>`;
+        return;
+    }
+
+    // Case 4: Default fallback
+    statusEl.innerHTML = `<span class="text-muted"><i class="fas fa-lock"></i> Using built-in secure player</span>`;
 }
 
 function onAudioPlaybackError(event) {
