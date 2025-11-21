@@ -2281,19 +2281,38 @@ def main():
                     f"Interval {args.interval}s is below minimum; using {interval}s to prevent excessive CPU usage"
                 )
             logger.info(f"Running continuously with {interval} second intervals")
+            
+            consecutive_errors = 0
+            max_backoff = 300  # Maximum 5 minutes between retries
+            first_iteration = True
+            
             while True:
                 try:
+                    # Sleep before polling (except on first iteration) to prevent CPU hammering
+                    # This ensures we always wait between polls, even if a poll completes very quickly
+                    if not first_iteration:
+                        if consecutive_errors > 0:
+                            # Exponential backoff for errors: 60s, 120s, 240s, up to max_backoff
+                            backoff_time = min(60 * (2 ** (consecutive_errors - 1)), max_backoff)
+                            logger.info(f"Backing off for {backoff_time} seconds after {consecutive_errors} consecutive error(s)...")
+                            time.sleep(backoff_time)
+                        else:
+                            # Normal interval for successful polls
+                            logger.info(f"Waiting {interval} seconds before next poll...")
+                            time.sleep(interval)
+                    first_iteration = False
+                    
                     stats = poller.poll_and_process()
                     print(json.dumps(stats, indent=2))
-                    logger.info(f"Polling cycle complete. Sleeping for {interval} seconds...")
-                    time.sleep(interval)
+                    logger.info(f"Polling cycle complete.")
+                    consecutive_errors = 0  # Reset error counter on success
                 except KeyboardInterrupt:
                     logger.info("Received interrupt signal, shutting down")
                     break
                 except Exception as e:
-                    logger.error(f"Error in continuous polling: {e}")
-                    logger.info("Sleeping for 60 seconds before retry...")
-                    time.sleep(60)
+                    consecutive_errors += 1
+                    logger.error(f"Error in continuous polling (attempt {consecutive_errors}): {e}")
+                    # Backoff will be applied at the start of the next iteration
         else:
             stats = poller.poll_and_process()
             print(json.dumps(stats, indent=2))
