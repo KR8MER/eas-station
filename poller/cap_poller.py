@@ -431,6 +431,10 @@ class CAPPoller:
         self.location_name = f"{self.location_settings['county_name']}, {self.location_settings['state_code']}".strip(', ')
         self.county_upper = self.location_settings['county_name'].upper()
         self.state_code = self.location_settings['state_code']
+        
+        # Track when cleanup was last run to avoid expensive operations on every poll
+        self._last_cleanup_time = None
+        self._cleanup_interval_seconds = 86400  # Run cleanup once per day (24 hours)
 
         # EAS broadcaster
         self.eas_broadcaster = None
@@ -1891,6 +1895,15 @@ class CAPPoller:
                 pass
 
     def cleanup_old_poll_history(self):
+        """Clean old poll history records. Only runs periodically to avoid CPU overhead."""
+        # Check if cleanup is due (runs once per day by default)
+        now = utc_now()
+        if self._last_cleanup_time is not None:
+            time_since_cleanup = (now - self._last_cleanup_time).total_seconds()
+            if time_since_cleanup < self._cleanup_interval_seconds:
+                # Skip cleanup - not enough time has passed
+                return
+        
         try:
             # Ensure table exists
             try:
@@ -1907,7 +1920,12 @@ class CAPPoller:
                     PollHistory.timestamp < cutoff, ~PollHistory.id.in_(subq)
                 ).delete(synchronize_session=False)
                 self.db_session.commit()
-                self.logger.info("Cleaned old poll history")
+                self.logger.info("Cleaned old poll history (removed %d records)", old_count)
+            else:
+                self.logger.debug("Skipping poll history cleanup - only %d old records", old_count)
+            
+            # Update last cleanup time on success
+            self._last_cleanup_time = now
         except Exception as e:
             self.logger.error(f"cleanup_old_poll_history error: {e}")
             try:
@@ -1916,6 +1934,15 @@ class CAPPoller:
                 self.logger.debug("Rollback failed during poll history cleanup: %s", rollback_exc)
 
     def cleanup_old_debug_records(self):
+        """Clean old debug records. Only runs periodically to avoid CPU overhead."""
+        # Use same cleanup schedule as poll_history
+        now = utc_now()
+        if self._last_cleanup_time is not None:
+            time_since_cleanup = (now - self._last_cleanup_time).total_seconds()
+            if time_since_cleanup < self._cleanup_interval_seconds:
+                # Skip cleanup - not enough time has passed
+                return
+        
         if not self._ensure_debug_records_table():
             return
 
@@ -1938,6 +1965,9 @@ class CAPPoller:
                     ~PollDebugRecord.id.in_(subq),
                 ).delete(synchronize_session=False)
                 self.db_session.commit()
+                self.logger.info("Cleaned old debug records (removed %d records)", old_count - 500)
+            else:
+                self.logger.debug("Skipping debug records cleanup - only %d old records", old_count)
         except Exception as exc:
             self.logger.error(f"cleanup_old_debug_records error: {exc}")
             try:
