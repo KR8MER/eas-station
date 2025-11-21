@@ -55,7 +55,9 @@
     100% { transform: rotate(360deg); }
 }
 
-/* Skeleton Screens - using CSS variables for theme consistency */
+/* Skeleton Screens - using CSS variables that automatically adapt to theme 
+   Note: neutral colors are inverted in dark mode via design-system.css,
+   so skeleton appearance automatically adjusts for light/dark themes */
 .skeleton {
     background: linear-gradient(90deg, 
         var(--color-neutral-200) 25%, 
@@ -66,21 +68,8 @@
     border-radius: 4px;
 }
 
-[data-theme-mode="dark"] .skeleton {
-    background: linear-gradient(90deg, 
-        var(--color-neutral-200) 25%, 
-        var(--color-neutral-300) 50%, 
-        var(--color-neutral-200) 75%);
-    background-size: 200% 100%;
-    animation: loading-dark 1.5s infinite;
-}
-
+/* Single animation works for all themes since colors adapt via CSS variables */
 @keyframes loading {
-    0% { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
-}
-
-@keyframes loading-dark {
     0% { background-position: 200% 0; }
     100% { background-position: -200% 0; }
 }
