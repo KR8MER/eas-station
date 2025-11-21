@@ -180,9 +180,10 @@
     gap: 10px;
 }
 
+/* Prominent logo sizing - increased for better visibility */
 .brand-logo {
-    height: 96px;
-    max-height: 96px;
+    height: 112px;
+    max-height: 112px;
     width: auto;
     display: block;
     padding: var(--logo-padding);
@@ -193,6 +194,14 @@
     transition: background-color var(--transition-medium),
                 box-shadow var(--transition-medium),
                 border-color var(--transition-medium);
+}
+
+/* Responsive logo sizing */
+@media (max-width: 767.98px) {
+    .brand-logo {
+        height: 80px;
+        max-height: 80px;
+    }
 }
 
 .logo-wordmark {

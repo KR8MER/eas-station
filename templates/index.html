@@ -93,20 +93,30 @@
         margin-bottom: 0;
     }
 
+    /* Prominent dashboard logo - larger for visual impact
+       Note: White fill is intentional for visibility on gradient background */
     .dashboard-page-logo {
         height: auto;
         width: 100%;
-        max-width: 300px;
+        max-width: 360px;
         display: block;
+        filter: drop-shadow(0 4px 12px var(--shadow-color));
     }
 
     .dashboard-page-logo .logo-text-primary,
     .dashboard-page-logo .logo-text-secondary {
-        fill: #ffffff;
+        fill: #ffffff; /* White for visibility on colored gradient header */
     }
 
     .dashboard-page-logo .logo-bar {
-        fill: #ffffff;
+        fill: #ffffff; /* White for visibility on colored gradient header */
+    }
+    
+    /* Responsive logo sizing for dashboard */
+    @media (max-width: 767.98px) {
+        .dashboard-page-logo {
+            max-width: 280px;
+        }
     }
 
     .page-header-actions {
@@ -153,13 +163,14 @@
         align-items: center;
         justify-content: center;
         font-size: 1.35rem;
-        color: #fff;
+        color: var(--color-text-inverse);
     }
 
-    .metric-icon.metric-alert { background: #e05263; }
-    .metric-icon.metric-boundary { background: #2eb08d; }
-    .metric-icon.metric-clock { background: #f6b968; color: #1c2233; }
-    .metric-icon.metric-map { background: #2f5aa1; }
+    /* Using CSS variables for metric icons - all colors from theme variables */
+    .metric-icon.metric-alert { background: var(--danger-color); }
+    .metric-icon.metric-boundary { background: var(--success-color); }
+    .metric-icon.metric-clock { background: var(--warning-color); color: var(--text-color); }
+    .metric-icon.metric-map { background: var(--info-color); }
 
     .metric-label {
         font-size: 0.78rem;
