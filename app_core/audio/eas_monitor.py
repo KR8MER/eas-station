@@ -579,7 +579,7 @@ class ContinuousEASMonitor:
             "min_scan_duration_seconds": min_scan_duration,
             "max_scan_duration_seconds": max_scan_duration,
             "last_scan_duration_seconds": last_scan_duration,
-            "scan_history_size": len(self._scan_durations) if hasattr(self, '_scan_durations') else 0
+            "scan_history_size": len(self._scan_durations)
         }
 
     def get_buffer_history(self, max_points: int = 60) -> list:
