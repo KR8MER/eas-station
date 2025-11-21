@@ -126,7 +126,7 @@
     background-color: var(--color-primary-600);
     border-color: var(--color-primary-600);
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(11, 102, 255, 0.3);
+    box-shadow: var(--shadow-primary); /* Using unified shadow variable */
 }
 
 .btn-primary:active:not(:disabled) {

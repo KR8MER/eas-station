@@ -44,9 +44,8 @@
     --shadow-color: rgba(11, 102, 255, 0.12); /* Updated to match new primary */
     --shadow: rgba(11, 102, 255, 0.12);
 
-    /* Semantic Aliases - using unified colors */
-    --accent-primary: var(--primary-color);
-    --accent-secondary: var(--accent-color);
+    /* Legacy semantic aliases for backward compatibility with existing code */
+    /* Prefer using the unified color variables (--color-primary, --color-accent, etc.) in new code */
     --info: var(--info-color);
     --success: var(--success-color);
     --warning: var(--warning-color);
@@ -118,9 +117,7 @@
     --shadow-color: rgba(8, 11, 19, 0.55);
     --shadow: rgba(8, 11, 19, 0.55);
 
-    /* Semantic Aliases - using unified colors */
-    --accent-primary: var(--primary-color);
-    --accent-secondary: var(--accent-color);
+    /* Legacy semantic aliases for backward compatibility */
     --info: var(--info-color);
     --success: var(--success-color);
     --warning: var(--warning-color);

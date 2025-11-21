@@ -225,7 +225,7 @@
     fill: var(--color-muted, #64748b);
 }
 
-/* Navbar logo - ensure text is always readable on navbar with unified colors */
+/* Navbar logo - ensure maximum contrast on navbar background */
 .navbar .brand-logo .logo-text-primary {
     fill: #ffffff;
 }
@@ -235,7 +235,7 @@
 }
 
 .navbar .brand-logo .logo-bar {
-    fill: var(--color-accent); /* Use accent color for brand recognition */
+    fill: #ffffff; /* White ensures best contrast on primary blue navbar background */
 }
 
 /* Hero logo variant for landing page - larger and more prominent */
