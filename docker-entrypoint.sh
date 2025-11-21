@@ -269,7 +269,10 @@ while [ $attempt -lt $max_attempts ]; do
             echo "Migration attempt $attempt failed. Retrying in 2 seconds..."
             sleep 2
         else
-            echo "Migration failed after $max_attempts attempts. Continuing anyway..."
+            echo "ERROR: Migrations failed after $max_attempts attempts."
+            echo "Refusing to start application to prevent data corruption."
+            echo "Check the error messages above and fix the database schema."
+            exit 1
         fi
     fi
 done
