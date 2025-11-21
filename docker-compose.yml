@@ -6,10 +6,10 @@ services:
     image: eas-nginx:latest
     restart: unless-stopped
     ports:
-      - "0.0.0.0:80:80"   # HTTP (redirects to HTTPS - IPv4)
-      - "[::]:80:80"      # HTTP (redirects to HTTPS - IPv6)
-      - "0.0.0.0:443:443" # HTTPS (IPv4)
-      - "[::]:443:443"    # HTTPS (IPv6)
+      - "80:80"    # HTTP (redirects to HTTPS) - binds to both IPv4 and IPv6
+      - "443:443"  # HTTPS - binds to both IPv4 and IPv6
+    networks:
+      - eas-network
     volumes:
       - certbot-conf:/etc/letsencrypt
       - certbot-www:/var/www/certbot
@@ -27,6 +27,8 @@ services:
   certbot:
     image: certbot/certbot:latest
     restart: unless-stopped
+    networks:
+      - eas-network
     volumes:
       - certbot-conf:/etc/letsencrypt
       - certbot-www:/var/www/certbot
@@ -48,6 +50,8 @@ services:
     image: eas-station:latest
     expose:
       - "5000"  # Internal only, accessed via nginx reverse proxy
+    networks:
+      - eas-network
     env_file:
       - stack.env  # For Portainer Git deployments - provides defaults
       # NOTE: .env removed - loads empty file from Git. App loads from CONFIG_PATH at runtime.
@@ -115,6 +119,8 @@ services:
     image: eas-station:latest
     depends_on:
       - app
+    networks:
+      - eas-network
     command: ["python", "poller/cap_poller.py", "--continuous", "--interval", "180"]
     restart: unless-stopped
     env_file:
@@ -154,6 +160,8 @@ services:
     image: eas-station:latest
     depends_on:
       - app
+    networks:
+      - eas-network
     command:
       - python
       - poller/cap_poller.py
@@ -206,7 +214,7 @@ services:
       - embedded-db
     restart: unless-stopped
     networks:
-      default:
+      eas-network:
         aliases:
           - postgres
     environment:
@@ -228,6 +236,8 @@ services:
     image: eas-icecast:latest
     container_name: eas-icecast
     restart: unless-stopped
+    networks:
+      - eas-network
     ports:
       - "${ICECAST_PORT:-8001}:8000"  # Icecast web interface and streams (port 8001 to avoid Portainer conflict)
     environment:
@@ -267,3 +277,15 @@ volumes:
   certbot-conf:  # Let's Encrypt SSL certificates
   certbot-www:  # Certbot ACME challenge files
   nginx-logs:  # nginx access and error logs
+
+networks:
+  eas-network:
+    enable_ipv6: true
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.0.0/16
+          gateway: 172.20.0.1
+        - subnet: fd00:eas:station::/64
+          gateway: fd00:eas:station::1
