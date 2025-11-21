@@ -1861,6 +1861,8 @@ def api_stream_audio(source_name: str):
         logger.info(f'Setting up WAV stream for {source_name}: {sample_rate}Hz, {channels}ch, {bits_per_sample}-bit')
 
         # Build streaming-friendly WAV header - always send this regardless of source status
+        # If header generation fails, we'll build a minimal default header and continue
+        header_sent = False
         try:
             wav_header = io.BytesIO()
             wav_header.write(b'RIFF')
@@ -1882,10 +1884,31 @@ def api_stream_audio(source_name: str):
             wav_header.write(struct.pack('<I', 0xFFFFFFFF))  # Placeholder for data size
 
             yield wav_header.getvalue()
+            header_sent = True
             logger.debug(f'WAV header sent for {source_name}')
         except Exception as e:
             logger.error(f'Failed to generate WAV header for {source_name}: {e}', exc_info=True)
-            return
+            # Try to send a minimal fallback header so stream can continue
+            if not header_sent:
+                try:
+                    # Minimal WAV header with safe defaults (44100Hz mono)
+                    fallback_header = (
+                        b'RIFF\xff\xff\xff\xff'  # RIFF + size placeholder
+                        b'WAVE'
+                        b'fmt \x10\x00\x00\x00'  # fmt chunk (16 bytes)
+                        b'\x01\x00'  # PCM format
+                        b'\x01\x00'  # 1 channel
+                        b'\x44\xac\x00\x00'  # 44100 Hz sample rate
+                        b'\x88\x58\x01\x00'  # byte rate (44100 * 1 * 2)
+                        b'\x02\x00'  # block align (1 * 2)
+                        b'\x10\x00'  # 16 bits per sample
+                        b'data\xff\xff\xff\xff'  # data chunk header
+                    )
+                    yield fallback_header
+                    logger.warning(f'Sent fallback WAV header for {source_name}')
+                except Exception as fallback_error:
+                    logger.error(f'Even fallback header failed for {source_name}: {fallback_error}')
+                    # Continue anyway - will stream raw PCM which some players can handle
 
         # Pre-buffer audio for smooth playback - continue even if we can't fill buffer
         logger.info(f'Pre-buffering audio for {source_name}')

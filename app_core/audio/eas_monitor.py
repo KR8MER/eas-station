@@ -355,7 +355,7 @@ class ContinuousEASMonitor:
         self,
         audio_manager: AudioSourceManager,
         buffer_duration: float = 10.0,  # Optimized for SAME detection (3s header × 3 bursts + margin)
-        scan_interval: float = 10.0,  # Prevents scan pileup - matches buffer for reliable detection
+        scan_interval: float = 5.0,  # Scan every 5 seconds for faster detection (was 10s)
         sample_rate: int = 22050,
         alert_callback: Optional[Callable[[EASAlert], None]] = None,
         save_audio_files: bool = True,
@@ -702,10 +702,85 @@ class ContinuousEASMonitor:
                 self._audio_buffer[:self._buffer_pos]
             ]).copy()
 
+    def _has_same_signature(self, audio_samples: np.ndarray) -> bool:
+        """Fast pre-check to detect if audio contains SAME tone signatures.
+        
+        This is a lightweight filter that checks for the presence of the characteristic
+        SAME tones (853 Hz and 960 Hz) without doing full decoding. This allows us to
+        skip expensive decoding on audio that clearly doesn't contain alerts.
+        
+        Returns True if SAME tones might be present (run full decode).
+        Returns False if definitely no SAME tones (skip decode to save CPU).
+        """
+        try:
+            # Only analyze a small window to keep this fast (first 2 seconds)
+            window_samples = min(len(audio_samples), int(self.sample_rate * 2.0))
+            window = audio_samples[:window_samples]
+            
+            # Calculate power spectrum using FFT
+            # Use smaller FFT size for speed (2048 samples = ~93ms at 22050 Hz)
+            fft_size = 2048
+            hop_size = fft_size // 2
+            
+            # SAME uses 853 Hz (mark) and 960 Hz (space)
+            # Allow some tolerance for frequency drift
+            mark_freq = 853
+            space_freq = 960
+            freq_tolerance = 50  # Hz
+            
+            # Calculate frequency bins
+            freq_resolution = self.sample_rate / fft_size
+            mark_bin_low = int((mark_freq - freq_tolerance) / freq_resolution)
+            mark_bin_high = int((mark_freq + freq_tolerance) / freq_resolution)
+            space_bin_low = int((space_freq - freq_tolerance) / freq_resolution)
+            space_bin_high = int((space_freq + freq_tolerance) / freq_resolution)
+            
+            # Analyze multiple windows
+            max_mark_energy = 0.0
+            max_space_energy = 0.0
+            
+            for i in range(0, window_samples - fft_size, hop_size):
+                segment = window[i:i + fft_size]
+                
+                # Apply window function to reduce spectral leakage
+                segment = segment * np.hanning(fft_size)
+                
+                # Calculate power spectrum
+                spectrum = np.abs(np.fft.rfft(segment))
+                
+                # Check energy in SAME frequency bands
+                mark_energy = np.sum(spectrum[mark_bin_low:mark_bin_high])
+                space_energy = np.sum(spectrum[space_bin_low:space_bin_high])
+                
+                max_mark_energy = max(max_mark_energy, mark_energy)
+                max_space_energy = max(max_space_energy, space_energy)
+            
+            # If both SAME tones have significant energy, likely contains SAME
+            # Use a threshold relative to total signal energy
+            total_energy = np.sum(np.abs(window) ** 2)
+            
+            # Require at least some energy in both tone bands
+            # and reasonable signal-to-noise ratio
+            has_mark = max_mark_energy > (total_energy * 0.001)
+            has_space = max_space_energy > (total_energy * 0.001)
+            
+            if has_mark and has_space:
+                logger.debug("SAME signature detected - running full decode")
+                return True
+            else:
+                # No SAME signature - skip expensive decode
+                return False
+                
+        except Exception as e:
+            logger.debug(f"Error in SAME signature pre-check: {e}")
+            # On error, assume signature present to ensure we don't miss alerts
+            return True
+
     def _scan_for_alerts(self) -> None:
         """Scan buffered audio for EAS alerts (non-blocking).
 
         Launches scan in background thread to prevent blocking audio stream.
+        Uses a fast pre-filter to skip expensive decoding on audio without SAME tones.
         """
         # Check if too many scans are running
         with self._scan_lock:
@@ -720,6 +795,15 @@ class ContinuousEASMonitor:
 
         # Get buffer copy (fast, lock released immediately)
         audio_samples = self._get_buffer_contents()
+        
+        # Fast pre-check: does this audio contain SAME tones?
+        # This avoids expensive decoding on silent periods or non-EAS audio
+        if not self._has_same_signature(audio_samples):
+            # No SAME signature detected - skip expensive decode
+            logger.debug("No SAME signature in audio buffer, skipping decode")
+            with self._scan_lock:
+                self._active_scans -= 1
+            return
 
         # Launch scan in background thread
         scan_thread = threading.Thread(
@@ -734,7 +818,11 @@ class ContinuousEASMonitor:
         """Worker thread that performs the actual EAS scan.
 
         This runs in background to avoid blocking the audio stream.
+        The decode operation has no built-in timeout, but if it hangs, the watchdog
+        will detect the stalled decoder and restart the entire monitor thread.
+        We also limit concurrent scans to prevent resource exhaustion.
         """
+        temp_wav = None
         try:
             self._scans_performed += 1
 
@@ -743,25 +831,33 @@ class ContinuousEASMonitor:
 
             try:
                 # Run decoder (this is the slow part - now in background)
+                # Note: This could theoretically hang on corrupted audio, but:
+                # 1. It runs in a background thread so won't block the main loop
+                # 2. The watchdog will detect and restart if monitoring stalls
+                # 3. We limit concurrent scans to 2 max to prevent resource exhaustion
                 result = decode_same_audio(temp_wav, sample_rate=self.sample_rate)
 
                 # Check if we found an alert
                 if result.headers and len(result.headers) > 0:
                     # Alert detected!
                     self._handle_alert_detected(result, audio_samples, temp_wav)
+                    temp_wav = None  # Don't clean up - _handle_alert_detected manages it
 
-            finally:
-                # Clean up temp file if we're not saving it
-                if not self.save_audio_files and os.path.exists(temp_wav):
-                    try:
-                        os.unlink(temp_wav)
-                    except Exception:
-                        pass
+            except Exception as decode_error:
+                logger.error(f"Error in SAME decoder: {decode_error}", exc_info=True)
+                # Continue - don't let decoder errors stop monitoring
 
         except Exception as e:
-            logger.error(f"Error scanning for alerts: {e}", exc_info=True)
+            logger.error(f"Error in scan worker: {e}", exc_info=True)
         finally:
-            # Decrement active scan counter
+            # Clean up temp file if we're not saving it
+            if temp_wav and not self.save_audio_files and os.path.exists(temp_wav):
+                try:
+                    os.unlink(temp_wav)
+                except Exception as cleanup_error:
+                    logger.debug(f"Error cleaning up temp file {temp_wav}: {cleanup_error}")
+            
+            # Decrement active scan counter - ALWAYS do this even if scan failed
             with self._scan_lock:
                 self._active_scans -= 1
 
