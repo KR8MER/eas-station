@@ -1827,6 +1827,45 @@ def api_get_spectrogram(source_name: str):
         logger.error('Error getting spectrogram for %s: %s', source_name, exc)
         return jsonify({'error': str(exc)}), 500
 
+def _try_read_audio_chunk(adapter: Any, timeout: float = 0.2) -> Optional[Any]:
+    """
+    Try to read audio chunk from adapter supporting multiple method names.
+    
+    Attempts methods in order: get_audio_chunk, read_audio, read, get_chunk.
+    Automatically detects whether the method accepts a timeout parameter.
+    
+    Args:
+        adapter: Audio adapter instance
+        timeout: Timeout in seconds for reading
+        
+    Returns:
+        Audio chunk or None if no method works
+    """
+    import inspect
+    
+    for method_name in ['get_audio_chunk', 'read_audio', 'read', 'get_chunk']:
+        if hasattr(adapter, method_name):
+            method = getattr(adapter, method_name)
+            try:
+                # Use inspect.signature for robust parameter detection
+                sig = inspect.signature(method)
+                if 'timeout' in sig.parameters:
+                    return method(timeout=timeout)
+                else:
+                    return method()
+            except TypeError:
+                # Fallback: try without timeout if inspect fails
+                try:
+                    return method()
+                except TypeError:
+                    continue
+            except Exception:
+                # Method exists but failed - let caller handle
+                raise
+    
+    return None
+
+
 @audio_ingest_bp.route('/api/audio/stream/<source_name>')
 def api_stream_audio(source_name: str):
     """Stream live audio from a specific source as WAV."""
@@ -1887,17 +1926,7 @@ def api_stream_audio(source_name: str):
 
             try:
                 # Try to read audio chunk - support multiple method names
-                audio_chunk = None
-                for method_name in ['get_audio_chunk', 'read_audio', 'read', 'get_chunk']:
-                    if hasattr(active_adapter, method_name):
-                        method = getattr(active_adapter, method_name)
-                        try:
-                            audio_chunk = method(timeout=0.2) if 'timeout' in method.__code__.co_varnames else method()
-                            break
-                        except TypeError:
-                            # Method doesn't accept timeout parameter
-                            audio_chunk = method()
-                            break
+                audio_chunk = _try_read_audio_chunk(active_adapter, timeout=0.2)
                 
                 if audio_chunk is not None:
                     if not isinstance(audio_chunk, np.ndarray):
@@ -1934,17 +1963,7 @@ def api_stream_audio(source_name: str):
             while chunk_count < max_chunks:
                 try:
                     # Get audio chunk from adapter - support multiple method names
-                    audio_chunk = None
-                    for method_name in ['get_audio_chunk', 'read_audio', 'read', 'get_chunk']:
-                        if hasattr(active_adapter, method_name):
-                            method = getattr(active_adapter, method_name)
-                            try:
-                                audio_chunk = method(timeout=0.05) if 'timeout' in method.__code__.co_varnames else method()
-                                break
-                            except TypeError:
-                                # Method doesn't accept timeout parameter
-                                audio_chunk = method()
-                                break
+                    audio_chunk = _try_read_audio_chunk(active_adapter, timeout=0.05)
                 except Exception as e:
                     logger.debug(f'Error reading audio chunk from {source_name}: {e}')
                     audio_chunk = None
@@ -2005,10 +2024,11 @@ def api_stream_audio(source_name: str):
                     # Clip to [-1, 1] range and convert to int16
                     audio_chunk = np.clip(audio_chunk, -1.0, 1.0)
                     
-                    # Handle multi-channel by flattening if needed
+                    # Handle multi-channel by interleaving if needed
                     if audio_chunk.ndim > 1:
-                        # Interleave channels for proper WAV format
-                        audio_chunk = audio_chunk.flatten('F')  # Fortran order for interleaving
+                        # Interleave channels for proper WAV format (L, R, L, R, ...)
+                        # Transpose then flatten ensures proper channel interleaving
+                        audio_chunk = audio_chunk.T.flatten()
                     
                     pcm_data = (audio_chunk * 32767).astype(np.int16)
 

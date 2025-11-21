@@ -412,6 +412,8 @@ class ContinuousEASMonitor:
         self._activity_lock = threading.Lock()
         self._watchdog_thread: Optional[threading.Thread] = None
         self._restart_count = 0
+        self._consecutive_errors = 0  # Track consecutive errors
+        self._max_consecutive_errors = 10  # Threshold for persistent failures
 
         logger.info(
             f"Initialized ContinuousEASMonitor: buffer={buffer_duration}s, "
@@ -562,34 +564,28 @@ class ContinuousEASMonitor:
                     )
                     self._restart_count += 1
                     
-                    # Attempt restart
+                    # Attempt restart by stopping and restarting the monitor thread
                     try:
-                        # Check if we have a restart method on the decoder worker
-                        if hasattr(self, 'restart_decoder_worker'):
-                            logger.info("Calling restart_decoder_worker()")
-                            self.restart_decoder_worker()
-                        else:
-                            # Fallback: stop and start the monitor
-                            logger.info("No restart_decoder_worker method, using stop/start")
-                            old_stop_event_state = self._stop_event.is_set()
+                        old_stop_event_state = self._stop_event.is_set()
+                        
+                        # Stop the monitor thread
+                        logger.info("Watchdog stopping stalled monitor thread")
+                        self._stop_event.set()
+                        if self._monitor_thread:
+                            self._monitor_thread.join(timeout=5.0)
+                        
+                        # Reset and restart if it was running
+                        if not old_stop_event_state:
+                            self._stop_event.clear()
+                            self._update_activity()  # Reset activity timer
                             
-                            # Stop the monitor thread
-                            self._stop_event.set()
-                            if self._monitor_thread:
-                                self._monitor_thread.join(timeout=5.0)
-                            
-                            # Reset and restart if it was running
-                            if not old_stop_event_state:
-                                self._stop_event.clear()
-                                self._update_activity()  # Reset activity timer
-                                
-                                self._monitor_thread = threading.Thread(
-                                    target=self._monitor_loop,
-                                    name="eas-monitor-restarted",
-                                    daemon=True
-                                )
-                                self._monitor_thread.start()
-                                logger.info("EAS monitor thread restarted by watchdog")
+                            self._monitor_thread = threading.Thread(
+                                target=self._monitor_loop,
+                                name="eas-monitor-restarted",
+                                daemon=True
+                            )
+                            self._monitor_thread.start()
+                            logger.info("EAS monitor thread restarted by watchdog")
                         
                         # Update activity time after successful restart
                         self._update_activity()
@@ -620,6 +616,8 @@ class ContinuousEASMonitor:
                     self._add_to_buffer(samples)
                     # Update activity on successful audio read
                     self._update_activity()
+                    # Reset consecutive error counter on success
+                    self._consecutive_errors = 0
 
                 # Check if it's time to scan for alerts
                 current_time = time.time()
@@ -635,8 +633,24 @@ class ContinuousEASMonitor:
 
             except Exception as e:
                 logger.error(f"Error in EAS monitor loop: {e}", exc_info=True)
-                # Update activity even on error to prevent watchdog restart during transient issues
-                self._update_activity()
+                
+                # Track consecutive errors to distinguish transient from persistent failures
+                self._consecutive_errors += 1
+                
+                if self._consecutive_errors < self._max_consecutive_errors:
+                    # Transient error - update activity to prevent watchdog restart
+                    self._update_activity()
+                    logger.debug(
+                        f"Consecutive errors: {self._consecutive_errors}/{self._max_consecutive_errors} "
+                        f"- treating as transient"
+                    )
+                else:
+                    # Persistent failure - don't update activity, let watchdog handle it
+                    logger.warning(
+                        f"Consecutive errors exceeded threshold ({self._consecutive_errors}). "
+                        f"Watchdog may trigger restart."
+                    )
+                
                 time.sleep(1.0)  # Back off on error
 
         logger.debug("EAS monitor loop stopped")
