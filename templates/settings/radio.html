@@ -908,7 +908,6 @@
                 mimeType,
                 label: rawFormat ? `Icecast ${rawFormat.toUpperCase()}` : 'Icecast stream',
                 isIcecast: true,
-                viaIcecast: true,
                 format: rawFormat,
                 description: rawFormat ? `Icecast ${rawFormat.toUpperCase()}` : 'Icecast stream',
             };
@@ -921,7 +920,6 @@
             mimeType: 'audio/wav',
             label: protocolMismatch ? 'Secure proxied stream (HTTPS fallback)' : 'Direct WAV proxy (16-bit PCM)',
             isIcecast: false,
-            viaIcecast: false,
             format: null,
             description: protocolMismatch ? 'Secure proxied stream (HTTPS fallback)' : 'Direct WAV proxy (16-bit PCM)',
         };
@@ -998,7 +996,7 @@
 
         if (streamDetails?.format) {
             summaryParts.push(escapeHtml(String(streamDetails.format).toUpperCase()));
-        } else if (!streamDetails?.viaIcecast) {
+        } else if (!streamDetails?.isIcecast) {
             summaryParts.push('WAV proxy');
         }
 
@@ -1086,7 +1084,7 @@
 
         if (running) {
             playerWrap.innerHTML = `
-                <audio controls preload="none" class="w-100" data-stream-origin="${streamDetails.viaIcecast ? 'icecast' : 'proxy'}">
+                <audio controls preload="none" class="w-100" data-stream-origin="${streamDetails.isIcecast ? 'icecast' : 'proxy'}">
                     <source src="${escapeHtml(streamDetails.url)}" type="${escapeHtml(streamDetails.mimeType)}">
                     Your browser does not support HTML5 audio.
                 </audio>

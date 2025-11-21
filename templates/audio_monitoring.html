@@ -330,6 +330,13 @@ const htmlEntityDecoder = document.createElement('textarea');
 // VU meter state tracking for smoothing and peak hold
 const vuMeterState = new Map(); // sourceId -> { lastPeak, lastRms, peakHold, peakHoldTime }
 
+// VU meter behavior constants
+const PEAK_HOLD_TIME_MS = 1500; // Hold peak for 1.5 seconds
+const PEAK_SMOOTHING = 0.3; // Higher = smoother but slower (0-1)
+const PEAK_ATTACK_MULTIPLIER = 0.3; // Quick attack for peak meter
+const PEAK_ATTACK_FACTOR = PEAK_SMOOTHING * PEAK_ATTACK_MULTIPLIER; // Pre-calculated for performance
+const RMS_SMOOTHING = 0.5; // RMS should be smoother than peak
+
 function getPreferredStreamMode() {
     const stored = (localStorage.getItem(STREAM_MODE_KEY) || '').toLowerCase();
     return stored === 'icecast' ? 'icecast' : 'builtin';
@@ -1556,12 +1563,8 @@ function updateLevelMetersFromSnapshot(snapshot) {
     }
 
     const now = Date.now();
-    const PEAK_HOLD_TIME_MS = 1500; // Hold peak for 1.5 seconds
-    const PEAK_SMOOTHING = 0.3; // Higher = smoother but slower (0-1)
-    const PEAK_ATTACK_MULTIPLIER = 0.3; // Quick attack for peak meter
-    const RMS_SMOOTHING = 0.5; // RMS should be smoother than peak
-
     let updatedCount = 0;
+    
     snapshot.live_metrics.forEach(metric => {
         const safeId = sanitizeId(metric.source_id);
         const peakBar = document.getElementById(`peak-meter-${safeId}`);
@@ -1591,9 +1594,8 @@ function updateLevelMetersFromSnapshot(snapshot) {
         const targetPeak = metric.peak_level_db;
         let smoothedPeak;
         if (targetPeak > state.lastPeak) {
-            // Rise quickly (attack)
-            const attackFactor = PEAK_SMOOTHING * PEAK_ATTACK_MULTIPLIER;
-            smoothedPeak = targetPeak * (1 - attackFactor) + state.lastPeak * attackFactor;
+            // Rise quickly (attack) - use pre-calculated attack factor
+            smoothedPeak = targetPeak * (1 - PEAK_ATTACK_FACTOR) + state.lastPeak * PEAK_ATTACK_FACTOR;
         } else {
             // Fall slowly (release)
             smoothedPeak = targetPeak * (1 - PEAK_SMOOTHING) + state.lastPeak * PEAK_SMOOTHING;
