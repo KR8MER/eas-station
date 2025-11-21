@@ -17,10 +17,8 @@ services:
     image: eas-nginx:latest
     restart: unless-stopped
     ports:
-      - "0.0.0.0:80:80"   # HTTP (redirects to HTTPS - IPv4)
-      - "[::]:80:80"      # HTTP (redirects to HTTPS - IPv6)
-      - "0.0.0.0:443:443" # HTTPS (IPv4)
-      - "[::]:443:443"    # HTTPS (IPv6)
+      - "80:80"    # HTTP (redirects to HTTPS) - binds to both IPv4 and IPv6
+      - "443:443"  # HTTPS - binds to both IPv4 and IPv6
     volumes:
       - certbot-conf:/etc/letsencrypt
       - certbot-www:/var/www/certbot
