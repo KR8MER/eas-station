@@ -86,11 +86,13 @@ class AudioRingBuffer:
             capacity_samples: Buffer capacity in samples (not bytes)
             dtype: NumPy data type for samples (default: float32)
         """
-        if capacity_samples < 1024:
-            raise ValueError("Ring buffer must be at least 1024 samples")
-
         # Round up to power of 2 for efficient wraparound
         self.capacity = self._next_power_of_2(capacity_samples)
+        
+        # Validate after rounding
+        if self.capacity < 1024:
+            raise ValueError("Ring buffer must be at least 1024 samples")
+        
         self.mask = self.capacity - 1
         self.dtype = dtype
 

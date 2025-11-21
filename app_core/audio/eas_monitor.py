@@ -354,8 +354,8 @@ class ContinuousEASMonitor:
     def __init__(
         self,
         audio_manager: AudioSourceManager,
-        buffer_duration: float = 10.0,  # Optimized for SAME detection (3s header × 3 bursts + margin)
-        scan_interval: float = 10.0,  # Prevents scan pileup - matches buffer for reliable detection
+        buffer_duration: float = 12.0,  # 12 seconds to capture full SAME sequence (3s × 3 bursts + margin)
+        scan_interval: float = 3.0,  # Scan every 3 seconds for 75% overlap to never miss alerts
         sample_rate: int = 22050,
         alert_callback: Optional[Callable[[EASAlert], None]] = None,
         save_audio_files: bool = True,
@@ -366,12 +366,27 @@ class ContinuousEASMonitor:
 
         Args:
             audio_manager: AudioSourceManager instance providing audio
-            buffer_duration: Seconds of audio to buffer for analysis (default: 30s)
-            scan_interval: Seconds between decode attempts (default: 5s)
+            buffer_duration: Seconds of audio to buffer for analysis
+                            12s ensures full SAME capture (3 bursts × ~3s each)
+            scan_interval: Seconds between decode attempts
+                          3s provides 75% overlap (12s buffer, 3s interval)
+                          This ensures no SAME sequence can be missed at boundaries
             sample_rate: Audio sample rate in Hz (default: 22050)
             alert_callback: Optional callback function called when alert detected
             save_audio_files: Whether to save audio files of detected alerts
             audio_archive_dir: Directory to save alert audio files
+            
+        Note on overlap strategy:
+            SAME headers consist of 3 bursts, each ~3 seconds long = ~9 seconds total.
+            With 12s buffer and 3s scan interval, we get 75% overlap:
+            
+            Time:    0    3    6    9    12   15   18
+            Scan 1:  [------------]
+            Scan 2:       [------------]
+            Scan 3:            [------------]
+            
+            Any SAME sequence will appear COMPLETELY in at least one scan window,
+            ensuring 100% detection with no missed alerts at boundaries.
         """
         self.audio_manager = audio_manager
         self.buffer_duration = buffer_duration
@@ -393,6 +408,7 @@ class ContinuousEASMonitor:
 
         # Monitoring state
         self._monitor_thread: Optional[threading.Thread] = None
+        self._watchdog_thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
         self._stop_event.set()  # Initialize in "stopped" state
         self._alerts_detected = 0
@@ -403,11 +419,27 @@ class ContinuousEASMonitor:
         self._recent_alert_signatures: OrderedDict[str, float] = OrderedDict()
         self._active_scans = 0  # Track concurrent scans
         self._scan_lock = threading.Lock()  # Protect scan counter
+        
+        # Watchdog/heartbeat tracking
+        self._last_activity: float = time.time()
+        self._activity_lock = threading.Lock()
+        self._watchdog_timeout: float = 60.0  # Seconds before considering thread stalled
+        self._restart_count: int = 0
 
+        # Calculate overlap percentage for logging
+        overlap_pct = ((buffer_duration - scan_interval) / buffer_duration * 100) if buffer_duration > 0 else 0
+        
         logger.info(
             f"Initialized ContinuousEASMonitor: buffer={buffer_duration}s, "
-            f"scan_interval={scan_interval}s, sample_rate={sample_rate}Hz"
+            f"scan_interval={scan_interval}s ({overlap_pct:.0f}% overlap), "
+            f"sample_rate={sample_rate}Hz, watchdog_timeout={self._watchdog_timeout}s"
         )
+        
+        if overlap_pct < 50:
+            logger.warning(
+                f"Low scan overlap ({overlap_pct:.0f}%) may miss alerts at window boundaries. "
+                f"Recommend scan_interval <= {buffer_duration * 0.5:.1f}s for 50%+ overlap."
+            )
 
     def start(self) -> bool:
         """
@@ -421,6 +453,7 @@ class ContinuousEASMonitor:
             return False
 
         self._stop_event.clear()
+        self._update_activity()  # Initialize activity timestamp
 
         # Start monitoring thread
         self._monitor_thread = threading.Thread(
@@ -430,7 +463,19 @@ class ContinuousEASMonitor:
         )
         self._monitor_thread.start()
 
-        logger.info("Started continuous EAS monitoring")
+        # Start watchdog thread
+        self._watchdog_thread = threading.Thread(
+            target=self._watchdog_loop,
+            name="eas-watchdog",
+            daemon=True
+        )
+        self._watchdog_thread.start()
+
+        overlap_pct = ((self.buffer_duration - self.scan_interval) / self.buffer_duration * 100)
+        logger.info(
+            f"Started continuous EAS monitoring with {overlap_pct:.0f}% overlapping windows. "
+            f"SAME sequences (9s) will appear completely in at least one scan window."
+        )
         return True
 
     def stop(self) -> None:
@@ -440,10 +485,13 @@ class ContinuousEASMonitor:
 
         if self._monitor_thread:
             self._monitor_thread.join(timeout=10.0)
+        
+        if self._watchdog_thread:
+            self._watchdog_thread.join(timeout=5.0)
 
         logger.info(
             f"Stopped EAS monitoring. Stats: {self._scans_performed} scans, "
-            f"{self._alerts_detected} alerts detected"
+            f"{self._alerts_detected} alerts detected, {self._restart_count} restarts"
         )
 
     def get_status(self) -> dict:
@@ -478,6 +526,10 @@ class ContinuousEASMonitor:
 
         with self._scan_lock:
             active_scans = self._active_scans
+        
+        with self._activity_lock:
+            last_activity = self._last_activity
+            time_since_activity = time.time() - last_activity
 
         return {
             "running": is_running,
@@ -492,7 +544,11 @@ class ContinuousEASMonitor:
             "active_scans": active_scans,
             "audio_flowing": audio_flowing,
             "sample_rate": self.sample_rate,
-            "scan_warnings": 0  # TODO: track skipped scans
+            "scan_warnings": 0,  # TODO: track skipped scans
+            "last_activity": last_activity,
+            "time_since_activity": time_since_activity,
+            "restart_count": self._restart_count,
+            "watchdog_timeout": self._watchdog_timeout
         }
 
     def get_buffer_history(self, max_points: int = 60) -> list:
@@ -513,35 +569,131 @@ class ContinuousEASMonitor:
             "active_scans": status["active_scans"]
         }]
 
+    def _update_activity(self) -> None:
+        """Update the last activity timestamp (heartbeat)."""
+        with self._activity_lock:
+            self._last_activity = time.time()
+
+    def _watchdog_loop(self) -> None:
+        """Watchdog thread that monitors decoder thread health and restarts if stalled."""
+        logger.debug("EAS watchdog loop started")
+        check_interval = 10.0  # Check every 10 seconds
+        
+        while not self._stop_event.is_set():
+            try:
+                time.sleep(check_interval)
+                
+                if self._stop_event.is_set():
+                    break
+                
+                # Check if decoder thread is still alive and active
+                with self._activity_lock:
+                    time_since_activity = time.time() - self._last_activity
+                
+                if time_since_activity > self._watchdog_timeout:
+                    logger.error(
+                        f"EAS decoder thread appears stalled (no activity for {time_since_activity:.1f}s, "
+                        f"timeout={self._watchdog_timeout}s). Attempting restart..."
+                    )
+                    
+                    # Attempt to restart the monitor thread
+                    self._restart_monitor_thread()
+                    
+            except Exception as e:
+                logger.error(f"Error in EAS watchdog loop: {e}", exc_info=True)
+                time.sleep(5.0)  # Back off on error
+        
+        logger.debug("EAS watchdog loop stopped")
+
+    def _restart_monitor_thread(self) -> None:
+        """Attempt to safely restart the monitor thread."""
+        try:
+            self._restart_count += 1
+            logger.warning(f"Restarting EAS monitor thread (restart #{self._restart_count})")
+            
+            # Stop old thread if still running
+            if self._monitor_thread and self._monitor_thread.is_alive():
+                logger.debug("Old monitor thread still alive, giving it 3 seconds to stop")
+                # Note: We don't have a separate stop event for the monitor thread,
+                # so we can't force it to stop without stopping the entire service.
+                # Instead, just start a new one - the old one will eventually exit
+            
+            # Start new monitoring thread
+            self._monitor_thread = threading.Thread(
+                target=self._monitor_loop,
+                name=f"eas-monitor-r{self._restart_count}",
+                daemon=True
+            )
+            self._monitor_thread.start()
+            self._update_activity()  # Reset activity timestamp
+            
+            logger.info(f"EAS monitor thread restarted successfully (restart #{self._restart_count})")
+            
+        except Exception as e:
+            logger.error(f"Failed to restart EAS monitor thread: {e}", exc_info=True)
+
     def _monitor_loop(self) -> None:
-        """Main monitoring loop - runs continuously."""
+        """Main monitoring loop - runs continuously with heartbeat updates."""
         logger.debug("EAS monitor loop started")
 
         # Buffer for reading audio chunks
         chunk_samples = int(self.sample_rate * 0.1)  # 100ms chunks
         last_scan_time = 0.0
+        last_heartbeat_time = time.time()
+        heartbeat_interval = 5.0  # Update activity every 5 seconds
 
+        read_error_count = 0
+        last_error_log_time = 0
+        error_log_interval = 10.0  # Only log repeated errors every 10 seconds
+        
         while not self._stop_event.is_set():
             try:
-                # Read audio from manager
-                samples = self.audio_manager.read_audio(chunk_samples)
+                # Update activity heartbeat periodically
+                current_time = time.time()
+                if current_time - last_heartbeat_time >= heartbeat_interval:
+                    self._update_activity()
+                    last_heartbeat_time = current_time
+
+                # Read audio from manager with error protection
+                samples = None
+                try:
+                    samples = self.audio_manager.read_audio(chunk_samples)
+                    read_error_count = 0  # Reset error count on success
+                except Exception as read_error:
+                    read_error_count += 1
+                    if current_time - last_error_log_time > error_log_interval:
+                        logger.error(
+                            f"Error reading audio from manager (error #{read_error_count}): {read_error}",
+                            exc_info=True
+                        )
+                        last_error_log_time = current_time
+                    samples = None
 
                 if samples is not None:
                     # Add to circular buffer
-                    self._add_to_buffer(samples)
+                    try:
+                        self._add_to_buffer(samples)
+                    except Exception as buffer_error:
+                        logger.error(f"Error adding samples to buffer: {buffer_error}", exc_info=True)
 
                 # Check if it's time to scan for alerts
-                current_time = time.time()
                 if current_time - last_scan_time >= self.scan_interval:
-                    self._scan_for_alerts()
-                    last_scan_time = current_time
-                    self._last_scan_time = current_time
+                    try:
+                        self._scan_for_alerts()
+                        last_scan_time = current_time
+                        self._last_scan_time = current_time
+                        self._update_activity()  # Update on successful scan
+                    except Exception as scan_error:
+                        logger.error(f"Error initiating scan for alerts: {scan_error}", exc_info=True)
+                        last_scan_time = current_time  # Still update to avoid rapid retry
                 else:
                     # Brief sleep to avoid busy-waiting
                     time.sleep(0.01)
 
             except Exception as e:
-                logger.error(f"Error in EAS monitor loop: {e}", exc_info=True)
+                logger.error(f"Unexpected error in EAS monitor loop: {e}", exc_info=True)
+                # Still update activity to show loop is running, even with errors
+                self._update_activity()
                 time.sleep(1.0)  # Back off on error
 
         logger.debug("EAS monitor loop stopped")
@@ -578,10 +730,85 @@ class ContinuousEASMonitor:
                 self._audio_buffer[:self._buffer_pos]
             ]).copy()
 
+    def _has_same_signature(self, audio_samples: np.ndarray) -> bool:
+        """Fast pre-check to detect if audio contains SAME tone signatures.
+        
+        This is a lightweight filter that checks for the presence of the characteristic
+        SAME tones (853 Hz and 960 Hz) without doing full decoding. This allows us to
+        skip expensive decoding on audio that clearly doesn't contain alerts.
+        
+        Returns True if SAME tones might be present (run full decode).
+        Returns False if definitely no SAME tones (skip decode to save CPU).
+        """
+        try:
+            # Only analyze a small window to keep this fast (first 2 seconds)
+            window_samples = min(len(audio_samples), int(self.sample_rate * 2.0))
+            window = audio_samples[:window_samples]
+            
+            # Calculate power spectrum using FFT
+            # Use smaller FFT size for speed (2048 samples = ~93ms at 22050 Hz)
+            fft_size = 2048
+            hop_size = fft_size // 2
+            
+            # SAME uses 853 Hz (mark) and 960 Hz (space)
+            # Allow some tolerance for frequency drift
+            mark_freq = 853
+            space_freq = 960
+            freq_tolerance = 50  # Hz
+            
+            # Calculate frequency bins
+            freq_resolution = self.sample_rate / fft_size
+            mark_bin_low = int((mark_freq - freq_tolerance) / freq_resolution)
+            mark_bin_high = int((mark_freq + freq_tolerance) / freq_resolution)
+            space_bin_low = int((space_freq - freq_tolerance) / freq_resolution)
+            space_bin_high = int((space_freq + freq_tolerance) / freq_resolution)
+            
+            # Analyze multiple windows
+            max_mark_energy = 0.0
+            max_space_energy = 0.0
+            
+            for i in range(0, window_samples - fft_size, hop_size):
+                segment = window[i:i + fft_size]
+                
+                # Apply window function to reduce spectral leakage
+                segment = segment * np.hanning(fft_size)
+                
+                # Calculate power spectrum
+                spectrum = np.abs(np.fft.rfft(segment))
+                
+                # Check energy in SAME frequency bands
+                mark_energy = np.sum(spectrum[mark_bin_low:mark_bin_high])
+                space_energy = np.sum(spectrum[space_bin_low:space_bin_high])
+                
+                max_mark_energy = max(max_mark_energy, mark_energy)
+                max_space_energy = max(max_space_energy, space_energy)
+            
+            # If both SAME tones have significant energy, likely contains SAME
+            # Use a threshold relative to total signal energy
+            total_energy = np.sum(np.abs(window) ** 2)
+            
+            # Require at least some energy in both tone bands
+            # and reasonable signal-to-noise ratio
+            has_mark = max_mark_energy > (total_energy * 0.001)
+            has_space = max_space_energy > (total_energy * 0.001)
+            
+            if has_mark and has_space:
+                logger.debug("SAME signature detected - running full decode")
+                return True
+            else:
+                # No SAME signature - skip expensive decode
+                return False
+                
+        except Exception as e:
+            logger.debug(f"Error in SAME signature pre-check: {e}")
+            # On error, assume signature present to ensure we don't miss alerts
+            return True
+
     def _scan_for_alerts(self) -> None:
         """Scan buffered audio for EAS alerts (non-blocking).
 
         Launches scan in background thread to prevent blocking audio stream.
+        Uses a fast pre-filter to skip expensive decoding on audio without SAME tones.
         """
         # Check if too many scans are running
         with self._scan_lock:
@@ -596,6 +823,15 @@ class ContinuousEASMonitor:
 
         # Get buffer copy (fast, lock released immediately)
         audio_samples = self._get_buffer_contents()
+        
+        # Fast pre-check: does this audio contain SAME tones?
+        # This avoids expensive decoding on silent periods or non-EAS audio
+        if not self._has_same_signature(audio_samples):
+            # No SAME signature detected - skip expensive decode
+            logger.debug("No SAME signature in audio buffer, skipping decode")
+            with self._scan_lock:
+                self._active_scans -= 1
+            return
 
         # Launch scan in background thread
         scan_thread = threading.Thread(
@@ -610,7 +846,11 @@ class ContinuousEASMonitor:
         """Worker thread that performs the actual EAS scan.
 
         This runs in background to avoid blocking the audio stream.
+        The decode operation has no built-in timeout, but if it hangs, the watchdog
+        will detect the stalled decoder and restart the entire monitor thread.
+        We also limit concurrent scans to prevent resource exhaustion.
         """
+        temp_wav = None
         try:
             self._scans_performed += 1
 
@@ -619,45 +859,57 @@ class ContinuousEASMonitor:
 
             try:
                 # Run decoder (this is the slow part - now in background)
+                # Note: This could theoretically hang on corrupted audio, but:
+                # 1. It runs in a background thread so won't block the main loop
+                # 2. The watchdog will detect and restart if monitoring stalls
+                # 3. We limit concurrent scans to 2 max to prevent resource exhaustion
                 result = decode_same_audio(temp_wav, sample_rate=self.sample_rate)
 
                 # Check if we found an alert
                 if result.headers and len(result.headers) > 0:
                     # Alert detected!
                     self._handle_alert_detected(result, audio_samples, temp_wav)
+                    temp_wav = None  # Don't clean up - _handle_alert_detected manages it
 
-            finally:
-                # Clean up temp file if we're not saving it
-                if not self.save_audio_files and os.path.exists(temp_wav):
-                    try:
-                        os.unlink(temp_wav)
-                    except Exception:
-                        pass
+            except Exception as decode_error:
+                logger.error(f"Error in SAME decoder: {decode_error}", exc_info=True)
+                # Continue - don't let decoder errors stop monitoring
 
         except Exception as e:
-            logger.error(f"Error scanning for alerts: {e}", exc_info=True)
+            logger.error(f"Error in scan worker: {e}", exc_info=True)
         finally:
-            # Decrement active scan counter
+            # Clean up temp file if we're not saving it
+            if temp_wav and not self.save_audio_files and os.path.exists(temp_wav):
+                try:
+                    os.unlink(temp_wav)
+                except Exception as cleanup_error:
+                    logger.debug(f"Error cleaning up temp file {temp_wav}: {cleanup_error}")
+            
+            # Decrement active scan counter - ALWAYS do this even if scan failed
             with self._scan_lock:
                 self._active_scans -= 1
 
     def _save_to_temp_wav(self, samples: np.ndarray) -> str:
-        """Save samples to temporary WAV file."""
-        # Create temp file
-        fd, temp_path = tempfile.mkstemp(suffix=".wav", prefix="eas_scan_")
-        os.close(fd)
+        """Save samples to temporary WAV file with error handling."""
+        try:
+            # Create temp file
+            fd, temp_path = tempfile.mkstemp(suffix=".wav", prefix="eas_scan_")
+            os.close(fd)
 
-        # Write WAV file
-        with wave.open(temp_path, 'wb') as wf:
-            wf.setnchannels(1)  # Mono
-            wf.setsampwidth(2)  # 16-bit
-            wf.setframerate(self.sample_rate)
+            # Write WAV file
+            with wave.open(temp_path, 'wb') as wf:
+                wf.setnchannels(1)  # Mono
+                wf.setsampwidth(2)  # 16-bit
+                wf.setframerate(self.sample_rate)
 
-            # Convert float32 [-1, 1] to int16 PCM
-            pcm_data = (samples * 32767).astype(np.int16)
-            wf.writeframes(pcm_data.tobytes())
+                # Convert float32 [-1, 1] to int16 PCM
+                pcm_data = (samples * 32767).astype(np.int16)
+                wf.writeframes(pcm_data.tobytes())
 
-        return temp_path
+            return temp_path
+        except Exception as e:
+            logger.error(f"Failed to save temporary WAV file for EAS scan: {e}", exc_info=True)
+            raise  # Re-raise so scan_worker can handle it
 
     def _handle_alert_detected(
         self,

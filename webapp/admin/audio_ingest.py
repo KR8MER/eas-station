@@ -1835,130 +1835,220 @@ def api_stream_audio(source_name: str):
     from flask import Response, stream_with_context
 
     def generate_wav_stream(active_adapter: Any):
-        """Generator that yields WAV-formatted audio chunks."""
+        """Generator that yields WAV-formatted audio chunks with resilient error handling.
+        
+        This generator is designed to NEVER fail - it will stream silence if needed to keep
+        the connection alive, allowing clients to maintain continuous audio monitoring even
+        through source failures or transient errors.
+        """
         import numpy as np
 
-        if active_adapter.status != AudioSourceStatus.RUNNING:
-            logger.error(f'Audio source not running: {source_name}')
-            return
-
-        # WAV header for streaming (we'll use a placeholder for data size)
+        # Get configuration - even if source not running, we can stream silence
         sample_rate = active_adapter.config.sample_rate
         channels = active_adapter.config.channels
         bits_per_sample = 16  # 16-bit PCM
+        
+        # Constants for resilience
+        SILENCE_CHUNK_DURATION = 0.05  # 50ms chunks of silence
+        MAX_CONSECUTIVE_ERRORS = 50
+        
+        if active_adapter.status != AudioSourceStatus.RUNNING:
+            logger.warning(
+                f'Audio source not running for streaming: {source_name} (status={active_adapter.status.value}). '
+                f'Will stream silence and wait for recovery.'
+            )
 
-        # Build WAV header
-        wav_header = io.BytesIO()
-        wav_header.write(b'RIFF')
-        wav_header.write(struct.pack('<I', 0xFFFFFFFF))  # Placeholder for file size
-        wav_header.write(b'WAVE')
+        logger.info(f'Setting up WAV stream for {source_name}: {sample_rate}Hz, {channels}ch, {bits_per_sample}-bit')
 
-        # fmt chunk
-        wav_header.write(b'fmt ')
-        wav_header.write(struct.pack('<I', 16))  # fmt chunk size
-        wav_header.write(struct.pack('<H', 1))   # PCM format
-        wav_header.write(struct.pack('<H', channels))
-        wav_header.write(struct.pack('<I', sample_rate))
-        wav_header.write(struct.pack('<I', sample_rate * channels * bits_per_sample // 8))  # byte rate
-        wav_header.write(struct.pack('<H', channels * bits_per_sample // 8))  # block align
-        wav_header.write(struct.pack('<H', bits_per_sample))
+        # Build streaming-friendly WAV header - always send this regardless of source status
+        # If header generation fails, we'll build a minimal default header and continue
+        header_sent = False
+        try:
+            wav_header = io.BytesIO()
+            wav_header.write(b'RIFF')
+            wav_header.write(struct.pack('<I', 0xFFFFFFFF))  # Placeholder for file size
+            wav_header.write(b'WAVE')
 
-        # data chunk header
-        wav_header.write(b'data')
-        wav_header.write(struct.pack('<I', 0xFFFFFFFF))  # Placeholder for data size
+            # fmt chunk
+            wav_header.write(b'fmt ')
+            wav_header.write(struct.pack('<I', 16))  # fmt chunk size
+            wav_header.write(struct.pack('<H', 1))   # PCM format
+            wav_header.write(struct.pack('<H', channels))
+            wav_header.write(struct.pack('<I', sample_rate))
+            wav_header.write(struct.pack('<I', sample_rate * channels * bits_per_sample // 8))  # byte rate
+            wav_header.write(struct.pack('<H', channels * bits_per_sample // 8))  # block align
+            wav_header.write(struct.pack('<H', bits_per_sample))
 
-        yield wav_header.getvalue()
+            # data chunk header
+            wav_header.write(b'data')
+            wav_header.write(struct.pack('<I', 0xFFFFFFFF))  # Placeholder for data size
 
-        # Pre-buffer audio for smooth playback (VLC-style buffering)
+            yield wav_header.getvalue()
+            header_sent = True
+            logger.debug(f'WAV header sent for {source_name}')
+        except Exception as e:
+            logger.error(f'Failed to generate WAV header for {source_name}: {e}', exc_info=True)
+            # Try to send a minimal fallback header so stream can continue
+            if not header_sent:
+                try:
+                    # Minimal WAV header with safe defaults (44100Hz mono)
+                    fallback_header = (
+                        b'RIFF\xff\xff\xff\xff'  # RIFF + size placeholder
+                        b'WAVE'
+                        b'fmt \x10\x00\x00\x00'  # fmt chunk (16 bytes)
+                        b'\x01\x00'  # PCM format
+                        b'\x01\x00'  # 1 channel
+                        b'\x44\xac\x00\x00'  # 44100 Hz sample rate
+                        b'\x88\x58\x01\x00'  # byte rate (44100 * 1 * 2)
+                        b'\x02\x00'  # block align (1 * 2)
+                        b'\x10\x00'  # 16 bits per sample
+                        b'data\xff\xff\xff\xff'  # data chunk header
+                    )
+                    yield fallback_header
+                    logger.warning(f'Sent fallback WAV header for {source_name}')
+                except Exception as fallback_error:
+                    logger.error(f'Even fallback header failed for {source_name}: {fallback_error}')
+                    # Continue anyway - will stream raw PCM which some players can handle
+
+        # Pre-buffer audio for smooth playback - continue even if we can't fill buffer
         logger.info(f'Pre-buffering audio for {source_name}')
         prebuffer = []
         prebuffer_target = int(sample_rate * 2)  # 2 seconds of audio
         prebuffer_samples = 0
         prebuffer_timeout = 5.0  # Max 5 seconds to fill prebuffer
         prebuffer_start = time.time()
+        prebuffer_errors = 0
 
         while prebuffer_samples < prebuffer_target:
             if time.time() - prebuffer_start > prebuffer_timeout:
-                logger.warning(f'Prebuffer timeout for {source_name}, starting with {prebuffer_samples}/{prebuffer_target} samples')
+                logger.warning(
+                    f'Prebuffer timeout for {source_name}, continuing with {prebuffer_samples}/{prebuffer_target} samples'
+                )
                 break
 
-            audio_chunk = active_adapter.get_audio_chunk(timeout=0.2)
-            if audio_chunk is not None:
-                if not isinstance(audio_chunk, np.ndarray):
-                    audio_chunk = np.array(audio_chunk, dtype=np.float32)
+            try:
+                audio_chunk = active_adapter.get_audio_chunk(timeout=0.2)
+                if audio_chunk is not None:
+                    if not isinstance(audio_chunk, np.ndarray):
+                        audio_chunk = np.array(audio_chunk, dtype=np.float32)
 
-                prebuffer.append(audio_chunk)
-                prebuffer_samples += len(audio_chunk)
+                    prebuffer.append(audio_chunk)
+                    prebuffer_samples += len(audio_chunk)
+            except Exception as e:
+                prebuffer_errors += 1
+                logger.warning(f'Error reading chunk during prebuffer for {source_name} (error {prebuffer_errors}): {e}')
+                # Don't abort - just continue with what we have
+                if prebuffer_errors > 10:
+                    logger.warning(f'Multiple prebuffer errors for {source_name}, continuing anyway')
+                    break
 
         # Yield pre-buffered audio
         logger.info(f'Streaming {len(prebuffer)} pre-buffered chunks for {source_name}')
         for chunk in prebuffer:
-            pcm_data = (np.clip(chunk, -1.0, 1.0) * 32767).astype(np.int16)
-            yield pcm_data.tobytes()
+            try:
+                pcm_data = (np.clip(chunk, -1.0, 1.0) * 32767).astype(np.int16)
+                yield pcm_data.tobytes()
+            except Exception as e:
+                logger.warning(f'Error converting prebuffered chunk for {source_name}: {e}')
+                # Continue with next chunk instead of failing
 
-        # Stream audio chunks
-        logger.info(f'Starting live audio stream for {source_name}')
+        # Stream audio chunks - this loop should NEVER exit except on client disconnect
+        logger.info(f'Starting live audio stream for {source_name} (will stream forever until client disconnects)')
         chunk_count = len(prebuffer)
-        max_chunks = 999999999  # Effectively unlimited - stream until client disconnects
         silence_count = 0
-        max_consecutive_silence = 200  # 10 seconds of silence before stopping (increased from 1s)
         last_reported_status = active_adapter.status
+        conversion_error_count = 0
+        last_error_log_time = 0
+        error_log_interval = 10.0  # Only log repeated errors every 10 seconds
 
         try:
-            while chunk_count < max_chunks:
-                # Get audio chunk from adapter (very short timeout to keep stream responsive)
-                audio_chunk = active_adapter.get_audio_chunk(timeout=0.05)
+            while True:  # Stream forever until client disconnects
+                audio_chunk = None
+                
+                # Wrap chunk read in try/except to prevent read errors from terminating stream
+                try:
+                    # Get audio chunk from adapter (very short timeout to keep stream responsive)
+                    audio_chunk = active_adapter.get_audio_chunk(timeout=0.05)
+                except Exception as e:
+                    current_time = time.time()
+                    if current_time - last_error_log_time > error_log_interval:
+                        logger.warning(f'Error reading audio chunk from {source_name}: {e}')
+                        last_error_log_time = current_time
+                    audio_chunk = None
 
                 if audio_chunk is None:
                     # No data available - yield silence to keep HTTP stream alive
+                    # This allows the stream to continue even if the source stops or has issues
                     current_status = active_adapter.status
-                    if current_status == AudioSourceStatus.STOPPED:
-                        logger.info(f'Audio source stopped: {source_name}')
-                        break
+                    
+                    # Only log status changes to avoid log spam
+                    if current_status != last_reported_status:
+                        if current_status == AudioSourceStatus.STOPPED:
+                            logger.warning(
+                                f'Audio source stopped: {source_name} - streaming silence and waiting for recovery'
+                            )
+                        else:
+                            logger.warning(
+                                'Audio source %s status transitioned to %s - streaming silence until recovery',
+                                source_name,
+                                current_status.value,
+                            )
+                        last_reported_status = current_status
 
-                    if current_status != AudioSourceStatus.RUNNING and current_status != last_reported_status:
-                        logger.warning(
-                            'Audio source %s status transitioned to %s - streaming silence until recovery',
-                            source_name,
-                            current_status.value,
-                        )
-
-                    last_reported_status = current_status
-
-                    # Yield a small chunk of silence (0.05 seconds worth)
+                    # Yield a small chunk of silence (50ms)
                     # This keeps the HTTP connection alive and prevents browser timeout
-                    silence_samples = int(sample_rate * channels * 0.05)
+                    silence_samples = int(sample_rate * channels * SILENCE_CHUNK_DURATION)
                     silence_chunk = np.zeros(silence_samples, dtype=np.int16)
                     yield silence_chunk.tobytes()
 
                     silence_count += 1
-                    if silence_count > max_consecutive_silence:
-                        logger.warning(f'Too many consecutive silent chunks for {source_name}, stopping stream')
-                        break
+                    
+                    # Small sleep to avoid busy-waiting when source is idle
+                    time.sleep(0.01)
                     continue
 
                 # Reset silence counter when we get real data
-                silence_count = 0
+                if silence_count > 0:
+                    logger.info(f'Audio resumed for {source_name} after {silence_count} silent chunks')
+                    silence_count = 0
                 last_reported_status = active_adapter.status
 
-                # Convert float32 [-1, 1] to int16 PCM
-                # Ensure we have a numpy array
-                if not isinstance(audio_chunk, np.ndarray):
-                    audio_chunk = np.array(audio_chunk, dtype=np.float32)
+                # Wrap conversion in try/except to prevent a single bad chunk from terminating stream
+                try:
+                    # Convert float32 [-1, 1] to int16 PCM
+                    # Ensure we have a numpy array
+                    if not isinstance(audio_chunk, np.ndarray):
+                        audio_chunk = np.array(audio_chunk, dtype=np.float32)
 
-                # Clip to [-1, 1] range and convert to int16
-                audio_chunk = np.clip(audio_chunk, -1.0, 1.0)
-                pcm_data = (audio_chunk * 32767).astype(np.int16)
+                    # Clip to [-1, 1] range and convert to int16
+                    audio_chunk = np.clip(audio_chunk, -1.0, 1.0)
+                    pcm_data = (audio_chunk * 32767).astype(np.int16)
 
-                # Convert to bytes and yield
-                yield pcm_data.tobytes()
-
-                chunk_count += 1
+                    # Convert to bytes and yield
+                    yield pcm_data.tobytes()
+                    
+                    chunk_count += 1
+                    conversion_error_count = 0  # Reset error count on success
+                    
+                except Exception as e:
+                    conversion_error_count += 1
+                    current_time = time.time()
+                    if current_time - last_error_log_time > error_log_interval:
+                        logger.warning(
+                            f'Error converting audio chunk for {source_name} '
+                            f'(error {conversion_error_count} total): {e}'
+                        )
+                        last_error_log_time = current_time
+                    
+                    # Always yield silence on conversion error - NEVER stop the stream
+                    silence_samples = int(sample_rate * channels * SILENCE_CHUNK_DURATION)
+                    silence_chunk = np.zeros(silence_samples, dtype=np.int16)
+                    yield silence_chunk.tobytes()
 
         except GeneratorExit:
-            logger.info(f'Client disconnected from audio stream: {source_name}')
+            logger.info(f'Client disconnected from audio stream: {source_name} (streamed {chunk_count} chunks)')
         except Exception as exc:
-            logger.error(f'Error streaming audio from {source_name}: {exc}')
+            logger.error(f'Unexpected error in audio stream generator for {source_name}: {exc}', exc_info=True)
 
     try:
         controller, adapter, db_config, _ = _get_controller_and_adapter(source_name)
