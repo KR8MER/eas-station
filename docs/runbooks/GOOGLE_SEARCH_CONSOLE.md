@@ -2,7 +2,7 @@
 
 This runbook explains how to publish crawler-friendly metadata (robots.txt and sitemap.xml),
 verify ownership in Google Search Console, and respond to the deceptive-content warnings
-captured in `/bugs/Screenshot_7-11-2025_75931_wxalerts.k8tek.net.jpeg` and the TLS
+captured in `/bugs/Screenshot_7-11-2025_75931_easstation.com.jpeg` and the TLS
 concerns illustrated in `/bugs/Screenshot_4-11-2025_202347_omv.local.jpeg`.
 
 ## 1. Preparing the application
@@ -21,7 +21,7 @@ concerns illustrated in `/bugs/Screenshot_4-11-2025_202347_omv.local.jpeg`.
 ## 2. Verifying ownership
 
 1. Sign in to Search Console, add the property for the production hostname
-   (e.g., `https://wxalerts.k8tek.net`).
+   (e.g., `https://easstation.com`).
 2. Choose the **HTML tag** verification method and copy the token string (typically a
    43-character slug).
 3. Set `GOOGLE_SITE_VERIFICATION="googleXXXXXXXXXXXX"` in the deployment environment and
@@ -45,7 +45,7 @@ concerns illustrated in `/bugs/Screenshot_4-11-2025_202347_omv.local.jpeg`.
 ## 4. Clearing deceptive-content warnings
 
 Google flagged the property for “Deceptive pages” and “Possible phishing detected on user
-login,” which is shown in `/bugs/Screenshot_7-11-2025_75931_wxalerts.k8tek.net.jpeg`. To
+login,” which is shown in `/bugs/Screenshot_7-11-2025_75931_easstation.com.jpeg`. To
 resolve the warning:
 
 1. Audit all `/login`, `/admin`, and other credential forms to ensure they only load over
@@ -67,7 +67,7 @@ site is fronted by Let’s Encrypt. Keep the warning from Search Console from re
 1. Renewing certificates at least every 60 days via the existing certbot/ACME automation.
 2. Verifying that intermediate certificates are included (the screenshot shows the correct
    chain; maintain it by updating the web server bundle during renewals).
-3. Running `openssl s_client -connect wxalerts.k8tek.net:443 -servername wxalerts.k8tek.net`
+3. Running `openssl s_client -connect easstation.com:443 -servername easstation.com`
    after each renewal to confirm the issued certificate matches the hostname and that the
    SHA-256 fingerprint matches expectations.
 4. Documenting renewal times in `docs/runbooks/upgrade_checklist.md` so operations staff

@@ -928,7 +928,7 @@ echo "Customer $CUSTOMER_NAME deployed at https://$CUSTOMER_DOMAIN"
 
 ---
 
-**Questions?** Contact Easstation@k8tek.net
+**Questions?** Contact sales@easstation.com
 
 **Document Version:** 1.0
 **Last Updated:** November 21, 2025

@@ -252,7 +252,7 @@ EAS Station is dual-licensed:
 
 ### How to Buy
 
-1. **Contact:** Email Easstation@k8tek.net with:
+1. **Contact:** Email sales@easstation.com with:
    - Your organization name and use case
    - Desired license tier
    - Number of installations needed
@@ -270,7 +270,7 @@ EAS Station is dual-licensed:
 - **30-day evaluation license** available (no credit card required)
 - Full-featured commercial version
 - No obligation to purchase
-- Request via Easstation@k8tek.net
+- Request via sales@easstation.com
 
 ---
 
@@ -303,7 +303,7 @@ A: Annual subscriptions: 30-day money-back guarantee. Perpetual licenses: 90-day
 
 **Commercial Licensing Inquiries:**
 Timothy Kramer (KR8MER)
-Email: Easstation@k8tek.net
+Email: sales@easstation.com
 Phone: Available upon request for qualified prospects
 Website: https://github.com/KR8MER/eas-station
 

@@ -773,7 +773,7 @@ Create a **"Managed Hosting"** page that links to Vultr deployment options.
 
 ---
 
-**Questions?** Contact Easstation@k8tek.net
+**Questions?** Contact sales@easstation.com
 
 **Document Version:** 1.0
 **Last Updated:** November 21, 2025

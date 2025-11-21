@@ -502,7 +502,7 @@ tracks releases under the 2.x series.
 
 ## [2.4.14] - 2025-11-10
 ### Fixed
-- Added automatic cache-busting query parameters to all Flask-served static asset URLs so envoy/nginx layers fetch freshly deployed bundles instead of stale copies (Screenshot_7-11-2025_75931_wxalerts.k8tek.net.jpeg).
+- Added automatic cache-busting query parameters to all Flask-served static asset URLs so envoy/nginx layers fetch freshly deployed bundles instead of stale copies (Screenshot_7-11-2025_75931_easstation.com.jpeg).
 
 ## [2.4.11] - 2025-11-09
 ### Fixed
