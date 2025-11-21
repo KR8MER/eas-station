@@ -554,10 +554,16 @@ class ContinuousEASMonitor:
             last_activity = self._last_activity
             time_since_activity = time.time() - last_activity
 
+        # Calculate effective interval (may be higher than configured if scans are slow)
+        effective_interval = self._get_effective_scan_interval()
+        is_auto_adjusted = effective_interval > self.scan_interval
+        
         return {
             "running": is_running,
             "buffer_duration": self.buffer_duration,
             "scan_interval": self.scan_interval,
+            "effective_scan_interval": effective_interval,
+            "scan_interval_auto_adjusted": is_auto_adjusted,
             "buffer_utilization": buffer_utilization,
             "buffer_fill_seconds": buffer_fill_seconds,
             "scans_performed": self._scans_performed,
@@ -604,6 +610,42 @@ class ContinuousEASMonitor:
         """Update the last activity timestamp (heartbeat)."""
         with self._activity_lock:
             self._last_activity = time.time()
+
+    def _get_effective_scan_interval(self) -> float:
+        """Calculate effective scan interval based on recent scan performance.
+        
+        If scans are consistently taking longer than the configured interval,
+        automatically increase the interval to prevent queue buildup and skipped scans.
+        
+        Returns:
+            Effective scan interval in seconds (may be higher than configured)
+        """
+        with self._scan_lock:
+            if not self._scan_durations:
+                # No scan history yet, use configured interval
+                return self.scan_interval
+            
+            # Calculate average scan duration from recent scans
+            recent_scans = self._scan_durations[-10:]  # Last 10 scans
+            avg_scan_duration = sum(recent_scans) / len(recent_scans)
+            
+            # If scans are taking longer than interval, increase interval adaptively
+            # Add 20% buffer to prevent oscillation
+            if avg_scan_duration > self.scan_interval:
+                effective_interval = avg_scan_duration * 1.2
+                
+                # Only log warning periodically (not every scan)
+                if len(self._scan_durations) % 20 == 10:  # Every 20 scans
+                    logger.warning(
+                        f"EAS scans taking {avg_scan_duration:.2f}s (avg) > configured interval {self.scan_interval:.2f}s. "
+                        f"Auto-adjusting to {effective_interval:.2f}s to prevent queue buildup. "
+                        f"Consider increasing EAS_SCAN_INTERVAL or MAX_CONCURRENT_EAS_SCANS in configuration."
+                    )
+                
+                return effective_interval
+            
+            # Scans completing within interval, use configured value
+            return self.scan_interval
 
     def _watchdog_loop(self) -> None:
         """Watchdog thread that monitors decoder thread health and restarts if stalled."""
@@ -708,7 +750,9 @@ class ContinuousEASMonitor:
                         logger.error(f"Error adding samples to buffer: {buffer_error}", exc_info=True)
 
                 # Check if it's time to scan for alerts
-                if current_time - last_scan_time >= self.scan_interval:
+                # Use adaptive interval if scans are taking longer than configured interval
+                effective_scan_interval = self._get_effective_scan_interval()
+                if current_time - last_scan_time >= effective_scan_interval:
                     try:
                         self._scan_for_alerts()
                         last_scan_time = current_time
@@ -847,11 +891,21 @@ class ContinuousEASMonitor:
         with self._scan_lock:
             if self._active_scans >= self.max_concurrent_scans:
                 self._scans_skipped += 1
+                
+                # Get performance stats for diagnostic message
+                if self._scan_durations:
+                    recent_scans = self._scan_durations[-10:]
+                    avg_duration = sum(recent_scans) / len(recent_scans)
+                    max_duration = max(recent_scans)
+                    perf_info = f"avg scan: {avg_duration:.2f}s, max: {max_duration:.2f}s"
+                else:
+                    perf_info = "no scan history yet"
+                
                 logger.warning(
-                    f"Skipping EAS scan #{self._scans_skipped}: {self._active_scans} scans already active "
-                    f"(max={self.max_concurrent_scans}). "
-                    "Consider increasing scan_interval, reducing buffer_duration, "
-                    "or increasing max_concurrent_scans."
+                    f"⚠️ Skipping EAS scan #{self._scans_skipped}: {self._active_scans} scans already active "
+                    f"(max={self.max_concurrent_scans}). Performance: {perf_info}, "
+                    f"interval={self.scan_interval:.2f}s. "
+                    f"Solution: Increase EAS_SCAN_INTERVAL or MAX_CONCURRENT_EAS_SCANS in Settings → Environment → Performance."
                 )
                 return
 

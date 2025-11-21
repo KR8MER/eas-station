@@ -876,7 +876,7 @@ ENV_CATEGORIES = {
                 'type': 'number',
                 'step': 0.5,
                 'default': '3.0',
-                'description': 'How often to scan audio buffer for SAME headers (in seconds). Lower = more frequent scans (better detection) but higher CPU usage. Increase if scans are taking longer than this interval.',
+                'description': 'How often to scan audio buffer for SAME headers (in seconds). System auto-adjusts if scans take longer. Raspberry Pi 5: start with 5.0s, Desktop: 3.0s. Lower = more frequent scans (better detection) but higher CPU usage. Monitor logs for "Skipping EAS scan" warnings.',
                 'min': 1.0,
                 'max': 10.0,
             },
