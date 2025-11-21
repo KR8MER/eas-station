@@ -956,15 +956,115 @@
                                 <input type="hidden" id="locationFipsCodes" name="fips_codes">
                                 <small class="text-muted d-block mt-2">Select up to 31 SAME location codes to monitor. The nationwide code (000000) is automatically included and required for nationwide alerts.</small>
                             </div>
-                            <div class="col-md-6">
-                                <label for="locationZoneCodes" class="form-label fw-bold">NOAA Zone / UGC Codes</label>
-                                <textarea class="form-control" id="locationZoneCodes" name="zone_codes" rows="3" placeholder="One code per line">{{ (location_settings.zone_codes or []) | join('\n') }}</textarea>
-                                <small class="text-muted">These codes are queried from api.weather.gov (e.g. OHZ016).</small>
+                            <div class="col-12">
+                                <div class="card border-info-subtle shadow-sm mb-3">
+                                    <div class="card-header bg-info-subtle">
+                                        <h5 class="mb-0">
+                                            <button class="btn btn-link text-decoration-none text-dark w-100 text-start p-0" type="button" data-bs-toggle="collapse" data-bs-target="#alertProcessingHelp">
+                                                <i class="fas fa-info-circle me-2"></i> Understanding Alert Processing: EAS Broadcasting vs. Geographic Storage
+                                                <i class="fas fa-chevron-down float-end mt-1"></i>
+                                            </button>
+                                        </h5>
+                                    </div>
+                                    <div class="collapse" id="alertProcessingHelp">
+                                        <div class="card-body">
+                                            <p class="fw-bold text-primary">This system serves two distinct user groups with different needs:</p>
+
+                                            <div class="row g-3 mb-3">
+                                                <div class="col-md-6">
+                                                    <div class="border border-primary rounded p-3 h-100">
+                                                        <h6 class="text-primary"><i class="fas fa-broadcast-tower me-2"></i>EAS Broadcasting System</h6>
+                                                        <p class="small mb-2"><strong>For:</strong> Broadcasters, radio/TV stations, cable operators</p>
+                                                        <p class="small mb-2"><strong>Purpose:</strong> Forward Emergency Alert System (EAS) messages to the public</p>
+                                                        <p class="small mb-2"><strong>Coverage:</strong> Your county + adjoining counties (regional coverage area)</p>
+                                                        <p class="small mb-0"><strong>Action:</strong> Triggers audio EAS broadcasts when alerts match configured zones</p>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <div class="border border-success rounded p-3 h-100">
+                                                        <h6 class="text-success"><i class="fas fa-map-marked-alt me-2"></i>Geographic Alert Storage System</h6>
+                                                        <p class="small mb-2"><strong>For:</strong> Emergency managers, EMA directors, public safety officials, first responders</p>
+                                                        <p class="small mb-2"><strong>Purpose:</strong> Store alerts, calculate geographic boundaries, display on maps</p>
+                                                        <p class="small mb-2"><strong>Coverage:</strong> Your local county/jurisdiction only</p>
+                                                        <p class="small mb-0"><strong>Action:</strong> Saves to database, calculates polygon intersections, shows on emergency management dashboard</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="alert alert-warning mb-3">
+                                                <strong><i class="fas fa-exclamation-triangle me-2"></i>Why the distinction matters:</strong>
+                                                <p class="small mb-1">Broadcasters need to relay alerts for multiple counties (their coverage area), but emergency managers only need detailed geographic data for their specific jurisdiction.</p>
+                                                <p class="small mb-0">Processing and storing geographic boundaries for dozens of adjoining counties would waste resources and clutter the emergency management interface.</p>
+                                            </div>
+
+                                            <h6 class="fw-bold mb-2">Configuration Fields Explained:</h6>
+                                            <ul class="small mb-3">
+                                                <li><strong>SAME / FIPS Counties:</strong> Your local county codes (e.g., 039137 for Putnam County, OH). Always triggers BOTH broadcast AND storage.</li>
+                                                <li><strong>NOAA Zone / UGC Codes (All Monitored):</strong> All zones to monitor including your county and adjoining areas (e.g., OHZ003 for Putnam + OHZ009 for Hancock). Used for EAS broadcasting.</li>
+                                                <li><strong>Storage Zone Codes (Local Only):</strong> ONLY your local county zones (e.g., OHZ003, OHC137 for Putnam). Determines which UGC-based alerts get stored and have boundaries calculated.</li>
+                                            </ul>
+
+                                            <div class="bg-light border rounded p-3">
+                                                <h6 class="fw-bold mb-2"><i class="fas fa-lightbulb me-2"></i>Example Configuration for Putnam County, OH:</h6>
+                                                <table class="table table-sm table-borderless mb-0">
+                                                    <tr>
+                                                        <td class="small" style="width: 40%"><strong>SAME / FIPS Counties:</strong></td>
+                                                        <td class="small font-monospace">039137</td>
+                                                        <td class="small text-muted">Putnam County FIPS</td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td class="small"><strong>NOAA Zones (All):</strong></td>
+                                                        <td class="small font-monospace">OHZ003<br>OHC137<br>OHZ009<br>OHC063<br>...</td>
+                                                        <td class="small text-muted">Putnam zone<br>Putnam county<br>Hancock zone<br>Hancock county<br>(adjoining areas)</td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td class="small"><strong>Storage Zones (Local):</strong></td>
+                                                        <td class="small font-monospace">OHZ003<br>OHC137</td>
+                                                        <td class="small text-muted">Only Putnam County zones</td>
+                                                    </tr>
+                                                </table>
+                                                <hr class="my-2">
+                                                <p class="small mb-1"><strong>Result:</strong></p>
+                                                <ul class="small mb-0">
+                                                    <li>Alert for Putnam (039137, OHZ003, or OHC137): <span class="badge bg-success">EAS Broadcast</span> + <span class="badge bg-success">Stored</span> + <span class="badge bg-success">Boundaries</span></li>
+                                                    <li>Alert for Hancock (OHZ009, OHC063): <span class="badge bg-primary">EAS Broadcast</span> only (not stored, no boundaries)</li>
+                                                </ul>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
+
                             <div class="col-md-6">
-                                <label for="locationAreaTerms" class="form-label fw-bold">Area Match Keywords</label>
-                                <textarea class="form-control" id="locationAreaTerms" name="area_terms" rows="3" placeholder="Names that indicate a relevant alert">{{ (location_settings.area_terms or []) | join('\n') }}</textarea>
-                                <small class="text-muted">Used to match alerts that list multiple counties.</small>
+                                <label for="locationZoneCodes" class="form-label fw-bold">
+                                    NOAA Zone / UGC Codes (All Monitored)
+                                    <i class="fas fa-info-circle text-primary ms-1" data-bs-toggle="tooltip" title="All zones to monitor for EAS broadcasting, including your county and adjoining counties"></i>
+                                </label>
+                                <textarea class="form-control" id="locationZoneCodes" name="zone_codes" rows="3" placeholder="OHZ003&#10;OHC137&#10;OHZ009&#10;OHC063">{{ (location_settings.zone_codes or []) | join('\n') }}</textarea>
+                                <small class="text-muted">
+                                    <strong>For EAS Broadcasting:</strong> Include your county + adjoining counties.
+                                    Format: One code per line (e.g., OHZ003, OHC137).
+                                    <a href="#alertProcessingHelp" data-bs-toggle="collapse" class="text-decoration-none">Learn more</a>
+                                </small>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label for="locationStorageZoneCodes" class="form-label fw-bold">
+                                    Storage Zone Codes (Local County Only)
+                                    <i class="fas fa-info-circle text-success ms-1" data-bs-toggle="tooltip" title="Only your local county zones - determines which alerts get stored and have boundaries calculated"></i>
+                                </label>
+                                <textarea class="form-control" id="locationStorageZoneCodes" name="storage_zone_codes" rows="3" placeholder="OHZ003&#10;OHC137">{{ (location_settings.storage_zone_codes or []) | join('\n') }}</textarea>
+                                <small class="text-muted">
+                                    <strong>For Geographic Storage:</strong> ONLY your local county zones.
+                                    Determines which alerts are saved to database and have boundaries calculated.
+                                    <a href="#alertProcessingHelp" data-bs-toggle="collapse" class="text-decoration-none">Learn more</a>
+                                </small>
+                            </div>
+
+                            <div class="col-md-12">
+                                <label for="locationAreaTerms" class="form-label fw-bold">Area Match Keywords <span class="badge bg-secondary">Deprecated</span></label>
+                                <textarea class="form-control" id="locationAreaTerms" name="area_terms" rows="2" placeholder="Names that indicate a relevant alert">{{ (location_settings.area_terms or []) | join('\n') }}</textarea>
+                                <small class="text-muted">This field is deprecated and retained only for backwards compatibility. Use SAME/FIPS codes and zone codes instead.</small>
                             </div>
                             <div class="col-12">
                                 <div class="card border-secondary-subtle shadow-sm mt-2" id="locationReferenceCard">
