@@ -121,6 +121,65 @@ def ensure_alert_source_columns(logger) -> bool:
         return False
 
 
+def ensure_storage_zone_codes_column(logger) -> bool:
+    """Ensure location_settings.storage_zone_codes column exists."""
+
+    engine = db.engine
+    if engine.dialect.name != "postgresql":
+        return True
+
+    try:
+        # Check if storage_zone_codes column exists
+        column_exists = db.session.execute(
+            text(
+                """
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_name = 'location_settings'
+                  AND column_name = 'storage_zone_codes'
+                  AND table_schema = current_schema()
+                """
+            )
+        ).scalar()
+
+        if not column_exists:
+            logger.info(
+                "Adding location_settings.storage_zone_codes column for selective alert storage"
+            )
+            # Add the column with JSONB type and default value
+            db.session.execute(
+                text(
+                    """
+                    ALTER TABLE location_settings
+                    ADD COLUMN storage_zone_codes JSONB NOT NULL DEFAULT '["OHZ003", "OHC137"]'::jsonb
+                    """
+                )
+            )
+
+            # Update existing rows to copy zone_codes if storage_zone_codes is somehow null
+            db.session.execute(
+                text(
+                    """
+                    UPDATE location_settings
+                    SET storage_zone_codes = COALESCE(zone_codes, '["OHZ003", "OHC137"]'::jsonb)
+                    WHERE storage_zone_codes IS NULL
+                    """
+                )
+            )
+
+            db.session.commit()
+            logger.info("Successfully added storage_zone_codes column")
+
+        return True
+    except Exception as exc:
+        logger.warning("Could not ensure storage_zone_codes column: %s", exc)
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return False
+
+
 def ensure_boundary_geometry_column(logger) -> bool:
     """Ensure the boundaries table accepts any geometry subtype with SRID 4326."""
 

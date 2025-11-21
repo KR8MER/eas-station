@@ -89,6 +89,7 @@ from webapp import register_routes
 from webapp.admin.boundaries import (
     ensure_alert_source_columns,
     ensure_boundary_geometry_column,
+    ensure_storage_zone_codes_column,
 )
 # Re-export manual import utilities for CLI scripts that import from ``app``.
 from webapp.admin.maintenance import (
@@ -1017,6 +1018,11 @@ def initialize_database():
             if not ensure_zone_catalog(logger):
                 _db_initialization_error = RuntimeError(
                     "NWS zone catalog could not be ensured"
+                )
+                return False
+            if not ensure_storage_zone_codes_column(logger):
+                _db_initialization_error = RuntimeError(
+                    "Location settings storage_zone_codes column could not be ensured"
                 )
                 return False
             backfill_eas_message_payloads(logger)
