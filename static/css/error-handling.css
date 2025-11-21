@@ -2,38 +2,42 @@
    ERROR HANDLING & NOTIFICATION COMPONENTS
    ============================================ */
 
-/* Error States */
+/* Error States - using CSS variables for theme consistency */
 .error-container {
     padding: 2rem;
     text-align: center;
-    background-color: #fff5f5;
-    border: 1px solid #fed7d7;
+    background-color: var(--color-danger-light);
+    border: 1px solid var(--danger-color);
     border-radius: 8px;
     margin: 1rem 0;
 }
 
-.error-container.dark {
-    background-color: #2d1b1b;
-    border-color: #742a2a;
+[data-theme-mode="dark"] .error-container {
+    background-color: rgba(239, 68, 68, 0.15);
+    border-color: var(--danger-color);
 }
 
 .error-icon {
     font-size: 3rem;
-    color: #e53e3e;
+    color: var(--danger-color);
     margin-bottom: 1rem;
 }
 
 .error-title {
     font-size: 1.25rem;
     font-weight: 600;
-    color: #e53e3e;
+    color: var(--danger-color);
     margin-bottom: 0.5rem;
 }
 
 .error-message {
-    color: #742a2a;
+    color: var(--color-danger-dark);
     margin-bottom: 1rem;
     line-height: 1.5;
+}
+
+[data-theme-mode="dark"] .error-message {
+    color: var(--text-secondary);
 }
 
 .error-actions {
@@ -43,106 +47,118 @@
     flex-wrap: wrap;
 }
 
-/* Warning States */
+/* Warning States - using CSS variables */
 .warning-container {
     padding: 1.5rem;
     text-align: center;
-    background-color: #fffbf0;
-    border: 1px solid #fed7aa;
+    background-color: var(--color-warning-light);
+    border: 1px solid var(--warning-color);
     border-radius: 8px;
     margin: 1rem 0;
 }
 
-.warning-container.dark {
-    background-color: #2d2115;
-    border-color: #744210;
+[data-theme-mode="dark"] .warning-container {
+    background-color: rgba(245, 158, 11, 0.15);
+    border-color: var(--warning-color);
 }
 
 .warning-icon {
     font-size: 2rem;
-    color: #d69e2e;
+    color: var(--warning-color);
     margin-bottom: 0.75rem;
 }
 
 .warning-title {
     font-size: 1.125rem;
     font-weight: 600;
-    color: #d69e2e;
+    color: var(--warning-color);
     margin-bottom: 0.5rem;
 }
 
 .warning-message {
-    color: #744210;
+    color: var(--color-warning-dark);
     margin-bottom: 1rem;
     line-height: 1.5;
 }
 
-/* Success States */
+[data-theme-mode="dark"] .warning-message {
+    color: var(--text-secondary);
+}
+
+/* Success States - using CSS variables */
 .success-container {
     padding: 1.5rem;
     text-align: center;
-    background-color: #f0fff4;
-    border: 1px solid #9ae6b4;
+    background-color: var(--color-success-light);
+    border: 1px solid var(--success-color);
     border-radius: 8px;
     margin: 1rem 0;
 }
 
-.success-container.dark {
-    background-color: #0d1f13;
-    border-color: #22543d;
+[data-theme-mode="dark"] .success-container {
+    background-color: rgba(16, 185, 129, 0.15);
+    border-color: var(--success-color);
 }
 
 .success-icon {
     font-size: 2rem;
-    color: #38a169;
+    color: var(--success-color);
     margin-bottom: 0.75rem;
 }
 
 .success-title {
     font-size: 1.125rem;
     font-weight: 600;
-    color: #38a169;
+    color: var(--success-color);
     margin-bottom: 0.5rem;
 }
 
 .success-message {
-    color: #22543d;
+    color: var(--color-success-dark);
     margin-bottom: 1rem;
     line-height: 1.5;
 }
 
-/* Info States */
+[data-theme-mode="dark"] .success-message {
+    color: var(--text-secondary);
+}
+
+/* Info States - using CSS variables */
 .info-container {
     padding: 1.5rem;
     text-align: center;
-    background-color: #ebf8ff;
-    border: 1px solid #90cdf4;
+    background-color: var(--color-info-light);
+    border: 1px solid var(--info-color);
     border-radius: 8px;
     margin: 1rem 0;
 }
 
-.info-container.dark {
-    background-color: #0c1929;
-    border-color: #2a4365;
+[data-theme-mode="dark"] .info-container {
+    background-color: rgba(59, 130, 246, 0.15);
+    border-color: var(--info-color);
 }
 
 .info-icon {
     font-size: 2rem;
-    color: #3182ce;
+    color: var(--info-color);
     margin-bottom: 0.75rem;
 }
 
 .info-title {
     font-size: 1.125rem;
     font-weight: 600;
-    color: #3182ce;
+    color: var(--info-color);
     margin-bottom: 0.5rem;
 }
 
 .info-message {
-    color: #2a4365;
+    color: var(--color-info-dark);
     margin-bottom: 1rem;
     line-height: 1.5;
+}
+
+[data-theme-mode="dark"] .info-message {
+    color: var(--text-secondary);
 }
 
 /* Empty States */

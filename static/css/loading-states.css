@@ -28,11 +28,12 @@
     background-color: rgba(0, 0, 0, 0.6);
 }
 
+/* Using CSS variables for spinner colors */
 .spinner-custom {
     width: 40px;
     height: 40px;
-    border: 4px solid rgba(0, 123, 255, 0.1);
-    border-top: 4px solid #007bff;
+    border: 4px solid var(--border-color);
+    border-top: 4px solid var(--primary-color);
     border-radius: 50%;
     animation: spin 1s linear infinite;
 }
@@ -54,16 +55,22 @@
     100% { transform: rotate(360deg); }
 }
 
-/* Skeleton Screens */
+/* Skeleton Screens - using CSS variables for theme consistency */
 .skeleton {
-    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background: linear-gradient(90deg, 
+        var(--color-neutral-200) 25%, 
+        var(--color-neutral-300) 50%, 
+        var(--color-neutral-200) 75%);
     background-size: 200% 100%;
     animation: loading 1.5s infinite;
     border-radius: 4px;
 }
 
-.skeleton.dark {
-    background: linear-gradient(90deg, #2d3748 25%, #4a5568 50%, #2d3748 75%);
+[data-theme-mode="dark"] .skeleton {
+    background: linear-gradient(90deg, 
+        var(--color-neutral-200) 25%, 
+        var(--color-neutral-300) 50%, 
+        var(--color-neutral-200) 75%);
     background-size: 200% 100%;
     animation: loading-dark 1.5s infinite;
 }
@@ -151,7 +158,7 @@
     display: flex;
     gap: 1rem;
     padding: 0.75rem 0;
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 1px solid var(--border-color-light);
 }
 
 .skeleton-table-cell {
@@ -213,10 +220,10 @@
     z-index: 2;
 }
 
-/* Progress Loading */
+/* Progress Loading - using CSS variables */
 .progress-loading {
     height: 4px;
-    background-color: #e9ecef;
+    background-color: var(--color-neutral-200);
     border-radius: 2px;
     overflow: hidden;
     margin: 1rem 0;
@@ -224,7 +231,7 @@
 
 .progress-loading-bar {
     height: 100%;
-    background: linear-gradient(90deg, #007bff, #0056b3);
+    background: linear-gradient(90deg, var(--primary-color), var(--primary-soft));
     background-size: 200% 100%;
     animation: progress-loading 2s ease-in-out infinite;
     border-radius: 2px;
@@ -310,12 +317,7 @@
     }
 }
 
-/* Dark Mode Support */
-[data-theme-mode="dark"] .skeleton {
-    background: linear-gradient(90deg, #2d3748 25%, #4a5568 50%, #2d3748 75%);
-    background-size: 200% 100%;
-    animation: loading-dark 1.5s infinite;
-}
+/* Dark Mode Support - skeleton styles defined above */
 
 [data-theme-mode="dark"] .skeleton-table-row {
     border-bottom-color: #4a5568;
