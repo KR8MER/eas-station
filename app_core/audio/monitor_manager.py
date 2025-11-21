@@ -90,10 +90,23 @@ def initialize_eas_monitor(audio_manager, alert_callback=None, auto_start=True) 
                 except ValueError:
                     logger.warning(f"Invalid MAX_CONCURRENT_EAS_SCANS value '{env_value}', using default: 2")
 
+            # Allow scan_interval to be configured via environment variable
+            # Default 3.0s provides 75% overlap, but may need increase if scans take >3s
+            scan_interval = 3.0
+            env_scan_interval = os.getenv('EAS_SCAN_INTERVAL')
+            if env_scan_interval:
+                try:
+                    scan_interval = float(env_scan_interval)
+                    logger.info(f"Using EAS_SCAN_INTERVAL={scan_interval}s from environment")
+                    if scan_interval < 1.0:
+                        logger.warning(f"EAS_SCAN_INTERVAL={scan_interval}s is very low, may cause CPU issues")
+                except ValueError:
+                    logger.warning(f"Invalid EAS_SCAN_INTERVAL value '{env_scan_interval}', using default: 3.0")
+
             _monitor_instance = ContinuousEASMonitor(
                 audio_manager=audio_manager,
                 buffer_duration=12.0,  # 12s captures full SAME sequence (3s × 3 bursts + margin)
-                scan_interval=3.0,  # 3s interval creates 75% overlap to never miss alerts
+                scan_interval=scan_interval,  # Configurable via EAS_SCAN_INTERVAL env var
                 sample_rate=22050,
                 alert_callback=alert_callback,
                 save_audio_files=True,
