@@ -1237,6 +1237,22 @@ class CAPPoller:
             try:
                 self.logger.info(f"Fetching alerts from: {endpoint}")
                 response = self.session.get(endpoint, timeout=timeout)
+                
+                # Check for rate limiting before raising for other status codes
+                if response.status_code == 429:
+                    retry_after = response.headers.get('Retry-After', 'unknown')
+                    self.logger.warning(
+                        f"Rate limited by {endpoint} (HTTP 429). Retry-After: {retry_after}. "
+                        f"Consider increasing poll interval to avoid API rate limits."
+                    )
+                    continue  # Skip this endpoint and move to next
+                elif response.status_code == 503:
+                    self.logger.warning(
+                        f"Service unavailable from {endpoint} (HTTP 503). "
+                        f"API may be overloaded or blocking requests."
+                    )
+                    continue  # Skip this endpoint and move to next
+                
                 response.raise_for_status()
                 features = self._parse_feed_payload(response)
                 self.logger.info(f"Retrieved {len(features)} alerts from {endpoint}")
@@ -1292,6 +1308,11 @@ class CAPPoller:
                     "uses custom certificates.",
                     endpoint,
                     exc,
+                )
+            except requests.exceptions.Timeout as exc:
+                self.logger.error(
+                    f"Timeout fetching from {endpoint} after {timeout}s. "
+                    f"API may be slow or rate limiting requests. Error: {str(exc)}"
                 )
             except requests.exceptions.RequestException as exc:
                 self.logger.error(f"Error fetching from {endpoint}: {str(exc)}")

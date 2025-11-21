@@ -141,19 +141,29 @@ Waiting 180 seconds before next poll...
    ```
    If you don't see "Waiting X seconds" messages, the poller is not sleeping.
 
-2. **Check for exception loops**:
+2. **Check for API rate limiting**:
+   ```bash
+   docker logs noaa-poller 2>&1 | grep "429\|503\|Rate limited\|Timeout"
+   ```
+   If you see HTTP 429 (Too Many Requests) or 503 (Service Unavailable) errors:
+   - The API is rate limiting or blocking your requests
+   - **Solution**: Increase polling interval (e.g., `--interval 300` or higher)
+   - **Solution**: Reduce number of zone codes to poll fewer endpoints
+   - Check if you have multiple pollers hitting the same API
+
+3. **Check for exception loops**:
    ```bash
    docker logs noaa-poller 2>&1 | grep "Error in continuous polling"
    ```
    If you see many errors, there's an exception causing a tight loop.
 
-3. **Check Docker restart count**:
+4. **Check Docker restart count**:
    ```bash
    docker inspect noaa-poller --format='{{.RestartCount}}'
    ```
    If the count is high and increasing, the container is crashing and Docker is restarting it.
 
-4. **Verify --continuous flag**:
+5. **Verify --continuous flag**:
    ```bash
    docker inspect noaa-poller --format='{{.Config.Cmd}}'
    ```

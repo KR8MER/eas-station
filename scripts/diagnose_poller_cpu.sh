@@ -15,36 +15,47 @@ echo "   Looking for 'Waiting X seconds' messages in last 50 lines..."
 docker logs noaa-poller 2>&1 | tail -50 | grep -i "waiting\|sleep" || echo "   ⚠️  NO SLEEP MESSAGES FOUND"
 echo ""
 
+# Check for rate limiting and API issues
+echo "3. Checking for API rate limiting and errors..."
+echo "   HTTP 429 (Rate Limited) errors:"
+docker logs noaa-poller 2>&1 | tail -200 | grep -c "429\|Rate limited" | xargs -I {} echo "      Count: {}"
+echo "   Timeout errors:"
+docker logs noaa-poller 2>&1 | tail -200 | grep -c "Timeout" | xargs -I {} echo "      Count: {}"
+echo "   If counts are high, increase --interval or reduce zone codes"
+echo ""
+
 # Check for continuous error loops
-echo "3. Checking for error loops..."
+echo "4. Checking for error loops..."
 docker logs noaa-poller 2>&1 | tail -100 | grep -c "Error in continuous polling" | xargs -I {} echo "   Error count in last 100 lines: {}"
 echo ""
 
 # Check restart count
-echo "4. Checking Docker restart count..."
+echo "5. Checking Docker restart count..."
 docker inspect noaa-poller --format='{{.RestartCount}}' | xargs -I {} echo "   Restart count: {}"
 echo ""
 
 # Check if --continuous flag is present
-echo "5. Checking command line arguments..."
+echo "6. Checking command line arguments..."
 docker inspect noaa-poller --format='{{.Config.Cmd}}' | grep -o "continuous" && echo "   ✓ --continuous flag present" || echo "   ⚠️  --continuous flag MISSING"
 echo ""
 
 # Check recent log entries
-echo "6. Last 10 log entries from noaa-poller:"
+echo "7. Last 10 log entries from noaa-poller:"
 docker logs noaa-poller 2>&1 | tail -10
 echo ""
 
 # Check CPU usage
-echo "7. Current CPU usage:"
+echo "8. Current CPU usage:"
 docker stats --no-stream --format "table {{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}" | grep -E "CONTAINER|poller"
 echo ""
 
 echo "=== Analysis ==="
 echo "If you see:"
 echo "  - No 'Waiting X seconds' messages → Poller is NOT sleeping (tight loop)"
-echo "  - High restart count → Docker is restarting container repeatedly ⚠️ MOST LIKELY CAUSE"
-echo "  - Many 'Database not ready' messages → Database connection failure causing restart loop"
+echo "  - HTTP 429 or 'Rate limited' messages → API is rate limiting requests ⚠️ COMMON CAUSE"
+echo "  - Timeout errors → API is slow or blocking, increase interval"
+echo "  - High restart count → Docker is restarting container repeatedly"
+echo "  - Many 'Database not ready' messages → Database connection failure"
 echo "  - Many 'Error in continuous polling' messages → Exception in poll loop"
 echo "  - Missing --continuous flag → Running in single-shot mode with Docker restart"
 echo ""
