@@ -897,6 +897,14 @@ class CAPPoller:
                 last_err = e
                 self.logger.warning("Database not ready (attempt %d/%d): %s", attempt, retries, str(e).strip())
                 time.sleep(delay)
+        
+        # If we get here, all retries failed
+        # Sleep for a longer period before raising to prevent Docker restart loops
+        self.logger.error(
+            f"Failed to connect to database after {retries} attempts. "
+            f"Sleeping for 60 seconds before exit to prevent restart loop."
+        )
+        time.sleep(60)
         raise last_err
 
     # ---------- Fetch ----------
