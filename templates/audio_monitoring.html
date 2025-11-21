@@ -562,21 +562,13 @@ function renderAudioSources(fullRender = true) {
                             </audio>
                             <div class="audio-player-status small mt-2 text-muted" id="player-status-${source.name}"></div>
                             ${source.icecast_url ? `
-                                <small class="d-block mt-1">
-                                    <span class="text-muted">
-                                        <i class="fas fa-broadcast-tower"></i> Icecast streaming available
-                                        ${source.streaming && source.streaming.icecast ? `
-                                            <span>
-                                                ${typeof source.streaming.icecast.bitrate_kbps === 'number' ? ` • ${Number(source.streaming.icecast.bitrate_kbps).toFixed(1)} kbps` : ''}
-                                                ${typeof source.streaming.icecast.uptime_seconds === 'number' ? `
-                                                    <span>
-                                                        • <i class="fas fa-clock"></i> Uptime ${Math.floor(source.streaming.icecast.uptime_seconds / 60)}m
-                                                    </span>
-                                                ` : ''}
-                                            </span>
-                                        ` : ''}
-                                    </span>
-                                    <span class="d-block text-muted small mt-1">
+                                <small class="d-block mt-1 text-muted">
+                                    <i class="fas fa-broadcast-tower"></i> Icecast streaming available
+                                    ${source.streaming && source.streaming.icecast ? `
+                                        ${typeof source.streaming.icecast.bitrate_kbps === 'number' ? ` • ${Number(source.streaming.icecast.bitrate_kbps).toFixed(1)} kbps` : ''}
+                                        ${typeof source.streaming.icecast.uptime_seconds === 'number' ? ` • <i class="fas fa-clock"></i> Uptime ${Math.floor(source.streaming.icecast.uptime_seconds / 60)}m` : ''}
+                                    ` : ''}
+                                    <span class="d-block small mt-1">
                                         <i class="fas fa-info-circle"></i> If Icecast is not HTTPS, the UI will use a secure proxied player instead to avoid mixed-content blocking.
                                     </span>
                                 </small>
@@ -1566,6 +1558,7 @@ function updateLevelMetersFromSnapshot(snapshot) {
     const now = Date.now();
     const PEAK_HOLD_TIME_MS = 1500; // Hold peak for 1.5 seconds
     const PEAK_SMOOTHING = 0.3; // Higher = smoother but slower (0-1)
+    const PEAK_ATTACK_MULTIPLIER = 0.3; // Quick attack for peak meter
     const RMS_SMOOTHING = 0.5; // RMS should be smoother than peak
 
     let updatedCount = 0;
@@ -1599,7 +1592,7 @@ function updateLevelMetersFromSnapshot(snapshot) {
         let smoothedPeak;
         if (targetPeak > state.lastPeak) {
             // Rise quickly (attack)
-            smoothedPeak = targetPeak * (1 - PEAK_SMOOTHING * 0.3) + state.lastPeak * (PEAK_SMOOTHING * 0.3);
+            smoothedPeak = targetPeak * (1 - PEAK_SMOOTHING * PEAK_ATTACK_MULTIPLIER) + state.lastPeak * (PEAK_SMOOTHING * PEAK_ATTACK_MULTIPLIER);
         } else {
             // Fall slowly (release)
             smoothedPeak = targetPeak * (1 - PEAK_SMOOTHING) + state.lastPeak * PEAK_SMOOTHING;
@@ -1630,7 +1623,7 @@ function updateLevelMetersFromSnapshot(snapshot) {
             rmsBar.style.opacity = metric.source_status === 'running' ? 0.9 : 0.3;
         }
 
-        // Labels show actual instantaneous values, not smoothed
+        // Labels show raw server measurements, not client-side smoothed values
         if (peakLabel) {
             peakLabel.textContent = `Peak: ${formatDbLabel(metric.peak_level_db)}`;
         }
