@@ -25,6 +25,7 @@ Provides thread-safe access and lifecycle management.
 """
 
 import logging
+import os
 import threading
 from typing import Optional
 
@@ -51,6 +52,10 @@ def initialize_eas_monitor(audio_manager, alert_callback=None, auto_start=True) 
 
     Returns:
         True if initialized successfully
+    
+    Environment Variables:
+        MAX_CONCURRENT_EAS_SCANS: Maximum number of concurrent scan threads (default: 2)
+                                  Increase for faster hardware or to reduce scan skipping
     """
     global _monitor_instance
 
@@ -75,6 +80,16 @@ def initialize_eas_monitor(audio_manager, alert_callback=None, auto_start=True) 
                 )
                 logger.info(f"EAS monitor subscribed to broadcast queue: {broadcast_queue.name}")
 
+            # Read max_concurrent_scans from environment variable
+            max_concurrent_scans = 2  # default
+            env_value = os.getenv('MAX_CONCURRENT_EAS_SCANS')
+            if env_value:
+                try:
+                    max_concurrent_scans = int(env_value)
+                    logger.info(f"Using MAX_CONCURRENT_EAS_SCANS={max_concurrent_scans} from environment")
+                except ValueError:
+                    logger.warning(f"Invalid MAX_CONCURRENT_EAS_SCANS value '{env_value}', using default: 2")
+
             _monitor_instance = ContinuousEASMonitor(
                 audio_manager=audio_manager,
                 buffer_duration=12.0,  # 12s captures full SAME sequence (3s × 3 bursts + margin)
@@ -82,7 +97,8 @@ def initialize_eas_monitor(audio_manager, alert_callback=None, auto_start=True) 
                 sample_rate=22050,
                 alert_callback=alert_callback,
                 save_audio_files=True,
-                audio_archive_dir="/tmp/eas-audio"
+                audio_archive_dir="/tmp/eas-audio",
+                max_concurrent_scans=max_concurrent_scans
             )
 
             logger.info("Initialized ContinuousEASMonitor (not yet started)")

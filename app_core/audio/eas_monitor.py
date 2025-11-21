@@ -359,7 +359,8 @@ class ContinuousEASMonitor:
         sample_rate: int = 22050,
         alert_callback: Optional[Callable[[EASAlert], None]] = None,
         save_audio_files: bool = True,
-        audio_archive_dir: str = "/tmp/eas-audio"
+        audio_archive_dir: str = "/tmp/eas-audio",
+        max_concurrent_scans: int = 2  # Maximum number of concurrent scan threads
     ):
         """
         Initialize continuous EAS monitor.
@@ -375,6 +376,9 @@ class ContinuousEASMonitor:
             alert_callback: Optional callback function called when alert detected
             save_audio_files: Whether to save audio files of detected alerts
             audio_archive_dir: Directory to save alert audio files
+            max_concurrent_scans: Maximum number of concurrent scan threads (default: 2)
+                                 Increase for faster hardware or longer scan intervals
+                                 Decrease if scans are consuming too many resources
             
         Note on overlap strategy:
             SAME headers consist of 3 bursts, each ~3 seconds long = ~9 seconds total.
@@ -395,6 +399,7 @@ class ContinuousEASMonitor:
         self.alert_callback = alert_callback
         self.save_audio_files = save_audio_files
         self.audio_archive_dir = audio_archive_dir
+        self.max_concurrent_scans = max(1, max_concurrent_scans)  # Ensure at least 1
 
         # Create audio archive directory
         if save_audio_files:
@@ -420,6 +425,11 @@ class ContinuousEASMonitor:
         self._active_scans = 0  # Track concurrent scans
         self._scan_lock = threading.Lock()  # Protect scan counter
         
+        # Scan timing metrics
+        self._scan_durations: List[float] = []  # Recent scan durations in seconds
+        self._max_scan_history = 100  # Keep last 100 scan times
+        self._scans_skipped = 0  # Track how many scans were skipped due to concurrency limit
+        
         # Watchdog/heartbeat tracking
         self._last_activity: float = time.time()
         self._activity_lock = threading.Lock()
@@ -432,7 +442,8 @@ class ContinuousEASMonitor:
         logger.info(
             f"Initialized ContinuousEASMonitor: buffer={buffer_duration}s, "
             f"scan_interval={scan_interval}s ({overlap_pct:.0f}% overlap), "
-            f"sample_rate={sample_rate}Hz, watchdog_timeout={self._watchdog_timeout}s"
+            f"sample_rate={sample_rate}Hz, max_concurrent_scans={self.max_concurrent_scans}, "
+            f"watchdog_timeout={self._watchdog_timeout}s"
         )
         
         if overlap_pct < 50:
@@ -526,6 +537,18 @@ class ContinuousEASMonitor:
 
         with self._scan_lock:
             active_scans = self._active_scans
+            scans_skipped = self._scans_skipped
+            # Calculate scan timing statistics
+            if self._scan_durations:
+                avg_scan_duration = sum(self._scan_durations) / len(self._scan_durations)
+                min_scan_duration = min(self._scan_durations)
+                max_scan_duration = max(self._scan_durations)
+                last_scan_duration = self._scan_durations[-1] if self._scan_durations else None
+            else:
+                avg_scan_duration = None
+                min_scan_duration = None
+                max_scan_duration = None
+                last_scan_duration = None
         
         with self._activity_lock:
             last_activity = self._last_activity
@@ -538,17 +561,25 @@ class ContinuousEASMonitor:
             "buffer_utilization": buffer_utilization,
             "buffer_fill_seconds": buffer_fill_seconds,
             "scans_performed": self._scans_performed,
+            "scans_skipped": scans_skipped,
             "alerts_detected": self._alerts_detected,
             "last_scan_time": self._last_scan_time,
             "last_alert_time": self._last_alert_time,
             "active_scans": active_scans,
+            "max_concurrent_scans": self.max_concurrent_scans,
             "audio_flowing": audio_flowing,
             "sample_rate": self.sample_rate,
-            "scan_warnings": 0,  # TODO: track skipped scans
+            "scan_warnings": scans_skipped,  # Alias for backward compatibility
             "last_activity": last_activity,
             "time_since_activity": time_since_activity,
             "restart_count": self._restart_count,
-            "watchdog_timeout": self._watchdog_timeout
+            "watchdog_timeout": self._watchdog_timeout,
+            # Scan timing metrics
+            "avg_scan_duration_seconds": avg_scan_duration,
+            "min_scan_duration_seconds": min_scan_duration,
+            "max_scan_duration_seconds": max_scan_duration,
+            "last_scan_duration_seconds": last_scan_duration,
+            "scan_history_size": len(self._scan_durations) if hasattr(self, '_scan_durations') else 0
         }
 
     def get_buffer_history(self, max_points: int = 60) -> list:
@@ -814,10 +845,13 @@ class ContinuousEASMonitor:
         """
         # Check if too many scans are running
         with self._scan_lock:
-            if self._active_scans >= 2:
+            if self._active_scans >= self.max_concurrent_scans:
+                self._scans_skipped += 1
                 logger.warning(
-                    f"Skipping EAS scan: {self._active_scans} scans already active. "
-                    "Consider increasing scan_interval or reducing buffer_duration."
+                    f"Skipping EAS scan #{self._scans_skipped}: {self._active_scans} scans already active "
+                    f"(max={self.max_concurrent_scans}). "
+                    "Consider increasing scan_interval, reducing buffer_duration, "
+                    "or increasing max_concurrent_scans."
                 )
                 return
 
@@ -853,6 +887,7 @@ class ContinuousEASMonitor:
         We also limit concurrent scans to prevent resource exhaustion.
         """
         temp_wav = None
+        scan_start_time = time.time()
         try:
             self._scans_performed += 1
 
@@ -880,6 +915,16 @@ class ContinuousEASMonitor:
         except Exception as e:
             logger.error(f"Error in scan worker: {e}", exc_info=True)
         finally:
+            # Record scan duration
+            scan_duration = time.time() - scan_start_time
+            with self._scan_lock:
+                self._scan_durations.append(scan_duration)
+                # Keep only recent history
+                if len(self._scan_durations) > self._max_scan_history:
+                    self._scan_durations = self._scan_durations[-self._max_scan_history:]
+            
+            logger.debug(f"EAS scan completed in {scan_duration:.2f}s")
+            
             # Clean up temp file if we're not saving it
             if temp_wav and not self.save_audio_files and os.path.exists(temp_wav):
                 try:
