@@ -433,7 +433,9 @@ class CAPPoller:
         self.state_code = self.location_settings['state_code']
         
         # Track when cleanup was last run to avoid expensive operations on every poll
-        self._last_cleanup_time = None
+        # Use separate trackers for poll_history and debug_records cleanup
+        self._last_poll_history_cleanup_time = None
+        self._last_debug_records_cleanup_time = None
         self._cleanup_interval_seconds = 86400  # Run cleanup once per day (24 hours)
 
         # EAS broadcaster
@@ -1897,11 +1899,13 @@ class CAPPoller:
     def cleanup_old_poll_history(self):
         """Clean old poll history records. Only runs periodically to avoid CPU overhead."""
         # Check if cleanup is due (runs once per day by default)
+        # Early return to avoid ANY database queries when cleanup is not due
         now = utc_now()
-        if self._last_cleanup_time is not None:
-            time_since_cleanup = (now - self._last_cleanup_time).total_seconds()
+        if self._last_poll_history_cleanup_time is not None:
+            time_since_cleanup = (now - self._last_poll_history_cleanup_time).total_seconds()
             if time_since_cleanup < self._cleanup_interval_seconds:
                 # Skip cleanup - not enough time has passed
+                # Don't perform any database queries to minimize CPU usage
                 return
         
         try:
@@ -1925,7 +1929,7 @@ class CAPPoller:
                 self.logger.debug("Skipping poll history cleanup - only %d old records (threshold: 100)", old_count)
             
             # Update last cleanup time on success
-            self._last_cleanup_time = now
+            self._last_poll_history_cleanup_time = now
         except Exception as e:
             self.logger.error(f"cleanup_old_poll_history error: {e}")
             try:
@@ -1935,12 +1939,14 @@ class CAPPoller:
 
     def cleanup_old_debug_records(self):
         """Clean old debug records. Only runs periodically to avoid CPU overhead."""
-        # Use same cleanup schedule as poll_history
+        # Check if cleanup is due (runs once per day by default)
+        # Early return to avoid ANY database queries when cleanup is not due
         now = utc_now()
-        if self._last_cleanup_time is not None:
-            time_since_cleanup = (now - self._last_cleanup_time).total_seconds()
+        if self._last_debug_records_cleanup_time is not None:
+            time_since_cleanup = (now - self._last_debug_records_cleanup_time).total_seconds()
             if time_since_cleanup < self._cleanup_interval_seconds:
                 # Skip cleanup - not enough time has passed
+                # Don't perform any database queries to minimize CPU usage
                 return
         
         if not self._ensure_debug_records_table():
@@ -1968,6 +1974,9 @@ class CAPPoller:
                 self.logger.info("Cleaned old debug records (removed %d records, kept 500 most recent)", deleted)
             else:
                 self.logger.debug("Skipping debug records cleanup - only %d old records (threshold: 500)", old_count)
+            
+            # Update last cleanup time on success
+            self._last_debug_records_cleanup_time = now
         except Exception as exc:
             self.logger.error(f"cleanup_old_debug_records error: {exc}")
             try:
