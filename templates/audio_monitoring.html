@@ -511,33 +511,9 @@ function renderAudioSources(fullRender = true) {
                                 Your browser does not support the audio element.
                             </audio>
                             <div class="audio-player-status small mt-2 text-muted" id="player-status-${source.name}"></div>
-                            ${source.icecast_url ? `
-                                <small class="text-success d-block mt-1">
-                                    <i class="fas fa-broadcast-tower"></i> Professional Streaming (Icecast) - Better quality, no dropouts
-                                    ${source.streaming && source.streaming.icecast ? `
-                                        <span class="d-block text-muted small mt-1">
-                                            ${typeof source.streaming.icecast.bitrate_kbps === 'number' ? `${Number(source.streaming.icecast.bitrate_kbps).toFixed(1)} kbps` : ''}
-                                            ${typeof source.streaming.icecast.uptime_seconds === 'number' ? `
-                                                <span class="ms-2">
-                                                    <i class="fas fa-clock"></i> Uptime ${Math.floor(source.streaming.icecast.uptime_seconds / 60)}m
-                                                </span>
-                                            ` : ''}
-                                        </span>
-                                    ` : ''}
-                                    <span class="d-block text-muted small mt-1">
-                                        <i class="fas fa-shield-alt"></i> HTTPS dashboards automatically fall back to the secure built-in player if Icecast is HTTP-only.
-                                    </span>
-                                </small>
-                            ` : `
-                                <small class="text-muted d-block mt-1">
-                                    <i class="fas fa-info-circle"></i> Basic Streaming Mode
-                                    <span class="d-block small text-muted mt-1">A secure built-in player is used automatically on HTTPS deployments.</span>
-                                    <a href="/settings/audio#icecast" class="d-inline-flex align-items-center gap-1 text-primary mt-1">
-                                        <i class="fas fa-arrow-up-right-from-square"></i>
-                                        <span>Enable Icecast for professional quality</span>
-                                    </a>
-                                </small>
-                            `}
+                            <div class="small mt-2" id="stream-status-${source.name}">
+                                <span class="text-muted"><i class="fas fa-circle-notch fa-spin"></i> Checking stream availability...</span>
+                            </div>
                         ` : `
                             <div class="alert alert-secondary mb-0">
                                 <i class="fas fa-pause-circle"></i>
@@ -816,6 +792,7 @@ function initializeAudioPlayers(playingStates = {}, currentTimes = {}) {
             }
 
             setPlayerStatus(source.name, 'Ready. Press play to listen via Icecast.', 'muted');
+            updateStreamStatus(source.name, audioEl);
 
             if (wasPlaying) {
                 const resumeTime = currentTimes[source.name] || 0;
@@ -842,6 +819,7 @@ function initializeAudioPlayers(playingStates = {}, currentTimes = {}) {
             reason: fallbackReason,
             notify: !wasPlaying
         });
+        updateStreamStatus(source.name, audioEl);
     });
 }
 
@@ -947,6 +925,8 @@ function switchToProxyStream(audioEl, sourceName, options = {}) {
             });
         }
     }
+
+    updateStreamStatus(sourceName, audioEl);
 }
 
 function appendCacheBuster(url) {
@@ -1023,6 +1003,38 @@ function labelForStreamType(streamType) {
             return 'Secure built-in stream';
         default:
             return 'Audio stream';
+    }
+}
+
+function updateStreamStatus(sourceName, audioEl) {
+    const statusEl = document.getElementById(`stream-status-${sourceName}`);
+    if (!statusEl) {
+        return;
+    }
+
+    const icecastUrl = audioEl.dataset.icecastUrl;
+    const streamType = audioEl.dataset.streamType || audioEl.dataset.initialStreamType;
+    const isSecureContext = window.location.protocol === 'https:';
+    const icecastIsHttp = icecastUrl && /^http:\/\//i.test(icecastUrl);
+
+    if (!icecastUrl) {
+        // No Icecast configured
+        statusEl.innerHTML = `<span class="text-muted"><i class="fas fa-lock"></i> Using built-in secure player</span>`;
+        return;
+    }
+
+    if (streamType === 'icecast' || (icecastUrl && !icecastIsHttp)) {
+        // Using or can use Icecast
+        statusEl.innerHTML = `
+            <a href="${escapeHtml(icecastUrl)}" target="_blank" rel="noopener" class="text-success text-decoration-none">
+                <i class="fas fa-broadcast-tower"></i> Icecast stream available
+            </a>
+        `;
+    } else if (isSecureContext && icecastIsHttp) {
+        // HTTPS page with HTTP Icecast - fallback active
+        statusEl.innerHTML = `<span class="text-muted"><i class="fas fa-lock"></i> Using built-in secure player <small>(Icecast is HTTP-only)</small></span>`;
+    } else {
+        statusEl.innerHTML = `<span class="text-muted"><i class="fas fa-lock"></i> Using built-in secure player</span>`;
     }
 }
 
