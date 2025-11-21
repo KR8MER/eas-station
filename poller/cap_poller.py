@@ -2144,13 +2144,11 @@ class CAPPoller:
                 if self._debug_records_enabled:
                     debug_entry = self._initialise_debug_entry(alert_data, relevance, poll_run_id, poll_start_utc)
                     debug_records.append(debug_entry)
-                else:
-                    debug_entry = {}
 
                 if not relevance.get('is_relevant'):
                     self.logger.info(f"• Filtered out (not specific to {self.county_upper})")
                     stats['alerts_filtered'] += 1
-                    if self._debug_records_enabled:
+                    if self._debug_records_enabled and 'debug_entry' in locals():
                         debug_entry.setdefault('notes', []).append('Filtered out by strict location rules')
                     continue
 
@@ -2158,16 +2156,16 @@ class CAPPoller:
                 parsed = self.parse_cap_alert(alert_data)
                 if not parsed:
                     self.logger.warning(f"Failed to parse: {event}")
-                    if self._debug_records_enabled:
+                    if self._debug_records_enabled and 'debug_entry' in locals():
                         debug_entry['parse_error'] = 'parse_cap_alert returned None'
                         debug_entry.setdefault('notes', []).append('Parsing failed')
                     continue
 
-                if self._debug_records_enabled:
+                if self._debug_records_enabled and 'debug_entry' in locals():
                     debug_entry['parse_success'] = True
-                    debug_entry['identifier'] = parsed.get('identifier', debug_entry.get('identifier', ''))
-                    debug_entry['source'] = parsed.get('source', debug_entry.get('source'))
-                    debug_entry['alert_sent'] = parsed.get('sent', debug_entry.get('alert_sent'))
+                    debug_entry['identifier'] = parsed.get('identifier', '')
+                    debug_entry['source'] = parsed.get('source')
+                    debug_entry['alert_sent'] = parsed.get('sent')
                     geometry_data = parsed.get('_geometry_data')
                     if geometry_data:
                         debug_entry['geometry_geojson'] = self._safe_json_copy(geometry_data)
