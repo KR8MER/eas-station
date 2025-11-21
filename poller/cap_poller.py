@@ -310,6 +310,7 @@ except Exception as e:
         state_code = Column(String(2))
         timezone = Column(String(64))
         zone_codes = Column(JSON)
+        storage_zone_codes = Column(JSON)
         area_terms = Column(JSON)
         map_center_lat = Column(Float)
         map_center_lng = Column(Float)
@@ -569,6 +570,8 @@ class CAPPoller:
         self.zone_codes = set(self.location_settings['zone_codes'])
         fips_codes, _ = sanitize_fips_codes(self.location_settings.get('fips_codes'))
         self.same_codes = {code for code in fips_codes if code}
+        # Storage zone codes: UGC/zone codes that should trigger storage (in addition to SAME codes)
+        self.storage_zone_codes = set(self.location_settings.get('storage_zone_codes', []))
 
     # ---------- Engine with retry ----------
     def _ensure_source_columns(self):
@@ -809,11 +812,13 @@ class CAPPoller:
             record = self.db_session.query(LocationSettings).order_by(LocationSettings.id).first()
             if record:
                 fips_codes, _ = sanitize_fips_codes(record.fips_codes or defaults['fips_codes'])
+                storage_zones = getattr(record, 'storage_zone_codes', None)
                 settings.update({
                     'county_name': record.county_name or defaults['county_name'],
                     'state_code': (record.state_code or defaults['state_code']).upper(),
                     'timezone': record.timezone or defaults['timezone'],
                     'zone_codes': normalise_upper(record.zone_codes) or list(defaults['zone_codes']),
+                    'storage_zone_codes': normalise_upper(storage_zones) if storage_zones else list(defaults['storage_zone_codes']),
                     'fips_codes': fips_codes or list(defaults['fips_codes']),
                     'area_terms': normalise_upper(record.area_terms) or list(defaults['area_terms']),
                     'map_center_lat': record.map_center_lat or defaults['map_center_lat'],
@@ -828,6 +833,8 @@ class CAPPoller:
 
         if not settings['zone_codes']:
             settings['zone_codes'] = list(defaults['zone_codes'])
+        if not settings.get('storage_zone_codes'):
+            settings['storage_zone_codes'] = list(defaults['storage_zone_codes'])
         if not settings.get('fips_codes'):
             settings['fips_codes'] = list(defaults['fips_codes'])
         if not settings['area_terms']:
@@ -1398,11 +1405,16 @@ class CAPPoller:
 
             for ugc in normalized_ugc:
                 if ugc in self.zone_codes:
-                    message = f"✓ Alert ACCEPTED by UGC: {event} ({ugc}) [BROADCAST ONLY - no storage/boundaries]"
+                    # Check if this UGC code is in storage_zone_codes (local county)
+                    is_storage_ugc = ugc in self.storage_zone_codes
+                    if is_storage_ugc:
+                        message = f"✓ Alert ACCEPTED by UGC: {event} ({ugc}) [STORAGE+BROADCAST]"
+                    else:
+                        message = f"✓ Alert ACCEPTED by UGC: {event} ({ugc}) [BROADCAST ONLY - no storage/boundaries]"
                     result.update(
                         {
                             'is_relevant': True,
-                            'is_storage_relevant': False,  # UGC match = broadcast only, no storage
+                            'is_storage_relevant': is_storage_ugc,
                             'reason': 'UGC_MATCH',
                             'matched_ugc': ugc,
                             'relevance_matches': [ugc],

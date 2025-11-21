@@ -593,6 +593,11 @@ class LocationSettings(db.Model):
         nullable=False,
         default=lambda: list(DEFAULT_LOCATION_SETTINGS["zone_codes"]),
     )
+    storage_zone_codes = db.Column(
+        JSONB,
+        nullable=False,
+        default=lambda: list(DEFAULT_LOCATION_SETTINGS["storage_zone_codes"]),
+    )
     area_terms = db.Column(
         JSONB,
         nullable=False,
