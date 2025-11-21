@@ -1916,13 +1916,13 @@ class CAPPoller:
             old_count = self.db_session.query(PollHistory).filter(PollHistory.timestamp < cutoff).count()
             if old_count > 100:
                 subq = self.db_session.query(PollHistory.id).order_by(PollHistory.timestamp.desc()).limit(100).subquery()
-                self.db_session.query(PollHistory).filter(
+                deleted = self.db_session.query(PollHistory).filter(
                     PollHistory.timestamp < cutoff, ~PollHistory.id.in_(subq)
                 ).delete(synchronize_session=False)
                 self.db_session.commit()
-                self.logger.info("Cleaned old poll history (removed %d records)", old_count)
+                self.logger.info("Cleaned old poll history (removed %d records, kept 100 most recent)", deleted)
             else:
-                self.logger.debug("Skipping poll history cleanup - only %d old records", old_count)
+                self.logger.debug("Skipping poll history cleanup - only %d old records (threshold: 100)", old_count)
             
             # Update last cleanup time on success
             self._last_cleanup_time = now
@@ -1960,14 +1960,14 @@ class CAPPoller:
                     .limit(500)
                     .subquery()
                 )
-                self.db_session.query(PollDebugRecord).filter(
+                deleted = self.db_session.query(PollDebugRecord).filter(
                     PollDebugRecord.created_at < cutoff,
                     ~PollDebugRecord.id.in_(subq),
                 ).delete(synchronize_session=False)
                 self.db_session.commit()
-                self.logger.info("Cleaned old debug records (removed %d records)", old_count - 500)
+                self.logger.info("Cleaned old debug records (removed %d records, kept 500 most recent)", deleted)
             else:
-                self.logger.debug("Skipping debug records cleanup - only %d old records", old_count)
+                self.logger.debug("Skipping debug records cleanup - only %d old records (threshold: 500)", old_count)
         except Exception as exc:
             self.logger.error(f"cleanup_old_debug_records error: {exc}")
             try:
