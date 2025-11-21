@@ -393,6 +393,7 @@ class ContinuousEASMonitor:
 
         # Monitoring state
         self._monitor_thread: Optional[threading.Thread] = None
+        self._watchdog_thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
         self._stop_event.set()  # Initialize in "stopped" state
         self._alerts_detected = 0
@@ -403,10 +404,17 @@ class ContinuousEASMonitor:
         self._recent_alert_signatures: OrderedDict[str, float] = OrderedDict()
         self._active_scans = 0  # Track concurrent scans
         self._scan_lock = threading.Lock()  # Protect scan counter
+        
+        # Watchdog/heartbeat tracking
+        self._last_activity: float = time.time()
+        self._activity_lock = threading.Lock()
+        self._watchdog_timeout: float = 60.0  # Seconds before considering thread stalled
+        self._restart_count: int = 0
 
         logger.info(
             f"Initialized ContinuousEASMonitor: buffer={buffer_duration}s, "
-            f"scan_interval={scan_interval}s, sample_rate={sample_rate}Hz"
+            f"scan_interval={scan_interval}s, sample_rate={sample_rate}Hz, "
+            f"watchdog_timeout={self._watchdog_timeout}s"
         )
 
     def start(self) -> bool:
@@ -421,6 +429,7 @@ class ContinuousEASMonitor:
             return False
 
         self._stop_event.clear()
+        self._update_activity()  # Initialize activity timestamp
 
         # Start monitoring thread
         self._monitor_thread = threading.Thread(
@@ -430,7 +439,15 @@ class ContinuousEASMonitor:
         )
         self._monitor_thread.start()
 
-        logger.info("Started continuous EAS monitoring")
+        # Start watchdog thread
+        self._watchdog_thread = threading.Thread(
+            target=self._watchdog_loop,
+            name="eas-watchdog",
+            daemon=True
+        )
+        self._watchdog_thread.start()
+
+        logger.info("Started continuous EAS monitoring with watchdog")
         return True
 
     def stop(self) -> None:
@@ -440,10 +457,13 @@ class ContinuousEASMonitor:
 
         if self._monitor_thread:
             self._monitor_thread.join(timeout=10.0)
+        
+        if self._watchdog_thread:
+            self._watchdog_thread.join(timeout=5.0)
 
         logger.info(
             f"Stopped EAS monitoring. Stats: {self._scans_performed} scans, "
-            f"{self._alerts_detected} alerts detected"
+            f"{self._alerts_detected} alerts detected, {self._restart_count} restarts"
         )
 
     def get_status(self) -> dict:
@@ -478,6 +498,10 @@ class ContinuousEASMonitor:
 
         with self._scan_lock:
             active_scans = self._active_scans
+        
+        with self._activity_lock:
+            last_activity = self._last_activity
+            time_since_activity = time.time() - last_activity
 
         return {
             "running": is_running,
@@ -492,7 +516,11 @@ class ContinuousEASMonitor:
             "active_scans": active_scans,
             "audio_flowing": audio_flowing,
             "sample_rate": self.sample_rate,
-            "scan_warnings": 0  # TODO: track skipped scans
+            "scan_warnings": 0,  # TODO: track skipped scans
+            "last_activity": last_activity,
+            "time_since_activity": time_since_activity,
+            "restart_count": self._restart_count,
+            "watchdog_timeout": self._watchdog_timeout
         }
 
     def get_buffer_history(self, max_points: int = 60) -> list:
@@ -513,16 +541,87 @@ class ContinuousEASMonitor:
             "active_scans": status["active_scans"]
         }]
 
+    def _update_activity(self) -> None:
+        """Update the last activity timestamp (heartbeat)."""
+        with self._activity_lock:
+            self._last_activity = time.time()
+
+    def _watchdog_loop(self) -> None:
+        """Watchdog thread that monitors decoder thread health and restarts if stalled."""
+        logger.debug("EAS watchdog loop started")
+        check_interval = 10.0  # Check every 10 seconds
+        
+        while not self._stop_event.is_set():
+            try:
+                time.sleep(check_interval)
+                
+                if self._stop_event.is_set():
+                    break
+                
+                # Check if decoder thread is still alive and active
+                with self._activity_lock:
+                    time_since_activity = time.time() - self._last_activity
+                
+                if time_since_activity > self._watchdog_timeout:
+                    logger.error(
+                        f"EAS decoder thread appears stalled (no activity for {time_since_activity:.1f}s, "
+                        f"timeout={self._watchdog_timeout}s). Attempting restart..."
+                    )
+                    
+                    # Attempt to restart the monitor thread
+                    self._restart_monitor_thread()
+                    
+            except Exception as e:
+                logger.error(f"Error in EAS watchdog loop: {e}", exc_info=True)
+                time.sleep(5.0)  # Back off on error
+        
+        logger.debug("EAS watchdog loop stopped")
+
+    def _restart_monitor_thread(self) -> None:
+        """Attempt to safely restart the monitor thread."""
+        try:
+            self._restart_count += 1
+            logger.warning(f"Restarting EAS monitor thread (restart #{self._restart_count})")
+            
+            # Stop old thread if still running
+            if self._monitor_thread and self._monitor_thread.is_alive():
+                logger.debug("Old monitor thread still alive, giving it 3 seconds to stop")
+                # Note: We don't have a separate stop event for the monitor thread,
+                # so we can't force it to stop without stopping the entire service.
+                # Instead, just start a new one - the old one will eventually exit
+            
+            # Start new monitoring thread
+            self._monitor_thread = threading.Thread(
+                target=self._monitor_loop,
+                name=f"eas-monitor-r{self._restart_count}",
+                daemon=True
+            )
+            self._monitor_thread.start()
+            self._update_activity()  # Reset activity timestamp
+            
+            logger.info(f"EAS monitor thread restarted successfully (restart #{self._restart_count})")
+            
+        except Exception as e:
+            logger.error(f"Failed to restart EAS monitor thread: {e}", exc_info=True)
+
     def _monitor_loop(self) -> None:
-        """Main monitoring loop - runs continuously."""
+        """Main monitoring loop - runs continuously with heartbeat updates."""
         logger.debug("EAS monitor loop started")
 
         # Buffer for reading audio chunks
         chunk_samples = int(self.sample_rate * 0.1)  # 100ms chunks
         last_scan_time = 0.0
+        last_heartbeat_time = time.time()
+        heartbeat_interval = 5.0  # Update activity every 5 seconds
 
         while not self._stop_event.is_set():
             try:
+                # Update activity heartbeat periodically
+                current_time = time.time()
+                if current_time - last_heartbeat_time >= heartbeat_interval:
+                    self._update_activity()
+                    last_heartbeat_time = current_time
+
                 # Read audio from manager
                 samples = self.audio_manager.read_audio(chunk_samples)
 
@@ -531,17 +630,19 @@ class ContinuousEASMonitor:
                     self._add_to_buffer(samples)
 
                 # Check if it's time to scan for alerts
-                current_time = time.time()
                 if current_time - last_scan_time >= self.scan_interval:
                     self._scan_for_alerts()
                     last_scan_time = current_time
                     self._last_scan_time = current_time
+                    self._update_activity()  # Update on successful scan
                 else:
                     # Brief sleep to avoid busy-waiting
                     time.sleep(0.01)
 
             except Exception as e:
                 logger.error(f"Error in EAS monitor loop: {e}", exc_info=True)
+                # Still update activity to show loop is running, even with errors
+                self._update_activity()
                 time.sleep(1.0)  # Back off on error
 
         logger.debug("EAS monitor loop stopped")

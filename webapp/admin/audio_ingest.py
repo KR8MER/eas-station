@@ -1835,11 +1835,11 @@ def api_stream_audio(source_name: str):
     from flask import Response, stream_with_context
 
     def generate_wav_stream(active_adapter: Any):
-        """Generator that yields WAV-formatted audio chunks."""
+        """Generator that yields WAV-formatted audio chunks with resilient error handling."""
         import numpy as np
 
         if active_adapter.status != AudioSourceStatus.RUNNING:
-            logger.error(f'Audio source not running: {source_name}')
+            logger.error(f'Audio source not running for streaming: {source_name}')
             return
 
         # WAV header for streaming (we'll use a placeholder for data size)
@@ -1847,7 +1847,9 @@ def api_stream_audio(source_name: str):
         channels = active_adapter.config.channels
         bits_per_sample = 16  # 16-bit PCM
 
-        # Build WAV header
+        logger.debug(f'Setting up WAV stream for {source_name}: {sample_rate}Hz, {channels}ch, {bits_per_sample}-bit')
+
+        # Build streaming-friendly WAV header
         wav_header = io.BytesIO()
         wav_header.write(b'RIFF')
         wav_header.write(struct.pack('<I', 0xFFFFFFFF))  # Placeholder for file size
@@ -1868,6 +1870,7 @@ def api_stream_audio(source_name: str):
         wav_header.write(struct.pack('<I', 0xFFFFFFFF))  # Placeholder for data size
 
         yield wav_header.getvalue()
+        logger.debug(f'WAV header sent for {source_name}')
 
         # Pre-buffer audio for smooth playback (VLC-style buffering)
         logger.info(f'Pre-buffering audio for {source_name}')
@@ -1876,25 +1879,37 @@ def api_stream_audio(source_name: str):
         prebuffer_samples = 0
         prebuffer_timeout = 5.0  # Max 5 seconds to fill prebuffer
         prebuffer_start = time.time()
+        prebuffer_errors = 0
 
         while prebuffer_samples < prebuffer_target:
             if time.time() - prebuffer_start > prebuffer_timeout:
                 logger.warning(f'Prebuffer timeout for {source_name}, starting with {prebuffer_samples}/{prebuffer_target} samples')
                 break
 
-            audio_chunk = active_adapter.get_audio_chunk(timeout=0.2)
-            if audio_chunk is not None:
-                if not isinstance(audio_chunk, np.ndarray):
-                    audio_chunk = np.array(audio_chunk, dtype=np.float32)
+            try:
+                audio_chunk = active_adapter.get_audio_chunk(timeout=0.2)
+                if audio_chunk is not None:
+                    if not isinstance(audio_chunk, np.ndarray):
+                        audio_chunk = np.array(audio_chunk, dtype=np.float32)
 
-                prebuffer.append(audio_chunk)
-                prebuffer_samples += len(audio_chunk)
+                    prebuffer.append(audio_chunk)
+                    prebuffer_samples += len(audio_chunk)
+            except Exception as e:
+                prebuffer_errors += 1
+                logger.warning(f'Error reading chunk during prebuffer for {source_name}: {e}')
+                if prebuffer_errors > 10:
+                    logger.error(f'Too many prebuffer errors for {source_name}, aborting')
+                    return
 
         # Yield pre-buffered audio
         logger.info(f'Streaming {len(prebuffer)} pre-buffered chunks for {source_name}')
         for chunk in prebuffer:
-            pcm_data = (np.clip(chunk, -1.0, 1.0) * 32767).astype(np.int16)
-            yield pcm_data.tobytes()
+            try:
+                pcm_data = (np.clip(chunk, -1.0, 1.0) * 32767).astype(np.int16)
+                yield pcm_data.tobytes()
+            except Exception as e:
+                logger.warning(f'Error converting prebuffered chunk for {source_name}: {e}')
+                # Continue with next chunk instead of failing
 
         # Stream audio chunks
         logger.info(f'Starting live audio stream for {source_name}')
@@ -1903,11 +1918,20 @@ def api_stream_audio(source_name: str):
         silence_count = 0
         max_consecutive_silence = 200  # 10 seconds of silence before stopping (increased from 1s)
         last_reported_status = active_adapter.status
+        conversion_error_count = 0
+        max_conversion_errors = 50
 
         try:
             while chunk_count < max_chunks:
-                # Get audio chunk from adapter (very short timeout to keep stream responsive)
-                audio_chunk = active_adapter.get_audio_chunk(timeout=0.05)
+                audio_chunk = None
+                
+                # Wrap chunk read in try/except to prevent read errors from terminating stream
+                try:
+                    # Get audio chunk from adapter (very short timeout to keep stream responsive)
+                    audio_chunk = active_adapter.get_audio_chunk(timeout=0.05)
+                except Exception as e:
+                    logger.warning(f'Error reading audio chunk from {source_name}: {e}')
+                    audio_chunk = None
 
                 if audio_chunk is None:
                     # No data available - yield silence to keep HTTP stream alive
@@ -1935,30 +1959,54 @@ def api_stream_audio(source_name: str):
                     if silence_count > max_consecutive_silence:
                         logger.warning(f'Too many consecutive silent chunks for {source_name}, stopping stream')
                         break
+                    
+                    # Small sleep to avoid busy-waiting when source is idle
+                    time.sleep(0.01)
                     continue
 
                 # Reset silence counter when we get real data
                 silence_count = 0
                 last_reported_status = active_adapter.status
 
-                # Convert float32 [-1, 1] to int16 PCM
-                # Ensure we have a numpy array
-                if not isinstance(audio_chunk, np.ndarray):
-                    audio_chunk = np.array(audio_chunk, dtype=np.float32)
+                # Wrap conversion in try/except to prevent a single bad chunk from terminating stream
+                try:
+                    # Convert float32 [-1, 1] to int16 PCM
+                    # Ensure we have a numpy array
+                    if not isinstance(audio_chunk, np.ndarray):
+                        audio_chunk = np.array(audio_chunk, dtype=np.float32)
 
-                # Clip to [-1, 1] range and convert to int16
-                audio_chunk = np.clip(audio_chunk, -1.0, 1.0)
-                pcm_data = (audio_chunk * 32767).astype(np.int16)
+                    # Clip to [-1, 1] range and convert to int16
+                    audio_chunk = np.clip(audio_chunk, -1.0, 1.0)
+                    pcm_data = (audio_chunk * 32767).astype(np.int16)
 
-                # Convert to bytes and yield
-                yield pcm_data.tobytes()
-
-                chunk_count += 1
+                    # Convert to bytes and yield
+                    yield pcm_data.tobytes()
+                    
+                    chunk_count += 1
+                    conversion_error_count = 0  # Reset error count on success
+                    
+                except Exception as e:
+                    conversion_error_count += 1
+                    logger.warning(
+                        f'Error converting audio chunk for {source_name} '
+                        f'(error {conversion_error_count}/{max_conversion_errors}): {e}'
+                    )
+                    
+                    if conversion_error_count >= max_conversion_errors:
+                        logger.error(
+                            f'Too many consecutive conversion errors for {source_name}, stopping stream'
+                        )
+                        break
+                    
+                    # Yield silence instead of failing
+                    silence_samples = int(sample_rate * channels * 0.05)
+                    silence_chunk = np.zeros(silence_samples, dtype=np.int16)
+                    yield silence_chunk.tobytes()
 
         except GeneratorExit:
             logger.info(f'Client disconnected from audio stream: {source_name}')
         except Exception as exc:
-            logger.error(f'Error streaming audio from {source_name}: {exc}')
+            logger.error(f'Unexpected error in audio stream generator for {source_name}: {exc}', exc_info=True)
 
     try:
         controller, adapter, db_config, _ = _get_controller_and_adapter(source_name)
