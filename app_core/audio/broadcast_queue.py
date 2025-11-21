@@ -159,8 +159,17 @@ class BroadcastQueue:
                         f"Subscriber '{subscriber_id}' queue full, dropped oldest chunk "
                         f"(total dropped: {self._dropped_chunks})"
                     )
-                except (queue.Empty, queue.Full):
-                    logger.warning(f"Failed to deliver chunk to subscriber '{subscriber_id}'")
+                except (queue.Empty, queue.Full) as e:
+                    logger.warning(
+                        f"Failed to deliver chunk to subscriber '{subscriber_id}': {type(e).__name__} - "
+                        f"queue may be backed up or consumer stalled"
+                    )
+            except Exception as e:
+                # Catch any other unexpected errors during frame delivery
+                logger.error(
+                    f"Unexpected error delivering frame to subscriber '{subscriber_id}': {e}",
+                    exc_info=True
+                )
 
         return delivered
 
