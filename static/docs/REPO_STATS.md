@@ -1,27 +1,27 @@
 # Repository Statistics
 
-**Generated:** 2025-11-21 21:57:38 UTC
+**Generated:** 2025-11-21 22:44:27 UTC
 
 ## Overview
 
-- **Total Files:** 679
+- **Total Files:** 689
 - **Total Directories:** 77
-- **Total Lines:** 236,940
-- **Code Lines:** 146,679
-- **Comment Lines:** 50,746
+- **Total Lines:** 239,009
+- **Code Lines:** 148,019
+- **Comment Lines:** 51,059
 - **Total Routes:** 189
 
 ## Files by Type
 
 | File Type | Count |
 |-----------|-------|
-| Python | 271 |
-| Markdown | 188 |
+| Python | 274 |
+| Markdown | 193 |
 | HTML | 80 |
 | Other | 60 |
-| Shell | 19 |
+| Shell | 20 |
 | SVG | 15 |
-| YAML | 12 |
+| YAML | 13 |
 | JavaScript | 12 |
 | CSS | 10 |
 | Text | 7 |
@@ -32,16 +32,16 @@
 
 | Language | Total Lines | Code Lines | Comment Lines |
 |----------|-------------|------------|---------------|
-| Python | 98,219 | 36,795 | 44,624 |
-| Markdown | 69,591 | 53,301 | 0 |
+| Python | 98,692 | 36,879 | 44,914 |
+| Markdown | 70,938 | 54,353 | 0 |
 | HTML | 48,025 | 43,701 | 464 |
 | CSS | 6,564 | 1,202 | 4,384 |
 | JavaScript | 4,921 | 3,726 | 548 |
 | Text | 2,283 | 2,138 | 0 |
-| Shell | 2,157 | 1,575 | 260 |
+| Shell | 2,233 | 1,638 | 262 |
 | SVG | 1,755 | 1,332 | 176 |
+| YAML | 1,598 | 1,140 | 287 |
 | XML | 1,591 | 1,584 | 0 |
-| YAML | 1,425 | 999 | 266 |
 | SQL | 275 | 240 | 0 |
 | Other | 134 | 86 | 24 |
 
@@ -81,10 +81,10 @@
 
 ### Top Languages by Lines of Code
 
-**Python:** 36,795 lines  
-`██████████████████████████████████`
+**Python:** 36,879 lines  
+`█████████████████████████████████`
 
-**Markdown:** 53,301 lines  
+**Markdown:** 54,353 lines  
 `██████████████████████████████████████████████████`
 
 **HTML:** 43,701 lines  
