@@ -19,10 +19,10 @@
     --secondary-soft: #9d5bb1;
     --accent-color: #FF6B35; /* Updated to match unified accent */
 
-    /* Status Colors - using unified palette */
-    --success-color: #10b981;
-    --danger-color: #ef4444;
-    --warning-color: #f59e0b;
+    /* Status Colors - using unified palette with improved contrast */
+    --success-color: #059669;
+    --danger-color: #dc2626;
+    --warning-color: #d97706;
     --info-color: #3b82f6;
     --critical-color: #ff4f8b;
 
@@ -37,7 +37,7 @@
     /* Text Colors */
     --text-color: #1c2233;
     --text-secondary: #5a6c8f;
-    --text-muted: #8892a6;
+    --text-muted: #5a6c8f; /* Updated for better contrast */
 
     /* Borders & Shadows */
     --border-color: #ced7ea;

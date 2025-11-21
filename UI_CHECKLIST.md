@@ -15,7 +15,7 @@ The application uses a unified color palette defined in `static/css/design-syste
 --color-bg: #e8ecf7;            /* Page background */
 --color-surface: #ffffff;       /* Cards and elevated surfaces */
 --color-text: #1c2233;          /* Primary text */
---color-muted: #8892a6;         /* Secondary/muted text */
+--color-muted: #5a6c8f;         /* Secondary/muted text (WCAG AA compliant) */
 ```
 
 #### Dark Mode
@@ -30,10 +30,12 @@ The application uses a unified color palette defined in `static/css/design-syste
 
 ### Status Colors (WCAG AA Compliant)
 ```css
---color-success: #10b981;       /* Success/positive states */
---color-warning: #f59e0b;       /* Warning/caution states */
---color-error: #ef4444;         /* Error/danger states */
+--color-success: #059669;       /* Success/positive states (darkened for contrast) */
+--color-warning: #d97706;       /* Warning/caution states (darkened for contrast) */
+--color-error: #dc2626;         /* Error/danger states (darkened for contrast) */
 ```
+
+**Note**: Status colors meet WCAG AA standards for large text (18pt+) and UI components. Error color meets AA for normal text as well.
 
 ### Extended Palette
 For nuanced color needs, use the extended primary palette:
