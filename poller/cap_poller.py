@@ -431,6 +431,10 @@ class CAPPoller:
         self.location_name = f"{self.location_settings['county_name']}, {self.location_settings['state_code']}".strip(', ')
         self.county_upper = self.location_settings['county_name'].upper()
         self.state_code = self.location_settings['state_code']
+        
+        # Track when cleanup was last run to avoid expensive operations on every poll
+        self._last_cleanup_time = None
+        self._cleanup_interval_seconds = 86400  # Run cleanup once per day (24 hours)
 
         # EAS broadcaster
         self.eas_broadcaster = None
@@ -1308,7 +1312,7 @@ class CAPPoller:
 
     # ---------- Relevance ----------
     def _validate_ugc_code(self, ugc: str) -> bool:
-        """Validate UGC code format: [A-Z]{2}[CZ]\d{3} (e.g., OHZ016, OHC137)."""
+        r"""Validate UGC code format: [A-Z]{2}[CZ]\d{3} (e.g., OHZ016, OHC137)."""
         if not ugc or not isinstance(ugc, str):
             return False
         ugc = ugc.strip().upper()
@@ -1891,6 +1895,15 @@ class CAPPoller:
                 pass
 
     def cleanup_old_poll_history(self):
+        """Clean old poll history records. Only runs periodically to avoid CPU overhead."""
+        # Check if cleanup is due (runs once per day by default)
+        now = utc_now()
+        if self._last_cleanup_time is not None:
+            time_since_cleanup = (now - self._last_cleanup_time).total_seconds()
+            if time_since_cleanup < self._cleanup_interval_seconds:
+                # Skip cleanup - not enough time has passed
+                return
+        
         try:
             # Ensure table exists
             try:
@@ -1903,11 +1916,16 @@ class CAPPoller:
             old_count = self.db_session.query(PollHistory).filter(PollHistory.timestamp < cutoff).count()
             if old_count > 100:
                 subq = self.db_session.query(PollHistory.id).order_by(PollHistory.timestamp.desc()).limit(100).subquery()
-                self.db_session.query(PollHistory).filter(
+                deleted = self.db_session.query(PollHistory).filter(
                     PollHistory.timestamp < cutoff, ~PollHistory.id.in_(subq)
                 ).delete(synchronize_session=False)
                 self.db_session.commit()
-                self.logger.info("Cleaned old poll history")
+                self.logger.info("Cleaned old poll history (removed %d records, kept 100 most recent)", deleted)
+            else:
+                self.logger.debug("Skipping poll history cleanup - only %d old records (threshold: 100)", old_count)
+            
+            # Update last cleanup time on success
+            self._last_cleanup_time = now
         except Exception as e:
             self.logger.error(f"cleanup_old_poll_history error: {e}")
             try:
@@ -1916,6 +1934,15 @@ class CAPPoller:
                 self.logger.debug("Rollback failed during poll history cleanup: %s", rollback_exc)
 
     def cleanup_old_debug_records(self):
+        """Clean old debug records. Only runs periodically to avoid CPU overhead."""
+        # Use same cleanup schedule as poll_history
+        now = utc_now()
+        if self._last_cleanup_time is not None:
+            time_since_cleanup = (now - self._last_cleanup_time).total_seconds()
+            if time_since_cleanup < self._cleanup_interval_seconds:
+                # Skip cleanup - not enough time has passed
+                return
+        
         if not self._ensure_debug_records_table():
             return
 
@@ -1933,11 +1960,14 @@ class CAPPoller:
                     .limit(500)
                     .subquery()
                 )
-                self.db_session.query(PollDebugRecord).filter(
+                deleted = self.db_session.query(PollDebugRecord).filter(
                     PollDebugRecord.created_at < cutoff,
                     ~PollDebugRecord.id.in_(subq),
                 ).delete(synchronize_session=False)
                 self.db_session.commit()
+                self.logger.info("Cleaned old debug records (removed %d records, kept 500 most recent)", deleted)
+            else:
+                self.logger.debug("Skipping debug records cleanup - only %d old records (threshold: 500)", old_count)
         except Exception as exc:
             self.logger.error(f"cleanup_old_debug_records error: {exc}")
             try:
@@ -2281,19 +2311,38 @@ def main():
                     f"Interval {args.interval}s is below minimum; using {interval}s to prevent excessive CPU usage"
                 )
             logger.info(f"Running continuously with {interval} second intervals")
+            
+            consecutive_errors = 0
+            max_backoff = 300  # Maximum 5 minutes between retries
+            first_iteration = True
+            
             while True:
                 try:
+                    # Sleep before polling (except on first iteration) to prevent CPU hammering
+                    # This ensures we always wait between polls, even if a poll completes very quickly
+                    if not first_iteration:
+                        if consecutive_errors > 0:
+                            # Exponential backoff for errors: 60s, 120s, 240s, up to max_backoff
+                            backoff_time = min(60 * (2 ** (consecutive_errors - 1)), max_backoff)
+                            logger.info(f"Backing off for {backoff_time} seconds after {consecutive_errors} consecutive error(s)...")
+                            time.sleep(backoff_time)
+                        else:
+                            # Normal interval for successful polls
+                            logger.info(f"Waiting {interval} seconds before next poll...")
+                            time.sleep(interval)
+                    first_iteration = False
+                    
                     stats = poller.poll_and_process()
                     print(json.dumps(stats, indent=2))
-                    logger.info(f"Polling cycle complete. Sleeping for {interval} seconds...")
-                    time.sleep(interval)
+                    logger.info(f"Polling cycle complete.")
+                    consecutive_errors = 0  # Reset error counter on success
                 except KeyboardInterrupt:
                     logger.info("Received interrupt signal, shutting down")
                     break
                 except Exception as e:
-                    logger.error(f"Error in continuous polling: {e}")
-                    logger.info("Sleeping for 60 seconds before retry...")
-                    time.sleep(60)
+                    consecutive_errors += 1
+                    logger.error(f"Error in continuous polling (attempt {consecutive_errors}): {e}")
+                    # Backoff will be applied at the start of the next iteration
         else:
             stats = poller.poll_and_process()
             print(json.dumps(stats, indent=2))
