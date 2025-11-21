@@ -437,6 +437,14 @@ class CAPPoller:
         self._last_poll_history_cleanup_time = None
         self._last_debug_records_cleanup_time = None
         self._cleanup_interval_seconds = 86400  # Run cleanup once per day (24 hours)
+        
+        # Track when radio configuration was last refreshed to avoid CPU overhead
+        self._last_radio_config_refresh_time = None
+        self._radio_config_refresh_interval_seconds = 3600  # Refresh radio config once per hour
+        
+        # Control debug record persistence to avoid CPU/database overhead
+        # Debug records are useful for troubleshooting but expensive (one DB row per alert per poll)
+        self._debug_records_enabled = _env_flag('CAP_POLLER_DEBUG_RECORDS', False)
 
         # EAS broadcaster
         self.eas_broadcaster = None
@@ -675,8 +683,26 @@ class CAPPoller:
         self._refresh_radio_configuration(initial=True)
 
     def _refresh_radio_configuration(self, initial: bool = False) -> None:
+        """Refresh radio receiver configuration from database.
+        
+        Args:
+            initial: If True, always refresh. If False, only refresh if interval has elapsed.
+        
+        This is a potentially expensive operation that queries the database and may
+        start/restart SDR processes. To avoid CPU overhead, it only runs periodically
+        (once per hour by default) unless initial=True.
+        """
         if not self.radio_manager:
             return
+        
+        # Skip refresh if not due (unless initial=True)
+        if not initial:
+            now = utc_now()
+            if self._last_radio_config_refresh_time is not None:
+                time_since_refresh = (now - self._last_radio_config_refresh_time).total_seconds()
+                if time_since_refresh < self._radio_config_refresh_interval_seconds:
+                    # Skip refresh - not enough time has passed
+                    return
 
         try:
             receivers = (
@@ -705,6 +731,14 @@ class CAPPoller:
             self._radio_receiver_cache = cache
             if configs:
                 self.radio_manager.start_all()
+            
+            # Update last refresh time on success
+            if not initial:
+                self._last_radio_config_refresh_time = utc_now()
+            else:
+                # On initial setup, set the time so we don't refresh again immediately
+                self._last_radio_config_refresh_time = utc_now()
+                
         except Exception as exc:
             self.logger.error("Failed to configure radio manager: %s", exc)
 
@@ -1852,6 +1886,20 @@ class CAPPoller:
         stats: Dict[str, Any],
         debug_records: List[Dict[str, Any]],
     ) -> None:
+        """Persist poll debug records to database.
+        
+        This is a CPU and database intensive operation that creates one row per alert
+        processed (including rejected alerts) with full geometry and properties.
+        
+        By default, this is DISABLED to reduce CPU usage. Enable by setting:
+            CAP_POLLER_DEBUG_RECORDS=1
+        
+        Only enable for troubleshooting or when actively debugging alert filtering issues.
+        """
+        if not self._debug_records_enabled:
+            # Skip debug record persistence to reduce CPU and database overhead
+            return
+            
         if not debug_records:
             return
         if not self._ensure_debug_records_table():
@@ -2084,34 +2132,41 @@ class CAPPoller:
                     else:
                         self.logger.info(message)
 
-                debug_entry = self._initialise_debug_entry(alert_data, relevance, poll_run_id, poll_start_utc)
-                debug_records.append(debug_entry)
+                # Only collect debug data if debug records are enabled (expensive)
+                if self._debug_records_enabled:
+                    debug_entry = self._initialise_debug_entry(alert_data, relevance, poll_run_id, poll_start_utc)
+                    debug_records.append(debug_entry)
+                else:
+                    debug_entry = {}
 
                 if not relevance.get('is_relevant'):
                     self.logger.info(f"• Filtered out (not specific to {self.county_upper})")
                     stats['alerts_filtered'] += 1
-                    debug_entry.setdefault('notes', []).append('Filtered out by strict location rules')
+                    if self._debug_records_enabled:
+                        debug_entry.setdefault('notes', []).append('Filtered out by strict location rules')
                     continue
 
                 stats['alerts_accepted'] += 1
                 parsed = self.parse_cap_alert(alert_data)
                 if not parsed:
                     self.logger.warning(f"Failed to parse: {event}")
-                    debug_entry['parse_error'] = 'parse_cap_alert returned None'
-                    debug_entry.setdefault('notes', []).append('Parsing failed')
+                    if self._debug_records_enabled:
+                        debug_entry['parse_error'] = 'parse_cap_alert returned None'
+                        debug_entry.setdefault('notes', []).append('Parsing failed')
                     continue
 
-                debug_entry['parse_success'] = True
-                debug_entry['identifier'] = parsed.get('identifier', debug_entry['identifier'])
-                debug_entry['source'] = parsed.get('source', debug_entry.get('source'))
-                debug_entry['alert_sent'] = parsed.get('sent', debug_entry.get('alert_sent'))
-                geometry_data = parsed.get('_geometry_data')
-                if geometry_data:
-                    debug_entry['geometry_geojson'] = self._safe_json_copy(geometry_data)
-                    geom_type, polygon_count, preview = self._summarise_geometry(geometry_data)
-                    debug_entry['geometry_type'] = geom_type
-                    debug_entry['polygon_count'] = polygon_count
-                    debug_entry['geometry_preview'] = preview
+                if self._debug_records_enabled:
+                    debug_entry['parse_success'] = True
+                    debug_entry['identifier'] = parsed.get('identifier', debug_entry.get('identifier', ''))
+                    debug_entry['source'] = parsed.get('source', debug_entry.get('source'))
+                    debug_entry['alert_sent'] = parsed.get('sent', debug_entry.get('alert_sent'))
+                    geometry_data = parsed.get('_geometry_data')
+                    if geometry_data:
+                        debug_entry['geometry_geojson'] = self._safe_json_copy(geometry_data)
+                        geom_type, polygon_count, preview = self._summarise_geometry(geometry_data)
+                        debug_entry['geometry_type'] = geom_type
+                        debug_entry['polygon_count'] = polygon_count
+                        debug_entry['geometry_preview'] = preview
 
                 # Check if this alert should be stored (SAME match) or broadcast-only (UGC match)
                 is_storage_relevant = relevance.get('is_storage_relevant', False)
@@ -2131,11 +2186,12 @@ class CAPPoller:
                             f"Updated {self.location_name} alert: {alert.event if alert else parsed['event']} - Sent: {format_local_datetime(parsed.get('sent'))}"
                         )
 
-                    debug_entry['was_saved'] = bool(alert)
-                    debug_entry['was_new'] = bool(is_new and alert is not None)
-                    debug_entry['alert_db_id'] = getattr(alert, 'id', None) if alert else None
-                    if not alert:
-                        debug_entry.setdefault('notes', []).append('Database save failed')
+                    if self._debug_records_enabled:
+                        debug_entry['was_saved'] = bool(alert)
+                        debug_entry['was_new'] = bool(is_new and alert is not None)
+                        debug_entry['alert_db_id'] = getattr(alert, 'id', None) if alert else None
+                        if not alert:
+                            debug_entry.setdefault('notes', []).append('Database save failed')
 
                     if capture_metadata:
                         capture_metadata.setdefault('timestamp', utc_now())
@@ -2146,9 +2202,10 @@ class CAPPoller:
                     self.logger.info(
                         f"Broadcast-only alert (UGC match): {event} - Sent: {format_local_datetime(parsed.get('sent'))}"
                     )
-                    debug_entry.setdefault('notes', []).append('Broadcast-only (UGC match, no storage)')
-                    debug_entry['was_saved'] = False
-                    debug_entry['was_new'] = False
+                    if self._debug_records_enabled:
+                        debug_entry.setdefault('notes', []).append('Broadcast-only (UGC match, no storage)')
+                        debug_entry['was_saved'] = False
+                        debug_entry['was_new'] = False
 
                     # Trigger EAS broadcast without saving to database
                     if self.eas_broadcaster:
@@ -2164,7 +2221,8 @@ class CAPPoller:
                             capture_events.append(capture_metadata)
                         except Exception as exc:
                             self.logger.error(f"EAS broadcast failed for {event}: {exc}")
-                            debug_entry.setdefault('notes', []).append(f'Broadcast error: {exc}')
+                            if self._debug_records_enabled:
+                                debug_entry.setdefault('notes', []).append(f'Broadcast error: {exc}')
 
             self.cleanup_old_poll_history()
             self.log_poll_history(stats)
@@ -2350,8 +2408,16 @@ def main():
                     break
                 except Exception as e:
                     consecutive_errors += 1
-                    logger.error(f"Error in continuous polling (attempt {consecutive_errors}): {e}")
+                    logger.error(f"Error in continuous polling (attempt {consecutive_errors}): {e}", exc_info=True)
                     # Backoff will be applied at the start of the next iteration
+                    # If this is a JSON serialization error, log the problematic stats
+                    if "json" in str(e).lower() or "serializ" in str(e).lower():
+                        logger.error(f"Stats that failed to serialize: {type(stats)}")
+                        for key, value in stats.items():
+                            try:
+                                json.dumps({key: value})
+                            except Exception as json_err:
+                                logger.error(f"Key '{key}' with value type {type(value)} cannot be JSON serialized: {json_err}")
         else:
             stats = poller.poll_and_process()
             print(json.dumps(stats, indent=2))

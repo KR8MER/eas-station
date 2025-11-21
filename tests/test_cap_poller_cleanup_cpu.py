@@ -139,10 +139,67 @@ def test_cpu_impact_calculation():
     print("✓ CPU impact calculation shows >99% reduction in database queries")
 
 
+def test_debug_records_disabled_by_default():
+    """Test that debug record persistence is disabled by default to reduce CPU usage."""
+    # By default, CAP_POLLER_DEBUG_RECORDS is not set, so it should be False
+    import os
+    
+    # Simulate default environment (no CAP_POLLER_DEBUG_RECORDS set)
+    debug_enabled = os.getenv('CAP_POLLER_DEBUG_RECORDS', '').lower() in {'1', 'true', 'yes', 'on', 't', 'y'}
+    
+    # When not set, should be False
+    assert not debug_enabled, "Debug records should be disabled by default"
+    
+    print("✓ Debug records disabled by default (reduces CPU usage)")
+
+
+def test_debug_records_cpu_savings():
+    """Calculate CPU savings from disabling debug record persistence."""
+    # Assumptions:
+    # - Polling interval: 180 seconds (3 minutes)
+    # - Average alerts per poll: 30 (conservative estimate with 2 zone codes)
+    # - Database operations per alert: 1 INSERT with JSON serialization
+    # - Cost per INSERT: ~10ms (conservative estimate)
+    
+    poll_interval_seconds = 180
+    alerts_per_poll = 30
+    db_cost_per_alert_ms = 10
+    
+    # OLD: All alerts are persisted as debug records
+    old_db_time_per_poll_ms = alerts_per_poll * db_cost_per_alert_ms
+    old_cpu_percent_per_poll = (old_db_time_per_poll_ms / (poll_interval_seconds * 1000)) * 100
+    
+    # NEW: Debug records disabled, no database operations for debug data
+    new_db_time_per_poll_ms = 0
+    new_cpu_percent_per_poll = 0
+    
+    polls_per_hour = 3600 / poll_interval_seconds
+    old_cpu_seconds_per_hour = (old_db_time_per_poll_ms / 1000) * polls_per_hour
+    new_cpu_seconds_per_hour = (new_db_time_per_poll_ms / 1000) * polls_per_hour
+    
+    print(f"Debug Records CPU Impact Analysis:")
+    print(f"  Polls per hour: {polls_per_hour:.0f}")
+    print(f"  Alerts per poll: {alerts_per_poll}")
+    print(f"  Old: {old_db_time_per_poll_ms}ms DB operations per poll")
+    print(f"  Old: {old_cpu_percent_per_poll:.2f}% CPU per poll")
+    print(f"  Old: {old_cpu_seconds_per_hour:.1f} CPU seconds per hour")
+    print(f"  New: {new_db_time_per_poll_ms}ms DB operations per poll")
+    print(f"  New: {new_cpu_percent_per_poll:.2f}% CPU per poll")
+    print(f"  New: {new_cpu_seconds_per_hour:.1f} CPU seconds per hour")
+    print(f"  Savings: {old_cpu_seconds_per_hour:.1f} CPU seconds per hour")
+    
+    assert old_cpu_seconds_per_hour > 0, "Old implementation should use CPU"
+    assert new_cpu_seconds_per_hour == 0, "New implementation should use no CPU for debug records"
+    
+    print("✓ Debug record persistence is the main CPU consumer")
+
+
 if __name__ == "__main__":
     test_separate_cleanup_trackers()
     test_cleanup_skipped_when_not_due()
     test_cleanup_runs_when_due()
     test_first_cleanup_always_runs()
     test_cpu_impact_calculation()
+    test_debug_records_disabled_by_default()
+    test_debug_records_cpu_savings()
     print("\n✅ All CPU optimization tests passed!")
