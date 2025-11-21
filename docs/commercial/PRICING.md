@@ -31,7 +31,7 @@ EAS Station is dual-licensed:
 ## Pricing Tiers
 
 ### 1. Single Station License
-**$2,995/year** or **$7,995 perpetual**
+**$995/year** or **$2,995 perpetual**
 
 **Includes:**
 - Single production installation
@@ -46,10 +46,12 @@ EAS Station is dual-licensed:
 - Small amateur radio clubs
 - Single location deployments
 
+**Value:** Comparable to DASDEC hardware ($3K-$7K) but with software flexibility and no vendor lock-in.
+
 ---
 
 ### 2. Multi-Station License (Up to 10 Installations)
-**$12,995/year** or **$29,995 perpetual**
+**$4,995/year** or **$12,995 perpetual**
 
 **Includes:**
 - Up to 10 production installations
@@ -65,10 +67,12 @@ EAS Station is dual-licensed:
 - Multi-location organizations
 - Amateur radio networks
 
+**Value:** $1,300 per installation (perpetual) vs. $5,000+ per DASDEC unit = **70% cost savings**.
+
 ---
 
 ### 3. Enterprise License (Unlimited Installations)
-**$49,995/year** or **$124,995 perpetual**
+**$19,995/year** or **$49,995 perpetual**
 
 **Includes:**
 - Unlimited production installations
@@ -86,10 +90,12 @@ EAS Station is dual-licensed:
 - Large amateur radio organizations
 - Commercial alert distribution services
 
+**Value:** For 10+ stations, saves $40K-$60K vs. buying individual DASDEC units.
+
 ---
 
 ### 4. OEM/Integration License
-**Starting at $99,995** (custom pricing)
+**Starting at $25,000** (custom pricing)
 
 **Includes:**
 - Embedding EAS Station in your hardware/software products
@@ -111,15 +117,15 @@ EAS Station is dual-licensed:
 ## Add-On Services
 
 ### Professional Services
-- **Custom Development:** $250/hour (40-hour minimum project)
-- **FCC Certification Assistance:** $15,000 - $50,000 (depending on scope)
-- **On-Site Installation & Training:** $2,500/day + expenses
-- **24/7 Critical Support:** +$10,000/year per license
+- **Custom Development:** $150/hour (20-hour minimum project)
+- **FCC Certification Assistance:** $10,000 - $25,000 (depending on scope)
+- **On-Site Installation & Training:** $1,500/day + expenses
+- **24/7 Critical Support:** +$5,000/year per license
 
 ### Extended Support Tiers
-- **Gold Support:** +$2,000/year (8-hour response, phone support)
-- **Platinum Support:** +$5,000/year (4-hour response, dedicated engineer)
-- **Mission Critical:** +$15,000/year (1-hour response, 24/7/365 availability)
+- **Gold Support:** +$1,000/year (8-hour response, phone support)
+- **Platinum Support:** +$2,500/year (4-hour response, dedicated engineer)
+- **Mission Critical:** +$7,500/year (1-hour response, 24/7/365 availability)
 
 ---
 
@@ -134,11 +140,13 @@ EAS Station is dual-licensed:
   - 3 years: 15% discount
   - 5 years: 20% discount
 
+**Example:** Single Station 3-year prepay = $995 × 3 × 0.85 = **$2,537 total** ($846/year)
+
 ### Perpetual Licenses
 - One-time payment
 - Lifetime license to current major version
 - Includes 1 year of updates and support
-- Optional maintenance renewal: 20% of perpetual price/year
+- Optional maintenance renewal: $199/year (Single), $599/year (Multi-Station), $2,499/year (Enterprise)
 - Major version upgrades: 50% discount on new perpetual license
 
 ### Payment Methods
@@ -173,8 +181,8 @@ EAS Station is dual-licensed:
 ### Alpha Early Adopter Pricing (Until FCC Certification)
 **Lock in lifetime discounts:**
 - **Single Station:** 40% off perpetual licenses
-- **Multi-Station:** 50% off perpetual licenses
-- **Enterprise:** 60% off perpetual licenses
+- **Multi-Station:** 40% off perpetual licenses
+- **Enterprise:** 40% off perpetual licenses
 
 **Benefits:**
 - Locked-in pricing for life (perpetual licenses)
@@ -184,9 +192,9 @@ EAS Station is dual-licensed:
 - Beta access to new features
 
 **Investment:**
-- Single Station Perpetual: **$4,797** (reg. $7,995)
-- Multi-Station Perpetual: **$14,998** (reg. $29,995)
-- Enterprise Perpetual: **$49,998** (reg. $124,995)
+- Single Station Perpetual: **$1,797** (reg. $2,995) - **Cheaper than a DASDEC!**
+- Multi-Station Perpetual: **$7,797** (reg. $12,995) - **Under $800/installation**
+- Enterprise Perpetual: **$29,997** (reg. $49,995) - **Unlimited installations**
 
 ---
 
@@ -195,6 +203,7 @@ EAS Station is dual-licensed:
 ### Competitive Analysis
 
 **Traditional EAS Encoder/Decoder Hardware:**
+- **DASDEC (Digital Alert Systems):** $3,000 - $7,000
 - Sage Digital ENDEC: $7,000 - $12,000
 - Gorman-Redlich CAP-DEC: $5,000 - $8,500
 - Monroe Electronics R189 OneBox: $6,500 - $9,000
@@ -206,18 +215,20 @@ EAS Station is dual-licensed:
 - OnSolve: $5,000 - $50,000/year depending on volume
 
 ### EAS Station Value
-- **Hardware replacement:** Saves $5,000-$7,000 per installation
+- **Price competitive with DASDEC** - Similar upfront cost
 - **Open architecture:** No vendor lock-in
-- **Self-hosted:** No recurring cloud fees (after license)
+- **Self-hosted:** No recurring cloud fees (perpetual license)
 - **Customizable:** Full control over features and integration
 - **Modern tech stack:** Docker, PostgreSQL, Python, REST APIs
-- **Hardware freedom:** Runs on Raspberry Pi or commodity servers
+- **Hardware freedom:** Runs on Raspberry Pi ($100) or commodity servers
 
 **Total Cost of Ownership (3 years):**
-- Traditional Hardware: $7,000 (hardware) + $4,500 (support) = **$11,500**
-- EAS Station Annual: $2,995 × 3 = **$8,985**
-- EAS Station Perpetual: $7,995 + $3,198 (2 years support) = **$11,193**
-- EAS Station Early Adopter: $4,797 (perpetual) + $1,919 (2 years support) = **$6,716**
+- **DASDEC:** $5,000 (hardware) + $3,000 (support) = **$8,000**
+- **EAS Station Annual:** $995 × 3 = **$2,985** (63% savings)
+- **EAS Station Perpetual:** $2,995 + $398 (2 years optional support) = **$3,393** (58% savings)
+- **EAS Station Early Adopter:** $1,797 (perpetual) + $398 (2 years support) = **$2,195** (73% savings)
+
+**PLUS: Raspberry Pi hardware (~$250) vs. $5,000 commercial EAS hardware = Additional $4,750 savings**
 
 ---
 
@@ -225,7 +236,7 @@ EAS Station is dual-licensed:
 
 | Feature | AGPL v3 (Open Source) | Commercial License |
 |---------|----------------------|-------------------|
-| **Cost** | Free | $2,995 - $124,995/year |
+| **Cost** | Free | $995 - $19,995/year |
 | **Use in closed-source products** | ❌ No | ✅ Yes |
 | **Must share modifications** | ✅ Yes (if deployed as service) | ❌ No |
 | **Technical support** | Community only | ✅ Priority support |
