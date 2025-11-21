@@ -391,6 +391,50 @@ async function loadAudioSources(fullRender = true) {
     }
 }
 
+function updateSourcePlayer(source) {
+    // Dynamically update audio player when stream state changes
+    const audioEl = document.getElementById(`audio-${source.name}`);
+    if (!audioEl || source.status !== 'running') {
+        return;
+    }
+
+    // Check if Icecast URL availability has changed
+    const currentIcecastUrl = audioEl.dataset.icecastUrl || '';
+    const newIcecastUrl = source.icecast_url || '';
+    
+    if (currentIcecastUrl !== newIcecastUrl) {
+        // Icecast URL changed - update the data attribute
+        audioEl.dataset.icecastUrl = newIcecastUrl;
+        
+        // Determine if we should switch sources
+        const wasPlaying = !audioEl.paused && audioEl.currentTime > 0;
+        const preferIcecast = shouldUseIcecastStream(audioEl);
+        const currentStreamType = audioEl.dataset.streamType || '';
+        
+        // Switch if preference changed
+        if (preferIcecast && currentStreamType !== 'icecast' && newIcecastUrl) {
+            console.debug(`Switching ${source.name} to Icecast stream`);
+            audioEl.dataset.streamType = 'icecast';
+            audioEl.src = newIcecastUrl;
+            audioEl.dataset.suppressPauseMessage = '1';
+            audioEl.load();
+            
+            if (wasPlaying) {
+                audioEl.play().catch(err => {
+                    console.debug(`Could not resume playback after switch to Icecast:`, err.message);
+                });
+            }
+        } else if (!preferIcecast && currentStreamType === 'icecast') {
+            console.debug(`Switching ${source.name} to proxy stream`);
+            switchToProxyStream(audioEl, source.name, {
+                autoplay: wasPlaying,
+                reason: 'Icecast stream no longer available',
+                notify: true
+            });
+        }
+    }
+}
+
 function updateMetricsOnly() {
     // Update metrics for each source without touching audio players
     audioSources.forEach(source => {
@@ -422,6 +466,9 @@ function updateMetricsOnly() {
             if (rmsLabel) {
                 rmsLabel.textContent = `RMS: ${formatDbLabel(source.metrics.rms_level_db)}`;
             }
+            
+            // Check if player needs to be updated due to stream state changes
+            updateSourcePlayer(source);
         }
     });
 }
