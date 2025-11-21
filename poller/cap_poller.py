@@ -433,8 +433,18 @@ class CAPPoller:
         self.state_code = self.location_settings['state_code']
         
         # Track when cleanup was last run to avoid expensive operations on every poll
-        self._last_cleanup_time = None
+        # Use separate trackers for poll_history and debug_records cleanup
+        self._last_poll_history_cleanup_time = None
+        self._last_debug_records_cleanup_time = None
         self._cleanup_interval_seconds = 86400  # Run cleanup once per day (24 hours)
+        
+        # Track when radio configuration was last refreshed to avoid CPU overhead
+        self._last_radio_config_refresh_time = None
+        self._radio_config_refresh_interval_seconds = 3600  # Refresh radio config once per hour
+        
+        # Control debug record persistence to avoid CPU/database overhead
+        # Debug records are useful for troubleshooting but expensive (one DB row per alert per poll)
+        self._debug_records_enabled = _env_flag('CAP_POLLER_DEBUG_RECORDS', False)
 
         # EAS broadcaster
         self.eas_broadcaster = None
@@ -673,8 +683,26 @@ class CAPPoller:
         self._refresh_radio_configuration(initial=True)
 
     def _refresh_radio_configuration(self, initial: bool = False) -> None:
+        """Refresh radio receiver configuration from database.
+        
+        Args:
+            initial: If True, always refresh. If False, only refresh if interval has elapsed.
+        
+        This is a potentially expensive operation that queries the database and may
+        start/restart SDR processes. To avoid CPU overhead, it only runs periodically
+        (once per hour by default) unless initial=True.
+        """
         if not self.radio_manager:
             return
+        
+        # Skip refresh if not due (unless initial=True)
+        if not initial:
+            now = utc_now()
+            if self._last_radio_config_refresh_time is not None:
+                time_since_refresh = (now - self._last_radio_config_refresh_time).total_seconds()
+                if time_since_refresh < self._radio_config_refresh_interval_seconds:
+                    # Skip refresh - not enough time has passed
+                    return
 
         try:
             receivers = (
@@ -703,6 +731,14 @@ class CAPPoller:
             self._radio_receiver_cache = cache
             if configs:
                 self.radio_manager.start_all()
+            
+            # Update last refresh time on success
+            if not initial:
+                self._last_radio_config_refresh_time = utc_now()
+            else:
+                # On initial setup, set the time so we don't refresh again immediately
+                self._last_radio_config_refresh_time = utc_now()
+                
         except Exception as exc:
             self.logger.error("Failed to configure radio manager: %s", exc)
 
@@ -861,6 +897,14 @@ class CAPPoller:
                 last_err = e
                 self.logger.warning("Database not ready (attempt %d/%d): %s", attempt, retries, str(e).strip())
                 time.sleep(delay)
+        
+        # If we get here, all retries failed
+        # Sleep for a longer period before raising to prevent Docker restart loops
+        self.logger.error(
+            f"Failed to connect to database after {retries} attempts. "
+            f"Sleeping for 60 seconds before exit to prevent restart loop."
+        )
+        time.sleep(60)
         raise last_err
 
     # ---------- Fetch ----------
@@ -1193,6 +1237,22 @@ class CAPPoller:
             try:
                 self.logger.info(f"Fetching alerts from: {endpoint}")
                 response = self.session.get(endpoint, timeout=timeout)
+                
+                # Check for rate limiting before raising for other status codes
+                if response.status_code == 429:
+                    retry_after = response.headers.get('Retry-After', 'unknown')
+                    self.logger.warning(
+                        f"Rate limited by {endpoint} (HTTP 429). Retry-After: {retry_after}. "
+                        f"Consider increasing poll interval to avoid API rate limits."
+                    )
+                    continue  # Skip this endpoint and move to next
+                elif response.status_code == 503:
+                    self.logger.warning(
+                        f"Service unavailable from {endpoint} (HTTP 503). "
+                        f"API may be overloaded or blocking requests."
+                    )
+                    continue  # Skip this endpoint and move to next
+                
                 response.raise_for_status()
                 features = self._parse_feed_payload(response)
                 self.logger.info(f"Retrieved {len(features)} alerts from {endpoint}")
@@ -1248,6 +1308,11 @@ class CAPPoller:
                     "uses custom certificates.",
                     endpoint,
                     exc,
+                )
+            except requests.exceptions.Timeout as exc:
+                self.logger.error(
+                    f"Timeout fetching from {endpoint} after {timeout}s. "
+                    f"API may be slow or rate limiting requests. Error: {str(exc)}"
                 )
             except requests.exceptions.RequestException as exc:
                 self.logger.error(f"Error fetching from {endpoint}: {str(exc)}")
@@ -1850,6 +1915,20 @@ class CAPPoller:
         stats: Dict[str, Any],
         debug_records: List[Dict[str, Any]],
     ) -> None:
+        """Persist poll debug records to database.
+        
+        This is a CPU and database intensive operation that creates one row per alert
+        processed (including rejected alerts) with full geometry and properties.
+        
+        By default, this is DISABLED to reduce CPU usage. Enable by setting:
+            CAP_POLLER_DEBUG_RECORDS=1
+        
+        Only enable for troubleshooting or when actively debugging alert filtering issues.
+        """
+        if not self._debug_records_enabled:
+            # Skip debug record persistence to reduce CPU and database overhead
+            return
+            
         if not debug_records:
             return
         if not self._ensure_debug_records_table():
@@ -1897,11 +1976,13 @@ class CAPPoller:
     def cleanup_old_poll_history(self):
         """Clean old poll history records. Only runs periodically to avoid CPU overhead."""
         # Check if cleanup is due (runs once per day by default)
+        # Early return to avoid ANY database queries when cleanup is not due
         now = utc_now()
-        if self._last_cleanup_time is not None:
-            time_since_cleanup = (now - self._last_cleanup_time).total_seconds()
+        if self._last_poll_history_cleanup_time is not None:
+            time_since_cleanup = (now - self._last_poll_history_cleanup_time).total_seconds()
             if time_since_cleanup < self._cleanup_interval_seconds:
                 # Skip cleanup - not enough time has passed
+                # Don't perform any database queries to minimize CPU usage
                 return
         
         try:
@@ -1925,7 +2006,7 @@ class CAPPoller:
                 self.logger.debug("Skipping poll history cleanup - only %d old records (threshold: 100)", old_count)
             
             # Update last cleanup time on success
-            self._last_cleanup_time = now
+            self._last_poll_history_cleanup_time = now
         except Exception as e:
             self.logger.error(f"cleanup_old_poll_history error: {e}")
             try:
@@ -1935,12 +2016,14 @@ class CAPPoller:
 
     def cleanup_old_debug_records(self):
         """Clean old debug records. Only runs periodically to avoid CPU overhead."""
-        # Use same cleanup schedule as poll_history
+        # Check if cleanup is due (runs once per day by default)
+        # Early return to avoid ANY database queries when cleanup is not due
         now = utc_now()
-        if self._last_cleanup_time is not None:
-            time_since_cleanup = (now - self._last_cleanup_time).total_seconds()
+        if self._last_debug_records_cleanup_time is not None:
+            time_since_cleanup = (now - self._last_debug_records_cleanup_time).total_seconds()
             if time_since_cleanup < self._cleanup_interval_seconds:
                 # Skip cleanup - not enough time has passed
+                # Don't perform any database queries to minimize CPU usage
                 return
         
         if not self._ensure_debug_records_table():
@@ -1968,6 +2051,9 @@ class CAPPoller:
                 self.logger.info("Cleaned old debug records (removed %d records, kept 500 most recent)", deleted)
             else:
                 self.logger.debug("Skipping debug records cleanup - only %d old records (threshold: 500)", old_count)
+            
+            # Update last cleanup time on success
+            self._last_debug_records_cleanup_time = now
         except Exception as exc:
             self.logger.error(f"cleanup_old_debug_records error: {exc}")
             try:
@@ -2075,34 +2161,39 @@ class CAPPoller:
                     else:
                         self.logger.info(message)
 
-                debug_entry = self._initialise_debug_entry(alert_data, relevance, poll_run_id, poll_start_utc)
-                debug_records.append(debug_entry)
+                # Only collect debug data if debug records are enabled (expensive)
+                if self._debug_records_enabled:
+                    debug_entry = self._initialise_debug_entry(alert_data, relevance, poll_run_id, poll_start_utc)
+                    debug_records.append(debug_entry)
 
                 if not relevance.get('is_relevant'):
                     self.logger.info(f"• Filtered out (not specific to {self.county_upper})")
                     stats['alerts_filtered'] += 1
-                    debug_entry.setdefault('notes', []).append('Filtered out by strict location rules')
+                    if self._debug_records_enabled and 'debug_entry' in locals():
+                        debug_entry.setdefault('notes', []).append('Filtered out by strict location rules')
                     continue
 
                 stats['alerts_accepted'] += 1
                 parsed = self.parse_cap_alert(alert_data)
                 if not parsed:
                     self.logger.warning(f"Failed to parse: {event}")
-                    debug_entry['parse_error'] = 'parse_cap_alert returned None'
-                    debug_entry.setdefault('notes', []).append('Parsing failed')
+                    if self._debug_records_enabled and 'debug_entry' in locals():
+                        debug_entry['parse_error'] = 'parse_cap_alert returned None'
+                        debug_entry.setdefault('notes', []).append('Parsing failed')
                     continue
 
-                debug_entry['parse_success'] = True
-                debug_entry['identifier'] = parsed.get('identifier', debug_entry['identifier'])
-                debug_entry['source'] = parsed.get('source', debug_entry.get('source'))
-                debug_entry['alert_sent'] = parsed.get('sent', debug_entry.get('alert_sent'))
-                geometry_data = parsed.get('_geometry_data')
-                if geometry_data:
-                    debug_entry['geometry_geojson'] = self._safe_json_copy(geometry_data)
-                    geom_type, polygon_count, preview = self._summarise_geometry(geometry_data)
-                    debug_entry['geometry_type'] = geom_type
-                    debug_entry['polygon_count'] = polygon_count
-                    debug_entry['geometry_preview'] = preview
+                if self._debug_records_enabled and 'debug_entry' in locals():
+                    debug_entry['parse_success'] = True
+                    debug_entry['identifier'] = parsed.get('identifier', '')
+                    debug_entry['source'] = parsed.get('source')
+                    debug_entry['alert_sent'] = parsed.get('sent')
+                    geometry_data = parsed.get('_geometry_data')
+                    if geometry_data:
+                        debug_entry['geometry_geojson'] = self._safe_json_copy(geometry_data)
+                        geom_type, polygon_count, preview = self._summarise_geometry(geometry_data)
+                        debug_entry['geometry_type'] = geom_type
+                        debug_entry['polygon_count'] = polygon_count
+                        debug_entry['geometry_preview'] = preview
 
                 # Check if this alert should be stored (SAME match) or broadcast-only (UGC match)
                 is_storage_relevant = relevance.get('is_storage_relevant', False)
@@ -2122,11 +2213,12 @@ class CAPPoller:
                             f"Updated {self.location_name} alert: {alert.event if alert else parsed['event']} - Sent: {format_local_datetime(parsed.get('sent'))}"
                         )
 
-                    debug_entry['was_saved'] = bool(alert)
-                    debug_entry['was_new'] = bool(is_new and alert is not None)
-                    debug_entry['alert_db_id'] = getattr(alert, 'id', None) if alert else None
-                    if not alert:
-                        debug_entry.setdefault('notes', []).append('Database save failed')
+                    if self._debug_records_enabled:
+                        debug_entry['was_saved'] = bool(alert)
+                        debug_entry['was_new'] = bool(is_new and alert is not None)
+                        debug_entry['alert_db_id'] = getattr(alert, 'id', None) if alert else None
+                        if not alert:
+                            debug_entry.setdefault('notes', []).append('Database save failed')
 
                     if capture_metadata:
                         capture_metadata.setdefault('timestamp', utc_now())
@@ -2137,9 +2229,10 @@ class CAPPoller:
                     self.logger.info(
                         f"Broadcast-only alert (UGC match): {event} - Sent: {format_local_datetime(parsed.get('sent'))}"
                     )
-                    debug_entry.setdefault('notes', []).append('Broadcast-only (UGC match, no storage)')
-                    debug_entry['was_saved'] = False
-                    debug_entry['was_new'] = False
+                    if self._debug_records_enabled:
+                        debug_entry.setdefault('notes', []).append('Broadcast-only (UGC match, no storage)')
+                        debug_entry['was_saved'] = False
+                        debug_entry['was_new'] = False
 
                     # Trigger EAS broadcast without saving to database
                     if self.eas_broadcaster:
@@ -2155,7 +2248,8 @@ class CAPPoller:
                             capture_events.append(capture_metadata)
                         except Exception as exc:
                             self.logger.error(f"EAS broadcast failed for {event}: {exc}")
-                            debug_entry.setdefault('notes', []).append(f'Broadcast error: {exc}')
+                            if self._debug_records_enabled:
+                                debug_entry.setdefault('notes', []).append(f'Broadcast error: {exc}')
 
             self.cleanup_old_poll_history()
             self.log_poll_history(stats)
@@ -2341,8 +2435,16 @@ def main():
                     break
                 except Exception as e:
                     consecutive_errors += 1
-                    logger.error(f"Error in continuous polling (attempt {consecutive_errors}): {e}")
+                    logger.error(f"Error in continuous polling (attempt {consecutive_errors}): {e}", exc_info=True)
                     # Backoff will be applied at the start of the next iteration
+                    # If this is a JSON serialization error, log the problematic stats
+                    if "json" in str(e).lower() or "serializ" in str(e).lower():
+                        logger.error(f"Stats that failed to serialize: {type(stats)}")
+                        for key, value in stats.items():
+                            try:
+                                json.dumps({key: value})
+                            except Exception as json_err:
+                                logger.error(f"Key '{key}' with value type {type(value)} cannot be JSON serialized: {json_err}")
         else:
             stats = poller.poll_and_process()
             print(json.dumps(stats, indent=2))
