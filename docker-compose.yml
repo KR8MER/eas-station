@@ -287,5 +287,5 @@ networks:
       config:
         - subnet: 172.20.0.0/16
           gateway: 172.20.0.1
-        - subnet: fd00:eas:station::/64
-          gateway: fd00:eas:station::1
+        - subnet: fd00:ea:1::/64
+          gateway: fd00:ea:1::1
