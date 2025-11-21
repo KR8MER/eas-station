@@ -204,7 +204,7 @@ attempt=0
 export SKIP_DB_INIT=1
 
 while [ $attempt -lt $max_attempts ]; do
-    if python -m alembic upgrade head; then
+    if python -m alembic upgrade heads; then
         echo "Migrations complete."
         break
     else
