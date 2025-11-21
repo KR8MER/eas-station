@@ -1308,7 +1308,7 @@ class CAPPoller:
 
     # ---------- Relevance ----------
     def _validate_ugc_code(self, ugc: str) -> bool:
-        """Validate UGC code format: [A-Z]{2}[CZ]\d{3} (e.g., OHZ016, OHC137)."""
+        r"""Validate UGC code format: [A-Z]{2}[CZ]\d{3} (e.g., OHZ016, OHC137)."""
         if not ugc or not isinstance(ugc, str):
             return False
         ugc = ugc.strip().upper()
