@@ -194,6 +194,62 @@ EOF
     fi
 fi
 
+# Fix database schema issues before migrations
+# Drop problematic storage_zone_codes column if it exists
+echo "Checking for schema issues..."
+if [ -n "$POSTGRES_HOST" ] && [ -n "$POSTGRES_USER" ] && [ -n "$POSTGRES_DB" ]; then
+    python3 <<'PYEOF'
+import os
+import psycopg2
+import time
+
+max_retries = 10
+retry_delay = 2
+
+for attempt in range(max_retries):
+    try:
+        conn = psycopg2.connect(
+            host=os.environ.get('POSTGRES_HOST', 'alerts-db'),
+            port=os.environ.get('POSTGRES_PORT', '5432'),
+            user=os.environ.get('POSTGRES_USER', 'postgres'),
+            password=os.environ.get('POSTGRES_PASSWORD', 'postgres'),
+            database=os.environ.get('POSTGRES_DB', 'alerts'),
+            connect_timeout=5
+        )
+        cur = conn.cursor()
+
+        # Check if storage_zone_codes column exists
+        cur.execute("""
+            SELECT COUNT(*)
+            FROM information_schema.columns
+            WHERE table_name='location_settings'
+            AND column_name='storage_zone_codes'
+        """)
+
+        if cur.fetchone()[0] > 0:
+            print("⚠️  Found problematic column 'storage_zone_codes', dropping it...")
+            cur.execute("ALTER TABLE location_settings DROP COLUMN storage_zone_codes")
+            conn.commit()
+            print("✅ Dropped storage_zone_codes column")
+        else:
+            print("✅ Schema OK (storage_zone_codes column doesn't exist)")
+
+        cur.close()
+        conn.close()
+        break
+
+    except psycopg2.OperationalError as e:
+        if attempt < max_retries - 1:
+            print(f"Database not ready (attempt {attempt + 1}/{max_retries}), waiting {retry_delay}s...")
+            time.sleep(retry_delay)
+        else:
+            print(f"⚠️  Could not connect to database after {max_retries} attempts, continuing anyway...")
+    except Exception as e:
+        print(f"⚠️  Schema check failed: {e}")
+        break
+PYEOF
+fi
+
 # Run database migrations with retry logic
 # This is safe to run concurrently - Alembic handles locking
 echo "Running database migrations..."
