@@ -267,6 +267,29 @@ def update_location_settings(data: Dict[str, Any]) -> Dict[str, Any]:
             if appended and zone_input is None:
                 zone_codes = normalise_upper(zone_codes)
 
+        # Storage zone codes: subset of zone_codes for local county only
+        storage_zone_input = data.get("storage_zone_codes")
+        raw_storage_zone_codes = normalise_upper(
+            storage_zone_input
+            or getattr(record, 'storage_zone_codes', None)
+            or DEFAULT_LOCATION_SETTINGS["storage_zone_codes"]
+        )
+        storage_zone_codes, invalid_storage_zone_codes = normalise_zone_codes(raw_storage_zone_codes)
+        if storage_zone_input is not None and invalid_storage_zone_codes:
+            ignored = sorted(
+                {code for code in invalid_storage_zone_codes if code}
+            )
+            if ignored:
+                _log_warning(
+                    "Ignoring malformed storage zone identifiers: %s"
+                    % ", ".join(ignored)
+                )
+        if not storage_zone_codes:
+            defaults = DEFAULT_LOCATION_SETTINGS["storage_zone_codes"]
+            storage_zone_codes, _ = normalise_zone_codes(defaults)
+            if not storage_zone_codes:
+                storage_zone_codes = list(defaults)
+
         area_terms = normalise_upper(
             data.get("area_terms")
             or record.area_terms
@@ -309,6 +332,7 @@ def update_location_settings(data: Dict[str, Any]) -> Dict[str, Any]:
         record.timezone = timezone_name
         record.fips_codes = fips_codes
         record.zone_codes = zone_codes
+        record.storage_zone_codes = storage_zone_codes
         record.area_terms = area_terms
         record.led_default_lines = led_lines
         record.map_center_lat = map_center_lat

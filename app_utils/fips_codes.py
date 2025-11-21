@@ -3248,14 +3248,20 @@ US_FIPS_COUNTY_TABLE = """
 
 
 def _to_same_county_code(code: str) -> str:
-    """Convert a county FIPS code into a 6-digit SAME identifier."""
+    """Convert a county FIPS code into a 5-digit base code (without portion digit)."""
 
     digits = ''.join(ch for ch in code if ch.isdigit())
     if not digits:
         raise ValueError(f'Invalid county code: {code!r}')
+    # Return 5-digit code (state + county FIPS) without portion digit
+    # The portion digit (0-9) should be added by the UI layer
     if len(digits) == 5:
-        return f'0{digits}'
-    return digits.zfill(6)
+        return digits
+    # If it's 6 digits, strip the portion digit (first character)
+    if len(digits) == 6:
+        return digits[1:]
+    # For other lengths, ensure we have exactly 5 digits
+    return digits.zfill(5)[-5:]
 
 
 def _format_subdivision_display_name(

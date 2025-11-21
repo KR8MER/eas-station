@@ -310,6 +310,7 @@ except Exception as e:
         state_code = Column(String(2))
         timezone = Column(String(64))
         zone_codes = Column(JSON)
+        storage_zone_codes = Column(JSON)
         area_terms = Column(JSON)
         map_center_lat = Column(Float)
         map_center_lng = Column(Float)
@@ -569,6 +570,8 @@ class CAPPoller:
         self.zone_codes = set(self.location_settings['zone_codes'])
         fips_codes, _ = sanitize_fips_codes(self.location_settings.get('fips_codes'))
         self.same_codes = {code for code in fips_codes if code}
+        # Storage zone codes: UGC/zone codes that should trigger storage (in addition to SAME codes)
+        self.storage_zone_codes = set(self.location_settings.get('storage_zone_codes', []))
 
     # ---------- Engine with retry ----------
     def _ensure_source_columns(self):
@@ -809,11 +812,13 @@ class CAPPoller:
             record = self.db_session.query(LocationSettings).order_by(LocationSettings.id).first()
             if record:
                 fips_codes, _ = sanitize_fips_codes(record.fips_codes or defaults['fips_codes'])
+                storage_zones = getattr(record, 'storage_zone_codes', None)
                 settings.update({
                     'county_name': record.county_name or defaults['county_name'],
                     'state_code': (record.state_code or defaults['state_code']).upper(),
                     'timezone': record.timezone or defaults['timezone'],
                     'zone_codes': normalise_upper(record.zone_codes) or list(defaults['zone_codes']),
+                    'storage_zone_codes': normalise_upper(storage_zones) if storage_zones else list(defaults['storage_zone_codes']),
                     'fips_codes': fips_codes or list(defaults['fips_codes']),
                     'area_terms': normalise_upper(record.area_terms) or list(defaults['area_terms']),
                     'map_center_lat': record.map_center_lat or defaults['map_center_lat'],
@@ -828,6 +833,8 @@ class CAPPoller:
 
         if not settings['zone_codes']:
             settings['zone_codes'] = list(defaults['zone_codes'])
+        if not settings.get('storage_zone_codes'):
+            settings['storage_zone_codes'] = list(defaults['storage_zone_codes'])
         if not settings.get('fips_codes'):
             settings['fips_codes'] = list(defaults['fips_codes'])
         if not settings['area_terms']:
@@ -1319,6 +1326,7 @@ class CAPPoller:
     def get_alert_relevance_details(self, alert_data: Dict) -> Dict[str, Any]:
         result: Dict[str, Any] = {
             'is_relevant': False,
+            'is_storage_relevant': False,  # True only if SAME code matches (for storage/boundaries)
             'reason': 'NO_MATCH',
             'matched_ugc': None,
             'matched_terms': [],
@@ -1366,10 +1374,11 @@ class CAPPoller:
 
             for same in normalized_same:
                 if same in self.same_codes:
-                    message = f"✓ Alert ACCEPTED by SAME: {event} ({same})"
+                    message = f"✓ Alert ACCEPTED by SAME: {event} ({same}) [STORAGE+BROADCAST]"
                     result.update(
                         {
                             'is_relevant': True,
+                            'is_storage_relevant': True,  # SAME match = store + calculate boundaries
                             'reason': 'SAME_MATCH',
                             'matched_ugc': same,
                             'relevance_matches': [same],
@@ -1381,10 +1390,11 @@ class CAPPoller:
                 if same.endswith('000'):
                     prefix = same[:3]
                     if prefix and any(code.startswith(prefix) for code in self.same_codes):
-                        message = f"✓ Alert ACCEPTED by statewide SAME: {event} ({same})"
+                        message = f"✓ Alert ACCEPTED by statewide SAME: {event} ({same}) [STORAGE+BROADCAST]"
                         result.update(
                             {
                                 'is_relevant': True,
+                                'is_storage_relevant': True,  # Statewide SAME match = store + calculate boundaries
                                 'reason': 'SAME_MATCH',
                                 'matched_ugc': same,
                                 'relevance_matches': [same],
@@ -1395,10 +1405,16 @@ class CAPPoller:
 
             for ugc in normalized_ugc:
                 if ugc in self.zone_codes:
-                    message = f"✓ Alert ACCEPTED by UGC: {event} ({ugc})"
+                    # Check if this UGC code is in storage_zone_codes (local county)
+                    is_storage_ugc = ugc in self.storage_zone_codes
+                    if is_storage_ugc:
+                        message = f"✓ Alert ACCEPTED by UGC: {event} ({ugc}) [STORAGE+BROADCAST]"
+                    else:
+                        message = f"✓ Alert ACCEPTED by UGC: {event} ({ugc}) [BROADCAST ONLY - no storage/boundaries]"
                     result.update(
                         {
                             'is_relevant': True,
+                            'is_storage_relevant': is_storage_ugc,
                             'reason': 'UGC_MATCH',
                             'matched_ugc': ugc,
                             'relevance_matches': [ugc],
@@ -2058,29 +2074,58 @@ class CAPPoller:
                     debug_entry['polygon_count'] = polygon_count
                     debug_entry['geometry_preview'] = preview
 
-                is_new, alert, capture_metadata = self.save_cap_alert(parsed)
-                if is_new:
-                    stats['alerts_new'] += 1
-                    stats['led_updated'] = True
-                    self.logger.info(
-                        f"Saved new {self.location_name} alert: {alert.event if alert else parsed['event']} - Sent: {format_local_datetime(parsed.get('sent'))}"
-                    )
+                # Check if this alert should be stored (SAME match) or broadcast-only (UGC match)
+                is_storage_relevant = relevance.get('is_storage_relevant', False)
+
+                if is_storage_relevant:
+                    # SAME code match: Save to database and calculate boundaries
+                    is_new, alert, capture_metadata = self.save_cap_alert(parsed)
+                    if is_new:
+                        stats['alerts_new'] += 1
+                        stats['led_updated'] = True
+                        self.logger.info(
+                            f"Saved new {self.location_name} alert: {alert.event if alert else parsed['event']} - Sent: {format_local_datetime(parsed.get('sent'))}"
+                        )
+                    else:
+                        stats['alerts_updated'] += 1
+                        self.logger.info(
+                            f"Updated {self.location_name} alert: {alert.event if alert else parsed['event']} - Sent: {format_local_datetime(parsed.get('sent'))}"
+                        )
+
+                    debug_entry['was_saved'] = bool(alert)
+                    debug_entry['was_new'] = bool(is_new and alert is not None)
+                    debug_entry['alert_db_id'] = getattr(alert, 'id', None) if alert else None
+                    if not alert:
+                        debug_entry.setdefault('notes', []).append('Database save failed')
+
+                    if capture_metadata:
+                        capture_metadata.setdefault('timestamp', utc_now())
+                        stats['radio_captures'] += len(capture_metadata.get('captures', []))
+                        capture_events.append(capture_metadata)
                 else:
-                    stats['alerts_updated'] += 1
+                    # UGC/Zone match only: Broadcast but don't store or calculate boundaries
                     self.logger.info(
-                        f"Updated {self.location_name} alert: {alert.event if alert else parsed['event']} - Sent: {format_local_datetime(parsed.get('sent'))}"
+                        f"Broadcast-only alert (UGC match): {event} - Sent: {format_local_datetime(parsed.get('sent'))}"
                     )
+                    debug_entry.setdefault('notes', []).append('Broadcast-only (UGC match, no storage)')
+                    debug_entry['was_saved'] = False
+                    debug_entry['was_new'] = False
 
-                debug_entry['was_saved'] = bool(alert)
-                debug_entry['was_new'] = bool(is_new and alert is not None)
-                debug_entry['alert_db_id'] = getattr(alert, 'id', None) if alert else None
-                if not alert:
-                    debug_entry.setdefault('notes', []).append('Database save failed')
-
-                if capture_metadata:
-                    capture_metadata.setdefault('timestamp', utc_now())
-                    stats['radio_captures'] += len(capture_metadata.get('captures', []))
-                    capture_events.append(capture_metadata)
+                    # Trigger EAS broadcast without saving to database
+                    if self.eas_broadcaster:
+                        try:
+                            # Create a temporary alert object for broadcasting without persisting
+                            from app_core.models import CAPAlert
+                            temp_alert = CAPAlert(**parsed)
+                            broadcast_result = self.eas_broadcaster.handle_alert(temp_alert, alert_data)
+                            if broadcast_result and broadcast_result.get("same_triggered"):
+                                self.logger.info(f"EAS broadcast triggered for {event}")
+                            capture_metadata = {"broadcast": broadcast_result, "broadcast_only": True}
+                            capture_metadata.setdefault('timestamp', utc_now())
+                            capture_events.append(capture_metadata)
+                        except Exception as exc:
+                            self.logger.error(f"EAS broadcast failed for {event}: {exc}")
+                            debug_entry.setdefault('notes', []).append(f'Broadcast error: {exc}')
 
             self.cleanup_old_poll_history()
             self.log_poll_history(stats)

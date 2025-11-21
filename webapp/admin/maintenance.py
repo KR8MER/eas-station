@@ -781,6 +781,7 @@ def admin_location_settings():
                 "timezone": payload.get("timezone"),
                 "fips_codes": payload.get("fips_codes"),
                 "zone_codes": payload.get("zone_codes"),
+                "storage_zone_codes": payload.get("storage_zone_codes"),
                 "area_terms": payload.get("area_terms"),
                 "led_default_lines": payload.get("led_default_lines"),
                 "map_center_lat": payload.get("map_center_lat"),
