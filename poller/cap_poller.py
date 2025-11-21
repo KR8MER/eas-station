@@ -1681,10 +1681,10 @@ class CAPPoller:
             # This uses a SQL subquery to compute ST_Intersects and ST_Area for all boundaries at once
             # OLD: N+1 queries (1 to fetch boundaries + N queries for intersections)
             # NEW: 1 query that calculates all intersections
+            # Note: ST_Intersects in WHERE clause filters boundaries, so we don't need it in SELECT
             intersection_query = text("""
                 SELECT 
                     b.id as boundary_id,
-                    ST_Intersects(:alert_geom, b.geom) as intersects,
                     ST_Area(ST_Intersection(:alert_geom, b.geom)) as intersection_area
                 FROM boundaries b
                 WHERE b.geom IS NOT NULL
