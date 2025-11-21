@@ -881,7 +881,13 @@
         const icecastUrl = payload?.icecast_url || null;
         const icecastStats = payload?.streaming?.icecast || null;
 
-        if (icecastUrl) {
+        // Check for protocol compatibility: HTTPS pages cannot use HTTP Icecast streams
+        const pageIsHttps = window.location.protocol === 'https:';
+        const icecastIsHttp = icecastUrl && /^http:\/\//i.test(icecastUrl);
+        const protocolMismatch = pageIsHttps && icecastIsHttp;
+
+        if (icecastUrl && !protocolMismatch) {
+            // Icecast is available and protocol-compatible
             const rawFormat = String(icecastStats?.format || '').trim();
             const lowered = rawFormat.toLowerCase();
             let mimeType = 'audio/mpeg';
@@ -898,19 +904,26 @@
 
             return {
                 url: icecastUrl,
+                type: 'icecast',
                 mimeType,
+                label: rawFormat ? `Icecast ${rawFormat.toUpperCase()}` : 'Icecast stream',
+                isIcecast: true,
                 viaIcecast: true,
                 format: rawFormat,
                 description: rawFormat ? `Icecast ${rawFormat.toUpperCase()}` : 'Icecast stream',
             };
         }
 
+        // Use proxied fallback (either no Icecast or protocol mismatch)
         return {
             url: fallbackUrl,
+            type: 'proxy',
             mimeType: 'audio/wav',
+            label: protocolMismatch ? 'Secure proxied stream (HTTPS fallback)' : 'Direct WAV proxy (16-bit PCM)',
+            isIcecast: false,
             viaIcecast: false,
             format: null,
-            description: 'Direct WAV proxy (16-bit PCM)',
+            description: protocolMismatch ? 'Secure proxied stream (HTTPS fallback)' : 'Direct WAV proxy (16-bit PCM)',
         };
     }
 
