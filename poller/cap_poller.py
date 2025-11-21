@@ -1319,6 +1319,7 @@ class CAPPoller:
     def get_alert_relevance_details(self, alert_data: Dict) -> Dict[str, Any]:
         result: Dict[str, Any] = {
             'is_relevant': False,
+            'is_storage_relevant': False,  # True only if SAME code matches (for storage/boundaries)
             'reason': 'NO_MATCH',
             'matched_ugc': None,
             'matched_terms': [],
@@ -1366,10 +1367,11 @@ class CAPPoller:
 
             for same in normalized_same:
                 if same in self.same_codes:
-                    message = f"✓ Alert ACCEPTED by SAME: {event} ({same})"
+                    message = f"✓ Alert ACCEPTED by SAME: {event} ({same}) [STORAGE+BROADCAST]"
                     result.update(
                         {
                             'is_relevant': True,
+                            'is_storage_relevant': True,  # SAME match = store + calculate boundaries
                             'reason': 'SAME_MATCH',
                             'matched_ugc': same,
                             'relevance_matches': [same],
@@ -1381,10 +1383,11 @@ class CAPPoller:
                 if same.endswith('000'):
                     prefix = same[:3]
                     if prefix and any(code.startswith(prefix) for code in self.same_codes):
-                        message = f"✓ Alert ACCEPTED by statewide SAME: {event} ({same})"
+                        message = f"✓ Alert ACCEPTED by statewide SAME: {event} ({same}) [STORAGE+BROADCAST]"
                         result.update(
                             {
                                 'is_relevant': True,
+                                'is_storage_relevant': True,  # Statewide SAME match = store + calculate boundaries
                                 'reason': 'SAME_MATCH',
                                 'matched_ugc': same,
                                 'relevance_matches': [same],
@@ -1395,10 +1398,11 @@ class CAPPoller:
 
             for ugc in normalized_ugc:
                 if ugc in self.zone_codes:
-                    message = f"✓ Alert ACCEPTED by UGC: {event} ({ugc})"
+                    message = f"✓ Alert ACCEPTED by UGC: {event} ({ugc}) [BROADCAST ONLY - no storage/boundaries]"
                     result.update(
                         {
                             'is_relevant': True,
+                            'is_storage_relevant': False,  # UGC match = broadcast only, no storage
                             'reason': 'UGC_MATCH',
                             'matched_ugc': ugc,
                             'relevance_matches': [ugc],
@@ -2058,29 +2062,58 @@ class CAPPoller:
                     debug_entry['polygon_count'] = polygon_count
                     debug_entry['geometry_preview'] = preview
 
-                is_new, alert, capture_metadata = self.save_cap_alert(parsed)
-                if is_new:
-                    stats['alerts_new'] += 1
-                    stats['led_updated'] = True
-                    self.logger.info(
-                        f"Saved new {self.location_name} alert: {alert.event if alert else parsed['event']} - Sent: {format_local_datetime(parsed.get('sent'))}"
-                    )
+                # Check if this alert should be stored (SAME match) or broadcast-only (UGC match)
+                is_storage_relevant = relevance.get('is_storage_relevant', False)
+
+                if is_storage_relevant:
+                    # SAME code match: Save to database and calculate boundaries
+                    is_new, alert, capture_metadata = self.save_cap_alert(parsed)
+                    if is_new:
+                        stats['alerts_new'] += 1
+                        stats['led_updated'] = True
+                        self.logger.info(
+                            f"Saved new {self.location_name} alert: {alert.event if alert else parsed['event']} - Sent: {format_local_datetime(parsed.get('sent'))}"
+                        )
+                    else:
+                        stats['alerts_updated'] += 1
+                        self.logger.info(
+                            f"Updated {self.location_name} alert: {alert.event if alert else parsed['event']} - Sent: {format_local_datetime(parsed.get('sent'))}"
+                        )
+
+                    debug_entry['was_saved'] = bool(alert)
+                    debug_entry['was_new'] = bool(is_new and alert is not None)
+                    debug_entry['alert_db_id'] = getattr(alert, 'id', None) if alert else None
+                    if not alert:
+                        debug_entry.setdefault('notes', []).append('Database save failed')
+
+                    if capture_metadata:
+                        capture_metadata.setdefault('timestamp', utc_now())
+                        stats['radio_captures'] += len(capture_metadata.get('captures', []))
+                        capture_events.append(capture_metadata)
                 else:
-                    stats['alerts_updated'] += 1
+                    # UGC/Zone match only: Broadcast but don't store or calculate boundaries
                     self.logger.info(
-                        f"Updated {self.location_name} alert: {alert.event if alert else parsed['event']} - Sent: {format_local_datetime(parsed.get('sent'))}"
+                        f"Broadcast-only alert (UGC match): {event} - Sent: {format_local_datetime(parsed.get('sent'))}"
                     )
+                    debug_entry.setdefault('notes', []).append('Broadcast-only (UGC match, no storage)')
+                    debug_entry['was_saved'] = False
+                    debug_entry['was_new'] = False
 
-                debug_entry['was_saved'] = bool(alert)
-                debug_entry['was_new'] = bool(is_new and alert is not None)
-                debug_entry['alert_db_id'] = getattr(alert, 'id', None) if alert else None
-                if not alert:
-                    debug_entry.setdefault('notes', []).append('Database save failed')
-
-                if capture_metadata:
-                    capture_metadata.setdefault('timestamp', utc_now())
-                    stats['radio_captures'] += len(capture_metadata.get('captures', []))
-                    capture_events.append(capture_metadata)
+                    # Trigger EAS broadcast without saving to database
+                    if self.eas_broadcaster:
+                        try:
+                            # Create a temporary alert object for broadcasting without persisting
+                            from app_core.models import CAPAlert
+                            temp_alert = CAPAlert(**parsed)
+                            broadcast_result = self.eas_broadcaster.handle_alert(temp_alert, alert_data)
+                            if broadcast_result and broadcast_result.get("same_triggered"):
+                                self.logger.info(f"EAS broadcast triggered for {event}")
+                            capture_metadata = {"broadcast": broadcast_result, "broadcast_only": True}
+                            capture_metadata.setdefault('timestamp', utc_now())
+                            capture_events.append(capture_metadata)
+                        except Exception as exc:
+                            self.logger.error(f"EAS broadcast failed for {event}: {exc}")
+                            debug_entry.setdefault('notes', []).append(f'Broadcast error: {exc}')
 
             self.cleanup_old_poll_history()
             self.log_poll_history(stats)

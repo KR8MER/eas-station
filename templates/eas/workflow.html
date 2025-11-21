@@ -731,7 +731,8 @@ function populateCountyOptions(stateAbbr, selectedCode = '') {
         const option = document.createElement('option');
         option.value = county.code;
         option.textContent = `${county.name || county.code} (${county.code})`;
-        option.dataset.portion = county.code[0] || '0';
+        // Regular counties are now 5-digit codes without portion, default to '0' (entire area)
+        option.dataset.portion = '0';
         countySelect.appendChild(option);
 
         const subdivisions = Array.isArray(county.subdivisions) ? county.subdivisions : [];
@@ -742,6 +743,7 @@ function populateCountyOptions(stateAbbr, selectedCode = '') {
             const subOption = document.createElement('option');
             subOption.value = subdivision.code;
             subOption.textContent = `↳ ${subdivision.name || subdivision.code} (${subdivision.code})`;
+            // Subdivisions may have 6-digit codes with portion digit as first character
             subOption.dataset.portion = subdivision.code[0] || '0';
             subOption.dataset.parentCode = county.code;
             countySelect.appendChild(subOption);
@@ -756,19 +758,36 @@ function populateCountyOptions(stateAbbr, selectedCode = '') {
     if (selectedCode) {
         const normalized = normalizeSameCode(selectedCode);
         if (normalized) {
-            const directOption = countySelect.querySelector(`option[value="${normalized}"]`);
+            // Try direct match first (for 5-digit county codes)
+            let directOption = countySelect.querySelector(`option[value="${normalized}"]`);
             if (directOption) {
                 countySelect.value = normalized;
                 if (portionSelect) {
-                    const portionValue = directOption.dataset?.portion || normalized[0] || '0';
+                    const portionValue = directOption.dataset?.portion || '0';
                     portionSelect.value = portionValue;
                 }
                 return;
             }
-            const baseCode = `0${normalized.slice(1)}`;
-            countySelect.value = baseCode;
-            if (portionSelect) {
-                portionSelect.value = normalized[0] || '0';
+            // If 6-digit code, extract portion and base code (5 digits)
+            if (normalized.length === 6) {
+                const portionDigit = normalized[0];
+                const baseCode = normalized.slice(1); // 5-digit county code
+                directOption = countySelect.querySelector(`option[value="${baseCode}"]`);
+                if (directOption) {
+                    countySelect.value = baseCode;
+                    if (portionSelect) {
+                        portionSelect.value = portionDigit;
+                    }
+                    return;
+                }
+            }
+            // Fallback: try as 5-digit code
+            if (normalized.length > 5) {
+                const fallbackCode = normalized.slice(-5);
+                countySelect.value = fallbackCode;
+                if (portionSelect && normalized.length === 6) {
+                    portionSelect.value = normalized[0] || '0';
+                }
             }
         }
     }
@@ -793,6 +812,7 @@ function handleAddSameCode() {
         setStatus('Unable to determine the SAME code for the selected area.', 'error');
         return;
     }
+    // Subdivisions have parentCode and already include portion digit (6 digits)
     if (selectedOption && selectedOption.dataset && selectedOption.dataset.parentCode) {
         addSameCodes([normalizedCounty]);
         return;
@@ -801,13 +821,26 @@ function handleAddSameCode() {
     if (!/^[0-9]$/.test(portionValue)) {
         portionValue = '0';
     }
-    if (normalizedCounty.slice(3) === '000') {
+    // Statewide codes (ending in 000) always use portion '0'
+    if (normalizedCounty.length >= 3 && normalizedCounty.slice(-3) === '000') {
         portionValue = '0';
         if (portionSelect) {
             portionSelect.value = '0';
         }
     }
-    const combinedCode = `${portionValue}${normalizedCounty.slice(1)}`;
+    // County codes are 5 digits (SSCCC), prepend portion digit to make 6-digit SAME code (PSSCCC)
+    let baseCode = normalizedCounty;
+    if (baseCode.length === 6) {
+        // If already 6 digits, strip first digit (old portion) to get base 5-digit code
+        baseCode = baseCode.slice(1);
+    } else if (baseCode.length < 5) {
+        // Pad to 5 digits if needed
+        baseCode = baseCode.padStart(5, '0');
+    } else if (baseCode.length > 6) {
+        // Take last 5 digits for base code
+        baseCode = baseCode.slice(-5);
+    }
+    const combinedCode = `${portionValue}${baseCode}`;
     addSameCodes([combinedCode]);
 }
 
@@ -851,16 +884,19 @@ function initialiseSameCodeSelector() {
     if (countySelect && portionSelect) {
         countySelect.addEventListener('change', (event) => {
             const option = event?.target?.selectedOptions?.[0];
-            if (!option) {
-                portionSelect.value = '0';
+            if (!option || !portionSelect) {
+                if (portionSelect) portionSelect.value = '0';
                 return;
             }
+            // For subdivisions with explicit portion in dataset, use it
             const portionValue = option.dataset?.portion;
             if (portionValue && /^[0-9]$/.test(portionValue)) {
                 portionSelect.value = portionValue;
-            } else if (!/^[0-9]$/.test(portionSelect.value)) {
+            } else {
+                // Default to '0' (entire area) for regular counties
                 portionSelect.value = '0';
             }
+            // Statewide codes always use portion '0'
             if (option.value.endsWith('000')) {
                 portionSelect.value = '0';
             }
