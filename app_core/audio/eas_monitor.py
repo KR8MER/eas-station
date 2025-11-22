@@ -656,6 +656,12 @@ class ContinuousEASMonitor:
                 # so we can't force it to stop without stopping the entire service.
                 # Instead, just start a new one - the old one will eventually exit
             
+            # CRITICAL FIX: Reset start time to maintain consistency between wall clock
+            # and samples-based runtime calculations. Without this, wall_clock_runtime_seconds
+            # continues from the original start time while samples_processed resets to 0,
+            # causing the runtime display to jump between values (e.g., 6 min -> 2 sec -> 6 min)
+            self._start_time = time.time()
+            
             # Start new monitoring thread
             self._monitor_thread = threading.Thread(
                 target=self._monitor_loop,

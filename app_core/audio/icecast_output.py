@@ -403,16 +403,17 @@ class IcecastStreamer:
                     self._consecutive_empty_reads = 0  # Reset counter on successful read
                 else:
                     # Track consecutive empty reads to diagnose source issues
+                    # Note: With 0.5s timeout per read, timing is: N reads * 0.5s
                     self._consecutive_empty_reads += 1
-                    if self._consecutive_empty_reads == 100:  # After 10 seconds of no data (100 * 0.1s timeout)
+                    if self._consecutive_empty_reads == 20:  # After 10 seconds (20 * 0.5s)
                         logger.error(
                             f"Audio source for mount {self.config.mount} has not provided data for 10+ seconds. "
                             f"Buffer: {len(buffer)}/{buffer.maxlen} chunks. "
                             "Check if audio source is running and configured correctly."
                         )
-                    elif self._consecutive_empty_reads == 500:  # After 50 seconds
+                    elif self._consecutive_empty_reads == 200:  # After 100 seconds (200 * 0.5s) - extended to avoid disrupting legitimate slow sources
                         logger.critical(
-                            f"Audio source for mount {self.config.mount} completely starved for 50+ seconds! "
+                            f"Audio source for mount {self.config.mount} completely starved for 100+ seconds! "
                             f"This indicates a serious issue with the audio source. "
                             f"Buffer exhausted. Check logs for audio source errors."
                         )
