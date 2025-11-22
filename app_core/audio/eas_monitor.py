@@ -545,12 +545,12 @@ class ContinuousEASMonitor:
         }
 
     def get_buffer_history(self, max_points: int = 60) -> list:
-        """Get recent buffer utilization history for graphing.
+        """Get decoder health history for graphing.
 
         Returns list of dicts with:
         - timestamp: float (unix time)
-        - utilization: float (0-100%)
-        - active_scans: int
+        - health: float (0-100%)
+        - in_message: bool
 
         TODO: Actually track history over time
         For now, returns current state only.
@@ -558,8 +558,8 @@ class ContinuousEASMonitor:
         status = self.get_status()
         return [{
             "timestamp": time.time(),
-            "utilization": status["buffer_utilization"],
-            "active_scans": status["active_scans"]
+            "health": status.get("health_percentage", 0) * 100,
+            "in_message": status.get("decoder_in_message", False)
         }]
 
     def _update_activity(self) -> None:
