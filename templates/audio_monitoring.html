@@ -369,6 +369,9 @@ let levelIntervalHandle = null;
 const STREAM_MODE_KEY = 'audioMonitorStreamMode';
 const htmlEntityDecoder = document.createElement('textarea');
 
+// EAS Monitor warmup configuration
+const EAS_WARMUP_DURATION_SECONDS = 10; // Show "warming up" only during first 10 seconds
+
 // VU meter state tracking for smoothing and peak hold
 const vuMeterState = new Map(); // sourceId -> { lastPeak, lastRms, peakHold, peakHoldTime }
 
@@ -1816,21 +1819,25 @@ function updateEASMonitorDisplay(status) {
             bufferStatus.className = 'text-warning d-block mt-1';
             easMonitorStartTime = null; // Reset if no audio
         } else {
-            // Use server-side wall clock runtime if available, otherwise track client-side
-            let actualRuntimeSeconds = status.wall_clock_runtime_seconds || 0;
+            // Use server-side wall clock runtime if available for accurate warmup detection
+            let actualRuntimeSeconds = status.wall_clock_runtime_seconds;
             
-            // Fallback to client-side tracking if server doesn't provide wall clock runtime
-            if (actualRuntimeSeconds === 0) {
+            // Determine if we're in warmup period
+            // Server-provided runtime is most accurate, but fallback to client tracking if needed
+            let isWarmingUp = false;
+            if (actualRuntimeSeconds !== undefined && actualRuntimeSeconds !== null) {
+                // Server provides wall clock runtime - use it directly
+                isWarmingUp = actualRuntimeSeconds < EAS_WARMUP_DURATION_SECONDS;
+            } else {
+                // Fallback: track client-side for backward compatibility
                 if (easMonitorStartTime === null) {
                     easMonitorStartTime = Date.now();
+                    isWarmingUp = true; // Just started
+                } else {
+                    actualRuntimeSeconds = (Date.now() - easMonitorStartTime) / 1000;
+                    isWarmingUp = actualRuntimeSeconds < EAS_WARMUP_DURATION_SECONDS;
                 }
-                actualRuntimeSeconds = (Date.now() - easMonitorStartTime) / 1000;
-            } else {
-                // Server is providing runtime, sync our client-side tracking
-                easMonitorStartTime = Date.now() - (actualRuntimeSeconds * 1000);
             }
-            
-            const isWarmingUp = actualRuntimeSeconds < 10; // Only first 10 seconds is "warming up"
             
             if (status.health_percentage >= 0.95) {
                 const rate = status.sample_rate || 16000;
