@@ -24,14 +24,35 @@ function initializeAudioMonitoring() {
     loadAudioHealth();
     loadAudioAlerts();
 
-    // Start periodic updates (every 2 seconds for real-time monitoring without overloading server)
-    metricsUpdateInterval = setInterval(updateMetrics, 1000);
-    healthUpdateInterval = setInterval(loadAudioHealth, 2000);
-    // Monitor for device changes every 10 seconds
-    deviceMonitorInterval = setInterval(monitorDeviceChanges, 10000);
+    // DRASTICALLY REDUCED POLLING - Rely on cache and user interactions
+    // Metrics: 10s instead of 1s (cache serves intermediate requests)
+    metricsUpdateInterval = setInterval(updateMetrics, 10000);
+    // Health: 30s instead of 5s (health doesn't change that fast)
+    healthUpdateInterval = setInterval(loadAudioHealth, 30000);
+    // Device changes: 60s instead of 10s (hot-plug is rare)
+    deviceMonitorInterval = setInterval(monitorDeviceChanges, 60000);
+
+    // Reload on user interaction (click anywhere refreshes data immediately via cache)
+    document.addEventListener('click', debounce(() => {
+        // Cache will serve if < TTL, otherwise fetches fresh
+        loadAudioSources();
+    }, 2000), { passive: true });
 
     // Setup event listeners
     document.getElementById('sourceType')?.addEventListener('change', updateSourceTypeConfig);
+}
+
+// Simple debounce helper
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
 }
 
 /**
@@ -39,7 +60,8 @@ function initializeAudioMonitoring() {
  */
 async function monitorDeviceChanges() {
     try {
-        const response = await fetch('/api/audio/devices');
+        const fetchFunc = window.cachedFetch || fetch;
+        const response = await fetchFunc('/api/audio/devices');
         if (!response.ok) return;
 
         const data = await response.json();
@@ -87,7 +109,8 @@ async function monitorDeviceChanges() {
  */
 async function loadAudioSources() {
     try {
-        const response = await fetch('/api/audio/sources');
+        const fetchFunc = window.cachedFetch || fetch;
+        const response = await fetchFunc('/api/audio/sources');
         const data = await response.json();
 
         audioSources = data.sources || [];
@@ -250,7 +273,8 @@ function getStatusBadge(status) {
  */
 async function updateMetrics() {
     try {
-        const response = await fetch('/api/audio/metrics');
+        const fetchFunc = window.cachedFetch || fetch;
+        const response = await fetchFunc('/api/audio/metrics');
         const data = await response.json();
 
         const liveMetrics = data.live_metrics || [];
@@ -530,7 +554,8 @@ function updateMeterDisplay(sourceId, type, levelDb) {
  */
 async function loadAudioHealth() {
     try {
-        const response = await fetch('/api/audio/health');
+        const fetchFunc = window.cachedFetch || fetch;
+        const response = await fetchFunc('/api/audio/health');
         const data = await response.json();
 
         const healthScore = Math.round(data.overall_health_score || 0);
@@ -556,7 +581,8 @@ async function loadAudioHealth() {
  */
 async function loadAudioAlerts() {
     try {
-        const response = await fetch('/api/audio/alerts?unresolved_only=true');
+        const fetchFunc = window.cachedFetch || fetch;
+        const response = await fetchFunc('/api/audio/alerts?unresolved_only=true');
         const data = await response.json();
 
         const alerts = data.alerts || [];

@@ -2150,6 +2150,7 @@ async function updateAudioHealth() {
 
 // Update audio health periodically (every 2 seconds for real-time monitoring)
 updateAudioHealth();
-setInterval(updateAudioHealth, 2000);
+// REDUCED: 30 seconds instead of 5 seconds - health status doesn't change rapidly
+setInterval(updateAudioHealth, 30000);
 </script>
 {% endblock %}

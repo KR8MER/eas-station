@@ -26,6 +26,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from flask import Flask, jsonify, render_template, request
 from sqlalchemy.exc import SQLAlchemyError
 
+from app_core.cache import cache
 from app_core.extensions import db, get_radio_manager
 from app_core.location import get_location_settings
 from app_core.models import RadioReceiver
@@ -442,6 +443,7 @@ def register(app: Flask, logger) -> None:
         )
 
     @app.route("/api/radio/receivers", methods=["GET"])
+    @cache.cached(timeout=15, key_prefix='receivers_list')
     def api_list_receivers() -> Any:
         ensure_radio_tables(route_logger)
         receivers = RadioReceiver.query.order_by(RadioReceiver.display_name.asc(), RadioReceiver.identifier.asc()).all()

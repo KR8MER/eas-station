@@ -31,6 +31,7 @@ import psutil
 from flask import Blueprint, flash, jsonify, redirect, render_template, request, url_for, Response
 from sqlalchemy import desc, func
 
+from app_core.cache import cache
 from app_core.extensions import db
 from app_core.models import Boundary, CAPAlert, EASMessage, Intersection, PollHistory
 from app_core.system_health import get_system_health
@@ -499,6 +500,7 @@ def alert_detail_pdf(alert_id):
         return redirect(url_for('alert_detail', alert_id=alert_id))
 
 @api_bp.route('/api/alerts')
+@cache.cached(timeout=30, query_string=True, key_prefix='alerts_list')
 def get_alerts():
     """Get CAP alerts as GeoJSON with optional inclusion of expired alerts"""
     try:
@@ -623,6 +625,7 @@ def get_alerts():
         return jsonify({'error': 'Failed to retrieve alerts'}), 500
 
 @api_bp.route('/api/alerts/historical')
+@cache.cached(timeout=60, query_string=True, key_prefix='alerts_historical')
 def get_historical_alerts():
     """Get historical alerts as GeoJSON with date filtering"""
     try:
@@ -730,6 +733,7 @@ def get_historical_alerts():
         return jsonify({'error': 'Failed to retrieve historical alerts'}), 500
 
 @api_bp.route('/api/boundaries')
+@cache.cached(timeout=300, query_string=True, key_prefix='boundaries_list')
 def get_boundaries():
     """Get all boundaries as GeoJSON"""
     try:
@@ -785,6 +789,7 @@ def get_boundaries():
         return jsonify({'error': 'Failed to retrieve boundaries'}), 500
 
 @api_bp.route('/api/system_status')
+@cache.cached(timeout=10, key_prefix='system_status')
 def api_system_status():
     """Get system status information using new helper functions with timezone support"""
     try:
@@ -954,6 +959,7 @@ def api_system_status():
         return jsonify({'error': 'Failed to get system status'}), 500
 
 @api_bp.route('/api/system_health')
+@cache.cached(timeout=10, key_prefix='system_health')
 def api_system_health():
     """Get comprehensive system health information via API"""
     try:

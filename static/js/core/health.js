@@ -65,7 +65,8 @@
      */
     async function checkSystemHealth() {
         try {
-            const response = await fetch('/api/system_status');
+            const fetchFunc = window.cachedFetch || fetch;
+            const response = await fetchFunc('/api/system_status');
             const data = await response.json();
 
             const healthDot = document.getElementById('system-health-dot');
@@ -157,8 +158,8 @@
         // Check immediately
         checkSystemHealth();
 
-        // Check every 30 seconds
-        setInterval(checkSystemHealth, 30000);
+        // REDUCED: Check every 60 seconds instead of 30 (cache serves intermediate requests)
+        setInterval(checkSystemHealth, 60000);
 
         // Setup banner close handler
         setupBannerCloseHandler();

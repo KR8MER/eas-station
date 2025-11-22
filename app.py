@@ -137,6 +137,7 @@ from app_core.boundaries import (
     get_field_mappings,
     normalize_boundary_type,
 )
+from app_core.cache import init_cache, cache
 from app_core.extensions import db
 from app_core.led import (
     LED_AVAILABLE,
@@ -516,6 +517,9 @@ app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
 
 # Initialize database
 db.init_app(app)
+
+# Initialize caching
+init_cache(app)
 
 
 def _check_database_connectivity() -> bool:
@@ -911,6 +915,20 @@ def after_request(response):
             response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,POST,DELETE,OPTIONS'
             if app.config.get('CORS_ALLOW_CREDENTIALS') and not allow_any:
                 response.headers['Access-Control-Allow-Credentials'] = 'true'
+        
+        # Add Cache-Control headers for GET requests to reduce load
+        if request.method == 'GET' and response.status_code == 200:
+            # Use shorter cache times for real-time data, longer for static data
+            if '/api/system_status' in request.path or '/api/system_health' in request.path:
+                response.headers['Cache-Control'] = 'public, max-age=10'
+            elif '/api/alerts' in request.path:
+                response.headers['Cache-Control'] = 'public, max-age=30'
+            elif '/api/boundaries' in request.path:
+                response.headers['Cache-Control'] = 'public, max-age=300'
+            elif '/api/audio' in request.path:
+                response.headers['Cache-Control'] = 'public, max-age=15'
+            else:
+                response.headers['Cache-Control'] = 'public, max-age=60'
 
     # Add security headers
     response.headers.add('X-Content-Type-Options', 'nosniff')

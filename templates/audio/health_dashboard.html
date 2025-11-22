@@ -202,8 +202,9 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeCharts();
     updateDashboard();
 
-    // Auto-refresh every 2 seconds for real-time monitoring
-    setInterval(updateDashboard, 2000);
+    // Auto-refresh every 5 seconds
+    // REDUCED: 15 seconds instead of 5 seconds - dashboard metrics are cached
+    setInterval(updateDashboard, 15000);
 });
 
 function initializeCharts() {

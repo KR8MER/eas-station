@@ -32,6 +32,7 @@ from flask import Blueprint, Flask, jsonify, render_template, request, current_a
 from sqlalchemy import desc
 from werkzeug.exceptions import BadRequest
 
+from app_core.cache import cache, clear_audio_source_cache
 from app_core.extensions import db
 from app_core.models import (
     AudioAlert,
@@ -889,7 +890,10 @@ def _restore_audio_source_from_db_config(
 def _get_controller_and_adapter(
     source_name: str,
 ) -> Tuple[AudioIngestController, Optional[Any], Optional[AudioSourceConfigDB], bool]:
-    """Return the audio controller, adapter, DB config, and whether a restore occurred."""
+    """Return the audio controller, adapter, DB config, and whether a restore occurred.
+    
+    Implements retry logic to reduce 503 errors when sources temporarily fail to load.
+    """
 
     controller = _get_audio_controller()
     adapter = controller._sources.get(source_name)
@@ -897,17 +901,39 @@ def _get_controller_and_adapter(
     restored = False
 
     if adapter is None and db_config is not None:
-        try:
-            adapter = _restore_audio_source_from_db_config(controller, db_config)
-            restored = adapter is not None
-        except Exception as exc:  # pylint: disable=broad-except
-            logger.error(
-                "Failed to restore audio source %s from persisted configuration: %s",
-                source_name,
-                exc,
-                exc_info=True,
-            )
-            adapter = None
+        # Try to restore with retry logic (up to 2 retries)
+        max_retries = 2
+        for attempt in range(max_retries + 1):
+            try:
+                adapter = _restore_audio_source_from_db_config(controller, db_config)
+                restored = adapter is not None
+                if restored:
+                    logger.info(
+                        "Successfully restored audio source %s on attempt %d",
+                        source_name,
+                        attempt + 1,
+                    )
+                    break
+            except Exception as exc:  # pylint: disable=broad-except
+                if attempt < max_retries:
+                    logger.warning(
+                        "Failed to restore audio source %s (attempt %d/%d): %s - retrying",
+                        source_name,
+                        attempt + 1,
+                        max_retries + 1,
+                        exc,
+                    )
+                    # Brief delay before retry
+                    time.sleep(0.5)
+                else:
+                    logger.error(
+                        "Failed to restore audio source %s after %d attempts: %s",
+                        source_name,
+                        max_retries + 1,
+                        exc,
+                        exc_info=True,
+                    )
+                adapter = None
 
     return controller, adapter, db_config, restored
 
@@ -1047,8 +1073,12 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
 # Route definitions
 
 @audio_ingest_bp.route('/api/audio/sources', methods=['GET'])
+@cache.cached(timeout=30, key_prefix='audio_source_list')
 def api_get_audio_sources():
-    """List all configured audio sources."""
+    """List all configured audio sources.
+    
+    Cached for 30 seconds to reduce database load during rapid polling.
+    """
     try:
         controller = _get_audio_controller()
         sources: List[Dict[str, Any]] = []
@@ -1168,6 +1198,9 @@ def api_get_audio_sources():
 def api_create_audio_source():
     """Create a new audio source."""
     try:
+        # Clear cache before creating
+        clear_audio_source_cache()
+        
         data = request.get_json()
         if not data:
             return jsonify({'error': 'No data provided'}), 400
@@ -1287,6 +1320,9 @@ def api_get_audio_source(source_name: str):
 def api_update_audio_source(source_name: str):
     """Update audio source configuration."""
     try:
+        # Clear cache before updating
+        clear_audio_source_cache(source_name)
+        
         controller, adapter, db_config, _restored = _get_controller_and_adapter(source_name)
 
         if adapter is None:
@@ -1363,6 +1399,9 @@ def api_update_audio_source(source_name: str):
 def api_delete_audio_source(source_name: str):
     """Delete an audio source."""
     try:
+        # Clear cache before deleting
+        clear_audio_source_cache(source_name)
+        
         controller, adapter, db_config, _ = _get_controller_and_adapter(source_name)
 
         if not db_config:
@@ -1479,6 +1518,7 @@ def api_stop_audio_source(source_name: str):
         return jsonify({'error': str(exc)}), 500
 
 @audio_ingest_bp.route('/api/audio/metrics', methods=['GET'])
+@cache.cached(timeout=15, query_string=True, key_prefix='audio_metrics')
 def api_get_audio_metrics():
     """Get real-time metrics for all audio sources."""
     try:
@@ -1543,6 +1583,7 @@ def api_get_audio_metrics():
         return jsonify({'error': str(exc)}), 500
 
 @audio_ingest_bp.route('/api/audio/health', methods=['GET'])
+@cache.cached(timeout=20, key_prefix='audio_health')
 def api_get_audio_health():
     """Get audio system health status."""
     try:
@@ -1602,6 +1643,7 @@ def api_get_audio_health():
         return jsonify({'error': str(exc)}), 500
 
 @audio_ingest_bp.route('/api/audio/alerts', methods=['GET'])
+@cache.cached(timeout=10, query_string=True, key_prefix='audio_alerts')
 def api_get_audio_alerts():
     """Get audio system alerts."""
     try:
