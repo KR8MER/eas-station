@@ -1712,10 +1712,10 @@ function startLevelPolling() {
 
     updateLevelMeters();
     
-    // Poll every 1 second for real-time meters (as originally intended)
+    // Poll every 250ms (4Hz) for smooth real-time VU meters
     // Cache serves most requests with 5s TTL, so actual API calls are ~every 5s
     // This gives buttery smooth real-time feel WITHOUT hammering the server!
-    levelIntervalHandle = setInterval(updateLevelMeters, 1000);
+    levelIntervalHandle = setInterval(updateLevelMeters, 250);
 }
 
 // ============================================================================
@@ -1723,6 +1723,7 @@ function startLevelPolling() {
 // ============================================================================
 
 let easMonitorIntervalHandle = null;
+let easMonitorStartTime = null; // Track when monitor actually started
 
 async function loadEASMonitorStatus() {
     try {
@@ -1809,20 +1810,38 @@ function updateEASMonitorDisplay(status) {
         if (!running) {
             bufferStatus.innerHTML = '<i class="fas fa-pause-circle"></i> Decoder stopped';
             bufferStatus.className = 'text-muted d-block mt-1';
+            easMonitorStartTime = null; // Reset start time when stopped
         } else if (!audioFlowing) {
             bufferStatus.innerHTML = '⚠️ No audio flowing';
             bufferStatus.className = 'text-warning d-block mt-1';
-        } else if (status.health_percentage >= 0.95) {
-            const rate = status.sample_rate || 16000;
-            const rateKhz = (rate / 1000).toFixed(2);
-            bufferStatus.innerHTML = `✓ Processing at line rate (${rateKhz} kHz)`;
-            bufferStatus.className = 'text-success d-block mt-1';
-        } else if (status.health_percentage >= 0.5) {
-            bufferStatus.innerHTML = '<i class="fas fa-hourglass-half"></i> Warming up...';
-            bufferStatus.className = 'text-info d-block mt-1';
+            easMonitorStartTime = null; // Reset if no audio
         } else {
-            bufferStatus.innerHTML = '⚠️ Below expected rate';
-            bufferStatus.className = 'text-warning d-block mt-1';
+            // Track when monitor started to only show "warming up" during actual startup
+            if (easMonitorStartTime === null) {
+                easMonitorStartTime = Date.now();
+            }
+            
+            const runtimeMs = Date.now() - easMonitorStartTime;
+            const isWarmingUp = runtimeMs < 10000; // Only first 10 seconds is "warming up"
+            
+            if (status.health_percentage >= 0.95) {
+                const rate = status.sample_rate || 16000;
+                const rateKhz = (rate / 1000).toFixed(2);
+                bufferStatus.innerHTML = `✓ Processing at line rate (${rateKhz} kHz)`;
+                bufferStatus.className = 'text-success d-block mt-1';
+            } else if (isWarmingUp) {
+                // Only show "warming up" during first 10 seconds after start
+                bufferStatus.innerHTML = '<i class="fas fa-hourglass-half"></i> Warming up...';
+                bufferStatus.className = 'text-info d-block mt-1';
+            } else if (status.health_percentage >= 0.5) {
+                // After warmup, if health is OK but not perfect, show it's working
+                bufferStatus.innerHTML = `✓ Processing (${healthPct}% health)`;
+                bufferStatus.className = 'text-info d-block mt-1';
+            } else {
+                // Below 50% health after warmup - show warning
+                bufferStatus.innerHTML = '⚠️ Below expected rate';
+                bufferStatus.className = 'text-warning d-block mt-1';
+            }
         }
     }
 
@@ -2040,8 +2059,9 @@ function startEASMonitorPolling() {
     }
 
     loadEASMonitorStatus();
-    // Poll every 2 seconds for real-time updates without overloading server
-    easMonitorIntervalHandle = setInterval(loadEASMonitorStatus, 2000);
+    // Poll every 5 seconds for real-time updates without overloading server
+    // Reduced from 2s to prevent stuttering and reduce server load
+    easMonitorIntervalHandle = setInterval(loadEASMonitorStatus, 5000);
 }
 
 // Load sources on page load
