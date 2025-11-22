@@ -1943,6 +1943,33 @@ function updateEASMonitorDisplay(status) {
             scanWarnings.innerHTML = '<span style="color: #28a745;">No</span>';
         }
     }
+
+    // Update streaming performance status message
+    const performanceStatus = document.getElementById('performance-status');
+    if (performanceStatus) {
+        if (!running) {
+            performanceStatus.textContent = 'Monitor stopped. Start monitoring to see real-time performance.';
+            performanceStatus.style.color = '#6c757d';
+        } else if (!audioFlowing) {
+            performanceStatus.textContent = 'Waiting for audio data from sources. Configure and start audio sources to begin processing.';
+            performanceStatus.style.color = '#856404';
+        } else {
+            const sps = status.samples_per_second || 0;
+            const expectedRate = status.sample_rate || 22050;
+            const percentage = expectedRate > 0 ? ((sps / expectedRate) * 100).toFixed(1) : 0;
+            
+            if (status.health_percentage >= 0.95) {
+                performanceStatus.innerHTML = `<span style="color: #28a745;">✓ Processing at ${percentage}% of line rate (${(sps / 1000).toFixed(1)}k samples/sec). Real-time streaming active.</span>`;
+            } else if (status.health_percentage >= 0.8) {
+                performanceStatus.innerHTML = `<span style="color: #0c5460;">Processing at ${percentage}% of line rate (${(sps / 1000).toFixed(1)}k samples/sec). Building up to full rate...</span>`;
+            } else if (audioFlowing) {
+                performanceStatus.innerHTML = `<span style="color: #856404;">⚠️ Processing at ${percentage}% of expected rate (${(sps / 1000).toFixed(1)}k samples/sec). Check audio sources.</span>`;
+            } else {
+                performanceStatus.textContent = 'No audio data received yet. Check audio source configuration.';
+                performanceStatus.style.color = '#856404';
+            }
+        }
+    }
 }
 
 function showEASMonitorError(message) {
