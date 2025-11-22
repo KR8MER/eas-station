@@ -37,12 +37,14 @@ import tempfile
 import threading
 import time
 import wave
+import math
 from dataclasses import dataclass
 from datetime import datetime
 from collections import OrderedDict
 from typing import Optional, Callable, List
 
 import numpy as np
+from scipy.signal import resample_poly
 
 from app_utils.eas_decode import decode_same_audio, SAMEAudioDecodeResult
 from app_utils import utc_now
@@ -368,7 +370,7 @@ class ContinuousEASMonitor:
 
         Args:
             audio_manager: AudioSourceManager instance providing audio
-            sample_rate: Audio sample rate in Hz (default: 22050)
+            sample_rate: Decoder sample rate in Hz (default: 22050)
             alert_callback: Optional callback function called when alert detected
             save_audio_files: Whether to save audio files of detected alerts
             audio_archive_dir: Directory to save alert audio files
@@ -380,6 +382,7 @@ class ContinuousEASMonitor:
         """
         self.audio_manager = audio_manager
         self.sample_rate = sample_rate
+        self.source_sample_rate = getattr(audio_manager, "sample_rate", sample_rate)
         self.alert_callback = alert_callback
         self.save_audio_files = save_audio_files
         self.audio_archive_dir = audio_archive_dir
@@ -428,7 +431,8 @@ class ContinuousEASMonitor:
         
         logger.info(
             f"Initialized ContinuousEASMonitor: "
-            f"sample_rate={sample_rate}Hz, "
+            f"source_sample_rate={self.source_sample_rate}Hz, "
+            f"decoder_sample_rate={sample_rate}Hz, "
             f"streaming_mode=True, "
             f"watchdog_timeout={self._watchdog_timeout}s"
         )
@@ -526,16 +530,32 @@ class ContinuousEASMonitor:
             time_since_activity = time.time() - last_activity
         
         # Calculate health metrics
-        # For streaming decoder, "health" = processing at line rate (22050 samples/sec)
+        # For streaming decoder, "health" = processing at the decoder's target sample rate
         expected_rate = self.sample_rate
         health_percentage = min(1.0, samples_per_second / expected_rate) if audio_flowing else 0.0
+
+        resample_ratio = None
+        if self.source_sample_rate:
+            try:
+                resample_ratio = self.sample_rate / float(self.source_sample_rate)
+            except Exception:
+                resample_ratio = None
         
+        adapter_stats = {}
+        if hasattr(self.audio_manager, "get_stats"):
+            try:
+                adapter_stats = self.audio_manager.get_stats()
+            except Exception:
+                adapter_stats = {}
+
         return {
             # System state
             "running": is_running,
             "mode": "streaming",
             "audio_flowing": audio_flowing,
             "sample_rate": self.sample_rate,
+            "source_sample_rate": self.source_sample_rate,
+            "resample_ratio": resample_ratio,
             
             # Streaming decoder metrics
             "samples_processed": samples_processed,
@@ -554,7 +574,17 @@ class ContinuousEASMonitor:
             "last_activity": last_activity,
             "time_since_activity": time_since_activity,
             "restart_count": self._restart_count,
-            "watchdog_timeout": self._watchdog_timeout
+            "watchdog_timeout": self._watchdog_timeout,
+
+            # Audio adapter stats (broadcast subscription health)
+            "audio_buffer_samples": adapter_stats.get("buffer_samples"),
+            "audio_buffer_seconds": adapter_stats.get("buffer_seconds"),
+            "audio_queue_depth": adapter_stats.get("queue_size"),
+            "audio_underruns": adapter_stats.get("underrun_count"),
+            "audio_underrun_rate_percent": adapter_stats.get("underrun_rate_percent"),
+            "audio_last_audio_time": adapter_stats.get("last_audio_time"),
+            "audio_health": adapter_stats.get("health"),
+            "audio_subscriber_id": adapter_stats.get("subscriber_id"),
         }
 
     def get_buffer_history(self, max_points: int = 60) -> list:
@@ -638,6 +668,33 @@ class ContinuousEASMonitor:
         except Exception as e:
             logger.error(f"Failed to restart EAS monitor thread: {e}", exc_info=True)
 
+    def _resample_if_needed(self, samples: np.ndarray) -> np.ndarray:
+        """Downsample incoming audio to the decoder's target rate if needed."""
+        if samples is None or len(samples) == 0:
+            return samples
+
+        if self.source_sample_rate == self.sample_rate:
+            return samples
+
+        try:
+            up = int(self.sample_rate)
+            down = int(self.source_sample_rate)
+            if up <= 0 or down <= 0:
+                return samples
+
+            factor_gcd = math.gcd(up, down)
+            up //= factor_gcd
+            down //= factor_gcd
+
+            resampled = resample_poly(samples, up, down)
+            return resampled.astype(np.float32, copy=False)
+        except Exception as resample_error:
+            logger.error(
+                f"Failed to resample audio from {self.source_sample_rate}Hz to {self.sample_rate}Hz: {resample_error}",
+                exc_info=True,
+            )
+            return samples
+
     def _monitor_loop(self) -> None:
         """
         Main monitoring loop - STREAMING REAL-TIME PROCESSING.
@@ -652,7 +709,7 @@ class ContinuousEASMonitor:
         """
         logger.info("🔴 STREAMING EAS monitor started - processing samples in real-time")
 
-        # Buffer for reading audio chunks (100ms = 2205 samples at 22050 Hz)
+        # Buffer for reading audio chunks (~100ms at decoder rate)
         chunk_samples = int(self.sample_rate * 0.1)
         
         last_heartbeat_time = time.time()
@@ -695,12 +752,14 @@ class ContinuousEASMonitor:
                     samples = None
 
                 if samples is not None and len(samples) > 0:
+                    decoded_samples = self._resample_if_needed(samples)
+
                     # REAL-TIME PROCESSING: Feed samples directly to decoder
                     # ZERO buffering, ZERO batching, ZERO delays
                     # Every sample is processed immediately
                     try:
-                        self._streaming_decoder.process_samples(samples)
-                        samples_processed += len(samples)
+                        self._streaming_decoder.process_samples(decoded_samples)
+                        samples_processed += len(decoded_samples)
                     except Exception as decode_error:
                         logger.error(f"Error in streaming decoder: {decode_error}", exc_info=True)
                 

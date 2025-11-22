@@ -1486,6 +1486,7 @@ def api_get_audio_metrics():
                     'source_id': source_name,
                     'source_name': adapter.config.name,
                     'source_type': adapter.config.source_type.value,
+                    'source_status': adapter.status.value,
                     'timestamp': adapter.metrics.timestamp,
                     'peak_level_db': _sanitize_float(adapter.metrics.peak_level_db),
                     'rms_level_db': _sanitize_float(adapter.metrics.rms_level_db),
@@ -1521,10 +1522,14 @@ def api_get_audio_metrics():
                 'timestamp': metric.timestamp.isoformat() if metric.timestamp else None,
             })
 
+        broadcast_stats = controller.get_broadcast_queue().get_stats()
+
         return jsonify({
             'live_metrics': source_metrics,
             'recent_metrics': db_metrics_list,
             'total_sources': len(source_metrics),
+            'active_source': controller.get_active_source(),
+            'broadcast_stats': broadcast_stats,
         })
 
     except Exception as exc:
