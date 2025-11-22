@@ -155,7 +155,7 @@ def _load_audio_source_configs(controller: AudioIngestController) -> None:
                     name=db_config.name,
                     enabled=db_config.enabled,
                     priority=db_config.priority,
-                    sample_rate=config_params.get('sample_rate', 44100),
+                    sample_rate=config_params.get('sample_rate', 44100),  # Native rate for source/stream
                     channels=config_params.get('channels', 1),
                     buffer_size=config_params.get('buffer_size', 4096),
                     silence_threshold_db=config_params.get('silence_threshold_db', -60.0),
@@ -473,16 +473,22 @@ def _derive_sdr_source_name(identifier: str) -> str:
 
 
 def _recommend_audio_stream(receiver: RadioReceiver) -> Tuple[int, int]:
-    """Return (sample_rate, channels) best suited for the receiver's modulation."""
+    """Return (sample_rate, channels) best suited for the receiver's modulation.
+    
+    These are the NATIVE sample rates for the audio sources/streams.
+    The EAS monitor will resample to 16 kHz internally for SAME decoding.
+    """
 
     modulation = (receiver.modulation_type or "IQ").upper()
 
     if modulation in {"FM", "WFM"}:
+        # FM broadcast quality - native rate for demodulated audio
         return (48000 if receiver.stereo_enabled else 32000, 2 if receiver.stereo_enabled else 1)
     if modulation in {"AM", "NFM"}:
+        # AM/NFM - narrower bandwidth, lower sample rate sufficient
         return 24000, 1
 
-    # Default to full-bandwidth monitoring
+    # Default for IQ/unknown - standard audio rate
     return 44100, 1
 
 
@@ -832,7 +838,7 @@ def _restore_audio_source_from_db_config(
         name=db_config.name,
         enabled=db_config.enabled,
         priority=db_config.priority,
-        sample_rate=config_params.get('sample_rate', 44100),
+        sample_rate=config_params.get('sample_rate', 44100),  # Native rate for source/stream
         channels=config_params.get('channels', 1),
         buffer_size=config_params.get('buffer_size', 4096),
         silence_threshold_db=config_params.get('silence_threshold_db', -60.0),
@@ -1203,7 +1209,7 @@ def api_create_audio_source():
             name=name,
             enabled=data.get('enabled', True),
             priority=data.get('priority', 100),
-            sample_rate=data.get('sample_rate', 44100),
+            sample_rate=data.get('sample_rate', 44100),  # Native rate for source/stream
             channels=data.get('channels', 1),
             buffer_size=data.get('buffer_size', 4096),
             silence_threshold_db=data.get('silence_threshold_db', -60.0),

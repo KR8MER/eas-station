@@ -65,7 +65,7 @@ class AudioSourceConfig:
     source_url: str
     priority: int  # Lower number = higher priority
     enabled: bool = True
-    sample_rate: int = 22050
+    sample_rate: int = 44100  # Native sample rate for audio source/stream
     silence_threshold_db: float = -50.0
     silence_duration_seconds: float = 10.0
 
@@ -91,7 +91,7 @@ class AudioSourceManager:
 
     def __init__(
         self,
-        sample_rate: int = 22050,
+        sample_rate: int = 44100,  # Native sample rate for audio sources/streams
         master_buffer_seconds: float = 5.0,
         failover_callback: Optional[Callable[[FailoverEvent], None]] = None
     ):
@@ -99,7 +99,7 @@ class AudioSourceManager:
         Initialize source manager.
 
         Args:
-            sample_rate: Global sample rate for all sources
+            sample_rate: Global sample rate for all sources (native rate for streams)
             master_buffer_seconds: Size of master output buffer
             failover_callback: Optional callback for failover events
         """
