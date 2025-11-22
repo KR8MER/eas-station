@@ -355,52 +355,31 @@ class ContinuousEASMonitor:
     def __init__(
         self,
         audio_manager: AudioSourceManager,
-        buffer_duration: float = 12.0,  # 12 seconds to capture full SAME sequence (3s × 3 bursts + margin)
-        scan_interval: float = 3.0,  # Scan every 3 seconds for 75% overlap to never miss alerts
         sample_rate: int = 22050,
         alert_callback: Optional[Callable[[EASAlert], None]] = None,
         save_audio_files: bool = True,
-        audio_archive_dir: str = "/tmp/eas-audio",
-        max_concurrent_scans: int = 2  # Maximum number of concurrent scan threads
+        audio_archive_dir: str = "/tmp/eas-audio"
     ):
         """
-        Initialize continuous EAS monitor.
+        Initialize continuous EAS monitor with real-time streaming decoder.
 
         Args:
             audio_manager: AudioSourceManager instance providing audio
-            buffer_duration: Seconds of audio to buffer for analysis
-                            12s ensures full SAME capture (3 bursts × ~3s each)
-            scan_interval: Seconds between decode attempts
-                          3s provides 75% overlap (12s buffer, 3s interval)
-                          This ensures no SAME sequence can be missed at boundaries
             sample_rate: Audio sample rate in Hz (default: 22050)
             alert_callback: Optional callback function called when alert detected
             save_audio_files: Whether to save audio files of detected alerts
             audio_archive_dir: Directory to save alert audio files
-            max_concurrent_scans: Maximum number of concurrent scan threads (default: 2)
-                                 Increase for faster hardware or longer scan intervals
-                                 Decrease if scans are consuming too many resources
             
-        Note on overlap strategy:
-            SAME headers consist of 3 bursts, each ~3 seconds long = ~9 seconds total.
-            With 12s buffer and 3s scan interval, we get 75% overlap:
-            
-            Time:    0    3    6    9    12   15   18
-            Scan 1:  [------------]
-            Scan 2:       [------------]
-            Scan 3:            [------------]
-            
-            Any SAME sequence will appear COMPLETELY in at least one scan window,
-            ensuring 100% detection with no missed alerts at boundaries.
+        How it works:
+            Audio samples are processed immediately as they arrive using a
+            streaming SAME decoder. No buffering, no batching, no delays.
+            Detection latency is <200ms, matching commercial EAS decoders.
         """
         self.audio_manager = audio_manager
-        self.buffer_duration = buffer_duration
-        self.scan_interval = scan_interval
         self.sample_rate = sample_rate
         self.alert_callback = alert_callback
         self.save_audio_files = save_audio_files
         self.audio_archive_dir = audio_archive_dir
-        self.max_concurrent_scans = max(1, max_concurrent_scans)  # Ensure at least 1
 
         # Create audio archive directory
         if save_audio_files:
@@ -440,22 +419,13 @@ class ContinuousEASMonitor:
         self._activity_lock = threading.Lock()
         self._watchdog_timeout: float = 60.0  # Seconds before considering thread stalled
         self._restart_count: int = 0
-
-        # Calculate overlap percentage for logging
-        overlap_pct = ((buffer_duration - scan_interval) / buffer_duration * 100) if buffer_duration > 0 else 0
         
         logger.info(
-            f"Initialized ContinuousEASMonitor: buffer={buffer_duration}s, "
-            f"scan_interval={scan_interval}s ({overlap_pct:.0f}% overlap), "
-            f"sample_rate={sample_rate}Hz, max_concurrent_scans={self.max_concurrent_scans}, "
+            f"Initialized ContinuousEASMonitor: "
+            f"sample_rate={sample_rate}Hz, "
+            f"streaming_mode=true, "
             f"watchdog_timeout={self._watchdog_timeout}s"
         )
-        
-        if overlap_pct < 50:
-            logger.warning(
-                f"Low scan overlap ({overlap_pct:.0f}%) may miss alerts at window boundaries. "
-                f"Recommend scan_interval <= {buffer_duration * 0.5:.1f}s for 50%+ overlap."
-            )
 
     def start(self) -> bool:
         """
@@ -471,21 +441,7 @@ class ContinuousEASMonitor:
         self._stop_event.clear()
         self._update_activity()  # Initialize activity timestamp
 
-        # Start worker threads - one per configured worker
-        # These threads pull from the queue and process scans
-        self._worker_threads = []
-        for i in range(self.max_concurrent_scans):
-            worker = threading.Thread(
-                target=self._scan_worker_loop,
-                name=f"eas-worker-{i+1}",
-                daemon=True
-            )
-            worker.start()
-            self._worker_threads.append(worker)
-        
-        logger.info(f"Started {self.max_concurrent_scans} EAS scan worker threads")
-
-        # Start monitoring thread (queues scans)
+        # Start streaming monitor thread
         self._monitor_thread = threading.Thread(
             target=self._monitor_loop,
             name="eas-monitor",
@@ -501,16 +457,14 @@ class ContinuousEASMonitor:
         )
         self._watchdog_thread.start()
 
-        overlap_pct = ((self.buffer_duration - self.scan_interval) / self.buffer_duration * 100)
         logger.info(
-            f"Started continuous EAS monitoring with {overlap_pct:.0f}% overlapping windows. "
-            f"SAME sequences (9s) will appear completely in at least one scan window. "
-            f"Queue-based processing ensures ZERO dropped scans."
+            "Started real-time EAS monitoring with streaming decoder. "
+            "Samples processed immediately with <200ms detection latency."
         )
         return True
 
     def stop(self) -> None:
-        """Stop continuous monitoring and worker threads."""
+        """Stop continuous monitoring."""
         logger.info("Stopping continuous EAS monitoring")
         self._stop_event.set()
 
@@ -518,24 +472,12 @@ class ContinuousEASMonitor:
         if self._monitor_thread:
             self._monitor_thread.join(timeout=10.0)
         
-        # Send poison pills to worker threads to make them exit
-        for _ in range(len(self._worker_threads)):
-            try:
-                self._scan_queue.put(None, timeout=1.0)
-            except queue.Full:
-                pass
-        
-        # Wait for workers to finish
-        for worker in self._worker_threads:
-            worker.join(timeout=5.0)
-        
         # Wait for watchdog
         if self._watchdog_thread:
             self._watchdog_thread.join(timeout=5.0)
 
         logger.info(
-            f"Stopped EAS monitoring. Stats: {self._scans_completed} scans completed, "
-            f"{self._alerts_detected} alerts detected, {self._scans_queue_full} queue full errors, "
+            f"Stopped EAS monitoring. Stats: {self._alerts_detected} alerts detected, "
             f"{self._restart_count} restarts"
         )
 
@@ -578,11 +520,11 @@ class ContinuousEASMonitor:
         return {
             # System state
             "running": is_running,
-            "mode": "streaming",  # NEW: Indicate we're in streaming mode
+            "mode": "streaming",
             "audio_flowing": audio_flowing,
             "sample_rate": self.sample_rate,
             
-            # Streaming decoder metrics (OPERATOR CONFIRMATION)
+            # Streaming decoder metrics
             "samples_processed": samples_processed,
             "samples_per_second": int(samples_per_second),
             "runtime_seconds": runtime_seconds,
@@ -595,58 +537,11 @@ class ContinuousEASMonitor:
             "alerts_detected": alerts_detected,
             "last_alert_time": last_alert_time,
             
-            # Legacy compatibility (for UI that expects these)
-            "buffer_duration": self.buffer_duration,
-            "scan_interval": 0.0,  # N/A in streaming mode
-            "effective_scan_interval": 0.0,  # N/A in streaming mode  
-            "scan_interval_auto_adjusted": False,
-            "buffer_utilization": health_percentage,  # Repurpose as health indicator
-            "buffer_fill_seconds": runtime_seconds,
-            "scans_performed": samples_processed // (self.sample_rate * 100),  # Rough estimate: 1 "scan" per 100s
-            "scans_skipped": 0,  # N/A in streaming mode
-            "scans_no_signature": 0,  # N/A in streaming mode
-            "total_scan_attempts": samples_processed // (self.sample_rate * 100),
-            "active_scans": 1 if decoder_stats['in_message'] else 0,
-            "max_concurrent_scans": 1,  # Streaming = always 1 decoder thread
-            "dynamic_max_concurrent_scans": 1,
-            "scan_warnings": 0,
-            
             # Health metrics
             "last_activity": last_activity,
             "time_since_activity": time_since_activity,
             "restart_count": self._restart_count,
-            "watchdog_timeout": self._watchdog_timeout,
-            
-            # Streaming-specific stats
-            "avg_scan_duration_seconds": None,  # N/A
-            "min_scan_duration_seconds": None,
-            "max_scan_duration_seconds": None,
-            "last_scan_duration_seconds": None,
-            "scan_history_size": 0,
-            "buffer_fill_seconds": buffer_fill_seconds,
-            "scans_performed": scans_performed,
-            "scans_skipped": scans_skipped,
-            "scans_no_signature": scans_no_signature,
-            "total_scan_attempts": total_scan_attempts,
-            "alerts_detected": self._alerts_detected,
-            "last_scan_time": self._last_scan_time,
-            "last_alert_time": self._last_alert_time,
-            "active_scans": active_scans,
-            "max_concurrent_scans": self.max_concurrent_scans,
-            "dynamic_max_concurrent_scans": self._dynamic_max_scans,
-            "audio_flowing": audio_flowing,
-            "sample_rate": self.sample_rate,
-            "scan_warnings": scans_skipped,  # Alias for backward compatibility
-            "last_activity": last_activity,
-            "time_since_activity": time_since_activity,
-            "restart_count": self._restart_count,
-            "watchdog_timeout": self._watchdog_timeout,
-            # Scan timing metrics
-            "avg_scan_duration_seconds": avg_scan_duration,
-            "min_scan_duration_seconds": min_scan_duration,
-            "max_scan_duration_seconds": max_scan_duration,
-            "last_scan_duration_seconds": last_scan_duration,
-            "scan_history_size": len(self._scan_durations)
+            "watchdog_timeout": self._watchdog_timeout
         }
 
     def get_buffer_history(self, max_points: int = 60) -> list:
@@ -1566,13 +1461,12 @@ class ContinuousEASMonitor:
         return signature in self._recent_alert_signatures
 
     def get_stats(self) -> dict:
-        """Get monitoring statistics."""
+        """Get monitoring statistics for streaming mode."""
+        decoder_stats = self._streaming_decoder.get_stats()
         return {
             'running': not self._stop_event.is_set(),
-            'scans_performed': self._scans_performed,
+            'samples_processed': decoder_stats['samples_processed'],
             'alerts_detected': self._alerts_detected,
-            'buffer_duration_seconds': self.buffer_duration,
-            'scan_interval_seconds': self.scan_interval,
             'active_source': self.audio_manager.get_active_source(),
             'last_alert_time': self._last_alert_time
         }

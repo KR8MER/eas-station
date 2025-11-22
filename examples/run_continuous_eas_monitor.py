@@ -139,8 +139,6 @@ def main():
     logger.info("Creating EAS monitor...")
     eas_monitor = ContinuousEASMonitor(
         audio_manager=manager,
-        buffer_duration=120.0,  # 2 minute rolling buffer
-        scan_interval=2.0,  # Scan every 2 seconds
         sample_rate=22050,
         alert_callback=on_alert_detected,
         save_audio_files=True,
@@ -184,7 +182,7 @@ def main():
             print("STATUS REPORT")
             print("=" * 70)
             print(f"Active Source: {eas_stats['active_source']}")
-            print(f"Scans Performed: {eas_stats['scans_performed']}")
+            print(f"Samples Processed: {eas_stats['samples_processed']:,}")
             print(f"Alerts Detected: {eas_stats['alerts_detected']}")
 
             print("\nSource Health:")
