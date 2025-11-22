@@ -558,7 +558,7 @@ class ContinuousEASMonitor:
         status = self.get_status()
         return [{
             "timestamp": time.time(),
-            "health": status.get("health_percentage", 0) * 100,
+            "health": status.get("health_percentage", 0),  # 0-1 range
             "in_message": status.get("decoder_in_message", False)
         }]
 
