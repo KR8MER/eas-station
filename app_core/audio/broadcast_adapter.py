@@ -147,6 +147,98 @@ class BroadcastAudioAdapter:
             )
             return None
 
+    def get_audio_chunk(self, timeout: float = 0.5) -> Optional[np.ndarray]:
+        """
+        Get next audio chunk from broadcast subscription.
+        
+        Compatible with IcecastStreamer interface.
+        This pulls a standard chunk size (100ms) with configurable timeout.
+        
+        Args:
+            timeout: Maximum time to wait for audio (seconds)
+            
+        Returns:
+            NumPy array of audio samples, or None if no audio available
+        """
+        # Standard chunk size: 100ms of audio at current sample rate
+        chunk_samples = int(self.sample_rate * 0.1)
+        
+        with self._buffer_lock:
+            self._total_reads += 1
+            
+            # Try to fill buffer if we don't have enough samples
+            while len(self._buffer) < chunk_samples:
+                try:
+                    # Use the caller's timeout (important for Icecast prebuffering)
+                    chunk = self._subscriber_queue.get(timeout=timeout)
+                except:  # noqa: E722
+                    # Queue.Empty or other timeout-related exception
+                    # No more audio available right now
+                    if len(self._buffer) < chunk_samples:
+                        # Not enough data - return None
+                        return None
+                    break
+                
+                if chunk is None:
+                    if len(self._buffer) < chunk_samples:
+                        return None
+                    break
+                
+                # Append chunk to buffer
+                self._buffer = np.concatenate([self._buffer, chunk])
+                
+                # Limit buffer size to prevent unbounded growth
+                # Keep max 5 seconds worth of audio
+                max_buffer_samples = self.sample_rate * 5
+                if len(self._buffer) > max_buffer_samples:
+                    # Trim from front (drop oldest audio)
+                    self._buffer = self._buffer[-max_buffer_samples:]
+            
+            # Extract requested samples
+            if len(self._buffer) >= chunk_samples:
+                samples = self._buffer[:chunk_samples].copy()
+                self._buffer = self._buffer[chunk_samples:]
+                return samples
+            
+            # Not enough data
+            return None
+    
+    def get_recent_audio(self, num_samples: int) -> Optional[np.ndarray]:
+        """
+        Get recent audio samples from buffer (for audio archiving).
+        
+        Compatible with ContinuousEASMonitor interface for saving alert audio.
+        
+        Note: This returns whatever audio is currently in the buffer, up to
+        num_samples. If less audio is available, returns what we have.
+        For best results, maintain a larger buffer in real-time operations.
+        
+        Args:
+            num_samples: Number of samples requested
+            
+        Returns:
+            NumPy array of recent audio samples, or None if buffer is empty
+        """
+        with self._buffer_lock:
+            if len(self._buffer) == 0:
+                logger.warning(
+                    f"{self.subscriber_id}: get_recent_audio() called but buffer is empty"
+                )
+                return None
+            
+            # Return up to num_samples from the current buffer
+            # If we have less than requested, return what we have
+            available_samples = min(len(self._buffer), num_samples)
+            
+            if available_samples < num_samples:
+                logger.debug(
+                    f"{self.subscriber_id}: Requested {num_samples} recent samples, "
+                    f"only {available_samples} available in buffer"
+                )
+            
+            # Return copy of recent audio without consuming from buffer
+            return self._buffer[:available_samples].copy()
+
     def get_active_source(self) -> Optional[str]:
         """Get name of currently active audio source."""
         # Broadcast queues don't track source name - return broadcast name
