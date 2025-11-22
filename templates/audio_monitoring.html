@@ -1816,13 +1816,21 @@ function updateEASMonitorDisplay(status) {
             bufferStatus.className = 'text-warning d-block mt-1';
             easMonitorStartTime = null; // Reset if no audio
         } else {
-            // Track when monitor started to only show "warming up" during actual startup
-            if (easMonitorStartTime === null) {
-                easMonitorStartTime = Date.now();
+            // Use server-side wall clock runtime if available, otherwise track client-side
+            let actualRuntimeSeconds = status.wall_clock_runtime_seconds || 0;
+            
+            // Fallback to client-side tracking if server doesn't provide wall clock runtime
+            if (actualRuntimeSeconds === 0) {
+                if (easMonitorStartTime === null) {
+                    easMonitorStartTime = Date.now();
+                }
+                actualRuntimeSeconds = (Date.now() - easMonitorStartTime) / 1000;
+            } else {
+                // Server is providing runtime, sync our client-side tracking
+                easMonitorStartTime = Date.now() - (actualRuntimeSeconds * 1000);
             }
             
-            const runtimeMs = Date.now() - easMonitorStartTime;
-            const isWarmingUp = runtimeMs < 10000; // Only first 10 seconds is "warming up"
+            const isWarmingUp = actualRuntimeSeconds < 10; // Only first 10 seconds is "warming up"
             
             if (status.health_percentage >= 0.95) {
                 const rate = status.sample_rate || 16000;
@@ -1860,7 +1868,8 @@ function updateEASMonitorDisplay(status) {
 
     const scansBreakdown = document.getElementById('eas-scans-breakdown');
     if (scansBreakdown) {
-        const runtime = status.runtime_seconds || 0;
+        // Use wall clock runtime for consistent display (doesn't fluctuate with sample rate)
+        const runtime = status.wall_clock_runtime_seconds || status.runtime_seconds || 0;
         const hours = Math.floor(runtime / 3600);
         const minutes = Math.floor((runtime % 3600) / 60);
         const seconds = Math.floor(runtime % 60);
@@ -1914,7 +1923,8 @@ function updateEASMonitorDisplay(status) {
 
     const scanOverlap = document.getElementById('eas-scan-overlap');
     if (scanOverlap) {
-        const runtime = status.runtime_seconds || 0;
+        // Use wall clock runtime for consistent display
+        const runtime = status.wall_clock_runtime_seconds || status.runtime_seconds || 0;
         const hours = Math.floor(runtime / 3600);
         const minutes = Math.floor((runtime % 3600) / 60);
         if (hours > 0) {
