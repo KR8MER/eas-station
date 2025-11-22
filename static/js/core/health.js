@@ -158,8 +158,8 @@
         // Check immediately
         checkSystemHealth();
 
-        // Check every 30 seconds
-        setInterval(checkSystemHealth, 30000);
+        // REDUCED: Check every 60 seconds instead of 30 (cache serves intermediate requests)
+        setInterval(checkSystemHealth, 60000);
 
         // Setup banner close handler
         setupBannerCloseHandler();

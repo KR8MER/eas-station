@@ -203,7 +203,8 @@ document.addEventListener('DOMContentLoaded', function() {
     updateDashboard();
 
     // Auto-refresh every 5 seconds
-    setInterval(updateDashboard, 5000);
+    // REDUCED: 15 seconds instead of 5 seconds - dashboard metrics are cached
+    setInterval(updateDashboard, 15000);
 });
 
 function initializeCharts() {

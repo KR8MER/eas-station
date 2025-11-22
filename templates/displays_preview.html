@@ -494,7 +494,8 @@ document.addEventListener('DOMContentLoaded', function() {
     updateDisplayStates();
 
     // Poll for updates every 500ms
-    setInterval(updateDisplayStates, 500);
+    // REDUCED: 10 seconds instead of 500ms - displays don't update that fast
+    setInterval(updateDisplayStates, 10000);
 
     // Start animation loop
     animate();

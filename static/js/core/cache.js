@@ -175,25 +175,48 @@
         if (cached) {
             cacheHits++;
             apiCache._hitRate = cacheHits / (cacheHits + cacheMisses);
-            console.debug(`[Cache HIT] ${url}`, apiCache.getStats());
+            
+            // Only log in development
+            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                console.debug(`[Cache HIT] ${url}`, apiCache.getStats());
+            }
             
             // Return cached data as a Response-like object
-            return {
+            const urlObj = new URL(url, window.location.origin);
+            const mockResponse = {
                 ok: true,
                 status: 200,
                 statusText: 'OK',
-                json: async () => cached,
-                text: async () => JSON.stringify(cached),
-                clone: function() { return this; },
-                headers: new Headers(),
+                url: urlObj.href,
+                type: 'basic',
+                body: null,
+                bodyUsed: false,
+                headers: new Headers({ 'content-type': 'application/json' }),
+                json: async function() { 
+                    this.bodyUsed = true;
+                    return cached;
+                },
+                text: async function() { 
+                    this.bodyUsed = true;
+                    return JSON.stringify(cached);
+                },
+                clone: function() {
+                    // Create a new instance with the same data
+                    return Object.assign({}, this, { bodyUsed: false });
+                },
                 _fromCache: true
             };
+            return mockResponse;
         }
 
         // Cache miss - fetch from server
         cacheMisses++;
         apiCache._hitRate = cacheHits / (cacheHits + cacheMisses);
-        console.debug(`[Cache MISS] ${url}`, apiCache.getStats());
+        
+        // Only log in development
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            console.debug(`[Cache MISS] ${url}`, apiCache.getStats());
+        }
         
         try {
             const response = await fetch(url, options);

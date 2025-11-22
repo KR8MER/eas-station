@@ -491,7 +491,8 @@ sudo systemctl restart eas-station</code></pre>
 
         if (autoRefreshCheckbox.checked) {
             loadDiagnostics();
-            autoRefreshHandle = setInterval(loadDiagnostics, 5000);
+            // REDUCED: 15 seconds instead of 5 seconds - diagnostics data is cached
+            autoRefreshHandle = setInterval(loadDiagnostics, 15000);
         }
     }
 

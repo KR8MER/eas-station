@@ -24,14 +24,35 @@ function initializeAudioMonitoring() {
     loadAudioHealth();
     loadAudioAlerts();
 
-    // Start periodic updates (every 1 second)
-    metricsUpdateInterval = setInterval(updateMetrics, 1000);
-    healthUpdateInterval = setInterval(loadAudioHealth, 5000);
-    // Monitor for device changes every 10 seconds
-    deviceMonitorInterval = setInterval(monitorDeviceChanges, 10000);
+    // DRASTICALLY REDUCED POLLING - Rely on cache and user interactions
+    // Metrics: 10s instead of 1s (cache serves intermediate requests)
+    metricsUpdateInterval = setInterval(updateMetrics, 10000);
+    // Health: 30s instead of 5s (health doesn't change that fast)
+    healthUpdateInterval = setInterval(loadAudioHealth, 30000);
+    // Device changes: 60s instead of 10s (hot-plug is rare)
+    deviceMonitorInterval = setInterval(monitorDeviceChanges, 60000);
+
+    // Reload on user interaction (click anywhere refreshes data immediately via cache)
+    document.addEventListener('click', debounce(() => {
+        // Cache will serve if < TTL, otherwise fetches fresh
+        loadAudioSources();
+    }, 2000), { passive: true });
 
     // Setup event listeners
     document.getElementById('sourceType')?.addEventListener('change', updateSourceTypeConfig);
+}
+
+// Simple debounce helper
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
 }
 
 /**

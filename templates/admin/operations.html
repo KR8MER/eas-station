@@ -269,7 +269,8 @@ function startStatusPolling() {
     if (statusPollInterval) {
         clearInterval(statusPollInterval);
     }
-    statusPollInterval = setInterval(pollOperationStatus, 3000);
+    // REDUCED: 10 seconds instead of 3 seconds - operation status is cached
+    statusPollInterval = setInterval(pollOperationStatus, 10000);
 }
 
 // Poll operation status

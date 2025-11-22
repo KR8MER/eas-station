@@ -1688,9 +1688,13 @@ function updateLevelMetersFromSnapshot(snapshot) {
     console.debug(`Updated ${updatedCount} VU meters from ${snapshot.live_metrics.length} metrics`);
 }
 
+// REAL-TIME METERS: The existing code has sophisticated VU meter animation
+// We just need to use cached fetch and poll more frequently for real-time feel
 async function updateLevelMeters() {
     try {
-        const response = await fetch('/api/audio/metrics');
+        // Use cached fetch - most requests served from cache (5s TTL)
+        const fetchFunc = window.cachedFetch || fetch;
+        const response = await fetchFunc('/api/audio/metrics');
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);
         }
@@ -1707,6 +1711,10 @@ function startLevelPolling() {
     }
 
     updateLevelMeters();
+    
+    // Poll every 1 second for real-time meters (as originally intended)
+    // Cache serves most requests with 5s TTL, so actual API calls are ~every 5s
+    // This gives buttery smooth real-time feel WITHOUT hammering the server!
     levelIntervalHandle = setInterval(updateLevelMeters, 1000);
 }
 
