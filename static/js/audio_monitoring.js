@@ -39,7 +39,8 @@ function initializeAudioMonitoring() {
  */
 async function monitorDeviceChanges() {
     try {
-        const response = await fetch('/api/audio/devices');
+        const fetchFunc = window.cachedFetch || fetch;
+        const response = await fetchFunc('/api/audio/devices');
         if (!response.ok) return;
 
         const data = await response.json();
@@ -87,7 +88,8 @@ async function monitorDeviceChanges() {
  */
 async function loadAudioSources() {
     try {
-        const response = await fetch('/api/audio/sources');
+        const fetchFunc = window.cachedFetch || fetch;
+        const response = await fetchFunc('/api/audio/sources');
         const data = await response.json();
 
         audioSources = data.sources || [];
@@ -250,7 +252,8 @@ function getStatusBadge(status) {
  */
 async function updateMetrics() {
     try {
-        const response = await fetch('/api/audio/metrics');
+        const fetchFunc = window.cachedFetch || fetch;
+        const response = await fetchFunc('/api/audio/metrics');
         const data = await response.json();
 
         const liveMetrics = data.live_metrics || [];
@@ -530,7 +533,8 @@ function updateMeterDisplay(sourceId, type, levelDb) {
  */
 async function loadAudioHealth() {
     try {
-        const response = await fetch('/api/audio/health');
+        const fetchFunc = window.cachedFetch || fetch;
+        const response = await fetchFunc('/api/audio/health');
         const data = await response.json();
 
         const healthScore = Math.round(data.overall_health_score || 0);
@@ -556,7 +560,8 @@ async function loadAudioHealth() {
  */
 async function loadAudioAlerts() {
     try {
-        const response = await fetch('/api/audio/alerts?unresolved_only=true');
+        const fetchFunc = window.cachedFetch || fetch;
+        const response = await fetchFunc('/api/audio/alerts?unresolved_only=true');
         const data = await response.json();
 
         const alerts = data.alerts || [];

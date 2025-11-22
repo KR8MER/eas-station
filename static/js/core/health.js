@@ -65,7 +65,8 @@
      */
     async function checkSystemHealth() {
         try {
-            const response = await fetch('/api/system_status');
+            const fetchFunc = window.cachedFetch || fetch;
+            const response = await fetchFunc('/api/system_status');
             const data = await response.json();
 
             const healthDot = document.getElementById('system-health-dot');

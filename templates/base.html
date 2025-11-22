@@ -191,6 +191,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
 
     <!-- 2. EAS Station Core JavaScript Modules -->
+    <!-- CRITICAL: Load cache.js FIRST to intercept all fetch calls and prevent server overload -->
+    <script src="{{ url_for('static', filename='js/core/cache.js') }}"></script>
     <script src="{{ url_for('static', filename='js/core/theme.js') }}"></script>
     <script src="{{ url_for('static', filename='js/core/notifications.js') }}"></script>
     <script src="{{ url_for('static', filename='js/core/api.js') }}"></script>
