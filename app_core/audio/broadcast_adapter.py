@@ -171,7 +171,8 @@ class BroadcastAudioAdapter:
                 try:
                     # Use the caller's timeout (important for Icecast prebuffering)
                     chunk = self._subscriber_queue.get(timeout=timeout)
-                except Exception:
+                except:  # noqa: E722
+                    # Queue.Empty or other timeout-related exception
                     # No more audio available right now
                     if len(self._buffer) < chunk_samples:
                         # Not enough data - return None

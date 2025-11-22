@@ -75,9 +75,11 @@ class TestBroadcastAudioAdapterMethods(unittest.TestCase):
         self.subscriber_queue.put(test_audio)
         
         # Read some audio to populate internal buffer
-        self.adapter.read_audio(2205)  # Read 100ms, leaving 100ms in buffer
+        result1 = self.adapter.read_audio(2205)  # Read 100ms
+        self.assertIsNotNone(result1, "First read should return audio")
+        self.assertEqual(len(result1), 2205, "First read should return 100ms")
         
-        # Now get recent audio
+        # Now get recent audio - should have 100ms remaining in buffer
         result = self.adapter.get_recent_audio(2205)
         
         # Should return audio from buffer
@@ -99,13 +101,15 @@ class TestBroadcastAudioAdapterMethods(unittest.TestCase):
         test_audio = np.random.randn(1000).astype(np.float32)
         self.subscriber_queue.put(test_audio)
         
-        # Read to populate buffer
-        self.adapter.read_audio(500)  # Read 500, leaving 500 in buffer
+        # Read to populate buffer, verify we got what we asked for
+        result1 = self.adapter.read_audio(500)  # Read 500
+        self.assertIsNotNone(result1, "First read should succeed")
+        self.assertEqual(len(result1), 500, "First read should return exactly 500 samples")
         
-        # Request more than available
+        # Request more than available from buffer
         result = self.adapter.get_recent_audio(2205)
         
-        # Should return what's available (500 samples)
+        # Should return what's available (500 samples remaining)
         self.assertIsNotNone(result)
         self.assertEqual(len(result), 500)
 
