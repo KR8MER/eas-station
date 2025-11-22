@@ -48,13 +48,13 @@ class AudioControllerAdapter:
     the requested number of samples.
     """
 
-    def __init__(self, controller: AudioIngestController, sample_rate: int = 22050):
+    def __init__(self, controller: AudioIngestController, sample_rate: int = 16000):
         """
         Initialize adapter.
 
         Args:
             controller: AudioIngestController instance to adapt
-            sample_rate: Expected sample rate (for calculating chunk sizes)
+            sample_rate: Expected sample rate (for calculating chunk sizes, default 16000 Hz)
         """
         self.controller = controller
         self.sample_rate = sample_rate

@@ -155,7 +155,7 @@ def _load_audio_source_configs(controller: AudioIngestController) -> None:
                     name=db_config.name,
                     enabled=db_config.enabled,
                     priority=db_config.priority,
-                    sample_rate=config_params.get('sample_rate', 44100),
+                    sample_rate=config_params.get('sample_rate', 16000),  # Default to 16 kHz (optimal for SAME)
                     channels=config_params.get('channels', 1),
                     buffer_size=config_params.get('buffer_size', 4096),
                     silence_threshold_db=config_params.get('silence_threshold_db', -60.0),
@@ -478,12 +478,14 @@ def _recommend_audio_stream(receiver: RadioReceiver) -> Tuple[int, int]:
     modulation = (receiver.modulation_type or "IQ").upper()
 
     if modulation in {"FM", "WFM"}:
+        # For FM, use 48kHz stereo or 32kHz mono - will be resampled to 16kHz for SAME decoding
         return (48000 if receiver.stereo_enabled else 32000, 2 if receiver.stereo_enabled else 1)
     if modulation in {"AM", "NFM"}:
+        # For AM/NFM, 24kHz mono - will be resampled to 16kHz for SAME decoding
         return 24000, 1
 
-    # Default to full-bandwidth monitoring
-    return 44100, 1
+    # Default to 16 kHz for EAS/SAME monitoring (optimal rate)
+    return 16000, 1
 
 
 def _format_receiver_frequency(frequency_hz: float) -> str:
@@ -832,7 +834,7 @@ def _restore_audio_source_from_db_config(
         name=db_config.name,
         enabled=db_config.enabled,
         priority=db_config.priority,
-        sample_rate=config_params.get('sample_rate', 44100),
+        sample_rate=config_params.get('sample_rate', 16000),  # Default to 16 kHz (optimal for SAME)
         channels=config_params.get('channels', 1),
         buffer_size=config_params.get('buffer_size', 4096),
         silence_threshold_db=config_params.get('silence_threshold_db', -60.0),
@@ -1203,7 +1205,7 @@ def api_create_audio_source():
             name=name,
             enabled=data.get('enabled', True),
             priority=data.get('priority', 100),
-            sample_rate=data.get('sample_rate', 44100),
+            sample_rate=data.get('sample_rate', 16000),  # Default to 16 kHz (optimal for SAME)
             channels=data.get('channels', 1),
             buffer_size=data.get('buffer_size', 4096),
             silence_threshold_db=data.get('silence_threshold_db', -60.0),
