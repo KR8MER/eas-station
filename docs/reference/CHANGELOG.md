@@ -4,6 +4,11 @@ All notable changes to this project are documented in this file. The format is b
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project currently
 tracks releases under the 2.x series.
 
+## [2.12.12] - 2025-12-05
+### Fixed
+- Filled the continuous monitor status API with the streaming decoder's health, rate, and sync metrics so every dashboard field renders and operators can confirm the monitor is actively processing audio.
+- Tagged live audio metrics with each source's runtime status so the VU meters reflect whether inputs are running instead of dimming as if they were offline.
+
 ## [2.12.10] - 2025-12-04
 ### Changed
 - Added a selectable streaming mode on the audio monitor that prefers the built-in HTTPS stream by default and only opts into Icecast when operators explicitly choose it, reducing stalls when external ports are blocked.
@@ -169,6 +174,8 @@ tracks releases under the 2.x series.
   touching the filesystem.
 - Removed the CAP poller's area-term fallback so `/alerts` only surfaces entries that explicitly name the configured SAME or
   UGC codes, eliminating false positives from neighboring county descriptions.
+- Ensured the continuous EAS monitor auto-initializes on demand so the audio monitoring page no longer stalls when the monitor
+  wasn't started during app boot.
 - Added comprehensive audio ingest pipeline for unified capture from SDR, ALSA, and file sources
   - Implemented `app_core/audio/ingest.py` with pluggable source adapters and PCM normalization
   - Added peak/RMS metering and silence detection with PostgreSQL storage

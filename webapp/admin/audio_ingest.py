@@ -1486,6 +1486,7 @@ def api_get_audio_metrics():
                     'source_id': source_name,
                     'source_name': adapter.config.name,
                     'source_type': adapter.config.source_type.value,
+                    'source_status': adapter.status.value,
                     'timestamp': adapter.metrics.timestamp,
                     'peak_level_db': _sanitize_float(adapter.metrics.peak_level_db),
                     'rms_level_db': _sanitize_float(adapter.metrics.rms_level_db),
