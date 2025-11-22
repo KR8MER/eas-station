@@ -152,7 +152,7 @@ class BroadcastAudioAdapter:
         Get next audio chunk from broadcast subscription.
         
         Compatible with IcecastStreamer interface.
-        This is an alias for read_audio() that pulls a standard chunk size.
+        This pulls a standard chunk size (100ms) with configurable timeout.
         
         Args:
             timeout: Maximum time to wait for audio (seconds)
@@ -163,8 +163,44 @@ class BroadcastAudioAdapter:
         # Standard chunk size: 100ms of audio at current sample rate
         chunk_samples = int(self.sample_rate * 0.1)
         
-        # Use existing read_audio implementation
-        return self.read_audio(chunk_samples)
+        with self._buffer_lock:
+            self._total_reads += 1
+            
+            # Try to fill buffer if we don't have enough samples
+            while len(self._buffer) < chunk_samples:
+                try:
+                    # Use the caller's timeout (important for Icecast prebuffering)
+                    chunk = self._subscriber_queue.get(timeout=timeout)
+                except Exception:
+                    # No more audio available right now
+                    if len(self._buffer) < chunk_samples:
+                        # Not enough data - return None
+                        return None
+                    break
+                
+                if chunk is None:
+                    if len(self._buffer) < chunk_samples:
+                        return None
+                    break
+                
+                # Append chunk to buffer
+                self._buffer = np.concatenate([self._buffer, chunk])
+                
+                # Limit buffer size to prevent unbounded growth
+                # Keep max 5 seconds worth of audio
+                max_buffer_samples = self.sample_rate * 5
+                if len(self._buffer) > max_buffer_samples:
+                    # Trim from front (drop oldest audio)
+                    self._buffer = self._buffer[-max_buffer_samples:]
+            
+            # Extract requested samples
+            if len(self._buffer) >= chunk_samples:
+                samples = self._buffer[:chunk_samples].copy()
+                self._buffer = self._buffer[chunk_samples:]
+                return samples
+            
+            # Not enough data
+            return None
     
     def get_recent_audio(self, num_samples: int) -> Optional[np.ndarray]:
         """
