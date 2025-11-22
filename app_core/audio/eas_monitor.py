@@ -622,7 +622,7 @@ class ContinuousEASMonitor:
             "min_scan_duration_seconds": None,
             "max_scan_duration_seconds": None,
             "last_scan_duration_seconds": None,
-            "scan_history_size": 0
+            "scan_history_size": 0,
             "buffer_fill_seconds": buffer_fill_seconds,
             "scans_performed": scans_performed,
             "scans_skipped": scans_skipped,
@@ -756,8 +756,6 @@ class ContinuousEASMonitor:
             # This caused missed scans (80 instead of 200 in 10 minutes)
             # For EAS decoders, scan rate MUST be maintained at configured value
             # If hardware can't keep up, that's a critical error requiring operator action
-                    f"max_scans={self._dynamic_max_scans}."
-                )
     
     def _get_effective_scan_interval(self) -> float:
         """Get the scan interval.
