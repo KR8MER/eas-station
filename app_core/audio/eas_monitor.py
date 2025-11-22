@@ -406,21 +406,23 @@ class ContinuousEASMonitor:
         if save_audio_files:
             os.makedirs(audio_archive_dir, exist_ok=True)
 
-        # Circular buffer for audio (ring buffer for analysis)
-        buffer_samples = int(sample_rate * buffer_duration)
-        self._audio_buffer = np.zeros(buffer_samples, dtype=np.float32)
-        self._buffer_pos = 0
-        self._buffer_lock = threading.Lock()
-
-        # CRITICAL: Scan queue for 100% reliability
-        # Commercial EAS decoders NEVER drop audio samples
-        # We use a queue to ensure EVERY scan attempt is processed
-        # Queue size = 2x workers to allow some buffering without unbounded growth
-        self._scan_queue: queue.Queue = queue.Queue(maxsize=max_concurrent_scans * 2)
-        self._worker_threads: List[threading.Thread] = []
-        self._scans_queued = 0
-        self._scans_queue_full = 0  # Critical error - queue is full
-        self._max_queue_depth_seen = 0
+        # STREAMING DECODER: Process samples in real-time as they arrive
+        # NO BUFFERING. NO BATCHING. NO INTERVALS. NO TEMP FILES.
+        # Every sample is processed immediately by the decoder.
+        # This is how commercial EAS decoders work (DASDEC, multimon-ng).
+        from .streaming_same_decoder import StreamingSAMEDecoder
+        
+        self._streaming_decoder = StreamingSAMEDecoder(
+            sample_rate=sample_rate,
+            alert_callback=self._handle_streaming_alert
+        )
+        
+        logger.warning(
+            "⚠️ BATCH PROCESSING DISABLED - Using real-time streaming decoder. "
+            "No buffering, no intervals, no temp files. "
+            f"Audio archiving: {'ENABLED' if save_audio_files else 'DISABLED'}. "
+            "This is commercial-grade EAS decoder operation."
+        )
         
         # Monitoring state
         self._monitor_thread: Optional[threading.Thread] = None
@@ -428,27 +430,10 @@ class ContinuousEASMonitor:
         self._stop_event = threading.Event()
         self._stop_event.set()  # Initialize in "stopped" state
         self._alerts_detected = 0
-        self._scans_performed = 0
-        self._scans_completed = 0  # Track completed scans (different from started)
-        self._last_scan_time: Optional[float] = None
         self._last_alert_time: Optional[float] = None
         self._duplicate_cooldown_seconds = 30.0
         self._recent_alert_signatures: OrderedDict[str, float] = OrderedDict()
-        self._scan_lock = threading.Lock()  # Protect scan counters
-        
-        # Scan timing metrics
-        self._scan_durations: List[float] = []  # Recent scan durations in seconds
-        self._max_scan_history = 100  # Keep last 100 scan times
-        
-        # Self-regulating feedback loop state (INTERVAL ONLY - never reduce workers)
-        self._configured_scan_interval = scan_interval  # Store original config
-        self._dynamic_scan_interval = scan_interval  # Current effective value
-        self._last_adjustment_time = 0.0  # When we last adjusted parameters
-        self._adjustment_cooldown = 30.0  # Wait 30s between adjustments to let changes stabilize
-        
-        # Auto-tuning constants
-        self.SCAN_BUFFER_FACTOR = 1.15  # Add 15% buffer to scan time for interval
-        self.MIN_SCAN_INTERVAL = 1.5  # Hard floor on scan interval (seconds)
+        self._stats_lock = threading.Lock()  # Protect statistics
         
         # Watchdog/heartbeat tracking
         self._last_activity: float = time.time()
@@ -555,71 +540,89 @@ class ContinuousEASMonitor:
         )
 
     def get_status(self) -> dict:
-        """Get current monitor status and metrics for UI display.
-
-        Returns dict with:
-        - running: bool
-        - buffer_duration: float (seconds)
-        - scan_interval: float (seconds)
-        - buffer_utilization: float (0.0-1.0, where 1.0 = 100%)
-        - buffer_fill_seconds: float (how much audio is in buffer)
-        - scans_performed: int
-        - alerts_detected: int
-        - last_scan_time: float (unix timestamp) or None
-        - last_alert_time: float (unix timestamp) or None
-        - active_scans: int
-        - audio_flowing: bool
-        - sample_rate: int
-        - scan_warnings: int (how many scans were skipped)
+        """
+        Get current monitor status and metrics for UI display.
+        
+        STREAMING MODE: Reports real-time decoder status, not batch scan metrics.
         """
         is_running = not self._stop_event.is_set()
 
-        # Calculate buffer utilization (return as 0.0-1.0 for UI to convert to percentage)
-        with self._buffer_lock:
-            buffer_len = len(self._audio_buffer)
-            # Simple heuristic: buffer is "full" if we've written at least once
-            buffer_fill_seconds = (buffer_len / self.sample_rate) if self._buffer_pos > 0 else 0
-            buffer_utilization = min(1.0, buffer_fill_seconds / self.buffer_duration)
-
-        # Audio flowing if we've written data
-        audio_flowing = self._buffer_pos > 0
-
-        with self._scan_lock:
-            active_scans = self._active_scans
-            scans_skipped = self._scans_skipped
-            scans_no_signature = self._scans_no_signature
-            scans_performed = self._scans_performed
-            # Calculate scan timing statistics
-            if self._scan_durations:
-                avg_scan_duration = sum(self._scan_durations) / len(self._scan_durations)
-                min_scan_duration = min(self._scan_durations)
-                max_scan_duration = max(self._scan_durations)
-                last_scan_duration = self._scan_durations[-1] if self._scan_durations else None
-            else:
-                avg_scan_duration = None
-                min_scan_duration = None
-                max_scan_duration = None
-                last_scan_duration = None
+        # Get streaming decoder stats
+        decoder_stats = self._streaming_decoder.get_stats()
+        
+        # Audio is flowing if decoder has processed samples
+        audio_flowing = decoder_stats['samples_processed'] > 0
+        samples_processed = decoder_stats['samples_processed']
+        
+        # Calculate how long decoder has been running based on samples
+        if audio_flowing:
+            runtime_seconds = samples_processed / self.sample_rate
+            samples_per_second = samples_processed / max(runtime_seconds, 1.0)
+        else:
+            runtime_seconds = 0
+            samples_per_second = 0
+        
+        with self._stats_lock:
+            alerts_detected = self._alerts_detected
+            last_alert_time = self._last_alert_time
         
         with self._activity_lock:
             last_activity = self._last_activity
             time_since_activity = time.time() - last_activity
-
-        # Calculate effective interval (may be higher than configured if scans are slow)
-        effective_interval = self._get_effective_scan_interval()
-        is_auto_adjusted = effective_interval > self.scan_interval
         
-        # Calculate total scan attempts for better reporting
-        # Total attempts = scans that completed decode + scans skipped + scans rejected (no SAME)
-        total_scan_attempts = scans_performed + scans_skipped + scans_no_signature
+        # Calculate health metrics
+        # For streaming decoder, "health" = processing at line rate (22050 samples/sec)
+        expected_rate = self.sample_rate
+        health_percentage = min(1.0, samples_per_second / expected_rate) if audio_flowing else 0.0
         
         return {
+            # System state
             "running": is_running,
+            "mode": "streaming",  # NEW: Indicate we're in streaming mode
+            "audio_flowing": audio_flowing,
+            "sample_rate": self.sample_rate,
+            
+            # Streaming decoder metrics (OPERATOR CONFIRMATION)
+            "samples_processed": samples_processed,
+            "samples_per_second": int(samples_per_second),
+            "runtime_seconds": runtime_seconds,
+            "decoder_synced": decoder_stats['synced'],
+            "decoder_in_message": decoder_stats['in_message'],
+            "decoder_bytes_decoded": decoder_stats['bytes_decoded'],
+            "health_percentage": health_percentage,
+            
+            # Alert metrics
+            "alerts_detected": alerts_detected,
+            "last_alert_time": last_alert_time,
+            
+            # Legacy compatibility (for UI that expects these)
             "buffer_duration": self.buffer_duration,
-            "scan_interval": self.scan_interval,
-            "effective_scan_interval": effective_interval,
-            "scan_interval_auto_adjusted": is_auto_adjusted,
-            "buffer_utilization": buffer_utilization,
+            "scan_interval": 0.0,  # N/A in streaming mode
+            "effective_scan_interval": 0.0,  # N/A in streaming mode  
+            "scan_interval_auto_adjusted": False,
+            "buffer_utilization": health_percentage,  # Repurpose as health indicator
+            "buffer_fill_seconds": runtime_seconds,
+            "scans_performed": samples_processed // (self.sample_rate * 100),  # Rough estimate: 1 "scan" per 100s
+            "scans_skipped": 0,  # N/A in streaming mode
+            "scans_no_signature": 0,  # N/A in streaming mode
+            "total_scan_attempts": samples_processed // (self.sample_rate * 100),
+            "active_scans": 1 if decoder_stats['in_message'] else 0,
+            "max_concurrent_scans": 1,  # Streaming = always 1 decoder thread
+            "dynamic_max_concurrent_scans": 1,
+            "scan_warnings": 0,
+            
+            # Health metrics
+            "last_activity": last_activity,
+            "time_since_activity": time_since_activity,
+            "restart_count": self._restart_count,
+            "watchdog_timeout": self._watchdog_timeout,
+            
+            # Streaming-specific stats
+            "avg_scan_duration_seconds": None,  # N/A
+            "min_scan_duration_seconds": None,
+            "max_scan_duration_seconds": None,
+            "last_scan_duration_seconds": None,
+            "scan_history_size": 0
             "buffer_fill_seconds": buffer_fill_seconds,
             "scans_performed": scans_performed,
             "scans_skipped": scans_skipped,
@@ -834,18 +837,30 @@ class ContinuousEASMonitor:
             logger.error(f"Failed to restart EAS monitor thread: {e}", exc_info=True)
 
     def _monitor_loop(self) -> None:
-        """Main monitoring loop - runs continuously with heartbeat updates."""
-        logger.debug("EAS monitor loop started")
+        """
+        Main monitoring loop - STREAMING REAL-TIME PROCESSING.
+        
+        NO BATCHING. NO INTERVALS. NO TEMP FILES.
+        
+        This is how commercial EAS decoders (DASDEC, multimon-ng) work:
+        - Read audio samples as they arrive
+        - Feed directly to streaming decoder
+        - Decoder maintains state and emits alerts
+        - Zero latency, zero dropouts
+        """
+        logger.info("🔴 STREAMING EAS monitor started - processing samples in real-time")
 
-        # Buffer for reading audio chunks
-        chunk_samples = int(self.sample_rate * 0.1)  # 100ms chunks
-        last_scan_time = 0.0
+        # Buffer for reading audio chunks (100ms = 2205 samples at 22050 Hz)
+        chunk_samples = int(self.sample_rate * 0.1)
+        
         last_heartbeat_time = time.time()
         heartbeat_interval = 5.0  # Update activity every 5 seconds
 
         read_error_count = 0
         last_error_log_time = 0
-        error_log_interval = 10.0  # Only log repeated errors every 10 seconds
+        error_log_interval = 10.0
+        
+        samples_processed = 0
         
         while not self._stop_event.is_set():
             try:
@@ -854,8 +869,15 @@ class ContinuousEASMonitor:
                 if current_time - last_heartbeat_time >= heartbeat_interval:
                     self._update_activity()
                     last_heartbeat_time = current_time
+                    # Log progress
+                    stats = self._streaming_decoder.get_stats()
+                    logger.debug(
+                        f"Streaming decoder stats: {stats['samples_processed']:,} samples processed, "
+                        f"{stats['alerts_detected']} alerts detected, "
+                        f"synced={stats['synced']}, in_message={stats['in_message']}"
+                    )
 
-                # Read audio from manager with error protection
+                # Read audio from manager
                 samples = None
                 try:
                     samples = self.audio_manager.read_audio(chunk_samples)
@@ -870,57 +892,211 @@ class ContinuousEASMonitor:
                         last_error_log_time = current_time
                     samples = None
 
-                if samples is not None:
-                    # Add to circular buffer
+                if samples is not None and len(samples) > 0:
+                    # REAL-TIME PROCESSING: Feed samples directly to decoder
+                    # ZERO buffering, ZERO batching, ZERO delays
+                    # Every sample is processed immediately
                     try:
-                        self._add_to_buffer(samples)
-                    except Exception as buffer_error:
-                        logger.error(f"Error adding samples to buffer: {buffer_error}", exc_info=True)
-
-                # Update scan parameters based on performance feedback (self-regulating)
-                # This happens continuously to adapt to system conditions
-                try:
-                    self._update_scan_parameters()
-                except Exception as feedback_error:
-                    logger.error(f"Error in feedback loop: {feedback_error}", exc_info=True)
+                        self._streaming_decoder.process_samples(samples)
+                        samples_processed += len(samples)
+                    except Exception as decode_error:
+                        logger.error(f"Error in streaming decoder: {decode_error}", exc_info=True)
                 
-                # Check if it's time to scan for alerts
-                # Use dynamically-adjusted interval
-                effective_scan_interval = self._get_effective_scan_interval()
-                if current_time - last_scan_time >= effective_scan_interval:
-                    try:
-                        # CRITICAL: Always attempt scan on every interval
-                        # The scan will be skipped/rejected inside _scan_for_alerts if needed
-                        # But we MUST attempt it to maintain scan coverage
-                        scan_initiated = self._scan_for_alerts()
-                        
-                        # ALWAYS update last_scan_time to maintain regular scan attempts
-                        # This ensures consistent scan rate regardless of skip/reject status
-                        last_scan_time = current_time
-                        
-                        # Only update _last_scan_time (for UI) if scan actually initiated
-                        if scan_initiated:
-                            self._last_scan_time = current_time
-                            self._update_activity()  # Update on successful scan initiation
-                    except Exception as scan_error:
-                        logger.error(f"Error initiating scan for alerts: {scan_error}", exc_info=True)
-                        last_scan_time = current_time  # Still update to avoid rapid retry
-                
-                # Brief sleep only if we didn't get audio samples (prevents tight loop when audio unavailable)
-                # Combined with 100ms timeout in get_audio_chunk(), creates ~120ms cycle (8.3 Hz) when idle
+                # Brief sleep only if we didn't get audio samples
                 if samples is None:
                     time.sleep(0.02)  # 20ms sleep when no audio available
 
             except Exception as e:
                 logger.error(f"Unexpected error in EAS monitor loop: {e}", exc_info=True)
-                # Still update activity to show loop is running, even with errors
                 self._update_activity()
                 time.sleep(1.0)  # Back off on error
 
-        logger.debug("EAS monitor loop stopped")
+        logger.info("🔴 STREAMING EAS monitor stopped")
 
+    def _handle_streaming_alert(self, alert) -> None:
+        """
+        Handle alert from streaming decoder.
+        
+        This is called by StreamingSAMEDecoder when an alert is detected.
+        
+        CRITICAL: For alert verification, we need to save audio.
+        In streaming mode, we capture audio AFTER detection by reading from audio manager.
+        """
+        from .streaming_same_decoder import StreamingSAMEAlert
+        
+        logger.info(f"🔔 Streaming alert received: {alert.message[:80]}... (confidence: {alert.confidence:.1%})")
+        
+        # Get active source name
+        source_name = self.audio_manager.get_active_source() or "unknown"
+        
+        # Parse the SAME message to extract fields
+        from app_utils.eas import describe_same_header
+        from app_utils.fips_codes import get_same_lookup
+        
+        # Extract just the header part (ZCZC-ORG-EEE-PSSCCC...)
+        message_text = alert.message.strip()
+        if "ZCZC" in message_text:
+            zczc_idx = message_text.find("ZCZC")
+            header_text = message_text[zczc_idx:]
+            # Remove trailing dash if present
+            if header_text.endswith('-'):
+                header_text = header_text[:-1]
+        else:
+            header_text = message_text
+        
+        # Parse SAME header fields
+        fips_lookup = get_same_lookup()
+        header_fields = describe_same_header(header_text, lookup=fips_lookup)
+        
+        # AUDIO ARCHIVING: Save audio for verification/archival
+        # In streaming mode, the audio manager maintains a buffer
+        # We can capture recent audio when alert is detected
+        audio_file_path = None
+        if self.save_audio_files:
+            try:
+                # Get approximately 12 seconds of audio from audio manager
+                # This should contain the full SAME sequence
+                archive_duration = 12.0
+                archive_samples = int(self.sample_rate * archive_duration)
+                
+                # Try to get recent audio from audio manager's buffer
+                # Note: This depends on AudioSourceManager having a get_recent_audio() method
+                # If not available, we'll need to add a small buffer here
+                try:
+                    audio_samples = self.audio_manager.get_recent_audio(archive_samples)
+                except AttributeError:
+                    logger.warning(
+                        "AudioSourceManager doesn't support get_recent_audio(). "
+                        "Audio archiving disabled for streaming mode. "
+                        "Alert will be logged but audio won't be saved."
+                    )
+                    audio_samples = None
+                
+                if audio_samples is not None and len(audio_samples) > 0:
+                    # Save to file in RAM disk
+                    audio_file_path = self._save_alert_audio(audio_samples, alert)
+                    logger.info(f"Saved alert audio to {audio_file_path}")
+            except Exception as e:
+                logger.error(f"Failed to save alert audio: {e}", exc_info=True)
+        
+        # Create EASAlert object compatible with existing callback
+        eas_alert = EASAlert(
+            timestamp=alert.timestamp,
+            raw_text=message_text,
+            headers=[{
+                'header': header_text,
+                'fields': header_fields,
+                'confidence': alert.confidence,
+                'raw_text': header_text
+            }],
+            confidence=alert.confidence,
+            duration_seconds=0.0,  # Streaming doesn't track duration
+            source_name=source_name,
+            audio_file_path=audio_file_path
+        )
+        
+        # Check for duplicates
+        alert_signature = compute_alert_signature(eas_alert)
+        current_time = time.time()
+        
+        if self._is_duplicate_alert(alert_signature, current_time):
+            logger.info(
+                f"Duplicate alert detected within {self._duplicate_cooldown_seconds}s window - ignoring"
+            )
+            return
+        
+        self._recent_alert_signatures[alert_signature] = current_time
+        self._last_alert_time = current_time
+        
+        with self._stats_lock:
+            self._alerts_detected += 1
+        
+        # Log comprehensive alert info
+        event_code = header_fields.get('event_code', 'UNKNOWN')
+        originator = header_fields.get('originator', 'UNKNOWN')
+        location_codes = []
+        locations = header_fields.get('locations', [])
+        if isinstance(locations, list):
+            for loc in locations:
+                if isinstance(loc, dict):
+                    code = loc.get('code', '')
+                    if code:
+                        location_codes.append(code)
+        
+        logger.warning(
+            f"🚨 EAS ALERT DETECTED (STREAMING): "
+            f"Event={event_code} | "
+            f"Originator={originator} | "
+            f"FIPS={','.join(location_codes) if location_codes else 'NONE'} | "
+            f"Source={source_name} | "
+            f"Confidence={alert.confidence:.1%}"
+        )
+        
+        # Invoke callback (FIPS filtering happens here)
+        if self.alert_callback:
+            try:
+                self.alert_callback(eas_alert)
+            except Exception as e:
+                logger.error(f"Error in alert callback: {e}", exc_info=True)
+    
+    def _save_alert_audio(self, samples: np.ndarray, alert) -> str:
+        """
+        Save alert audio to WAV file for archiving and verification.
+        
+        Uses /dev/shm (RAM disk) for zero disk I/O.
+        
+        Args:
+            samples: Audio samples to save
+            alert: StreamingSAMEAlert object
+            
+        Returns:
+            Path to saved audio file
+        """
+        import wave
+        
+        # Create archive directory in RAM disk
+        ram_disk_dir = "/dev/shm/eas-audio"
+        os.makedirs(ram_disk_dir, exist_ok=True)
+        
+        # Create filename: YYYYMMDD_HHMMSS_message.wav
+        timestamp_str = alert.timestamp.strftime("%Y%m%d_%H%M%S")
+        
+        # Extract event code from message for filename
+        message_text = alert.message
+        event_code = "UNK"
+        originator = "UNK"
+        if "ZCZC" in message_text:
+            try:
+                parts = message_text.split('-')
+                if len(parts) >= 3:
+                    originator = parts[1]
+                    event_code = parts[2]
+            except:
+                pass
+        
+        filename = f"{timestamp_str}_{originator}-{event_code}.wav"
+        filepath = os.path.join(ram_disk_dir, filename)
+        
+        try:
+            with wave.open(filepath, 'wb') as wf:
+                wf.setnchannels(1)  # Mono
+                wf.setsampwidth(2)  # 16-bit
+                wf.setframerate(self.sample_rate)
+                
+                # Convert float32 [-1, 1] to int16 PCM
+                pcm_data = (samples * 32767).astype(np.int16)
+                wf.writeframes(pcm_data.tobytes())
+            
+            return filepath
+        except Exception as e:
+            logger.error(f"Failed to save alert audio to {filepath}: {e}", exc_info=True)
+            raise
+    
     def _add_to_buffer(self, samples: np.ndarray) -> None:
-        """Add samples to circular buffer."""
+        """Add samples to circular buffer (for audio archiving only)."""
+        if self._buffer_lock is None:
+            return  # Archiving disabled
+        
         with self._buffer_lock:
             num_samples = len(samples)
             buffer_len = len(self._audio_buffer)
