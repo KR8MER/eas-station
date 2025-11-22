@@ -107,6 +107,8 @@ def register_eas_monitor_routes(app: Flask, logger_instance) -> None:
                 "audio_flowing": status.get("audio_flowing", False),
                 "mode": status.get("mode", "streaming"),
                 "sample_rate": status.get("sample_rate", 0),
+                "source_sample_rate": status.get("source_sample_rate"),
+                "resample_ratio": status.get("resample_ratio"),
                 "health_percentage": status.get("health_percentage", 0),
 
                 # Streaming decoder metrics (what the UI renders today)

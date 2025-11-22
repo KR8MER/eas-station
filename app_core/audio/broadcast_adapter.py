@@ -277,6 +277,7 @@ class BroadcastAudioAdapter:
                 "queue_size": queue_size,
                 "buffer_samples": buffer_samples,
                 "buffer_seconds": buffer_seconds,
+                "sample_rate": self.sample_rate,
                 "total_reads": self._total_reads,
                 "underrun_count": self._underrun_count,
                 "underrun_rate_percent": underrun_rate,

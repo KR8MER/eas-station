@@ -4,6 +4,16 @@ All notable changes to this project are documented in this file. The format is b
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project currently
 tracks releases under the 2.x series.
 
+## [2.12.15] - 2025-11-22
+### Changed
+- Downsampled the continuous EAS monitor to 8 kHz (with automatic resampling from higher-rate sources) so SAME FSK decoding runs at an efficient rate without wasting CPU on unnecessary bandwidth.
+- Surfaced both the source and decoder sample rates in the monitor status API so operators can verify the tap is resampling correctly instead of assuming 22.05 kHz.
+
+## [2.12.14] - 2025-11-22
+### Fixed
+- Matched the streaming decoder sample rate to the active ingest source so SAME correlation and preamble detection run at the correct frequency instead of drifting off-sync when sources run at 44.1 kHz.
+- Exposed the ingest-driven sample rate in the broadcast adapter stats returned with the EAS monitor status so operators can confirm the tap is aligned with the source.
+
 ## [2.12.13] - 2025-12-05
 ### Fixed
 - Added broadcast subscription health (queue depth, underruns, last audio time) to the continuous monitor API so the dashboard shows when audio is actually flowing and operators can see the tap is healthy instead of guessing through empty fields.
