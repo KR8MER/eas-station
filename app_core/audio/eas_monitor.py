@@ -723,64 +723,49 @@ class ContinuousEASMonitor:
             adjustment_reason = []
             
             # CONDITION 1: Scans are being skipped - we're overloaded
+            # CRITICAL: For life-safety systems, we NEVER reduce scan rate
+            # If hardware can't keep up, operator MUST be alerted to upgrade
             if skip_rate > 0.05:  # More than 5% skip rate
-                adjustment_reason.append(f"high skip rate ({skip_rate:.1%})")
-                needs_adjustment = True
-                
-                # CRITICAL FIX: NEVER reduce concurrency below configured minimum
-                # The system must maintain scan coverage at all costs
-                # Option: Increase interval if scans are slow
-                if avg_scan_duration > self._dynamic_scan_interval * 0.9:
-                    self._dynamic_scan_interval = max(optimal_interval, self._dynamic_scan_interval * 1.2)
-                    adjustment_reason.append(f"increased interval to {self._dynamic_scan_interval:.2f}s")
-                # NOTE: Removed Option B that reduced concurrency - this was causing missed scans
+                logger.critical(
+                    f"🚨 CRITICAL: High scan skip rate ({skip_rate:.1%})! "
+                    f"System cannot maintain configured scan rate. "
+                    f"Avg scan time: {avg_scan_duration:.2f}s, Interval: {self._dynamic_scan_interval:.2f}s. "
+                    f"ACTION REQUIRED: Increase MAX_CONCURRENT_EAS_SCANS from {self.max_concurrent_scans} "
+                    f"or upgrade hardware. ALERT COVERAGE MAY BE COMPROMISED!"
+                )
+                # DO NOT increase interval - that reduces alert coverage
+                # DO NOT reduce workers - that makes it worse
+                # The only fix is more workers or better hardware
             
-            # CONDITION 2: Scans completing much faster than interval - we have headroom
-            elif avg_scan_duration < self._dynamic_scan_interval * 0.6 and skip_rate < 0.01:
-                adjustment_reason.append(f"fast scans ({avg_scan_duration:.2f}s < {self._dynamic_scan_interval * 0.6:.2f}s)")
-                needs_adjustment = True
-                
-                # Option A: Increase concurrency if we're not maxed out
-                if self._dynamic_max_scans < self.MAX_DYNAMIC_SCANS and queue_pressure > 0.5:
-                    self._dynamic_max_scans += 1
-                    adjustment_reason.append(f"increased concurrency to {self._dynamic_max_scans}")
-                
-                # Option B: Decrease interval to scan more frequently
-                elif self._dynamic_scan_interval > self.MIN_SCAN_INTERVAL:
-                    new_interval = max(optimal_interval, self._dynamic_scan_interval * 0.8)
-                    new_interval = max(new_interval, self.MIN_SCAN_INTERVAL)  # Hard floor
-                    if new_interval < self._dynamic_scan_interval:
-                        self._dynamic_scan_interval = new_interval
-                        adjustment_reason.append(f"decreased interval to {self._dynamic_scan_interval:.2f}s")
+            # CONDITION 2: System performing well - log success
+            elif skip_rate < 0.01 and avg_scan_duration < self._dynamic_scan_interval:
+                # System is healthy - no adjustment needed
+                # Just ensure interval hasn't drifted from configured value
+                if self._dynamic_scan_interval != self._configured_scan_interval:
+                    self._dynamic_scan_interval = self._configured_scan_interval
+                    logger.info(
+                        f"✓ EAS scanner healthy: avg_scan={avg_scan_duration:.2f}s, "
+                        f"skip_rate={skip_rate:.1%}. Reset interval to configured {self._configured_scan_interval:.2f}s"
+                    )
             
-            # CONDITION 3: System is stable but not optimal - fine tune
-            elif abs(avg_scan_duration - self._dynamic_scan_interval) > 1.0:
-                # Interval is significantly different from actual scan time
-                new_interval = optimal_interval
-                # Don't go below configured minimum
-                new_interval = max(new_interval, self._configured_scan_interval)
-                if abs(new_interval - self._dynamic_scan_interval) > 0.5:
-                    self._dynamic_scan_interval = new_interval
-                    needs_adjustment = True
-                    adjustment_reason.append(f"fine-tuned interval to {self._dynamic_scan_interval:.2f}s")
-            
-            if needs_adjustment:
-                self._last_adjustment_time = current_time
-                logger.info(
-                    f"🔄 Auto-tuning EAS scanner: {' + '.join(adjustment_reason)}. "
-                    f"Performance: avg_scan={avg_scan_duration:.2f}s, skip_rate={skip_rate:.1%}, "
-                    f"queue_pressure={queue_pressure:.0%}. "
-                    f"Current: interval={self._dynamic_scan_interval:.2f}s, "
+            # NOTE: Auto-tuning has been DISABLED for life-safety systems
+            # Previously, the system would increase scan interval when scans were slow
+            # This caused missed scans (80 instead of 200 in 10 minutes)
+            # For EAS decoders, scan rate MUST be maintained at configured value
+            # If hardware can't keep up, that's a critical error requiring operator action
                     f"max_scans={self._dynamic_max_scans}."
                 )
     
     def _get_effective_scan_interval(self) -> float:
-        """Get the current dynamically-adjusted scan interval.
+        """Get the scan interval.
+        
+        CRITICAL: For life-safety EAS systems, we ALWAYS use the configured interval.
+        Auto-tuning has been disabled because it was causing missed scans.
         
         Returns:
-            Current effective scan interval in seconds
+            Configured scan interval in seconds (never adjusted)
         """
-        return self._dynamic_scan_interval
+        return self._configured_scan_interval
     
     def _get_effective_max_concurrent_scans(self) -> int:
         """Get the current dynamically-adjusted max concurrent scans.
