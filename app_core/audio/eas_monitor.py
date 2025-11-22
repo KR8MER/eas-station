@@ -423,7 +423,7 @@ class ContinuousEASMonitor:
         logger.info(
             f"Initialized ContinuousEASMonitor: "
             f"sample_rate={sample_rate}Hz, "
-            f"streaming_mode=true, "
+            f"streaming_mode=True, "
             f"watchdog_timeout={self._watchdog_timeout}s"
         )
 

@@ -43,7 +43,7 @@
             <strong>Background Monitoring:</strong> EAS alert detection, waveform visualization, and audio level monitoring run continuously in the background, independent of web playback.
             Even if you pause or stop web playback, the system continues monitoring for alerts 24/7.
             <br>
-            <strong>Real-Time Streaming:</strong> The monitor uses a streaming decoder that processes audio samples immediately as they arrive—no buffering, no batching, no delays. Every sample is analyzed in real-time for SAME headers, matching commercial EAS decoder behavior (<200ms detection latency).
+            <strong>Real-Time Streaming:</strong> The monitor uses a streaming decoder that processes audio samples immediately as they arrive — no buffering, no batching, no delays. Every sample is analyzed in real-time for SAME headers, matching commercial EAS decoder behavior (sub-second detection latency).
         </div>
     </div>
 </div>
@@ -176,13 +176,13 @@
                         <div class="col-md-4 col-sm-6">
                             <div class="metric-item bg-light">
                                 <div class="metric-label">Detection Latency</div>
-                                <div class="metric-value" id="eas-max-workers">&lt;200ms</div>
+                                <div class="metric-value" id="eas-max-workers">Real-time</div>
                             </div>
                         </div>
                         <div class="col-md-4 col-sm-6">
                             <div class="metric-item bg-light">
-                                <div class="metric-label">CPU Usage</div>
-                                <div class="metric-value" id="eas-avg-scan-time">~5%</div>
+                                <div class="metric-label">Architecture</div>
+                                <div class="metric-value" id="eas-avg-scan-time">Streaming</div>
                             </div>
                         </div>
                     </div>
@@ -1743,92 +1743,111 @@ function updateEASMonitorDisplay(status) {
     // Update status badge
     const statusBadge = document.getElementById('eas-monitor-status-badge');
     const running = status.running || false;
+    const audioFlowing = status.audio_flowing || false;
 
     if (statusBadge) {
         if (status.error) {
             statusBadge.innerHTML = '<span class="badge bg-danger">Error</span>';
             showEASMonitorError(status.error);
+        } else if (running && audioFlowing) {
+            statusBadge.innerHTML = '<span class="badge bg-success"><i class="fas fa-broadcast-tower"></i> Streaming</span>';
         } else if (running) {
-            statusBadge.innerHTML = '<span class="badge bg-success"><i class="fas fa-circle"></i> Running</span>';
+            statusBadge.innerHTML = '<span class="badge bg-warning">Running (No Audio)</span>';
         } else {
             statusBadge.innerHTML = '<span class="badge bg-secondary">Stopped</span>';
         }
     }
 
-    // Update running status metric
+    // Update running status
     const runningStatus = document.getElementById('eas-running-status');
     if (runningStatus) {
         runningStatus.textContent = running ? '✅ Active' : '⏸️ Stopped';
         runningStatus.style.color = running ? '#28a745' : '#6c757d';
     }
 
-    // Update buffer utilization
-    const bufferUtil = status.buffer_utilization || 0;
-    const bufferPct = (bufferUtil * 100).toFixed(1);
-
+    // Update decoder health indicator
+    const healthPct = ((status.health_percentage || 0) * 100).toFixed(1);
     const bufferBar = document.getElementById('eas-buffer-bar');
     const bufferText = document.getElementById('eas-buffer-text');
     const bufferPercentage = document.getElementById('eas-buffer-percentage');
     const bufferStatus = document.getElementById('eas-buffer-status');
 
     if (bufferBar) {
-        bufferBar.style.width = `${bufferPct}%`;
-        bufferBar.setAttribute('aria-valuenow', bufferPct);
-
-        // Color code based on utilization
-        // For circular buffer: 100% = healthy (green), low = warning/problem
+        bufferBar.style.width = `${healthPct}%`;
+        bufferBar.setAttribute('aria-valuenow', healthPct);
         bufferBar.className = 'progress-bar progress-bar-striped';
+        
         if (running) {
             bufferBar.classList.add('progress-bar-animated');
         }
 
-        if (bufferUtil < 0.01) {
-            // No audio flowing
-            bufferBar.classList.add('bg-warning');
-        } else if (bufferUtil < 0.5) {
-            // Still filling up (startup or audio issues)
-            bufferBar.classList.add('bg-info');
-        } else {
-            // Normal operation (50-100% is healthy for circular buffer)
+        if (status.health_percentage >= 0.95) {
             bufferBar.classList.add('bg-success');
+        } else if (status.health_percentage >= 0.8) {
+            bufferBar.classList.add('bg-info');
+        } else if (status.health_percentage > 0) {
+            bufferBar.classList.add('bg-warning');
+        } else {
+            bufferBar.classList.add('bg-secondary');
         }
     }
 
     if (bufferText) {
-        bufferText.textContent = `${bufferPct}%`;
+        bufferText.textContent = `${healthPct}%`;
     }
 
     if (bufferPercentage) {
-        bufferPercentage.textContent = `${bufferPct}%`;
+        bufferPercentage.textContent = `${healthPct}%`;
     }
 
     if (bufferStatus) {
         if (!running) {
-            bufferStatus.innerHTML = '<i class="fas fa-pause-circle"></i> Monitor stopped';
+            bufferStatus.innerHTML = '<i class="fas fa-pause-circle"></i> Decoder stopped';
             bufferStatus.className = 'text-muted d-block mt-1';
-        } else if (bufferUtil < 0.01) {
-            bufferStatus.innerHTML = '⚠️ No audio data flowing';
+        } else if (!audioFlowing) {
+            bufferStatus.innerHTML = '⚠️ No audio flowing';
             bufferStatus.className = 'text-warning d-block mt-1';
-        } else if (bufferUtil >= 0.95) {
-            // Circular buffer at 100% is NORMAL steady-state operation
-            bufferStatus.innerHTML = '✓ Buffer full - ready for scanning';
+        } else if (status.health_percentage >= 0.95) {
+            bufferStatus.innerHTML = '✓ Processing at line rate (22.05 kHz)';
             bufferStatus.className = 'text-success d-block mt-1';
-        } else if (bufferUtil < 0.5) {
-            // Low buffer could indicate startup or audio issues
-            bufferStatus.innerHTML = '<i class="fas fa-hourglass-half"></i> Buffer filling...';
+        } else if (status.health_percentage >= 0.5) {
+            bufferStatus.innerHTML = '<i class="fas fa-hourglass-half"></i> Warming up...';
             bufferStatus.className = 'text-info d-block mt-1';
         } else {
-            bufferStatus.innerHTML = '✓ Audio flowing normally';
-            bufferStatus.className = 'text-success d-block mt-1';
+            bufferStatus.innerHTML = '⚠️ Below expected rate';
+            bufferStatus.className = 'text-warning d-block mt-1';
         }
     }
 
-    // Update metrics
+    // Update samples processed
     const scansCount = document.getElementById('eas-scans-count');
     if (scansCount) {
-        scansCount.textContent = (status.scans_performed || 0).toLocaleString();
+        const samples = status.samples_processed || 0;
+        if (samples > 1000000) {
+            scansCount.textContent = `${(samples / 1000000).toFixed(1)}M`;
+        } else if (samples > 1000) {
+            scansCount.textContent = `${(samples / 1000).toFixed(1)}K`;
+        } else {
+            scansCount.textContent = samples.toLocaleString();
+        }
     }
 
+    const scansBreakdown = document.getElementById('eas-scans-breakdown');
+    if (scansBreakdown) {
+        const runtime = status.runtime_seconds || 0;
+        const hours = Math.floor(runtime / 3600);
+        const minutes = Math.floor((runtime % 3600) / 60);
+        const seconds = Math.floor(runtime % 60);
+        if (hours > 0) {
+            scansBreakdown.textContent = `Runtime: ${hours}h ${minutes}m`;
+        } else if (minutes > 0) {
+            scansBreakdown.textContent = `Runtime: ${minutes}m ${seconds}s`;
+        } else {
+            scansBreakdown.textContent = `Runtime: ${seconds}s`;
+        }
+    }
+
+    // Update alerts detected
     const alertsCount = document.getElementById('eas-alerts-count');
     if (alertsCount) {
         const count = status.alerts_detected || 0;
@@ -1836,183 +1855,93 @@ function updateEASMonitorDisplay(status) {
         alertsCount.style.color = count > 0 ? '#28a745' : '#6c757d';
     }
 
+    // Update decoder status
     const activeScans = document.getElementById('eas-active-scans');
     if (activeScans) {
-        const active = status.active_scans || 0;
-        activeScans.textContent = active.toLocaleString();
-        activeScans.style.color = active > 0 ? '#0d6efd' : '#6c757d';
+        if (status.decoder_in_message) {
+            activeScans.innerHTML = '<span style="color: #dc3545;">🔴 Decoding Message</span>';
+        } else if (status.decoder_synced) {
+            activeScans.innerHTML = '<span style="color: #28a745;">🟢 Synced</span>';
+        } else if (audioFlowing) {
+            activeScans.innerHTML = '<span style="color: #6c757d;">⚪ Listening</span>';
+        } else {
+            activeScans.innerHTML = '<span style="color: #6c757d;">⏸️ Idle</span>';
+        }
     }
 
-    // Update details
-    const bufferDuration = document.getElementById('eas-buffer-duration');
-    if (bufferDuration) {
-        bufferDuration.textContent = status.buffer_duration ? `${status.buffer_duration.toFixed(1)}s` : '--';
+    // Update streaming details
+    const sampleRate = document.getElementById('eas-sample-rate');
+    if (sampleRate) {
+        const rate = status.sample_rate || 22050;
+        sampleRate.textContent = `${(rate / 1000).toFixed(1)} kHz`;
     }
 
     const scanInterval = document.getElementById('eas-scan-interval');
     if (scanInterval) {
-        scanInterval.textContent = status.scan_interval ? `${status.scan_interval.toFixed(1)}s` : '--';
+        const sps = status.samples_per_second || 0;
+        if (sps > 0) {
+            scanInterval.textContent = `${(sps / 1000).toFixed(1)}k samples/sec`;
+        } else {
+            scanInterval.textContent = '--';
+        }
     }
 
-    // Calculate and display overlap percentage
     const scanOverlap = document.getElementById('eas-scan-overlap');
-    if (scanOverlap && status.buffer_duration && status.scan_interval) {
-        const overlapPct = ((status.buffer_duration - status.scan_interval) / status.buffer_duration * 100);
-        const overlapText = `${overlapPct.toFixed(0)}%`;
-        scanOverlap.textContent = overlapText;
-        
-        // Color code based on overlap (green = good, yellow = warning, red = bad)
-        if (overlapPct >= 50) {
-            scanOverlap.style.color = '#28a745'; // green
-        } else if (overlapPct >= 25) {
-            scanOverlap.style.color = '#ffc107'; // yellow
+    if (scanOverlap) {
+        const runtime = status.runtime_seconds || 0;
+        const hours = Math.floor(runtime / 3600);
+        const minutes = Math.floor((runtime % 3600) / 60);
+        if (hours > 0) {
+            scanOverlap.textContent = `${hours}h ${minutes}m`;
+        } else if (minutes > 0) {
+            scanOverlap.textContent = `${minutes}m`;
         } else {
-            scanOverlap.style.color = '#dc3545'; // red
+            scanOverlap.textContent = '< 1m';
         }
     }
 
-    // Update performance metrics
-    const effectiveInterval = document.getElementById('eas-effective-interval');
-    const configuredInterval = document.getElementById('eas-configured-interval');
-    const autoTuneBadge = document.getElementById('auto-tune-badge');
-    
-    if (effectiveInterval && status.effective_scan_interval) {
-        effectiveInterval.textContent = `${status.effective_scan_interval.toFixed(1)}s`;
-        
-        // Show if auto-adjusted
-        if (status.scan_interval_auto_adjusted) {
-            effectiveInterval.style.color = '#0d6efd';
-            if (autoTuneBadge) {
-                autoTuneBadge.classList.remove('d-none');
-            }
-        } else {
-            effectiveInterval.style.color = '';
-            if (autoTuneBadge) {
-                autoTuneBadge.classList.add('d-none');
-            }
-        }
-    }
-    
-    if (configuredInterval && status.scan_interval) {
-        if (status.scan_interval_auto_adjusted) {
-            configuredInterval.textContent = `(configured: ${status.scan_interval.toFixed(1)}s)`;
-        } else {
-            configuredInterval.textContent = '';
-        }
-    }
-    
-    const maxWorkers = document.getElementById('eas-max-workers');
-    if (maxWorkers) {
-        maxWorkers.textContent = status.max_concurrent_scans || '--';
-    }
-    
-    const avgScanTime = document.getElementById('eas-avg-scan-time');
-    if (avgScanTime && status.avg_scan_duration_seconds != null) {
-        const avg = status.avg_scan_duration_seconds;
-        avgScanTime.textContent = `${avg.toFixed(2)}s`;
-        
-        // Color code: green if < interval, yellow if close, red if over
-        if (status.effective_scan_interval) {
-            if (avg < status.effective_scan_interval * 0.8) {
-                avgScanTime.style.color = '#28a745'; // Fast enough
-            } else if (avg < status.effective_scan_interval) {
-                avgScanTime.style.color = '#ffc107'; // Close
-            } else {
-                avgScanTime.style.color = '#dc3545'; // Too slow
-            }
-        }
-    } else if (avgScanTime) {
-        avgScanTime.textContent = '--';
-    }
-    
-    const scanRange = document.getElementById('eas-scan-range');
-    if (scanRange && status.min_scan_duration_seconds != null && status.max_scan_duration_seconds != null) {
-        scanRange.textContent = `${status.min_scan_duration_seconds.toFixed(1)}s - ${status.max_scan_duration_seconds.toFixed(1)}s`;
-    } else if (scanRange) {
-        scanRange.textContent = '--';
-    }
-    
-    // Performance status message
-    const perfStatus = document.getElementById('performance-status');
-    if (perfStatus) {
-        const skipped = status.scans_skipped || 0;
-        const performed = status.scans_performed || 0;
-        const skipRate = performed > 0 ? (skipped / performed * 100) : 0;
-        
-        if (!running) {
-            perfStatus.textContent = 'Monitor is stopped.';
-            perfStatus.className = 'text-muted';
-        } else if (status.scan_interval_auto_adjusted) {
-            // Build message safely without innerHTML
-            perfStatus.textContent = '';
-            perfStatus.className = 'text-info';
-            perfStatus.appendChild(document.createTextNode('System detected slower hardware and auto-adjusted scan interval from '));
-            const fromSpan = document.createElement('strong');
-            fromSpan.textContent = status.scan_interval.toFixed(1) + 's';
-            perfStatus.appendChild(fromSpan);
-            perfStatus.appendChild(document.createTextNode(' to '));
-            const toSpan = document.createElement('strong');
-            toSpan.textContent = status.effective_scan_interval.toFixed(1) + 's';
-            perfStatus.appendChild(toSpan);
-            perfStatus.appendChild(document.createTextNode(' for optimal performance.'));
-        } else if (skipRate > 5) {
-            perfStatus.textContent = `Scan queue is backing up (${skipRate.toFixed(1)}% skip rate). System will auto-tune.`;
-            perfStatus.className = 'text-warning';
-        } else if (skipped > 0) {
-            perfStatus.textContent = `Operating normally with occasional queue pressure (${skipped} skipped).`;
-            perfStatus.className = 'text-success';
-        } else {
-            perfStatus.textContent = 'System running optimally with no skipped scans.';
-            perfStatus.className = 'text-success';
-        }
+    const bufferDuration = document.getElementById('eas-buffer-duration');
+    if (bufferDuration) {
+        const bytes = status.decoder_bytes_decoded || 0;
+        bufferDuration.textContent = bytes.toLocaleString();
     }
 
-    const sampleRate = document.getElementById('eas-sample-rate');
-    if (sampleRate) {
-        sampleRate.textContent = status.sample_rate ? `${(status.sample_rate / 1000).toFixed(1)} kHz` : '--';
-    }
-
+    // Update last scan/alert times
     const lastScan = document.getElementById('eas-last-scan');
     if (lastScan) {
-        if (status.last_scan_time) {
-            const elapsed = Math.floor(Date.now() / 1000 - status.last_scan_time);
-            lastScan.textContent = formatTimeAgo(elapsed);
+        if (status.decoder_synced) {
+            lastScan.innerHTML = '<span style="color: #28a745;">✓ Yes</span>';
         } else {
-            lastScan.textContent = 'Never';
+            lastScan.innerHTML = '<span style="color: #6c757d;">No</span>';
         }
     }
 
     const lastAlert = document.getElementById('eas-last-alert');
-    if (lastAlert) {
-        if (status.last_alert_time) {
-            const elapsed = Math.floor(Date.now() / 1000 - status.last_alert_time);
-            lastAlert.textContent = formatTimeAgo(elapsed);
-            lastAlert.style.color = '#28a745';
-            lastAlert.style.fontWeight = 'bold';
+    if (lastAlert && status.last_alert_time) {
+        const alertTime = new Date(status.last_alert_time * 1000);
+        const now = new Date();
+        const diffMinutes = Math.floor((now - alertTime) / 60000);
+        if (diffMinutes < 1) {
+            lastAlert.textContent = 'Just now';
+        } else if (diffMinutes < 60) {
+            lastAlert.textContent = `${diffMinutes}m ago`;
         } else {
-            lastAlert.textContent = 'None';
-            lastAlert.style.color = '';
-            lastAlert.style.fontWeight = '';
+            const diffHours = Math.floor(diffMinutes / 60);
+            lastAlert.textContent = `${diffHours}h ago`;
         }
+        lastAlert.style.color = diffMinutes < 60 ? '#28a745' : '#6c757d';
+    } else if (lastAlert) {
+        lastAlert.textContent = 'Never';
+        lastAlert.style.color = '#6c757d';
     }
 
     const scanWarnings = document.getElementById('eas-scan-warnings');
     if (scanWarnings) {
-        const warnings = status.scan_warnings || 0;
-        scanWarnings.textContent = warnings.toLocaleString();
-        scanWarnings.style.color = warnings > 0 ? '#dc3545' : '#28a745';
-    }
-
-    // Update control buttons
-    const startBtn = document.getElementById('eas-start-btn');
-    const stopBtn = document.getElementById('eas-stop-btn');
-
-    if (startBtn) {
-        startBtn.disabled = running || status.error;
-    }
-
-    if (stopBtn) {
-        stopBtn.disabled = !running || status.error;
+        if (status.decoder_in_message) {
+            scanWarnings.innerHTML = '<span style="color: #dc3545;">Yes</span>';
+        } else {
+            scanWarnings.innerHTML = '<span style="color: #28a745;">No</span>';
+        }
     }
 }
 
