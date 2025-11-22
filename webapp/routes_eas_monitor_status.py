@@ -153,7 +153,7 @@ def register_eas_monitor_routes(app: Flask, logger_instance) -> None:
             return jsonify({
                 "history": history,
                 "sample_rate": monitor.sample_rate,
-                "buffer_duration": monitor.buffer_duration
+                "mode": "streaming"
             })
 
         except Exception as e:

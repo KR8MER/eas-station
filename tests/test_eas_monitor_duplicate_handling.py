@@ -52,8 +52,6 @@ def _build_decode_result(raw_text: str) -> SAMEAudioDecodeResult:
 def _create_monitor() -> ContinuousEASMonitor:
     monitor = ContinuousEASMonitor(
         audio_manager=DummyAudioManager(),
-        buffer_duration=1.0,
-        scan_interval=1.0,
         save_audio_files=False,
     )
     monitor.alert_callback = MagicMock()
