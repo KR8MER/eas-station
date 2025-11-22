@@ -1643,6 +1643,7 @@ def api_get_audio_health():
         return jsonify({'error': str(exc)}), 500
 
 @audio_ingest_bp.route('/api/audio/alerts', methods=['GET'])
+@cache.cached(timeout=10, query_string=True, key_prefix='audio_alerts')
 def api_get_audio_alerts():
     """Get audio system alerts."""
     try:
