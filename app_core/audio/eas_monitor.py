@@ -562,6 +562,7 @@ class ContinuousEASMonitor:
             "samples_processed": samples_processed,
             "samples_per_second": int(samples_per_second),
             "runtime_seconds": runtime_seconds,
+            "wall_clock_runtime_seconds": actual_elapsed,  # Real elapsed time for UI display
             "decoder_synced": decoder_stats['synced'],
             "decoder_in_message": decoder_stats['in_message'],
             "decoder_bytes_decoded": decoder_stats['bytes_decoded'],
