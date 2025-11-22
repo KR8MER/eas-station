@@ -533,6 +533,22 @@ class AudioIngestController:
         """
         return self._broadcast_queue
 
+    def get_active_sample_rate(self) -> Optional[int]:
+        """Return the current active source sample rate (or first configured rate)."""
+        with self._lock:
+            active = self._active_source
+            if active and active in self._sources:
+                metrics = self._sources[active].metrics
+                if metrics and metrics.sample_rate:
+                    return int(metrics.sample_rate)
+
+            # Fall back to the first configured source's sample rate if active is unknown
+            for adapter in self._sources.values():
+                if adapter.config.sample_rate:
+                    return int(adapter.config.sample_rate)
+
+        return None
+
     def get_source_metrics(self, name: str) -> Optional[AudioMetrics]:
         """Get metrics for a specific source."""
         with self._lock:

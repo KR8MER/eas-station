@@ -69,16 +69,34 @@ def initialize_eas_monitor(audio_manager, alert_callback=None, auto_start=True) 
             if isinstance(audio_manager, AudioIngestController):
                 logger.info("Creating BroadcastAudioAdapter for EAS monitor (non-destructive subscription)")
                 broadcast_queue = audio_manager.get_broadcast_queue()
+
+                # Align the monitor's decoder sample rate with the active ingest source so
+                # correlation and preamble detection run at the correct frequency. Falling
+                # back to 22050 Hz preserves legacy behavior when no sources are active yet.
+                ingest_sample_rate = audio_manager.get_active_sample_rate() or 22050
+
                 audio_manager = BroadcastAudioAdapter(
                     broadcast_queue=broadcast_queue,
                     subscriber_id="eas-monitor",
-                    sample_rate=22050
+                    sample_rate=int(ingest_sample_rate)
                 )
-                logger.info(f"EAS monitor subscribed to broadcast queue: {broadcast_queue.name}")
+                logger.info(
+                    f"EAS monitor subscribed to broadcast queue: {broadcast_queue.name} "
+                    f"(sample_rate={ingest_sample_rate})"
+                )
+
+                # SAME only needs a few kilohertz of bandwidth. Decode at 8 kHz to reduce
+                # CPU usage while preserving fidelity. Do not upsample if the source is
+                # already lower than that (e.g., low-bitrate sources).
+                target_sample_rate = 8000
+                if ingest_sample_rate and ingest_sample_rate < target_sample_rate:
+                    target_sample_rate = int(ingest_sample_rate)
+            else:
+                target_sample_rate = 8000
 
             _monitor_instance = ContinuousEASMonitor(
                 audio_manager=audio_manager,
-                sample_rate=22050,
+                sample_rate=target_sample_rate,
                 alert_callback=alert_callback,
                 save_audio_files=True,
                 audio_archive_dir="/tmp/eas-audio"
