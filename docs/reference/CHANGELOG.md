@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file. The format is b
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project currently
 tracks releases under the 2.x series.
 
+## [2.12.13] - 2025-12-05
+### Fixed
+- Added broadcast subscription health (queue depth, underruns, last audio time) to the continuous monitor API so the dashboard shows when audio is actually flowing and operators can see the tap is healthy instead of guessing through empty fields.
+- Throttled repetitive buffer underrun warnings from the monitor's broadcast adapter while still counting them for visibility, preventing log spam when sources are temporarily quiet.
+- Exposed broadcast queue stats and the currently active source in `/api/audio/metrics` so VU meters can distinguish "no signal" from transport failures and display accurate runtime state.
+
 ## [2.12.12] - 2025-12-05
 ### Fixed
 - Filled the continuous monitor status API with the streaming decoder's health, rate, and sync metrics so every dashboard field renders and operators can confirm the monitor is actively processing audio.

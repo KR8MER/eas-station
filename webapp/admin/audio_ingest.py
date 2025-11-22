@@ -1522,10 +1522,14 @@ def api_get_audio_metrics():
                 'timestamp': metric.timestamp.isoformat() if metric.timestamp else None,
             })
 
+        broadcast_stats = controller.get_broadcast_queue().get_stats()
+
         return jsonify({
             'live_metrics': source_metrics,
             'recent_metrics': db_metrics_list,
             'total_sources': len(source_metrics),
+            'active_source': controller.get_active_source(),
+            'broadcast_stats': broadcast_stats,
         })
 
     except Exception as exc:

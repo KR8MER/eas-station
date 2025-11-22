@@ -26,6 +26,7 @@ copy of audio data.
 """
 
 import logging
+import time
 import numpy as np
 import threading
 from typing import Optional
@@ -74,6 +75,8 @@ class BroadcastAudioAdapter:
         # Statistics for monitoring audio continuity
         self._underrun_count = 0
         self._total_reads = 0
+        self._last_underrun_log = 0.0
+        self._last_audio_time: Optional[float] = None
 
         logger.info(
             f"BroadcastAudioAdapter '{subscriber_id}' subscribed to '{broadcast_queue.name}'"
@@ -105,11 +108,19 @@ class BroadcastAudioAdapter:
                     if len(self._buffer) < num_samples:
                         # Buffer underrun - log warning for monitoring
                         self._underrun_count += 1
-                        logger.warning(
-                            f"{self.subscriber_id}: Buffer underrun #{self._underrun_count}! "
-                            f"Requested {num_samples} samples, only have {len(self._buffer)} "
-                            f"(queue empty after timeout, {self._underrun_count}/{self._total_reads} underruns)"
-                        )
+                        now = time.time()
+                        # Throttle noisy underrun warnings while still surfacing trends
+                        if (
+                            self._underrun_count <= 3
+                            or self._underrun_count % 50 == 0
+                            or (now - self._last_underrun_log) >= 10.0
+                        ):
+                            logger.warning(
+                                f"{self.subscriber_id}: Buffer underrun #{self._underrun_count}! "
+                                f"Requested {num_samples} samples, only have {len(self._buffer)} "
+                                f"(queue empty after timeout, {self._underrun_count}/{self._total_reads} underruns)"
+                            )
+                            self._last_underrun_log = now
                         return None
                     break
 
@@ -125,6 +136,7 @@ class BroadcastAudioAdapter:
 
                 # Append chunk to buffer
                 self._buffer = np.concatenate([self._buffer, chunk])
+                self._last_audio_time = time.time()
 
                 # Limit buffer size to prevent unbounded growth
                 # Keep max 5 seconds worth of audio
@@ -183,9 +195,10 @@ class BroadcastAudioAdapter:
                     if len(self._buffer) < chunk_samples:
                         return None
                     break
-                
+
                 # Append chunk to buffer
                 self._buffer = np.concatenate([self._buffer, chunk])
+                self._last_audio_time = time.time()
                 
                 # Limit buffer size to prevent unbounded growth
                 # Keep max 5 seconds worth of audio
@@ -267,6 +280,7 @@ class BroadcastAudioAdapter:
                 "total_reads": self._total_reads,
                 "underrun_count": self._underrun_count,
                 "underrun_rate_percent": underrun_rate,
+                "last_audio_time": self._last_audio_time,
                 "health": "good" if underrun_rate < 1.0 else "degraded" if underrun_rate < 5.0 else "poor"
             }
 

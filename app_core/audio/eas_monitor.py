@@ -530,6 +530,13 @@ class ContinuousEASMonitor:
         expected_rate = self.sample_rate
         health_percentage = min(1.0, samples_per_second / expected_rate) if audio_flowing else 0.0
         
+        adapter_stats = {}
+        if hasattr(self.audio_manager, "get_stats"):
+            try:
+                adapter_stats = self.audio_manager.get_stats()
+            except Exception:
+                adapter_stats = {}
+
         return {
             # System state
             "running": is_running,
@@ -554,7 +561,17 @@ class ContinuousEASMonitor:
             "last_activity": last_activity,
             "time_since_activity": time_since_activity,
             "restart_count": self._restart_count,
-            "watchdog_timeout": self._watchdog_timeout
+            "watchdog_timeout": self._watchdog_timeout,
+
+            # Audio adapter stats (broadcast subscription health)
+            "audio_buffer_samples": adapter_stats.get("buffer_samples"),
+            "audio_buffer_seconds": adapter_stats.get("buffer_seconds"),
+            "audio_queue_depth": adapter_stats.get("queue_size"),
+            "audio_underruns": adapter_stats.get("underrun_count"),
+            "audio_underrun_rate_percent": adapter_stats.get("underrun_rate_percent"),
+            "audio_last_audio_time": adapter_stats.get("last_audio_time"),
+            "audio_health": adapter_stats.get("health"),
+            "audio_subscriber_id": adapter_stats.get("subscriber_id"),
         }
 
     def get_buffer_history(self, max_points: int = 60) -> list:

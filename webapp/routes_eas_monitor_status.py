@@ -148,6 +148,16 @@ def register_eas_monitor_routes(app: Flask, logger_instance) -> None:
                 "max_scan_duration_seconds": status.get("max_scan_duration_seconds"),
                 "last_scan_duration_seconds": status.get("last_scan_duration_seconds"),
                 "scan_history_size": status.get("scan_history_size", 0),
+
+                # Audio subscription health (lets operators see underruns/last audio)
+                "audio_buffer_samples": status.get("audio_buffer_samples"),
+                "audio_buffer_seconds": status.get("audio_buffer_seconds"),
+                "audio_queue_depth": status.get("audio_queue_depth"),
+                "audio_underruns": status.get("audio_underruns"),
+                "audio_underrun_rate_percent": status.get("audio_underrun_rate_percent"),
+                "audio_last_audio_time": status.get("audio_last_audio_time"),
+                "audio_health": status.get("audio_health"),
+                "audio_subscriber_id": status.get("audio_subscriber_id"),
             }
 
             # Surface whether the route needed to self-heal the monitor
