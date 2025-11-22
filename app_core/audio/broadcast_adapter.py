@@ -51,7 +51,7 @@ class BroadcastAudioAdapter:
         self,
         broadcast_queue: BroadcastQueue,
         subscriber_id: str,
-        sample_rate: int = 16000  # Optimal rate for SAME decoding (was 22050)
+        sample_rate: int = 44100  # Native sample rate from audio sources
     ):
         """
         Initialize broadcast adapter.
@@ -59,7 +59,7 @@ class BroadcastAudioAdapter:
         Args:
             broadcast_queue: BroadcastQueue instance to subscribe to
             subscriber_id: Unique ID for this subscription (e.g., "eas-monitor")
-            sample_rate: Expected sample rate for calculations (default 16000 Hz)
+            sample_rate: Expected sample rate from audio sources (native stream rate)
         """
         self.broadcast_queue = broadcast_queue
         self.subscriber_id = subscriber_id

@@ -39,7 +39,7 @@ class DemodulatorConfig:
     """Configuration for audio demodulator."""
     modulation_type: str  # 'FM', 'WFM', 'NFM', 'AM', 'IQ'
     sample_rate: int  # Input sample rate (Hz)
-    audio_sample_rate: int = 16000  # Output audio sample rate (16 kHz optimal for SAME, was 44100)
+    audio_sample_rate: int = 44100  # Output audio sample rate (native for streams/outputs)
     stereo_enabled: bool = True  # Enable FM stereo decoding
     deemphasis_us: float = 75.0  # De-emphasis time constant (75μs NA, 50μs EU, 0 to disable)
     enable_rbds: bool = False  # Extract RBDS data from FM multiplex

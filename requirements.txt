@@ -59,9 +59,10 @@ pytest-asyncio==0.24.0  # For async test support
 pyttsx3==2.90  # Offline text-to-speech engine for the pyttsx3 provider
 
 # Audio processing for EAS decoding
-scipy==1.14.1  # Required for audio resampling when ffmpeg is not available
+scipy==1.14.1  # Optional: Advanced signal processing (not used for EAS resampling)
 pydub==0.25.1  # Audio stream decoding (MP3, AAC, OGG) for HTTP/Icecast streams
 # Note: pydub requires ffmpeg to be installed via system packages (libavcodec, libavformat)
+# Note: EAS monitor uses numpy's linear interpolation for efficient resampling on Raspberry Pi
 
 # SDR support for radio receivers
 numpy==2.2.1  # Required for SoapySDR sample processing

@@ -70,11 +70,10 @@ def initialize_eas_monitor(audio_manager, alert_callback=None, auto_start=True) 
                 logger.info("Creating BroadcastAudioAdapter for EAS monitor (non-destructive subscription)")
                 broadcast_queue = audio_manager.get_broadcast_queue()
 
-                # Get the active ingest source sample rate. Default to 16000 Hz which is
-                # the optimal rate for SAME decoding (7.7× Nyquist margin, 100% reliability).
-                # This rate was chosen based on extensive testing documented in
-                # SAMPLE_RATE_OPTIMIZATION_COMPLETE.md
-                ingest_sample_rate = audio_manager.get_active_sample_rate() or 16000
+                # Get the active ingest source sample rate (the NATIVE rate of the audio stream).
+                # Streams can be whatever rate they need (44.1k, 48k, etc.)
+                # Default to 44100 Hz if no sources are configured yet
+                ingest_sample_rate = audio_manager.get_active_sample_rate() or 44100
 
                 audio_manager = BroadcastAudioAdapter(
                     broadcast_queue=broadcast_queue,
@@ -83,11 +82,12 @@ def initialize_eas_monitor(audio_manager, alert_callback=None, auto_start=True) 
                 )
                 logger.info(
                     f"EAS monitor subscribed to broadcast queue: {broadcast_queue.name} "
-                    f"(sample_rate={ingest_sample_rate}Hz)"
+                    f"(source_sample_rate={ingest_sample_rate}Hz)"
                 )
 
-                # CRITICAL: Use 16 kHz for SAME decoding (optimal rate with 7.7× Nyquist margin).
-                # The EAS monitor will resample from ingest_sample_rate to this decoder rate.
+                # CRITICAL: The EAS decoder MUST use 16 kHz (optimal rate with 7.7× Nyquist margin).
+                # The EAS monitor will RESAMPLE from ingest_sample_rate to this 16 kHz decoder rate.
+                # Streams keep their native sample rates - only the EAS decoder input is resampled.
                 # DO NOT use 8 kHz - testing shows it's below recommended margins for production.
                 # See SAMPLE_RATE_OPTIMIZATION_COMPLETE.md for full analysis.
                 target_sample_rate = 16000
