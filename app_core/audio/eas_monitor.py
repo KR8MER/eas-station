@@ -351,6 +351,9 @@ class ContinuousEASMonitor:
     for SAME headers. When alerts are detected, triggers callbacks and
     stores to database.
     """
+    
+    # Minimum elapsed time for rate calculation (prevents division by zero on startup)
+    MIN_ELAPSED_SECONDS = 0.1
 
     def __init__(
         self,
@@ -420,6 +423,9 @@ class ContinuousEASMonitor:
         self._watchdog_timeout: float = 60.0  # Seconds before considering thread stalled
         self._restart_count: int = 0
         
+        # Track actual start time for accurate rate calculation
+        self._start_time: Optional[float] = None
+        
         logger.info(
             f"Initialized ContinuousEASMonitor: "
             f"sample_rate={sample_rate}Hz, "
@@ -440,6 +446,7 @@ class ContinuousEASMonitor:
 
         self._stop_event.clear()
         self._update_activity()  # Initialize activity timestamp
+        self._start_time = time.time()  # Record actual start time
 
         # Start streaming monitor thread
         self._monitor_thread = threading.Thread(
@@ -467,6 +474,7 @@ class ContinuousEASMonitor:
         """Stop continuous monitoring."""
         logger.info("Stopping continuous EAS monitoring")
         self._stop_event.set()
+        self._start_time = None  # Clear start time
 
         # Wait for monitor thread
         if self._monitor_thread:
@@ -496,11 +504,16 @@ class ContinuousEASMonitor:
         audio_flowing = decoder_stats['samples_processed'] > 0
         samples_processed = decoder_stats['samples_processed']
         
-        # Calculate how long decoder has been running based on samples
-        if audio_flowing:
+        # Calculate how long decoder has been running based on WALL CLOCK TIME
+        # This gives us the true instantaneous processing rate
+        if audio_flowing and self._start_time is not None:
+            actual_elapsed = time.time() - self._start_time
+            # Calculate actual samples per second based on wall clock time
+            samples_per_second = samples_processed / max(actual_elapsed, self.MIN_ELAPSED_SECONDS)
+            # Runtime in terms of audio content (how many seconds of audio we've processed)
             runtime_seconds = samples_processed / self.sample_rate
-            samples_per_second = samples_processed / max(runtime_seconds, 1.0)
         else:
+            actual_elapsed = 0
             runtime_seconds = 0
             samples_per_second = 0
         

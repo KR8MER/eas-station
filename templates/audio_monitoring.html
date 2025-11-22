@@ -158,9 +158,6 @@
                 <div class="mt-3 pt-3 border-top">
                     <h6 class="mb-3">
                         <i class="fas fa-tachometer-alt"></i> Streaming Performance
-                        <span id="auto-tune-badge" class="badge bg-success ms-2" title="Real-time streaming mode active">
-                            <i class="fas fa-broadcast-tower"></i> Real-Time
-                        </span>
                     </h6>
                     
                     <div class="row g-3">
@@ -184,6 +181,16 @@
                                 <div class="metric-label">Architecture</div>
                                 <div class="metric-value" id="eas-avg-scan-time">Streaming</div>
                             </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row g-3 mt-2">
+                        <div class="col-12">
+                            <small class="text-muted">
+                                <i class="fas fa-info-circle"></i>
+                                <strong>Decoder Status:</strong>
+                                <span id="performance-status">Loading...</span>
+                            </small>
                         </div>
                     </div>
                 </div>
@@ -1931,6 +1938,32 @@ function updateEASMonitorDisplay(status) {
             scanWarnings.innerHTML = '<span style="color: #dc3545;">Yes</span>';
         } else {
             scanWarnings.innerHTML = '<span style="color: #28a745;">No</span>';
+        }
+    }
+
+    // Update streaming performance status message
+    const performanceStatus = document.getElementById('performance-status');
+    if (performanceStatus) {
+        if (!running) {
+            performanceStatus.textContent = 'Monitor stopped. Start monitoring to see real-time performance.';
+            performanceStatus.style.color = '#6c757d';
+        } else if (!audioFlowing) {
+            performanceStatus.textContent = 'Waiting for audio data from sources. Configure and start audio sources to begin processing.';
+            performanceStatus.style.color = '#856404';
+        } else {
+            // Audio is flowing - show processing rate
+            const sps = status.samples_per_second || 0;
+            const expectedRate = status.sample_rate || 22050;
+            const percentage = expectedRate > 0 ? ((sps / expectedRate) * 100).toFixed(1) : 0;
+            
+            if (status.health_percentage >= 0.95) {
+                performanceStatus.innerHTML = `<span style="color: #28a745;">✓ Processing at ${percentage}% of line rate (${(sps / 1000).toFixed(1)}k samples/sec). Real-time streaming active.</span>`;
+            } else if (status.health_percentage >= 0.8) {
+                performanceStatus.innerHTML = `<span style="color: #0c5460;">Processing at ${percentage}% of line rate (${(sps / 1000).toFixed(1)}k samples/sec). Building up to full rate...</span>`;
+            } else {
+                // Below 80% health - show warning
+                performanceStatus.innerHTML = `<span style="color: #856404;">⚠️ Processing at ${percentage}% of expected rate (${(sps / 1000).toFixed(1)}k samples/sec). Check audio sources.</span>`;
+            }
         }
     }
 }
