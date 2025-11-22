@@ -1196,10 +1196,24 @@ class ContinuousEASMonitor:
                     logger.debug(f"Error cleaning up temp file {temp_wav}: {cleanup_error}")
 
     def _save_to_temp_wav(self, samples: np.ndarray) -> str:
-        """Save samples to temporary WAV file with error handling."""
+        """Save samples to temporary WAV file in RAM disk.
+        
+        Uses /dev/shm (tmpfs RAM disk) for zero disk I/O.
+        This is standard practice for high-frequency temp file operations.
+        """
         try:
-            # Create temp file
-            fd, temp_path = tempfile.mkstemp(suffix=".wav", prefix="eas_scan_")
+            # CRITICAL: Use /dev/shm (RAM disk) instead of /tmp (disk)
+            # This eliminates disk I/O latency and wear
+            # /dev/shm is a tmpfs mount guaranteed to be in RAM on Linux
+            ram_disk_dir = "/dev/shm"
+            os.makedirs(ram_disk_dir, exist_ok=True)
+            
+            # Create temp file in RAM
+            fd, temp_path = tempfile.mkstemp(
+                suffix=".wav", 
+                prefix="eas_scan_", 
+                dir=ram_disk_dir
+            )
             os.close(fd)
 
             # Write WAV file
