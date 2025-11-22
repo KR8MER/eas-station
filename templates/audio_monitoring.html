@@ -1951,6 +1951,7 @@ function updateEASMonitorDisplay(status) {
             performanceStatus.textContent = 'Waiting for audio data from sources. Configure and start audio sources to begin processing.';
             performanceStatus.style.color = '#856404';
         } else {
+            // Audio is flowing - show processing rate
             const sps = status.samples_per_second || 0;
             const expectedRate = status.sample_rate || 22050;
             const percentage = expectedRate > 0 ? ((sps / expectedRate) * 100).toFixed(1) : 0;
@@ -1959,11 +1960,9 @@ function updateEASMonitorDisplay(status) {
                 performanceStatus.innerHTML = `<span style="color: #28a745;">✓ Processing at ${percentage}% of line rate (${(sps / 1000).toFixed(1)}k samples/sec). Real-time streaming active.</span>`;
             } else if (status.health_percentage >= 0.8) {
                 performanceStatus.innerHTML = `<span style="color: #0c5460;">Processing at ${percentage}% of line rate (${(sps / 1000).toFixed(1)}k samples/sec). Building up to full rate...</span>`;
-            } else if (audioFlowing) {
-                performanceStatus.innerHTML = `<span style="color: #856404;">⚠️ Processing at ${percentage}% of expected rate (${(sps / 1000).toFixed(1)}k samples/sec). Check audio sources.</span>`;
             } else {
-                performanceStatus.textContent = 'No audio data received yet. Check audio source configuration.';
-                performanceStatus.style.color = '#856404';
+                // Below 80% health - show warning
+                performanceStatus.innerHTML = `<span style="color: #856404;">⚠️ Processing at ${percentage}% of expected rate (${(sps / 1000).toFixed(1)}k samples/sec). Check audio sources.</span>`;
             }
         }
     }

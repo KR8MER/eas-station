@@ -351,6 +351,9 @@ class ContinuousEASMonitor:
     for SAME headers. When alerts are detected, triggers callbacks and
     stores to database.
     """
+    
+    # Minimum elapsed time for rate calculation (prevents division by zero on startup)
+    MIN_ELAPSED_SECONDS = 0.1
 
     def __init__(
         self,
@@ -506,7 +509,7 @@ class ContinuousEASMonitor:
         if audio_flowing and self._start_time is not None:
             actual_elapsed = time.time() - self._start_time
             # Calculate actual samples per second based on wall clock time
-            samples_per_second = samples_processed / max(actual_elapsed, 0.1)
+            samples_per_second = samples_processed / max(actual_elapsed, self.MIN_ELAPSED_SECONDS)
             # Runtime in terms of audio content (how many seconds of audio we've processed)
             runtime_seconds = samples_processed / self.sample_rate
         else:
