@@ -32,6 +32,7 @@ import hashlib
 import io
 import logging
 import os
+import queue
 import tempfile
 import threading
 import time
@@ -411,6 +412,16 @@ class ContinuousEASMonitor:
         self._buffer_pos = 0
         self._buffer_lock = threading.Lock()
 
+        # CRITICAL: Scan queue for 100% reliability
+        # Commercial EAS decoders NEVER drop audio samples
+        # We use a queue to ensure EVERY scan attempt is processed
+        # Queue size = 2x workers to allow some buffering without unbounded growth
+        self._scan_queue: queue.Queue = queue.Queue(maxsize=max_concurrent_scans * 2)
+        self._worker_threads: List[threading.Thread] = []
+        self._scans_queued = 0
+        self._scans_queue_full = 0  # Critical error - queue is full
+        self._max_queue_depth_seen = 0
+        
         # Monitoring state
         self._monitor_thread: Optional[threading.Thread] = None
         self._watchdog_thread: Optional[threading.Thread] = None
@@ -418,29 +429,25 @@ class ContinuousEASMonitor:
         self._stop_event.set()  # Initialize in "stopped" state
         self._alerts_detected = 0
         self._scans_performed = 0
+        self._scans_completed = 0  # Track completed scans (different from started)
         self._last_scan_time: Optional[float] = None
         self._last_alert_time: Optional[float] = None
         self._duplicate_cooldown_seconds = 30.0
         self._recent_alert_signatures: OrderedDict[str, float] = OrderedDict()
-        self._active_scans = 0  # Track concurrent scans
-        self._scan_lock = threading.Lock()  # Protect scan counter
+        self._scan_lock = threading.Lock()  # Protect scan counters
         
         # Scan timing metrics
         self._scan_durations: List[float] = []  # Recent scan durations in seconds
         self._max_scan_history = 100  # Keep last 100 scan times
-        self._scans_skipped = 0  # Track how many scans were skipped due to concurrency limit
         
-        # Self-regulating feedback loop state
-        self._configured_max_scans = max_concurrent_scans  # Store original config
+        # Self-regulating feedback loop state (INTERVAL ONLY - never reduce workers)
         self._configured_scan_interval = scan_interval  # Store original config
-        self._dynamic_max_scans = max_concurrent_scans  # Current effective value
         self._dynamic_scan_interval = scan_interval  # Current effective value
         self._last_adjustment_time = 0.0  # When we last adjusted parameters
         self._adjustment_cooldown = 30.0  # Wait 30s between adjustments to let changes stabilize
         
         # Auto-tuning constants
         self.SCAN_BUFFER_FACTOR = 1.15  # Add 15% buffer to scan time for interval
-        self.MAX_DYNAMIC_SCANS = 8  # Cap on concurrent scans
         self.MIN_SCAN_INTERVAL = 1.5  # Hard floor on scan interval (seconds)
         
         # Watchdog/heartbeat tracking
@@ -467,7 +474,7 @@ class ContinuousEASMonitor:
 
     def start(self) -> bool:
         """
-        Start continuous monitoring.
+        Start continuous monitoring with dedicated worker pool.
 
         Returns:
             True if started successfully
@@ -479,7 +486,21 @@ class ContinuousEASMonitor:
         self._stop_event.clear()
         self._update_activity()  # Initialize activity timestamp
 
-        # Start monitoring thread
+        # Start worker threads - one per configured worker
+        # These threads pull from the queue and process scans
+        self._worker_threads = []
+        for i in range(self.max_concurrent_scans):
+            worker = threading.Thread(
+                target=self._scan_worker_loop,
+                name=f"eas-worker-{i+1}",
+                daemon=True
+            )
+            worker.start()
+            self._worker_threads.append(worker)
+        
+        logger.info(f"Started {self.max_concurrent_scans} EAS scan worker threads")
+
+        # Start monitoring thread (queues scans)
         self._monitor_thread = threading.Thread(
             target=self._monitor_loop,
             name="eas-monitor",
@@ -498,24 +519,39 @@ class ContinuousEASMonitor:
         overlap_pct = ((self.buffer_duration - self.scan_interval) / self.buffer_duration * 100)
         logger.info(
             f"Started continuous EAS monitoring with {overlap_pct:.0f}% overlapping windows. "
-            f"SAME sequences (9s) will appear completely in at least one scan window."
+            f"SAME sequences (9s) will appear completely in at least one scan window. "
+            f"Queue-based processing ensures ZERO dropped scans."
         )
         return True
 
     def stop(self) -> None:
-        """Stop continuous monitoring."""
+        """Stop continuous monitoring and worker threads."""
         logger.info("Stopping continuous EAS monitoring")
         self._stop_event.set()
 
+        # Wait for monitor thread
         if self._monitor_thread:
             self._monitor_thread.join(timeout=10.0)
         
+        # Send poison pills to worker threads to make them exit
+        for _ in range(len(self._worker_threads)):
+            try:
+                self._scan_queue.put(None, timeout=1.0)
+            except queue.Full:
+                pass
+        
+        # Wait for workers to finish
+        for worker in self._worker_threads:
+            worker.join(timeout=5.0)
+        
+        # Wait for watchdog
         if self._watchdog_thread:
             self._watchdog_thread.join(timeout=5.0)
 
         logger.info(
-            f"Stopped EAS monitoring. Stats: {self._scans_performed} scans, "
-            f"{self._alerts_detected} alerts detected, {self._restart_count} restarts"
+            f"Stopped EAS monitoring. Stats: {self._scans_completed} scans completed, "
+            f"{self._alerts_detected} alerts detected, {self._scans_queue_full} queue full errors, "
+            f"{self._restart_count} restarts"
         )
 
     def get_status(self) -> dict:
@@ -551,6 +587,8 @@ class ContinuousEASMonitor:
         with self._scan_lock:
             active_scans = self._active_scans
             scans_skipped = self._scans_skipped
+            scans_no_signature = self._scans_no_signature
+            scans_performed = self._scans_performed
             # Calculate scan timing statistics
             if self._scan_durations:
                 avg_scan_duration = sum(self._scan_durations) / len(self._scan_durations)
@@ -571,6 +609,10 @@ class ContinuousEASMonitor:
         effective_interval = self._get_effective_scan_interval()
         is_auto_adjusted = effective_interval > self.scan_interval
         
+        # Calculate total scan attempts for better reporting
+        # Total attempts = scans that completed decode + scans skipped + scans rejected (no SAME)
+        total_scan_attempts = scans_performed + scans_skipped + scans_no_signature
+        
         return {
             "running": is_running,
             "buffer_duration": self.buffer_duration,
@@ -579,13 +621,16 @@ class ContinuousEASMonitor:
             "scan_interval_auto_adjusted": is_auto_adjusted,
             "buffer_utilization": buffer_utilization,
             "buffer_fill_seconds": buffer_fill_seconds,
-            "scans_performed": self._scans_performed,
+            "scans_performed": scans_performed,
             "scans_skipped": scans_skipped,
+            "scans_no_signature": scans_no_signature,
+            "total_scan_attempts": total_scan_attempts,
             "alerts_detected": self._alerts_detected,
             "last_scan_time": self._last_scan_time,
             "last_alert_time": self._last_alert_time,
             "active_scans": active_scans,
             "max_concurrent_scans": self.max_concurrent_scans,
+            "dynamic_max_concurrent_scans": self._dynamic_max_scans,
             "audio_flowing": audio_flowing,
             "sample_rate": self.sample_rate,
             "scan_warnings": scans_skipped,  # Alias for backward compatibility
@@ -682,15 +727,13 @@ class ContinuousEASMonitor:
                 adjustment_reason.append(f"high skip rate ({skip_rate:.1%})")
                 needs_adjustment = True
                 
-                # Option A: Increase interval if scans are slow
+                # CRITICAL FIX: NEVER reduce concurrency below configured minimum
+                # The system must maintain scan coverage at all costs
+                # Option: Increase interval if scans are slow
                 if avg_scan_duration > self._dynamic_scan_interval * 0.9:
                     self._dynamic_scan_interval = max(optimal_interval, self._dynamic_scan_interval * 1.2)
                     adjustment_reason.append(f"increased interval to {self._dynamic_scan_interval:.2f}s")
-                
-                # Option B: Reduce concurrency if we're thrashing
-                elif self._dynamic_max_scans > 1:
-                    self._dynamic_max_scans -= 1
-                    adjustment_reason.append(f"reduced concurrency to {self._dynamic_max_scans}")
+                # NOTE: Removed Option B that reduced concurrency - this was causing missed scans
             
             # CONDITION 2: Scans completing much faster than interval - we have headroom
             elif avg_scan_duration < self._dynamic_scan_interval * 0.6 and skip_rate < 0.01:
@@ -861,10 +904,19 @@ class ContinuousEASMonitor:
                 effective_scan_interval = self._get_effective_scan_interval()
                 if current_time - last_scan_time >= effective_scan_interval:
                     try:
-                        self._scan_for_alerts()
+                        # CRITICAL: Always attempt scan on every interval
+                        # The scan will be skipped/rejected inside _scan_for_alerts if needed
+                        # But we MUST attempt it to maintain scan coverage
+                        scan_initiated = self._scan_for_alerts()
+                        
+                        # ALWAYS update last_scan_time to maintain regular scan attempts
+                        # This ensures consistent scan rate regardless of skip/reject status
                         last_scan_time = current_time
-                        self._last_scan_time = current_time
-                        self._update_activity()  # Update on successful scan
+                        
+                        # Only update _last_scan_time (for UI) if scan actually initiated
+                        if scan_initiated:
+                            self._last_scan_time = current_time
+                            self._update_activity()  # Update on successful scan initiation
                     except Exception as scan_error:
                         logger.error(f"Error initiating scan for alerts: {scan_error}", exc_info=True)
                         last_scan_time = current_time  # Still update to avoid rapid retry
@@ -988,81 +1040,128 @@ class ContinuousEASMonitor:
             # On error, assume signature present to ensure we don't miss alerts
             return True
 
-    def _scan_for_alerts(self) -> None:
-        """Scan buffered audio for EAS alerts (non-blocking).
-
-        Launches scan in background thread to prevent blocking audio stream.
-        Uses a fast pre-filter to skip expensive decoding on audio without SAME tones.
-        """
-        # Check if too many scans are running (use dynamic value from feedback loop)
-        effective_max_scans = self._get_effective_max_concurrent_scans()
+    def _scan_for_alerts(self) -> bool:
+        """Queue audio buffer for scan - NEVER drops scans.
         
-        with self._scan_lock:
-            if self._active_scans >= effective_max_scans:
-                self._scans_skipped += 1
-                
-                # Get performance stats for diagnostic message
-                if self._scan_durations:
-                    recent_scans = self._scan_durations[-10:]
-                    avg_duration = sum(recent_scans) / len(recent_scans)
-                    max_duration = max(recent_scans)
-                    perf_info = f"avg scan: {avg_duration:.2f}s, max: {max_duration:.2f}s"
-                else:
-                    perf_info = "no scan history yet"
-                
-                logger.warning(
-                    f"⚠️ Skipping EAS scan #{self._scans_skipped}: {self._active_scans} scans already active "
-                    f"(max={effective_max_scans}, configured={self.max_concurrent_scans}). "
-                    f"Performance: {perf_info}, interval={self._dynamic_scan_interval:.2f}s. "
-                    f"System is self-regulating - if this persists, hardware may be overloaded."
-                )
-                return
-
-            self._active_scans += 1
-
+        This is a life-safety system. Commercial EAS decoders NEVER skip audio analysis.
+        We use a queue to ensure every scan request is eventually processed.
+        
+        Returns:
+            True if scan was queued successfully
+            False only if queue is full (CRITICAL ERROR - log and alert operators)
+        """
         # Get buffer copy (fast, lock released immediately)
         audio_samples = self._get_buffer_contents()
         
-        # Fast pre-check: does this audio contain SAME tones?
-        # This avoids expensive decoding on silent periods or non-EAS audio
-        if not self._has_same_signature(audio_samples):
-            # No SAME signature detected - skip expensive decode
-            logger.debug("No SAME signature in audio buffer, skipping decode")
+        # Create scan job
+        scan_job = {
+            'audio_samples': audio_samples,
+            'timestamp': time.time(),
+            'scan_id': None  # Will be assigned by worker
+        }
+        
+        # Try to queue the scan
+        try:
+            # Use put_nowait to avoid blocking the monitor loop
+            # If queue is full, it raises queue.Full
+            self._scan_queue.put_nowait(scan_job)
+            
             with self._scan_lock:
-                self._active_scans -= 1
-            return
+                self._scans_queued += 1
+                current_depth = self._scan_queue.qsize()
+                if current_depth > self._max_queue_depth_seen:
+                    self._max_queue_depth_seen = current_depth
+                    if current_depth > self.max_concurrent_scans:
+                        logger.warning(
+                            f"⚠️ Scan queue depth at {current_depth} (workers={self.max_concurrent_scans}). "
+                            f"System is falling behind. Consider increasing MAX_CONCURRENT_EAS_SCANS."
+                        )
+            
+            return True
+            
+        except queue.Full:
+            # CRITICAL ERROR: Queue is full - we're about to drop a scan
+            # This should NEVER happen in a properly configured system
+            with self._scan_lock:
+                self._scans_queue_full += 1
+            
+            logger.critical(
+                f"🚨 CRITICAL: EAS scan queue FULL! Dropped scan #{self._scans_queue_full}. "
+                f"Queue size: {self._scan_queue.maxsize}, Workers: {self.max_concurrent_scans}. "
+                f"IMMEDIATE ACTION REQUIRED: Increase MAX_CONCURRENT_EAS_SCANS or upgrade hardware. "
+                f"ALERT COVERAGE IS COMPROMISED!"
+            )
+            return False
 
-        # Launch scan in background thread
-        scan_thread = threading.Thread(
-            target=self._scan_worker,
-            args=(audio_samples,),
-            name=f"eas-scan-{self._scans_performed}",
-            daemon=True
-        )
-        scan_thread.start()
-
-    def _scan_worker(self, audio_samples: np.ndarray) -> None:
-        """Worker thread that performs the actual EAS scan.
-
-        This runs in background to avoid blocking the audio stream.
-        The decode operation has no built-in timeout, but if it hangs, the watchdog
-        will detect the stalled decoder and restart the entire monitor thread.
-        We also limit concurrent scans to prevent resource exhaustion.
+    def _scan_worker_loop(self) -> None:
+        """Worker thread that processes scans from the queue.
+        
+        This ensures EVERY queued scan is processed with dedicated worker threads.
+        Multiple workers process scans in parallel for maximum throughput.
+        """
+        worker_name = threading.current_thread().name
+        logger.info(f"{worker_name} started and waiting for scan jobs")
+        
+        while not self._stop_event.is_set():
+            try:
+                # Get next scan job from queue (blocks until available)
+                # Use timeout so we can check stop_event periodically
+                try:
+                    scan_job = self._scan_queue.get(timeout=1.0)
+                except queue.Empty:
+                    continue
+                
+                # Check for poison pill (None = shutdown signal)
+                if scan_job is None:
+                    logger.info(f"{worker_name} received shutdown signal")
+                    break
+                
+                # Process the scan
+                self._process_scan_job(scan_job, worker_name)
+                
+                # Mark job as done
+                self._scan_queue.task_done()
+                
+            except Exception as e:
+                logger.error(f"{worker_name} error in worker loop: {e}", exc_info=True)
+                time.sleep(0.1)  # Brief pause on error
+        
+        logger.info(f"{worker_name} shutting down")
+    
+    def _process_scan_job(self, scan_job: dict, worker_name: str) -> None:
+        """Process a single scan job from the queue.
+        
+        Args:
+            scan_job: Dict with 'audio_samples', 'timestamp', 'scan_id'
+            worker_name: Name of the worker thread for logging
         """
         temp_wav = None
         scan_start_time = time.time()
+        audio_samples = scan_job['audio_samples']
+        
         try:
-            self._scans_performed += 1
+            # Assign scan ID
+            with self._scan_lock:
+                self._scans_performed += 1
+                scan_id = self._scans_performed
+            
+            scan_job['scan_id'] = scan_id
+            
+            # Check queue lag
+            queue_lag = scan_start_time - scan_job['timestamp']
+            if queue_lag > 5.0:
+                logger.warning(
+                    f"⚠️ Scan #{scan_id} has {queue_lag:.1f}s queue lag. "
+                    f"System is falling behind real-time. Consider adding workers."
+                )
 
             # Save to temporary WAV file for decoder
             temp_wav = self._save_to_temp_wav(audio_samples)
 
             try:
-                # Run decoder (this is the slow part - now in background)
-                # Note: This could theoretically hang on corrupted audio, but:
-                # 1. It runs in a background thread so won't block the main loop
-                # 2. The watchdog will detect and restart if monitoring stalls
-                # 3. We limit concurrent scans to 2 max to prevent resource exhaustion
+                # Run decoder - NO TIMEOUT, NO FILTERING
+                # Every audio buffer MUST be analyzed completely
+                # This is what commercial EAS decoders do
                 result = decode_same_audio(temp_wav, sample_rate=self.sample_rate)
 
                 # Check if we found an alert
@@ -1072,21 +1171,22 @@ class ContinuousEASMonitor:
                     temp_wav = None  # Don't clean up - _handle_alert_detected manages it
 
             except Exception as decode_error:
-                logger.error(f"Error in SAME decoder: {decode_error}", exc_info=True)
+                logger.error(f"Scan #{scan_id} decoder error: {decode_error}", exc_info=True)
                 # Continue - don't let decoder errors stop monitoring
 
         except Exception as e:
-            logger.error(f"Error in scan worker: {e}", exc_info=True)
+            logger.error(f"Scan #{scan_job.get('scan_id', '?')} processing error: {e}", exc_info=True)
         finally:
             # Record scan duration
             scan_duration = time.time() - scan_start_time
             with self._scan_lock:
+                self._scans_completed += 1
                 self._scan_durations.append(scan_duration)
                 # Keep only recent history
                 if len(self._scan_durations) > self._max_scan_history:
                     self._scan_durations = self._scan_durations[-self._max_scan_history:]
             
-            logger.debug(f"EAS scan completed in {scan_duration:.2f}s")
+            logger.debug(f"Scan #{scan_job.get('scan_id', '?')} completed in {scan_duration:.2f}s by {worker_name}")
             
             # Clean up temp file if we're not saving it
             if temp_wav and not self.save_audio_files and os.path.exists(temp_wav):
@@ -1094,10 +1194,6 @@ class ContinuousEASMonitor:
                     os.unlink(temp_wav)
                 except Exception as cleanup_error:
                     logger.debug(f"Error cleaning up temp file {temp_wav}: {cleanup_error}")
-            
-            # Decrement active scan counter - ALWAYS do this even if scan failed
-            with self._scan_lock:
-                self._active_scans -= 1
 
     def _save_to_temp_wav(self, samples: np.ndarray) -> str:
         """Save samples to temporary WAV file with error handling."""

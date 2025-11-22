@@ -101,8 +101,11 @@ def register_eas_monitor_routes(app: Flask, logger_instance) -> None:
                 # Scan performance metrics
                 "scans_performed": status.get("scans_performed", 0),
                 "scans_skipped": status.get("scans_skipped", 0),
+                "scans_no_signature": status.get("scans_no_signature", 0),
+                "total_scan_attempts": status.get("total_scan_attempts", 0),
                 "scan_warnings": status.get("scan_warnings", 0),  # Alias for backward compat
                 "active_scans": status.get("active_scans", 0),
+                "dynamic_max_concurrent_scans": status.get("dynamic_max_concurrent_scans", 0),
                 "avg_scan_duration_seconds": status.get("avg_scan_duration_seconds"),
                 "min_scan_duration_seconds": status.get("min_scan_duration_seconds"),
                 "max_scan_duration_seconds": status.get("max_scan_duration_seconds"),
