@@ -24,9 +24,9 @@ function initializeAudioMonitoring() {
     loadAudioHealth();
     loadAudioAlerts();
 
-    // Start periodic updates (every 1 second)
+    // Start periodic updates (every 1 second for real-time monitoring)
     metricsUpdateInterval = setInterval(updateMetrics, 1000);
-    healthUpdateInterval = setInterval(loadAudioHealth, 5000);
+    healthUpdateInterval = setInterval(loadAudioHealth, 1000);
     // Monitor for device changes every 10 seconds
     deviceMonitorInterval = setInterval(monitorDeviceChanges, 10000);
 

@@ -2032,8 +2032,8 @@ function startEASMonitorPolling() {
     }
 
     loadEASMonitorStatus();
-    // Poll every 5 seconds for real-time updates
-    easMonitorIntervalHandle = setInterval(loadEASMonitorStatus, 5000);
+    // Poll every 1 second for real-time updates
+    easMonitorIntervalHandle = setInterval(loadEASMonitorStatus, 1000);
 }
 
 // Load sources on page load
