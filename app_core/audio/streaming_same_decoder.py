@@ -45,7 +45,7 @@ class StreamingSAMEDecoder:
     Based on multimon-ng correlation+DLL algorithm but refactored for streaming operation.
     
     Usage:
-        decoder = StreamingSAMEDecoder(sample_rate=22050, callback=handle_alert)
+        decoder = StreamingSAMEDecoder(sample_rate=16000, callback=handle_alert)
         
         # In audio loop:
         while audio_streaming:
@@ -57,7 +57,7 @@ class StreamingSAMEDecoder:
     
     def __init__(
         self,
-        sample_rate: int = 22050,
+        sample_rate: int = 16000,
         alert_callback: Optional[Callable[[StreamingSAMEAlert], None]] = None
     ):
         """

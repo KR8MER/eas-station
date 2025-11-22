@@ -360,7 +360,7 @@ class ContinuousEASMonitor:
     def __init__(
         self,
         audio_manager: AudioSourceManager,
-        sample_rate: int = 22050,
+        sample_rate: int = 16000,
         alert_callback: Optional[Callable[[EASAlert], None]] = None,
         save_audio_files: bool = True,
         audio_archive_dir: str = "/tmp/eas-audio"
@@ -370,7 +370,7 @@ class ContinuousEASMonitor:
 
         Args:
             audio_manager: AudioSourceManager instance providing audio
-            sample_rate: Decoder sample rate in Hz (default: 22050)
+            sample_rate: Audio sample rate in Hz (default: 16000)
             alert_callback: Optional callback function called when alert detected
             save_audio_files: Whether to save audio files of detected alerts
             audio_archive_dir: Directory to save alert audio files
@@ -530,7 +530,7 @@ class ContinuousEASMonitor:
             time_since_activity = time.time() - last_activity
         
         # Calculate health metrics
-        # For streaming decoder, "health" = processing at the decoder's target sample rate
+        # For streaming decoder, "health" = processing at line rate (configured sample_rate)
         expected_rate = self.sample_rate
         health_percentage = min(1.0, samples_per_second / expected_rate) if audio_flowing else 0.0
 

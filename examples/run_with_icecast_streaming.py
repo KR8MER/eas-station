@@ -103,7 +103,7 @@ def main():
     # ========================================================================
     logger.info("Creating audio source manager...")
     manager = AudioSourceManager(
-        sample_rate=22050,
+        sample_rate=16000,
         master_buffer_seconds=5.0,
         failover_callback=on_failover
     )
@@ -117,7 +117,7 @@ def main():
         source_url="http://stream.example.com/noaa.mp3",  # Replace with actual stream
         priority=10,  # Highest priority
         enabled=True,
-        sample_rate=22050,
+        sample_rate=16000,
         silence_threshold_db=-50.0,
         silence_duration_seconds=10.0
     ))
@@ -128,7 +128,7 @@ def main():
         source_url="http://backup.example.com/noaa.mp3",  # Replace with actual stream
         priority=20,  # Lower priority (backup)
         enabled=True,
-        sample_rate=22050
+        sample_rate=16000
     ))
 
     # Start audio manager
@@ -143,7 +143,7 @@ def main():
     logger.info("Creating EAS monitor...")
     eas_monitor = ContinuousEASMonitor(
         audio_manager=manager,
-        sample_rate=22050,
+        sample_rate=16000,
         alert_callback=on_alert_detected,
         save_audio_files=True,
         audio_archive_dir="/tmp/eas-alerts"
