@@ -1714,11 +1714,11 @@ function startLevelPolling() {
     }
 
     updateLevelMeters();
-    
-    // Poll every 250ms (4Hz) for smooth real-time VU meters
-    // Cache serves most requests with 5s TTL, so actual API calls are ~every 5s
-    // This gives buttery smooth real-time feel WITHOUT hammering the server!
-    levelIntervalHandle = setInterval(updateLevelMeters, 250);
+
+    // Poll every 2 seconds to match cache TTL and prevent server overload
+    // Previous 250ms polling caused 503 errors due to cache misalignment
+    // 2s provides adequate real-time updates without exhausting workers
+    levelIntervalHandle = setInterval(updateLevelMeters, 2000);
 }
 
 // ============================================================================
@@ -2076,9 +2076,9 @@ function startEASMonitorPolling() {
     }
 
     loadEASMonitorStatus();
-    // Poll every 5 seconds for real-time updates without overloading server
-    // Reduced from 2s to prevent stuttering and reduce server load
-    easMonitorIntervalHandle = setInterval(loadEASMonitorStatus, 5000);
+    // Poll every 6 seconds to align with 5s server cache + 1s margin
+    // This prevents cache thrashing and reduces 503 errors
+    easMonitorIntervalHandle = setInterval(loadEASMonitorStatus, 6000);
 }
 
 // Load sources on page load

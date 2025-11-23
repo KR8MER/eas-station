@@ -1518,7 +1518,7 @@ def api_stop_audio_source(source_name: str):
         return jsonify({'error': str(exc)}), 500
 
 @audio_ingest_bp.route('/api/audio/metrics', methods=['GET'])
-@cache.cached(timeout=15, query_string=True, key_prefix='audio_metrics')
+@cache.cached(timeout=2, query_string=True, key_prefix='audio_metrics')
 def api_get_audio_metrics():
     """Get real-time metrics for all audio sources."""
     try:
