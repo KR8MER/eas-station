@@ -1,178 +1,25 @@
-<!-- Load Highcharts and modules -->
-<script>
-(function setupHighchartsLoader() {
-    const HIGHCHARTS_VERSION = '12.4.0';
-    const HIGHCHARTS_VERSION_MINOR = '12.4';
-    const CDN_SOURCES = [
-        {
-            name: 'Highcharts Official (latest)',
-            resolve: (path) => `https://code.highcharts.com${path}`
-        },
-        {
-            name: `Highcharts Official v${HIGHCHARTS_VERSION}`,
-            resolve: (path) => path.startsWith('/stock/')
-                ? `https://code.highcharts.com/stock/${HIGHCHARTS_VERSION}${path.substring('/stock'.length)}`
-                : `https://code.highcharts.com/${HIGHCHARTS_VERSION}${path}`
-        },
-        {
-            name: `Highcharts Official ${HIGHCHARTS_VERSION_MINOR}.x`,
-            resolve: (path) => path.startsWith('/stock/')
-                ? `https://code.highcharts.com/stock/${HIGHCHARTS_VERSION_MINOR}${path.substring('/stock'.length)}`
-                : `https://code.highcharts.com/${HIGHCHARTS_VERSION_MINOR}${path}`
-        },
-        {
-            name: 'jsDelivr',
-            resolve: (path) => `https://cdn.jsdelivr.net/npm/highcharts@${HIGHCHARTS_VERSION}${path}`
-        },
-        {
-            name: 'unpkg',
-            resolve: (path) => `https://unpkg.com/highcharts@${HIGHCHARTS_VERSION}/dist${path}`
-        }
-    ];
-    const REQUIRED_SCRIPTS = [
-        '/stock/highstock.js',
-        '/highcharts-more.js',
-        '/modules/heatmap.js',
-        '/modules/solid-gauge.js',
-        '/modules/xrange.js',
-        '/modules/drilldown.js',
-        '/modules/exporting.js',
-        '/modules/export-data.js',
-        '/modules/accessibility.js'
-    ];
-
-    if (window.__highchartsLoadPromise) {
-        return;
-    }
-
-    function loadScript(src) {
-        return new Promise((resolve, reject) => {
-            const scripts = Array.from(document.getElementsByTagName('script'));
-            const existing = scripts.find((script) => script.src === src && script.dataset.highchartsLoader !== 'stats-dashboard-failed');
-
-            const cleanupListeners = (scriptElement, onLoad, onError) => {
-                if (!scriptElement) {
-                    return;
-                }
-                scriptElement.removeEventListener('load', onLoad);
-                scriptElement.removeEventListener('error', onError);
-            };
-
-            const resolveSuccess = (scriptElement) => {
-                if (scriptElement) {
-                    scriptElement.dataset.highchartsLoaded = 'true';
-                }
-                resolve();
-            };
-
-            const rejectFailure = (scriptElement) => {
-                if (scriptElement) {
-                    scriptElement.dataset.highchartsLoader = 'stats-dashboard-failed';
-                    if (scriptElement.parentNode) {
-                        scriptElement.parentNode.removeChild(scriptElement);
-                    }
-                }
-                reject(new Error(`Failed to load Highcharts resource: ${src}`));
-            };
-
-            if (existing) {
-                const managedByLoader = existing.dataset.highchartsLoader === 'stats-dashboard';
-                const alreadyLoaded = existing.dataset.highchartsLoaded === 'true'
-                    || !managedByLoader
-                    || existing.readyState === 'complete'
-                    || existing.readyState === 'loaded';
-                if (alreadyLoaded) {
-                    resolve();
-                    return;
-                }
-
-                const onLoad = () => {
-                    cleanupListeners(existing, onLoad, onError);
-                    resolveSuccess(existing);
-                };
-                const onError = () => {
-                    cleanupListeners(existing, onLoad, onError);
-                    rejectFailure(existing);
-                };
-
-                existing.addEventListener('load', onLoad, { once: true });
-                existing.addEventListener('error', onError, { once: true });
-                return;
-            }
-
-            const script = document.createElement('script');
-            script.src = src;
-            script.async = false;
-            script.dataset.highchartsLoader = 'stats-dashboard';
-
-            const onLoad = () => {
-                cleanupListeners(script, onLoad, onError);
-                resolveSuccess(script);
-            };
-            const onError = () => {
-                cleanupListeners(script, onLoad, onError);
-                rejectFailure(script);
-            };
-
-            script.addEventListener('load', onLoad, { once: true });
-            script.addEventListener('error', onError, { once: true });
-            document.head.appendChild(script);
-        });
-    }
-
-    function tryLoadFromCdn(cdn) {
-        console.log(`[Highcharts loader] 📦 Attempting to load Highcharts from ${cdn.name}...`);
-        return REQUIRED_SCRIPTS.reduce(
-            (chain, path) => chain.then(() => loadScript(cdn.resolve(path))),
-            Promise.resolve()
-        );
-    }
-
-    function attemptFromIndex(index) {
-        if (index >= CDN_SOURCES.length) {
-            return Promise.reject(new Error('Failed to load Highcharts from all available sources.'));
-        }
-        const cdn = CDN_SOURCES[index];
-        return tryLoadFromCdn(cdn)
-            .then(() => cdn)
-            .catch((error) => {
-                console.warn(`[Highcharts loader] ⚠️ ${cdn.name} failed: ${error.message}`);
-                return attemptFromIndex(index + 1);
-            });
-    }
-
-    if (window.Highcharts) {
-        window.__highchartsLoadPromise = Promise.resolve(window.Highcharts);
-        Promise.resolve().then(() => document.dispatchEvent(new Event('highcharts:loaded')));
-        return;
-    }
-
-    const loadPromise = attemptFromIndex(0)
-        .then((cdn) => {
-            if (!window.Highcharts) {
-                throw new Error('Highcharts did not initialize as expected.');
-            }
-            delete window.__highchartsLoadError;
-            console.log(`[Highcharts loader] ✅ Highcharts loaded successfully from ${cdn.name}.`);
-            return window.Highcharts;
-        });
-
-    window.__highchartsLoadPromise = loadPromise
-        .then((highcharts) => {
-            document.dispatchEvent(new Event('highcharts:loaded'));
-            return highcharts;
-        })
-        .catch((error) => {
-            window.__highchartsLoadError = error;
-            document.dispatchEvent(new CustomEvent('highcharts:failed', { detail: error }));
-            delete window.__highchartsLoadPromise;
-            throw error;
-        });
-})();
-</script>
+<!-- Load Chart.js and required plugins -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@2.0.1/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@2.0.0/dist/chartjs-chart-matrix.min.js"></script>
 
 <script>
-console.log('🚀 Statistics dashboard initializing...');
+console.log('🚀 Statistics dashboard initializing (Chart.js)...');
+
+// Register Chart.js plugins globally where needed
+Chart.register(ChartDataLabels);
+
+// Configure global Chart.js defaults
+Chart.defaults.font.family = 'Segoe UI, sans-serif';
+Chart.defaults.color = '#212529';
+Chart.defaults.plugins.legend.display = true;
+Chart.defaults.plugins.tooltip.enabled = true;
+Chart.defaults.responsive = true;
+Chart.defaults.maintainAspectRatio = false;
+
+// Disable datalabels plugin by default (enable per chart as needed)
+Chart.defaults.plugins.datalabels.display = false;
 
 const statsData = {
     alertByEvent: {{ alert_by_event | tojson | safe }} || [],
@@ -209,6 +56,9 @@ const severityColors = {
     'Unknown': '#6c757d'
 };
 
+// Chart.js color palette
+const chartColors = ['#007bff', '#28a745', '#ffc107', '#dc3545', '#17a2b8', '#6f42c1', '#fd7e14', '#20c997', '#6c757d'];
+
 const state = {
     charts: {},
     filters: {
@@ -223,27 +73,6 @@ const state = {
     aggregates: null,
     staticChartsInitialized: false
 };
-
-let highchartsDefaultsConfigured = false;
-
-function configureHighchartsDefaults() {
-    if (highchartsDefaultsConfigured) {
-        return;
-    }
-    if (!window.Highcharts) {
-        throw new Error('Highcharts is not available.');
-    }
-    Highcharts.setOptions({
-        colors: ['#007bff', '#28a745', '#ffc107', '#dc3545', '#17a2b8', '#6f42c1', '#fd7e14', '#20c997', '#6c757d'],
-        chart: {
-            backgroundColor: 'transparent',
-            style: { fontFamily: 'Segoe UI, sans-serif' }
-        },
-        credits: { enabled: false },
-        title: { style: { color: '#212529', fontSize: '16px' } }
-    });
-    highchartsDefaultsConfigured = true;
-}
 
 function populateFilterSelect(id, options) {
     const select = document.getElementById(id);
@@ -491,7 +320,7 @@ function buildStatusSparklineSeries(aggregates, candidates) {
     return Array.from(combined.entries())
         .sort((a, b) => new Date(a[0]) - new Date(b[0]))
         .slice(-14)
-        .map(([date, count]) => [new Date(date).getTime(), count]);
+        .map(([date, count]) => ({ x: new Date(date).getTime(), y: count }));
 }
 
 function createSparkline(containerId, series, color) {
@@ -502,48 +331,55 @@ function createSparkline(containerId, series, color) {
     if (state.charts[containerId]) {
         state.charts[containerId].destroy();
     }
-    state.charts[containerId] = Highcharts.chart(containerId, {
-        chart: {
-            type: 'areaspline',
-            backgroundColor: 'transparent',
-            height: 60,
-            margin: [0, 0, 0, 0]
+
+    const canvas = document.createElement('canvas');
+    canvas.height = 60;
+    container.innerHTML = '';
+    container.appendChild(canvas);
+
+    state.charts[containerId] = new Chart(canvas, {
+        type: 'line',
+        data: {
+            datasets: [{
+                data: series,
+                borderColor: color,
+                backgroundColor: color + '33',
+                fill: true,
+                tension: 0.4,
+                borderWidth: 1.5,
+                pointRadius: 0
+            }]
         },
-        title: { text: null },
-        credits: { enabled: false },
-        legend: { enabled: false },
-        xAxis: {
-            type: 'datetime',
-            labels: { enabled: false },
-            lineWidth: 0,
-            tickLength: 0
-        },
-        yAxis: {
-            labels: { enabled: false },
-            title: { text: null },
-            gridLineWidth: 0
-        },
-        tooltip: {
-            valueDecimals: 0,
-            valueSuffix: ' alerts',
-            xDateFormat: '%b %e'
-        },
-        plotOptions: {
-            areaspline: {
-                marker: { enabled: false },
-                lineWidth: 1.5,
-                fillOpacity: 0.3
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        title: (items) => {
+                            const date = new Date(items[0].parsed.x);
+                            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                        },
+                        label: (item) => `${item.parsed.y} alerts`
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    type: 'time',
+                    display: false
+                },
+                y: {
+                    display: false
+                }
             }
-        },
-        series: [{
-            data: series,
-            color
-        }]
+        }
     });
 }
 
 function renderSparklines(aggregates) {
-    const totalSeries = aggregates.dailySeries.slice(-14).map(item => [new Date(item.date).getTime(), item.count]);
+    const totalSeries = aggregates.dailySeries.slice(-14).map(item => ({ x: new Date(item.date).getTime(), y: item.count }));
     if (totalSeries.length) {
         createSparkline('sparkline-total', totalSeries, '#007bff');
     }
@@ -575,6 +411,7 @@ function getFilteredAlerts() {
         return true;
     });
 }
+
 function computeMovingAverage(dailySeries, window) {
     if (!dailySeries.length) return [];
     const values = dailySeries.map(item => item.count);
@@ -724,37 +561,33 @@ function computeMasterDetail(alerts) {
     });
 
     const baseSeries = [];
-    const drilldownSeries = [];
+    const drilldownData = new Map();
     const sortedEvents = Array.from(events.entries()).sort((a, b) => b[1].total - a[1].total).slice(0, 6);
 
     sortedEvents.forEach(([eventName, data]) => {
-        baseSeries.push({ name: eventName, y: data.total, drilldown: eventName });
+        baseSeries.push({ name: eventName, y: data.total, eventName });
         const months = Array.from(data.months.entries())
             .sort((a, b) => new Date(`${a[0]}-01`) - new Date(`${b[0]}-01`))
             .slice(-12);
 
-        months.forEach(([monthKey, monthData]) => {
-            const drillId = `${eventName}|${monthKey}`;
-            drilldownSeries.push({
-                id: drillId,
-                name: `${eventName} in ${formatMonthKey(monthKey)}`,
-                type: 'column',
-                data: Array.from(monthData.days.entries())
+        drilldownData.set(eventName, {
+            months: months.map(([monthKey, monthData]) => ({
+                month: formatMonthKey(monthKey),
+                count: monthData.count,
+                monthKey
+            })),
+            days: new Map(months.map(([monthKey, monthData]) => [
+                monthKey,
+                Array.from(monthData.days.entries())
                     .sort((a, b) => new Date(a[0]) - new Date(b[0]))
-                    .map(([day, count]) => [day, count])
-            });
-        });
-
-        drilldownSeries.push({
-            id: eventName,
-            name: `${eventName} by month`,
-            type: 'column',
-            data: months.map(([monthKey, monthData]) => [formatMonthKey(monthKey), monthData.count])
+                    .map(([day, count]) => ({ day, count }))
+            ]))
         });
     });
 
-    return { baseSeries, drilldownSeries };
+    return { baseSeries, drilldownData };
 }
+
 function aggregateAlerts(alerts, filters) {
     const eventCounts = new Map();
     const severityCounts = new Map();
@@ -868,7 +701,9 @@ function createOrUpdateChart(containerId, chartFactory) {
         state.charts[containerId].destroy();
     }
     container.innerHTML = '';
-    const chart = chartFactory(container);
+    const canvas = document.createElement('canvas');
+    container.appendChild(canvas);
+    const chart = chartFactory(canvas);
     if (chart) {
         state.charts[containerId] = chart;
     }
@@ -893,6 +728,7 @@ function showNoData(containerId, message) {
     }
     container.innerHTML = `<div class="simple-chart text-muted"><i class="fas fa-info-circle"></i> ${message}</div>`;
 }
+
 function createAlertTypesChart(aggregates) {
     const containerId = 'alertTypesChart';
     if (!document.getElementById(containerId)) return;
@@ -900,27 +736,31 @@ function createAlertTypesChart(aggregates) {
         showNoData(containerId, 'No alert type data available for this filter');
         return;
     }
-    createOrUpdateChart(containerId, () => Highcharts.chart(containerId, {
-        chart: { type: 'pie', height: 350 },
-        title: { text: null },
-        plotOptions: {
-            pie: {
-                allowPointSelect: true,
-                cursor: 'pointer',
-                dataLabels: {
-                    enabled: true,
-                    format: '<b>{point.name}</b><br>{point.percentage:.1f}%'
-                },
-                showInLegend: true
-            }
+    createOrUpdateChart(containerId, (canvas) => new Chart(canvas, {
+        type: 'pie',
+        data: {
+            labels: aggregates.alertByEvent.map(item => item.event || 'Unknown'),
+            datasets: [{
+                data: aggregates.alertByEvent.map(item => item.count || 0),
+                backgroundColor: chartColors
+            }]
         },
-        series: [{
-            name: 'Alerts',
-            data: aggregates.alertByEvent.map(item => ({
-                name: item.event || 'Unknown',
-                y: item.count || 0
-            }))
-        }]
+        options: {
+            plugins: {
+                legend: { display: true, position: 'right' },
+                tooltip: { enabled: true },
+                datalabels: {
+                    display: true,
+                    color: '#fff',
+                    font: { weight: 'bold' },
+                    formatter: (value, context) => {
+                        const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                        const percentage = ((value / total) * 100).toFixed(1);
+                        return `${percentage}%`;
+                    }
+                }
+            }
+        }
     }));
 }
 
@@ -931,25 +771,33 @@ function createSeverityChart(aggregates) {
         showNoData(containerId, 'No severity data available for this filter');
         return;
     }
-    createOrUpdateChart(containerId, () => Highcharts.chart(containerId, {
-        chart: { type: 'column', height: 350 },
-        title: { text: null },
-        xAxis: {
-            categories: aggregates.alertBySeverity.map(item => item.severity),
-            title: { text: 'Severity Level' }
+    createOrUpdateChart(containerId, (canvas) => new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: aggregates.alertBySeverity.map(item => item.severity),
+            datasets: [{
+                label: 'Alerts',
+                data: aggregates.alertBySeverity.map(item => item.count),
+                backgroundColor: aggregates.alertBySeverity.map(item =>
+                    severityColors[item.severity] || severityColors.Unknown
+                )
+            }]
         },
-        yAxis: { title: { text: 'Number of Alerts' } },
-        plotOptions: {
-            column: { colorByPoint: true }
-        },
-        series: [{
-            name: 'Alerts',
-            data: aggregates.alertBySeverity.map(item => ({
-                name: item.severity,
-                y: item.count,
-                color: severityColors[item.severity] || severityColors.Unknown
-            }))
-        }]
+        options: {
+            indexAxis: 'x',
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: { display: true, text: 'Number of Alerts' }
+                },
+                x: {
+                    title: { display: true, text: 'Severity Level' }
+                }
+            }
+        }
     }));
 }
 
@@ -960,26 +808,30 @@ function createStatusChart(aggregates) {
         showNoData(containerId, 'No status data available for this filter');
         return;
     }
-    createOrUpdateChart(containerId, () => Highcharts.chart(containerId, {
-        chart: { type: 'pie', height: 350 },
-        title: { text: null },
-        plotOptions: {
-            pie: {
-                dataLabels: {
-                    enabled: true,
-                    format: '<b>{point.name}</b>: {point.y}'
+    createOrUpdateChart(containerId, (canvas) => new Chart(canvas, {
+        type: 'pie',
+        data: {
+            labels: aggregates.alertByStatus.map(item => item.status || 'Unknown'),
+            datasets: [{
+                data: aggregates.alertByStatus.map(item => item.count || 0),
+                backgroundColor: chartColors
+            }]
+        },
+        options: {
+            plugins: {
+                legend: { display: true, position: 'right' },
+                tooltip: { enabled: true },
+                datalabels: {
+                    display: true,
+                    color: '#fff',
+                    font: { weight: 'bold' },
+                    formatter: (value) => value
                 }
             }
-        },
-        series: [{
-            name: 'Alerts',
-            data: aggregates.alertByStatus.map(item => ({
-                name: item.status || 'Unknown',
-                y: item.count || 0
-            }))
-        }]
+        }
     }));
 }
+
 function createTemporalHeatmapChart(aggregates) {
     const containerId = 'temporalHeatmapChart';
     const container = document.getElementById(containerId);
@@ -989,43 +841,72 @@ function createTemporalHeatmapChart(aggregates) {
     const data = [];
     matrix.forEach((row, dow) => {
         row.forEach((value, hour) => {
-            data.push([hour, dow, value || 0]);
+            data.push({ x: hour, y: dow, v: value || 0 });
         });
     });
-    if (!data.some(point => point[2] > 0)) {
+    if (!data.some(point => point.v > 0)) {
         showNoData(containerId, 'No temporal activity for this filter');
         return;
     }
-    createOrUpdateChart(containerId, () => Highcharts.chart(containerId, {
-        chart: { type: 'heatmap', height: 340 },
-        title: { text: null },
-        xAxis: {
-            categories: Array.from({ length: 24 }, (_, i) => `${i}:00`),
-            title: { text: 'Hour of Day' }
+
+    createOrUpdateChart(containerId, (canvas) => new Chart(canvas, {
+        type: 'matrix',
+        data: {
+            datasets: [{
+                label: 'Alerts per hour',
+                data,
+                backgroundColor(context) {
+                    const value = context.dataset.data[context.dataIndex].v;
+                    const max = Math.max(...context.dataset.data.map(d => d.v));
+                    const alpha = value / max;
+                    return `rgba(0, 123, 255, ${alpha})`;
+                },
+                borderWidth: 1,
+                borderColor: '#fff',
+                width: ({ chart }) => (chart.chartArea || {}).width / 24 - 1,
+                height: ({ chart }) => (chart.chartArea || {}).height / 7 - 1
+            }]
         },
-        yAxis: {
-            categories: dayNames,
-            title: { text: 'Day of Week' },
-            reversed: true
-        },
-        colorAxis: {
-            min: 0,
-            minColor: '#FFFFFF',
-            maxColor: '#007bff'
-        },
-        tooltip: {
-            formatter() {
-                return `${dayNames[this.point.y]} ${this.point.x}:00 → <b>${this.point.value}</b> alerts`;
+        options: {
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        title() {
+                            return '';
+                        },
+                        label(context) {
+                            const v = context.dataset.data[context.dataIndex];
+                            return `${dayNames[v.y]} ${v.x}:00 → ${v.v} alerts`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    type: 'linear',
+                    position: 'bottom',
+                    min: 0,
+                    max: 23,
+                    ticks: {
+                        stepSize: 1,
+                        callback: (value) => `${value}:00`
+                    },
+                    title: { display: true, text: 'Hour of Day' }
+                },
+                y: {
+                    type: 'linear',
+                    min: 0,
+                    max: 6,
+                    reverse: true,
+                    ticks: {
+                        stepSize: 1,
+                        callback: (value) => dayNames[value]
+                    },
+                    title: { display: true, text: 'Day of Week' }
+                }
             }
-        },
-        series: [{
-            name: 'Alerts per hour',
-            borderWidth: 1,
-            data,
-            dataLabels: {
-                enabled: false
-            }
-        }]
+        }
     }));
 }
 
@@ -1037,19 +918,30 @@ function createDayOfWeekChart(aggregates) {
         return;
     }
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    createOrUpdateChart(containerId, () => Highcharts.chart(containerId, {
-        chart: { type: 'column', height: 350 },
-        title: { text: null },
-        xAxis: {
-            categories: dayNames,
-            title: { text: 'Day of Week' }
+    createOrUpdateChart(containerId, (canvas) => new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: dayNames,
+            datasets: [{
+                label: 'Alerts',
+                data: aggregates.dowTotals,
+                backgroundColor: '#28a745'
+            }]
         },
-        yAxis: { title: { text: 'Number of Alerts' } },
-        series: [{
-            name: 'Alerts',
-            data: aggregates.dowTotals,
-            color: '#28a745'
-        }]
+        options: {
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: { display: true, text: 'Number of Alerts' }
+                },
+                x: {
+                    title: { display: true, text: 'Day of Week' }
+                }
+            }
+        }
     }));
 }
 
@@ -1061,25 +953,33 @@ function createMonthlyChart(aggregates) {
         return;
     }
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    createOrUpdateChart(containerId, () => Highcharts.chart(containerId, {
-        chart: { type: 'area', height: 350 },
-        title: { text: null },
-        xAxis: {
-            categories: monthNames,
-            title: { text: 'Month' }
+    createOrUpdateChart(containerId, (canvas) => new Chart(canvas, {
+        type: 'line',
+        data: {
+            labels: monthNames,
+            datasets: [{
+                label: 'Monthly Alerts',
+                data: aggregates.monthlyTotals,
+                borderColor: '#007bff',
+                backgroundColor: 'rgba(0, 123, 255, 0.1)',
+                fill: true,
+                tension: 0.4
+            }]
         },
-        yAxis: { title: { text: 'Number of Alerts' } },
-        plotOptions: {
-            area: {
-                fillOpacity: 0.3,
-                marker: { enabled: false }
+        options: {
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: { display: true, text: 'Number of Alerts' }
+                },
+                x: {
+                    title: { display: true, text: 'Month' }
+                }
             }
-        },
-        series: [{
-            name: 'Monthly Alerts',
-            data: aggregates.monthlyTotals,
-            color: '#007bff'
-        }]
+        }
     }));
 }
 
@@ -1092,25 +992,37 @@ function createYearlyTrendChart(aggregates) {
         showNoData(containerId, 'Not enough yearly data to plot');
         return;
     }
-    createOrUpdateChart(containerId, () => Highcharts.chart(containerId, {
-        chart: { type: 'line', height: 300 },
-        title: { text: null },
-        xAxis: {
-            categories: data.map(item => item.year),
-            title: { text: 'Year' }
+    createOrUpdateChart(containerId, (canvas) => new Chart(canvas, {
+        type: 'line',
+        data: {
+            labels: data.map(item => item.year),
+            datasets: [{
+                label: 'Annual Alerts',
+                data: data.map(item => item.count),
+                borderColor: '#6f42c1',
+                backgroundColor: '#6f42c1',
+                pointRadius: 5
+            }]
         },
-        yAxis: { title: { text: 'Number of Alerts' } },
-        plotOptions: {
-            line: {
-                dataLabels: { enabled: true },
-                marker: { enabled: true, radius: 5 }
+        options: {
+            plugins: {
+                legend: { display: false },
+                datalabels: {
+                    display: true,
+                    align: 'top',
+                    color: '#6f42c1'
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: { display: true, text: 'Number of Alerts' }
+                },
+                x: {
+                    title: { display: true, text: 'Year' }
+                }
             }
-        },
-        series: [{
-            name: 'Annual Alerts',
-            data: data.map(item => item.count),
-            color: '#6f42c1'
-        }]
+        }
     }));
 }
 
@@ -1123,27 +1035,37 @@ function createRecentActivityChart(aggregates) {
         showNoData(containerId, 'No recent activity available');
         return;
     }
-    createOrUpdateChart(containerId, () => Highcharts.chart(containerId, {
-        chart: { type: 'spline', height: 300 },
-        title: { text: null },
-        xAxis: {
-            categories: series.map(item => new Date(item.date).toLocaleDateString()),
-            title: { text: 'Date' }
+    createOrUpdateChart(containerId, (canvas) => new Chart(canvas, {
+        type: 'line',
+        data: {
+            labels: series.map(item => new Date(item.date).toLocaleDateString()),
+            datasets: [{
+                label: 'Daily Alerts',
+                data: series.map(item => item.count),
+                borderColor: '#20c997',
+                backgroundColor: '#20c997',
+                pointRadius: 4,
+                borderWidth: 3,
+                tension: 0.4
+            }]
         },
-        yAxis: { title: { text: 'Number of Alerts' } },
-        plotOptions: {
-            spline: {
-                marker: { enabled: true, radius: 4 },
-                lineWidth: 3
+        options: {
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: { display: true, text: 'Number of Alerts' }
+                },
+                x: {
+                    title: { display: true, text: 'Date' }
+                }
             }
-        },
-        series: [{
-            name: 'Daily Alerts',
-            data: series.map(item => item.count),
-            color: '#20c997'
-        }]
+        }
     }));
 }
+
 function createMultiTimelineChart(aggregates) {
     const containerId = 'multiTimelineChart';
     const container = document.getElementById(containerId);
@@ -1153,25 +1075,67 @@ function createMultiTimelineChart(aggregates) {
         showNoData(containerId, 'Not enough timeline data to compare weeks');
         return;
     }
-    const toSeries = points => points.map(point => [new Date(point.date).getTime(), point.count]);
-    const series = [
-        { name: 'Current Week', data: toSeries(comparison.currentWeek), color: '#007bff' },
-        { name: 'Previous Week', data: toSeries(comparison.previousWeek), color: '#20c997' },
-        { name: 'Same Week Last Year', data: toSeries(comparison.lastYearWeek), color: '#6c757d' }
-    ];
-    const movingAverages = [
-        { name: '7-day Avg', data: comparison.movingAverages.sevenDay.map(p => [new Date(p.date).getTime(), p.value]), color: '#fd7e14', dashStyle: 'ShortDash' },
-        { name: '30-day Avg', data: comparison.movingAverages.thirtyDay.map(p => [new Date(p.date).getTime(), p.value]), color: '#dc3545', dashStyle: 'Dot' }
-    ];
-    createOrUpdateChart(containerId, () => Highcharts.stockChart(containerId, {
-        rangeSelector: { enabled: false },
-        navigator: { enabled: false },
-        scrollbar: { enabled: false },
-        title: { text: null },
-        xAxis: { type: 'datetime' },
-        yAxis: { title: { text: 'Alerts' } },
-        series: [...series, ...movingAverages]
+    const toPoints = points => points.map(point => ({ x: new Date(point.date), y: point.count }));
+
+    createOrUpdateChart(containerId, (canvas) => new Chart(canvas, {
+        type: 'line',
+        data: {
+            datasets: [
+                {
+                    label: 'Current Week',
+                    data: toPoints(comparison.currentWeek),
+                    borderColor: '#007bff',
+                    backgroundColor: 'rgba(0, 123, 255, 0.1)',
+                    fill: false
+                },
+                {
+                    label: 'Previous Week',
+                    data: toPoints(comparison.previousWeek),
+                    borderColor: '#20c997',
+                    backgroundColor: 'rgba(32, 201, 151, 0.1)',
+                    fill: false
+                },
+                {
+                    label: 'Same Week Last Year',
+                    data: toPoints(comparison.lastYearWeek),
+                    borderColor: '#6c757d',
+                    backgroundColor: 'rgba(108, 117, 125, 0.1)',
+                    fill: false
+                },
+                {
+                    label: '7-day Avg',
+                    data: comparison.movingAverages.sevenDay.map(p => ({ x: new Date(p.date), y: p.value })),
+                    borderColor: '#fd7e14',
+                    borderDash: [5, 5],
+                    fill: false
+                },
+                {
+                    label: '30-day Avg',
+                    data: comparison.movingAverages.thirtyDay.map(p => ({ x: new Date(p.date), y: p.value })),
+                    borderColor: '#dc3545',
+                    borderDash: [2, 2],
+                    fill: false
+                }
+            ]
+        },
+        options: {
+            plugins: {
+                legend: { display: true, position: 'top' }
+            },
+            scales: {
+                x: {
+                    type: 'time',
+                    time: { unit: 'day' },
+                    title: { display: true, text: 'Date' }
+                },
+                y: {
+                    beginAtZero: true,
+                    title: { display: true, text: 'Alerts' }
+                }
+            }
+        }
     }));
+
     const annotations = document.getElementById('timelineAnnotations');
     if (annotations) {
         annotations.textContent = comparison.annotations.length ? comparison.annotations.map(item => `${new Date(item.date).toLocaleDateString()}: ${item.text}`).join(' | ') : 'No notable peaks detected in this range.';
@@ -1187,35 +1151,59 @@ function createForecastChart(aggregates) {
         showNoData(containerId, 'Need more history to forecast alerts');
         return;
     }
-    const actualSeries = aggregates.dailySeries.slice(-30).map(item => [new Date(item.date).getTime(), item.count]);
-    const projectionSeries = forecast.projection.map(item => [new Date(item.date).getTime(), item.value]);
-    const lowerBand = forecast.projection.map(item => [new Date(item.date).getTime(), item.lower]);
-    const upperBand = forecast.projection.map(item => [new Date(item.date).getTime(), item.upper]);
+    const actualSeries = aggregates.dailySeries.slice(-30).map(item => ({ x: new Date(item.date), y: item.count }));
+    const projectionSeries = forecast.projection.map(item => ({ x: new Date(item.date), y: item.value }));
 
-    createOrUpdateChart(containerId, () => Highcharts.chart(containerId, {
-        chart: { type: 'areaspline', height: 350 },
-        title: { text: null },
-        xAxis: { type: 'datetime' },
-        yAxis: { title: { text: 'Alerts' } },
-        tooltip: { shared: true },
-        series: [
-            { name: 'Last 30 Days', type: 'spline', data: actualSeries, color: '#007bff', marker: { enabled: false } },
-            {
-                name: 'Confidence Interval',
-                type: 'arearange',
-                data: upperBand.map((point, idx) => [point[0], lowerBand[idx][1], point[1]]),
-                color: 'rgba(0, 123, 255, 0.15)',
-                lineWidth: 0,
-                linkedTo: ':previous'
+    createOrUpdateChart(containerId, (canvas) => new Chart(canvas, {
+        type: 'line',
+        data: {
+            datasets: [
+                {
+                    label: 'Last 30 Days',
+                    data: actualSeries,
+                    borderColor: '#007bff',
+                    backgroundColor: 'rgba(0, 123, 255, 0.1)',
+                    fill: true,
+                    tension: 0.4
+                },
+                {
+                    label: 'Projected',
+                    data: projectionSeries,
+                    borderColor: '#dc3545',
+                    backgroundColor: 'rgba(220, 53, 69, 0.1)',
+                    borderDash: [5, 5],
+                    fill: false,
+                    pointRadius: 4
+                }
+            ]
+        },
+        options: {
+            plugins: {
+                legend: { display: true, position: 'top' },
+                tooltip: { mode: 'index', intersect: false }
             },
-            { name: 'Projected', type: 'spline', data: projectionSeries, color: '#dc3545', dashStyle: 'ShortDash', marker: { enabled: true } }
-        ]
+            scales: {
+                x: {
+                    type: 'time',
+                    time: { unit: 'day' },
+                    title: { display: true, text: 'Date' }
+                },
+                y: {
+                    beginAtZero: true,
+                    title: { display: true, text: 'Alerts' }
+                }
+            }
+        }
     }));
+
     const summary = document.getElementById('forecastSummary');
     if (summary) {
         summary.textContent = `Expected alerts next 7 days: ${forecast.expectedNext7}`;
     }
 }
+
+// Drilldown state management
+let drilldownStack = [];
 
 function createMasterDetailChart(aggregates) {
     const containerId = 'masterDetailChart';
@@ -1226,19 +1214,69 @@ function createMasterDetailChart(aggregates) {
         showNoData(containerId, 'Not enough alert variety to build drilldown');
         return;
     }
-    createOrUpdateChart(containerId, () => Highcharts.chart(containerId, {
-        chart: { type: 'column', height: 350 },
-        title: { text: null },
-        xAxis: { type: 'category' },
-        yAxis: { title: { text: 'Alerts' } },
-        legend: { enabled: false },
-        drilldown: { series: masterDetail.drilldownSeries },
-        series: [{
-            name: 'Alerts',
-            colorByPoint: true,
-            data: masterDetail.baseSeries
-        }]
-    }));
+
+    drilldownStack = [];
+    renderMasterDetailLevel(containerId, masterDetail.baseSeries, masterDetail.drilldownData, null);
+}
+
+function renderMasterDetailLevel(containerId, data, drilldownData, eventName) {
+    createOrUpdateChart(containerId, (canvas) => {
+        const chart = new Chart(canvas, {
+            type: 'bar',
+            data: {
+                labels: data.map(item => item.name || item.month),
+                datasets: [{
+                    label: 'Alerts',
+                    data: data.map(item => item.y || item.count),
+                    backgroundColor: chartColors
+                }]
+            },
+            options: {
+                onClick: (event, elements) => {
+                    if (elements.length > 0) {
+                        const index = elements[0].index;
+                        const item = data[index];
+
+                        if (!eventName && item.eventName) {
+                            // First level: drill into event
+                            const drillData = drilldownData.get(item.eventName);
+                            if (drillData) {
+                                drilldownStack.push({ data, drilldownData, eventName: null });
+                                renderMasterDetailLevel(containerId, drillData.months, drilldownData, item.eventName);
+                            }
+                        }
+                    }
+                },
+                plugins: {
+                    legend: { display: false },
+                    title: {
+                        display: !!eventName,
+                        text: eventName ? `${eventName} by month (click chart to go back)` : 'Click bars to drill down'
+                    }
+                },
+                scales: {
+                    x: { type: 'category' },
+                    y: {
+                        beginAtZero: true,
+                        title: { display: true, text: 'Alerts' }
+                    }
+                }
+            }
+        });
+
+        // Add back navigation if drilled down
+        if (drilldownStack.length > 0) {
+            canvas.style.cursor = 'pointer';
+            canvas.addEventListener('dblclick', () => {
+                if (drilldownStack.length > 0) {
+                    const previous = drilldownStack.pop();
+                    renderMasterDetailLevel(containerId, previous.data, previous.drilldownData, previous.eventName);
+                }
+            });
+        }
+
+        return chart;
+    });
 }
 
 function createLifecycleChart(filteredAlerts) {
@@ -1253,41 +1291,58 @@ function createLifecycleChart(filteredAlerts) {
         showNoData(containerId, 'No alerts with lifecycle data in this filter');
         return;
     }
+
     const categories = alerts.map(alert => `${alert.event} (${alert.severity})`);
-    const points = alerts.map((alert, index) => {
+    const data = alerts.map((alert, index) => {
         const start = alert.sentDate.getTime();
         const end = alert.expiresDate ? alert.expiresDate.getTime() : start + (60 * 60 * 1000);
         return {
-            x: start,
-            x2: end,
             y: index,
-            color: severityColors[alert.severity] || severityColors.Unknown,
-            name: alert.event
+            x: [start, end],
+            backgroundColor: severityColors[alert.severity] || severityColors.Unknown
         };
     });
-    createOrUpdateChart(containerId, () => Highcharts.chart(containerId, {
-        chart: { type: 'xrange', height: 400 },
-        title: { text: null },
-        xAxis: { type: 'datetime', title: { text: 'Timeline' } },
-        yAxis: {
-            categories,
-            reversed: true,
-            title: { text: null }
+
+    createOrUpdateChart(containerId, (canvas) => new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: categories,
+            datasets: [{
+                label: 'Alert Lifecycle',
+                data,
+                backgroundColor: data.map(d => d.backgroundColor),
+                borderColor: 'rgba(0,0,0,0.15)',
+                borderWidth: 1
+            }]
         },
-        tooltip: {
-            pointFormatter() {
-                const start = new Date(this.x).toLocaleString();
-                const end = new Date(this.x2).toLocaleString();
-                return `<b>${this.name}</b><br>Start: ${start}<br>End: ${end}`;
+        options: {
+            indexAxis: 'y',
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: (context) => {
+                            const alert = alerts[context.dataIndex];
+                            const start = alert.sentDate.toLocaleString();
+                            const end = alert.expiresDate ? alert.expiresDate.toLocaleString() : 'Unknown';
+                            return [`Start: ${start}`, `End: ${end}`];
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    type: 'time',
+                    title: { display: true, text: 'Timeline' }
+                },
+                y: {
+                    title: { display: false }
+                }
             }
-        },
-        series: [{
-            name: 'Alert Lifecycle',
-            borderColor: 'rgba(0,0,0,0.15)',
-            data: points
-        }]
+        }
     }));
 }
+
 function createAffectedAreasChart() {
     const containerId = 'affectedAreasChart';
     const container = document.getElementById(containerId);
@@ -1296,19 +1351,31 @@ function createAffectedAreasChart() {
         showNoData(containerId, 'No boundary impact data available');
         return;
     }
-    createOrUpdateChart(containerId, () => Highcharts.chart(containerId, {
-        chart: { type: 'bar', height: 400 },
-        title: { text: null },
-        xAxis: {
-            categories: statsData.mostAffectedBoundaries.map(item => item.name),
-            title: { text: 'Boundary' }
+    createOrUpdateChart(containerId, (canvas) => new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: statsData.mostAffectedBoundaries.map(item => item.name),
+            datasets: [{
+                label: 'Alert Count',
+                data: statsData.mostAffectedBoundaries.map(item => item.count),
+                backgroundColor: '#17a2b8'
+            }]
         },
-        yAxis: { title: { text: 'Number of Alerts' } },
-        series: [{
-            name: 'Alert Count',
-            data: statsData.mostAffectedBoundaries.map(item => item.count),
-            color: '#17a2b8'
-        }]
+        options: {
+            indexAxis: 'y',
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                x: {
+                    beginAtZero: true,
+                    title: { display: true, text: 'Number of Alerts' }
+                },
+                y: {
+                    title: { display: true, text: 'Boundary' }
+                }
+            }
+        }
     }));
 }
 
@@ -1320,16 +1387,25 @@ function createBoundaryTypesChart() {
         showNoData(containerId, 'No boundary types data available');
         return;
     }
-    createOrUpdateChart(containerId, () => Highcharts.chart(containerId, {
-        chart: { type: 'pie', height: 350 },
-        title: { text: null },
-        plotOptions: {
-            pie: { dataLabels: { enabled: true } }
+    createOrUpdateChart(containerId, (canvas) => new Chart(canvas, {
+        type: 'pie',
+        data: {
+            labels: statsData.boundaryStats.map(item => item.type),
+            datasets: [{
+                data: statsData.boundaryStats.map(item => item.count),
+                backgroundColor: chartColors
+            }]
         },
-        series: [{
-            name: 'Boundary Types',
-            data: statsData.boundaryStats.map(item => ({ name: item.type, y: item.count }))
-        }]
+        options: {
+            plugins: {
+                legend: { display: true, position: 'right' },
+                datalabels: {
+                    display: true,
+                    color: '#fff',
+                    font: { weight: 'bold' }
+                }
+            }
+        }
     }));
 }
 
@@ -1337,46 +1413,46 @@ function createReliabilityGauge() {
     const containerId = 'reliabilityGauge';
     const container = document.getElementById(containerId);
     if (!container || !statsData.polling || typeof statsData.polling.success_rate === 'undefined') return;
-    createOrUpdateChart(containerId, () => Highcharts.chart(containerId, {
-        chart: { type: 'solidgauge', height: 300 },
-        title: { text: null },
-        pane: {
-            center: ['50%', '85%'],
-            size: '140%',
-            startAngle: -90,
-            endAngle: 90,
-            background: {
-                backgroundColor: '#EEE',
-                innerRadius: '60%',
-                outerRadius: '100%',
-                shape: 'arc'
-            }
+
+    const rate = statsData.polling.success_rate || 0;
+    const percentage = Math.round(rate * 100);
+
+    createOrUpdateChart(containerId, (canvas) => new Chart(canvas, {
+        type: 'doughnut',
+        data: {
+            datasets: [{
+                data: [rate, 1 - rate],
+                backgroundColor: [
+                    rate < 0.5 ? '#dc3545' : rate < 0.9 ? '#ffc107' : '#28a745',
+                    '#EEE'
+                ],
+                circumference: 180,
+                rotation: 270
+            }]
         },
-        yAxis: {
-            min: 0,
-            max: 1,
-            stops: [
-                [0.1, '#dc3545'],
-                [0.5, '#ffc107'],
-                [0.9, '#28a745']
-            ],
-            lineWidth: 0,
-            tickWidth: 0,
-            minorTickInterval: null,
-            tickAmount: 2,
-            title: { y: -70, text: 'System Reliability' },
-            labels: {
-                y: 16,
-                formatter() {
-                    return Math.round(this.value * 100) + '%';
+        options: {
+            plugins: {
+                legend: { display: false },
+                tooltip: { enabled: false },
+                title: {
+                    display: true,
+                    text: 'System Reliability'
                 }
             }
         },
-        series: [{
-            name: 'Reliability',
-            data: [statsData.polling.success_rate || 0],
-            dataLabels: {
-                format: '<div style="text-align:center"><span style="font-size:24px">{y:.1%}</span><br/><span style="font-size:12px;color:silver">Uptime</span></div>'
+        plugins: [{
+            id: 'gaugeText',
+            afterDraw(chart) {
+                const { ctx, chartArea: { width, height } } = chart;
+                ctx.save();
+                ctx.font = 'bold 24px Segoe UI';
+                ctx.fillStyle = '#212529';
+                ctx.textAlign = 'center';
+                ctx.fillText(`${percentage}%`, width / 2, height / 2 + 20);
+                ctx.font = '12px Segoe UI';
+                ctx.fillStyle = '#6c757d';
+                ctx.fillText('Uptime', width / 2, height / 2 + 40);
+                ctx.restore();
             }
         }]
     }));
@@ -1386,19 +1462,30 @@ function createDurationChart() {
     const containerId = 'durationChart';
     const container = document.getElementById(containerId);
     if (!container || !statsData.avgDurations || !statsData.avgDurations.length) return;
-    createOrUpdateChart(containerId, () => Highcharts.chart(containerId, {
-        chart: { type: 'column', height: 350 },
-        title: { text: null },
-        xAxis: {
-            categories: statsData.avgDurations.map(item => item.event),
-            title: { text: 'Alert Type' }
+    createOrUpdateChart(containerId, (canvas) => new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: statsData.avgDurations.map(item => item.event),
+            datasets: [{
+                label: 'Duration',
+                data: statsData.avgDurations.map(item => Math.round(item.avg_hours * 10) / 10),
+                backgroundColor: '#fd7e14'
+            }]
         },
-        yAxis: { title: { text: 'Average Duration (hours)' } },
-        series: [{
-            name: 'Duration',
-            data: statsData.avgDurations.map(item => Math.round(item.avg_hours * 10) / 10),
-            color: '#fd7e14'
-        }]
+        options: {
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: { display: true, text: 'Average Duration (hours)' }
+                },
+                x: {
+                    title: { display: true, text: 'Alert Type' }
+                }
+            }
+        }
     }));
 }
 
@@ -1490,53 +1577,24 @@ function initializeDashboard() {
     }
 
     window.__statsDashboardInitialized = true;
-    configureHighchartsDefaults();
     initializeFilters();
     updateDashboard();
-    console.log('📊 Dashboard ready');
-}
-
-function renderInitializationFailure(message) {
-    const root = document.getElementById('statisticsDashboardRoot');
-    if (root) {
-        let alert = root.querySelector('.stats-init-error');
-        if (!alert) {
-            alert = document.createElement('div');
-            alert.className = 'alert alert-danger mt-3 stats-init-error';
-            root.prepend(alert);
-        }
-        alert.innerHTML = `<strong>${message}</strong> Please check the browser console for details.`;
-    }
-    if (typeof showToast === 'function') {
-        showToast(message, 'error', 8000);
-    }
-}
-
-function handleInitializationError(error, message) {
-    console.error('❌ Statistics dashboard failed to initialize', error);
-    window.__statsDashboardInitialized = false;
-    renderInitializationFailure(message || 'Statistics failed to load.');
+    console.log('📊 Dashboard ready (Chart.js)');
 }
 
 document.addEventListener('DOMContentLoaded', () => {
     updateSystemInfo();
-    const highchartsPromise = window.__highchartsLoadPromise;
-
-    if (!highchartsPromise) {
-        handleInitializationError(new Error('Highcharts loader was not initialized.'), 'Statistics failed to load because the charting library was not requested.');
-        return;
+    try {
+        initializeDashboard();
+    } catch (error) {
+        console.error('❌ Statistics dashboard failed to initialize', error);
+        const root = document.getElementById('statisticsDashboardRoot');
+        if (root) {
+            const alert = document.createElement('div');
+            alert.className = 'alert alert-danger mt-3';
+            alert.innerHTML = `<strong>Failed to initialize statistics dashboard.</strong> ${error.message}`;
+            root.prepend(alert);
+        }
     }
-
-    highchartsPromise
-        .then(() => {
-            try {
-                initializeDashboard();
-            } catch (error) {
-                handleInitializationError(error, 'Statistics failed to load.');
-            }
-        })
-        .catch((error) => {
-            handleInitializationError(error, 'Statistics failed to load because the charting library could not be loaded.');
-        });
 });
 </script>
