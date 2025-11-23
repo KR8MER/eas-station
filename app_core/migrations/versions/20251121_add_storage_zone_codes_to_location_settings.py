@@ -59,13 +59,15 @@ def upgrade() -> None:
 
         # For existing installations, populate storage_zone_codes with current zone_codes as default
         # This maintains backwards compatibility - existing setups will store all monitored zones
+        # Convert Python list to JSON string, then cast to JSONB to match zone_codes column type
+        default_json = json.dumps(DEFAULT_STORAGE_ZONE_CODES)
         bind.execute(
             sa.text(
                 f"UPDATE {LOCATION_SETTINGS_TABLE} "
-                f"SET {STORAGE_ZONE_CODES_COLUMN} = COALESCE(zone_codes, :default_codes) "
+                f"SET {STORAGE_ZONE_CODES_COLUMN} = COALESCE(zone_codes, :default_codes::jsonb) "
                 f"WHERE {STORAGE_ZONE_CODES_COLUMN} IS NULL"
             ),
-            {"default_codes": DEFAULT_STORAGE_ZONE_CODES},
+            {"default_codes": default_json},
         )
 
 

@@ -331,7 +331,7 @@ def collect_metrics():
         if _audio_controller:
             controller_stats = {
                 "sources": {},
-                "active_source": _audio_controller.get_active_source_name(),
+                "active_source": _audio_controller._active_source,
             }
 
             for name, source in _audio_controller._sources.items():
@@ -433,6 +433,25 @@ def main():
         # Initialize Icecast auto-streaming
         logger.info("Initializing Icecast auto-streaming...")
         auto_streaming = initialize_auto_streaming(app, audio_controller)
+
+        # Add all RUNNING audio sources to Icecast streaming
+        if auto_streaming and audio_controller:
+            from app_core.audio.ingest import AudioSourceStatus
+
+            logger.info("Adding running audio sources to Icecast streaming...")
+            for source_name, source_adapter in audio_controller._sources.items():
+                # Only add sources that are actually running
+                if source_adapter.status != AudioSourceStatus.RUNNING:
+                    logger.debug(f"Skipping {source_name} - not running (status: {source_adapter.status})")
+                    continue
+
+                try:
+                    if auto_streaming.add_source(source_name, source_adapter):
+                        logger.info(f"✅ Added running source {source_name} to Icecast streaming")
+                    else:
+                        logger.warning(f"Failed to add {source_name} to Icecast streaming")
+                except Exception as e:
+                    logger.error(f"Error adding {source_name} to Icecast: {e}", exc_info=True)
 
         # Initialize EAS monitor
         logger.info("Initializing EAS monitor...")
