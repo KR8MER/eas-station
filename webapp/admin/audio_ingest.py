@@ -1968,9 +1968,9 @@ def api_stream_audio(source_name: str):
         # Pre-buffer audio for smooth playback - continue even if we can't fill buffer
         logger.info(f'Pre-buffering audio for {source_name}')
         prebuffer = []
-        prebuffer_target = int(sample_rate * 2)  # 2 seconds of audio
+        prebuffer_target = int(sample_rate * 5)  # 5 seconds of audio (increased from 2s to prevent choppiness)
         prebuffer_samples = 0
-        prebuffer_timeout = 5.0  # Max 5 seconds to fill prebuffer
+        prebuffer_timeout = 10.0  # Max 10 seconds to fill prebuffer (increased from 5s)
         prebuffer_start = time.time()
         prebuffer_errors = 0
 
@@ -1982,7 +1982,7 @@ def api_stream_audio(source_name: str):
                 break
 
             try:
-                audio_chunk = active_adapter.get_audio_chunk(timeout=0.2)
+                audio_chunk = active_adapter.get_audio_chunk(timeout=0.5)  # Increased from 0.2s to 0.5s
                 if audio_chunk is not None:
                     if not isinstance(audio_chunk, np.ndarray):
                         audio_chunk = np.array(audio_chunk, dtype=np.float32)
@@ -2022,8 +2022,8 @@ def api_stream_audio(source_name: str):
                 
                 # Wrap chunk read in try/except to prevent read errors from terminating stream
                 try:
-                    # Get audio chunk from adapter (very short timeout to keep stream responsive)
-                    audio_chunk = active_adapter.get_audio_chunk(timeout=0.05)
+                    # Get audio chunk from adapter (increased timeout to prevent underruns)
+                    audio_chunk = active_adapter.get_audio_chunk(timeout=0.15)  # Increased from 0.05s to 0.15s
                 except Exception as e:
                     current_time = time.time()
                     if current_time - last_error_log_time > error_log_interval:

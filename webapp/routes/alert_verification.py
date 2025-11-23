@@ -827,6 +827,13 @@ def register(app: Flask, logger) -> None:
     route_logger = logger.getChild("alert_verification")
     repo_root = Path(app.root_path).resolve()
 
+    # Clean up stale progress files on startup (files older than 1 hour)
+    try:
+        ProgressTracker.cleanup_old(max_age_seconds=3600)
+        route_logger.info("Cleaned up stale alert verification progress files")
+    except Exception as e:
+        route_logger.warning(f"Failed to cleanup stale progress files: {e}")
+
     def _load_configured_fips(override: Iterable[str]) -> List[str]:
         override_list = [str(code).strip() for code in (override or []) if str(code).strip()]
         if override_list:
@@ -1030,6 +1037,12 @@ def register(app: Flask, logger) -> None:
     @app.route("/admin/alert-verification/operations", methods=["POST"])
     def start_alert_verification_operation():
         window_days = _resolve_window_days()
+
+        # Periodic cleanup of old progress files
+        try:
+            ProgressTracker.cleanup_old(max_age_seconds=3600)
+        except Exception:
+            pass  # Don't fail operation if cleanup fails
 
         if "audio_file" not in request.files:
             return (
