@@ -444,8 +444,10 @@ class AudioIngestController:
         self._flask_app = flask_app  # Store Flask app for app context in background threads
 
         # Broadcast queue for pub/sub audio distribution
-        # Increased from 100 to 200 to prevent drops during processing spikes
-        self._broadcast_queue = BroadcastQueue(name="audio-ingest-broadcast", max_queue_size=200)
+        # CRITICAL: Increased to 2000 to prevent EAS monitor from missing chunks
+        # At 44100Hz: 200 chunks = 18.6 seconds (TOO SMALL - caused missed alerts)
+        # At 44100Hz: 2000 chunks = 186 seconds (safe buffer)
+        self._broadcast_queue = BroadcastQueue(name="audio-ingest-broadcast", max_queue_size=2000)
         # Subscribe to our own broadcast for backward compatibility with get_audio_chunk()
         self._controller_subscription = self._broadcast_queue.subscribe("controller-legacy")
 
