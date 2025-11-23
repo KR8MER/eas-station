@@ -1,15 +1,104 @@
-# Docker Compose with Separated Services
-# This file demonstrates how to separate components into individual containers
-# for better CPU attribution and debugging
+# EAS Station - Separated Service Architecture
+#
+# This is the SAME as docker-compose.yml - the separated architecture is now the default!
+#
+# Modern Architecture:
+#   - audio-service: Standalone audio processing (SDR, EAS monitoring, metrics)
+#   - app: Web UI only (reads metrics from Redis)
+#   - redis: State management and pub/sub
+#
+# Benefits:
+#   - Web crashes don't affect audio monitoring
+#   - Independent service restart
+#   - Clear CPU attribution per service
+#   - Simpler than old multi-container approach
+#
+# For the full configuration, use docker-compose.yml directly:
+#   docker-compose up -d
+#
+# This file is kept for backward compatibility and documentation purposes.
+# It demonstrates the separated service architecture that's now standard.
 
 version: '3.8'
 
 services:
-  # Database
-  alerts-db:
-    # ... keep existing configuration ...
-    
-  # Main Flask web application (UI only, no background processing)
+  # Redis - State management and coordination
+  redis:
+    image: redis:7-alpine
+    container_name: eas-redis
+    restart: unless-stopped
+    networks:
+      - eas-network
+    volumes:
+      - redis-data:/data
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    security_opt:
+      - no-new-privileges:true
+
+  # Audio Service - Dedicated audio processing
+  # Runs independently from web application
+  # Publishes metrics to Redis every 5 seconds
+  audio-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: eas-station:latest
+    container_name: eas-audio-service
+    restart: unless-stopped
+    networks:
+      - eas-network
+    command: ["python", "audio_service.py"]
+    volumes:
+      - app-config:/app-config
+    environment:
+      # Database connection
+      POSTGRES_HOST: ${POSTGRES_HOST:-host.docker.internal}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_DB: ${POSTGRES_DB:-alerts}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+
+      # Redis connection
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_DB: ${REDIS_DB:-0}
+
+      # Application settings
+      CONFIG_PATH: /app-config/.env
+
+      # SDR settings
+      SDR_ARGS: ${SDR_ARGS:-driver=airspy}
+
+      # Icecast configuration
+      ICECAST_SERVER: ${ICECAST_SERVER:-icecast}
+      ICECAST_PORT: ${ICECAST_INTERNAL_PORT:-8000}
+      ICECAST_SOURCE_PASSWORD: ${ICECAST_SOURCE_PASSWORD:-eas_station_source_password}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    devices:
+      # SDR Device Passthrough
+      - /dev/bus/usb:/dev/bus/usb
+    privileged: true
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # Web Application - UI only (no audio processing)
+  # Reads metrics from Redis (published by audio-service)
+  # Multiple workers can run safely - all read from same Redis state
   app:
     build:
       context: .
@@ -25,20 +114,59 @@ services:
       - stack.env
     volumes:
       - app-config:/app-config
+      - certbot-conf:/etc/letsencrypt:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
-      POSTGRES_HOST: ${POSTGRES_HOST:-alerts-db}
+      # Database connection
+      POSTGRES_HOST: ${POSTGRES_HOST:-host.docker.internal}
       POSTGRES_PORT: ${POSTGRES_PORT:-5432}
       POSTGRES_DB: ${POSTGRES_DB:-alerts}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+
+      # Redis connection
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_DB: ${REDIS_DB:-0}
+
+      # Application settings
+      SECRET_KEY: ${SECRET_KEY:-}
+      FLASK_ENV: ${FLASK_ENV:-production}
+      FLASK_DEBUG: ${FLASK_DEBUG:-false}
+      CONFIG_PATH: /app-config/.env
+
+      # Service architecture - WEB ONLY MODE
+      AUDIO_SERVICE_MODE: "web_only"  # Don't run audio in web app
+
+      # Location defaults
+      DEFAULT_TIMEZONE: ${DEFAULT_TIMEZONE:-America/New_York}
+
+      # Icecast auto-configuration
+      ICECAST_SERVER: ${ICECAST_SERVER:-icecast}
+      ICECAST_PORT: ${ICECAST_INTERNAL_PORT:-8000}
+      ICECAST_EXTERNAL_PORT: ${ICECAST_EXTERNAL_PORT:-8001}
+      ICECAST_SOURCE_PASSWORD: ${ICECAST_SOURCE_PASSWORD:-eas_station_source_password}
+      ICECAST_ENABLED: ${ICECAST_ENABLED:-true}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
+      - /dev:/dev:ro
+    privileged: true
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      redis:
+        condition: service_healthy
+      icecast:
+        condition: service_healthy
     restart: unless-stopped
-    # Web UI only - no background tasks
-  
-  # CAP Alert Poller for NOAA (lean, polling only)
+
+  # NOAA CAP Alert Poller
   noaa-poller:
     image: eas-station:latest
     depends_on:
-      - alerts-db
+      - app
     networks:
       - eas-network
     command: ["python", "poller/cap_poller.py", "--continuous", "--interval", "180"]
@@ -48,126 +176,157 @@ services:
     volumes:
       - app-config:/app-config
     environment:
-      POSTGRES_HOST: ${POSTGRES_HOST:-alerts-db}
+      POSTGRES_HOST: ${POSTGRES_HOST:-host.docker.internal}
       POSTGRES_PORT: ${POSTGRES_PORT:-5432}
       POSTGRES_DB: ${POSTGRES_DB:-alerts}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      # Disable components that run in separate containers
-      CAP_POLLER_ENABLE_RADIO: "0"  # Radio runs in radio-manager container
-      # Note: EAS broadcaster should be decoupled from poller
-    # htop will show: "python cap_poller.py" with accurate CPU usage
-  
-  # CAP Alert Poller for IPAWS
+      CONFIG_PATH: /app-config/.env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # IPAWS CAP Alert Poller
   ipaws-poller:
     image: eas-station:latest
     depends_on:
-      - alerts-db
-    networks:
-      - eas-network
-    command: ["python", "poller/cap_poller.py", "--continuous", "--interval", "180"]
-    restart: unless-stopped
-    env_file:
-      - stack.env
-    volumes:
-      - app-config:/app-config
-    environment:
-      POSTGRES_HOST: ${POSTGRES_HOST:-alerts-db}
-      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
-      POSTGRES_DB: ${POSTGRES_DB:-alerts}
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      CAP_POLLER_MODE: "IPAWS"
-      CAP_POLLER_ENABLE_RADIO: "0"
-  
-  # EAS Audio Broadcaster (separate process)
-  eas-broadcaster:
-    image: eas-station:latest
-    depends_on:
-      - alerts-db
       - app
     networks:
       - eas-network
-    command: ["python", "scripts/run_eas_broadcaster.py"]
+    command:
+      - python
+      - poller/cap_poller.py
+      - --continuous
+      - --interval
+      - "180"
+      - --log-level
+      - "${LOG_LEVEL:-INFO}"
     restart: unless-stopped
     env_file:
       - stack.env
     volumes:
       - app-config:/app-config
-      - /tmp/eas-audio:/tmp/eas-audio  # For audio file storage
     environment:
-      POSTGRES_HOST: ${POSTGRES_HOST:-alerts-db}
+      POSTGRES_HOST: ${POSTGRES_HOST:-host.docker.internal}
       POSTGRES_PORT: ${POSTGRES_PORT:-5432}
       POSTGRES_DB: ${POSTGRES_DB:-alerts}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      EAS_BROADCAST_CHECK_INTERVAL: ${EAS_BROADCAST_CHECK_INTERVAL:-5}
-    devices:
-      - /dev/snd:/dev/snd  # Audio device access
-    # htop will show: "python run_eas_broadcaster.py" with its own CPU usage
-  
-  # Radio/SDR Manager (separate process)
-  radio-manager:
-    image: eas-station:latest
-    depends_on:
-      - alerts-db
-    networks:
-      - eas-network
-    command: ["python", "scripts/run_radio_manager.py"]
-    restart: unless-stopped
-    env_file:
-      - stack.env
-    volumes:
-      - app-config:/app-config
-      - ./radio_captures:/app/radio_captures
-    environment:
-      POSTGRES_HOST: ${POSTGRES_HOST:-alerts-db}
-      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
-      POSTGRES_DB: ${POSTGRES_DB:-alerts}
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      ENABLE_RADIO_MANAGER: ${ENABLE_RADIO_MANAGER:-0}  # Set to 1 to enable
-      RADIO_CONFIG_REFRESH_INTERVAL: ${RADIO_CONFIG_REFRESH_INTERVAL:-300}
-    devices:
-      - /dev/bus/usb:/dev/bus/usb  # SDR device access
-    privileged: false  # Only if needed for SDR access
-    # htop will show: "python run_radio_manager.py" with its own CPU usage
-  
-  # EAS Audio Monitor (separate process) - THE CPU HOG!
-  eas-audio-monitor:
-    image: eas-station:latest
-    depends_on:
-      - alerts-db
-      - app
-    networks:
-      - eas-network
-    command: ["python", "examples/run_continuous_eas_monitor.py"]  # Or create new script
-    restart: unless-stopped
-    env_file:
-      - stack.env
-    volumes:
-      - app-config:/app-config
-      - /tmp/eas-audio:/tmp/eas-audio
-    environment:
-      POSTGRES_HOST: ${POSTGRES_HOST:-alerts-db}
-      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
-      POSTGRES_DB: ${POSTGRES_DB:-alerts}
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      EAS_SCAN_INTERVAL: ${EAS_SCAN_INTERVAL:-6.0}  # CRITICAL: Set to 6+ to avoid backlog
-      MAX_CONCURRENT_EAS_SCANS: ${MAX_CONCURRENT_EAS_SCANS:-2}
-    devices:
-      - /dev/snd:/dev/snd  # Audio input device
-    # htop will show: "python run_continuous_eas_monitor.py" - NOW WE CAN SEE THE CPU HOG!
+      CONFIG_PATH: /app-config/.env
+      CAP_POLLER_MODE: IPAWS
+      CAP_ENDPOINTS: ${IPAWS_CAP_FEED_URLS:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
-  # Nginx reverse proxy
+  # Icecast Streaming Server
+  icecast:
+    build:
+      context: .
+      dockerfile: Dockerfile.icecast
+    image: eas-icecast:latest
+    container_name: eas-icecast
+    restart: unless-stopped
+    networks:
+      - eas-network
+    ports:
+      - "${ICECAST_PORT:-8001}:8000"
+    environment:
+      - ICECAST_LOCATION=EAS Monitoring Station
+      - ICECAST_ADMIN=${ICECAST_CONTACT:-admin@example.com}
+      - ICECAST_HOSTNAME=${ICECAST_HOSTNAME:-localhost}
+      - ICECAST_MAX_CLIENTS=${ICECAST_MAX_CLIENTS:-100}
+      - ICECAST_MAX_SOURCES=${ICECAST_MAX_SOURCES:-50}
+      - ICECAST_SOURCE_PASSWORD=${ICECAST_SOURCE_PASSWORD:-eas_station_source_password}
+      - ICECAST_RELAY_PASSWORD=${ICECAST_RELAY_PASSWORD:-changeme_relay}
+      - ICECAST_ADMIN_PASSWORD=${ICECAST_ADMIN_PASSWORD:-changeme_admin}
+    volumes:
+      - icecast-logs:/var/log/icecast2
+      - app-config:/app-config:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f -s http://localhost:8000/status.xsl >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # Nginx Reverse Proxy
   nginx:
-    # ... keep existing ...
+    build:
+      context: .
+      dockerfile: Dockerfile.nginx
+    image: eas-nginx:latest
+    restart: unless-stopped
+    networks:
+      - eas-network
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - certbot-conf:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
+      - nginx-logs:/var/log/nginx
+      - app-config:/app-config:ro
+    environment:
+      - DOMAIN_NAME=${DOMAIN_NAME:-localhost}
+      - SSL_EMAIL=${SSL_EMAIL:-admin@example.com}
+      - CERTBOT_STAGING=${CERTBOT_STAGING:-0}
+    depends_on:
+      - app
+    security_opt:
+      - no-new-privileges:true
+
+  # Certbot for SSL certificates
+  certbot:
+    image: certbot/certbot:latest
+    restart: unless-stopped
+    networks:
+      - eas-network
+    volumes:
+      - certbot-conf:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
+      - app-config:/app-config:ro
+    environment:
+      - DOMAIN_NAME=${DOMAIN_NAME:-localhost}
+      - SSL_EMAIL=${SSL_EMAIL:-admin@example.com}
+      - CERTBOT_STAGING=${CERTBOT_STAGING:-0}
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot --webroot-path=/var/www/certbot; sleep 12h & wait $${!}; done;'"
+    security_opt:
+      - no-new-privileges:true
 
 volumes:
-  app-config:
-  # ... other volumes ...
+  redis-data:  # Redis persistent storage
+  app-config:  # Persistent configuration
+  icecast-logs:  # Icecast logs
+  certbot-conf:  # SSL certificates
+  certbot-www:  # Certbot ACME challenges
+  nginx-logs:  # Nginx logs
 
 networks:
   eas-network:
+    enable_ipv6: true
     driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.0.0/16
+          gateway: 172.20.0.1
+        - subnet: fd00:ea:1::/64
+          gateway: fd00:ea:1::1
+
+# ARCHITECTURE NOTES:
+#
+# This separated architecture provides:
+#   ✅ Fault isolation - web crashes don't affect audio
+#   ✅ Independent scaling - add web workers without duplicating audio
+#   ✅ Clear debugging - separate logs per service
+#   ✅ Simple coordination - Redis pub/sub (no complex file locking)
+#   ✅ Performance - dedicated resources per service
+#
+# Monitoring:
+#   docker-compose logs -f audio-service  # Audio processing logs
+#   docker-compose logs -f app            # Web application logs
+#   docker-compose exec redis redis-cli HGETALL eas:metrics  # View metrics
+#
+# Compare to old approach (eas-broadcaster, radio-manager, eas-audio-monitor):
+#   - Old: 4+ separate containers, complex coordination
+#   - New: 1 audio-service container, simple Redis pub/sub
+#   - Result: Simpler, more reliable, easier to maintain

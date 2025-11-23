@@ -31,3 +31,18 @@ services:
       - /dev/gpiochip0:/dev/gpiochip0  # GPIO chip device for modern GPIO libraries (lgpio)
     privileged: true  # Required for GPIO access on Pi 5
     # Configuration: start-pi.sh syncs local .env to persistent volume before starting
+
+  audio-service:
+    env_file:
+      - .env  # Load all settings from local .env
+    environment:
+      # Hard-code database settings for CasaOS PostgreSQL
+      POSTGRES_HOST: host.docker.internal
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: casaos
+      POSTGRES_USER: casaos
+      POSTGRES_PASSWORD: casaos
+    devices:
+      - /dev/gpiomem:/dev/gpiomem    # GPIO memory access for user-space GPIO control
+      - /dev/gpiochip0:/dev/gpiochip0  # GPIO chip device for modern GPIO libraries (lgpio)
+    privileged: true  # Required for GPIO access on Pi 5
