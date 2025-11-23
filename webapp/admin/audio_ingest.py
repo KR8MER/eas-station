@@ -1968,10 +1968,12 @@ def api_stream_audio(source_name: str):
         sample_rate = active_adapter.config.sample_rate
         channels = active_adapter.config.channels
         bits_per_sample = 16  # 16-bit PCM
-        
+
         # Constants for resilience
         SILENCE_CHUNK_DURATION = 0.05  # 50ms chunks of silence
         MAX_CONSECUTIVE_ERRORS = 50
+        MAX_REALTIME_BLOCK_SECONDS = 0.25  # Cap live bursts to ~250ms to avoid chunky playback
+        max_realtime_samples = int(sample_rate * channels * MAX_REALTIME_BLOCK_SECONDS)
         
         if active_adapter.status != AudioSourceStatus.RUNNING:
             logger.warning(
@@ -2034,9 +2036,9 @@ def api_stream_audio(source_name: str):
         # Pre-buffer audio for smooth playback - continue even if we can't fill buffer
         logger.info(f'Pre-buffering audio for {source_name}')
         prebuffer = []
-        prebuffer_target = int(sample_rate * 5)  # 5 seconds of audio (increased from 2s to prevent choppiness)
+        prebuffer_target = int(sample_rate * 1.5)  # ~1.5 seconds of audio to minimize latency
         prebuffer_samples = 0
-        prebuffer_timeout = 10.0  # Max 10 seconds to fill prebuffer (increased from 5s)
+        prebuffer_timeout = 5.0  # Max 5 seconds to fill prebuffer
         prebuffer_start = time.time()
         prebuffer_errors = 0
 
@@ -2140,6 +2142,10 @@ def api_stream_audio(source_name: str):
                     # Ensure we have a numpy array
                     if not isinstance(audio_chunk, np.ndarray):
                         audio_chunk = np.array(audio_chunk, dtype=np.float32)
+
+                    if max_realtime_samples > 0 and len(audio_chunk) > max_realtime_samples:
+                        # Trim to most recent audio to keep latency low and avoid bursty playback
+                        audio_chunk = audio_chunk[-max_realtime_samples:]
 
                     # Clip to [-1, 1] range and convert to int16
                     audio_chunk = np.clip(audio_chunk, -1.0, 1.0)
