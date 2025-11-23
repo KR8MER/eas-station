@@ -1194,13 +1194,23 @@ def register(app: Flask, logger) -> None:
             enabled_receivers = [r for r in receivers_db if r.enabled]
             auto_start_receivers = [r for r in enabled_receivers if r.auto_start]
 
-            # Get RadioManager status
-            radio_manager = get_radio_manager()
-            available_drivers = list(radio_manager.available_drivers().keys())
-
-            # Get loaded receiver instances
+            # In separated architecture, RadioManager runs in audio-service container
+            # The app container only serves the web UI and reads from database
+            # Don't try to access RadioManager locally
+            available_drivers = []
             loaded_receivers = {}
-            if hasattr(radio_manager, '_receivers'):
+            radio_manager = None
+
+            # Get RadioManager status (only if available locally)
+            try:
+                radio_manager = get_radio_manager()
+                available_drivers = list(radio_manager.available_drivers().keys())
+            except Exception as exc:
+                # RadioManager not available - this is normal in separated architecture
+                route_logger.debug("RadioManager not available (separated architecture): %s", exc)
+
+            # Get loaded receiver instances (only if radio_manager is available)
+            if radio_manager and hasattr(radio_manager, '_receivers'):
                 for identifier, receiver_instance in radio_manager._receivers.items():
                     status = receiver_instance.get_status()
 
@@ -1248,7 +1258,11 @@ def register(app: Flask, logger) -> None:
             with_samples_count = sum(1 for r in loaded_receivers.values() if r['samples_available'])
 
             # Determine overall health status
-            if len(loaded_receivers) == 0 and len(enabled_receivers) > 0:
+            if len(loaded_receivers) == 0 and len(enabled_receivers) > 0 and radio_manager is None:
+                # Separated architecture: RadioManager runs in audio-service container
+                health_status = "info"
+                health_message = "Radio processing handled by audio-service container"
+            elif len(loaded_receivers) == 0 and len(enabled_receivers) > 0:
                 health_status = "error"
                 health_message = "RadioManager not initialized - restart required"
             elif locked_count > 0 and with_samples_count > 0:
