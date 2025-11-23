@@ -45,6 +45,9 @@ def initialize_eas_monitor(audio_manager, alert_callback=None, auto_start=True) 
     """
     Initialize the global EAS monitor instance with real-time streaming decoder.
 
+    IMPORTANT: In multi-worker setups, only the MASTER worker should initialize
+    the EAS monitor. Slave workers will read shared metrics from the master.
+
     Args:
         audio_manager: AudioSourceManager or AudioIngestController instance
         alert_callback: Optional callback for alert detections
@@ -54,6 +57,16 @@ def initialize_eas_monitor(audio_manager, alert_callback=None, auto_start=True) 
         True if initialized successfully
     """
     global _monitor_instance
+
+    # Check if this worker is authorized to run EAS monitor
+    from .worker_coordinator import is_master_worker
+
+    if not is_master_worker():
+        logger.info(
+            f"Worker PID {os.getpid()} is SLAVE - skipping EAS monitor initialization "
+            "(master worker handles audio processing)"
+        )
+        return False
 
     with _monitor_lock:
         if _monitor_instance is not None:
@@ -108,7 +121,12 @@ def initialize_eas_monitor(audio_manager, alert_callback=None, auto_start=True) 
             if auto_start:
                 started = _monitor_instance.start()
                 if started:
-                    logger.info("EAS monitor started automatically")
+                    logger.info("✅ EAS monitor started automatically on MASTER worker")
+
+                    # Start heartbeat writer to share metrics with slave workers
+                    from .worker_coordinator import start_heartbeat_writer
+                    start_heartbeat_writer(get_combined_metrics)
+                    logger.info("Started metrics heartbeat writer for cross-worker coordination")
                 else:
                     logger.warning("EAS monitor failed to auto-start")
                 return started
@@ -167,3 +185,74 @@ def shutdown_eas_monitor() -> None:
                 logger.error(f"Error during EAS monitor shutdown: {e}", exc_info=True)
             finally:
                 _monitor_instance = None
+
+    # Stop heartbeat writer if running
+    from .worker_coordinator import stop_heartbeat_writer
+    stop_heartbeat_writer()
+
+
+def get_combined_metrics() -> dict:
+    """
+    Get combined metrics from audio controller and EAS monitor.
+
+    This function is called by the heartbeat writer to collect all metrics
+    that should be shared across workers.
+
+    Returns:
+        Dictionary containing all relevant metrics
+    """
+    metrics = {
+        "eas_monitor": None,
+        "audio_controller": None,
+        "broadcast_queue": None,
+    }
+
+    try:
+        # Get EAS monitor stats
+        if _monitor_instance is not None:
+            try:
+                monitor_stats = _monitor_instance.get_stats()
+                metrics["eas_monitor"] = monitor_stats
+            except Exception as e:
+                logger.error(f"Error getting EAS monitor stats: {e}")
+
+        # Get audio controller stats
+        try:
+            from webapp.admin.audio_ingest import _get_audio_controller
+            controller = _get_audio_controller()
+
+            if controller is not None:
+                # Get controller stats
+                controller_stats = {
+                    "sources": {},
+                    "active_source": controller.get_active_source_name(),
+                }
+
+                # Get per-source stats
+                for name, source in controller._sources.items():
+                    try:
+                        source_stats = {
+                            "status": source.status.value if hasattr(source.status, 'value') else str(source.status),
+                            "sample_rate": getattr(source, 'sample_rate', None),
+                        }
+                        controller_stats["sources"][name] = source_stats
+                    except Exception as e:
+                        logger.error(f"Error getting stats for source '{name}': {e}")
+
+                metrics["audio_controller"] = controller_stats
+
+                # Get broadcast queue stats
+                try:
+                    broadcast_queue = controller.get_broadcast_queue()
+                    if broadcast_queue:
+                        metrics["broadcast_queue"] = broadcast_queue.get_stats()
+                except Exception as e:
+                    logger.error(f"Error getting broadcast queue stats: {e}")
+
+        except Exception as e:
+            logger.error(f"Error getting audio controller stats: {e}")
+
+    except Exception as e:
+        logger.error(f"Error collecting combined metrics: {e}")
+
+    return metrics

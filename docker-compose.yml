@@ -41,6 +41,29 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  redis:
+    image: redis:7-alpine
+    container_name: eas-redis
+    restart: unless-stopped
+    networks:
+      - eas-network
+    volumes:
+      - redis-data:/data
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    security_opt:
+      - no-new-privileges:true
+
   app:
     build:
       context: .
@@ -66,6 +89,11 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-alerts}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+
+      # Redis connection for worker coordination
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_DB: ${REDIS_DB:-0}
 
       # Application settings
       SECRET_KEY: ${SECRET_KEY:-}
@@ -112,6 +140,8 @@ services:
     security_opt:
       - no-new-privileges:true
     depends_on:
+      redis:
+        condition: service_healthy
       icecast:
         condition: service_healthy
 
@@ -272,6 +302,7 @@ services:
 
 volumes:
   alerts-db-data:
+  redis-data:  # Redis persistent storage for worker coordination
   app-config:  # Persistent storage for wizard-generated .env file
   icecast-logs:  # Icecast server logs
   certbot-conf:  # Let's Encrypt SSL certificates
