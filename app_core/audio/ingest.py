@@ -645,6 +645,11 @@ class AudioIngestController:
         """
         logger.info("Broadcast pump started")
 
+        last_status_log = 0.0
+        status_log_interval = 10.0  # Log status every 10 seconds
+        chunks_published_since_log = 0
+        chunks_none_since_log = 0
+
         while not self._pump_stop.is_set():
             try:
                 # Find the best active source based on priority
@@ -653,6 +658,29 @@ class AudioIngestController:
                         (name, source) for name, source in self._sources.items()
                         if source.status == AudioSourceStatus.RUNNING and source.config.enabled
                     ]
+
+                current_time = time.time()
+
+                # Periodic status logging
+                if current_time - last_status_log >= status_log_interval:
+                    with self._lock:
+                        total_sources = len(self._sources)
+                        running_sources = len(active_sources)
+
+                    broadcast_stats = self._broadcast_queue.get_stats()
+
+                    logger.info(
+                        f"Broadcast pump status: {running_sources}/{total_sources} sources running, "
+                        f"{broadcast_stats['subscribers']} subscribers, "
+                        f"{chunks_published_since_log} chunks published (last {status_log_interval}s), "
+                        f"{chunks_none_since_log} empty reads, "
+                        f"total published: {broadcast_stats['published_chunks']}, "
+                        f"dropped: {broadcast_stats['dropped_chunks']}"
+                    )
+
+                    last_status_log = current_time
+                    chunks_published_since_log = 0
+                    chunks_none_since_log = 0
 
                 if not active_sources:
                     # No active sources, sleep and retry
@@ -673,10 +701,13 @@ class AudioIngestController:
                 chunk = best_source.get_audio_chunk(timeout=0.5)
 
                 if chunk is not None:
+                    chunks_published_since_log += 1
                     # Publish to broadcast queue - all subscribers get a copy
                     delivered = self._broadcast_queue.publish(chunk)
                     if delivered == 0:
                         logger.warning("No subscribers to receive audio chunk")
+                else:
+                    chunks_none_since_log += 1
 
             except Exception as e:
                 logger.error(f"Error in broadcast pump loop: {e}", exc_info=True)
