@@ -100,25 +100,36 @@ class BroadcastAudioAdapter:
             # Try to fill buffer if we don't have enough samples
             while len(self._buffer) < num_samples:
                 try:
-                    # Increased timeout from 0.1s to 0.5s to match broadcast pump
-                    # This prevents false underruns when pump has brief delays
-                    chunk = self._subscriber_queue.get(timeout=0.5)
-                except Exception:
+                    # Increased timeout to 2.0s to prevent false underruns
+                    # Broadcast pump publishes ~10 chunks/sec, so 2s should always get data
+                    chunk = self._subscriber_queue.get(timeout=2.0)
+
+                    # Log successful read for first few to verify subscription works
+                    if self._total_reads < 5:
+                        logger.info(
+                            f"✅ {self.subscriber_id}: Successfully got chunk from queue "
+                            f"(size: {len(chunk) if chunk is not None else 0})"
+                        )
+                except Exception as e:
                     # No more audio available right now
                     if len(self._buffer) < num_samples:
                         # Buffer underrun - log warning for monitoring
                         self._underrun_count += 1
                         now = time.time()
-                        # Throttle noisy underrun warnings while still surfacing trends
+                        # Log first 10 underruns immediately to diagnose subscription issues
+                        # Then throttle noisy warnings
                         if (
-                            self._underrun_count <= 3
+                            self._underrun_count <= 10
                             or self._underrun_count % 50 == 0
                             or (now - self._last_underrun_log) >= 10.0
                         ):
+                            # Get queue stats for debugging
+                            queue_size = self._subscriber_queue.qsize()
                             logger.warning(
-                                f"{self.subscriber_id}: Buffer underrun #{self._underrun_count}! "
-                                f"Requested {num_samples} samples, only have {len(self._buffer)} "
-                                f"(queue empty after timeout, {self._underrun_count}/{self._total_reads} underruns)"
+                                f"❌ {self.subscriber_id}: Underrun #{self._underrun_count}! "
+                                f"Queue timeout after 2.0s, queue_size={queue_size}, "
+                                f"buffer={len(self._buffer)}/{num_samples} samples, "
+                                f"exception={type(e).__name__}"
                             )
                             self._last_underrun_log = now
                         return None
