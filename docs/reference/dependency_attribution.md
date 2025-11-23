@@ -1,20 +1,14 @@
 # Open-Source Dependency Attribution
 
-## 🚨 CRITICAL LICENSE COMPLIANCE WARNING 🚨
+## ✅ LICENSE COMPLIANCE STATUS
 
-**IMPORTANT**: The current version of EAS Station includes **Highcharts** (v12.4.0), a commercial JavaScript charting library that **REQUIRES A PAID LICENSE** for commercial use.
+**All dependencies are now cleared for commercial use!**
 
-- ❌ **CANNOT BE USED FOR COMMERCIAL DISTRIBUTION** without purchasing a Highcharts commercial license ($540+)
-- ✅ **Safe for non-commercial, open-source use** under Creative Commons Attribution-NonCommercial 3.0
-- 🚨 **BLOCKER for commercial releases** - See `LICENSE_COMPLIANCE_CRITICAL.md` for full details
-- ✅ **ACKNOWLEDGED** - Removal roadmap in place (Section 11 of `docs/roadmap/master_todo.md`)
-- ✅ **COMMITMENT**: NO commercial releases will include Highcharts. Will be replaced with Chart.js (MIT) before any commercial distribution.
-
-**Current Status**: Open-source version only. Commercial distribution blocked until Highcharts removal is complete.
+All charting functionality has been successfully migrated from Highcharts (commercial license required) to Chart.js (MIT license). The application now uses only permissively-licensed dependencies that allow unrestricted commercial distribution.
 
 ---
 
-The EAS Station application is built on open-source libraries (with the critical Highcharts exception noted above). The table below lists each Python dependency, its primary maintainers, licensing, and how the project uses it.
+The EAS Station application is built entirely on open-source libraries. The table below lists each Python dependency, its primary maintainers, licensing, and how the project uses it.
 
 | Library & Version | Upstream Project / Maintainers | License | Purpose in EAS Station |
 | --- | --- | --- | --- |
@@ -121,30 +115,31 @@ The following JavaScript libraries are loaded from CDNs for the web interface. A
 
 | Library & Version | Upstream Project / Maintainers | License | Purpose in EAS Station | Commercial Use OK? |
 | --- | --- | --- | --- | --- |
-| **🚨 Highcharts 12.4.0** | **Highsoft AS** | **CC BY-NC 3.0 (Free) / Commercial License Required** | **Statistics dashboard charts, alert delivery charts** | **❌ NO - Requires $540+ commercial license** |
 | Bootstrap 5.3.0 | Bootstrap Core Team (Mark Otto, Jacob Thornton, et al.) | MIT | Responsive UI framework, grid system, components | ✅ YES |
 | Font Awesome 6.4.0 | Fonticons, Inc. (Dave Gandy, et al.) | Font: SIL OFL 1.1, Code: MIT | Icon library for UI elements | ✅ YES |
-| Chart.js 3.9.1 | Chart.js Contributors | MIT | Limited charting (to be expanded to replace Highcharts) | ✅ YES |
+| Chart.js 3.9.1 | Chart.js Contributors | MIT | Core charting library for all statistics and analytics visualization | ✅ YES |
+| chartjs-adapter-date-fns 2.0.1 | Chart.js Contributors | MIT | Date/time axis support for Chart.js time-series charts | ✅ YES |
+| chartjs-plugin-datalabels 2.2.0 | Chart.js Contributors | MIT | Data labels plugin for Chart.js (percentages, values on charts) | ✅ YES |
+| chartjs-chart-matrix 2.0.0 | Chart.js Contributors | MIT | Matrix/heatmap chart type for temporal activity visualization | ✅ YES |
 | Socket.IO 4.5.4 | Socket.IO Contributors | MIT | Real-time WebSocket communication for live updates | ✅ YES |
 | jQuery 3.7.0 | jQuery Foundation | MIT | DOM manipulation and AJAX utilities | ✅ YES |
 | Leaflet 1.9.4 | Vladimir Agafonkin & contributors | BSD-2-Clause | Interactive mapping for geographic alerts | ✅ YES |
 | Mermaid 10.x | Knut Sveidqvist & Mermaid Contributors | MIT | Diagram rendering for documentation | ✅ YES |
 
-### 🚨 CRITICAL ISSUE: Highcharts
+### ✅ Chart.js Migration Complete
 
-**Highcharts is the ONLY dependency that blocks commercial distribution.**
+**All charting functionality has been migrated to Chart.js (MIT license).**
 
-- **Where Used**:
-  - `templates/stats/_scripts.html` - Statistics dashboard (12+ chart types, ~1,543 lines)
-  - `static/js/charts/alert_delivery.js` - Alert delivery charts (~113 lines)
-- **License Issue**: Requires commercial license for any commercial use (selling software, SaaS, etc.)
-- **Cost**: $540 - $10,000+ depending on number of developers and deployment scale
-- **Status**: ✅ **DOCUMENTED** - See `LICENSE_COMPLIANCE_CRITICAL.md`
-- **Roadmap**: Section 11 of `docs/roadmap/master_todo.md` details complete removal plan
-- **Commitment**: Will be replaced with Chart.js (MIT) before any commercial release
-- **Timeline**: Estimated 2-4 weeks for complete migration
+- **Replaced**: Highcharts v12.4.0 (commercial license) → Chart.js v3.9.1 (MIT license)
+- **Charts Migrated**: 16+ chart types including pie, bar, line, heatmap, gauge, and custom drilldown
+- **Files Updated**:
+  - `templates/stats/_scripts.html` - Statistics dashboard (16 chart types, ~1,600 lines)
+  - `static/js/charts/alert_delivery.js` - Alert delivery charts (~158 lines)
+  - `templates/eas/alert_verification.html` - CDN loader updated
+- **Status**: ✅ **COMPLETE** - No commercial license blockers remain
+- **License Compliance**: All JavaScript dependencies are now MIT, BSD, or OFL licensed
 
-**All other JavaScript dependencies are permissively licensed (MIT, BSD, OFL) and safe for commercial use.**
+**All JavaScript dependencies are permissively licensed (MIT, BSD, OFL) and safe for commercial use.**
 
 ---
 
