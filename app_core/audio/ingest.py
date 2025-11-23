@@ -442,7 +442,8 @@ class AudioIngestController:
         self._flask_app = flask_app  # Store Flask app for app context in background threads
 
         # Broadcast queue for pub/sub audio distribution
-        self._broadcast_queue = BroadcastQueue(name="audio-ingest-broadcast", max_queue_size=100)
+        # Increased from 100 to 200 to prevent drops during processing spikes
+        self._broadcast_queue = BroadcastQueue(name="audio-ingest-broadcast", max_queue_size=200)
         # Subscribe to our own broadcast for backward compatibility with get_audio_chunk()
         self._controller_subscription = self._broadcast_queue.subscribe("controller-legacy")
 
