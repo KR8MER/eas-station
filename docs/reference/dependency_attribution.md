@@ -1,6 +1,20 @@
 # Open-Source Dependency Attribution
 
-The EAS Station application is built entirely on open-source libraries. The table below lists each Python dependency, its primary maintainers, licensing, and how the project uses it.
+## 🚨 CRITICAL LICENSE COMPLIANCE WARNING 🚨
+
+**IMPORTANT**: The current version of EAS Station includes **Highcharts** (v12.4.0), a commercial JavaScript charting library that **REQUIRES A PAID LICENSE** for commercial use.
+
+- ❌ **CANNOT BE USED FOR COMMERCIAL DISTRIBUTION** without purchasing a Highcharts commercial license ($540+)
+- ✅ **Safe for non-commercial, open-source use** under Creative Commons Attribution-NonCommercial 3.0
+- 🚨 **BLOCKER for commercial releases** - See `LICENSE_COMPLIANCE_CRITICAL.md` for full details
+- ✅ **ACKNOWLEDGED** - Removal roadmap in place (Section 11 of `docs/roadmap/master_todo.md`)
+- ✅ **COMMITMENT**: NO commercial releases will include Highcharts. Will be replaced with Chart.js (MIT) before any commercial distribution.
+
+**Current Status**: Open-source version only. Commercial distribution blocked until Highcharts removal is complete.
+
+---
+
+The EAS Station application is built on open-source libraries (with the critical Highcharts exception noted above). The table below lists each Python dependency, its primary maintainers, licensing, and how the project uses it.
 
 | Library & Version | Upstream Project / Maintainers | License | Purpose in EAS Station |
 | --- | --- | --- | --- |
@@ -100,6 +114,37 @@ The following Python packages are used to build the documentation website locall
 | mkdocs-material ≥9.5.3 | Martin Donath & contributors | MIT | Material Design theme for MkDocs documentation |
 | mkdocs-minify-plugin ≥0.8.0 | Brian R. Jackson & contributors | MIT | HTML, CSS, and JavaScript minification for documentation |
 | pymdown-extensions ≥10.7 | Isaac Muse & contributors | MIT | Markdown extensions adding syntax highlighting and advanced formatting |
+
+## Frontend JavaScript Dependencies
+
+The following JavaScript libraries are loaded from CDNs for the web interface. All are loaded dynamically and not bundled with the application.
+
+| Library & Version | Upstream Project / Maintainers | License | Purpose in EAS Station | Commercial Use OK? |
+| --- | --- | --- | --- | --- |
+| **🚨 Highcharts 12.4.0** | **Highsoft AS** | **CC BY-NC 3.0 (Free) / Commercial License Required** | **Statistics dashboard charts, alert delivery charts** | **❌ NO - Requires $540+ commercial license** |
+| Bootstrap 5.3.0 | Bootstrap Core Team (Mark Otto, Jacob Thornton, et al.) | MIT | Responsive UI framework, grid system, components | ✅ YES |
+| Font Awesome 6.4.0 | Fonticons, Inc. (Dave Gandy, et al.) | Font: SIL OFL 1.1, Code: MIT | Icon library for UI elements | ✅ YES |
+| Chart.js 3.9.1 | Chart.js Contributors | MIT | Limited charting (to be expanded to replace Highcharts) | ✅ YES |
+| Socket.IO 4.5.4 | Socket.IO Contributors | MIT | Real-time WebSocket communication for live updates | ✅ YES |
+| jQuery 3.7.0 | jQuery Foundation | MIT | DOM manipulation and AJAX utilities | ✅ YES |
+| Leaflet 1.9.4 | Vladimir Agafonkin & contributors | BSD-2-Clause | Interactive mapping for geographic alerts | ✅ YES |
+| Mermaid 10.x | Knut Sveidqvist & Mermaid Contributors | MIT | Diagram rendering for documentation | ✅ YES |
+
+### 🚨 CRITICAL ISSUE: Highcharts
+
+**Highcharts is the ONLY dependency that blocks commercial distribution.**
+
+- **Where Used**:
+  - `templates/stats/_scripts.html` - Statistics dashboard (12+ chart types, ~1,543 lines)
+  - `static/js/charts/alert_delivery.js` - Alert delivery charts (~113 lines)
+- **License Issue**: Requires commercial license for any commercial use (selling software, SaaS, etc.)
+- **Cost**: $540 - $10,000+ depending on number of developers and deployment scale
+- **Status**: ✅ **DOCUMENTED** - See `LICENSE_COMPLIANCE_CRITICAL.md`
+- **Roadmap**: Section 11 of `docs/roadmap/master_todo.md` details complete removal plan
+- **Commitment**: Will be replaced with Chart.js (MIT) before any commercial release
+- **Timeline**: Estimated 2-4 weeks for complete migration
+
+**All other JavaScript dependencies are permissively licensed (MIT, BSD, OFL) and safe for commercial use.**
 
 ---
 

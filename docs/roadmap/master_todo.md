@@ -184,6 +184,59 @@ Maintaining this document:
   4. ✅ Built JSON export functionality for compliance and troubleshooting.
   5. ✅ Documented in `docs/NEW_FEATURES_2025-11.md`.
 
+## 11. 🚨 Highcharts Removal & Chart.js Migration (CRITICAL - BLOCKS COMMERCIAL RELEASE)
+- **Goal**: Replace Highcharts with permissively-licensed charting library to enable commercial distribution.
+- **Status**: 🚨 **CRITICAL BLOCKER** - Current implementation uses Highcharts which requires commercial license for any commercial use.
+- **Legal Risk**: ❌ **CANNOT DISTRIBUTE COMMERCIALLY** until Highcharts is removed.
+- **Acknowledgment**: ✅ **DOCUMENTED AND ACKNOWLEDGED** - See `LICENSE_COMPLIANCE_CRITICAL.md` for full details.
+- **Commitment**: NO commercial releases will use Highcharts. All commercial distributions will use Chart.js or another permissively-licensed alternative.
+- **Plan**:
+  1. **Audit Highcharts Usage** ✅ COMPLETE
+     - Identified all Highcharts dependencies in `templates/stats/_scripts.html` (12+ chart types, ~1,543 lines)
+     - Identified alert delivery charts in `static/js/charts/alert_delivery.js` (~113 lines)
+     - Documented licensing issue in `LICENSE_COMPLIANCE_CRITICAL.md`
+  2. **Design Chart.js Migration Strategy**
+     - Create abstraction layer for charting API to enable gradual migration
+     - Map each Highcharts chart type to Chart.js equivalent (pie → doughnut, column → bar, etc.)
+     - Design unified chart configuration schema that works across both libraries during transition
+     - Document Chart.js plugin requirements (chartjs-plugin-datalabels, chartjs-adapter-date-fns, etc.)
+  3. **Implement Statistics Dashboard Migration**
+     - Replace pie charts (alert types, status breakdown, boundary types) with Chart.js
+     - Replace column/bar charts (severity, day-of-week, monthly, yearly trends) with Chart.js
+     - Replace heatmap chart (temporal activity) with Chart.js matrix plugin
+     - Replace gauge chart (reliability) with Chart.js radial gauge
+     - Replace spline/area charts (recent activity, forecast) with Chart.js line charts
+     - Replace stock chart (multi-timeline comparison) with Chart.js time-series
+     - Replace xrange chart (lifecycle timeline) with Chart.js bar chart with time axis
+     - Implement drilldown functionality using Chart.js click handlers
+  4. **Implement Alert Delivery Charts Migration**
+     - Replace stacked column charts in `static/js/charts/alert_delivery.js`
+     - Migrate tooltip formatters and data processing logic
+     - Ensure color scheme consistency with existing dashboard
+  5. **Testing & Validation**
+     - Create comprehensive test suite for all chart types
+     - Verify data accuracy matches original Highcharts implementation
+     - Test across browsers (Chrome, Firefox, Safari, Edge)
+     - Validate responsive behavior and mobile rendering
+     - Performance testing with large datasets (1000+ alerts)
+  6. **Remove Highcharts Dependencies**
+     - Delete Highcharts CDN loader from `templates/stats/_scripts.html`
+     - Remove all Highcharts API calls and configurations
+     - Update dependency attribution in `docs/reference/dependency_attribution.md`
+     - Final license compliance audit to verify no Highcharts remnants
+  7. **Documentation Updates**
+     - Update `LICENSE_COMPLIANCE_CRITICAL.md` status to RESOLVED
+     - Document Chart.js customization in `docs/frontend/COMPONENT_LIBRARY.md`
+     - Add charting best practices guide for future contributors
+     - Update help documentation with new chart interaction patterns
+
+**Estimated Effort**: 2-4 weeks for complete migration
+**Priority**: 🚨 **CRITICAL** - Must complete before any commercial distribution
+**Risk**: HIGH - Statistics dashboard is core feature, migration must maintain feature parity
+**License Note**: Chart.js (MIT) and all required plugins are permissively licensed and safe for commercial use.
+
+---
+
 ## Recommended Future Enhancements
 - Capture RBDS metadata surfaced by the new demodulator in a web dashboard widget and expose it via the analytics API for downstream signage.
 - Add a standby node bootstrap script that replays the latest backup, re-seeds SSL credentials, and validates Icecast connectivity before promoting the node.
