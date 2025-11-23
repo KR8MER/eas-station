@@ -7,6 +7,7 @@ Create Date: 2025-11-21
 
 from __future__ import annotations
 
+import json
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy import inspect
@@ -44,13 +45,15 @@ def upgrade() -> None:
     columns = {column["name"] for column in inspector.get_columns(LOCATION_SETTINGS_TABLE)}
 
     if STORAGE_ZONE_CODES_COLUMN not in columns:
+        # Use JSON array syntax (not PostgreSQL ARRAY syntax) for JSONB default
+        default_json = json.dumps(DEFAULT_STORAGE_ZONE_CODES)
         op.add_column(
             LOCATION_SETTINGS_TABLE,
             sa.Column(
                 STORAGE_ZONE_CODES_COLUMN,
                 JSONB,
                 nullable=False,
-                server_default=sa.text(f"'{sa.dialects.postgresql.array(DEFAULT_STORAGE_ZONE_CODES)}'::jsonb"),
+                server_default=sa.text(f"'{default_json}'::jsonb"),
             ),
         )
 
