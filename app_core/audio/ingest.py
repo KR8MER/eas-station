@@ -114,7 +114,9 @@ class AudioSourceAdapter(ABC):
         )
         self._stop_event = threading.Event()
         self._capture_thread: Optional[threading.Thread] = None
-        self._audio_queue = queue.Queue(maxsize=500)  # Increased from 100 to handle network jitter
+        # Increased to 2000 to prevent overflow at 48 seconds (44100Hz = ~180s buffer @ 4096 samples/chunk)
+        # Previous 500 limit caused stuttering after 45-48 seconds of playback
+        self._audio_queue = queue.Queue(maxsize=2000)
         self._last_metrics_update = 0.0
         self._start_time = 0.0
         # Waveform buffer for visualization (stores last 2048 samples)
