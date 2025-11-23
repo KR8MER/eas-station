@@ -123,6 +123,39 @@ def initialize_database():
     return app
 
 
+def initialize_radio_receivers(app):
+    """Initialize and start radio receivers (low-level SoapySDR) from database configuration."""
+    try:
+        with app.app_context():
+            from app_core.models import RadioReceiver
+            from app_core.extensions import get_radio_manager
+
+            # Get all configured receivers from database
+            receivers = RadioReceiver.query.filter_by(enabled=True).all()
+            if not receivers:
+                logger.info("No radio receivers configured in database")
+                return
+
+            # Get or create the radio manager
+            radio_manager = get_radio_manager()
+
+            # Configure receivers from database records
+            radio_manager.configure_from_records(receivers)
+            logger.info(f"Configured {len(receivers)} radio receiver(s) from database")
+
+            # Start all receivers that have auto_start enabled
+            auto_start_receivers = [r for r in receivers if r.auto_start]
+            if auto_start_receivers:
+                radio_manager.start_all()
+                logger.info(f"✅ Started {len(auto_start_receivers)} radio receiver(s) with auto_start enabled")
+            else:
+                logger.info("No radio receivers have auto_start enabled")
+
+    except Exception as exc:
+        logger.error(f"Failed to initialize radio receivers: {exc}", exc_info=True)
+        raise
+
+
 def initialize_audio_controller(app):
     """Initialize audio ingestion controller."""
     global _audio_controller
@@ -270,10 +303,10 @@ def collect_metrics():
             except Exception as e:
                 logger.error(f"Error getting broadcast queue stats: {e}")
 
-        # Get EAS monitor stats
+        # Get EAS monitor stats (use get_status for comprehensive health metrics)
         if _eas_monitor:
             try:
-                metrics["eas_monitor"] = _eas_monitor.get_stats()
+                metrics["eas_monitor"] = _eas_monitor.get_status()
             except Exception as e:
                 logger.error(f"Error getting EAS monitor stats: {e}")
 
@@ -330,6 +363,14 @@ def main():
         # Initialize database
         logger.info("Initializing database connection...")
         app = initialize_database()
+
+        # Initialize radio receivers (SoapySDR)
+        logger.info("Initializing radio receivers...")
+        try:
+            initialize_radio_receivers(app)
+        except Exception as e:
+            logger.warning(f"Failed to initialize radio receivers: {e}")
+            # Continue - audio sources might still work
 
         # Initialize audio controller
         logger.info("Initializing audio controller...")
