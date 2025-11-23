@@ -331,7 +331,7 @@ def collect_metrics():
         if _audio_controller:
             controller_stats = {
                 "sources": {},
-                "active_source": _audio_controller.get_active_source_name(),
+                "active_source": _audio_controller._active_source,
             }
 
             for name, source in _audio_controller._sources.items():
