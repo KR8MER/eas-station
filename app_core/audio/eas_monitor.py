@@ -455,7 +455,7 @@ class ContinuousEASMonitor:
 
         # Start streaming monitor thread
         self._monitor_thread = threading.Thread(
-            target=self._monitor_loop,
+            target=self._monitor_loop_wrapper,
             name="eas-monitor",
             daemon=True
         )
@@ -470,10 +470,46 @@ class ContinuousEASMonitor:
         self._watchdog_thread.start()
 
         logger.info(
-            "Started real-time EAS monitoring with streaming decoder. "
+            "✅ Started real-time EAS monitoring with streaming decoder. "
             "Samples processed immediately with <200ms detection latency."
         )
         return True
+
+    def _monitor_loop_wrapper(self) -> None:
+        """Wrapper to catch and log any uncaught exceptions in monitor loop."""
+        try:
+            logger.info("🔴 EAS monitor thread starting...")
+
+            # Verify audio manager is available
+            if not self.audio_manager:
+                logger.error("❌ FATAL: No audio manager configured!")
+                return
+
+            logger.info(f"✅ Audio manager OK: {type(self.audio_manager).__name__}")
+
+            # Log adapter stats to verify subscription
+            if hasattr(self.audio_manager, "get_stats"):
+                try:
+                    stats = self.audio_manager.get_stats()
+                    logger.info(
+                        f"📊 Broadcast subscription: "
+                        f"subscriber_id={stats.get('subscriber_id')}, "
+                        f"queue_size={stats.get('queue_size')}, "
+                        f"sample_rate={stats.get('sample_rate')}Hz"
+                    )
+                except Exception as e:
+                    logger.warning(f"Could not get initial adapter stats: {e}")
+
+            # Run the actual monitor loop
+            self._monitor_loop()
+
+        except Exception as e:
+            logger.error(f"❌ FATAL: EAS monitor thread crashed: {e}", exc_info=True)
+            # Try to set status to error state
+            try:
+                self._stop_event.set()
+            except Exception:
+                pass
 
     def stop(self) -> None:
         """Stop continuous monitoring."""
@@ -729,19 +765,20 @@ class ContinuousEASMonitor:
     def _monitor_loop(self) -> None:
         """
         Main monitoring loop - STREAMING REAL-TIME PROCESSING.
-        
+
         NO BATCHING. NO INTERVALS. NO TEMP FILES.
-        
+
         This is how commercial EAS decoders (DASDEC, multimon-ng) work:
         - Read audio samples as they arrive
         - Feed directly to streaming decoder
         - Decoder maintains state and emits alerts
         - Zero latency, zero dropouts
         """
-        logger.info("🔴 STREAMING EAS monitor started - processing samples in real-time")
+        logger.info("🔴 EAS monitor loop entered - processing samples in real-time")
 
         # Buffer for reading audio chunks (~100ms at decoder rate)
         chunk_samples = int(self.sample_rate * 0.1)
+        logger.info(f"📏 Requesting {chunk_samples} samples per chunk ({self.sample_rate}Hz decoder rate)")
         
         last_heartbeat_time = time.time()
         heartbeat_interval = 5.0  # Update activity every 5 seconds
@@ -753,6 +790,9 @@ class ContinuousEASMonitor:
         samples_processed = 0
         last_diagnostics_log = 0
         diagnostics_interval = 10.0  # Log diagnostics every 10 seconds
+
+        successful_reads = 0
+        failed_reads = 0
 
         while not self._stop_event.is_set():
             try:
@@ -782,8 +822,10 @@ class ContinuousEASMonitor:
                     decoder_stats = self._streaming_decoder.get_stats()
 
                     logger.info(
-                        f"EAS Monitor diagnostics: "
+                        f"🔍 EAS Monitor diagnostics: "
                         f"samples_processed={decoder_stats['samples_processed']:,}, "
+                        f"successful_reads={successful_reads}, "
+                        f"failed_reads={failed_reads}, "
                         f"queue_depth={adapter_stats.get('queue_size', 'N/A')}, "
                         f"buffer_samples={adapter_stats.get('buffer_samples', 'N/A')}, "
                         f"underruns={adapter_stats.get('underrun_count', 'N/A')}/{adapter_stats.get('total_reads', 'N/A')} "
@@ -792,17 +834,24 @@ class ContinuousEASMonitor:
                     )
 
                     last_diagnostics_log = current_time
+                    successful_reads = 0
+                    failed_reads = 0
 
                 # Read audio from manager
                 samples = None
                 try:
                     samples = self.audio_manager.read_audio(chunk_samples)
+                    if samples is not None and len(samples) > 0:
+                        successful_reads += 1
+                    else:
+                        failed_reads += 1
                     read_error_count = 0  # Reset error count on success
                 except Exception as read_error:
+                    failed_reads += 1
                     read_error_count += 1
                     if current_time - last_error_log_time > error_log_interval:
                         logger.error(
-                            f"Error reading audio from manager (error #{read_error_count}): {read_error}",
+                            f"❌ Error reading audio from manager (error #{read_error_count}): {read_error}",
                             exc_info=True
                         )
                         last_error_log_time = current_time
