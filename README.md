@@ -1,9 +1,15 @@
 # <img src="static/img/eas-system-wordmark.svg" alt="EAS Station" width="48" height="48" style="vertical-align: middle;"> EAS Station
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0) [![Commercial License](https://img.shields.io/badge/License-Commercial-green.svg)](LICENSE-COMMERCIAL)
+
 [![Docker](https://img.shields.io/badge/docker-supported-blue.svg)](https://www.docker.com/)
 [![Python 3.11](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/)
 [![PostgreSQL](https://img.shields.io/badge/postgresql-17-blue.svg)](https://www.postgresql.org/)
+[![Redis](https://img.shields.io/badge/redis-7-red.svg)](https://redis.io/)
+
+[![Flask](https://img.shields.io/badge/flask-3.0-lightgrey.svg)](https://flask.palletsprojects.com/)
+[![Gunicorn](https://img.shields.io/badge/gunicorn-gevent-green.svg)](https://gunicorn.org/)
+[![Architecture](https://img.shields.io/badge/architecture-separated%20services-brightgreen.svg)](#-architecture)
 
 > **A professional Emergency Alert System (EAS) platform for monitoring, broadcasting, and verifying NOAA and IPAWS alerts**
 
@@ -46,6 +52,27 @@ The system now supports **67 event codes** (up from 61) and can encode/decode al
 | 🔒 **Built-in HTTPS** | Automatic SSL/TLS with Let's Encrypt, nginx reverse proxy |
 | 🎨 **Modern Web UI** | Responsive Bootstrap 5 interface with real-time updates |
 | ⚡ **Hardware Integration** | GPIO relay control, LED signs, multiple audio outputs |
+
+## 🏗️ Architecture
+
+**Separated Service Design** - Modern, reliable, production-grade architecture:
+
+```
+Audio Service           Web Application
+├─ Audio Ingestion      ├─ REST API
+├─ EAS Monitoring       ├─ WebSocket
+├─ SAME Decoding        ├─ Web UI
+└─ Metrics ──────►      └─ Configuration
+                 Redis (State Storage)
+```
+
+**Benefits:**
+- ✅ **Reliable** - Services isolated (web crashes don't affect audio)
+- ✅ **Simple** - No complex worker coordination
+- ✅ **Fast** - Dedicated resources per service
+- ✅ **Debuggable** - Separate logs, independent restart
+
+See **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** for details.
 
 ## 🚀 Quick Start
 
