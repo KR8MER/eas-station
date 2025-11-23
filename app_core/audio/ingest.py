@@ -670,9 +670,10 @@ class AudioIngestController:
 
                     broadcast_stats = self._broadcast_queue.get_stats()
 
+                    subscriber_ids = broadcast_stats.get('subscriber_ids', [])
                     logger.info(
                         f"Broadcast pump status: {running_sources}/{total_sources} sources running, "
-                        f"{broadcast_stats['subscribers']} subscribers, "
+                        f"{broadcast_stats['subscribers']} subscribers {subscriber_ids}, "
                         f"{chunks_published_since_log} chunks published (last {status_log_interval}s), "
                         f"{chunks_none_since_log} empty reads, "
                         f"total published: {broadcast_stats['published_chunks']}, "
