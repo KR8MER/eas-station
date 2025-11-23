@@ -1248,7 +1248,7 @@
     }
 
     // Load detected SDR devices
-    async function loadSDRDevices() {
+    async function loadSDRDevices(preSelectSerial = null) {
         const deviceSelect = document.getElementById('receiverDevice');
         try {
             const response = await fetch('/api/radio/devices/simple');
@@ -1264,6 +1264,11 @@
                     option.dataset.driver = device.driver;
                     option.dataset.serial = device.serial || '';
                     deviceSelect.appendChild(option);
+
+                    // Pre-select device if editing and serial matches
+                    if (preSelectSerial && device.serial && device.serial === preSelectSerial) {
+                        option.selected = true;
+                    }
                 });
             } else {
                 deviceSelect.innerHTML = '<option value="">-- No devices detected --</option>';
@@ -1542,11 +1547,10 @@
         const deemphasisContainer = document.getElementById('deemphasisContainer');
         if (fmOptionsContainer) fmOptionsContainer.style.display = 'none';
 
-        // Load devices
-        loadSDRDevices();
-
         if (receiver) {
-            // Editing existing receiver
+            // Editing existing receiver - load devices and pre-select current one
+            loadSDRDevices(receiver.serial);
+
             document.getElementById('receiverId').value = receiver.id;
             document.getElementById('receiverDisplayName').value = receiver.display_name;
             document.getElementById('receiverIdentifier').value = receiver.identifier;
@@ -1637,6 +1641,8 @@
             freqDisplay.className = 'alert alert-info mb-0';
         } else {
             // Creating new receiver - all fields start fresh
+            loadSDRDevices(); // Load devices without pre-selection
+
             document.getElementById('receiverId').value = '';
             document.getElementById('receiverEnabled').checked = true;
             document.getElementById('receiverAutoStart').checked = true;

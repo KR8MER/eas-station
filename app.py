@@ -1069,10 +1069,14 @@ def initialize_database():
                 logger.warning("Failed to initialize RBAC roles: %s", rbac_error)
 
             # Initialize RadioManager with configured receivers
-            try:
-                _initialize_radio_receivers()
-            except Exception as radio_error:
-                logger.warning("Failed to initialize radio receivers: %s", radio_error)
+            # Skip in WEB_ONLY mode - audio service handles radio receivers
+            if os.getenv("AUDIO_SERVICE_MODE", "").lower() != "web_only":
+                try:
+                    _initialize_radio_receivers()
+                except Exception as radio_error:
+                    logger.warning("Failed to initialize radio receivers: %s", radio_error)
+            else:
+                logger.info("Skipping radio receiver initialization (WEB_ONLY mode - handled by audio service)")
 
             # Initialize EAS continuous monitoring system
             try:

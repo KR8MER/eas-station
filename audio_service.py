@@ -100,7 +100,7 @@ def get_redis_client() -> redis.Redis:
 
 def initialize_database():
     """Initialize database connection for configuration."""
-    from webapp.models import db
+    from app_core.extensions import db
     from flask import Flask
 
     # Create minimal Flask app for database access
@@ -163,7 +163,7 @@ def initialize_audio_controller(app):
 
     with app.app_context():
         from app_core.audio.ingest import AudioIngestController
-        from webapp.models import AudioSourceConfigDB
+        from app_core.models import AudioSourceConfigDB
 
         logger.info("Initializing audio controller...")
 
@@ -176,26 +176,29 @@ def initialize_audio_controller(app):
 
         for config in configs:
             try:
+                # Get config parameters from JSONB field
+                params = config.config_params or {}
+
                 if config.source_type == 'icecast':
                     _audio_controller.add_icecast_source(
                         name=config.name,
-                        url=config.icecast_url,
-                        sample_rate=config.sample_rate or 44100,
+                        url=params.get('url', ''),
+                        sample_rate=params.get('sample_rate', 44100),
                         enabled=config.enabled
                     )
                 elif config.source_type == 'sdr':
                     _audio_controller.add_sdr_source(
                         name=config.name,
-                        frequency_mhz=config.sdr_frequency,
-                        sample_rate=config.sample_rate or 1024000,
-                        sdr_args=config.sdr_args or "",
+                        frequency_mhz=params.get('frequency_mhz', 162.55),
+                        sample_rate=params.get('sample_rate', 1024000),
+                        sdr_args=params.get('sdr_args', ''),
                         enabled=config.enabled
                     )
 
                 logger.info(f"Loaded audio source: {config.name} ({config.source_type})")
 
             except Exception as e:
-                logger.error(f"Error loading source '{config.name}': {e}")
+                logger.error(f"Error loading source '{config.name}': {e}", exc_info=True)
 
         # Start auto-start sources
         for config in configs:
