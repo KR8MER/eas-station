@@ -2081,17 +2081,114 @@ function startEASMonitorPolling() {
     easMonitorIntervalHandle = setInterval(loadEASMonitorStatus, 6000);
 }
 
+// ============================================================================
+// WebSocket Real-Time Updates
+// ============================================================================
+
+let socket = null;
+let socketConnected = false;
+
+function initializeWebSocket() {
+    try {
+        // Initialize Socket.IO connection
+        socket = io({
+            transports: ['websocket', 'polling'],
+            reconnection: true,
+            reconnectionDelay: 1000,
+            reconnectionAttempts: 5
+        });
+
+        socket.on('connect', function() {
+            console.log('WebSocket connected - real-time updates active');
+            socketConnected = true;
+
+            // Stop polling since we're using WebSocket now
+            if (levelIntervalHandle) {
+                clearInterval(levelIntervalHandle);
+                levelIntervalHandle = null;
+            }
+            if (easMonitorIntervalHandle) {
+                clearInterval(easMonitorIntervalHandle);
+                easMonitorIntervalHandle = null;
+            }
+        });
+
+        socket.on('disconnect', function() {
+            console.log('WebSocket disconnected - falling back to polling');
+            socketConnected = false;
+
+            // Fall back to polling if WebSocket disconnects
+            startLevelPolling();
+            startEASMonitorPolling();
+        });
+
+        socket.on('connect_error', function(error) {
+            console.error('WebSocket connection error:', error);
+
+            // Fall back to polling on connection error
+            if (!levelIntervalHandle) {
+                startLevelPolling();
+            }
+            if (!easMonitorIntervalHandle) {
+                startEASMonitorPolling();
+            }
+        });
+
+        // Listen for real-time audio monitoring updates
+        socket.on('audio_monitoring_update', function(data) {
+            try {
+                // Update VU meters from WebSocket data
+                if (data.audio_metrics && data.audio_metrics.live_metrics) {
+                    updateLevelMetersFromSnapshot(data.audio_metrics);
+                }
+
+                // Update EAS monitor status
+                if (data.eas_monitor) {
+                    updateEASMonitorDisplay(data.eas_monitor);
+                }
+
+                // Log broadcast queue stats for diagnostics
+                if (data.audio_metrics && data.audio_metrics.broadcast_stats) {
+                    const stats = data.audio_metrics.broadcast_stats;
+                    console.debug(
+                        `Broadcast queue: ${stats.subscribers} subscribers, ` +
+                        `${stats.published_chunks} published, ${stats.dropped_chunks} dropped`
+                    );
+                }
+            } catch (error) {
+                console.error('Error processing WebSocket update:', error);
+            }
+        });
+
+        console.log('WebSocket initialization complete');
+    } catch (error) {
+        console.error('Failed to initialize WebSocket:', error);
+        // Fall back to polling if WebSocket initialization fails
+        startLevelPolling();
+        startEASMonitorPolling();
+    }
+}
+
 // Load sources on page load
 document.addEventListener('DOMContentLoaded', function() {
     renderStreamModeControls();
     loadAudioSources(true); // Initial full render
-    startEASMonitorPolling();
+
+    // Try to initialize WebSocket for real-time updates
+    // If it fails, will automatically fall back to polling
+    if (typeof io !== 'undefined') {
+        initializeWebSocket();
+    } else {
+        console.warn('Socket.IO not available - using polling mode');
+        startLevelPolling();
+        startEASMonitorPolling();
+    }
 
     // Auto-refresh every 30 seconds - only updates metrics, never interrupts playback
     setInterval(() => loadAudioSources(false), 30000);
 });
 
-// Clean up intervals when page unloads
+// Clean up intervals and socket when page unloads
 window.addEventListener('beforeunload', function() {
     if (levelIntervalHandle) {
         clearInterval(levelIntervalHandle);
@@ -2101,6 +2198,16 @@ window.addEventListener('beforeunload', function() {
         clearInterval(easMonitorIntervalHandle);
         easMonitorIntervalHandle = null;
     }
+    if (socket) {
+        socket.disconnect();
+        socket = null;
+    }
 });
 </script>
+
+<!-- Socket.IO for real-time updates -->
+<script src="https://cdn.socket.io/4.5.4/socket.io.min.js"
+        integrity="sha384-/KNQL8Nu5gCHLqwqfQjA689Hhoqgi2S84SNUxC3roTe4EhJ9AfLkp8QiQcU8AMzI"
+        crossorigin="anonymous"></script>
+
 {% endblock %}

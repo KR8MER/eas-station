@@ -190,6 +190,7 @@ def _start_audio_sources_background(app: Flask) -> None:
             # starts the audio source decoders to prevent duplicate FFmpeg processes
             import os
             import tempfile
+            import time
 
             # Use secure lock file location with fallback chain
             # Priority: /var/lock > /run > tempfile.gettempdir()
@@ -206,18 +207,60 @@ def _start_audio_sources_background(app: Flask) -> None:
 
             lock_file_path = os.path.join(lock_dir, 'eas-audio-initialization.lock')
 
+            # Check for stale lock file (older than 60 seconds with no valid process)
+            should_remove_stale_lock = False
+            if os.path.exists(lock_file_path):
+                try:
+                    lock_age = time.time() - os.path.getmtime(lock_file_path)
+                    if lock_age > 60:
+                        logger.warning(
+                            f"Found stale lock file (age: {lock_age:.1f}s) - will attempt to remove"
+                        )
+                        should_remove_stale_lock = True
+                except (OSError, IOError) as e:
+                    logger.warning(f"Could not check lock file age: {e}")
+
+            if should_remove_stale_lock:
+                try:
+                    os.remove(lock_file_path)
+                    logger.info(f"Removed stale lock file: {lock_file_path}")
+                except (OSError, IOError) as e:
+                    logger.warning(f"Could not remove stale lock file: {e}")
+
             lock_file, acquired = _try_acquire_lock(lock_file_path, mode='a')
             if not acquired:
-                # Lock is already held by another worker - skip initialization
-                logger.info(
-                    f"Audio sources already being initialized by another worker (PID {os.getpid()}) - skipping"
+                # Lock is already held by another worker
+                logger.warning(
+                    f"Audio sources lock held by another worker (PID {os.getpid()}) - "
+                    f"waiting 5 seconds then checking if sources need starting..."
                 )
-                return
+                time.sleep(5)
+
+                # After waiting, check if any sources actually started
+                # If not, we should start them anyway (previous worker may have crashed)
+                if _audio_controller:
+                    running_sources = [
+                        name for name, src in _audio_controller._sources.items()
+                        if src.status == AudioSourceStatus.RUNNING
+                    ]
+                    if not running_sources:
+                        logger.warning(
+                            f"No sources running after lock wait - other worker may have failed. "
+                            f"Proceeding to start sources anyway (PID {os.getpid()})"
+                        )
+                    else:
+                        logger.info(
+                            f"Found {len(running_sources)} running sources - other worker succeeded. Exiting."
+                        )
+                        return
+                else:
+                    logger.error("Audio controller not initialized - cannot check running sources")
+                    return
 
             if lock_file:
                 # Keep the file open to maintain the lock for the life of the process
                 _audio_initialization_lock_file = lock_file
-                logger.info(f"Acquired audio initialization lock (PID {os.getpid()})")
+                logger.info(f"Acquired audio initialization lock at {lock_file_path} (PID {os.getpid()})")
             else:
                 logger.info(
                     f"Proceeding without exclusive audio initialization lock (PID {os.getpid()})"
@@ -231,13 +274,36 @@ def _start_audio_sources_background(app: Flask) -> None:
 
             # Start sources that have auto_start enabled (SLOW - network connections)
             saved_configs = AudioSourceConfigDB.query.all()
-            for db_config in saved_configs:
-                if db_config.enabled and db_config.auto_start:
-                    try:
-                        _audio_controller.start_source(db_config.name)
-                        logger.info(f'Background: Auto-started audio source: {db_config.name}')
-                    except Exception as e:
-                        logger.error(f'Background: Failed to start audio source {db_config.name}: {e}')
+            logger.info(f"Background: Found {len(saved_configs)} audio source configs in database")
+
+            sources_to_start = [
+                db_config for db_config in saved_configs
+                if db_config.enabled and db_config.auto_start
+            ]
+            logger.info(
+                f"Background: {len(sources_to_start)} sources have auto_start enabled "
+                f"(enabled configs: {len([c for c in saved_configs if c.enabled])})"
+            )
+
+            started_count = 0
+            failed_count = 0
+            for db_config in sources_to_start:
+                try:
+                    logger.info(f'Background: Attempting to auto-start source: {db_config.name}')
+                    _audio_controller.start_source(db_config.name)
+                    logger.info(f'Background: ✅ Auto-started audio source: {db_config.name}')
+                    started_count += 1
+                except Exception as e:
+                    logger.error(
+                        f'Background: ❌ Failed to start audio source {db_config.name}: {e}',
+                        exc_info=True
+                    )
+                    failed_count += 1
+
+            logger.info(
+                f"Background: Audio source startup complete - "
+                f"started: {started_count}, failed: {failed_count}"
+            )
 
             # Initialize streaming service (SLOW - starts FFmpeg processes)
             _initialize_auto_streaming()
