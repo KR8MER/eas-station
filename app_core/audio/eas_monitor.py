@@ -749,9 +749,11 @@ class ContinuousEASMonitor:
         read_error_count = 0
         last_error_log_time = 0
         error_log_interval = 10.0
-        
+
         samples_processed = 0
-        
+        last_diagnostics_log = 0
+        diagnostics_interval = 10.0  # Log diagnostics every 10 seconds
+
         while not self._stop_event.is_set():
             try:
                 # Update activity heartbeat periodically
@@ -766,6 +768,30 @@ class ContinuousEASMonitor:
                         f"{stats['alerts_detected']} alerts detected, "
                         f"synced={stats['synced']}, in_message={stats['in_message']}"
                     )
+
+                # Periodic diagnostics logging
+                if current_time - last_diagnostics_log >= diagnostics_interval:
+                    # Get audio adapter stats for diagnostics
+                    adapter_stats = {}
+                    if hasattr(self.audio_manager, "get_stats"):
+                        try:
+                            adapter_stats = self.audio_manager.get_stats()
+                        except Exception:
+                            pass
+
+                    decoder_stats = self._streaming_decoder.get_stats()
+
+                    logger.info(
+                        f"EAS Monitor diagnostics: "
+                        f"samples_processed={decoder_stats['samples_processed']:,}, "
+                        f"queue_depth={adapter_stats.get('queue_size', 'N/A')}, "
+                        f"buffer_samples={adapter_stats.get('buffer_samples', 'N/A')}, "
+                        f"underruns={adapter_stats.get('underrun_count', 'N/A')}/{adapter_stats.get('total_reads', 'N/A')} "
+                        f"({adapter_stats.get('underrun_rate_percent', 0):.1f}%), "
+                        f"health={adapter_stats.get('health', 'N/A')}"
+                    )
+
+                    last_diagnostics_log = current_time
 
                 # Read audio from manager
                 samples = None
