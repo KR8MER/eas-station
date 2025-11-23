@@ -38,15 +38,16 @@ def initialize_eas_monitoring_system() -> bool:
     Initialize and start the complete EAS monitoring system.
 
     This function:
-    1. Tries to acquire master worker lock (multi-worker coordination)
-    2. Gets the global AudioIngestController (master only)
-    3. Creates an alert callback for processing detections
-    4. Initializes the EAS monitor with adapter
-    5. Auto-starts continuous monitoring
+    1. Checks if audio processing should run in this service
+    2. Tries to acquire master worker lock (multi-worker coordination)
+    3. Gets the global AudioIngestController (master only)
+    4. Creates an alert callback for processing detections
+    5. Initializes the EAS monitor with adapter
+    6. Auto-starts continuous monitoring
 
-    In multi-worker setups, only ONE worker (the master) will run audio
-    processing. Other workers (slaves) will serve UI requests by reading
-    shared metrics from the master.
+    Service Architecture:
+    - Separated: Audio service runs audio processing, web app reads from Redis
+    - Integrated: Web app runs everything (with master/slave worker coordination)
 
     Returns:
         True if successfully initialized and started
@@ -54,12 +55,21 @@ def initialize_eas_monitoring_system() -> bool:
     Should be called during Flask app startup (in initialize_database or similar).
     """
     try:
+        import os
+
+        # Check if we're running in web-only mode (separate audio service)
+        audio_service_mode = os.getenv("AUDIO_SERVICE_MODE", "").lower()
+
+        if audio_service_mode == "web_only":
+            logger.info("🌐 Running in WEB_ONLY mode - audio processing handled by separate audio service")
+            logger.info("   UI will read metrics from Redis (published by audio service)")
+            return True  # Success, web-only mode
+
         # Import here to avoid circular dependencies
         from webapp.admin.audio_ingest import _get_audio_controller
         from .monitor_manager import initialize_eas_monitor
         from .eas_monitor import create_fips_filtering_callback
         from .worker_coordinator import try_acquire_master_lock, is_master_worker
-        import os
 
         # Step 1: Try to become the master worker
         try_acquire_master_lock()

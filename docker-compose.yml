@@ -64,6 +64,50 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  audio-service:
+    image: eas-station:latest
+    container_name: eas-audio-service
+    restart: unless-stopped
+    networks:
+      - eas-network
+    command: ["python", "audio_service.py"]
+    volumes:
+      - app-config:/app-config
+    environment:
+      # Database connection
+      POSTGRES_HOST: ${POSTGRES_HOST:-host.docker.internal}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_DB: ${POSTGRES_DB:-alerts}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+
+      # Redis connection
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_DB: ${REDIS_DB:-0}
+
+      # Application settings
+      CONFIG_PATH: /app-config/.env
+
+      # SDR settings
+      SDR_ARGS: ${SDR_ARGS:-driver=airspy}
+
+      # Icecast configuration
+      ICECAST_SERVER: ${ICECAST_SERVER:-icecast}
+      ICECAST_PORT: ${ICECAST_INTERNAL_PORT:-8000}
+      ICECAST_SOURCE_PASSWORD: ${ICECAST_SOURCE_PASSWORD:-eas_station_source_password}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    devices:
+      # SDR Device Passthrough
+      - /dev/bus/usb:/dev/bus/usb
+    privileged: true
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      redis:
+        condition: service_healthy
+
   app:
     build:
       context: .
@@ -100,6 +144,9 @@ services:
       FLASK_ENV: ${FLASK_ENV:-production}
       FLASK_DEBUG: ${FLASK_DEBUG:-false}
       CONFIG_PATH: /app-config/.env  # Point to persistent location
+
+      # Service architecture (separate audio service)
+      AUDIO_SERVICE_MODE: "web_only"  # Don't run audio processing in web app
 
       # Location defaults
       DEFAULT_TIMEZONE: ${DEFAULT_TIMEZONE:-America/New_York}

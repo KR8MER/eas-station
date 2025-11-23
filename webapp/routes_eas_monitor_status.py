@@ -65,12 +65,16 @@ def register_eas_monitor_routes(app: Flask, logger_instance) -> None:
         - sample_rate: int - Audio sample rate
         """
         try:
+            import os
             # Import here to avoid circular dependencies
             from app_core.audio import get_eas_monitor_instance
             from app_core.audio.worker_coordinator import is_master_worker, read_shared_metrics
 
+            # Check if audio service mode is enabled (separate audio service)
+            audio_service_mode = os.getenv("AUDIO_SERVICE_MODE", "").lower() == "web_only"
+
             # Check if we should read from shared state or local instance
-            if not is_master_worker():
+            if audio_service_mode or not is_master_worker():
                 # SLAVE worker: Read from shared metrics file
                 logger.debug("Slave worker reading EAS monitor status from shared metrics")
                 shared_metrics = read_shared_metrics()
