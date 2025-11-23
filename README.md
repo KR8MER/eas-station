@@ -8,7 +8,7 @@
 [![Redis](https://img.shields.io/badge/redis-7-red.svg)](https://redis.io/)
 
 [![Flask](https://img.shields.io/badge/flask-3.0-lightgrey.svg)](https://flask.palletsprojects.com/)
-[![Gunicorn](https://img.shields.io/badge/gunicorn-gevent-green.svg)](https://gunicorn.org/)
+[![Services](https://img.shields.io/badge/services-web%20%2B%20audio-brightgreen.svg)](#-architecture)
 [![Architecture](https://img.shields.io/badge/architecture-separated%20services-brightgreen.svg)](#-architecture)
 
 > **A professional Emergency Alert System (EAS) platform for monitoring, broadcasting, and verifying NOAA and IPAWS alerts**
