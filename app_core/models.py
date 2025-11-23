@@ -39,6 +39,10 @@ from .extensions import db
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.dialects.postgresql import JSONB
 
+# Import Role and Permission models to ensure they're available for relationship resolution
+# This prevents "failed to locate a name ('Role')" errors when AdminUser mapper is configured
+from app_core.auth.roles import Role, Permission
+
 
 def _spatial_backend_supports_geometry() -> bool:
     database_url = os.getenv("SQLALCHEMY_DATABASE_URI") or os.getenv("DATABASE_URL")
@@ -1236,6 +1240,8 @@ __all__ = [
     "CAPAlert",
     "SystemLog",
     "AdminUser",
+    "Role",
+    "Permission",
     "EASMessage",
     "Intersection",
     "PollHistory",
