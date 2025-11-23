@@ -162,7 +162,8 @@ def initialize_audio_controller(app):
     global _audio_controller
 
     with app.app_context():
-        from app_core.audio.ingest import AudioIngestController
+        from app_core.audio.ingest import AudioIngestController, AudioSourceConfig, AudioSourceType
+        from app_core.audio.sources import create_audio_source
         from app_core.models import AudioSourceConfigDB
 
         logger.info("Initializing audio controller...")
@@ -171,43 +172,47 @@ def initialize_audio_controller(app):
         _audio_controller = AudioIngestController()
 
         # Load audio sources from database
-        configs = AudioSourceConfigDB.query.all()
-        logger.info(f"Loading {len(configs)} audio source configurations from database")
+        saved_configs = AudioSourceConfigDB.query.all()
+        logger.info(f"Loading {len(saved_configs)} audio source configurations from database")
 
-        for config in configs:
+        for db_config in saved_configs:
             try:
-                # Get config parameters from JSONB field
-                params = config.config_params or {}
+                # Parse source type
+                source_type = AudioSourceType(db_config.source_type)
 
-                if config.source_type == 'icecast':
-                    _audio_controller.add_icecast_source(
-                        name=config.name,
-                        url=params.get('url', ''),
-                        sample_rate=params.get('sample_rate', 44100),
-                        enabled=config.enabled
-                    )
-                elif config.source_type == 'sdr':
-                    _audio_controller.add_sdr_source(
-                        name=config.name,
-                        frequency_mhz=params.get('frequency_mhz', 162.55),
-                        sample_rate=params.get('sample_rate', 1024000),
-                        sdr_args=params.get('sdr_args', ''),
-                        enabled=config.enabled
-                    )
+                # Create runtime configuration from database config
+                config_params = db_config.config_params or {}
+                runtime_config = AudioSourceConfig(
+                    source_type=source_type,
+                    name=db_config.name,
+                    enabled=db_config.enabled,
+                    priority=db_config.priority,
+                    sample_rate=config_params.get('sample_rate', 44100),
+                    channels=config_params.get('channels', 1),
+                    buffer_size=config_params.get('buffer_size', 4096),
+                    silence_threshold_db=config_params.get('silence_threshold_db', -60.0),
+                    silence_duration_seconds=config_params.get('silence_duration_seconds', 5.0),
+                    device_params=config_params.get('device_params', {}),
+                )
 
-                logger.info(f"Loaded audio source: {config.name} ({config.source_type})")
+                # Create and add adapter
+                adapter = create_audio_source(runtime_config)
+                _audio_controller.add_source(adapter)
+                logger.info(f"Loaded audio source: {db_config.name} ({db_config.source_type})")
 
             except Exception as e:
-                logger.error(f"Error loading source '{config.name}': {e}", exc_info=True)
+                logger.error(f"Error loading source '{db_config.name}': {e}", exc_info=True)
+
+        logger.info(f"Loaded {len(_audio_controller._sources)} audio source configurations")
 
         # Start auto-start sources
-        for config in configs:
-            if config.enabled and config.auto_start:
+        for db_config in saved_configs:
+            if db_config.enabled and db_config.auto_start:
                 try:
-                    logger.info(f"Auto-starting source: {config.name}")
-                    _audio_controller.start_source(config.name)
+                    logger.info(f"Auto-starting source: {db_config.name}")
+                    _audio_controller.start_source(db_config.name)
                 except Exception as e:
-                    logger.error(f"Error auto-starting '{config.name}': {e}")
+                    logger.error(f"Error auto-starting '{db_config.name}': {e}")
 
         logger.info("✅ Audio controller initialized")
         return _audio_controller
@@ -288,7 +293,7 @@ def initialize_eas_monitor(app, audio_controller):
             forward_alert_to_api(alert)
 
         alert_callback = create_fips_filtering_callback(
-            target_fips_codes=configured_fips,
+            configured_fips_codes=configured_fips,
             forward_callback=forward_alert_handler,
             logger_instance=logger
         )
