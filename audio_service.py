@@ -434,6 +434,18 @@ def main():
         logger.info("Initializing Icecast auto-streaming...")
         auto_streaming = initialize_auto_streaming(app, audio_controller)
 
+        # Add all running audio sources to Icecast streaming
+        if auto_streaming and audio_controller:
+            logger.info("Adding audio sources to Icecast streaming...")
+            for source_name, source_adapter in audio_controller._sources.items():
+                try:
+                    if auto_streaming.add_source(source_name, source_adapter):
+                        logger.info(f"✅ Added {source_name} to Icecast streaming")
+                    else:
+                        logger.warning(f"Failed to add {source_name} to Icecast streaming")
+                except Exception as e:
+                    logger.error(f"Error adding {source_name} to Icecast: {e}", exc_info=True)
+
         # Initialize EAS monitor
         logger.info("Initializing EAS monitor...")
         eas_monitor = initialize_eas_monitor(app, audio_controller)
