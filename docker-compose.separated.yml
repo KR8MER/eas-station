@@ -135,9 +135,6 @@ services:
       FLASK_DEBUG: ${FLASK_DEBUG:-false}
       CONFIG_PATH: /app-config/.env
 
-      # Service architecture - WEB ONLY MODE
-      AUDIO_SERVICE_MODE: "web_only"  # Don't run audio in web app
-
       # Location defaults
       DEFAULT_TIMEZONE: ${DEFAULT_TIMEZONE:-America/New_York}
 
