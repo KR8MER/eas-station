@@ -1,0 +1,100 @@
+WEBSOCKET CONVERSION - WHAT'S LEFT TO DO
+
+## Backend: ✅ COMPLETE
+- Flask-SocketIO installed
+- WebSocket server running
+- Pushes data every 1 second to 'audio_monitoring_update' event
+
+## Frontend: 🔄 NEEDS UPDATE
+
+File: templates/audio_monitoring.html
+
+### Step 1: Add SocketIO client library (before closing </body> tag)
+<script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+
+### Step 2: Replace ALL polling intervals with WebSocket listeners
+
+BEFORE (Polling):
+```javascript
+// Line ~1721
+levelIntervalHandle = setInterval(updateLevelMeters, 2000);
+
+// Line ~2081  
+easMonitorIntervalHandle = setInterval(loadEASMonitorStatus, 6000);
+```
+
+AFTER (WebSocket):
+```javascript
+// Connect to WebSocket
+const socket = io();
+
+// Listen for updates
+socket.on('audio_monitoring_update', function(data) {
+    // Update VU meters
+    if (data.audio_metrics && data.audio_metrics.live_metrics) {
+        updateLevelMetersFromData(data.audio_metrics.live_metrics);
+    }
+    
+    // Update sources list
+    if (data.audio_sources) {
+        updateAudioSourcesFromData(data.audio_sources);
+    }
+    
+    // Update EAS monitor
+    if (data.eas_monitor) {
+        updateEASMonitorFromData(data.eas_monitor);
+    }
+});
+
+// Remove all setInterval calls
+// Remove all clearInterval calls
+```
+
+### Step 3: Modify update functions to accept data parameter
+
+BEFORE:
+```javascript
+async function updateLevelMeters() {
+    const response = await fetch('/api/audio/metrics');
+    const data = await response.json();
+    // ... process data
+}
+```
+
+AFTER:
+```javascript
+function updateLevelMetersFromData(metrics) {
+    // ... process metrics directly (no fetch)
+}
+```
+
+## Benefits:
+- HTTP requests: 120/min → 1/min (99% reduction)
+- Update speed: 2000ms → 1000ms (2x faster)
+- Server load: Minimal (one background thread)
+- No cache complexity
+- Real-time push notifications
+
+## Other Pages That Need WebSockets:
+
+1. /admin/health (health.js) - polls /api/system_health every 60s
+2. /admin/receivers (if exists) - polls receiver status
+3. /admin/diagnostics - polls system metrics
+4. Dashboard (if exists) - polls multiple endpoints
+5. Any page with setInterval(...fetch...)
+
+Find them:
+grep -r "setInterval.*fetch\|setInterval.*\$.ajax" static/js/ templates/
+
+## Why Polling Was Used:
+- Simpler to implement (no persistent connections)
+- No library dependencies
+- Works in all browsers
+- But: Inefficient, high server load, slower updates
+
+## Why WebSockets Are Better:
+- Server pushes updates (no polling waste)
+- Real-time (no polling delay)
+- One persistent connection
+- 99% less HTTP overhead
+- Same port (80/443) - no firewall issues

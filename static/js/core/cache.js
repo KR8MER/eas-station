@@ -19,7 +19,7 @@
             this.config = {
                 // Default TTLs in milliseconds for different endpoint patterns
                 '/api/audio/sources': 30000,        // 30s - frequently polled
-                '/api/audio/metrics': 5000,         // 5s - real-time data
+                '/api/audio/metrics': 2000,         // 2s - VU meter data (matches server cache)
                 '/api/audio/health': 15000,         // 15s - health data
                 '/api/audio/devices': 30000,        // 30s - device list
                 '/api/audio/alerts': 10000,         // 10s - active alerts

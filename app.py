@@ -521,6 +521,10 @@ db.init_app(app)
 # Initialize caching
 init_cache(app)
 
+# Initialize WebSocket support
+from flask_socketio import SocketIO
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
+
 
 def _check_database_connectivity() -> bool:
     """Attempt to connect to the database and return True on success."""
@@ -1091,6 +1095,15 @@ def initialize_database():
             _db_initialized = True
             _db_initialization_error = None
             logger.info("Database tables ensured on startup")
+
+            # Start WebSocket push service for real-time updates
+            try:
+                from app_core.websocket_push import start_websocket_push
+                start_websocket_push(app, socketio)
+                logger.info("WebSocket push service started")
+            except Exception as ws_error:
+                logger.warning("Failed to start WebSocket push service: %s", ws_error)
+
             return True
 
 
