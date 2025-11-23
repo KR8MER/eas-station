@@ -89,10 +89,6 @@ services:
       # Application settings
       CONFIG_PATH: /app-config/.env
 
-      # Service architecture - audio service should NEVER be in web_only mode
-      # Explicitly set to empty to override any value in CONFIG_PATH .env file
-      AUDIO_SERVICE_MODE: ""
-
       # SDR settings
       SDR_ARGS: ${SDR_ARGS:-driver=airspy}
 
@@ -148,9 +144,6 @@ services:
       FLASK_ENV: ${FLASK_ENV:-production}
       FLASK_DEBUG: ${FLASK_DEBUG:-false}
       CONFIG_PATH: /app-config/.env  # Point to persistent location
-
-      # Service architecture (separate audio service)
-      AUDIO_SERVICE_MODE: "web_only"  # Don't run audio processing in web app
 
       # Location defaults
       DEFAULT_TIMEZONE: ${DEFAULT_TIMEZONE:-America/New_York}

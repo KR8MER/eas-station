@@ -55,16 +55,15 @@ def initialize_eas_monitoring_system() -> bool:
     Should be called during Flask app startup (in initialize_database or similar).
     """
     try:
-        import os
+        # Separated architecture: Audio processing handled by dedicated audio-service container
+        # This app container only serves the web UI and reads metrics from Redis
+        logger.info("🌐 App container running in UI-only mode")
+        logger.info("   Audio processing handled by dedicated audio-service container")
+        logger.info("   Metrics read from Redis (published by audio-service)")
+        return True  # Success - separated architecture
 
-        # Check if we're running in web-only mode (separate audio service)
-        audio_service_mode = os.getenv("AUDIO_SERVICE_MODE", "").lower()
-
-        if audio_service_mode == "web_only":
-            logger.info("🌐 Running in WEB_ONLY mode - audio processing handled by separate audio service")
-            logger.info("   UI will read metrics from Redis (published by audio service)")
-            return True  # Success, web-only mode
-
+        # The following code is unreachable and left for reference only
+        # It would be used if we ever need single-container mode again
         # Import here to avoid circular dependencies
         from webapp.admin.audio_ingest import _get_audio_controller
         from .monitor_manager import initialize_eas_monitor
