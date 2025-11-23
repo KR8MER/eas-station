@@ -48,6 +48,10 @@ def register_eas_monitor_routes(app: Flask, logger_instance) -> None:
     def api_eas_monitor_status() -> Any:
         """Get current EAS monitor status and metrics.
 
+        IMPORTANT: In multi-worker setups, SLAVE workers read metrics from
+        shared file written by MASTER worker. This ensures consistent metrics
+        across all workers.
+
         Returns JSON with:
         - running: bool - Is monitor active
         - buffer_duration: float - Buffer size in seconds
@@ -63,6 +67,105 @@ def register_eas_monitor_routes(app: Flask, logger_instance) -> None:
         try:
             # Import here to avoid circular dependencies
             from app_core.audio import get_eas_monitor_instance
+            from app_core.audio.worker_coordinator import is_master_worker, read_shared_metrics
+
+            # Check if we should read from shared state or local instance
+            if not is_master_worker():
+                # SLAVE worker: Read from shared metrics file
+                logger.debug("Slave worker reading EAS monitor status from shared metrics")
+                shared_metrics = read_shared_metrics()
+
+                if shared_metrics is None or "eas_monitor" not in shared_metrics:
+                    return jsonify({
+                        "running": False,
+                        "error": "No metrics available from master worker (master may be starting up or dead)",
+                        "worker_role": "slave",
+                        "initialization_attempted": False
+                    })
+
+                # Extract EAS monitor stats from shared metrics
+                status = shared_metrics.get("eas_monitor", {})
+
+                if status is None:
+                    return jsonify({
+                        "running": False,
+                        "error": "EAS monitor not running on master worker",
+                        "worker_role": "slave",
+                        "initialization_attempted": False
+                    })
+
+                # Build response from shared metrics
+                response_data: Dict[str, Any] = {
+                    # Basic status
+                    "running": status.get("running", False),
+                    "audio_flowing": status.get("audio_flowing", False),
+                    "mode": status.get("mode", "streaming"),
+                    "sample_rate": status.get("sample_rate", 0),
+                    "source_sample_rate": status.get("source_sample_rate"),
+                    "resample_ratio": status.get("resample_ratio"),
+                    "health_percentage": status.get("health_percentage", 0),
+
+                    # Streaming decoder metrics
+                    "samples_processed": status.get("samples_processed", 0),
+                    "samples_per_second": status.get("samples_per_second", 0),
+                    "runtime_seconds": status.get("runtime_seconds", 0),
+                    "decoder_synced": status.get("decoder_synced", False),
+                    "decoder_in_message": status.get("decoder_in_message", False),
+                    "decoder_bytes_decoded": status.get("decoder_bytes_decoded", 0),
+
+                    # Alert detection
+                    "alerts_detected": status.get("alerts_detected", 0),
+                    "last_scan_time": status.get("last_scan_time"),
+                    "last_alert_time": status.get("last_alert_time"),
+
+                    # Health metrics
+                    "last_activity": status.get("last_activity"),
+                    "time_since_activity": status.get("time_since_activity", 0),
+                    "restart_count": status.get("restart_count", 0),
+                    "watchdog_timeout": status.get("watchdog_timeout", 0),
+
+                    # Backward-compatible fields
+                    "buffer_duration": status.get("buffer_duration", 0),
+                    "buffer_utilization": status.get("buffer_utilization", 0),
+                    "buffer_fill_seconds": status.get("buffer_fill_seconds", 0),
+                    "scan_interval": status.get("scan_interval", 0),
+                    "effective_scan_interval": status.get("effective_scan_interval", 0),
+                    "scan_interval_auto_adjusted": status.get("scan_interval_auto_adjusted", False),
+                    "max_concurrent_scans": status.get("max_concurrent_scans", 0),
+                    "scans_performed": status.get("scans_performed", 0),
+                    "scans_skipped": status.get("scans_skipped", 0),
+                    "scans_no_signature": status.get("scans_no_signature", 0),
+                    "total_scan_attempts": status.get("total_scan_attempts", 0),
+                    "scan_warnings": status.get("scan_warnings", 0),
+                    "active_scans": status.get("active_scans", 0),
+                    "dynamic_max_concurrent_scans": status.get("dynamic_max_concurrent_scans", 0),
+                    "avg_scan_duration_seconds": status.get("avg_scan_duration_seconds"),
+                    "min_scan_duration_seconds": status.get("min_scan_duration_seconds"),
+                    "max_scan_duration_seconds": status.get("max_scan_duration_seconds"),
+                    "last_scan_duration_seconds": status.get("last_scan_duration_seconds"),
+                    "scan_history_size": status.get("scan_history_size", 0),
+
+                    # Audio subscription health
+                    "audio_buffer_samples": status.get("audio_buffer_samples"),
+                    "audio_buffer_seconds": status.get("audio_buffer_seconds"),
+                    "audio_queue_depth": status.get("audio_queue_depth"),
+                    "audio_underruns": status.get("audio_underruns"),
+                    "audio_underrun_rate_percent": status.get("audio_underrun_rate_percent"),
+                    "audio_last_audio_time": status.get("audio_last_audio_time"),
+                    "audio_health": status.get("audio_health"),
+                    "audio_subscriber_id": status.get("audio_subscriber_id"),
+
+                    # Cross-worker metadata
+                    "worker_role": "slave",
+                    "initialization_attempted": False,
+                    "master_pid": shared_metrics.get("_master_pid"),
+                    "metrics_age": shared_metrics.get("_heartbeat"),
+                }
+
+                return jsonify(response_data)
+
+            # MASTER worker: Read from local monitor instance
+            logger.debug("Master worker reading EAS monitor status from local instance")
 
             monitor = get_eas_monitor_instance()
             initialization_attempted = False
@@ -167,6 +270,11 @@ def register_eas_monitor_routes(app: Flask, logger_instance) -> None:
 
             # Surface whether the route needed to self-heal the monitor
             response_data["initialization_attempted"] = initialization_attempted
+
+            # Add worker role metadata
+            response_data["worker_role"] = "master"
+            import os
+            response_data["worker_pid"] = os.getpid()
 
             return jsonify(response_data)
 

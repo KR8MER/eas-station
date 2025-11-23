@@ -179,18 +179,37 @@ def _load_audio_source_configs(controller: AudioIngestController) -> None:
 
 
 def _start_audio_sources_background(app: Flask) -> None:
-    """Start audio sources and streaming in background (slow, async)."""
+    """
+    Start audio sources and streaming in background (slow, async).
+
+    IMPORTANT: In multi-worker setups, only the MASTER worker should start
+    audio sources. This function will check worker role and exit early if
+    this is a SLAVE worker.
+    """
     global _audio_controller, _streaming_lock_file, _audio_initialization_lock_file
 
     # CRITICAL: Use Flask app context for database access
     with app.app_context():
         try:
-            # CRITICAL: Acquire file lock BEFORE starting audio sources
-            # In multi-worker environments, we need to ensure only ONE worker
-            # starts the audio source decoders to prevent duplicate FFmpeg processes
+            # Check if this worker should handle audio processing
+            from app_core.audio.worker_coordinator import is_master_worker
             import os
             import tempfile
             import time
+
+            if not is_master_worker():
+                logger.info(
+                    f"Worker PID {os.getpid()} is SLAVE - skipping audio source startup "
+                    "(master worker handles audio processing)"
+                )
+                return
+
+            logger.info(f"Worker PID {os.getpid()} is MASTER - starting audio sources")
+
+            # CRITICAL: Acquire file lock BEFORE starting audio sources
+            # In multi-worker environments, we need to ensure only ONE worker
+            # starts the audio source decoders to prevent duplicate FFmpeg processes
+            # (This lock provides additional safety in case master election fails)
 
             # Use secure lock file location with fallback chain
             # Priority: /var/lock > /run > tempfile.gettempdir()

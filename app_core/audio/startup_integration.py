@@ -38,10 +38,15 @@ def initialize_eas_monitoring_system() -> bool:
     Initialize and start the complete EAS monitoring system.
 
     This function:
-    1. Gets the global AudioIngestController
-    2. Creates an alert callback for processing detections
-    3. Initializes the EAS monitor with adapter
-    4. Auto-starts continuous monitoring
+    1. Tries to acquire master worker lock (multi-worker coordination)
+    2. Gets the global AudioIngestController (master only)
+    3. Creates an alert callback for processing detections
+    4. Initializes the EAS monitor with adapter
+    5. Auto-starts continuous monitoring
+
+    In multi-worker setups, only ONE worker (the master) will run audio
+    processing. Other workers (slaves) will serve UI requests by reading
+    shared metrics from the master.
 
     Returns:
         True if successfully initialized and started
@@ -53,16 +58,30 @@ def initialize_eas_monitoring_system() -> bool:
         from webapp.admin.audio_ingest import _get_audio_controller
         from .monitor_manager import initialize_eas_monitor
         from .eas_monitor import create_fips_filtering_callback
+        from .worker_coordinator import try_acquire_master_lock, is_master_worker
+        import os
 
-        # Step 1: Get the audio controller
+        # Step 1: Try to become the master worker
+        try_acquire_master_lock()
+
+        if not is_master_worker():
+            logger.info(
+                f"Worker PID {os.getpid()} is SLAVE - will serve UI from shared metrics "
+                "(master worker handles audio processing)"
+            )
+            return True  # Success, but as slave worker
+
+        logger.info(f"🎯 Worker PID {os.getpid()} is MASTER - initializing audio processing")
+
+        # Step 2: Get the audio controller (master only)
         controller = _get_audio_controller()
         if controller is None:
             logger.warning("Audio controller not available - EAS monitoring cannot start")
             return False
 
-        logger.info("Audio controller available for EAS monitoring")
+        logger.info("✅ Audio controller available for EAS monitoring")
 
-        # Step 2: Create alert callback with FIPS filtering
+        # Step 3: Create alert callback with FIPS filtering
         # Load configured FIPS codes from settings
         configured_fips = load_fips_codes_from_config()
         logger.info(f"Loaded {len(configured_fips)} FIPS codes for alert filtering")
@@ -97,7 +116,7 @@ def initialize_eas_monitoring_system() -> bool:
 
         logger.info("Created alert callback with FIPS filtering")
 
-        # Step 3: Initialize monitor with controller and callback
+        # Step 4: Initialize monitor with controller and callback
         success = initialize_eas_monitor(
             audio_manager=controller,
             alert_callback=alert_callback,
@@ -105,14 +124,16 @@ def initialize_eas_monitoring_system() -> bool:
         )
 
         if success:
-            logger.info("✅ EAS monitoring system initialized and started successfully")
+            logger.info("✅ EAS monitoring system initialized and started successfully on MASTER worker")
             logger.info("   - Audio pipeline: Connected")
             logger.info("   - SAME decoder: Active")
             logger.info("   - Alert processing: Enabled")
             logger.info("   - FIPS filtering: Configured")
+            logger.info("   - Worker role: MASTER (audio processing + metrics heartbeat)")
+            logger.info("   - Other workers: SLAVE (UI serving from shared metrics)")
             return True
         else:
-            logger.error("❌ Failed to initialize EAS monitoring system")
+            logger.error("❌ Failed to initialize EAS monitoring system on MASTER worker")
             return False
 
     except Exception as e:
