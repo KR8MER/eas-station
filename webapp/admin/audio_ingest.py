@@ -2055,9 +2055,9 @@ def api_stream_audio(source_name: str):
         # Pre-buffer audio for smooth playback - continue even if we can't fill buffer
         logger.info(f'Pre-buffering audio for {source_name}')
         prebuffer = []
-        prebuffer_target = int(sample_rate * 1.5)  # ~1.5 seconds of audio to minimize latency
+        prebuffer_target = int(sample_rate * 5)  # 5 seconds of audio for smooth playback on Pi
         prebuffer_samples = 0
-        prebuffer_timeout = 5.0  # Max 5 seconds to fill prebuffer
+        prebuffer_timeout = 10.0  # Max 10 seconds to fill prebuffer (increased for larger buffer)
         prebuffer_start = time.time()
         prebuffer_errors = 0
 
@@ -2110,7 +2110,7 @@ def api_stream_audio(source_name: str):
                 # Wrap chunk read in try/except to prevent read errors from terminating stream
                 try:
                     # Get audio chunk from adapter (increased timeout to prevent underruns)
-                    audio_chunk = active_adapter.get_audio_chunk(timeout=0.15)  # Increased from 0.05s to 0.15s
+                    audio_chunk = active_adapter.get_audio_chunk(timeout=0.2)  # Optimal for Raspberry Pi stability
                 except Exception as e:
                     current_time = time.time()
                     if current_time - last_error_log_time > error_log_interval:
