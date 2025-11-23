@@ -50,6 +50,16 @@ openpyxl==3.1.5
 # Production WSGI server
 gunicorn==23.0.0
 
+# Async worker for Gunicorn (CRITICAL for Flask-SocketIO WebSocket support)
+# Flask-SocketIO requires either gevent or eventlet when using Gunicorn
+# gevent is preferred for production use
+gevent==24.2.1
+
+# Redis for state management and worker coordination
+# Replaces fragile file-based coordination with robust distributed state
+redis==5.0.8
+hiredis==3.0.0  # C parser for better Redis performance
+
 # Development and debugging (optional)
 # flask-debugtoolbar==0.13.1  # Uncomment for development
 
