@@ -62,6 +62,7 @@ _running = True
 _redis_client: Optional[redis.Redis] = None
 _audio_controller = None
 _eas_monitor = None
+_auto_streaming_service = None
 
 
 def signal_handler(signum, frame):
@@ -123,6 +124,39 @@ def initialize_database():
     return app
 
 
+def initialize_radio_receivers(app):
+    """Initialize and start radio receivers (low-level SoapySDR) from database configuration."""
+    try:
+        with app.app_context():
+            from app_core.models import RadioReceiver
+            from app_core.extensions import get_radio_manager
+
+            # Get all configured receivers from database
+            receivers = RadioReceiver.query.filter_by(enabled=True).all()
+            if not receivers:
+                logger.info("No radio receivers configured in database")
+                return
+
+            # Get or create the radio manager
+            radio_manager = get_radio_manager()
+
+            # Configure receivers from database records
+            radio_manager.configure_from_records(receivers)
+            logger.info(f"Configured {len(receivers)} radio receiver(s) from database")
+
+            # Start all receivers that have auto_start enabled
+            auto_start_receivers = [r for r in receivers if r.auto_start]
+            if auto_start_receivers:
+                radio_manager.start_all()
+                logger.info(f"✅ Started {len(auto_start_receivers)} radio receiver(s) with auto_start enabled")
+            else:
+                logger.info("No radio receivers have auto_start enabled")
+
+    except Exception as exc:
+        logger.error(f"Failed to initialize radio receivers: {exc}", exc_info=True)
+        raise
+
+
 def initialize_audio_controller(app):
     """Initialize audio ingestion controller."""
     global _audio_controller
@@ -174,6 +208,47 @@ def initialize_audio_controller(app):
 
         logger.info("✅ Audio controller initialized")
         return _audio_controller
+
+
+def initialize_auto_streaming(app, audio_controller):
+    """Initialize Icecast auto-streaming service."""
+    global _auto_streaming_service
+
+    try:
+        with app.app_context():
+            from app_core.audio.icecast_auto_config import get_icecast_auto_config
+            from app_core.audio.auto_streaming import AutoStreamingService
+
+            auto_config = get_icecast_auto_config()
+
+            if not auto_config.is_enabled():
+                logger.info("Icecast auto-streaming is disabled (ICECAST_ENABLED=false)")
+                return None
+
+            logger.info(f"Initializing Icecast auto-streaming: {auto_config.server}:{auto_config.port}")
+
+            _auto_streaming_service = AutoStreamingService(
+                icecast_server=auto_config.server,
+                icecast_port=auto_config.port,
+                icecast_password=auto_config.source_password,
+                icecast_admin_user=auto_config.admin_user,
+                icecast_admin_password=auto_config.admin_password,
+                default_bitrate=128,
+                enabled=True,
+                audio_controller=audio_controller
+            )
+
+            # Start the service
+            if _auto_streaming_service.start():
+                logger.info("✅ Icecast auto-streaming service started successfully")
+            else:
+                logger.warning("Icecast auto-streaming service failed to start")
+
+            return _auto_streaming_service
+
+    except Exception as exc:
+        logger.error(f"Failed to initialize Icecast auto-streaming: {exc}", exc_info=True)
+        return None
 
 
 def initialize_eas_monitor(app, audio_controller):
@@ -270,10 +345,10 @@ def collect_metrics():
             except Exception as e:
                 logger.error(f"Error getting broadcast queue stats: {e}")
 
-        # Get EAS monitor stats
+        # Get EAS monitor stats (use get_status for comprehensive health metrics)
         if _eas_monitor:
             try:
-                metrics["eas_monitor"] = _eas_monitor.get_stats()
+                metrics["eas_monitor"] = _eas_monitor.get_status()
             except Exception as e:
                 logger.error(f"Error getting EAS monitor stats: {e}")
 
@@ -331,6 +406,14 @@ def main():
         logger.info("Initializing database connection...")
         app = initialize_database()
 
+        # Initialize radio receivers (SoapySDR)
+        logger.info("Initializing radio receivers...")
+        try:
+            initialize_radio_receivers(app)
+        except Exception as e:
+            logger.warning(f"Failed to initialize radio receivers: {e}")
+            # Continue - audio sources might still work
+
         # Initialize audio controller
         logger.info("Initializing audio controller...")
         audio_controller = initialize_audio_controller(app)
@@ -338,6 +421,10 @@ def main():
         if not audio_controller:
             logger.error("Failed to initialize audio controller")
             return 1
+
+        # Initialize Icecast auto-streaming
+        logger.info("Initializing Icecast auto-streaming...")
+        auto_streaming = initialize_auto_streaming(app, audio_controller)
 
         # Initialize EAS monitor
         logger.info("Initializing EAS monitor...")
@@ -350,6 +437,7 @@ def main():
         logger.info("=" * 80)
         logger.info("✅ Audio service started successfully")
         logger.info("   - Audio ingestion: ACTIVE")
+        logger.info(f"   - Icecast streaming: {'ACTIVE' if auto_streaming else 'DISABLED'}")
         logger.info("   - EAS monitoring: ACTIVE")
         logger.info("   - Metrics publishing: ACTIVE")
         logger.info("=" * 80)

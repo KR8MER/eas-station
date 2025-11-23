@@ -114,7 +114,9 @@ class AudioSourceAdapter(ABC):
         )
         self._stop_event = threading.Event()
         self._capture_thread: Optional[threading.Thread] = None
-        self._audio_queue = queue.Queue(maxsize=500)  # Increased from 100 to handle network jitter
+        # Increased to 2000 to prevent overflow at 48 seconds (44100Hz = ~180s buffer @ 4096 samples/chunk)
+        # Previous 500 limit caused stuttering after 45-48 seconds of playback
+        self._audio_queue = queue.Queue(maxsize=2000)
         self._last_metrics_update = 0.0
         self._start_time = 0.0
         # Waveform buffer for visualization (stores last 2048 samples)
@@ -442,8 +444,10 @@ class AudioIngestController:
         self._flask_app = flask_app  # Store Flask app for app context in background threads
 
         # Broadcast queue for pub/sub audio distribution
-        # Increased from 100 to 200 to prevent drops during processing spikes
-        self._broadcast_queue = BroadcastQueue(name="audio-ingest-broadcast", max_queue_size=200)
+        # CRITICAL: Increased to 2000 to prevent EAS monitor from missing chunks
+        # At 44100Hz: 200 chunks = 18.6 seconds (TOO SMALL - caused missed alerts)
+        # At 44100Hz: 2000 chunks = 186 seconds (safe buffer)
+        self._broadcast_queue = BroadcastQueue(name="audio-ingest-broadcast", max_queue_size=2000)
         # Subscribe to our own broadcast for backward compatibility with get_audio_chunk()
         self._controller_subscription = self._broadcast_queue.subscribe("controller-legacy")
 
