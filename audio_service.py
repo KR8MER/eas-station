@@ -62,6 +62,7 @@ _running = True
 _redis_client: Optional[redis.Redis] = None
 _audio_controller = None
 _eas_monitor = None
+_auto_streaming_service = None
 
 
 def signal_handler(signum, frame):
@@ -207,6 +208,47 @@ def initialize_audio_controller(app):
 
         logger.info("✅ Audio controller initialized")
         return _audio_controller
+
+
+def initialize_auto_streaming(app, audio_controller):
+    """Initialize Icecast auto-streaming service."""
+    global _auto_streaming_service
+
+    try:
+        with app.app_context():
+            from app_core.audio.icecast_auto_config import get_icecast_auto_config
+            from app_core.audio.auto_streaming import AutoStreamingService
+
+            auto_config = get_icecast_auto_config()
+
+            if not auto_config.is_enabled():
+                logger.info("Icecast auto-streaming is disabled (ICECAST_ENABLED=false)")
+                return None
+
+            logger.info(f"Initializing Icecast auto-streaming: {auto_config.server}:{auto_config.port}")
+
+            _auto_streaming_service = AutoStreamingService(
+                icecast_server=auto_config.server,
+                icecast_port=auto_config.port,
+                icecast_password=auto_config.source_password,
+                icecast_admin_user=auto_config.admin_user,
+                icecast_admin_password=auto_config.admin_password,
+                default_bitrate=128,
+                enabled=True,
+                audio_controller=audio_controller
+            )
+
+            # Start the service
+            if _auto_streaming_service.start():
+                logger.info("✅ Icecast auto-streaming service started successfully")
+            else:
+                logger.warning("Icecast auto-streaming service failed to start")
+
+            return _auto_streaming_service
+
+    except Exception as exc:
+        logger.error(f"Failed to initialize Icecast auto-streaming: {exc}", exc_info=True)
+        return None
 
 
 def initialize_eas_monitor(app, audio_controller):
@@ -380,6 +422,10 @@ def main():
             logger.error("Failed to initialize audio controller")
             return 1
 
+        # Initialize Icecast auto-streaming
+        logger.info("Initializing Icecast auto-streaming...")
+        auto_streaming = initialize_auto_streaming(app, audio_controller)
+
         # Initialize EAS monitor
         logger.info("Initializing EAS monitor...")
         eas_monitor = initialize_eas_monitor(app, audio_controller)
@@ -391,6 +437,7 @@ def main():
         logger.info("=" * 80)
         logger.info("✅ Audio service started successfully")
         logger.info("   - Audio ingestion: ACTIVE")
+        logger.info(f"   - Icecast streaming: {'ACTIVE' if auto_streaming else 'DISABLED'}")
         logger.info("   - EAS monitoring: ACTIVE")
         logger.info("   - Metrics publishing: ACTIVE")
         logger.info("=" * 80)
