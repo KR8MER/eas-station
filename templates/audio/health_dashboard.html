@@ -207,7 +207,32 @@ document.addEventListener('DOMContentLoaded', function() {
     setInterval(updateDashboard, 15000);
 });
 
+/**
+ * Get theme-aware colors for audio health dashboard charts
+ */
+function getAudioChartColors() {
+    const isDarkMode = document.documentElement.getAttribute('data-theme-mode') === 'dark';
+    const root = document.documentElement;
+    const style = getComputedStyle(root);
+
+    const getColor = (varName, lightFallback, darkFallback) => {
+        const value = style.getPropertyValue(varName).trim();
+        return value || (isDarkMode ? darkFallback : lightFallback);
+    };
+
+    return {
+        text: getColor('--text-color', '#212529', '#ffffff'),
+        gridLines: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+        bufferFill: isDarkMode ? 'rgba(96, 165, 250, 0.6)' : 'rgba(54, 162, 235, 0.6)',
+        bufferBorder: isDarkMode ? '#60a5fa' : 'rgba(54, 162, 235, 1)',
+        restart: isDarkMode ? 'rgba(248, 113, 113, 0.6)' : 'rgba(255, 99, 132, 0.6)',
+        restartBorder: isDarkMode ? '#f87171' : 'rgba(255, 99, 132, 1)'
+    };
+}
+
 function initializeCharts() {
+    const colors = getAudioChartColors();
+
     // Buffer Fill Chart
     const bufferCtx = document.getElementById('buffer-fill-chart').getContext('2d');
     bufferFillChart = new Chart(bufferCtx, {
@@ -217,8 +242,8 @@ function initializeCharts() {
             datasets: [{
                 label: 'Buffer Fill %',
                 data: [],
-                backgroundColor: 'rgba(54, 162, 235, 0.6)',
-                borderColor: 'rgba(54, 162, 235, 1)',
+                backgroundColor: colors.bufferFill,
+                borderColor: colors.bufferBorder,
                 borderWidth: 1
             }]
         },
@@ -226,13 +251,32 @@ function initializeCharts() {
             responsive: true,
             maintainAspectRatio: false,
             scales: {
+                x: {
+                    ticks: {
+                        color: colors.text
+                    },
+                    grid: {
+                        color: colors.gridLines
+                    }
+                },
                 y: {
                     beginAtZero: true,
                     max: 100,
                     ticks: {
+                        color: colors.text,
                         callback: function(value) {
                             return value + '%';
                         }
+                    },
+                    grid: {
+                        color: colors.gridLines
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    labels: {
+                        color: colors.text
                     }
                 }
             }
@@ -248,8 +292,8 @@ function initializeCharts() {
             datasets: [{
                 label: 'Restart Count',
                 data: [],
-                backgroundColor: 'rgba(255, 99, 132, 0.6)',
-                borderColor: 'rgba(255, 99, 132, 1)',
+                backgroundColor: colors.restart,
+                borderColor: colors.restartBorder,
                 borderWidth: 1
             }]
         },
@@ -257,10 +301,29 @@ function initializeCharts() {
             responsive: true,
             maintainAspectRatio: false,
             scales: {
+                x: {
+                    ticks: {
+                        color: colors.text
+                    },
+                    grid: {
+                        color: colors.gridLines
+                    }
+                },
                 y: {
                     beginAtZero: true,
                     ticks: {
+                        color: colors.text,
                         stepSize: 1
+                    },
+                    grid: {
+                        color: colors.gridLines
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    labels: {
+                        color: colors.text
                     }
                 }
             }
@@ -409,5 +472,24 @@ function formatUptime(seconds) {
         return `${Math.round(seconds / 86400)}d`;
     }
 }
+
+// Listen for theme changes and reinitialize charts
+window.addEventListener('theme-changed', () => {
+    console.log('🎨 Audio health dashboard: Theme changed, reinitializing charts...');
+
+    // Destroy existing charts
+    if (bufferFillChart) {
+        bufferFillChart.destroy();
+    }
+    if (restartChart) {
+        restartChart.destroy();
+    }
+
+    // Reinitialize with new theme colors
+    initializeCharts();
+
+    // Re-fetch and update data
+    updateDashboard();
+});
 </script>
 {% endblock %}

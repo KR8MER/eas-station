@@ -10,16 +10,79 @@ console.log('🚀 Statistics dashboard initializing (Chart.js)...');
 // Register Chart.js plugins globally where needed
 Chart.register(ChartDataLabels);
 
-// Configure global Chart.js defaults
-Chart.defaults.font.family = 'Segoe UI, sans-serif';
-Chart.defaults.color = '#212529';
-Chart.defaults.plugins.legend.display = true;
-Chart.defaults.plugins.tooltip.enabled = true;
-Chart.defaults.responsive = true;
-Chart.defaults.maintainAspectRatio = false;
+// ============================================
+// THEME-AWARE COLOR MANAGEMENT FOR CHART.JS
+// ============================================
 
-// Disable datalabels plugin by default (enable per chart as needed)
-Chart.defaults.plugins.datalabels.display = false;
+/**
+ * Get a CSS custom property value from the root element
+ * @param {string} varName - CSS variable name (e.g., '--text-color')
+ * @param {string} fallback - Fallback color if variable not found
+ * @returns {string} The resolved color value
+ */
+function getCSSVar(varName, fallback = '#212529') {
+    const root = document.documentElement;
+    const value = getComputedStyle(root).getPropertyValue(varName).trim();
+    return value || fallback;
+}
+
+/**
+ * Get theme-aware colors for charts
+ * This function reads CSS variables to ensure charts adapt to the current theme
+ * @returns {object} Object containing all theme-aware colors
+ */
+function getChartThemeColors() {
+    const isDarkMode = document.documentElement.getAttribute('data-theme-mode') === 'dark';
+
+    return {
+        text: getCSSVar('--text-color', isDarkMode ? '#ffffff' : '#212529'),
+        textSecondary: getCSSVar('--text-secondary', isDarkMode ? '#d5deed' : '#5a6c8f'),
+        textMuted: getCSSVar('--text-muted', isDarkMode ? '#a8b4cc' : '#8892a6'),
+        background: getCSSVar('--bg-color', isDarkMode ? '#1b2434' : '#e8ecf7'),
+        surface: getCSSVar('--surface-color', isDarkMode ? '#243046' : '#ffffff'),
+        border: getCSSVar('--border-color', isDarkMode ? '#40516c' : '#ced7ea'),
+        primary: getCSSVar('--primary-color', isDarkMode ? '#6b96ff' : '#204885'),
+        secondary: getCSSVar('--secondary-color', isDarkMode ? '#c9a8ff' : '#872a96'),
+        success: getCSSVar('--success-color', isDarkMode ? '#67ffd6' : '#2eb08d'),
+        danger: getCSSVar('--danger-color', isDarkMode ? '#ffafbf' : '#e05263'),
+        warning: getCSSVar('--warning-color', isDarkMode ? '#ffe3ad' : '#f6b968'),
+        info: getCSSVar('--info-color', isDarkMode ? '#adcfff' : '#2f5aa1'),
+        gridLines: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'
+    };
+}
+
+/**
+ * Apply theme colors to Chart.js global defaults
+ */
+function applyChartTheme() {
+    const colors = getChartThemeColors();
+
+    Chart.defaults.font.family = 'Segoe UI, sans-serif';
+    Chart.defaults.color = colors.text;
+    Chart.defaults.borderColor = colors.border;
+    Chart.defaults.backgroundColor = colors.surface;
+
+    // Update legend defaults
+    Chart.defaults.plugins.legend.display = true;
+    Chart.defaults.plugins.legend.labels.color = colors.text;
+
+    // Update tooltip defaults
+    Chart.defaults.plugins.tooltip.enabled = true;
+    Chart.defaults.plugins.tooltip.backgroundColor = colors.surface;
+    Chart.defaults.plugins.tooltip.titleColor = colors.text;
+    Chart.defaults.plugins.tooltip.bodyColor = colors.text;
+    Chart.defaults.plugins.tooltip.borderColor = colors.border;
+    Chart.defaults.plugins.tooltip.borderWidth = 1;
+
+    Chart.defaults.responsive = true;
+    Chart.defaults.maintainAspectRatio = false;
+
+    // Disable datalabels plugin by default (enable per chart as needed)
+    Chart.defaults.plugins.datalabels.display = false;
+}
+
+// Apply theme on load
+applyChartTheme();
 
 const statsData = {
     alertByEvent: {{ alert_by_event | tojson | safe }} || [],
@@ -48,16 +111,73 @@ const baseAlerts = (statsData.alertEvents || []).map(alert => ({
 const ACTIVE_STATUS_CANDIDATES = ['actual', 'active', 'alert', 'in effect'];
 const EXPIRED_STATUS_CANDIDATES = ['expired', 'past', 'cancelled', 'canceled', 'cancel', 'ended', 'test'];
 
-const severityColors = {
-    'Extreme': '#dc3545',
-    'Severe': '#fd7e14',
-    'Moderate': '#ffc107',
-    'Minor': '#17a2b8',
-    'Unknown': '#6c757d'
-};
+/**
+ * Get theme-aware severity colors
+ * @returns {object} Severity color mapping
+ */
+function getSeverityColors() {
+    const isDarkMode = document.documentElement.getAttribute('data-theme-mode') === 'dark';
 
-// Chart.js color palette
-const chartColors = ['#007bff', '#28a745', '#ffc107', '#dc3545', '#17a2b8', '#6f42c1', '#fd7e14', '#20c997', '#6c757d'];
+    if (isDarkMode) {
+        return {
+            'Extreme': '#f87171',
+            'Severe': '#fb923c',
+            'Moderate': '#fbbf24',
+            'Minor': '#22d3ee',
+            'Unknown': '#94a3b8'
+        };
+    } else {
+        return {
+            'Extreme': '#dc3545',
+            'Severe': '#fd7e14',
+            'Moderate': '#ffc107',
+            'Minor': '#17a2b8',
+            'Unknown': '#6c757d'
+        };
+    }
+}
+
+const severityColors = getSeverityColors();
+
+/**
+ * Get a theme-aware color palette for charts
+ * Returns colors that work well in both light and dark themes
+ * @returns {Array<string>} Array of color hex codes
+ */
+function getChartColorPalette() {
+    const isDarkMode = document.documentElement.getAttribute('data-theme-mode') === 'dark';
+
+    if (isDarkMode) {
+        // Brighter, more saturated colors for dark backgrounds
+        return [
+            '#60a5fa', // Blue
+            '#34d399', // Green
+            '#fbbf24', // Yellow
+            '#f87171', // Red
+            '#22d3ee', // Cyan
+            '#a78bfa', // Purple
+            '#fb923c', // Orange
+            '#2dd4bf', // Teal
+            '#94a3b8'  // Gray
+        ];
+    } else {
+        // Standard Bootstrap-like colors for light backgrounds
+        return [
+            '#007bff', // Blue
+            '#28a745', // Green
+            '#ffc107', // Yellow
+            '#dc3545', // Red
+            '#17a2b8', // Cyan
+            '#6f42c1', // Purple
+            '#fd7e14', // Orange
+            '#20c997', // Teal
+            '#6c757d'  // Gray
+        ];
+    }
+}
+
+// Chart.js color palette (will update on theme change)
+let chartColors = getChartColorPalette();
 
 const state = {
     charts: {},
@@ -1596,5 +1716,35 @@ document.addEventListener('DOMContentLoaded', () => {
             root.prepend(alert);
         }
     }
+});
+
+// ============================================
+// THEME CHANGE LISTENER
+// ============================================
+
+/**
+ * Listen for theme changes and update all charts
+ */
+window.addEventListener('theme-changed', (event) => {
+    console.log('🎨 Theme changed to:', event.detail.theme, '- Updating all charts...');
+
+    // Update theme colors
+    applyChartTheme();
+    chartColors = getChartColorPalette();
+
+    // Destroy and recreate all charts with new theme colors
+    Object.keys(state.charts).forEach(chartId => {
+        if (state.charts[chartId]) {
+            state.charts[chartId].destroy();
+            delete state.charts[chartId];
+        }
+    });
+
+    // Re-render all charts with new colors
+    if (state.aggregates) {
+        updateDashboard();
+    }
+
+    console.log('✅ All charts updated for new theme');
 });
 </script>

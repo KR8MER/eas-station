@@ -4,6 +4,33 @@
     // Track chart instances for cleanup
     const chartInstances = {};
 
+    /**
+     * Get theme-aware colors for charts
+     * Reads CSS custom properties to adapt to current theme
+     */
+    function getThemeColors() {
+        const root = document.documentElement;
+        const style = getComputedStyle(root);
+        const isDarkMode = root.getAttribute('data-theme-mode') === 'dark';
+
+        const getColor = (varName, lightFallback, darkFallback) => {
+            const value = style.getPropertyValue(varName).trim();
+            return value || (isDarkMode ? darkFallback : lightFallback);
+        };
+
+        return {
+            text: getColor('--text-color', '#212529', '#ffffff'),
+            textSecondary: getColor('--text-secondary', '#5a6c8f', '#d5deed'),
+            textMuted: getColor('--text-muted', '#8892a6', '#a8b4cc'),
+            border: getColor('--border-color', '#dee2e6', '#38465a'),
+            gridLines: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)',
+            delivered: isDarkMode ? '#34d399' : '#28a745',
+            missed: isDarkMode ? '#f87171' : '#dc3545',
+            tooltipBg: getColor('--surface-color', '#ffffff', '#243046'),
+            tooltipBorder: getColor('--border-color', '#dee2e6', '#38465a')
+        };
+    }
+
     function resolveSeries(entries) {
         const labels = [];
         const delivered = [];
@@ -54,6 +81,9 @@
         const canvas = document.createElement('canvas');
         target.appendChild(canvas);
 
+        // Get theme colors
+        const colors = getThemeColors();
+
         // Create Chart.js stacked bar chart
         chartInstances[containerId] = new Chart(canvas, {
             type: 'bar',
@@ -63,13 +93,13 @@
                     {
                         label: 'Delivered',
                         data: series.delivered,
-                        backgroundColor: '#28a745',
+                        backgroundColor: colors.delivered,
                         borderWidth: 0
                     },
                     {
                         label: 'Missed',
                         data: series.missed,
-                        backgroundColor: '#dc3545',
+                        backgroundColor: colors.missed,
                         borderWidth: 0
                     }
                 ]
@@ -81,16 +111,16 @@
                     legend: {
                         display: true,
                         labels: {
-                            color: 'var(--text-color, #212529)'
+                            color: colors.text
                         }
                     },
                     tooltip: {
                         mode: 'index',
                         intersect: false,
-                        backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                        titleColor: '#212529',
-                        bodyColor: '#212529',
-                        borderColor: '#dee2e6',
+                        backgroundColor: colors.tooltipBg,
+                        titleColor: colors.text,
+                        bodyColor: colors.text,
+                        borderColor: colors.tooltipBorder,
                         borderWidth: 1,
                         callbacks: {
                             title: function(context) {
@@ -117,7 +147,7 @@
                     x: {
                         stacked: true,
                         ticks: {
-                            color: 'var(--text-color, #212529)'
+                            color: colors.text
                         },
                         grid: {
                             display: false
@@ -129,13 +159,13 @@
                         title: {
                             display: true,
                             text: 'Alerts',
-                            color: 'var(--text-color, #212529)'
+                            color: colors.text
                         },
                         ticks: {
-                            color: 'var(--text-color, #212529)'
+                            color: colors.text
                         },
                         grid: {
-                            color: 'rgba(0, 0, 0, 0.05)'
+                            color: colors.gridLines
                         }
                     }
                 }
@@ -153,5 +183,22 @@
 
     window.AlertVerificationCharts = {
         render
+    };
+
+    // Listen for theme changes and re-render all charts
+    window.addEventListener('theme-changed', () => {
+        console.log('🎨 Alert delivery charts: Theme changed, re-rendering...');
+
+        // Get the last rendered config from a stored reference
+        if (window.__lastAlertVerificationConfig) {
+            render(window.__lastAlertVerificationConfig);
+        }
+    });
+
+    // Store the config for theme change re-renders
+    const originalRender = render;
+    window.AlertVerificationCharts.render = function(config) {
+        window.__lastAlertVerificationConfig = config;
+        originalRender(config);
     };
 })(window);
