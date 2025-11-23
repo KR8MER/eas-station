@@ -48,6 +48,71 @@ services:
     security_opt:
       - no-new-privileges:true
 
+  redis:
+    image: redis:7-alpine
+    container_name: eas-redis
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    security_opt:
+      - no-new-privileges:true
+
+  audio-service:
+    image: eas-station:latest
+    container_name: eas-audio-service
+    restart: unless-stopped
+    command: ["python", "audio_service.py"]
+    volumes:
+      - app-config:/app-config
+    environment:
+      # Database connection - embedded database
+      POSTGRES_HOST: ${POSTGRES_HOST:-alerts-db}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_DB: ${POSTGRES_DB:-alerts}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+
+      # Redis connection
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_DB: ${REDIS_DB:-0}
+
+      # Application settings
+      CONFIG_PATH: /app-config/.env
+
+      # SDR settings
+      SDR_ARGS: ${SDR_ARGS:-driver=airspy}
+
+      # Icecast configuration
+      ICECAST_SERVER: ${ICECAST_SERVER:-icecast}
+      ICECAST_PORT: ${ICECAST_INTERNAL_PORT:-8000}
+      ICECAST_SOURCE_PASSWORD: ${ICECAST_SOURCE_PASSWORD:-eas_station_source_password}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    devices:
+      # SDR Device Passthrough
+      - /dev/bus/usb:/dev/bus/usb
+    privileged: true
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      redis:
+        condition: service_healthy
+      alerts-db:
+        condition: service_healthy
+
   app:
     build:
       context: .
@@ -56,6 +121,8 @@ services:
         SOAPYSDR_DRIVERS: ${SOAPYSDR_DRIVERS:-rtlsdr,airspy}
     image: eas-station:latest
     depends_on:
+      redis:
+        condition: service_healthy
       alerts-db:
         condition: service_healthy
       icecast:
@@ -77,11 +144,19 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
 
+      # Redis connection for worker coordination
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_DB: ${REDIS_DB:-0}
+
       # Application settings
       SECRET_KEY: ${SECRET_KEY:-}
       FLASK_ENV: ${FLASK_ENV:-production}
       FLASK_DEBUG: ${FLASK_DEBUG:-false}
       CONFIG_PATH: /app-config/.env  # Point to persistent location
+
+      # Service architecture (separate audio service)
+      AUDIO_SERVICE_MODE: "web_only"  # Don't run audio processing in web app
 
       # Location defaults
       DEFAULT_TIMEZONE: ${DEFAULT_TIMEZONE:-America/New_York}
@@ -265,6 +340,7 @@ services:
 
 volumes:
   alerts-db-data:
+  redis-data:  # Redis persistent storage for worker coordination
   app-config:  # Persistent storage for wizard-generated .env file
   icecast-logs:  # Icecast server logs
   certbot-conf:  # Let's Encrypt SSL certificates
