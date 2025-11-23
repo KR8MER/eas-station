@@ -363,9 +363,10 @@
 }
 </style>
 
+<script src="https://cdn.socket.io/4.5.4/socket.io.min.js" crossorigin="anonymous"></script>
 <script>
 let audioSources = [];
-let levelIntervalHandle = null;
+let audioMonitoringSocket = null;
 const STREAM_MODE_KEY = 'audioMonitorStreamMode';
 const htmlEntityDecoder = document.createElement('textarea');
 
@@ -424,9 +425,6 @@ async function loadAudioSources(fullRender = true) {
         const data = await response.json();
         audioSources = data.sources || [];
         renderAudioSources(fullRender);
-        if (fullRender) {
-            startLevelPolling();
-        }
     } catch (error) {
         console.error('Failed to load audio sources:', error);
         if (fullRender) {
@@ -440,6 +438,42 @@ async function loadAudioSources(fullRender = true) {
             `;
         }
     }
+}
+
+function updateAudioSourcesFromRealtime(sources) {
+    if (!Array.isArray(sources) || sources.length === 0) {
+        return;
+    }
+
+    const updatesByName = new Map(
+        sources
+            .map(src => [src.name || src.source_id || src.id, src])
+            .filter(entry => entry[0])
+    );
+
+    audioSources = audioSources.map(source => {
+        const update = updatesByName.get(source.name);
+        if (update) {
+            const status = update.status || update.source_status || source.status;
+            return { ...source, status };
+        }
+        return source;
+    });
+
+    updatesByName.forEach((update, name) => {
+        if (!name) return;
+        const card = document.querySelector(`[data-source-card="${CSS.escape(name)}"]`);
+        if (!card) return;
+
+        const status = (update.status || update.source_status || 'stopped').toLowerCase();
+        card.className = `card audio-source-card status-${status}`;
+
+        const badge = card.querySelector('.status-badge');
+        if (badge) {
+            badge.className = `badge status-badge bg-${getStatusColor(status)}`;
+            badge.textContent = status.toUpperCase();
+        }
+    });
 }
 
 function updateSourcePlayer(source) {
@@ -1691,41 +1725,10 @@ function updateLevelMetersFromSnapshot(snapshot) {
     console.debug(`Updated ${updatedCount} VU meters from ${snapshot.live_metrics.length} metrics`);
 }
 
-// REAL-TIME METERS: The existing code has sophisticated VU meter animation
-// We just need to use cached fetch and poll more frequently for real-time feel
-async function updateLevelMeters() {
-    try {
-        // Use cached fetch - most requests served from cache (5s TTL)
-        const fetchFunc = window.cachedFetch || fetch;
-        const response = await fetchFunc('/api/audio/metrics');
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-        }
-        const data = await response.json();
-        updateLevelMetersFromSnapshot(data);
-    } catch (error) {
-        console.debug('Level meter update skipped:', error);
-    }
-}
-
-function startLevelPolling() {
-    if (levelIntervalHandle) {
-        clearInterval(levelIntervalHandle);
-    }
-
-    updateLevelMeters();
-
-    // Poll every 2 seconds to match cache TTL and prevent server overload
-    // Previous 250ms polling caused 503 errors due to cache misalignment
-    // 2s provides adequate real-time updates without exhausting workers
-    levelIntervalHandle = setInterval(updateLevelMeters, 2000);
-}
-
 // ============================================================================
 // EAS Monitor Status Functions
 // ============================================================================
 
-let easMonitorIntervalHandle = null;
 let easMonitorStartTime = null; // Track when monitor actually started
 
 async function loadEASMonitorStatus() {
@@ -2070,22 +2073,50 @@ async function controlEASMonitor(action) {
     }
 }
 
-function startEASMonitorPolling() {
-    if (easMonitorIntervalHandle) {
-        clearInterval(easMonitorIntervalHandle);
+function connectAudioMonitoringSocket() {
+    if (typeof io === 'undefined') {
+        console.warn('Socket.IO client not available; skipping realtime updates');
+        return;
     }
 
-    loadEASMonitorStatus();
-    // Poll every 6 seconds to align with 5s server cache + 1s margin
-    // This prevents cache thrashing and reduces 503 errors
-    easMonitorIntervalHandle = setInterval(loadEASMonitorStatus, 6000);
+    if (audioMonitoringSocket) {
+        audioMonitoringSocket.disconnect();
+    }
+
+    audioMonitoringSocket = io({
+        transports: ['websocket', 'polling'],
+        timeout: 5000
+    });
+
+    audioMonitoringSocket.on('connect', () => {
+        console.info('Connected to audio monitoring WebSocket');
+    });
+
+    audioMonitoringSocket.on('audio_monitoring_update', payload => {
+        if (payload?.audio_metrics) {
+            updateLevelMetersFromSnapshot(payload.audio_metrics);
+        }
+
+        if (payload?.audio_sources) {
+            updateAudioSourcesFromRealtime(payload.audio_sources);
+        }
+
+        if (payload?.eas_monitor) {
+            updateEASMonitorDisplay(payload.eas_monitor);
+        }
+    });
+
+    audioMonitoringSocket.on('disconnect', reason => {
+        console.warn('Audio monitoring WebSocket disconnected:', reason);
+    });
 }
 
 // Load sources on page load
 document.addEventListener('DOMContentLoaded', function() {
     renderStreamModeControls();
     loadAudioSources(true); // Initial full render
-    startEASMonitorPolling();
+    loadEASMonitorStatus();
+    connectAudioMonitoringSocket();
 
     // Auto-refresh every 30 seconds - only updates metrics, never interrupts playback
     setInterval(() => loadAudioSources(false), 30000);
@@ -2093,13 +2124,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Clean up intervals when page unloads
 window.addEventListener('beforeunload', function() {
-    if (levelIntervalHandle) {
-        clearInterval(levelIntervalHandle);
-        levelIntervalHandle = null;
-    }
-    if (easMonitorIntervalHandle) {
-        clearInterval(easMonitorIntervalHandle);
-        easMonitorIntervalHandle = null;
+    if (audioMonitoringSocket) {
+        audioMonitoringSocket.disconnect();
+        audioMonitoringSocket = null;
     }
 });
 </script>
