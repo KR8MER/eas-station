@@ -79,19 +79,19 @@ pip install -r requirements-fastapi.txt
 Or manually:
 
 ```bash
-uvicorn app_fastapi:app --reload --port 8001
+uvicorn app_fastapi:app --reload --port 8002
 ```
 
 ### 3. Access API Documentation
 
-- **Swagger UI:** http://localhost:8001/api/docs
-- **ReDoc:** http://localhost:8001/api/redoc
-- **OpenAPI JSON:** http://localhost:8001/api/openapi.json
+- **Swagger UI:** http://localhost:8002/api/docs
+- **ReDoc:** http://localhost:8002/api/redoc
+- **OpenAPI JSON:** http://localhost:8002/api/openapi.json
 
 ### 4. Test WebSocket Connection
 
 ```javascript
-const ws = new WebSocket('ws://localhost:8001/ws');
+const ws = new WebSocket('ws://localhost:8002/ws');
 
 ws.onopen = () => {
     console.log('Connected!');
@@ -181,7 +181,7 @@ apt-get install apache2-utils
 ab -n 10000 -c 100 http://localhost:5000/api/audio/sources
 
 # Test FastAPI
-ab -n 10000 -c 100 http://localhost:8001/api/audio/sources
+ab -n 10000 -c 100 http://localhost:8002/api/audio/sources
 ```
 
 ---
@@ -231,17 +231,17 @@ ab -n 10000 -c 100 http://localhost:8001/api/audio/sources
 
 1. **Health Check:**
    ```bash
-   curl http://localhost:8001/health
+   curl http://localhost:8002/health
    ```
 
 2. **API Documentation:**
-   Open http://localhost:8001/api/docs in browser
+   Open http://localhost:8002/api/docs in browser
 
 3. **WebSocket:**
    Use browser console or wscat:
    ```bash
    npm install -g wscat
-   wscat -c ws://localhost:8001/ws
+   wscat -c ws://localhost:8002/ws
    ```
 
 ### Automated Testing (TODO)
@@ -260,7 +260,7 @@ Create `.env` file or set these variables:
 
 ```bash
 # FastAPI Configuration
-FASTAPI_PORT=8001
+FASTAPI_PORT=8002
 DEBUG=true
 ENVIRONMENT=development
 
@@ -304,7 +304,7 @@ print(secrets.token_urlsafe(32))
 
 ### Running Both Flask and FastAPI
 
-FastAPI runs on port 8001 by default (Flask on 5000), so both can run simultaneously:
+FastAPI runs on port 8002 by default (Flask on 5000), so both can run simultaneously:
 
 ```bash
 # Terminal 1: Flask
@@ -330,12 +330,12 @@ python app.py
 
 FastAPI provides automatic interactive API documentation:
 
-- **Swagger UI** (http://localhost:8001/api/docs)
+- **Swagger UI** (http://localhost:8002/api/docs)
   - Interactive API testing
   - Try out endpoints directly
   - See request/response schemas
 
-- **ReDoc** (http://localhost:8001/api/redoc)
+- **ReDoc** (http://localhost:8002/api/redoc)
   - Clean, readable documentation
   - Better for reference
   - Exportable
@@ -344,7 +344,7 @@ FastAPI provides automatic interactive API documentation:
 
 Download the OpenAPI 3.0 specification:
 ```bash
-curl http://localhost:8001/api/openapi.json > openapi.json
+curl http://localhost:8002/api/openapi.json > openapi.json
 ```
 
 Use with code generators:

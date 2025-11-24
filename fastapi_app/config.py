@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     environment: str = Field(default="development", env="ENVIRONMENT")
     debug: bool = Field(default=False, env="DEBUG")
     host: str = Field(default="0.0.0.0", env="HOST")
-    fastapi_port: int = Field(default=8001, env="FASTAPI_PORT")
+    fastapi_port: int = Field(default=8002, env="FASTAPI_PORT")  # 8001 is used by Icecast
 
     # Database
     database_url: str = Field(

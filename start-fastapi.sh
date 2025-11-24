@@ -51,8 +51,8 @@ fi
 # Export environment variables
 export $(grep -v '^#' .env | xargs)
 
-# Default port
-PORT=${FASTAPI_PORT:-8001}
+# Default port (8002 - 8001 is used by Icecast)
+PORT=${FASTAPI_PORT:-8002}
 
 echo ""
 echo "Starting FastAPI application..."
