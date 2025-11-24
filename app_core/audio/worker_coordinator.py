@@ -55,29 +55,34 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# Try to use Redis-based coordinator, fall back to file-based
+# Redis is now REQUIRED for worker coordination in separated architecture.
+# File-based fallbacks have been removed as they don't work in containerized environments
+# where /tmp is ephemeral per container.
 _USE_REDIS = True
 _redis_coordinator = None
 
 try:
     from . import worker_coordinator_redis
     _redis_coordinator = worker_coordinator_redis
-    logger.info("Redis-based worker coordinator available")
+    logger.info("✅ Redis-based worker coordinator available")
 except ImportError as e:
-    logger.warning(f"Redis not available, falling back to file-based coordination: {e}")
+    logger.error(f"❌ CRITICAL: Redis not available for worker coordination: {e}")
+    logger.error("   Redis is REQUIRED in separated architecture")
+    logger.error("   Set REDIS_HOST and REDIS_PORT environment variables")
     _USE_REDIS = False
+    # Don't raise here - let functions fail explicitly when called
 
-# Shared state file location (world-readable, master-writable)
-METRICS_FILE = "/tmp/eas-station-metrics.json"
-MASTER_LOCK_FILE = "/tmp/eas-station-master.lock"
+# Constants
 HEARTBEAT_INTERVAL = 5.0  # Master updates heartbeat every 5 seconds
 STALE_HEARTBEAT_THRESHOLD = 15.0  # Consider master dead after 15 seconds
 
-# Global master lock file descriptor (kept open to hold lock)
-_master_lock_fd: Optional[int] = None
+# Global state
 _is_master_worker: bool = False
 _heartbeat_thread: Optional[threading.Thread] = None
 _heartbeat_stop_flag: threading.Event = threading.Event()
+
+# Note: File-based fallbacks (METRICS_FILE, MASTER_LOCK_FILE, _master_lock_fd) removed.
+# These don't work reliably in containerized environments.
 
 
 class WorkerRole:
@@ -88,54 +93,29 @@ class WorkerRole:
 
 def try_acquire_master_lock() -> bool:
     """
-    Try to acquire the master worker lock.
-
-    Delegates to Redis-based coordinator if available, otherwise uses file-based locking.
+    Try to acquire the master worker lock using Redis.
 
     Returns:
         True if this worker acquired master lock, False otherwise
-    """
-    global _master_lock_fd, _is_master_worker
 
-    # Try Redis first
-    if _USE_REDIS and _redis_coordinator:
-        try:
-            result = _redis_coordinator.try_acquire_master_lock()
-            _is_master_worker = result
-            return result
-        except Exception as e:
-            logger.error(f"Redis coordinator failed, falling back to file-based: {e}")
-            # Fall through to file-based
+    Raises:
+        RuntimeError: If Redis is not available
+    """
+    global _is_master_worker
+
+    if not _USE_REDIS or not _redis_coordinator:
+        raise RuntimeError(
+            "Redis is required for worker coordination. "
+            "Set REDIS_HOST and REDIS_PORT environment variables."
+        )
 
     try:
-        # Open lock file (create if doesn't exist)
-        fd = os.open(MASTER_LOCK_FILE, os.O_RDWR | os.O_CREAT, 0o644)
-
-        # Try to acquire exclusive lock (non-blocking)
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-
-        # Success! We are the master
-        _master_lock_fd = fd
-        _is_master_worker = True
-
-        # Write our PID to lock file
-        os.ftruncate(fd, 0)
-        os.lseek(fd, 0, os.SEEK_SET)
-        os.write(fd, f"{os.getpid()}\n".encode())
-
-        logger.info(f"✅ Worker PID {os.getpid()} acquired MASTER lock")
-        return True
-
-    except (IOError, OSError) as e:
-        # Lock held by another worker
-        if fd is not None:
-            try:
-                os.close(fd)
-            except:
-                pass
-
-        logger.info(f"Worker PID {os.getpid()} running as SLAVE (master lock held)")
-        return False
+        result = _redis_coordinator.try_acquire_master_lock()
+        _is_master_worker = result
+        return result
+    except Exception as e:
+        logger.error(f"Failed to acquire master lock via Redis: {e}")
+        raise
 
 
 def release_master_lock():
@@ -211,41 +191,26 @@ def write_shared_metrics(metrics: Dict[str, Any]):
 
 def read_shared_metrics() -> Optional[Dict[str, Any]]:
     """
-    Read metrics from shared storage.
+    Read metrics from Redis shared storage.
 
-    Uses Redis if available, otherwise reads from file.
     Can be called by any worker to get latest metrics from master.
 
     Returns:
         Dictionary of metrics, or None if not available or stale
+
+    Raises:
+        RuntimeError: If Redis is not available
     """
-    # Try Redis first
-    if _USE_REDIS and _redis_coordinator:
-        try:
-            return _redis_coordinator.read_shared_metrics()
-        except Exception as e:
-            logger.error(f"Redis read failed, falling back to file: {e}")
-            # Fall through to file-based
+    if not _USE_REDIS or not _redis_coordinator:
+        raise RuntimeError(
+            "Redis is required for metrics storage. "
+            "Set REDIS_HOST and REDIS_PORT environment variables."
+        )
 
     try:
-        if not os.path.exists(METRICS_FILE):
-            return None
-
-        with open(METRICS_FILE, 'r') as f:
-            metrics = json.load(f)
-
-        # Check heartbeat freshness
-        heartbeat = metrics.get("_heartbeat", 0)
-        age = time.time() - heartbeat
-
-        if age > STALE_HEARTBEAT_THRESHOLD:
-            logger.warning(f"Shared metrics are stale (age: {age:.1f}s), master may be dead")
-            return None
-
-        return metrics
-
+        return _redis_coordinator.read_shared_metrics()
     except Exception as e:
-        logger.error(f"Failed to read shared metrics: {e}")
+        logger.error(f"Failed to read shared metrics from Redis: {e}")
         return None
 
 

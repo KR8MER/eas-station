@@ -44,6 +44,7 @@ from app_core.models import (
 from app_core.audio import AudioIngestController
 from app_core.audio.ingest import AudioSourceConfig, AudioSourceType, AudioSourceStatus
 from app_core.audio.sources import create_audio_source
+from app_core.audio.redis_commands import get_audio_command_publisher
 from app_utils import utc_now
 
 logger = logging.getLogger(__name__)
@@ -221,153 +222,6 @@ def _start_audio_sources_background(app: Flask) -> None:
     logger.info("🌐 App container in separated architecture - skipping audio source startup")
     logger.info("   Audio processing handled by dedicated audio-service container")
     return
-
-    # The code below was used in the old integrated mode (kept for reference only)
-    # ----- UNREACHABLE CODE BELOW THIS LINE -----
-
-    # CRITICAL: Use Flask app context for database access
-    with app.app_context():
-        try:
-            # Check if this worker should handle audio processing
-            from app_core.audio.worker_coordinator import is_master_worker
-            import os
-            import tempfile
-            import time
-
-            if not is_master_worker():
-                logger.info(
-                    f"Worker PID {os.getpid()} is SLAVE - skipping audio source startup "
-                    "(master worker handles audio processing)"
-                )
-                return
-
-            logger.info(f"Worker PID {os.getpid()} is MASTER - starting audio sources")
-
-            # CRITICAL: Acquire file lock BEFORE starting audio sources
-            # In multi-worker environments, we need to ensure only ONE worker
-            # starts the audio source decoders to prevent duplicate FFmpeg processes
-            # (This lock provides additional safety in case master election fails)
-
-            # Use secure lock file location with fallback chain
-            # Priority: /var/lock > /run > tempfile.gettempdir()
-            lock_dirs = ['/var/lock', '/run', tempfile.gettempdir()]
-            lock_dir = None
-            for candidate in lock_dirs:
-                if os.path.isdir(candidate) and os.access(candidate, os.W_OK):
-                    lock_dir = candidate
-                    break
-
-            if lock_dir is None:
-                logger.warning("No suitable lock directory found; using current directory")
-                lock_dir = '.'
-
-            lock_file_path = os.path.join(lock_dir, 'eas-audio-initialization.lock')
-
-            # Check for stale lock file (older than 60 seconds with no valid process)
-            should_remove_stale_lock = False
-            if os.path.exists(lock_file_path):
-                try:
-                    lock_age = time.time() - os.path.getmtime(lock_file_path)
-                    if lock_age > 60:
-                        logger.warning(
-                            f"Found stale lock file (age: {lock_age:.1f}s) - will attempt to remove"
-                        )
-                        should_remove_stale_lock = True
-                except (OSError, IOError) as e:
-                    logger.warning(f"Could not check lock file age: {e}")
-
-            if should_remove_stale_lock:
-                try:
-                    os.remove(lock_file_path)
-                    logger.info(f"Removed stale lock file: {lock_file_path}")
-                except (OSError, IOError) as e:
-                    logger.warning(f"Could not remove stale lock file: {e}")
-
-            lock_file, acquired = _try_acquire_lock(lock_file_path, mode='a')
-            if not acquired:
-                # Lock is already held by another worker
-                logger.warning(
-                    f"Audio sources lock held by another worker (PID {os.getpid()}) - "
-                    f"waiting 5 seconds then checking if sources need starting..."
-                )
-                time.sleep(5)
-
-                # After waiting, check if any sources actually started
-                # If not, we should start them anyway (previous worker may have crashed)
-                if _audio_controller:
-                    running_sources = [
-                        name for name, src in _audio_controller._sources.items()
-                        if src.status == AudioSourceStatus.RUNNING
-                    ]
-                    if not running_sources:
-                        logger.warning(
-                            f"No sources running after lock wait - other worker may have failed. "
-                            f"Proceeding to start sources anyway (PID {os.getpid()})"
-                        )
-                    else:
-                        logger.info(
-                            f"Found {len(running_sources)} running sources - other worker succeeded. Exiting."
-                        )
-                        return
-                else:
-                    logger.error("Audio controller not initialized - cannot check running sources")
-                    return
-
-            if lock_file:
-                # Keep the file open to maintain the lock for the life of the process
-                _audio_initialization_lock_file = lock_file
-                logger.info(f"Acquired audio initialization lock at {lock_file_path} (PID {os.getpid()})")
-            else:
-                logger.info(
-                    f"Proceeding without exclusive audio initialization lock (PID {os.getpid()})"
-                )
-
-            logger.info("Background: Starting audio sources")
-
-            if _audio_controller is None:
-                logger.error("Audio controller not initialized - cannot start sources")
-                return
-
-            # Start sources that have auto_start enabled (SLOW - network connections)
-            saved_configs = AudioSourceConfigDB.query.all()
-            logger.info(f"Background: Found {len(saved_configs)} audio source configs in database")
-
-            sources_to_start = [
-                db_config for db_config in saved_configs
-                if db_config.enabled and db_config.auto_start
-            ]
-            logger.info(
-                f"Background: {len(sources_to_start)} sources have auto_start enabled "
-                f"(enabled configs: {len([c for c in saved_configs if c.enabled])})"
-            )
-
-            started_count = 0
-            failed_count = 0
-            for db_config in sources_to_start:
-                try:
-                    logger.info(f'Background: Attempting to auto-start source: {db_config.name}')
-                    _audio_controller.start_source(db_config.name)
-                    logger.info(f'Background: ✅ Auto-started audio source: {db_config.name}')
-                    started_count += 1
-                except Exception as e:
-                    logger.error(
-                        f'Background: ❌ Failed to start audio source {db_config.name}: {e}',
-                        exc_info=True
-                    )
-                    failed_count += 1
-
-            logger.info(
-                f"Background: Audio source startup complete - "
-                f"started: {started_count}, failed: {failed_count}"
-            )
-
-            # Initialize streaming service (SLOW - starts FFmpeg processes)
-            _initialize_auto_streaming()
-
-            logger.info("Background: Audio source initialization completed successfully")
-
-        except Exception as e:
-            logger.error(f"Background: Audio source initialization failed: {e}", exc_info=True)
 
 
 def _get_auto_streaming_service():
@@ -1753,41 +1607,41 @@ def api_delete_audio_source(source_name: str):
 
 @audio_ingest_bp.route('/api/audio/sources/<source_name>/start', methods=['POST'])
 def api_start_audio_source(source_name: str):
-    """Start audio ingestion from a source."""
-    try:
-        controller, adapter, db_config, _restored = _get_controller_and_adapter(source_name)
+    """
+    Start audio ingestion from a source.
 
-        if adapter is None:
-            if db_config:
-                return jsonify({
-                    'error': 'Source exists in database but could not be loaded',
-                    'hint': 'Check audio ingest logs for initialization errors',
-                }), 503
+    In separated architecture, this publishes a command to Redis for audio-service to execute.
+    """
+    try:
+        # Check if source exists in database
+        db_config = AudioSourceConfigDB.query.filter_by(name=source_name).first()
+        if not db_config:
             return jsonify({
                 'error': f'Audio source "{source_name}" not found',
                 'hint': 'Create the source first using POST /api/audio/sources'
             }), 404
 
-        if adapter.status == AudioSourceStatus.RUNNING:
-            return jsonify({'message': 'Source is already running'}), 200
+        # Publish command to audio-service via Redis
+        try:
+            publisher = get_audio_command_publisher()
+            result = publisher.start_source(source_name)
 
-        controller.start_source(source_name)
+            if result['success']:
+                logger.info('Published start command for audio source: %s', source_name)
+                return jsonify({
+                    'message': f'Start command sent to audio-service for source: {source_name}',
+                    'command_id': result.get('command_id')
+                })
+            else:
+                logger.error('Failed to publish start command: %s', result.get('message'))
+                return jsonify({'error': result.get('message')}), 500
 
-        # Auto-start Icecast streaming if available
-        auto_streaming = _get_auto_streaming_service()
-        if auto_streaming and auto_streaming.is_available():
-            try:
-                auto_streaming.add_source(source_name, adapter)
-                logger.info('Auto-started Icecast stream for: %s', source_name)
-            except Exception as e:
-                logger.warning(f'Failed to auto-start Icecast stream for {source_name}: {e}')
-
-        logger.info('Started audio source: %s', source_name)
-
-        return jsonify({
-            'message': 'Audio source started successfully',
-            'status': adapter.status.value
-        })
+        except Exception as e:
+            logger.error('Redis Pub/Sub unavailable, cannot send start command: %s', e)
+            return jsonify({
+                'error': 'Audio service communication unavailable',
+                'hint': 'Check Redis connection and audio-service container status'
+            }), 503
 
     except Exception as exc:
         logger.error('Error starting audio source %s: %s', source_name, exc)
@@ -1795,41 +1649,41 @@ def api_start_audio_source(source_name: str):
 
 @audio_ingest_bp.route('/api/audio/sources/<source_name>/stop', methods=['POST'])
 def api_stop_audio_source(source_name: str):
-    """Stop audio ingestion from a source."""
-    try:
-        controller, adapter, db_config, _ = _get_controller_and_adapter(source_name)
+    """
+    Stop audio ingestion from a source.
 
-        if adapter is None:
-            if db_config:
-                return jsonify({
-                    'error': 'Source exists in database but could not be loaded',
-                    'hint': 'Check audio ingest logs for initialization errors',
-                }), 503
+    In separated architecture, this publishes a command to Redis for audio-service to execute.
+    """
+    try:
+        # Check if source exists in database
+        db_config = AudioSourceConfigDB.query.filter_by(name=source_name).first()
+        if not db_config:
             return jsonify({
                 'error': f'Audio source "{source_name}" not found',
                 'hint': 'Create the source first using POST /api/audio/sources'
             }), 404
 
-        if adapter.status == AudioSourceStatus.STOPPED:
-            return jsonify({'message': 'Source is already stopped'}), 200
+        # Publish command to audio-service via Redis
+        try:
+            publisher = get_audio_command_publisher()
+            result = publisher.stop_source(source_name)
 
-        # Auto-stop Icecast streaming if available
-        auto_streaming = _get_auto_streaming_service()
-        if auto_streaming:
-            try:
-                auto_streaming.remove_source(source_name)
-                logger.info('Auto-stopped Icecast stream for: %s', source_name)
-            except Exception as e:
-                logger.warning(f'Failed to auto-stop Icecast stream for {source_name}: {e}')
+            if result['success']:
+                logger.info('Published stop command for audio source: %s', source_name)
+                return jsonify({
+                    'message': f'Stop command sent to audio-service for source: {source_name}',
+                    'command_id': result.get('command_id')
+                })
+            else:
+                logger.error('Failed to publish stop command: %s', result.get('message'))
+                return jsonify({'error': result.get('message')}), 500
 
-        controller.stop_source(source_name)
-
-        logger.info('Stopped audio source: %s', source_name)
-
-        return jsonify({
-            'message': 'Audio source stopped successfully',
-            'status': adapter.status.value
-        })
+        except Exception as e:
+            logger.error('Redis Pub/Sub unavailable, cannot send stop command: %s', e)
+            return jsonify({
+                'error': 'Audio service communication unavailable',
+                'hint': 'Check Redis connection and audio-service container status'
+            }), 503
 
     except Exception as exc:
         logger.error('Error stopping audio source %s: %s', source_name, exc)

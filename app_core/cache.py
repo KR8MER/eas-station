@@ -33,17 +33,20 @@ cache = Cache()
 
 def init_cache(app):
     """Initialize Flask-Caching with the application.
-    
+
     Configures caching based on environment variables:
     - CACHE_TYPE: Backend type (simple, redis, filesystem, etc.)
     - CACHE_DEFAULT_TIMEOUT: Default cache timeout in seconds
     - CACHE_DIR: Directory for filesystem cache
     - CACHE_REDIS_URL: Redis connection URL
-    
+
     Args:
         app: Flask application instance
+
+    Note: Redis is now the default for production use. Multi-worker deployments
+    require Redis to share cache state across workers.
     """
-    cache_type = os.environ.get('CACHE_TYPE', 'simple')
+    cache_type = os.environ.get('CACHE_TYPE', 'redis')
     cache_default_timeout = int(os.environ.get('CACHE_DEFAULT_TIMEOUT', '300'))
     
     config = {

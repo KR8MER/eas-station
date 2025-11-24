@@ -50,13 +50,9 @@ def register(app, logger):
     register_auth_routes(app, logger)
     register_dashboard_routes(app, logger, eas_config)
 
-    # CRITICAL: Initialize audio controller on startup (not just when first API request comes in)
-    # This ensures auto-start audio sources begin immediately
-    with app.app_context():
-        from .audio_ingest import _get_audio_controller
-        logger.info("Initializing audio controller on startup...")
-        _get_audio_controller()
-        logger.info("Audio controller initialized")
+    # Note: Audio controller initialization removed for separated architecture.
+    # In separated architecture, audio processing runs in dedicated audio-service container.
+    # The app container only serves the web UI and reads metrics from Redis.
 
 
 __all__ = ['register', 'calculate_coverage_percentages']
