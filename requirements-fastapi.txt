@@ -1,0 +1,44 @@
+# FastAPI Migration Requirements
+# Additional dependencies for running FastAPI alongside Flask
+# Install with: pip install -r requirements-fastapi.txt
+
+# FastAPI and ASGI server
+fastapi==0.115.0  # Modern async web framework with auto OpenAPI docs
+uvicorn[standard]==0.32.0  # ASGI server with auto-reload and performance features
+python-multipart==0.0.12  # Required for form data parsing
+
+# Async database support
+asyncpg==0.30.0  # Fast PostgreSQL async driver (replaces psycopg2 for async)
+sqlalchemy[asyncio]==2.0.44  # Already have 2.0.44, but ensuring async extra
+
+# Pydantic for validation and serialization
+pydantic==2.10.0  # Data validation using Python type annotations
+pydantic-settings==2.6.1  # Settings management from environment variables
+email-validator==2.2.0  # Email validation for Pydantic
+
+# Authentication and security
+python-jose[cryptography]==3.3.0  # JWT token creation and validation
+passlib[bcrypt]==1.7.4  # Password hashing (bcrypt algorithm)
+python-multipart==0.0.12  # OAuth2 password flow support
+
+# Async Redis client (upgrade from sync redis)
+redis[hiredis]==5.0.8  # Already installed, but ensuring compatibility
+
+# WebSocket support (native in FastAPI/Uvicorn)
+websockets==13.1  # WebSocket client/server library
+
+# Testing
+httpx==0.27.2  # Already installed - async HTTP client for testing
+pytest-asyncio==0.24.0  # Already installed - async pytest support
+
+# Optional: API documentation enhancements
+fastapi-pagination==0.12.30  # Automatic pagination for list endpoints (optional)
+
+# Note: The following are already installed via requirements.txt and compatible:
+# - SQLAlchemy==2.0.44 (supports async)
+# - psycopg2-binary==2.9.10 (keep for Flask, use asyncpg for FastAPI)
+# - GeoAlchemy2==0.15.2 (works with async SQLAlchemy)
+# - Alembic==1.14.0 (supports async migrations)
+# - redis==5.0.8 (we'll use aioredis adapter)
+# - httpx==0.27.2 (already installed)
+# - pytest-asyncio==0.24.0 (already installed)
