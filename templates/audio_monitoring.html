@@ -15,7 +15,7 @@
         <div class="card">
             <div class="card-body d-flex flex-wrap gap-3 align-items-center justify-content-between">
                 <div>
-                    <h5 class="mb-1">Streaming mode</h5>
+                    <h3 class="h5 mb-1">Streaming mode</h3>
                     <p class="text-muted small mb-0">
                         Use the built-in HTTPS player when Icecast is blocked or unreliable. Switch to Icecast when available for long-distance listening.
                     </p>
@@ -54,9 +54,9 @@
         <div class="card border-primary">
             <div class="card-header bg-primary text-white">
                 <div class="d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">
+                    <h4 class="h5 mb-0">
                         <i class="fas fa-satellite-dish"></i> EAS Continuous Monitor
-                    </h5>
+                    </h4>
                     <div id="eas-monitor-status-badge">
                         <span class="badge bg-secondary">Loading...</span>
                     </div>
@@ -2129,7 +2129,7 @@ let levelIntervalHandle = null;
 let easMonitorIntervalHandle = null;
 
 function startLevelPolling() {
-    // Poll for audio level metrics every 500ms when WebSocket unavailable
+    // Poll for audio level metrics every 2s when WebSocket unavailable
     if (levelIntervalHandle) {
         clearInterval(levelIntervalHandle);
     }
@@ -2139,14 +2139,17 @@ function startLevelPolling() {
             const response = await fetch('/api/audio/metrics', { cache: 'no-store' });
             if (response.ok) {
                 const data = await response.json();
-                if (data && data.audio_metrics) {
-                    updateLevelMetersFromSnapshot(data.audio_metrics);
+                const snapshot = data?.audio_metrics || data;
+
+                // API returns metrics at the top-level while WebSocket wraps them
+                if (snapshot && Array.isArray(snapshot.live_metrics)) {
+                    updateLevelMetersFromSnapshot(snapshot);
                 }
             }
         } catch (error) {
             console.error('Error polling audio levels:', error);
         }
-    }, 500);
+    }, 2000);
 }
 
 function startEASMonitorPolling() {
