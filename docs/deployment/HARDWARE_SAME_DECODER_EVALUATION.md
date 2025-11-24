@@ -174,6 +174,17 @@ Custom actions (Zigbee, Hailo, etc.)
 - When alert received, trigger Zigbee sirens, Hailo verification, etc.
 - Essentially use DASDEC as "hardware alert receiver"
 
+**Lab Validation Workflow (DASDEC-III)**
+- **Purpose:** Use a certified decoder as an oracle when qualifying the Raspberry Pi stack for FCC Part 11 submission.
+- **Setup:**
+  - Feed identical RF and IP inputs into both the DASDEC-III and the Pi reference build (dual SDRs + audio HAT).
+  - Connect the DASDEC-III Ethernet API (or RS-232) to a capture host that archives CAP XML and syslog events.
+- **Procedure:**
+  - Trigger live or replayed alerts (NOAA/SAME generator) and record: Pi playout audio, DASDEC-III CAP XML, GPIO/relay activations, and timestamps.
+  - Compare DASDEC-III CAP payloads and relay timing against EAS Station ingest/relay logs; investigate any header, FSK timing, or audio discrepancies.
+  - Repeat under stress (multiple overlapping alerts, degraded RF) to document stability deltas.
+- **Outcome:** Creates auditable evidence that the open-source stack matches a certified commercial decoder, reducing risk before scheduling a lab certification cycle.
+
 **Value:** ⭐ **Poor** - Extremely expensive for hobbyist/amateur use
 
 **Pros:**
