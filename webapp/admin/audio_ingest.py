@@ -182,11 +182,20 @@ def _start_audio_sources_background(app: Flask) -> None:
     """
     Start audio sources and streaming in background (slow, async).
 
-    IMPORTANT: In multi-worker setups, only the MASTER worker should start
-    audio sources. This function will check worker role and exit early if
-    this is a SLAVE worker.
+    SEPARATED ARCHITECTURE: This function should NOT run in the app container.
+    Audio processing is handled entirely by the dedicated audio-service container.
+    The app container only serves the UI and reads metrics from Redis.
     """
     global _audio_controller, _streaming_lock_file, _audio_initialization_lock_file
+
+    # Separated architecture: Audio processing handled by dedicated audio-service container
+    # Skip ALL audio initialization in app container
+    logger.info("🌐 App container in separated architecture - skipping audio source startup")
+    logger.info("   Audio processing handled by dedicated audio-service container")
+    return
+
+    # The code below was used in the old integrated mode (kept for reference only)
+    # ----- UNREACHABLE CODE BELOW THIS LINE -----
 
     # CRITICAL: Use Flask app context for database access
     with app.app_context():
