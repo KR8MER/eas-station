@@ -9,6 +9,8 @@ let metricsUpdateInterval = null;
 let healthUpdateInterval = null;
 let deviceMonitorInterval = null;
 let lastDeviceList = [];
+const lastMetricTimestamps = {};
+const DEFAULT_LEVEL_DB = -120;
 
 // Initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
@@ -231,7 +233,10 @@ function createSourceCard(source) {
                                 <i class="fas fa-wave-square"></i> Waveform Monitor
                                 ${source.status === 'running' ? '<span class="text-success">● LIVE</span>' : '<span class="text-muted">○ Stopped</span>'}
                             </small>
-                            <small class="text-muted">Data flowing: <span id="data-indicator-${safeId}">--</span></small>
+                            <small class="text-muted d-flex flex-wrap gap-2 justify-content-end">
+                                <span>Data flowing: <span id="data-indicator-${safeId}">--</span></span>
+                                <span id="metric-timestamp-${safeId}">Last metric: --</span>
+                            </small>
                         </div>
                         <canvas id="waveform-${safeId}" class="waveform-canvas" width="800" height="120"></canvas>
                     </div>
@@ -270,6 +275,86 @@ function getStatusBadge(status) {
     return badges[status] || badges.stopped;
 }
 
+function updateBackendStatusIndicator(broadcastStats = {}, activeSource = null) {
+    const indicator = document.getElementById('backend-status-indicator');
+    if (!indicator) return;
+
+    const isActive = Boolean(broadcastStats.active);
+    const sourceLabel = activeSource || broadcastStats.active_source;
+
+    indicator.className = `badge ${isActive ? 'bg-success' : 'bg-danger'} px-3 py-2`;
+    indicator.textContent = isActive
+        ? `Backend active${sourceLabel ? ` • ${sourceLabel}` : ''}`
+        : 'Backend inactive — no data broadcasting';
+}
+
+function showMetricsWarning(message) {
+    const banner = document.getElementById('metrics-warning-banner');
+    const text = document.getElementById('metrics-warning-text');
+    if (!banner || !text) return;
+
+    text.textContent = message;
+    banner.classList.remove('d-none');
+}
+
+function hideMetricsWarning() {
+    const banner = document.getElementById('metrics-warning-banner');
+    if (!banner) return;
+
+    banner.classList.add('d-none');
+}
+
+function hasMeaningfulLevels(metric) {
+    if (!metric) return false;
+    const peak = Number(metric.peak_level_db);
+    const rms = Number(metric.rms_level_db);
+
+    const peakValid = Number.isFinite(peak) && peak > DEFAULT_LEVEL_DB;
+    const rmsValid = Number.isFinite(rms) && rms > DEFAULT_LEVEL_DB;
+
+    return peakValid || rmsValid;
+}
+
+function parseMetricTimestamp(timestamp) {
+    if (timestamp === undefined || timestamp === null) return null;
+
+    if (typeof timestamp === 'number') {
+        const tsMs = timestamp > 1e12 ? timestamp : timestamp * 1000;
+        const parsed = new Date(tsMs);
+        return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
+
+    const parsed = new Date(timestamp);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function renderMetricTimestamp(sourceId) {
+    const safeId = sanitizeId(sourceId);
+    const target = document.getElementById(`metric-timestamp-${safeId}`);
+    if (!target) return;
+
+    const ts = lastMetricTimestamps[sourceId];
+    if (!ts) {
+        target.textContent = 'Last metric: --';
+        target.className = 'text-muted';
+        return;
+    }
+
+    const ageSeconds = Math.max(0, Math.round((Date.now() - ts.getTime()) / 1000));
+    target.textContent = `Last metric: ${ts.toLocaleTimeString()} (${ageSeconds}s ago)`;
+
+    let className = 'text-success';
+    if (ageSeconds > 120) className = 'text-danger fw-bold';
+    else if (ageSeconds > 60) className = 'text-warning fw-bold';
+
+    target.className = className;
+}
+
+function refreshMetricTimestampIndicators() {
+    if (!Array.isArray(audioSources)) return;
+    audioSources.forEach(source => renderMetricTimestamp(source.id));
+}
+
 /**
  * Update real-time metrics
  */
@@ -288,20 +373,44 @@ async function updateMetrics() {
         // API returns metrics at the top level while WebSocket wraps them
         const snapshot = data?.audio_metrics || data;
         const liveMetrics = snapshot?.live_metrics || [];
+        updateBackendStatusIndicator(snapshot?.broadcast_stats, snapshot?.active_source);
 
         if (!Array.isArray(liveMetrics)) {
             console.debug('No live metrics found in snapshot', snapshot);
+            showMetricsWarning('No live audio metrics received — check audio service/Redis');
+            refreshMetricTimestampIndicators();
             return;
         }
 
+        if (liveMetrics.length === 0) {
+            showMetricsWarning('No live audio metrics received — check audio service/Redis');
+            refreshMetricTimestampIndicators();
+            return;
+        }
+
+        const hasRealMetrics = liveMetrics.some(metric => hasMeaningfulLevels(metric));
+        if (!hasRealMetrics) {
+            showMetricsWarning('No live audio metrics received — check audio service/Redis');
+        } else {
+            hideMetricsWarning();
+        }
+
         liveMetrics.forEach(metric => {
+            if (hasMeaningfulLevels(metric)) {
+                const parsedTimestamp = parseMetricTimestamp(metric.timestamp) || new Date();
+                lastMetricTimestamps[metric.source_id] = parsedTimestamp;
+            }
+
             updateMeterDisplay(metric.source_id, 'peak', metric.peak_level_db);
             updateMeterDisplay(metric.source_id, 'rms', metric.rms_level_db);
+            renderMetricTimestamp(metric.source_id);
             // Update waveform for running sources
             if (audioSources.find(s => s.id === metric.source_id && s.status === 'running')) {
                 updateWaveform(metric.source_id);
             }
         });
+
+        refreshMetricTimestampIndicators();
     } catch (error) {
         console.error('Error updating metrics:', error);
     }
@@ -557,11 +666,13 @@ function updateMeterDisplay(sourceId, type, levelDb) {
 
     if (!bar || !value) return;
 
+    const safeLevel = Number.isFinite(levelDb) ? levelDb : DEFAULT_LEVEL_DB;
+
     // Convert dB to percentage (assuming -60dB to 0dB range)
-    const percentage = Math.max(0, Math.min(100, ((levelDb + 60) / 60) * 100));
+    const percentage = Math.max(0, Math.min(100, ((safeLevel + 60) / 60) * 100));
 
     bar.style.width = `${percentage}%`;
-    value.textContent = `${levelDb.toFixed(1)} dB`;
+    value.textContent = `${safeLevel.toFixed(1)} dB`;
 }
 
 /**
