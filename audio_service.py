@@ -626,60 +626,93 @@ def main():
             
             @stream_app.route('/api/audio/stream/<source_name>')
             def stream_audio(source_name):
-                """Stream live audio from a specific source as WAV for VU meters."""
-                import struct
-                import io
+                """Stream live audio from a specific source as MP3 (low bandwidth).
+                
+                VU meters get levels from /api/audio/metrics (published to Redis every 5s).
+                This stream is only for audio playback, so we use efficient MP3 compression
+                to reduce HTTPS traffic:
+                - WAV: 176 KB/s per source (uncompressed)
+                - MP3 @96kbps: 12 KB/s per source (14x smaller!)
+                """
+                import subprocess
                 import numpy as np
                 from app_core.audio.ingest import AudioSourceStatus
                 
-                def generate_wav_stream(adapter):
-                    """Generator that yields WAV-formatted audio chunks."""
-                    # Get configuration
+                def generate_mp3_stream(adapter):
+                    """Generator that yields MP3-encoded audio chunks using FFmpeg."""
                     sample_rate = adapter.config.sample_rate
                     channels = adapter.config.channels
-                    bits_per_sample = 16
                     
-                    # Send WAV header
-                    wav_header = io.BytesIO()
-                    wav_header.write(b'RIFF')
-                    wav_header.write(struct.pack('<I', 0xFFFFFFFF))
-                    wav_header.write(b'WAVE')
-                    wav_header.write(b'fmt ')
-                    wav_header.write(struct.pack('<I', 16))
-                    wav_header.write(struct.pack('<H', 1))
-                    wav_header.write(struct.pack('<H', channels))
-                    wav_header.write(struct.pack('<I', sample_rate))
-                    wav_header.write(struct.pack('<I', sample_rate * channels * bits_per_sample // 8))
-                    wav_header.write(struct.pack('<H', channels * bits_per_sample // 8))
-                    wav_header.write(struct.pack('<H', bits_per_sample))
-                    wav_header.write(b'data')
-                    wav_header.write(struct.pack('<I', 0xFFFFFFFF))
-                    yield wav_header.getvalue()
+                    # Start FFmpeg process for MP3 encoding
+                    # Use 96kbps for good quality with low bandwidth
+                    ffmpeg_cmd = [
+                        'ffmpeg',
+                        '-f', 's16le',  # Input format: signed 16-bit little-endian PCM
+                        '-ar', str(sample_rate),  # Input sample rate
+                        '-ac', str(channels),  # Input channels
+                        '-i', 'pipe:0',  # Read from stdin
+                        '-f', 'mp3',  # Output format: MP3
+                        '-b:a', '96k',  # Bitrate: 96 kbps (good quality, low bandwidth)
+                        '-ar', '44100',  # Output sample rate (standard)
+                        '-ac', str(min(channels, 2)),  # Output channels (max 2 for browser compatibility)
+                        '-loglevel', 'error',  # Only show errors
+                        'pipe:1'  # Write to stdout
+                    ]
                     
-                    # Stream audio chunks
-                    silence_chunk_duration = 0.05
-                    silence_samples = int(sample_rate * channels * silence_chunk_duration)
-                    
-                    while _running:
+                    try:
+                        ffmpeg_process = subprocess.Popen(
+                            ffmpeg_cmd,
+                            stdin=subprocess.PIPE,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE
+                        )
+                        
+                        import threading
+                        
+                        # Thread to feed audio to FFmpeg
+                        def feed_audio():
+                            silence_samples = int(sample_rate * channels * 0.05)
+                            try:
+                                while _running and ffmpeg_process.poll() is None:
+                                    try:
+                                        audio_chunk = adapter.get_audio_chunk(timeout=0.2)
+                                        if audio_chunk is None:
+                                            # Send silence
+                                            silence = np.zeros(silence_samples, dtype=np.int16)
+                                            ffmpeg_process.stdin.write(silence.tobytes())
+                                        else:
+                                            if not isinstance(audio_chunk, np.ndarray):
+                                                audio_chunk = np.array(audio_chunk, dtype=np.float32)
+                                            pcm_data = (np.clip(audio_chunk, -1.0, 1.0) * 32767).astype(np.int16)
+                                            ffmpeg_process.stdin.write(pcm_data.tobytes())
+                                        ffmpeg_process.stdin.flush()
+                                    except Exception as e:
+                                        logger.debug(f"Error feeding audio to FFmpeg: {e}")
+                                        break
+                            finally:
+                                try:
+                                    ffmpeg_process.stdin.close()
+                                except:
+                                    pass
+                        
+                        feeder_thread = threading.Thread(target=feed_audio, daemon=True)
+                        feeder_thread.start()
+                        
+                        # Stream MP3 data from FFmpeg to client
+                        while _running and ffmpeg_process.poll() is None:
+                            chunk = ffmpeg_process.stdout.read(8192)
+                            if not chunk:
+                                break
+                            yield chunk
+                            
+                    except Exception as e:
+                        logger.error(f"Error in MP3 stream generator: {e}")
+                    finally:
                         try:
-                            audio_chunk = adapter.get_audio_chunk(timeout=0.2)
-                            if audio_chunk is None:
-                                # Yield silence to keep stream alive
-                                silence_chunk = np.zeros(silence_samples, dtype=np.int16)
-                                yield silence_chunk.tobytes()
-                                time.sleep(0.01)
-                                continue
-                            
-                            if not isinstance(audio_chunk, np.ndarray):
-                                audio_chunk = np.array(audio_chunk, dtype=np.float32)
-                            
-                            pcm_data = (np.clip(audio_chunk, -1.0, 1.0) * 32767).astype(np.int16)
-                            yield pcm_data.tobytes()
-                        except Exception as e:
-                            logger.debug(f"Error in stream generator: {e}")
-                            silence_chunk = np.zeros(silence_samples, dtype=np.int16)
-                            yield silence_chunk.tobytes()
-                            time.sleep(0.01)
+                            ffmpeg_process.terminate()
+                            ffmpeg_process.wait(timeout=5)
+                        except:
+                            pass
                 
                 try:
                     if not _audio_controller:
@@ -696,10 +729,10 @@ def main():
                         }), 503
                     
                     return Response(
-                        stream_with_context(generate_wav_stream(adapter)),
-                        mimetype='audio/wav',
+                        stream_with_context(generate_mp3_stream(adapter)),
+                        mimetype='audio/mpeg',
                         headers={
-                            'Content-Disposition': f'inline; filename="{source_name}.wav"',
+                            'Content-Disposition': f'inline; filename="{source_name}.mp3"',
                             'Cache-Control': 'no-cache, no-store, must-revalidate',
                             'Pragma': 'no-cache',
                             'Expires': '0',
