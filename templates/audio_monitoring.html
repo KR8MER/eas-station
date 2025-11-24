@@ -2139,8 +2139,11 @@ function startLevelPolling() {
             const response = await fetch('/api/audio/metrics', { cache: 'no-store' });
             if (response.ok) {
                 const data = await response.json();
-                if (data && data.audio_metrics) {
-                    updateLevelMetersFromSnapshot(data.audio_metrics);
+                const snapshot = data?.audio_metrics || data;
+
+                // API returns metrics at the top-level while WebSocket wraps them
+                if (snapshot && snapshot.live_metrics) {
+                    updateLevelMetersFromSnapshot(snapshot);
                 }
             }
         } catch (error) {
