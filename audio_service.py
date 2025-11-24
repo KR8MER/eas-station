@@ -626,93 +626,90 @@ def main():
             
             @stream_app.route('/api/audio/stream/<source_name>')
             def stream_audio(source_name):
-                """Stream live audio from a specific source as MP3 (low bandwidth).
+                """Stream live audio as downsampled WAV for low bandwidth + zero latency.
                 
                 VU meters get levels from /api/audio/metrics (published to Redis every 5s).
-                This stream is only for audio playback, so we use efficient MP3 compression
-                to reduce HTTPS traffic:
-                - WAV: 176 KB/s per source (uncompressed)
-                - MP3 @96kbps: 12 KB/s per source (14x smaller!)
+                This stream is for audio playback, so we downsample to reduce bandwidth
+                while maintaining real-time zero-latency streaming:
+                - Original: 44.1kHz stereo = 176 KB/s per source
+                - Downsampled: 22.05kHz mono = 44 KB/s per source (4x smaller)
+                - Still uncompressed = ZERO latency (critical for Pi performance and SAME decoding)
+                - No CPU overhead for transcoding (Pi can focus on SAME decoding)
                 """
-                import subprocess
+                import struct
+                import io
                 import numpy as np
+                from scipy import signal
                 from app_core.audio.ingest import AudioSourceStatus
                 
-                def generate_mp3_stream(adapter):
-                    """Generator that yields MP3-encoded audio chunks using FFmpeg."""
-                    sample_rate = adapter.config.sample_rate
-                    channels = adapter.config.channels
+                def generate_wav_stream(adapter):
+                    """Generator that yields downsampled WAV chunks."""
+                    # Source configuration
+                    source_sample_rate = adapter.config.sample_rate
+                    source_channels = adapter.config.channels
                     
-                    # Start FFmpeg process for MP3 encoding
-                    # Use 96kbps for good quality with low bandwidth
-                    ffmpeg_cmd = [
-                        'ffmpeg',
-                        '-f', 's16le',  # Input format: signed 16-bit little-endian PCM
-                        '-ar', str(sample_rate),  # Input sample rate
-                        '-ac', str(channels),  # Input channels
-                        '-i', 'pipe:0',  # Read from stdin
-                        '-f', 'mp3',  # Output format: MP3
-                        '-b:a', '96k',  # Bitrate: 96 kbps (good quality, low bandwidth)
-                        '-ar', '44100',  # Output sample rate (standard)
-                        '-ac', str(min(channels, 2)),  # Output channels (max 2 for browser compatibility)
-                        '-loglevel', 'error',  # Only show errors
-                        'pipe:1'  # Write to stdout
-                    ]
+                    # Stream configuration: 22.05kHz mono (human voice is clear at this rate)
+                    stream_sample_rate = 22050
+                    stream_channels = 1  # Mono saves 50% bandwidth
+                    bits_per_sample = 16
                     
-                    try:
-                        ffmpeg_process = subprocess.Popen(
-                            ffmpeg_cmd,
-                            stdin=subprocess.PIPE,
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE
-                        )
-                        
-                        import threading
-                        
-                        # Thread to feed audio to FFmpeg
-                        def feed_audio():
-                            silence_samples = int(sample_rate * channels * 0.05)
-                            try:
-                                while _running and ffmpeg_process.poll() is None:
-                                    try:
-                                        audio_chunk = adapter.get_audio_chunk(timeout=0.2)
-                                        if audio_chunk is None:
-                                            # Send silence
-                                            silence = np.zeros(silence_samples, dtype=np.int16)
-                                            ffmpeg_process.stdin.write(silence.tobytes())
-                                        else:
-                                            if not isinstance(audio_chunk, np.ndarray):
-                                                audio_chunk = np.array(audio_chunk, dtype=np.float32)
-                                            pcm_data = (np.clip(audio_chunk, -1.0, 1.0) * 32767).astype(np.int16)
-                                            ffmpeg_process.stdin.write(pcm_data.tobytes())
-                                        ffmpeg_process.stdin.flush()
-                                    except Exception as e:
-                                        logger.debug(f"Error feeding audio to FFmpeg: {e}")
-                                        break
-                            finally:
-                                try:
-                                    ffmpeg_process.stdin.close()
-                                except:
-                                    pass
-                        
-                        feeder_thread = threading.Thread(target=feed_audio, daemon=True)
-                        feeder_thread.start()
-                        
-                        # Stream MP3 data from FFmpeg to client
-                        while _running and ffmpeg_process.poll() is None:
-                            chunk = ffmpeg_process.stdout.read(8192)
-                            if not chunk:
-                                break
-                            yield chunk
-                            
-                    except Exception as e:
-                        logger.error(f"Error in MP3 stream generator: {e}")
-                    finally:
+                    # Calculate decimation factor
+                    decimation = int(source_sample_rate / stream_sample_rate)
+                    if decimation < 1:
+                        decimation = 1
+                        stream_sample_rate = source_sample_rate
+                    
+                    # Send WAV header
+                    wav_header = io.BytesIO()
+                    wav_header.write(b'RIFF')
+                    wav_header.write(struct.pack('<I', 0xFFFFFFFF))
+                    wav_header.write(b'WAVE')
+                    wav_header.write(b'fmt ')
+                    wav_header.write(struct.pack('<I', 16))
+                    wav_header.write(struct.pack('<H', 1))  # PCM
+                    wav_header.write(struct.pack('<H', stream_channels))
+                    wav_header.write(struct.pack('<I', stream_sample_rate))
+                    wav_header.write(struct.pack('<I', stream_sample_rate * stream_channels * bits_per_sample // 8))
+                    wav_header.write(struct.pack('<H', stream_channels * bits_per_sample // 8))
+                    wav_header.write(struct.pack('<H', bits_per_sample))
+                    wav_header.write(b'data')
+                    wav_header.write(struct.pack('<I', 0xFFFFFFFF))
+                    yield wav_header.getvalue()
+                    
+                    # Stream audio chunks
+                    silence_duration = 0.05
+                    silence_samples = int(stream_sample_rate * stream_channels * silence_duration)
+                    
+                    while _running:
                         try:
-                            ffmpeg_process.terminate()
-                            ffmpeg_process.wait(timeout=5)
-                        except:
-                            pass
+                            audio_chunk = adapter.get_audio_chunk(timeout=0.2)
+                            if audio_chunk is None:
+                                # Yield silence to keep stream alive
+                                silence_chunk = np.zeros(silence_samples, dtype=np.int16)
+                                yield silence_chunk.tobytes()
+                                time.sleep(0.01)
+                                continue
+                            
+                            if not isinstance(audio_chunk, np.ndarray):
+                                audio_chunk = np.array(audio_chunk, dtype=np.float32)
+                            
+                            # Convert stereo to mono if needed (mix channels)
+                            if source_channels > 1 and stream_channels == 1:
+                                audio_chunk = np.mean(audio_chunk.reshape(-1, source_channels), axis=1)
+                            
+                            # Downsample if needed (simple decimation is fast)
+                            if decimation > 1:
+                                audio_chunk = signal.decimate(audio_chunk, decimation, zero_phase=True)
+                            
+                            # Convert to int16 PCM
+                            pcm_data = (np.clip(audio_chunk, -1.0, 1.0) * 32767).astype(np.int16)
+                            yield pcm_data.tobytes()
+                            
+                        except Exception as e:
+                            logger.debug(f"Error in stream generator: {e}")
+                            silence_chunk = np.zeros(silence_samples, dtype=np.int16)
+                            yield silence_chunk.tobytes()
+                            time.sleep(0.01)
                 
                 try:
                     if not _audio_controller:
@@ -729,10 +726,10 @@ def main():
                         }), 503
                     
                     return Response(
-                        stream_with_context(generate_mp3_stream(adapter)),
-                        mimetype='audio/mpeg',
+                        stream_with_context(generate_wav_stream(adapter)),
+                        mimetype='audio/wav',
                         headers={
-                            'Content-Disposition': f'inline; filename="{source_name}.mp3"',
+                            'Content-Disposition': f'inline; filename="{source_name}.wav"',
                             'Cache-Control': 'no-cache, no-store, must-revalidate',
                             'Pragma': 'no-cache',
                             'Expires': '0',
