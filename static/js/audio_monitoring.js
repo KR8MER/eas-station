@@ -474,8 +474,14 @@ async function updateWaveform(sourceId) {
 
             // Validate we have spectrogram data
             if (!data.spectrogram || data.spectrogram.length === 0) {
-                console.warn(`No spectrogram data for ${sourceId}, falling back to waveform`);
-                return await updateWaveformFallback(sourceId);
+                // No spectrogram data available yet - show waiting message
+                const safeId = sanitizeId(sourceId);
+                const indicator = document.getElementById(`data-indicator-${safeId}`);
+                if (indicator) {
+                    indicator.textContent = 'Waiting for spectrogram data...';
+                    indicator.className = 'text-muted';
+                }
+                return;
             }
 
             drawWaterfall(sourceId, data.spectrogram, data.sample_rate, data.fft_size);
@@ -499,15 +505,27 @@ async function updateWaveform(sourceId) {
             if (!response.ok) return;
 
             const data = await response.json();
-            drawWaveform(sourceId, data.waveform);
+            
+            // Check if we have valid waveform data
+            if (data.waveform && data.waveform.length > 0) {
+                drawWaveform(sourceId, data.waveform);
 
-            // Update data flow indicator
-            const safeId = sanitizeId(sourceId);
-            const indicator = document.getElementById(`data-indicator-${safeId}`);
-            if (indicator) {
-                const now = new Date();
-                indicator.textContent = `${now.toLocaleTimeString()} (${data.sample_count} samples)`;
-                indicator.className = 'text-success fw-bold';
+                // Update data flow indicator
+                const safeId = sanitizeId(sourceId);
+                const indicator = document.getElementById(`data-indicator-${safeId}`);
+                if (indicator) {
+                    const now = new Date();
+                    indicator.textContent = `${now.toLocaleTimeString()} (${data.sample_count} samples)`;
+                    indicator.className = 'text-success fw-bold';
+                }
+            } else {
+                // No waveform data available yet - source may be starting
+                const safeId = sanitizeId(sourceId);
+                const indicator = document.getElementById(`data-indicator-${safeId}`);
+                if (indicator) {
+                    indicator.textContent = 'Waiting for data...';
+                    indicator.className = 'text-muted';
+                }
             }
         } catch (error) {
             // Silently fail for individual waveform updates
@@ -525,15 +543,27 @@ async function updateWaveformFallback(sourceId) {
         if (!response.ok) return;
 
         const data = await response.json();
-        drawWaveform(sourceId, data.waveform);
+        
+        // Check if we have valid waveform data
+        if (data.waveform && data.waveform.length > 0) {
+            drawWaveform(sourceId, data.waveform);
 
-        // Update data flow indicator
-        const safeId = sanitizeId(sourceId);
-        const indicator = document.getElementById(`data-indicator-${safeId}`);
-        if (indicator) {
-            const now = new Date();
-            indicator.textContent = `${now.toLocaleTimeString()} (${data.sample_count} samples) [waveform]`;
-            indicator.className = 'text-warning fw-bold';
+            // Update data flow indicator
+            const safeId = sanitizeId(sourceId);
+            const indicator = document.getElementById(`data-indicator-${safeId}`);
+            if (indicator) {
+                const now = new Date();
+                indicator.textContent = `${now.toLocaleTimeString()} (${data.sample_count} samples) [waveform]`;
+                indicator.className = 'text-warning fw-bold';
+            }
+        } else {
+            // No waveform data available yet
+            const safeId = sanitizeId(sourceId);
+            const indicator = document.getElementById(`data-indicator-${safeId}`);
+            if (indicator) {
+                indicator.textContent = 'Waiting for data...';
+                indicator.className = 'text-muted';
+            }
         }
     } catch (error) {
         console.debug('Error updating waveform fallback for', sourceId, error);
