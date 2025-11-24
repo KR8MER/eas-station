@@ -39,8 +39,16 @@ function initializeRealtimeVUMeter(audioElement, sourceName) {
         analyzer.fftSize = 256; // Small FFT for fast response
         analyzer.smoothingTimeConstant = 0.3; // Moderate smoothing for realistic VU behavior
         
-        // Create source from audio element
-        const source = audioContext.createMediaElementSource(audioElement);
+        // Create source from audio element (only if not already connected)
+        // Check if element already has a source node to avoid DOMException
+        let source;
+        try {
+            source = audioContext.createMediaElementSource(audioElement);
+        } catch (error) {
+            // Element already connected to another source - skip Web Audio API
+            console.debug(`Audio element for ${sourceName} already has a source node - skipping Web Audio VU meter`);
+            return;
+        }
         
         // Connect: source -> analyzer -> destination
         source.connect(analyzer);
