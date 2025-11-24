@@ -22,7 +22,6 @@ from __future__ import annotations
 """REST-style API routes used by the admin interface."""
 
 import contextlib
-import json
 import socket
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -59,6 +58,7 @@ from app_core.alerts import (
 )
 from app_utils import is_alert_expired
 from app_utils.pdf_generator import generate_pdf_document
+from app_utils.optimized_parsing import json_loads, json_dumps
 
 from .coverage import calculate_coverage_percentages
 
@@ -149,7 +149,7 @@ def get_alert_geometry(alert_id):
             ).filter(Boundary.type == 'county').first()
 
             if county_geom and county_geom.geometry:
-                county_boundary = json.loads(county_geom.geometry)
+                county_boundary = json_loads(county_geom.geometry)
         except Exception as exc:  # pragma: no cover - defensive logging
             api_bp.logger.warning("Could not get county boundary: %s", exc)
 
@@ -157,7 +157,7 @@ def get_alert_geometry(alert_id):
         is_county_wide = False
 
         if alert.geometry:
-            geometry = json.loads(alert.geometry)
+            geometry = json_loads(alert.geometry)
         elif alert.area_desc:
             area_lower = alert.area_desc.lower()
             if any(county_term in area_lower for county_term in ['county', 'putnam', 'ohio']):
@@ -188,7 +188,7 @@ def get_alert_geometry(alert_id):
                                 'description': boundary.description,
                                 'intersection_area': intersection.intersection_area,
                             },
-                            'geometry': json.loads(boundary_geom_json),
+                            'geometry': json_loads(boundary_geom_json),
                         }
                     )
 
@@ -538,7 +538,7 @@ def get_alerts():
             ).filter(Boundary.type == 'county').first()
 
             if county_geom and county_geom.geometry:
-                county_boundary = json.loads(county_geom.geometry)
+                county_boundary = json_loads(county_geom.geometry)
         except Exception as exc:  # pragma: no cover - defensive logging
             api_bp.logger.warning("Could not get county boundary: %s", exc)
 
@@ -548,7 +548,7 @@ def get_alerts():
             is_county_wide = False
 
             if alert.geometry:
-                geometry = json.loads(alert.geometry)
+                geometry = json_loads(alert.geometry)
             elif alert.area_desc and any(
                 county_term in alert.area_desc.lower()
                 for county_term in ['county', 'putnam', 'ohio']
@@ -671,7 +671,7 @@ def get_historical_alerts():
             ).filter(Boundary.type == 'county').first()
 
             if county_geom and county_geom.geometry:
-                county_boundary = json.loads(county_geom.geometry)
+                county_boundary = json_loads(county_geom.geometry)
         except Exception as exc:  # pragma: no cover - defensive logging
             api_bp.logger.warning("Could not get county boundary: %s", exc)
 
@@ -681,7 +681,7 @@ def get_historical_alerts():
             is_county_wide = False
 
             if alert.geometry:
-                geometry = json.loads(alert.geometry)
+                geometry = json_loads(alert.geometry)
             elif alert.area_desc and any(
                 county_term in alert.area_desc.lower()
                 for county_term in ['county', 'putnam', 'ohio']
@@ -779,7 +779,7 @@ def get_boundaries():
                             'color': get_boundary_color(boundary.type),
                             'description': boundary.description,
                         },
-                        'geometry': json.loads(boundary.geometry),
+                        'geometry': json_loads(boundary.geometry),
                     }
                 )
 

@@ -21,7 +21,6 @@ from __future__ import annotations
 
 """Routes powering the alert verification and analytics dashboard."""
 
-import json
 import os
 import tempfile
 import time
@@ -72,6 +71,7 @@ import struct
 import numpy as np
 from app_utils import format_local_datetime, utc_now
 from app_utils.export import generate_csv
+from app_utils.optimized_parsing import json_loads, json_dumps
 from app_utils.eas_decode import (
     AudioDecodeError,
     SAMEAudioDecodeResult,

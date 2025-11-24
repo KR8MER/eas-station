@@ -21,7 +21,6 @@ from __future__ import annotations
 
 """Administrative routes and helpers for managing boundary data."""
 
-import json
 from typing import Any, Dict, Iterable, List, Optional, Set
 
 from flask import Blueprint, Flask, jsonify, request
@@ -45,6 +44,7 @@ from app_utils import (
     local_now,
     utc_now,
 )
+from app_utils.optimized_parsing import json_loads, json_dumps, JSONDecodeError
 
 # Create Blueprint for boundary routes
 boundaries_bp = Blueprint('boundaries', __name__)
@@ -419,7 +419,7 @@ def preview_geojson():
             )
 
         try:
-            geojson_data = json.loads(file_contents)
+            geojson_data = json_loads(file_contents)
         except json.JSONDecodeError:
             return jsonify({"error": "Invalid GeoJSON format"}), 400
 
@@ -510,7 +510,7 @@ def upload_boundaries():
             return jsonify({"error": "File must be a GeoJSON file"}), 400
 
         try:
-            geojson_data = json.loads(file.read().decode("utf-8"))
+            geojson_data = json_loads(file.read().decode("utf-8"))
         except json.JSONDecodeError:
             return jsonify({"error": "Invalid GeoJSON format"}), 400
 
@@ -531,7 +531,7 @@ def upload_boundaries():
                     properties, boundary_type
                 )
 
-                geometry_json = json.dumps(geometry)
+                geometry_json = json_dumps(geometry)
 
                 boundary = Boundary(
                     name=name,
@@ -723,7 +723,7 @@ def upload_shapefile():
                     properties, boundary_type
                 )
 
-                geometry_json = json.dumps(geometry)
+                geometry_json = json_dumps(geometry)
 
                 boundary = Boundary(
                     name=name,

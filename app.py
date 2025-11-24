@@ -36,12 +36,12 @@ import base64
 import hmac
 import io
 import os
-import json
 import math
 import re
 import secrets
 import psutil
 import threading
+import time
 from typing import Any, Dict, List, Optional, Tuple, Union
 from datetime import datetime, timedelta, timezone
 from collections import defaultdict
@@ -100,6 +100,7 @@ from webapp.admin.maintenance import (
 )
 from app_utils.event_codes import EVENT_CODE_REGISTRY
 from app_utils.fips_codes import get_same_lookup, get_us_state_county_tree
+from app_utils.optimized_parsing import json_loads, json_dumps, JSONDecodeError
 
 # Flask and extensions
 from flask import (
@@ -474,8 +475,8 @@ def _load_or_cache_summary_payload(message: EASMessage) -> Optional[Dict[str, An
 
     try:
         with open(disk_path, 'r', encoding='utf-8') as handle:
-            payload = json.load(handle)
-    except (OSError, json.JSONDecodeError) as exc:
+            payload = json_loads(handle.read())
+    except (OSError, JSONDecodeError) as exc:
         logger.debug('Unable to load summary payload from %s: %s', disk_path, exc)
         return None
 

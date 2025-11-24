@@ -38,14 +38,12 @@ No default passwords are provided for security.
 import os
 import sys
 import time
-import json
 import re
 import uuid
 import requests
 import logging
 import hashlib
 import math
-import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -97,6 +95,10 @@ from app_utils.location_settings import (
 )
 from app_utils.eas import EASBroadcaster, load_eas_config
 from app_core.radio import RadioManager, ensure_radio_tables
+from app_utils.optimized_parsing import json_loads, json_dumps, parse_xml_string, get_element_tree_module
+
+# Use optimized XML parser (lxml if available, else xml.etree.ElementTree)
+ET = get_element_tree_module()
 
 UTC_TZ = pytz.UTC
 
@@ -930,8 +932,8 @@ class CAPPoller:
             return alerts
 
         try:
-            root = ET.fromstring(xml_text)
-        except ET.ParseError as exc:
+            root = parse_xml_string(xml_text)
+        except Exception as exc:
             self.logger.error(f"XML parse error in CAP feed: {exc}")
             return alerts
 
@@ -1344,7 +1346,7 @@ class CAPPoller:
 
     def _safe_json_copy(self, value: Any) -> Any:
         try:
-            return json.loads(json.dumps(value, default=str))
+            return json_loads(json_dumps(value))
         except Exception:
             return value
 
@@ -1607,7 +1609,7 @@ class CAPPoller:
                         "(high complexity)"
                     )
 
-                geom_json = json.dumps(geometry_data)
+                geom_json = json_dumps(geometry_data)
                 result = self.db_session.execute(
                     text("SELECT ST_SetSRID(ST_GeomFromGeoJSON(:g), 4326)"),
                     {"g": geom_json}
@@ -2412,7 +2414,7 @@ def main():
         if args.fix_geometry:
             logger.info("Running geometry fix for existing alerts...")
             stats = poller.fix_existing_geometry()
-            print(json.dumps(stats, indent=2))
+            print(json_dumps(stats, indent=2))
         elif args.continuous:
             # Enforce minimum interval to prevent excessive CPU usage
             interval = max(30, args.interval)
@@ -2443,7 +2445,7 @@ def main():
                     first_iteration = False
                     
                     stats = poller.poll_and_process()
-                    print(json.dumps(stats, indent=2))
+                    print(json_dumps(stats, indent=2))
                     logger.info(f"Polling cycle complete.")
                     consecutive_errors = 0  # Reset error counter on success
                 except KeyboardInterrupt:
@@ -2458,12 +2460,12 @@ def main():
                         logger.error(f"Stats that failed to serialize: {type(stats)}")
                         for key, value in stats.items():
                             try:
-                                json.dumps({key: value})
+                                json_dumps({key: value})
                             except Exception as json_err:
                                 logger.error(f"Key '{key}' with value type {type(value)} cannot be JSON serialized: {json_err}")
         else:
             stats = poller.poll_and_process()
-            print(json.dumps(stats, indent=2))
+            print(json_dumps(stats, indent=2))
     finally:
         poller.close()
 
