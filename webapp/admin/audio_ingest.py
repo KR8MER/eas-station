@@ -1744,6 +1744,8 @@ def api_get_audio_metrics():
         source_metrics = []
         broadcast_stats = {}
         active_source = None
+        # Build a quick lookup of configured sources so we can enrich Redis metrics
+        db_configs = {cfg.name: cfg for cfg in AudioSourceConfigDB.query.all()}
 
         if redis_metrics:
             # Parse audio controller data from Redis
@@ -1759,10 +1761,13 @@ def api_get_audio_metrics():
 
                     # Build source metrics from Redis data
                     for source_name, source_data in redis_sources.items():
+                        config = db_configs.get(source_name)
                         source_metrics.append({
                             'source_id': source_name,
                             'source_name': source_name,
-                            'source_type': 'unknown',  # Not in Redis data
+                            'source_type': getattr(config.source_type, 'value', None) if config else 'unknown',
+                            'source_description': config.description if config else None,
+                            'priority': config.priority if config else None,
                             'source_status': source_data.get('status', 'unknown'),
                             'timestamp': source_data.get('timestamp', redis_metrics.get('timestamp', time.time())),
                             'sample_rate': source_data.get('sample_rate'),
