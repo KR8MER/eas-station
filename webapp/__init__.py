@@ -49,7 +49,6 @@ from . import (
     template_helpers,
     documentation,
 )
-from .admin import audio_ingest
 from .routes import alert_verification, eas_compliance, system_controls
 from . import eas
 
@@ -78,7 +77,6 @@ def iter_route_modules() -> Iterable[RouteModule]:
     yield RouteModule("routes_rwt_schedule", routes_rwt_schedule.register_routes)
     yield RouteModule("routes_settings_radio", routes_settings_radio.register)
     yield RouteModule("routes_settings_audio", routes_settings_audio.register)
-    yield RouteModule("routes_audio_ingest_api", audio_ingest.register_audio_ingest_routes)
     yield RouteModule("routes_eas_monitor_status", routes_eas_monitor_status.register_eas_monitor_routes)
     yield RouteModule("routes_audio_tests", routes_audio_tests.register)
     yield RouteModule("routes_exports", routes_exports.register)
