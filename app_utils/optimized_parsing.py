@@ -54,6 +54,9 @@ except ImportError:
 
 import json as _stdlib_json
 
+# Export JSONDecodeError from stdlib for compatibility
+JSONDecodeError = _stdlib_json.JSONDecodeError
+
 
 def json_loads(data: Union[str, bytes]) -> Any:
     """
@@ -73,21 +76,26 @@ def json_loads(data: Union[str, bytes]) -> Any:
     Raises:
         JSONDecodeError: If the data is not valid JSON
     """
-    if _HAS_ORJSON:
-        if isinstance(data, str):
-            data = data.encode('utf-8')
-        return orjson.loads(data)
-    elif _HAS_UJSON:
-        if isinstance(data, bytes):
-            data = data.decode('utf-8')
-        return ujson.loads(data)
-    else:
-        if isinstance(data, bytes):
-            data = data.decode('utf-8')
-        return _stdlib_json.loads(data)
+    try:
+        if _HAS_ORJSON:
+            if isinstance(data, str):
+                data = data.encode('utf-8')
+            return orjson.loads(data)
+        elif _HAS_UJSON:
+            if isinstance(data, bytes):
+                data = data.decode('utf-8')
+            return ujson.loads(data)
+        else:
+            if isinstance(data, bytes):
+                data = data.decode('utf-8')
+            return _stdlib_json.loads(data)
+    except (ValueError, TypeError) as e:
+        # Convert any JSON parsing error to JSONDecodeError for consistency
+        raise JSONDecodeError(str(e), str(data)[:100], 0) from e
 
 
-def json_dumps(obj: Any, indent: Optional[int] = None) -> str:
+def json_dumps(obj: Any, indent: Optional[int] = None, ensure_ascii: bool = True, 
+               sort_keys: bool = False, default=None) -> str:
     """
     Serialize object to JSON string using the fastest available library.
     
@@ -99,6 +107,9 @@ def json_dumps(obj: Any, indent: Optional[int] = None) -> str:
     Args:
         obj: Object to serialize
         indent: Optional indentation level for pretty-printing
+        ensure_ascii: If False, allow non-ASCII characters (orjson always False)
+        sort_keys: If True, sort dictionary keys
+        default: Function to serialize objects not supported by default
         
     Returns:
         JSON string
@@ -108,15 +119,34 @@ def json_dumps(obj: Any, indent: Optional[int] = None) -> str:
     """
     if _HAS_ORJSON:
         # orjson returns bytes, we need to decode to str
-        option = orjson.OPT_INDENT_2 if indent else 0
-        return orjson.dumps(obj, option=option).decode('utf-8')
+        # Build options based on parameters
+        option = 0
+        if indent:
+            option |= orjson.OPT_INDENT_2
+        if sort_keys:
+            option |= orjson.OPT_SORT_KEYS
+        # orjson doesn't support ensure_ascii=True (always outputs UTF-8)
+        # and doesn't support default parameter, so fallback for those cases
+        if ensure_ascii and not all(ord(c) < 128 for c in str(obj)):
+            # Fallback to stdlib for ASCII-only requirement
+            return _stdlib_json.dumps(obj, indent=indent, ensure_ascii=ensure_ascii, 
+                                    sort_keys=sort_keys, default=default)
+        try:
+            return orjson.dumps(obj, option=option, default=default).decode('utf-8')
+        except TypeError:
+            # orjson failed, try stdlib
+            return _stdlib_json.dumps(obj, indent=indent, ensure_ascii=ensure_ascii,
+                                    sort_keys=sort_keys, default=default)
     elif _HAS_UJSON:
-        return ujson.dumps(obj, indent=indent or 0)
+        return ujson.dumps(obj, indent=indent or 0, ensure_ascii=ensure_ascii, 
+                          sort_keys=sort_keys)
     else:
-        return _stdlib_json.dumps(obj, indent=indent)
+        return _stdlib_json.dumps(obj, indent=indent, ensure_ascii=ensure_ascii,
+                                sort_keys=sort_keys, default=default)
 
 
-def json_dump(obj: Any, fp, indent: Optional[int] = None) -> None:
+def json_dump(obj: Any, fp, indent: Optional[int] = None, ensure_ascii: bool = True,
+              sort_keys: bool = False, default=None) -> None:
     """
     Serialize object to JSON and write to file.
     
@@ -124,8 +154,12 @@ def json_dump(obj: Any, fp, indent: Optional[int] = None) -> None:
         obj: Object to serialize
         fp: File-like object to write to
         indent: Optional indentation level for pretty-printing
+        ensure_ascii: If False, allow non-ASCII characters
+        sort_keys: If True, sort dictionary keys
+        default: Function to serialize objects not supported by default
     """
-    json_str = json_dumps(obj, indent=indent)
+    json_str = json_dumps(obj, indent=indent, ensure_ascii=ensure_ascii,
+                         sort_keys=sort_keys, default=default)
     fp.write(json_str)
 
 

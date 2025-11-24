@@ -100,7 +100,7 @@ from webapp.admin.maintenance import (
 )
 from app_utils.event_codes import EVENT_CODE_REGISTRY
 from app_utils.fips_codes import get_same_lookup, get_us_state_county_tree
-from app_utils.optimized_parsing import json_loads, json_dumps
+from app_utils.optimized_parsing import json_loads, json_dumps, JSONDecodeError
 
 # Flask and extensions
 from flask import (
@@ -476,7 +476,7 @@ def _load_or_cache_summary_payload(message: EASMessage) -> Optional[Dict[str, An
     try:
         with open(disk_path, 'r', encoding='utf-8') as handle:
             payload = json_loads(handle.read())
-    except (OSError, Exception) as exc:
+    except (OSError, JSONDecodeError) as exc:
         logger.debug('Unable to load summary payload from %s: %s', disk_path, exc)
         return None
 

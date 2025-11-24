@@ -46,7 +46,7 @@ from app_utils.eas_decode import (
     build_plain_language_summary,
 )
 from app_utils.time import format_local_datetime, utc_now
-from app_utils.optimized_parsing import json_loads, json_dumps
+from app_utils.optimized_parsing import json_loads, json_dumps, JSONDecodeError
 
 # Import precedence levels for priority tracking
 try:

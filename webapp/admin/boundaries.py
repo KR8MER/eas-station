@@ -44,7 +44,7 @@ from app_utils import (
     local_now,
     utc_now,
 )
-from app_utils.optimized_parsing import json_loads, json_dumps
+from app_utils.optimized_parsing import json_loads, json_dumps, JSONDecodeError
 
 # Create Blueprint for boundary routes
 boundaries_bp = Blueprint('boundaries', __name__)
