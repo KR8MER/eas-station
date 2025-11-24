@@ -217,22 +217,20 @@ function createSourceCard(source) {
                     </div>
                     <div class="col-md-5">
                         <div class="mb-2">
-                            <small class="text-muted d-block mb-1">Peak Level</small>
+                            <small class="text-muted d-block mb-1" id="peak-label-${safeId}">Peak: -- dBFS</small>
                             <div class="audio-meter">
                                 <div class="audio-meter-bar peak"
-                                     id="peak-${safeId}"
+                                     id="peak-meter-${safeId}"
                                      style="width: 0%">
-                                    <span class="audio-meter-value" id="peak-value-${safeId}">-- dB</span>
                                 </div>
                             </div>
                         </div>
                         <div>
-                            <small class="text-muted d-block mb-1">RMS Level</small>
+                            <small class="text-muted d-block mb-1" id="rms-label-${safeId}">RMS: -- dBFS</small>
                             <div class="audio-meter">
                                 <div class="audio-meter-bar rms"
-                                     id="rms-${safeId}"
+                                     id="rms-meter-${safeId}"
                                      style="width: 0%">
-                                    <span class="audio-meter-value" id="rms-value-${safeId}">-- dB</span>
                                 </div>
                             </div>
                         </div>
@@ -725,14 +723,15 @@ function drawWaterfall(sourceId, spectrogramData, sampleRate, fftSize) {
 }
 
 /**
- * Update a meter display
+ * Update a meter display (fallback when Web Audio API is not available)
+ * When Web Audio API is working, realtime-vu-meters.js handles updates at 60Hz
  */
 function updateMeterDisplay(sourceId, type, levelDb) {
     const safeId = sanitizeId(sourceId);
-    const bar = document.getElementById(`${type}-${safeId}`);
-    const value = document.getElementById(`${type}-value-${safeId}`);
+    const bar = document.getElementById(`${type}-meter-${safeId}`);
+    const label = document.getElementById(`${type}-label-${safeId}`);
 
-    if (!bar || !value) return;
+    if (!bar) return;
 
     const safeLevel = Number.isFinite(levelDb) ? levelDb : DEFAULT_LEVEL_DB;
 
@@ -740,7 +739,12 @@ function updateMeterDisplay(sourceId, type, levelDb) {
     const percentage = Math.max(0, Math.min(100, ((safeLevel + 60) / 60) * 100));
 
     bar.style.width = `${percentage}%`;
-    value.textContent = `${safeLevel.toFixed(1)} dB`;
+    
+    // Update label if it exists (fallback for when Web Audio API is not available)
+    if (label && !label.textContent.includes('dBFS')) {
+        // Only update if not already being updated by realtime VU meters (which use dBFS format)
+        label.textContent = `${type === 'peak' ? 'Peak' : 'RMS'}: ${safeLevel.toFixed(1)} dB`;
+    }
 }
 
 /**
