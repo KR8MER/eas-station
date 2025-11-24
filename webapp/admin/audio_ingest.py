@@ -2314,51 +2314,41 @@ def api_stream_audio(source_name: str):
             logger.error(f'Unexpected error in audio stream generator for {source_name}: {exc}', exc_info=True)
 
     try:
-        controller, adapter, db_config, _ = _get_controller_and_adapter(source_name)
+        # SEPARATED ARCHITECTURE: Audio streaming not available
+        # In separated architecture, app container doesn't have access to audio adapters.
+        # Audio streaming requires direct access to audio buffers, which only exists
+        # in audio-service container.
+        #
+        # If audio streaming is critical, consider:
+        # 1. Exposing streaming endpoint on audio-service (requires port forwarding)
+        # 2. Using Icecast rebroadcast (recommended for production)
+        # 3. Running audio in app container (not recommended, defeats separated architecture)
 
-        if adapter is None:
-            if db_config:
-                return jsonify({'error': 'Source exists in database but could not be loaded'}), 503
-            return jsonify({'error': 'Source not found'}), 404
-
-        if adapter.status != AudioSourceStatus.RUNNING:
-            recovered = controller.ensure_source_running(
-                source_name,
-                reason="live stream request",
-                timeout=8.0,
-            )
-            if recovered:
-                adapter = controller._sources.get(source_name)
-            else:
-                detail = (
-                    adapter.error_message
-                    or getattr(adapter, '_last_error', None)
-                    or 'Source not running. Please start the source first.'
-                )
-                return jsonify({'error': detail}), 503
-
-        return Response(
-            stream_with_context(generate_wav_stream(adapter)),
-            mimetype='audio/wav',
-            headers={
-                'Cache-Control': 'no-cache, no-store, must-revalidate',
-                'Pragma': 'no-cache',
-                'Expires': '0',
-                'X-Content-Type-Options': 'nosniff',
-            }
-        )
+        return jsonify({
+            'error': 'Audio streaming not available in separated architecture',
+            'hint': 'Use Icecast rebroadcast for production audio streaming',
+            'alternative': 'Configure Icecast in Environment settings and use /api/audio/icecast/config for stream URLs',
+            'source_name': source_name,
+        }), 503
 
     except Exception as exc:
         logger.error('Error setting up audio stream for %s: %s', source_name, exc)
         return jsonify({'error': str(exc)}), 500
 
+# NOTE: Legacy audio streaming code removed (lines 2094-2350)
+# In separated architecture, audio streaming requires direct adapter access
+# which only exists in audio-service container. Use Icecast instead.
+
 @audio_ingest_bp.route('/api/audio/health/dashboard', methods=['GET'])
 def api_get_health_dashboard():
-    """Get comprehensive health metrics for dashboard display."""
-    try:
-        controller = _get_audio_controller()
+    """Get comprehensive health metrics for dashboard display.
 
-        # Get all source metrics and categorize
+    In separated architecture, reads from Redis where audio-service publishes metrics.
+    """
+    try:
+        # SEPARATED ARCHITECTURE: Read from Redis
+        redis_metrics = _read_audio_metrics_from_redis()
+
         source_health = {}
         categorized_sources = {
             'healthy': [],
@@ -2369,60 +2359,57 @@ def api_get_health_dashboard():
         degraded_count = 0
         failed_count = 0
         active_source = None
+        total_sources = 0
 
-        for source_name, adapter in controller._sources.items():
-            metrics = adapter.metrics
-            status = adapter.status
+        if redis_metrics:
+            try:
+                import json
+                audio_controller_data = redis_metrics.get('audio_controller')
+                if isinstance(audio_controller_data, str):
+                    audio_controller_data = json.loads(audio_controller_data)
 
-            # Skip sources with no metrics
-            if metrics is None:
-                health_status = 'failed'
-                failed_count += 1
-                categorized_sources['failed'].append(source_name)
-                source_health[source_name] = {
-                    'status': health_status,
-                    'uptime_seconds': 0,
-                    'peak_level_db': -120.0,
-                    'rms_level_db': -120.0,
-                    'is_silent': True,
-                    'buffer_fill_percentage': 0.0,
-                    'restart_count': 0,
-                    'error_message': 'No metrics available',
-                }
-                continue
+                if audio_controller_data:
+                    active_source = audio_controller_data.get('active_source')
+                    redis_sources = audio_controller_data.get('sources', {})
+                    total_sources = len(redis_sources)
 
-            # Determine health status
-            if status.value == 'running':
-                if not metrics.silence_detected:
-                    health_status = 'healthy'
-                    healthy_count += 1
-                    categorized_sources['healthy'].append(source_name)
-                    # Set first healthy source as active
-                    if active_source is None:
-                        active_source = source_name
-                else:
-                    health_status = 'degraded'
-                    degraded_count += 1
-                    categorized_sources['degraded'].append(source_name)
-            else:
-                health_status = 'failed'
-                failed_count += 1
-                categorized_sources['failed'].append(source_name)
+                    for source_name, source_data in redis_sources.items():
+                        status = source_data.get('status', 'unknown')
+                        silence_detected = source_data.get('silence_detected', True)
+                        peak_level_db = source_data.get('peak_level_db', -120.0)
+                        rms_level_db = source_data.get('rms_level_db', -120.0)
 
-            # Build source health data (as dict, not array)
-            source_health[source_name] = {
-                'status': health_status,
-                'uptime_seconds': time.time() - adapter._start_time if hasattr(adapter, '_start_time') and adapter._start_time > 0 else 0,
-                'peak_level_db': _sanitize_float(metrics.peak_level_db),
-                'rms_level_db': _sanitize_float(metrics.rms_level_db),
-                'is_silent': _sanitize_bool(metrics.silence_detected),
-                'buffer_fill_percentage': _sanitize_float(metrics.buffer_utilization * 100),
-                'restart_count': getattr(adapter, '_restart_count', 0),
-                'error_message': getattr(adapter, '_last_error', None),
-            }
+                        # Determine health status
+                        if status == 'running':
+                            if not silence_detected:
+                                health_status = 'healthy'
+                                healthy_count += 1
+                                categorized_sources['healthy'].append(source_name)
+                            else:
+                                health_status = 'degraded'
+                                degraded_count += 1
+                                categorized_sources['degraded'].append(source_name)
+                        else:
+                            health_status = 'failed'
+                            failed_count += 1
+                            categorized_sources['failed'].append(source_name)
+
+                        # Build source health data
+                        source_health[source_name] = {
+                            'status': health_status,
+                            'uptime_seconds': source_data.get('uptime_seconds', 0),
+                            'peak_level_db': peak_level_db,
+                            'rms_level_db': rms_level_db,
+                            'is_silent': silence_detected,
+                            'buffer_fill_percentage': source_data.get('buffer_utilization', 0.0) * 100,
+                            'restart_count': source_data.get('restart_count', 0),
+                            'error_message': source_data.get('error_message'),
+                        }
+
+            except Exception as e:
+                logger.warning(f"Failed to parse Redis metrics for health dashboard: {e}")
 
         # Calculate overall health score (0-100)
-        total_sources = len(controller._sources)
         if total_sources > 0:
             health_score = (
                 (healthy_count * 100) +
@@ -2441,7 +2428,8 @@ def api_get_health_dashboard():
             'categorized_sources': categorized_sources,
             'source_health': source_health,
             'active_source': active_source,
-            'timestamp': time.time()
+            'timestamp': time.time(),
+            'redis_mode': redis_metrics is not None,
         })
 
     except Exception as exc:
@@ -2450,28 +2438,44 @@ def api_get_health_dashboard():
 
 @audio_ingest_bp.route('/api/audio/health/metrics', methods=['GET'])
 def api_get_health_metrics():
-    """Get real-time metrics for all sources."""
+    """Get real-time metrics for all sources.
+
+    In separated architecture, reads from Redis where audio-service publishes metrics.
+    """
     try:
-        controller = _get_audio_controller()
+        # SEPARATED ARCHITECTURE: Read from Redis
+        redis_metrics = _read_audio_metrics_from_redis()
         metrics_list = []
 
-        for source_name, adapter in controller._sources.items():
-            metrics = adapter.metrics
+        if redis_metrics:
+            try:
+                import json
+                audio_controller_data = redis_metrics.get('audio_controller')
+                if isinstance(audio_controller_data, str):
+                    audio_controller_data = json.loads(audio_controller_data)
 
-            metrics_list.append({
-                'source_name': source_name,
-                'timestamp': metrics.timestamp,
-                'peak_level_db': _sanitize_float(metrics.peak_level_db),
-                'rms_level_db': _sanitize_float(metrics.rms_level_db),
-                'sample_rate': metrics.sample_rate,
-                'frames_captured': metrics.frames_captured,
-                'silence_detected': _sanitize_bool(metrics.silence_detected),
-                'buffer_utilization': _sanitize_float(metrics.buffer_utilization * 100),
-            })
+                if audio_controller_data:
+                    redis_sources = audio_controller_data.get('sources', {})
+
+                    for source_name, source_data in redis_sources.items():
+                        metrics_list.append({
+                            'source_name': source_name,
+                            'timestamp': source_data.get('timestamp', time.time()),
+                            'peak_level_db': source_data.get('peak_level_db', -120.0),
+                            'rms_level_db': source_data.get('rms_level_db', -120.0),
+                            'sample_rate': source_data.get('sample_rate', 0),
+                            'frames_captured': source_data.get('frames_captured', 0),
+                            'silence_detected': source_data.get('silence_detected', True),
+                            'buffer_utilization': source_data.get('buffer_utilization', 0.0) * 100,
+                        })
+
+            except Exception as e:
+                logger.warning(f"Failed to parse Redis metrics: {e}")
 
         return jsonify({
             'metrics': metrics_list,
-            'timestamp': time.time()
+            'timestamp': time.time(),
+            'redis_mode': redis_metrics is not None,
         })
 
     except Exception as exc:
