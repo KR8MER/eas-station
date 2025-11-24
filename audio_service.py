@@ -44,7 +44,7 @@ import signal
 import logging
 import redis
 import json
-from typing import Optional
+from typing import Optional, Any, Dict
 
 # Configure logging
 logging.basicConfig(
@@ -96,6 +96,40 @@ def get_redis_client() -> redis.Redis:
         logger.info(f"✅ Connected to Redis at {redis_host}:{redis_port}")
 
     return _redis_client
+
+
+def _sanitize_value(value: Any) -> Any:
+    """Convert runtime values to JSON-serializable primitives."""
+    try:
+        import numpy as np  # type: ignore
+
+        if isinstance(value, (np.floating, np.integer)):
+            return float(value)
+        if isinstance(value, np.bool_):
+            return bool(value)
+    except Exception:
+        # numpy is optional in some deployments; ignore if unavailable
+        pass
+
+    if isinstance(value, (str, int, float, bool)):
+        return value
+
+    if isinstance(value, dict):
+        return {str(k): _sanitize_value(v) for k, v in value.items()}
+
+    if isinstance(value, (list, tuple, set)):
+        return [_sanitize_value(v) for v in value]
+
+    if hasattr(value, "isoformat"):
+        try:
+            return value.isoformat()
+        except Exception:
+            pass
+
+    try:
+        return float(value)
+    except Exception:
+        return str(value)
 
 
 def initialize_database():
@@ -329,17 +363,52 @@ def collect_metrics():
     try:
         # Get audio controller stats
         if _audio_controller:
-            controller_stats = {
+            controller_stats: Dict[str, Any] = {
                 "sources": {},
                 "active_source": _audio_controller._active_source,
             }
 
+            streaming_status: Optional[Dict[str, Any]] = None
+            active_streams: Dict[str, Any] = {}
+
+            # Include Icecast streaming stats so the UI can show bitrate, mount, metadata, etc.
+            if _auto_streaming_service:
+                try:
+                    streaming_status = _auto_streaming_service.get_status()
+                    active_streams = streaming_status.get("active_streams", {}) if streaming_status else {}
+                    controller_stats["streaming"] = _sanitize_value(streaming_status)
+                except Exception as e:
+                    logger.error(f"Error getting streaming stats: {e}")
+
             for name, source in _audio_controller._sources.items():
                 try:
-                    controller_stats["sources"][name] = {
-                        "status": source.status.value if hasattr(source.status, 'value') else str(source.status),
-                        "sample_rate": getattr(source, 'sample_rate', None),
+                    metrics_obj = getattr(source, "metrics", None)
+                    source_stats: Dict[str, Any] = {
+                        "status": source.status.value if hasattr(source.status, "value") else str(source.status),
+                        "sample_rate": _sanitize_value(getattr(metrics_obj, "sample_rate", getattr(source, "sample_rate", None))),
+                        "channels": _sanitize_value(getattr(metrics_obj, "channels", getattr(source, "channels", None))),
+                        "frames_captured": _sanitize_value(getattr(metrics_obj, "frames_captured", None)),
+                        "peak_level_db": _sanitize_value(getattr(metrics_obj, "peak_level_db", None)),
+                        "rms_level_db": _sanitize_value(getattr(metrics_obj, "rms_level_db", None)),
+                        "buffer_utilization": _sanitize_value(getattr(metrics_obj, "buffer_utilization", None)),
+                        "silence_detected": bool(getattr(metrics_obj, "silence_detected", False)),
+                        "timestamp": _sanitize_value(getattr(metrics_obj, "timestamp", None)),
+                        "metadata": _sanitize_value(getattr(metrics_obj, "metadata", None)),
+                        "error_message": _sanitize_value(getattr(source, "error_message", None)),
                     }
+
+                    if hasattr(source, "config"):
+                        source_stats["config"] = _sanitize_value({
+                            "sample_rate": getattr(source.config, "sample_rate", None),
+                            "channels": getattr(source.config, "channels", None),
+                            "buffer_size": getattr(source.config, "buffer_size", None),
+                        })
+
+                    if active_streams and name in active_streams:
+                        # Provide per-source streaming stats (includes bitrate, mount, metadata)
+                        source_stats["streaming"] = {"icecast": _sanitize_value(active_streams[name])}
+
+                    controller_stats["sources"][name] = source_stats
                 except Exception as e:
                     logger.error(f"Error getting source stats for '{name}': {e}")
 
@@ -349,7 +418,7 @@ def collect_metrics():
             try:
                 broadcast_queue = _audio_controller.get_broadcast_queue()
                 if broadcast_queue:
-                    metrics["broadcast_queue"] = broadcast_queue.get_stats()
+                    metrics["broadcast_queue"] = _sanitize_value(broadcast_queue.get_stats())
             except Exception as e:
                 logger.error(f"Error getting broadcast queue stats: {e}")
 
