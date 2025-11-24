@@ -1285,6 +1285,7 @@ def api_get_audio_sources():
                     metrics_payload = {'metadata': metadata}
 
                 sources.append({
+                    'id': db_config.name,  # Add id field for JavaScript compatibility
                     'name': db_config.name,
                     'type': db_config.source_type,
                     'status': _first_defined(redis_source_data.get('status') if redis_source_data else None, 'unknown'),
@@ -1340,6 +1341,7 @@ def api_get_audio_sources():
                 metrics_payload = {'metadata': metadata}
 
             sources.append({
+                'id': db_config.name,  # Add id field for JavaScript compatibility
                 'name': db_config.name,
                 'type': db_config.source_type,
                 'status': 'stopped',
