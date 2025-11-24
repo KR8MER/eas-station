@@ -23,6 +23,14 @@ NOAA CAP Alert Poller with configurable location filtering
 Docker-safe DB defaults, strict jurisdiction filtering, PostGIS geometry/intersections,
 optional LED sign integration.
 
+NOAA Weather API Compliance:
+  The NOAA Weather API (https://api.weather.gov/) requires:
+  - User-Agent header: Identifies the application and provides contact information
+  - Accept header: Specifies desired response format (application/geo+json for CAP alerts)
+  - No API key or authentication required
+  - Configure via NOAA_USER_AGENT environment variable (defaults to a compliant value)
+  - API Documentation: https://www.weather.gov/documentation/services-web-api
+
 Database Configuration (via environment variables or --database-url):
   POSTGRES_HOST      - Database host (default: host.docker.internal; override for Docker services)
   POSTGRES_PORT      - Database port (default: 5432)
@@ -459,14 +467,20 @@ class CAPPoller:
             self.logger.warning(f"EAS broadcaster unavailable: {exc}")
             self.eas_broadcaster = None
 
-        # HTTP Session
+        # HTTP Session with NOAA Weather API compliance headers
+        # See: https://www.weather.gov/documentation/services-web-api
+        # NOAA requires:
+        # 1. User-Agent: Identifies the application and provides contact info
+        # 2. Accept: Specifies the desired response format (geo+json for CAP alerts)
+        # No API key or authentication is required for the NOAA Weather API
         self.session = requests.Session()
         default_user_agent = os.getenv(
             'NOAA_USER_AGENT',
-            'KR8MER Emergency Alert Hub/2.1 (+https://github.com/KR8MER/eas-station; NOAA+IPAWS)',
+            'EAS Station/2.12 (+https://github.com/KR8MER/eas-station; support@easstation.com)',
         )
         self.session.headers.update({
             'User-Agent': default_user_agent,
+            'Accept': 'application/geo+json, application/json;q=0.9',
         })
         ca_bundle_override = os.getenv('REQUESTS_CA_BUNDLE') or os.getenv('CAP_POLLER_CA_BUNDLE')
         if ca_bundle_override:

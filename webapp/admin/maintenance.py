@@ -59,6 +59,11 @@ from app_utils import UTC_TZ, format_bytes, get_location_timezone, local_now, ut
 # Create Blueprint for maintenance routes
 maintenance_bp = Blueprint('maintenance', __name__)
 
+# NOAA Weather API Configuration
+# API Documentation: https://www.weather.gov/documentation/services-web-api
+# Requirements:
+# - User-Agent header with contact information (no API key required)
+# - Accept header for response format (application/geo+json for CAP alerts)
 NOAA_API_BASE_URL = "https://api.weather.gov/alerts"
 NOAA_ALLOWED_QUERY_PARAMS = frozenset(
     {
@@ -81,7 +86,7 @@ NOAA_ALLOWED_QUERY_PARAMS = frozenset(
 )
 NOAA_USER_AGENT = os.environ.get(
     "NOAA_USER_AGENT",
-    "KR8MER Emergency Alert Hub/2.1 (+https://github.com/KR8MER/eas-station; NOAA+IPAWS)",
+    "EAS Station/2.12 (+https://github.com/KR8MER/eas-station; support@easstation.com)",
 )
 
 _OPERATION_LOCK = Lock()
