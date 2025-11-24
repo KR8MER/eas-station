@@ -188,13 +188,13 @@ Maintaining this document:
 - **Goal**: Replace Highcharts with permissively-licensed charting library to enable commercial distribution.
 - **Status**: 🚨 **CRITICAL BLOCKER** - Current implementation uses Highcharts which requires commercial license for any commercial use.
 - **Legal Risk**: ❌ **CANNOT DISTRIBUTE COMMERCIALLY** until Highcharts is removed.
-- **Acknowledgment**: ✅ **DOCUMENTED AND ACKNOWLEDGED** - See `LICENSE_COMPLIANCE_CRITICAL.md` for full details.
+- **Acknowledgment**: ✅ **DOCUMENTED AND ACKNOWLEDGED** - See `../archive/root-docs/LICENSE_COMPLIANCE_CRITICAL.md` for full details.
 - **Commitment**: NO commercial releases will use Highcharts. All commercial distributions will use Chart.js or another permissively-licensed alternative.
 - **Plan**:
   1. **Audit Highcharts Usage** ✅ COMPLETE
      - Identified all Highcharts dependencies in `templates/stats/_scripts.html` (12+ chart types, ~1,543 lines)
      - Identified alert delivery charts in `static/js/charts/alert_delivery.js` (~113 lines)
-     - Documented licensing issue in `LICENSE_COMPLIANCE_CRITICAL.md`
+     - Documented licensing issue in `../archive/root-docs/LICENSE_COMPLIANCE_CRITICAL.md`
   2. **Design Chart.js Migration Strategy**
      - Create abstraction layer for charting API to enable gradual migration
      - Map each Highcharts chart type to Chart.js equivalent (pie → doughnut, column → bar, etc.)
@@ -225,7 +225,7 @@ Maintaining this document:
      - Update dependency attribution in `docs/reference/dependency_attribution.md`
      - Final license compliance audit to verify no Highcharts remnants
   7. **Documentation Updates**
-     - Update `LICENSE_COMPLIANCE_CRITICAL.md` status to RESOLVED
+     - Update `../archive/root-docs/LICENSE_COMPLIANCE_CRITICAL.md` status to RESOLVED
      - Document Chart.js customization in `docs/frontend/COMPONENT_LIBRARY.md`
      - Add charting best practices guide for future contributors
      - Update help documentation with new chart interaction patterns

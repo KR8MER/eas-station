@@ -315,7 +315,7 @@ When building new features:
 - **Streaming Decoder**: `app_core/audio/streaming_same_decoder.py`
 - **EAS Monitor**: `app_core/audio/eas_monitor.py`
 - **File Decoder**: `app_utils/eas_decode.py`
-- **CPU Fix History**: `CPU_FIX_SUMMARY_FINAL.md`
+- **CPU Fix History**: `../archive/root-docs/CPU_FIX_SUMMARY_FINAL.md`
 
 ---
 

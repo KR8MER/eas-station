@@ -399,7 +399,7 @@ The streaming decoder is:
 - **File Decoder**: `app_utils/eas_decode.py` (verification)
 - **Streaming Decoder**: `app_core/audio/streaming_same_decoder.py` (monitoring)
 - **Shared Constants**: `app_utils/eas_fsk.py`
-- **CPU Fix History**: `CPU_FIX_SUMMARY_FINAL.md`
+- **CPU Fix History**: `../archive/root-docs/CPU_FIX_SUMMARY_FINAL.md`
 - **Architecture Analysis**: `BATCH_VS_REALTIME_ANALYSIS.md`
 
 ---

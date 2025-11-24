@@ -200,6 +200,6 @@ docker compose restart noaa-poller ipaws-poller
 
 ## See Also
 
-- [Performance Optimization Guide](../performance_patch.md)
+- [Performance Optimization Guide](../archive/root-docs/performance_patch.md)
 - [System Architecture](../architecture/SYSTEM_ARCHITECTURE.md)
 - [Troubleshooting Guide](../guides/HELP.md)

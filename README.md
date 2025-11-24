@@ -72,7 +72,7 @@ Audio Service           Web Application
 - ✅ **Fast** - Dedicated resources per service
 - ✅ **Debuggable** - Separate logs, independent restart
 
-See **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** for details.
+See **[DEPLOYMENT_GUIDE.md](docs/archive/root-docs/DEPLOYMENT_GUIDE.md)** for details.
 
 ## 🚀 Quick Start
 
