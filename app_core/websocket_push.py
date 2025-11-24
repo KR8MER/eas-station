@@ -19,6 +19,7 @@ Repository: https://github.com/KR8MER/eas-station
 
 """WebSocket push service for real-time updates."""
 
+import json
 import logging
 import threading
 import time
@@ -70,68 +71,122 @@ def _push_worker(app: 'Flask', socketio: 'SocketIO') -> None:
     """Background worker that pushes real-time updates via WebSocket."""
     logger.info("WebSocket push worker started")
 
+    # Cache audio source configs to avoid hammering the database every second
+    config_cache = {}
+    config_cache_loaded_at = 0.0
+
     with app.app_context():
         while not _stop_event.is_set():
             try:
                 # Get audio metrics and sources
-                from webapp.admin.audio_ingest import _get_audio_controller
+                from webapp.admin.audio_ingest import (
+                    _get_audio_controller,
+                    _read_audio_metrics_from_redis,
+                    AudioSourceConfigDB,
+                )
                 from app_core.audio import get_eas_monitor_instance
 
-                controller = _get_audio_controller()
-
-                # Audio metrics for VU meters
                 source_metrics = []
-                for source_name, adapter in controller._sources.items():
-                    if adapter.metrics:
-                        source_metrics.append({
-                            'source_id': source_name,
-                            'source_name': adapter.config.name,
-                            'source_type': adapter.config.source_type.value,
-                            'source_status': adapter.status.value,
-                            'timestamp': adapter.metrics.timestamp,
-                            'peak_level_db': float(adapter.metrics.peak_level_db) if adapter.metrics.peak_level_db is not None else -120.0,
-                            'rms_level_db': float(adapter.metrics.rms_level_db) if adapter.metrics.rms_level_db is not None else -120.0,
-                            'sample_rate': adapter.metrics.sample_rate,
-                            'channels': adapter.metrics.channels,
-                            'frames_captured': adapter.metrics.frames_captured,
-                            'silence_detected': bool(adapter.metrics.silence_detected),
-                            'buffer_utilization': float(adapter.metrics.buffer_utilization) if adapter.metrics.buffer_utilization is not None else 0.0,
+                audio_sources = []
+                broadcast_stats = {}
+                eas_monitor_status = None
+                active_source = None
+
+                # Prefer Redis metrics (audio-service publishes them in separated architecture)
+                redis_metrics = _read_audio_metrics_from_redis()
+
+                if redis_metrics:
+                    # Refresh config cache periodically to keep type/priority info current
+                    now = time.time()
+                    if now - config_cache_loaded_at > 30:
+                        config_cache = {cfg.name: cfg for cfg in AudioSourceConfigDB.query.all()}
+                        config_cache_loaded_at = now
+
+                    audio_controller_data = redis_metrics.get('audio_controller')
+                    if isinstance(audio_controller_data, str):
+                        audio_controller_data = json.loads(audio_controller_data)
+
+                    if audio_controller_data:
+                        active_source = audio_controller_data.get('active_source')
+                        redis_sources = audio_controller_data.get('sources', {})
+                        for source_name, source_data in redis_sources.items():
+                            config = config_cache.get(source_name)
+                            source_metrics.append({
+                                'source_id': source_name,
+                                'source_name': source_name,
+                                'source_type': getattr(config.source_type, 'value', None) if config else 'unknown',
+                                'source_status': source_data.get('status', 'unknown'),
+                                'timestamp': source_data.get('timestamp', redis_metrics.get('timestamp', time.time())),
+                                'sample_rate': source_data.get('sample_rate'),
+                                'channels': source_data.get('channels', 2),
+                                'peak_level_db': float(source_data.get('peak_level_db', -120.0)),
+                                'rms_level_db': float(source_data.get('rms_level_db', -120.0)),
+                                'frames_captured': source_data.get('frames_captured', 0),
+                                'silence_detected': bool(source_data.get('silence_detected', False)),
+                                'buffer_utilization': float(source_data.get('buffer_utilization', 0.0)),
+                            })
+
+                        audio_sources = []
+                        for name, data in redis_sources.items():
+                            config = config_cache.get(name)
+                            audio_sources.append({
+                                'name': name,
+                                'type': getattr(getattr(config, 'source_type', None), 'value', None) if config else 'unknown',
+                                'status': data.get('status', 'unknown'),
+                                'enabled': getattr(config, 'enabled', None),
+                                'priority': getattr(config, 'priority', None),
+                            })
+
+                    broadcast_stats = redis_metrics.get('broadcast_queue') or {}
+                    if isinstance(broadcast_stats, str):
+                        broadcast_stats = json.loads(broadcast_stats)
+
+                    eas_monitor_status = redis_metrics.get('eas_monitor')
+
+                # Fall back to local controller metrics when Redis is unavailable
+                if not redis_metrics:
+                    controller = _get_audio_controller()
+
+                    for source_name, adapter in controller._sources.items():
+                        if adapter.metrics:
+                            source_metrics.append({
+                                'source_id': source_name,
+                                'source_name': adapter.config.name,
+                                'source_type': adapter.config.source_type.value,
+                                'source_status': adapter.status.value,
+                                'timestamp': adapter.metrics.timestamp,
+                                'peak_level_db': float(adapter.metrics.peak_level_db) if adapter.metrics.peak_level_db is not None else -120.0,
+                                'rms_level_db': float(adapter.metrics.rms_level_db) if adapter.metrics.rms_level_db is not None else -120.0,
+                                'sample_rate': adapter.metrics.sample_rate,
+                                'channels': adapter.metrics.channels,
+                                'frames_captured': adapter.metrics.frames_captured,
+                                'silence_detected': bool(adapter.metrics.silence_detected),
+                                'buffer_utilization': float(adapter.metrics.buffer_utilization) if adapter.metrics.buffer_utilization is not None else 0.0,
+                            })
+
+                    broadcast_stats = controller.get_broadcast_queue().get_stats()
+                    active_source = controller.get_active_source()
+
+                    audio_sources = []
+                    for source_name, adapter in controller._sources.items():
+                        audio_sources.append({
+                            'name': adapter.config.name,
+                            'type': adapter.config.source_type.value,
+                            'status': adapter.status.value,
+                            'enabled': adapter.config.enabled,
+                            'priority': adapter.config.priority,
                         })
 
-                broadcast_stats = controller.get_broadcast_queue().get_stats()
-
-                # Audio sources list
-                audio_sources = []
-                for source_name, adapter in controller._sources.items():
-                    audio_sources.append({
-                        'name': adapter.config.name,
-                        'type': adapter.config.source_type.value,
-                        'status': adapter.status.value,
-                        'enabled': adapter.config.enabled,
-                        'priority': adapter.config.priority,
-                    })
-
-                # EAS Monitor status
-                monitor = get_eas_monitor_instance()
-                eas_monitor_status = None
-                if monitor:
-                    status = monitor.get_status()
-                    eas_monitor_status = {
-                        'running': status.get('running', False),
-                        'audio_flowing': status.get('audio_flowing', False),
-                        'health_percentage': status.get('health_percentage', 0),
-                        'samples_per_second': status.get('samples_per_second', 0),
-                        'runtime_seconds': status.get('runtime_seconds', 0),
-                        'alerts_detected': status.get('alerts_detected', 0),
-                        'decoder_synced': status.get('decoder_synced', False),
-                    }
+                    monitor = get_eas_monitor_instance()
+                    if monitor:
+                        eas_monitor_status = monitor.get_status()
 
                 # Broadcast all data to connected clients
                 socketio.emit('audio_monitoring_update', {
                     'audio_metrics': {
                         'live_metrics': source_metrics,
                         'total_sources': len(source_metrics),
-                        'active_source': controller.get_active_source(),
+                        'active_source': active_source,
                         'broadcast_stats': broadcast_stats,
                     },
                     'audio_sources': audio_sources,
