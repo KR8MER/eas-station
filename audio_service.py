@@ -371,6 +371,10 @@ def publish_metrics_to_redis(metrics):
     try:
         r = get_redis_client()
 
+        # Add heartbeat timestamp and process ID (required by app container)
+        metrics["_heartbeat"] = time.time()
+        metrics["_master_pid"] = os.getpid()
+
         # Flatten nested dicts to strings for Redis hash
         flat_metrics = {}
         for key, value in metrics.items():
