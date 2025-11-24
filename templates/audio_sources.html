@@ -117,6 +117,17 @@
     0%, 100% { background-color: #fff3cd; }
     50% { background-color: #ffc107; }
 }
+
+.metric-display {
+    font-size: 2rem;
+    font-weight: 300;
+    margin-bottom: 0;
+}
+
+.section-heading {
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+}
 </style>
 {% endblock %}
 
@@ -152,6 +163,7 @@
             </div>
 
             <!-- Health Overview Cards -->
+            <h2 class="section-heading">System Overview</h2>
             <div class="row mb-4">
                 <div class="col-md-3">
                     <div class="card">
@@ -161,7 +173,7 @@
                                     <span id="overall-health-score">--</span>
                                 </div>
                             </div>
-                            <h5 class="mt-3 mb-0">Overall Health</h5>
+                            <h3 class="h5 mt-3 mb-0">Overall Health</h3>
                             <small class="text-muted">System Score</small>
                         </div>
                     </div>
@@ -169,8 +181,8 @@
                 <div class="col-md-3">
                     <div class="card">
                         <div class="card-body text-center">
-                            <h3 class="mb-0 text-success" id="active-sources-count">0</h3>
-                            <h5 class="mb-0">Active Sources</h5>
+                            <div class="metric-display text-success" id="active-sources-count">0</div>
+                            <h3 class="h5 mb-0">Active Sources</h3>
                             <small class="text-muted">Currently Running</small>
                         </div>
                     </div>
@@ -178,8 +190,8 @@
                 <div class="col-md-3">
                     <div class="card">
                         <div class="card-body text-center">
-                            <h3 class="mb-0" id="total-sources-count">0</h3>
-                            <h5 class="mb-0">Total Sources</h5>
+                            <div class="metric-display" id="total-sources-count">0</div>
+                            <h3 class="h5 mb-0">Total Sources</h3>
                             <small class="text-muted">Configured</small>
                         </div>
                     </div>
@@ -187,8 +199,8 @@
                 <div class="col-md-3">
                     <div class="card">
                         <div class="card-body text-center">
-                            <h3 class="mb-0 text-warning" id="alerts-count">0</h3>
-                            <h5 class="mb-0">Alerts</h5>
+                            <div class="metric-display text-warning" id="alerts-count">0</div>
+                            <h3 class="h5 mb-0">Alerts</h3>
                             <small class="text-muted">Unresolved Issues</small>
                         </div>
                     </div>
@@ -198,9 +210,9 @@
             <!-- Active Sources -->
             <div class="card mb-4">
                 <div class="card-header">
-                    <h5 class="mb-0">
+                    <h2 class="h5 mb-0">
                         <i class="fas fa-play-circle"></i> Audio Sources
-                    </h5>
+                    </h2>
                 </div>
                 <div class="card-body">
                     <div id="sources-list">
@@ -215,9 +227,9 @@
             <!-- Recent Alerts -->
             <div class="card">
                 <div class="card-header">
-                    <h5 class="mb-0">
+                    <h2 class="h5 mb-0">
                         <i class="fas fa-exclamation-triangle"></i> Recent Alerts
-                    </h5>
+                    </h2>
                 </div>
                 <div class="card-body">
                     <div id="alerts-list">
@@ -234,7 +246,7 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="addSourceModalLabel">Add Audio Source</h5>
+                <h2 class="modal-title h5" id="addSourceModalLabel">Add Audio Source</h2>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
@@ -300,7 +312,7 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="editSourceModalLabel">Edit Audio Source</h5>
+                <h2 class="modal-title h5" id="editSourceModalLabel">Edit Audio Source</h2>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
@@ -371,7 +383,7 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="deviceDiscoveryModalLabel">Discovered Audio Devices</h5>
+                <h2 class="modal-title h5" id="deviceDiscoveryModalLabel">Discovered Audio Devices</h2>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
