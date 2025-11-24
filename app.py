@@ -515,12 +515,17 @@ app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Add connection timeout and pool settings to prevent startup hangs
+# Pool settings optimized for robustness and performance
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
     'connect_args': {
         'connect_timeout': 10,  # 10 second timeout for initial connection
     },
-    'pool_pre_ping': True,  # Verify connections before using them
-    'pool_recycle': 3600,   # Recycle connections after 1 hour
+    'pool_pre_ping': True,      # Verify connections before using them (detect stale connections)
+    'pool_recycle': 3600,       # Recycle connections after 1 hour
+    'pool_size': 10,            # Number of connections to maintain
+    'max_overflow': 20,         # Additional connections when pool exhausted
+    'pool_timeout': 30,         # Timeout waiting for connection from pool
+    'echo_pool': False,         # Set to True for connection pool debugging
 }
 
 # Initialize database
@@ -534,18 +539,47 @@ from flask_socketio import SocketIO
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 
-def _check_database_connectivity() -> bool:
-    """Attempt to connect to the database and return True on success."""
+def _check_database_connectivity(max_retries: int = 5, initial_backoff: float = 1.0) -> bool:
+    """
+    Attempt to connect to the database with retry logic.
 
-    try:
-        with app.app_context():
-            with db.engine.connect() as connection:
-                connection.execute(text("SELECT 1"))
-        return True
-    except OperationalError as exc:
-        logger.error("Database connection failed during startup: %s", exc)
-    except Exception as exc:  # noqa: BLE001 - broad catch to log unexpected failures
-        logger.exception("Unexpected error during database connectivity check: %s", exc)
+    Args:
+        max_retries: Maximum number of connection attempts
+        initial_backoff: Initial retry delay in seconds
+
+    Returns:
+        True if connection successful, False otherwise
+    """
+    attempt = 0
+    backoff = initial_backoff
+
+    while attempt < max_retries:
+        try:
+            with app.app_context():
+                with db.engine.connect() as connection:
+                    connection.execute(text("SELECT 1"))
+
+            if attempt > 0:
+                logger.info(f"✅ Database connection succeeded after {attempt + 1} attempts")
+            return True
+
+        except OperationalError as exc:
+            attempt += 1
+
+            if attempt >= max_retries:
+                logger.error(f"❌ Database connection failed after {max_retries} attempts: %s", exc)
+                break
+
+            logger.warning(
+                f"⚠️  Database connection failed (attempt {attempt}/{max_retries}): {exc}. "
+                f"Retrying in {backoff:.1f}s..."
+            )
+            time.sleep(backoff)
+            backoff = min(backoff * 2, 30.0)  # Exponential backoff, max 30s
+
+        except Exception as exc:  # noqa: BLE001 - broad catch to log unexpected failures
+            logger.exception("Unexpected error during database connectivity check: %s", exc)
+            break
 
     return False
 

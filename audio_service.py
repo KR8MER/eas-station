@@ -73,29 +73,27 @@ def signal_handler(signum, frame):
 
 
 def get_redis_client() -> redis.Redis:
-    """Get or create Redis client."""
+    """
+    Get or create Redis client with retry logic.
+
+    Uses app_core.redis_client for robust connection handling with
+    exponential backoff and circuit breaker pattern.
+    """
     global _redis_client
 
-    if _redis_client is None:
-        redis_host = os.getenv("REDIS_HOST", "localhost")
-        redis_port = int(os.getenv("REDIS_PORT", "6379"))
-        redis_db = int(os.getenv("REDIS_DB", "0"))
+    # Use robust Redis client with retry logic
+    from app_core.redis_client import get_redis_client as get_robust_client
 
-        _redis_client = redis.Redis(
-            host=redis_host,
-            port=redis_port,
-            db=redis_db,
-            decode_responses=True,
-            socket_connect_timeout=5,
-            socket_keepalive=True,
-            health_check_interval=30,
+    try:
+        _redis_client = get_robust_client(
+            max_retries=5,
+            initial_backoff=1.0,
+            max_backoff=30.0
         )
-
-        # Test connection
-        _redis_client.ping()
-        logger.info(f"✅ Connected to Redis at {redis_host}:{redis_port}")
-
-    return _redis_client
+        return _redis_client
+    except Exception as e:
+        logger.error(f"❌ Failed to connect to Redis: {e}")
+        raise
 
 
 def _sanitize_value(value: Any) -> Any:

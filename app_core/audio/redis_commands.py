@@ -43,14 +43,9 @@ import time
 from typing import Any, Callable, Dict, Optional
 
 import redis
+from app_core.redis_client import get_redis_client, redis_operation
 
 logger = logging.getLogger(__name__)
-
-# Redis configuration
-REDIS_HOST = os.environ.get('REDIS_HOST', 'redis')
-REDIS_PORT = int(os.environ.get('REDIS_PORT', '6379'))
-REDIS_DB = int(os.environ.get('REDIS_DB', '0'))
-REDIS_PASSWORD = os.environ.get('REDIS_PASSWORD', None)
 
 # Channel names
 AUDIO_COMMAND_CHANNEL = 'eas:audio:commands'
@@ -68,15 +63,13 @@ class AudioCommandPublisher:
     """
 
     def __init__(self):
-        """Initialize Redis connection for publishing commands."""
-        self.redis_client = redis.Redis(
-            host=REDIS_HOST,
-            port=REDIS_PORT,
-            db=REDIS_DB,
-            password=REDIS_PASSWORD,
-            decode_responses=True
-        )
-        self._check_connection()
+        """Initialize Redis connection for publishing commands with retry logic."""
+        try:
+            self.redis_client = get_redis_client(max_retries=5)
+            logger.info("✅ AudioCommandPublisher connected to Redis")
+        except Exception as e:
+            logger.error(f"❌ Failed to connect AudioCommandPublisher to Redis: {e}")
+            raise
 
     def _check_connection(self):
         """Check Redis connection is working."""
@@ -168,21 +161,20 @@ class AudioCommandSubscriber:
 
     def __init__(self, audio_controller):
         """
-        Initialize Redis subscriber.
+        Initialize Redis subscriber with retry logic.
 
         Args:
             audio_controller: AudioIngestController instance to execute commands on
         """
         self.audio_controller = audio_controller
-        self.redis_client = redis.Redis(
-            host=REDIS_HOST,
-            port=REDIS_PORT,
-            db=REDIS_DB,
-            password=REDIS_PASSWORD,
-            decode_responses=True
-        )
-        self.pubsub = self.redis_client.pubsub()
-        self.running = False
+        try:
+            self.redis_client = get_redis_client(max_retries=5)
+            self.pubsub = self.redis_client.pubsub()
+            self.running = False
+            logger.info("✅ AudioCommandSubscriber connected to Redis")
+        except Exception as e:
+            logger.error(f"❌ Failed to connect AudioCommandSubscriber to Redis: {e}")
+            raise
         self._check_connection()
 
     def _check_connection(self):
