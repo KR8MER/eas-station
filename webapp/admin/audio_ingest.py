@@ -1287,7 +1287,9 @@ def api_get_audio_sources():
             # If we have Redis data (separated mode), use it
             if redis_source_data:
                 # Build a simplified source object from Redis data
+                redis_metadata = redis_source_data.get('metadata')
                 metadata = _merge_metadata(
+                    redis_metadata,
                     latest_metric.source_metadata if latest_metric else None,
                     {
                         'stream_url': icecast_url,
@@ -1295,17 +1297,34 @@ def api_get_audio_sources():
                     }
                 )
 
+                redis_timestamp = redis_source_data.get('timestamp')
+                metrics_timestamp = None
+                if isinstance(redis_timestamp, (int, float)):
+                    metrics_timestamp = datetime.fromtimestamp(redis_timestamp).isoformat()
+                elif isinstance(redis_timestamp, str):
+                    metrics_timestamp = redis_timestamp
+                elif latest_metric and latest_metric.timestamp:
+                    metrics_timestamp = latest_metric.timestamp.isoformat()
+
                 metrics_payload: Optional[Dict[str, Any]] = None
-                if latest_metric:
+                if latest_metric or redis_source_data:
                     metrics_payload = {
-                        'timestamp': latest_metric.timestamp.isoformat() if latest_metric.timestamp else None,
-                        'peak_level_db': _sanitize_float(latest_metric.peak_level_db) if latest_metric.peak_level_db is not None else None,
-                        'rms_level_db': _sanitize_float(latest_metric.rms_level_db) if latest_metric.rms_level_db is not None else None,
-                        'sample_rate': redis_source_data.get('sample_rate', latest_metric.sample_rate),
-                        'channels': latest_metric.channels,
-                        'frames_captured': latest_metric.frames_captured,
-                        'silence_detected': _sanitize_bool(latest_metric.silence_detected) if latest_metric.silence_detected is not None else False,
-                        'buffer_utilization': _sanitize_float(latest_metric.buffer_utilization) if latest_metric.buffer_utilization is not None else 0.0,
+                        'timestamp': metrics_timestamp,
+                        'peak_level_db': _sanitize_float(
+                            redis_source_data.get('peak_level_db', latest_metric.peak_level_db if latest_metric else None)
+                        ),
+                        'rms_level_db': _sanitize_float(
+                            redis_source_data.get('rms_level_db', latest_metric.rms_level_db if latest_metric else None)
+                        ),
+                        'sample_rate': redis_source_data.get('sample_rate', latest_metric.sample_rate if latest_metric else None),
+                        'channels': redis_source_data.get('channels', latest_metric.channels if latest_metric else None),
+                        'frames_captured': redis_source_data.get('frames_captured', latest_metric.frames_captured if latest_metric else None),
+                        'silence_detected': _sanitize_bool(
+                            redis_source_data.get('silence_detected', latest_metric.silence_detected if latest_metric else False)
+                        ),
+                        'buffer_utilization': _sanitize_float(
+                            redis_source_data.get('buffer_utilization', latest_metric.buffer_utilization if latest_metric else 0.0)
+                        ),
                         'metadata': metadata,
                     }
                 elif metadata:
