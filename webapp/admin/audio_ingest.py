@@ -1743,32 +1743,15 @@ def api_get_audio_metrics():
 
                 logger.debug(f"Using Redis metrics: {len(source_metrics)} sources, active={active_source}")
             except Exception as e:
-                logger.warning(f"Failed to parse Redis metrics, falling back to local: {e}")
+                logger.warning(f"Failed to parse Redis metrics: {e}")
                 redis_metrics = None
 
-        # Fall back to local controller if Redis unavailable
+        # SEPARATED ARCHITECTURE: No fallback to local controller
+        # In separated architecture, app container doesn't run audio processing.
+        # Audio-service publishes metrics to Redis. If Redis has no metrics,
+        # return empty arrays (audio-service not running or not publishing).
         if not redis_metrics:
-            controller = _get_audio_controller()
-
-            for source_name, adapter in controller._sources.items():
-                if adapter.metrics:
-                    source_metrics.append({
-                        'source_id': source_name,
-                        'source_name': adapter.config.name,
-                        'source_type': adapter.config.source_type.value,
-                        'source_status': adapter.status.value,
-                        'timestamp': adapter.metrics.timestamp,
-                        'peak_level_db': _sanitize_float(adapter.metrics.peak_level_db),
-                        'rms_level_db': _sanitize_float(adapter.metrics.rms_level_db),
-                        'sample_rate': adapter.metrics.sample_rate,
-                        'channels': adapter.metrics.channels,
-                        'frames_captured': adapter.metrics.frames_captured,
-                        'silence_detected': _sanitize_bool(adapter.metrics.silence_detected),
-                        'buffer_utilization': _sanitize_float(adapter.metrics.buffer_utilization),
-                    })
-
-            broadcast_stats = controller.get_broadcast_queue().get_stats()
-            active_source = controller.get_active_source()
+            logger.debug("No Redis metrics available - audio-service may not be running")
 
         # Also get recent database metrics
         db_metrics = (
@@ -2042,34 +2025,28 @@ def api_discover_audio_devices():
 
 @audio_ingest_bp.route('/api/audio/waveform/<source_name>', methods=['GET'])
 def api_get_waveform(source_name: str):
-    """Get waveform data for a specific audio source."""
+    """Get waveform data for a specific audio source.
+
+    Note: In separated architecture, waveform data is not available through Redis
+    due to bandwidth constraints. VU meters (peak/RMS levels) work via /api/audio/metrics.
+    """
     try:
-        controller, adapter, db_config, _ = _get_controller_and_adapter(source_name)
-
-        if adapter is None:
-            if db_config:
-                return jsonify({
-                    'error': 'Source exists in database but could not be loaded',
-                    'hint': 'Check audio ingest logs for initialization errors',
-                }), 503
-            return jsonify({
-                'error': f'Audio source "{source_name}" not found',
-                'hint': 'Check /api/audio/sources for available sources'
-            }), 404
-
-        # Get waveform data from adapter
-        waveform_data = adapter.get_waveform_data()
-
-        # Convert to list for JSON serialization
-        waveform_list = waveform_data.tolist()
+        # SEPARATED ARCHITECTURE: Waveform data not available
+        # Waveform visualization is optional. VU meters use /api/audio/metrics instead.
+        # If waveform visualization is critical, consider:
+        # 1. Running audio processing in app container (not recommended)
+        # 2. Adding waveform publishing to audio-service (high Redis bandwidth)
+        # 3. Using alternative visualization (spectrum analyzer, etc.)
 
         return jsonify({
+            'error': 'Waveform data not available in separated architecture',
+            'hint': 'VU meters (peak/RMS levels) available via /api/audio/metrics',
             'source_name': source_name,
-            'waveform': waveform_list,
-            'sample_count': len(waveform_list),
+            'waveform': [],  # Empty array for compatibility
+            'sample_count': 0,
             'timestamp': time.time(),
-            'status': adapter.status.value,
-        })
+            'status': 'unavailable',
+        }), 503
 
     except Exception as exc:
         logger.error('Error getting waveform for %s: %s', source_name, exc)
@@ -2077,38 +2054,31 @@ def api_get_waveform(source_name: str):
 
 @audio_ingest_bp.route('/api/audio/spectrogram/<source_name>')
 def api_get_spectrogram(source_name: str):
-    """Get spectrogram data for a specific audio source (for waterfall display)."""
+    """Get spectrogram data for a specific audio source (for waterfall display).
+
+    Note: In separated architecture, spectrogram data is not available through Redis
+    due to bandwidth constraints. VU meters (peak/RMS levels) work via /api/audio/metrics.
+    """
     try:
-        controller, adapter, db_config, _ = _get_controller_and_adapter(source_name)
-
-        if adapter is None:
-            if db_config:
-                return jsonify({
-                    'error': 'Source exists in database but could not be loaded',
-                    'hint': 'Check audio ingest logs for initialization errors',
-                }), 503
-            return jsonify({
-                'error': f'Audio source "{source_name}" not found',
-                'hint': 'Check /api/audio/sources for available sources'
-            }), 404
-
-        # Get spectrogram data from adapter
-        spectrogram_data = adapter.get_spectrogram_data()
-
-        # Convert to list for JSON serialization
-        # Shape: [time_frames, frequency_bins]
-        spectrogram_list = spectrogram_data.tolist()
+        # SEPARATED ARCHITECTURE: Spectrogram data not available
+        # Spectrogram visualization is optional. VU meters use /api/audio/metrics instead.
+        # If spectrogram visualization is critical, consider:
+        # 1. Running audio processing in app container (not recommended)
+        # 2. Adding spectrogram publishing to audio-service (very high Redis bandwidth)
+        # 3. Using alternative visualization (simple FFT, spectrum bars, etc.)
 
         return jsonify({
+            'error': 'Spectrogram data not available in separated architecture',
+            'hint': 'VU meters (peak/RMS levels) available via /api/audio/metrics',
             'source_name': source_name,
-            'spectrogram': spectrogram_list,
-            'time_frames': len(spectrogram_list),
-            'frequency_bins': len(spectrogram_list[0]) if len(spectrogram_list) > 0 else 0,
-            'sample_rate': adapter.config.sample_rate,
-            'fft_size': adapter._fft_size,
+            'spectrogram': [],  # Empty array for compatibility
+            'time_frames': 0,
+            'frequency_bins': 0,
+            'sample_rate': 48000,  # Default value
+            'fft_size': 1024,  # Default value
             'timestamp': time.time(),
-            'status': adapter.status.value,
-        })
+            'status': 'unavailable',
+        }), 503
 
     except Exception as exc:
         logger.error('Error getting spectrogram for %s: %s', source_name, exc)
