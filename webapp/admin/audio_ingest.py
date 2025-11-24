@@ -1284,6 +1284,9 @@ def api_get_audio_sources():
                 elif metadata:
                     metrics_payload = {'metadata': metadata}
 
+                # Extract config parameters from JSONB field
+                config_params = db_config.config_params or {}
+                
                 sources.append({
                     'id': db_config.name,  # Add id field for JavaScript compatibility
                     'name': db_config.name,
@@ -1294,12 +1297,12 @@ def api_get_audio_sources():
                     'auto_start': db_config.auto_start,
                     'description': db_config.description or '',
                     'config': {
-                        'sample_rate': db_config.sample_rate,
-                        'channels': db_config.channels,
-                        'buffer_size': db_config.buffer_size,
-                        'silence_threshold_db': db_config.silence_threshold_db,
-                        'silence_duration_seconds': db_config.silence_duration_seconds,
-                        'device_params': db_config.device_params,
+                        'sample_rate': config_params.get('sample_rate', 44100),
+                        'channels': config_params.get('channels', 1),
+                        'buffer_size': config_params.get('buffer_size', 4096),
+                        'silence_threshold_db': config_params.get('silence_threshold_db', -60.0),
+                        'silence_duration_seconds': config_params.get('silence_duration_seconds', 5.0),
+                        'device_params': config_params.get('device_params', {}),
                     },
                     'metrics': metrics_payload,
                     'error_message': None,
@@ -1348,6 +1351,9 @@ def api_get_audio_sources():
             elif metadata:
                 metrics_payload = {'metadata': metadata}
 
+            # Extract config parameters from JSONB field
+            config_params = db_config.config_params or {}
+            
             sources.append({
                 'id': db_config.name,  # Add id field for JavaScript compatibility
                 'name': db_config.name,
@@ -1358,12 +1364,12 @@ def api_get_audio_sources():
                 'auto_start': db_config.auto_start,
                 'description': db_config.description or '',
                 'config': {
-                    'sample_rate': db_config.sample_rate,
-                    'channels': db_config.channels,
-                    'buffer_size': db_config.buffer_size,
-                    'silence_threshold_db': db_config.silence_threshold_db,
-                    'silence_duration_seconds': db_config.silence_duration_seconds,
-                    'device_params': db_config.device_params,
+                    'sample_rate': config_params.get('sample_rate', 44100),
+                    'channels': config_params.get('channels', 1),
+                    'buffer_size': config_params.get('buffer_size', 4096),
+                    'silence_threshold_db': config_params.get('silence_threshold_db', -60.0),
+                    'silence_duration_seconds': config_params.get('silence_duration_seconds', 5.0),
+                    'device_params': config_params.get('device_params', {}),
                 },
                 'metrics': metrics_payload,
                 'error_message': 'Not loaded in memory (restart required)',
