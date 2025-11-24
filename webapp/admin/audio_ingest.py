@@ -2354,8 +2354,6 @@ def api_stream_audio(source_name: str):
         # This allows VU meters and real-time monitoring to work in separated architecture
         # while still keeping audio processing isolated in the dedicated container.
         
-        import requests
-        
         # Try to proxy to audio-service container
         audio_service_host = os.environ.get('AUDIO_SERVICE_HOST', 'audio-service')
         audio_service_port = os.environ.get('AUDIO_SERVICE_PORT', '5001')

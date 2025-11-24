@@ -653,8 +653,8 @@ def main():
                     stream_channels = 1  # Mono saves 50% bandwidth
                     bits_per_sample = 16
                     
-                    # Calculate decimation factor
-                    decimation = int(source_sample_rate / stream_sample_rate)
+                    # Calculate decimation factor (use floor division for integer result)
+                    decimation = source_sample_rate // stream_sample_rate
                     if decimation < 1:
                         decimation = 1
                         stream_sample_rate = source_sample_rate
@@ -695,11 +695,18 @@ def main():
                             
                             # Convert stereo to mono if needed (mix channels)
                             if source_channels > 1 and stream_channels == 1:
-                                audio_chunk = np.mean(audio_chunk.reshape(-1, source_channels), axis=1)
+                                # Ensure chunk length is divisible by channels
+                                remainder = len(audio_chunk) % source_channels
+                                if remainder != 0:
+                                    audio_chunk = audio_chunk[:-remainder]
+                                if len(audio_chunk) > 0:
+                                    audio_chunk = np.mean(audio_chunk.reshape(-1, source_channels), axis=1)
                             
-                            # Downsample if needed (simple decimation is fast)
-                            if decimation > 1:
-                                audio_chunk = signal.decimate(audio_chunk, decimation, zero_phase=True)
+                            # Downsample if needed (simple decimation for low latency)
+                            if decimation > 1 and len(audio_chunk) > 0:
+                                # Use simple decimation (every Nth sample) for minimal latency
+                                # This is faster than zero_phase filtering and maintains real-time performance
+                                audio_chunk = audio_chunk[::decimation]
                             
                             # Convert to int16 PCM
                             pcm_data = (np.clip(audio_chunk, -1.0, 1.0) * 32767).astype(np.int16)
