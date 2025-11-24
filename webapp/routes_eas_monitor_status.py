@@ -72,12 +72,20 @@ def register_eas_monitor_routes(app: Flask, logger_instance) -> None:
             logger.debug("Reading EAS monitor status from Redis (published by audio-service container)")
             shared_metrics = read_shared_metrics()
 
+            # Debug: Log what we actually got from Redis
+            if shared_metrics is None:
+                logger.warning("read_shared_metrics() returned None - Redis may be unreachable or empty")
+            else:
+                logger.debug(f"read_shared_metrics() returned keys: {list(shared_metrics.keys())}")
+
             if shared_metrics is None or "eas_monitor" not in shared_metrics:
                 return jsonify({
                     "running": False,
                     "error": "No metrics available from audio-service (audio-service may be starting up)",
                     "worker_role": "app",
-                    "initialization_attempted": False
+                    "initialization_attempted": False,
+                    "debug_metrics_is_none": shared_metrics is None,
+                    "debug_metrics_keys": list(shared_metrics.keys()) if shared_metrics else None
                 })
 
             # Extract EAS monitor stats from shared metrics
