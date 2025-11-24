@@ -189,12 +189,17 @@ function createSourceCard(source) {
     const statusClass = `status-${source.status}`;
     const statusBadge = getStatusBadge(source.status);
     const metrics = source.metrics || {};
+    const config = source.config || {};
 
     // Sanitize source ID for use in HTML element IDs
     const safeId = sanitizeId(source.id);
 
     // Escape source ID for safe use in JavaScript strings (onclick attributes)
     const escapedId = escapeHtml(source.id).replace(/'/g, "\\'").replace(/\\/g, '\\\\');
+
+    // Get config values with defaults
+    const sampleRate = config.sample_rate || metrics.sample_rate || '?';
+    const channels = config.channels || metrics.channels || '?';
 
     return `
         <div class="source-card card mb-3 ${statusClass}" id="source-${safeId}">
@@ -207,7 +212,7 @@ function createSourceCard(source) {
                             ${statusBadge}
                         </p>
                         <small class="text-muted">
-                            ${source.config.sample_rate} Hz • ${source.config.channels} ch
+                            ${sampleRate} Hz • ${channels} ch
                         </small>
                     </div>
                     <div class="col-md-5">
