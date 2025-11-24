@@ -1207,6 +1207,8 @@ def api_get_audio_sources():
         redis_sources = {}
         use_redis = False
 
+        redis_streaming_status = None
+
         if redis_metrics and 'audio_controller' in redis_metrics:
             try:
                 import json
@@ -1218,6 +1220,14 @@ def api_get_audio_sources():
                     redis_sources = audio_controller_data['sources']
                     use_redis = True
                     logger.info(f"Using Redis for audio source status (separated architecture): {list(redis_sources.keys())}")
+
+                if audio_controller_data and isinstance(audio_controller_data, dict):
+                    redis_streaming_status = audio_controller_data.get('streaming')
+                    if isinstance(redis_streaming_status, str):
+                        try:
+                            redis_streaming_status = json.loads(redis_streaming_status)
+                        except Exception:
+                            logger.debug('Failed to decode Redis streaming status string; using raw value')
             except Exception as e:
                 logger.warning(f"Failed to parse Redis audio controller data: {e}")
 
@@ -1255,6 +1265,16 @@ def api_get_audio_sources():
                 }
             except Exception as status_exc:
                 logger.warning('Failed to get Icecast streaming status: %s', status_exc)
+
+        if not icecast_status_map and redis_streaming_status:
+            try:
+                active_streams = redis_streaming_status.get('active_streams', {}) if isinstance(redis_streaming_status, dict) else {}
+                icecast_status_map = {
+                    name: dict(stats)
+                    for name, stats in active_streams.items()
+                }
+            except Exception as status_exc:
+                logger.warning('Failed to parse Redis streaming status: %s', status_exc)
 
         for db_config in db_configs:
             latest_metric = latest_metrics_map.get(db_config.name)
@@ -1295,6 +1315,18 @@ def api_get_audio_sources():
 
             # If we have Redis data (separated mode), use it
             if redis_source_data:
+                redis_streaming_stats = redis_source_data.get('streaming') if isinstance(redis_source_data, dict) else None
+                if not icecast_stats and redis_streaming_stats:
+                    if isinstance(redis_streaming_stats, dict):
+                        icecast_stats = redis_streaming_stats.get('icecast') or redis_streaming_stats
+
+                if not icecast_url and icecast_stats and isinstance(icecast_stats, dict):
+                    mount = icecast_stats.get('mount')
+                    server = icecast_stats.get('server')
+                    port = icecast_stats.get('port')
+                    if mount and server and port:
+                        icecast_url = f"http://{server}:{port}/{mount}"
+
                 # Build a simplified source object from Redis data
                 redis_metadata = redis_source_data.get('metadata')
                 metadata = _merge_metadata(
