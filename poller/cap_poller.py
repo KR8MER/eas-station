@@ -476,7 +476,7 @@ class CAPPoller:
         self.session = requests.Session()
         default_user_agent = os.getenv(
             'NOAA_USER_AGENT',
-            'EAS Station/2.12 (+https://github.com/KR8MER/eas-station; contact@kr8mer.com)',
+            'EAS Station/2.12 (+https://github.com/KR8MER/eas-station; support@easstation.com)',
         )
         self.session.headers.update({
             'User-Agent': default_user_agent,

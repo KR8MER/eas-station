@@ -86,7 +86,7 @@ NOAA_ALLOWED_QUERY_PARAMS = frozenset(
 )
 NOAA_USER_AGENT = os.environ.get(
     "NOAA_USER_AGENT",
-    "EAS Station/2.12 (+https://github.com/KR8MER/eas-station; contact@kr8mer.com)",
+    "EAS Station/2.12 (+https://github.com/KR8MER/eas-station; support@easstation.com)",
 )
 
 _OPERATION_LOCK = Lock()
