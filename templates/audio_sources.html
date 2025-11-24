@@ -117,6 +117,17 @@
     0%, 100% { background-color: #fff3cd; }
     50% { background-color: #ffc107; }
 }
+
+.metric-display {
+    font-size: 2rem;
+    font-weight: 300;
+    margin-bottom: 0;
+}
+
+.section-heading {
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+}
 </style>
 {% endblock %}
 
@@ -152,7 +163,7 @@
             </div>
 
             <!-- Health Overview Cards -->
-            <h2 class="h4 mb-3">System Overview</h2>
+            <h2 class="section-heading">System Overview</h2>
             <div class="row mb-4">
                 <div class="col-md-3">
                     <div class="card">
@@ -170,7 +181,7 @@
                 <div class="col-md-3">
                     <div class="card">
                         <div class="card-body text-center">
-                            <div class="mb-0 text-success" style="font-size: 2rem; font-weight: 300;" id="active-sources-count">0</div>
+                            <div class="metric-display text-success" id="active-sources-count">0</div>
                             <h3 class="h5 mb-0">Active Sources</h3>
                             <small class="text-muted">Currently Running</small>
                         </div>
@@ -179,7 +190,7 @@
                 <div class="col-md-3">
                     <div class="card">
                         <div class="card-body text-center">
-                            <div class="mb-0" style="font-size: 2rem; font-weight: 300;" id="total-sources-count">0</div>
+                            <div class="metric-display" id="total-sources-count">0</div>
                             <h3 class="h5 mb-0">Total Sources</h3>
                             <small class="text-muted">Configured</small>
                         </div>
@@ -188,7 +199,7 @@
                 <div class="col-md-3">
                     <div class="card">
                         <div class="card-body text-center">
-                            <div class="mb-0 text-warning" style="font-size: 2rem; font-weight: 300;" id="alerts-count">0</div>
+                            <div class="metric-display text-warning" id="alerts-count">0</div>
                             <h3 class="h5 mb-0">Alerts</h3>
                             <small class="text-muted">Unresolved Issues</small>
                         </div>
