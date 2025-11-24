@@ -2346,22 +2346,45 @@ def api_stream_audio(source_name: str):
             logger.error(f'Unexpected error in audio stream generator for {source_name}: {exc}', exc_info=True)
 
     try:
-        # SEPARATED ARCHITECTURE: Audio streaming not available
-        # In separated architecture, app container doesn't have access to audio adapters.
-        # Audio streaming requires direct access to audio buffers, which only exists
-        # in audio-service container.
-        #
-        # If audio streaming is critical, consider:
-        # 1. Exposing streaming endpoint on audio-service (requires port forwarding)
-        # 2. Using Icecast rebroadcast (recommended for production)
-        # 3. Running audio in app container (not recommended, defeats separated architecture)
+        # Get or restore audio source adapter on-demand to eliminate 503 errors
+        # This allows audio streaming even if the source wasn't loaded at startup
+        controller, adapter, db_config, restored = _get_controller_and_adapter(source_name)
 
-        return jsonify({
-            'error': 'Audio streaming not available in separated architecture',
-            'hint': 'Use Icecast rebroadcast for production audio streaming',
-            'alternative': 'Configure Icecast in Environment settings and use /api/audio/icecast/config for stream URLs',
-            'source_name': source_name,
-        }), 503
+        if adapter is None:
+            if db_config:
+                return jsonify({
+                    'error': f'Audio source "{source_name}" exists but could not be loaded',
+                    'hint': 'Check audio ingest logs for initialization errors. The source may require configuration.',
+                    'alternative': 'Configure Icecast in Environment settings for production streaming'
+                }), 503
+            return jsonify({
+                'error': f'Audio source "{source_name}" not found',
+                'hint': 'Create the audio source first using POST /api/audio/sources',
+                'alternative': 'Check /api/audio/sources for available sources'
+            }), 404
+
+        # If source was just restored, start it automatically for streaming
+        if restored and adapter.status != AudioSourceStatus.RUNNING:
+            try:
+                logger.info(f'Auto-starting restored audio source for streaming: {source_name}')
+                controller.start_source(source_name)
+                # Give it a moment to initialize
+                time.sleep(0.5)
+            except Exception as start_exc:
+                logger.warning(f'Failed to auto-start restored source {source_name}: {start_exc}')
+
+        # Now stream the audio using the WAV generator
+        return Response(
+            stream_with_context(generate_wav_stream(adapter)),
+            mimetype='audio/wav',
+            headers={
+                'Content-Disposition': f'inline; filename="{source_name}.wav"',
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0',
+                'X-Content-Type-Options': 'nosniff',
+            }
+        )
 
     except Exception as exc:
         logger.error('Error setting up audio stream for %s: %s', source_name, exc)
