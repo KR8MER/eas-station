@@ -476,7 +476,7 @@ class CAPPoller:
         self.session = requests.Session()
         default_user_agent = os.getenv(
             'NOAA_USER_AGENT',
-            'KR8MER Emergency Alert Hub/2.1 (+https://github.com/KR8MER/eas-station; NOAA+IPAWS)',
+            'EAS Station/2.12 (+https://github.com/KR8MER/eas-station; contact@kr8mer.com)',
         )
         self.session.headers.update({
             'User-Agent': default_user_agent,

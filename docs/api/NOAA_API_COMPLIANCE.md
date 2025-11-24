@@ -27,7 +27,7 @@ The NOAA API **requires** all requests to include a User-Agent header that:
 
 **EAS Station Implementation:**
 ```python
-'User-Agent': 'KR8MER Emergency Alert Hub/2.1 (+https://github.com/KR8MER/eas-station; NOAA+IPAWS)'
+'User-Agent': 'EAS Station/2.12 (+https://github.com/KR8MER/eas-station; contact@kr8mer.com)'
 ```
 
 **Configuration:** Set via `NOAA_USER_AGENT` environment variable in `.env`
@@ -94,7 +94,7 @@ print("Accept:", poller.session.headers.get('Accept'))
 
 **Expected Output:**
 ```
-User-Agent: KR8MER Emergency Alert Hub/2.1 (+https://github.com/KR8MER/eas-station; NOAA+IPAWS)
+User-Agent: EAS Station/2.12 (+https://github.com/KR8MER/eas-station; contact@kr8mer.com)
 Accept: application/geo+json, application/json;q=0.9
 ```
 
