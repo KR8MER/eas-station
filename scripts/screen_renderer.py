@@ -166,7 +166,7 @@ class ScreenRenderer:
 
     def __init__(
         self,
-        base_url: str = "http://localhost:5000",
+        base_url: str = "http://localhost:8888",
         *,
         allow_preview_samples: bool = False,
     ):
