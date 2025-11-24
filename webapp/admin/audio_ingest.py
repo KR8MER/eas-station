@@ -488,14 +488,44 @@ def _reload_auto_streaming_from_env() -> None:
 def _safe_auto_stream_status(service) -> Optional[Dict[str, Any]]:
     """Return the current auto-streaming status, handling errors gracefully."""
 
-    if not service or not hasattr(service, 'get_status'):
-        return None
+    status: Optional[Dict[str, Any]] = None
 
-    try:
-        return service.get_status()
-    except Exception as exc:  # pylint: disable=broad-except
-        logger.debug("Unable to read auto-streaming status: %s", exc)
-        return None
+    if service and hasattr(service, 'get_status'):
+        try:
+            status = service.get_status()
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.debug("Unable to read auto-streaming status: %s", exc)
+
+    # Separated deployments run the streaming service in the audio-service container.
+    # When the UI worker doesn't host the service locally, fall back to Redis metrics
+    # so the UI still shows accurate active stream counts.
+    if not status:
+        try:
+            metrics = _read_audio_metrics_from_redis()
+            if metrics and 'audio_controller' in metrics:
+                import json
+
+                controller_data = metrics.get('audio_controller')
+                if isinstance(controller_data, str):
+                    try:
+                        controller_data = json.loads(controller_data)
+                    except Exception:  # pylint: disable=broad-except
+                        logger.debug('Failed to decode Redis controller data for streaming status')
+
+                if isinstance(controller_data, dict):
+                    streaming_status = controller_data.get('streaming')
+                    if isinstance(streaming_status, str):
+                        try:
+                            streaming_status = json.loads(streaming_status)
+                        except Exception:  # pylint: disable=broad-except
+                            logger.debug('Failed to decode Redis streaming status string')
+
+                    if isinstance(streaming_status, dict):
+                        status = streaming_status
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.debug("Redis fallback failed for streaming status: %s", exc)
+
+    return status
 
 
 def _start_auto_streaming_service() -> Tuple[bool, str, Optional[Dict[str, Any]]]:
