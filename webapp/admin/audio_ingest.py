@@ -2346,38 +2346,87 @@ def api_stream_audio(source_name: str):
             logger.error(f'Unexpected error in audio stream generator for {source_name}: {exc}', exc_info=True)
 
     try:
-        # SEPARATED ARCHITECTURE: Audio streaming not available via Flask proxy
-        # In separated architecture, the app container doesn't have access to audio adapters.
-        # Audio streaming requires direct access to audio buffers, which only exists
-        # in the audio-service container.
+        # SEPARATED ARCHITECTURE: Proxy streaming requests to audio-service container
+        # The app container doesn't have audio adapters, but the audio-service container does.
+        # We proxy the streaming request to audio-service:5001 which serves the actual audio.
         #
-        # The UI should use Icecast streaming URLs instead (populated automatically
-        # when Icecast is enabled). If sources are showing Flask proxy errors,
-        # it means Icecast is not properly configured.
+        # This allows VU meters and real-time monitoring to work in separated architecture
+        # while still keeping audio processing isolated in the dedicated container.
         
-        # Check if Icecast streaming is available for this source
-        icecast_url = _get_icecast_stream_url(source_name)
+        import requests
         
-        if icecast_url:
-            # Icecast is available - redirect or provide helpful error
+        # Try to proxy to audio-service container
+        audio_service_host = os.environ.get('AUDIO_SERVICE_HOST', 'audio-service')
+        audio_service_port = os.environ.get('AUDIO_SERVICE_PORT', '5001')
+        audio_service_url = f'http://{audio_service_host}:{audio_service_port}/api/audio/stream/{source_name}'
+        
+        try:
+            # Stream from audio-service with timeout
+            logger.info(f'Proxying audio stream request for {source_name} to {audio_service_url}')
+            resp = requests.get(audio_service_url, stream=True, timeout=5)
+            
+            if resp.status_code == 200:
+                # Successful streaming - proxy the response
+                def generate_proxy():
+                    try:
+                        for chunk in resp.iter_content(chunk_size=8192):
+                            if chunk:
+                                yield chunk
+                    except Exception as e:
+                        logger.error(f'Error proxying stream for {source_name}: {e}')
+                
+                return Response(
+                    stream_with_context(generate_proxy()),
+                    mimetype='audio/wav',
+                    headers={
+                        'Content-Disposition': f'inline; filename="{source_name}.wav"',
+                        'Cache-Control': 'no-cache, no-store, must-revalidate',
+                        'Pragma': 'no-cache',
+                        'Expires': '0',
+                        'X-Content-Type-Options': 'nosniff',
+                    }
+                )
+            else:
+                # Audio service returned an error - forward it
+                try:
+                    error_data = resp.json()
+                    return jsonify(error_data), resp.status_code
+                except:
+                    return jsonify({
+                        'error': f'Audio service returned status {resp.status_code}',
+                        'source_name': source_name
+                    }), resp.status_code
+                    
+        except requests.exceptions.Timeout:
+            logger.error(f'Timeout connecting to audio-service for {source_name}')
             return jsonify({
-                'error': 'Direct streaming not available - use Icecast URL instead',
-                'icecast_url': icecast_url,
-                'hint': 'The UI should automatically use the Icecast URL. If you see this error, the audio player may need to be refreshed.',
+                'error': 'Audio service timeout',
+                'hint': 'The audio-service container may not be running or is not responding',
                 'source_name': source_name,
             }), 503
-        else:
-            # Icecast not configured - provide setup instructions
-            return jsonify({
-                'error': 'Audio streaming requires Icecast configuration',
-                'hint': 'Go to Settings → Environment and configure Icecast settings (ICECAST_ENABLED, ICECAST_SERVER, ICECAST_PORT, ICECAST_SOURCE_PASSWORD)',
-                'documentation': 'Icecast provides production-grade audio streaming with automatic reconnection',
-                'alternative': 'For testing, you can also run audio-service locally in integrated mode',
-                'source_name': source_name,
-            }), 503
+            
+        except requests.exceptions.ConnectionError:
+            logger.error(f'Connection error to audio-service for {source_name}')
+            
+            # Fall back to Icecast if available
+            icecast_url = _get_icecast_stream_url(source_name)
+            if icecast_url:
+                return jsonify({
+                    'error': 'Audio service unavailable - use Icecast instead',
+                    'icecast_url': icecast_url,
+                    'hint': 'The audio-service container is not reachable. Using Icecast streaming as fallback.',
+                    'source_name': source_name,
+                }), 503
+            else:
+                return jsonify({
+                    'error': 'Audio service unavailable',
+                    'hint': 'The audio-service container is not running. Check Docker logs: docker logs eas-audio-service',
+                    'documentation': 'For VU meters, audio-service must be running. For basic playback, configure Icecast.',
+                    'source_name': source_name,
+                }), 503
 
     except Exception as exc:
-        logger.error('Error checking audio stream availability for %s: %s', source_name, exc)
+        logger.error('Error proxying audio stream for %s: %s', source_name, exc, exc_info=True)
         return jsonify({'error': str(exc)}), 500
 
 # NOTE: Legacy audio streaming code removed (lines 2094-2350)

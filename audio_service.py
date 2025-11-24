@@ -613,6 +613,117 @@ def main():
             logger.warning("   Audio control commands from app will not work")
             # Continue - metrics publishing still works
 
+        # Start HTTP streaming server for VU meter support
+        logger.info("Starting HTTP streaming server...")
+        streaming_server_thread = None
+        try:
+            from flask import Flask, Response, stream_with_context, jsonify
+            import threading
+            from werkzeug.serving import make_server
+            
+            # Create Flask app for streaming endpoints
+            stream_app = Flask(__name__)
+            
+            @stream_app.route('/api/audio/stream/<source_name>')
+            def stream_audio(source_name):
+                """Stream live audio from a specific source as WAV for VU meters."""
+                import struct
+                import io
+                import numpy as np
+                from app_core.audio.ingest import AudioSourceStatus
+                
+                def generate_wav_stream(adapter):
+                    """Generator that yields WAV-formatted audio chunks."""
+                    # Get configuration
+                    sample_rate = adapter.config.sample_rate
+                    channels = adapter.config.channels
+                    bits_per_sample = 16
+                    
+                    # Send WAV header
+                    wav_header = io.BytesIO()
+                    wav_header.write(b'RIFF')
+                    wav_header.write(struct.pack('<I', 0xFFFFFFFF))
+                    wav_header.write(b'WAVE')
+                    wav_header.write(b'fmt ')
+                    wav_header.write(struct.pack('<I', 16))
+                    wav_header.write(struct.pack('<H', 1))
+                    wav_header.write(struct.pack('<H', channels))
+                    wav_header.write(struct.pack('<I', sample_rate))
+                    wav_header.write(struct.pack('<I', sample_rate * channels * bits_per_sample // 8))
+                    wav_header.write(struct.pack('<H', channels * bits_per_sample // 8))
+                    wav_header.write(struct.pack('<H', bits_per_sample))
+                    wav_header.write(b'data')
+                    wav_header.write(struct.pack('<I', 0xFFFFFFFF))
+                    yield wav_header.getvalue()
+                    
+                    # Stream audio chunks
+                    silence_chunk_duration = 0.05
+                    silence_samples = int(sample_rate * channels * silence_chunk_duration)
+                    
+                    while _running:
+                        try:
+                            audio_chunk = adapter.get_audio_chunk(timeout=0.2)
+                            if audio_chunk is None:
+                                # Yield silence to keep stream alive
+                                silence_chunk = np.zeros(silence_samples, dtype=np.int16)
+                                yield silence_chunk.tobytes()
+                                time.sleep(0.01)
+                                continue
+                            
+                            if not isinstance(audio_chunk, np.ndarray):
+                                audio_chunk = np.array(audio_chunk, dtype=np.float32)
+                            
+                            pcm_data = (np.clip(audio_chunk, -1.0, 1.0) * 32767).astype(np.int16)
+                            yield pcm_data.tobytes()
+                        except Exception as e:
+                            logger.debug(f"Error in stream generator: {e}")
+                            silence_chunk = np.zeros(silence_samples, dtype=np.int16)
+                            yield silence_chunk.tobytes()
+                            time.sleep(0.01)
+                
+                try:
+                    if not _audio_controller:
+                        return jsonify({'error': 'Audio controller not initialized'}), 503
+                    
+                    adapter = _audio_controller._sources.get(source_name)
+                    if not adapter:
+                        return jsonify({'error': f'Audio source "{source_name}" not found'}), 404
+                    
+                    if adapter.status != AudioSourceStatus.RUNNING:
+                        return jsonify({
+                            'error': f'Audio source "{source_name}" is not running',
+                            'status': adapter.status.value
+                        }), 503
+                    
+                    return Response(
+                        stream_with_context(generate_wav_stream(adapter)),
+                        mimetype='audio/wav',
+                        headers={
+                            'Content-Disposition': f'inline; filename="{source_name}.wav"',
+                            'Cache-Control': 'no-cache, no-store, must-revalidate',
+                            'Pragma': 'no-cache',
+                            'Expires': '0',
+                            'X-Content-Type-Options': 'nosniff',
+                            'Access-Control-Allow-Origin': '*',
+                        }
+                    )
+                except Exception as exc:
+                    logger.error(f'Error setting up audio stream for {source_name}: {exc}')
+                    return jsonify({'error': str(exc)}), 500
+            
+            # Start Flask server in background thread
+            server = make_server('0.0.0.0', 5001, stream_app, threaded=True)
+            streaming_server_thread = threading.Thread(
+                target=server.serve_forever,
+                daemon=True,
+                name="StreamingHTTPServer"
+            )
+            streaming_server_thread.start()
+            logger.info("✅ HTTP streaming server started on port 5001")
+        except Exception as e:
+            logger.warning(f"Failed to start HTTP streaming server: {e}")
+            logger.warning("   VU meter real-time streaming will not be available")
+
         logger.info("=" * 80)
         logger.info("✅ Audio service started successfully")
         logger.info("   - Audio ingestion: ACTIVE")
@@ -620,6 +731,7 @@ def main():
         logger.info("   - EAS monitoring: ACTIVE")
         logger.info("   - Metrics publishing: ACTIVE")
         logger.info(f"   - Command subscriber: {'ACTIVE' if command_subscriber else 'DISABLED'}")
+        logger.info(f"   - HTTP streaming: {'ACTIVE' if streaming_server_thread else 'DISABLED'} (port 5001)")
         logger.info("=" * 80)
 
         # Main loop: publish metrics every 5 seconds
