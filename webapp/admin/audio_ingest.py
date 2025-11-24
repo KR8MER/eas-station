@@ -2346,48 +2346,38 @@ def api_stream_audio(source_name: str):
             logger.error(f'Unexpected error in audio stream generator for {source_name}: {exc}', exc_info=True)
 
     try:
-        # Get or restore audio source adapter on-demand to eliminate 503 errors
-        # This allows audio streaming even if the source wasn't loaded at startup
-        controller, adapter, db_config, restored = _get_controller_and_adapter(source_name)
-
-        if adapter is None:
-            if db_config:
-                return jsonify({
-                    'error': f'Audio source "{source_name}" exists but could not be loaded',
-                    'hint': 'Check audio ingest logs for initialization errors. The source may require configuration.',
-                    'alternative': 'Configure Icecast in Environment settings for production streaming'
-                }), 503
+        # SEPARATED ARCHITECTURE: Audio streaming not available via Flask proxy
+        # In separated architecture, the app container doesn't have access to audio adapters.
+        # Audio streaming requires direct access to audio buffers, which only exists
+        # in the audio-service container.
+        #
+        # The UI should use Icecast streaming URLs instead (populated automatically
+        # when Icecast is enabled). If sources are showing Flask proxy errors,
+        # it means Icecast is not properly configured.
+        
+        # Check if Icecast streaming is available for this source
+        icecast_url = _get_icecast_stream_url(source_name)
+        
+        if icecast_url:
+            # Icecast is available - redirect or provide helpful error
             return jsonify({
-                'error': f'Audio source "{source_name}" not found',
-                'hint': 'Create the audio source first using POST /api/audio/sources',
-                'alternative': 'Check /api/audio/sources for available sources'
-            }), 404
-
-        # If source was just restored, start it automatically for streaming
-        if restored and adapter.status != AudioSourceStatus.RUNNING:
-            try:
-                logger.info(f'Auto-starting restored audio source for streaming: {source_name}')
-                controller.start_source(source_name)
-                # Give it a moment to initialize
-                time.sleep(0.5)
-            except Exception as start_exc:
-                logger.warning(f'Failed to auto-start restored source {source_name}: {start_exc}')
-
-        # Now stream the audio using the WAV generator
-        return Response(
-            stream_with_context(generate_wav_stream(adapter)),
-            mimetype='audio/wav',
-            headers={
-                'Content-Disposition': f'inline; filename="{source_name}.wav"',
-                'Cache-Control': 'no-cache, no-store, must-revalidate',
-                'Pragma': 'no-cache',
-                'Expires': '0',
-                'X-Content-Type-Options': 'nosniff',
-            }
-        )
+                'error': 'Direct streaming not available - use Icecast URL instead',
+                'icecast_url': icecast_url,
+                'hint': 'The UI should automatically use the Icecast URL. If you see this error, the audio player may need to be refreshed.',
+                'source_name': source_name,
+            }), 503
+        else:
+            # Icecast not configured - provide setup instructions
+            return jsonify({
+                'error': 'Audio streaming requires Icecast configuration',
+                'hint': 'Go to Settings → Environment and configure Icecast settings (ICECAST_ENABLED, ICECAST_SERVER, ICECAST_PORT, ICECAST_SOURCE_PASSWORD)',
+                'documentation': 'Icecast provides production-grade audio streaming with automatic reconnection',
+                'alternative': 'For testing, you can also run audio-service locally in integrated mode',
+                'source_name': source_name,
+            }), 503
 
     except Exception as exc:
-        logger.error('Error setting up audio stream for %s: %s', source_name, exc)
+        logger.error('Error checking audio stream availability for %s: %s', source_name, exc)
         return jsonify({'error': str(exc)}), 500
 
 # NOTE: Legacy audio streaming code removed (lines 2094-2350)
