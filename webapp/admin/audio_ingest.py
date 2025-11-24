@@ -1717,7 +1717,6 @@ def api_stop_audio_source(source_name: str):
         return jsonify({'error': str(exc)}), 500
 
 @audio_ingest_bp.route('/api/audio/metrics', methods=['GET'])
-@cache.cached(timeout=2, query_string=True, key_prefix='audio_metrics')
 def api_get_audio_metrics():
     """Get real-time metrics for all audio sources."""
     try:
@@ -1818,13 +1817,20 @@ def api_get_audio_metrics():
                 'timestamp': metric.timestamp.isoformat() if metric.timestamp else None,
             })
 
-        return jsonify({
+        response = jsonify({
             'live_metrics': source_metrics,
             'recent_metrics': db_metrics_list,
             'total_sources': len(source_metrics),
             'active_source': active_source,
             'broadcast_stats': broadcast_stats,
         })
+
+        # Explicitly disable HTTP caching so VU meters stay real-time
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+
+        return response
 
     except Exception as exc:
         logger.error('Error getting audio metrics: %s', exc)
