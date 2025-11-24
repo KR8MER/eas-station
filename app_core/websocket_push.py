@@ -197,7 +197,8 @@ def _push_worker(app: 'Flask', socketio: 'SocketIO') -> None:
             except Exception as e:
                 logger.warning(f"Error in WebSocket push worker: {e}")
 
-            # Sleep for 1 second (real-time updates)
-            _stop_event.wait(1.0)
+            # Sleep for 100ms (10Hz updates) - good balance between responsiveness and server load
+            # Client-side Web Audio API provides 60Hz for active audio players
+            _stop_event.wait(0.1)
 
     logger.info("WebSocket push worker stopped")

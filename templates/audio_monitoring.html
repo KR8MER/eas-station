@@ -1778,6 +1778,14 @@ function updateEASMonitorDisplay(status) {
         }
     }
 
+    // Enable/disable control buttons based on status
+    const startBtn = document.getElementById('eas-start-btn');
+    const stopBtn = document.getElementById('eas-stop-btn');
+    if (startBtn && stopBtn) {
+        startBtn.disabled = running;  // Disable start if already running
+        stopBtn.disabled = !running;   // Disable stop if not running
+    }
+
     // Update running status
     const runningStatus = document.getElementById('eas-running-status');
     if (runningStatus) {
@@ -2284,5 +2292,31 @@ window.addEventListener('beforeunload', function() {
 <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"
         integrity="sha384-/KNQL8Nu5gCHLqwqfQjA689Hhoqgi2S84SNUxC3roTe4EhJ9AfLkp8QiQcU8AMzI"
         crossorigin="anonymous"></script>
+
+<!-- Real-time VU Meters (60Hz updates using Web Audio API) -->
+<script src="{{ url_for('static', filename='js/realtime-vu-meters.js') }}"></script>
+<script>
+// Enable real-time VU meters when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    // Enable real-time VU meters for smooth 60Hz updates
+    if (typeof enableRealtimeVUMeters === 'function') {
+        enableRealtimeVUMeters();
+        console.log('✓ Real-time VU meters enabled (60Hz Web Audio API)');
+    }
+});
+
+// Re-enable after sources are re-rendered
+const originalRenderAudioSources = renderAudioSources;
+renderAudioSources = function(fullRender = true) {
+    originalRenderAudioSources(fullRender);
+    
+    // Re-initialize VU meters for new audio elements
+    if (fullRender && typeof enableRealtimeVUMeters === 'function') {
+        setTimeout(() => {
+            enableRealtimeVUMeters();
+        }, 100);
+    }
+};
+</script>
 
 {% endblock %}
