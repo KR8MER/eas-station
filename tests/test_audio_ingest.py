@@ -633,6 +633,24 @@ def test_api_stop_icecast_stream_requires_configuration(icecast_control_app, mon
     assert 'configured' in payload['message'].lower()
 
 
+def test_safe_auto_stream_status_uses_redis(monkeypatch):
+    redis_payload = {
+        'audio_controller': {
+            'streaming': {
+                'active_stream_count': 3,
+                'server': 'icecast:8000'
+            }
+        }
+    }
+
+    monkeypatch.setattr(audio_admin, '_read_audio_metrics_from_redis', lambda: redis_payload)
+
+    status = audio_admin._safe_auto_stream_status(None)
+
+    assert status is not None
+    assert status['active_stream_count'] == 3
+
+
 if __name__ == '__main__':
     pytest.main([__file__])
 
