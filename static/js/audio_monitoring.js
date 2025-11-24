@@ -274,7 +274,7 @@ function getStatusBadge(status) {
 async function updateMetrics() {
     try {
         const fetchFunc = window.cachedFetch || fetch;
-        const response = await fetchFunc('/api/audio/metrics');
+        const response = await fetchFunc('/api/audio/metrics', { cache: 'no-store' });
         const data = await response.json();
 
         const liveMetrics = data.live_metrics || [];

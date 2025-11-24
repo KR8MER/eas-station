@@ -157,6 +157,7 @@ tracks releases under the 2.x series.
 
 ## [Unreleased]
 ### Added
+- Clarified the commercial license offer notes pricing covers software only and excludes any hardware costs.
 - Extended `/api/system_status` and `/api/system_health` with hostname, primary IPv4, uptime, and primary-interface metadata
   so OLED/network templates can surface real host diagnostics.
 - Surfaced the Weekly Test Automation console with a county management side panel, Broadcast navigation entry, and in-product callouts so operators can edit RWT schedules and default SAME codes entirely from the UI.
@@ -186,6 +187,8 @@ tracks releases under the 2.x series.
   - Documented complete analytics system architecture and usage in `app_core/analytics/README.md`
   - Published comprehensive compliance reporting playbook in `docs/compliance/reporting_playbook.md` with workflows for weekly/monthly test verification, performance monitoring, anomaly investigation, and regulatory audit preparation
 ### Fixed
+- Removed caching from `/api/audio/metrics` and set explicit no-store headers so VU meters and live audio telemetry refresh in
+  real time instead of waiting for multi-second cache windows.
 - Hardened backup API endpoints by validating backup names to block path traversal before
   touching the filesystem.
 - Removed the CAP poller's area-term fallback so `/alerts` only surfaces entries that explicitly name the configured SAME or

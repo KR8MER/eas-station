@@ -2136,7 +2136,7 @@ function startLevelPolling() {
 
     levelIntervalHandle = setInterval(async () => {
         try {
-            const response = await fetch('/api/audio/metrics');
+            const response = await fetch('/api/audio/metrics', { cache: 'no-store' });
             if (response.ok) {
                 const data = await response.json();
                 if (data && data.audio_metrics) {
