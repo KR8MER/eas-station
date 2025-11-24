@@ -296,6 +296,14 @@ PUBLIC_API_GET_PATHS = {
     '/api/alerts/historical',
     '/api/boundaries',
     '/api/system_status',
+    # Display hardware endpoints (OLED/LED/VFD screens)
+    '/api/audio/metrics',
+    '/api/audio/metrics/latest',
+    '/api/audio/health',
+    '/api/audio/sources',
+    '/api/eas-monitor/status',
+    '/api/system_health',
+    '/api/monitoring/radio',
 }
 CSRF_SESSION_KEY = '_csrf_token'
 CSRF_HEADER_NAME = 'X-CSRF-Token'
