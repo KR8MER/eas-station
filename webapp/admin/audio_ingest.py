@@ -48,6 +48,34 @@ from app_utils import utc_now
 
 logger = logging.getLogger(__name__)
 
+
+def _read_audio_metrics_from_redis() -> Optional[Dict[str, Any]]:
+    """
+    Read audio metrics from Redis (published by audio-service container).
+
+    In separated architecture, the audio-service container publishes metrics to Redis.
+    This function reads those metrics if available.
+
+    Returns:
+        Dict with keys: audio_controller, broadcast_queue, eas_monitor, timestamp
+        Or None if Redis is unavailable or metrics are stale
+    """
+    try:
+        from app_core.audio.worker_coordinator_redis import read_shared_metrics
+
+        metrics = read_shared_metrics()
+        if metrics:
+            logger.debug(f"Read audio metrics from Redis: {list(metrics.keys())}")
+            return metrics
+        else:
+            logger.debug("No metrics available in Redis")
+            return None
+
+    except Exception as e:
+        logger.warning(f"Failed to read audio metrics from Redis: {e}")
+        return None
+
+
 # Create Blueprint for audio ingest routes
 audio_ingest_bp = Blueprint('audio_ingest', __name__)
 
@@ -1170,10 +1198,30 @@ def register_audio_ingest_routes(app: Flask, logger_instance: Any) -> None:
 @cache.cached(timeout=30, key_prefix='audio_source_list')
 def api_get_audio_sources():
     """List all configured audio sources.
-    
+
     Cached for 30 seconds to reduce database load during rapid polling.
     """
     try:
+        # SEPARATED ARCHITECTURE: Try to read runtime status from Redis first
+        redis_metrics = _read_audio_metrics_from_redis()
+        redis_sources = {}
+        use_redis = False
+
+        if redis_metrics and 'audio_controller' in redis_metrics:
+            try:
+                import json
+                audio_controller_data = redis_metrics.get('audio_controller')
+                if isinstance(audio_controller_data, str):
+                    audio_controller_data = json.loads(audio_controller_data)
+
+                if audio_controller_data and 'sources' in audio_controller_data:
+                    redis_sources = audio_controller_data['sources']
+                    use_redis = True
+                    logger.info(f"Using Redis for audio source status (separated architecture): {list(redis_sources.keys())}")
+            except Exception as e:
+                logger.warning(f"Failed to parse Redis audio controller data: {e}")
+
+        # Get local controller (may be empty in separated architecture)
         controller = _get_audio_controller()
         sources: List[Dict[str, Any]] = []
 
@@ -1209,11 +1257,22 @@ def api_get_audio_sources():
                 logger.warning('Failed to get Icecast streaming status: %s', status_exc)
 
         for db_config in db_configs:
-            adapter = controller._sources.get(db_config.name)
             latest_metric = latest_metrics_map.get(db_config.name)
             icecast_stats = icecast_status_map.get(db_config.name)
             icecast_url = _get_icecast_stream_url(db_config.name)
 
+            # Try Redis first (separated architecture), then fall back to local controller
+            adapter = None
+            redis_source_data = None
+
+            if use_redis and db_config.name in redis_sources:
+                redis_source_data = redis_sources[db_config.name]
+                logger.debug(f"Found Redis data for source '{db_config.name}': {redis_source_data}")
+            else:
+                # Fall back to local controller (integrated mode or Redis unavailable)
+                adapter = controller._sources.get(db_config.name)
+
+            # If we have an actual adapter (integrated mode), serialize it
             if adapter:
                 sources.append(
                     _serialize_audio_source(
@@ -1223,6 +1282,52 @@ def api_get_audio_sources():
                         icecast_stats,
                     )
                 )
+                continue
+
+            # If we have Redis data (separated mode), use it
+            if redis_source_data:
+                # Build a simplified source object from Redis data
+                metadata = _merge_metadata(
+                    latest_metric.source_metadata if latest_metric else None,
+                    {
+                        'stream_url': icecast_url,
+                        'icecast_stream_url': icecast_url,
+                    }
+                )
+
+                metrics_payload: Optional[Dict[str, Any]] = None
+                if latest_metric:
+                    metrics_payload = {
+                        'timestamp': latest_metric.timestamp.isoformat() if latest_metric.timestamp else None,
+                        'peak_level_db': _sanitize_float(latest_metric.peak_level_db) if latest_metric.peak_level_db is not None else None,
+                        'rms_level_db': _sanitize_float(latest_metric.rms_level_db) if latest_metric.rms_level_db is not None else None,
+                        'sample_rate': redis_source_data.get('sample_rate', latest_metric.sample_rate),
+                        'channels': latest_metric.channels,
+                        'frames_captured': latest_metric.frames_captured,
+                        'silence_detected': _sanitize_bool(latest_metric.silence_detected) if latest_metric.silence_detected is not None else False,
+                        'buffer_utilization': _sanitize_float(latest_metric.buffer_utilization) if latest_metric.buffer_utilization is not None else 0.0,
+                        'metadata': metadata,
+                    }
+                elif metadata:
+                    metrics_payload = {'metadata': metadata}
+
+                sources.append({
+                    'name': db_config.name,
+                    'type': db_config.source_type,
+                    'status': redis_source_data.get('status', 'unknown'),
+                    'enabled': db_config.enabled,
+                    'priority': db_config.priority,
+                    'auto_start': db_config.auto_start,
+                    'description': db_config.description or '',
+                    'metrics': metrics_payload,
+                    'error_message': None,
+                    'in_memory': True,  # Running in audio-service container
+                    'icecast_url': icecast_url,
+                    'streaming': {
+                        'icecast': _sanitize_streaming_stats(icecast_stats, icecast_url)
+                    } if icecast_stats else None,
+                    'redis_mode': True,  # Indicate data came from Redis
+                })
                 continue
 
             metadata = _merge_metadata(
