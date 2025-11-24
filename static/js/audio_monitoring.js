@@ -24,9 +24,8 @@ function initializeAudioMonitoring() {
     loadAudioHealth();
     loadAudioAlerts();
 
-    // DRASTICALLY REDUCED POLLING - Rely on cache and user interactions
-    // Metrics: 10s instead of 1s (cache serves intermediate requests)
-    metricsUpdateInterval = setInterval(updateMetrics, 10000);
+    // Use faster metrics updates to keep VU meters responsive even when websockets drop
+    metricsUpdateInterval = setInterval(updateMetrics, 2000);
     // Health: 30s instead of 5s (health doesn't change that fast)
     healthUpdateInterval = setInterval(loadAudioHealth, 30000);
     // Device changes: 60s instead of 10s (hot-plug is rare)
@@ -37,6 +36,9 @@ function initializeAudioMonitoring() {
         // Cache will serve if < TTL, otherwise fetches fresh
         loadAudioSources();
     }, 2000), { passive: true });
+
+    // Perform an immediate metrics refresh so VU meters populate without delay
+    updateMetrics();
 
     // Setup event listeners
     document.getElementById('sourceType')?.addEventListener('change', updateSourceTypeConfig);

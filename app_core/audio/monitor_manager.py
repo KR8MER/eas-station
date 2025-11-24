@@ -249,6 +249,9 @@ def get_combined_metrics() -> dict:
                                 "timestamp": metrics_obj.timestamp if hasattr(metrics_obj, 'timestamp') else None,
                             })
 
+                            if hasattr(metrics_obj, "metadata") and metrics_obj.metadata:
+                                source_stats["metadata"] = metrics_obj.metadata
+
                         controller_stats["sources"][name] = source_stats
                     except Exception as e:
                         logger.error(f"Error getting stats for source '{name}': {e}")
