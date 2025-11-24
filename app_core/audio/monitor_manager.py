@@ -102,7 +102,7 @@ def initialize_eas_monitor(audio_manager, alert_callback=None, auto_start=True) 
                 # The EAS monitor will RESAMPLE from ingest_sample_rate to this 16 kHz decoder rate.
                 # Streams keep their native sample rates - only the EAS decoder input is resampled.
                 # DO NOT use 8 kHz - testing shows it's below recommended margins for production.
-                # See SAMPLE_RATE_OPTIMIZATION_COMPLETE.md for full analysis.
+                # See docs/archive/root-docs/SAMPLE_RATE_OPTIMIZATION_COMPLETE.md for full analysis.
                 target_sample_rate = 16000
             else:
                 # For legacy AudioSourceManager, use 16 kHz decoder rate

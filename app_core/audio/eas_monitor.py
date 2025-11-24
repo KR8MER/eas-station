@@ -722,7 +722,7 @@ class ContinuousEASMonitor:
         
         PERFORMANCE: Uses linear interpolation (np.interp) instead of polyphase filtering
         for optimal Raspberry Pi performance. This is 10-20x faster while maintaining
-        perfect quality for SAME tone detection. See RESAMPLING_PERFORMANCE_ANALYSIS.md
+        perfect quality for SAME tone detection. See docs/archive/root-docs/RESAMPLING_PERFORMANCE_ANALYSIS.md
         
         Args:
             samples: Input audio samples at source_sample_rate

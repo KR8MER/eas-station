@@ -303,7 +303,7 @@ Batch processing has no place in real-time emergency alert detection.
 - **Current Implementation**: `app_core/audio/streaming_same_decoder.py`
 - **Monitor Integration**: `app_core/audio/eas_monitor.py`
 - **File Decoder**: `app_utils/eas_decode.py` (for verification only)
-- **CPU Fix History**: `CPU_FIX_SUMMARY_FINAL.md`, `EAS_MONITOR_CPU_FIX.md`
+- **CPU Fix History**: `../archive/root-docs/CPU_FIX_SUMMARY_FINAL.md`, `../archive/root-docs/EAS_MONITOR_CPU_FIX.md`
 - **Commercial Reference**: DASDEC3 User Manual (real-time FSK decoder)
 - **Open Source Reference**: multimon-ng (streaming SAME decoder)
 
