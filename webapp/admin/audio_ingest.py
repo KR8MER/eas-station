@@ -1267,6 +1267,15 @@ def api_get_audio_sources():
 
             if use_redis and db_config.name in redis_sources:
                 redis_source_data = redis_sources[db_config.name]
+
+                if not isinstance(redis_source_data, dict):
+                    logger.warning(
+                        "Redis audio source data for %s is not a dict (type=%s); ignoring",
+                        db_config.name,
+                        type(redis_source_data),
+                    )
+                    redis_source_data = {}
+
                 logger.debug(f"Found Redis data for source '{db_config.name}': {redis_source_data}")
             else:
                 # Fall back to local controller (integrated mode or Redis unavailable)
@@ -1297,34 +1306,63 @@ def api_get_audio_sources():
                     }
                 )
 
-                redis_timestamp = redis_source_data.get('timestamp')
+                redis_timestamp = redis_source_data.get('timestamp') if redis_source_data else None
                 metrics_timestamp = None
                 if isinstance(redis_timestamp, (int, float)):
                     metrics_timestamp = datetime.fromtimestamp(redis_timestamp).isoformat()
+                elif isinstance(redis_timestamp, datetime):
+                    metrics_timestamp = redis_timestamp.isoformat()
                 elif isinstance(redis_timestamp, str):
                     metrics_timestamp = redis_timestamp
                 elif latest_metric and latest_metric.timestamp:
                     metrics_timestamp = latest_metric.timestamp.isoformat()
 
+                def _first_defined(*candidates):
+                    for candidate in candidates:
+                        if candidate is not None:
+                            return candidate
+                    return None
+
                 metrics_payload: Optional[Dict[str, Any]] = None
                 if latest_metric or redis_source_data:
+                    peak_value = _first_defined(
+                        redis_source_data.get('peak_level_db') if redis_source_data else None,
+                        latest_metric.peak_level_db if latest_metric else None,
+                    )
+                    rms_value = _first_defined(
+                        redis_source_data.get('rms_level_db') if redis_source_data else None,
+                        latest_metric.rms_level_db if latest_metric else None,
+                    )
+                    buffer_utilization_value = _first_defined(
+                        redis_source_data.get('buffer_utilization') if redis_source_data else None,
+                        latest_metric.buffer_utilization if latest_metric else None,
+                        0.0,
+                    )
+
                     metrics_payload = {
                         'timestamp': metrics_timestamp,
-                        'peak_level_db': _sanitize_float(
-                            redis_source_data.get('peak_level_db', latest_metric.peak_level_db if latest_metric else None)
+                        'peak_level_db': _sanitize_float(peak_value) if peak_value is not None else None,
+                        'rms_level_db': _sanitize_float(rms_value) if rms_value is not None else None,
+                        'sample_rate': _first_defined(
+                            redis_source_data.get('sample_rate') if redis_source_data else None,
+                            latest_metric.sample_rate if latest_metric else None,
                         ),
-                        'rms_level_db': _sanitize_float(
-                            redis_source_data.get('rms_level_db', latest_metric.rms_level_db if latest_metric else None)
+                        'channels': _first_defined(
+                            redis_source_data.get('channels') if redis_source_data else None,
+                            latest_metric.channels if latest_metric else None,
                         ),
-                        'sample_rate': redis_source_data.get('sample_rate', latest_metric.sample_rate if latest_metric else None),
-                        'channels': redis_source_data.get('channels', latest_metric.channels if latest_metric else None),
-                        'frames_captured': redis_source_data.get('frames_captured', latest_metric.frames_captured if latest_metric else None),
+                        'frames_captured': _first_defined(
+                            redis_source_data.get('frames_captured') if redis_source_data else None,
+                            latest_metric.frames_captured if latest_metric else None,
+                        ),
                         'silence_detected': _sanitize_bool(
-                            redis_source_data.get('silence_detected', latest_metric.silence_detected if latest_metric else False)
+                            _first_defined(
+                                redis_source_data.get('silence_detected') if redis_source_data else None,
+                                latest_metric.silence_detected if latest_metric else False,
+                                False,
+                            )
                         ),
-                        'buffer_utilization': _sanitize_float(
-                            redis_source_data.get('buffer_utilization', latest_metric.buffer_utilization if latest_metric else 0.0)
-                        ),
+                        'buffer_utilization': _sanitize_float(buffer_utilization_value),
                         'metadata': metadata,
                     }
                 elif metadata:
@@ -1333,7 +1371,7 @@ def api_get_audio_sources():
                 sources.append({
                     'name': db_config.name,
                     'type': db_config.source_type,
-                    'status': redis_source_data.get('status', 'unknown'),
+                    'status': _first_defined(redis_source_data.get('status') if redis_source_data else None, 'unknown'),
                     'enabled': db_config.enabled,
                     'priority': db_config.priority,
                     'auto_start': db_config.auto_start,

@@ -284,7 +284,7 @@
                             <span>Tools</span>
                         </a>
                         <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="toolsDropdown">
-                            <li><h6 class="dropdown-header">System Health</h6></li>
+                            <li><h6 class="dropdown-header">Observability</h6></li>
                             <li>
                                 <a class="dropdown-item" href="/diagnostics">
                                     <i class="fas fa-stethoscope"></i> System Diagnostics
@@ -301,6 +301,35 @@
                                     <i class="fas fa-file-alt"></i> System Logs
                                 </a>
                             </li>
+                            {% endif %}
+
+                            {% if show_tools_analytics %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li><h6 class="dropdown-header">Analytics & Reporting</h6></li>
+                            <li>
+                                <a class="dropdown-item" href="/analytics">
+                                    <i class="fas fa-chart-line"></i> Analytics Dashboard
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="/stats">
+                                    <i class="fas fa-chart-bar"></i> Alert Statistics
+                                </a>
+                            </li>
+                            {% if can_view_logs %}
+                            <li>
+                                <a class="dropdown-item" href="/admin/audit-logs">
+                                    <i class="fas fa-clipboard-list"></i> Audit Logs
+                                </a>
+                            </li>
+                            {% endif %}
+                            {% if can_manage_config %}
+                            <li>
+                                <a class="dropdown-item" href="/admin/operations">
+                                    <i class="fas fa-cogs"></i> Operations Report
+                                </a>
+                            </li>
+                            {% endif %}
                             {% endif %}
 
                             {% if show_tools_testing %}
@@ -329,7 +358,7 @@
 
                             {% if show_tools_data %}
                             <li><hr class="dropdown-divider"></li>
-                            <li><h6 class="dropdown-header">Data & Backup</h6></li>
+                            <li><h6 class="dropdown-header">Data Continuity</h6></li>
                             {% if can_export_alerts %}
                             <li>
                                 <a class="dropdown-item" href="/export/alerts">
@@ -341,35 +370,6 @@
                             <li>
                                 <a class="dropdown-item" href="/admin/backups">
                                     <i class="fas fa-database"></i> Backup Manager
-                                </a>
-                            </li>
-                            {% endif %}
-                            {% endif %}
-
-                            {% if show_tools_analytics %}
-                            <li><hr class="dropdown-divider"></li>
-                            <li><h6 class="dropdown-header">Analytics & Reporting</h6></li>
-                            <li>
-                                <a class="dropdown-item" href="/analytics">
-                                    <i class="fas fa-chart-line"></i> Analytics Dashboard
-                                </a>
-                            </li>
-                            <li>
-                                <a class="dropdown-item" href="/stats">
-                                    <i class="fas fa-chart-bar"></i> Alert Statistics
-                                </a>
-                            </li>
-                            {% if can_view_logs %}
-                            <li>
-                                <a class="dropdown-item" href="/admin/audit-logs">
-                                    <i class="fas fa-clipboard-list"></i> Audit Logs
-                                </a>
-                            </li>
-                            {% endif %}
-                            {% if can_manage_config %}
-                            <li>
-                                <a class="dropdown-item" href="/admin/operations">
-                                    <i class="fas fa-cogs"></i> Operations Report
                                 </a>
                             </li>
                             {% endif %}
