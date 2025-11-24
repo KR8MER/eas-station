@@ -52,6 +52,28 @@ SystemHealth = Dict[str, Any]
 
 NVME_DATA_UNIT_BYTES = 512_000
 
+_AUDIO_PROCESS_KEYWORDS = (
+    "ffmpeg",
+    "sox",
+    "gst-launch",
+    "gst-launch-1.0",
+    "arecord",
+    "aplay",
+    "liquidsoap",
+    "pulseaudio",
+    "jackd",
+    "audio_service",
+    "eas_decode",
+    "eas_detection",
+)
+
+
+def _is_audio_processing_process(name: Optional[str], cmdline: Optional[str]) -> bool:
+    """Return True when process metadata suggests active audio decoding/encoding."""
+
+    haystack = " ".join(filter(None, [name, cmdline])).lower()
+    return any(keyword in haystack for keyword in _AUDIO_PROCESS_KEYWORDS)
+
 
 def build_system_health_snapshot(db, logger) -> SystemHealth:
     """Collect detailed system health metrics."""
@@ -197,6 +219,10 @@ def build_system_health_snapshot(db, logger) -> SystemHealth:
                 [p for p in psutil.process_iter(["status"]) if p.info["status"] == psutil.STATUS_RUNNING]
             ),
             "top_processes": [],
+            "audio_decoding": {
+                "cpu_percent_total": 0.0,
+                "processes": [],
+            },
         }
 
         try:
@@ -216,31 +242,52 @@ def build_system_health_snapshot(db, logger) -> SystemHealth:
             time.sleep(0.3)
 
             processes: List[Dict[str, Any]] = []
+            audio_processes: List[Dict[str, Any]] = []
+            audio_cpu_total = 0.0
             for proc, metadata in observed_processes:
                 try:
                     cpu_percent = proc.cpu_percent(None)
                     memory_percent = proc.memory_percent()
                     name = metadata.get("name") or proc.name()
+                    cmdline_list = proc.cmdline()
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     continue
+
+                cmdline = " ".join(cmdline_list[:12]) if cmdline_list else None
 
                 if cpu_percent is None:
                     cpu_percent = 0.0
                 if memory_percent is None:
                     memory_percent = 0.0
 
-                processes.append(
-                    {
-                        "pid": metadata.get("pid", proc.pid),
-                        "name": name,
-                        "username": metadata.get("username"),
-                        "cpu_percent": cpu_percent,
-                        "memory_percent": memory_percent,
-                    }
-                )
+                process_entry = {
+                    "pid": metadata.get("pid", proc.pid),
+                    "name": name,
+                    "username": metadata.get("username"),
+                    "cpu_percent": cpu_percent,
+                    "memory_percent": memory_percent,
+                }
+
+                if cmdline:
+                    process_entry["command"] = cmdline
+
+                processes.append(process_entry)
+
+                if _is_audio_processing_process(name, cmdline):
+                    audio_cpu_total += cpu_percent
+                    audio_processes.append({
+                        **process_entry,
+                        "command": cmdline or name,
+                    })
 
             processes.sort(key=lambda entry: entry.get("cpu_percent", 0) or 0, reverse=True)
+            audio_processes.sort(key=lambda entry: entry.get("cpu_percent", 0) or 0, reverse=True)
+
             process_info["top_processes"] = processes[:10]
+            process_info["audio_decoding"] = {
+                "cpu_percent_total": round(audio_cpu_total, 1),
+                "processes": audio_processes[:5],
+            }
         except Exception:
             pass
 

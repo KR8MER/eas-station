@@ -25,18 +25,25 @@
         .health-card.success { 
             border-left-color: var(--success-color);
         }
-        .metric-row { 
-            margin-bottom: 1rem;
+        .metric-row {
+            margin-bottom: 0.85rem;
         }
-        .metric-label { 
+        .metric-label {
             font-weight: 600;
             color: var(--text-secondary);
         }
-        .metric-value { 
-            font-family: 'Courier New', monospace;
+        .metric-value {
+            font-family: 'Inter', 'Roboto Mono', 'SFMono-Regular', 'Courier New', monospace;
+            font-variant-numeric: tabular-nums;
+            font-weight: 600;
+            font-size: 0.97rem;
             color: var(--text-color);
         }
-        .progress-sm { 
+        .display-number {
+            font-size: 1.2rem;
+            letter-spacing: 0.01em;
+        }
+        .progress-sm {
             height: 8px;
             background-color: var(--border-color);
             border-radius: var(--radius-sm);
@@ -56,14 +63,18 @@
         .status-badge { 
             font-size: 0.8em;
         }
-        .system-overview { 
+        .system-overview {
             background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
             color: white;
             border-radius: var(--radius-lg);
             box-shadow: 0 4px 20px var(--shadow-color);
             margin-bottom: 1.5rem;
         }
-        .system-overview .card-body { 
+        .system-overview h2 {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+        .system-overview .card-body {
             background: rgba(255,255,255,0.05);
             backdrop-filter: blur(10px);
             border-radius: var(--radius-lg);
@@ -121,7 +132,7 @@
             font-size: 0.75rem;
             color: var(--text-muted);
         }
-        .hardware-badge { 
+        .hardware-badge {
             display: inline-block;
             padding: 0.25rem 0.5rem;
             margin: 0 0.25rem 0.25rem 0;
@@ -139,6 +150,11 @@
         }
         .table-hover tbody tr:hover {
             background-color: var(--bg-color);
+        }
+        .health-card h5,
+        .health-card h6 {
+            font-weight: 700;
+            letter-spacing: 0.01em;
         }
         .alert {
             border-radius: var(--radius-md);
@@ -165,6 +181,14 @@
             width: auto;
             margin-right: 1rem;
             filter: brightness(1.1);
+        }
+        .process-table {
+            font-size: 0.95rem;
+        }
+        .process-command {
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            word-break: break-all;
         }
     </style>
 {% endblock %}
@@ -1259,11 +1283,57 @@
             <div class="col-12" id="processes-card">
                 <div class="card health-card">
                     <div class="card-body">
-                        <h5><i class="fas fa-tasks section-icon"></i> Top Processes (CPU Usage)</h5>
-                        
+                        {% set audio_info = processes.audio_decoding or {} %}
+                        <div class="row align-items-center g-3 mb-3 flex-md-nowrap">
+                            <div class="col-auto">
+                                <div class="metric-label text-uppercase small">Audio decoding CPU</div>
+                                <div class="metric-value display-number">
+                                    {{ "%.1f"|format(audio_info.cpu_percent_total or 0) }}%
+                                </div>
+                            </div>
+                            <div class="col">
+                                <small class="text-muted d-block">Tracks ffmpeg, sox, gst-launch, arecord/aplay, PulseAudio, and EAS decoding helpers.</small>
+                            </div>
+                        </div>
+
+                        {% set audio_processes = audio_info.processes or [] %}
+                        {% if audio_processes %}
+                        <h6 class="text-muted fw-semibold">Audio-related processes</h6>
+                        <div class="table-responsive mb-3">
+                            <table class="table table-sm table-hover process-table">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>PID</th>
+                                        <th>Process</th>
+                                        <th>CPU %</th>
+                                        <th>Memory %</th>
+                                        <th>Command</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for proc in audio_processes[:5] %}
+                                    <tr>
+                                        <td><code>{{ proc.pid or 'N/A' }}</code></td>
+                                        <td>{{ proc.name or 'Unknown' }}</td>
+                                        <td><span class="metric-value">{{ "%.1f"|format(proc.cpu_percent or 0) }}%</span></td>
+                                        <td><span class="metric-value">{{ "%.1f"|format(proc.memory_percent or 0) }}%</span></td>
+                                        <td class="process-command">
+                                            {% if proc.command %}
+                                                {{ proc.command[:120] }}{% if proc.command|length > 120 %}...{% endif %}
+                                            {% else %}
+                                                <span class="text-muted">—</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% endif %}
+
                         {% if processes.top_processes %}
                         <div class="table-responsive">
-                            <table class="table table-sm table-hover">
+                            <table class="table table-sm table-hover process-table">
                                 <thead class="table-light">
                                     <tr>
                                         <th>PID</th>
@@ -1271,6 +1341,7 @@
                                         <th>CPU %</th>
                                         <th>Memory %</th>
                                         <th>User</th>
+                                        <th>Command</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -1293,6 +1364,13 @@
                                             <span class="metric-value">{{ "%.1f"|format(proc.memory_percent or 0) }}%</span>
                                         </td>
                                         <td><small class="text-muted">{{ proc.username or 'N/A' }}</small></td>
+                                        <td class="process-command">
+                                            {% if proc.command %}
+                                                {{ proc.command[:120] }}{% if proc.command|length > 120 %}...{% endif %}
+                                            {% else %}
+                                                <span class="text-muted">—</span>
+                                            {% endif %}
+                                        </td>
                                     </tr>
                                     {% endfor %}
                                 </tbody>
@@ -2742,6 +2820,15 @@
                 ? processes.top_processes.slice(0, 10)
                 : [];
 
+            const audioInfo = (processes && processes.audio_decoding) || {};
+            const audioProcesses = Array.isArray(audioInfo.processes)
+                ? audioInfo.processes.slice(0, 5)
+                : [];
+
+            const commandCell = (cmd) => cmd
+                ? `<div class="process-command">${escapeHtml(cmd.length > 120 ? `${cmd.substring(0, 120)}...` : cmd)}</div>`
+                : '<span class="text-muted">—</span>';
+
             const tableBody = processList
                 .map((proc) => {
                     const name = proc.name || 'Unknown';
@@ -2754,15 +2841,60 @@
                             <td><span class="metric-value">${formatPercent(proc.cpu_percent)}%</span></td>
                             <td><span class="metric-value">${formatPercent(proc.memory_percent)}%</span></td>
                             <td><small class="text-muted">${escapeHtml(proc.username || 'N/A')}</small></td>
+                            <td>${commandCell(proc.command)}</td>
                         </tr>
                     `;
                 })
                 .join('');
 
+            const audioRows = audioProcesses
+                .map((proc) => `
+                        <tr>
+                            <td><code>${escapeHtml(proc.pid ?? 'N/A')}</code></td>
+                            <td>${escapeHtml(proc.name || 'Unknown')}</td>
+                            <td><span class="metric-value">${formatPercent(proc.cpu_percent)}%</span></td>
+                            <td><span class="metric-value">${formatPercent(proc.memory_percent)}%</span></td>
+                            <td>${commandCell(proc.command)}</td>
+                        </tr>
+                    `)
+                .join('');
+
+            const audioSection = audioProcesses.length
+                ? `
+                        <h6 class="text-muted fw-semibold">Audio-related processes</h6>
+                        <div class="table-responsive mb-3">
+                            <table class="table table-sm table-hover process-table">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>PID</th>
+                                        <th>Process</th>
+                                        <th>CPU %</th>
+                                        <th>Memory %</th>
+                                        <th>Command</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${audioRows}
+                                </tbody>
+                            </table>
+                        </div>
+                    `
+                : '';
+
             const content = tableBody
                 ? `
+                        <div class="row align-items-center g-3 mb-3 flex-md-nowrap">
+                            <div class="col-auto">
+                                <div class="metric-label text-uppercase small">Audio decoding CPU</div>
+                                <div class="metric-value display-number">${formatPercent(audioInfo.cpu_percent_total)}%</div>
+                            </div>
+                            <div class="col">
+                                <small class="text-muted d-block">Tracks ffmpeg, sox, gst-launch, arecord/aplay, PulseAudio, and EAS decoding helpers.</small>
+                            </div>
+                        </div>
+                        ${audioSection}
                         <div class="table-responsive">
-                            <table class="table table-sm table-hover">
+                            <table class="table table-sm table-hover process-table">
                                 <thead class="table-light">
                                     <tr>
                                         <th>PID</th>
@@ -2770,6 +2902,7 @@
                                         <th>CPU %</th>
                                         <th>Memory %</th>
                                         <th>User</th>
+                                        <th>Command</th>
                                     </tr>
                                 </thead>
                                 <tbody>
