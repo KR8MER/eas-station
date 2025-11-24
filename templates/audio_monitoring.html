@@ -2117,6 +2117,44 @@ function connectAudioMonitoringSocket() {
 
 let socket = null;
 let socketConnected = false;
+let levelIntervalHandle = null;
+let easMonitorIntervalHandle = null;
+
+function startLevelPolling() {
+    // Poll for audio level metrics every 500ms when WebSocket unavailable
+    if (levelIntervalHandle) {
+        clearInterval(levelIntervalHandle);
+    }
+
+    levelIntervalHandle = setInterval(async () => {
+        try {
+            const response = await fetch('/api/audio/metrics');
+            if (response.ok) {
+                const data = await response.json();
+                if (data && data.audio_metrics) {
+                    updateLevelMetersFromSnapshot(data.audio_metrics);
+                }
+            }
+        } catch (error) {
+            console.error('Error polling audio levels:', error);
+        }
+    }, 500);
+}
+
+function startEASMonitorPolling() {
+    // Poll for EAS monitor status every 2 seconds when WebSocket unavailable
+    if (easMonitorIntervalHandle) {
+        clearInterval(easMonitorIntervalHandle);
+    }
+
+    easMonitorIntervalHandle = setInterval(async () => {
+        try {
+            await loadEASMonitorStatus();
+        } catch (error) {
+            console.error('Error polling EAS monitor status:', error);
+        }
+    }, 2000);
+}
 
 function initializeWebSocket() {
     try {
