@@ -10,6 +10,7 @@ let healthUpdateInterval = null;
 let deviceMonitorInterval = null;
 let lastDeviceList = [];
 const lastMetricTimestamps = {};
+let anonymousIdCounter = 0;
 const DEFAULT_LEVEL_DB = -120;
 
 // Initialize when DOM is loaded
@@ -117,7 +118,13 @@ async function loadAudioSources() {
         const response = await fetchFunc('/api/audio/sources');
         const data = await response.json();
 
-        audioSources = data.sources || [];
+        audioSources = (data.sources || []).filter(source => {
+            const hasId = hasUsableId(source?.id);
+            if (!hasId) {
+                console.warn('Skipping audio source with missing id', source);
+            }
+            return hasId;
+        });
         renderAudioSources();
 
         // Update counts
@@ -134,6 +141,7 @@ async function loadAudioSources() {
  */
 function renderAudioSources() {
     const container = document.getElementById('sources-list');
+    if (!container) return;
 
     if (audioSources.length === 0) {
         container.innerHTML = `
@@ -154,9 +162,24 @@ function renderAudioSources() {
 /**
  * Sanitize ID for use in HTML element IDs and CSS selectors
  */
+function hasUsableId(id) {
+    return id !== undefined && id !== null && String(id).trim() !== '';
+}
+
 function sanitizeId(id) {
+    if (id === undefined || id === null) {
+        anonymousIdCounter += 1;
+        return `unknown-${anonymousIdCounter}`;
+    }
+
+    const rawId = String(id);
+    if (rawId.trim() === '') {
+        anonymousIdCounter += 1;
+        return `unknown-${anonymousIdCounter}`;
+    }
+
     // Replace characters that are problematic in CSS selectors and HTML IDs
-    return id.replace(/[^a-zA-Z0-9_-]/g, '_');
+    return rawId.replace(/[^a-zA-Z0-9_-]/g, '_');
 }
 
 /**
@@ -329,6 +352,8 @@ function parseMetricTimestamp(timestamp) {
 }
 
 function renderMetricTimestamp(sourceId) {
+    if (!hasUsableId(sourceId)) return;
+
     const safeId = sanitizeId(sourceId);
     const target = document.getElementById(`metric-timestamp-${safeId}`);
     if (!target) return;
@@ -352,7 +377,10 @@ function renderMetricTimestamp(sourceId) {
 
 function refreshMetricTimestampIndicators() {
     if (!Array.isArray(audioSources)) return;
-    audioSources.forEach(source => renderMetricTimestamp(source.id));
+    audioSources.forEach(source => {
+        if (!hasUsableId(source?.id)) return;
+        renderMetricTimestamp(source.id);
+    });
 }
 
 /**
@@ -396,6 +424,11 @@ async function updateMetrics() {
         }
 
         liveMetrics.forEach(metric => {
+            if (!hasUsableId(metric?.source_id)) {
+                console.warn('Skipping metric with missing source_id', metric);
+                return;
+            }
+
             if (hasMeaningfulLevels(metric)) {
                 const parsedTimestamp = parseMetricTimestamp(metric.timestamp) || new Date();
                 lastMetricTimestamps[metric.source_id] = parsedTimestamp;
