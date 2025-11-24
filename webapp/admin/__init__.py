@@ -33,6 +33,7 @@ from .dashboard import register_dashboard_routes
 from .environment import register_environment_routes
 from .intersections import register_intersection_routes
 from .maintenance import register_maintenance_routes
+from .health_endpoints import register_health_routes
 
 
 def register(app, logger):
@@ -49,6 +50,7 @@ def register(app, logger):
     register_boundary_routes(app, logger)
     register_auth_routes(app, logger)
     register_dashboard_routes(app, logger, eas_config)
+    register_health_routes(app)  # New health check endpoints for separated architecture
 
     # Note: Audio controller initialization removed for separated architecture.
     # In separated architecture, audio processing runs in dedicated audio-service container.

@@ -468,7 +468,7 @@ def publish_metrics_to_redis(metrics):
 
 def main():
     """Main service loop."""
-    global _running
+    global _running, _audio_controller
 
     logger.info("=" * 80)
     logger.info("EAS Station - Standalone Audio Processing Service")
@@ -498,6 +498,7 @@ def main():
         # Initialize audio controller
         logger.info("Initializing audio controller...")
         audio_controller = initialize_audio_controller(app)
+        _audio_controller = audio_controller  # Store globally for command subscriber
 
         if not audio_controller:
             logger.error("Failed to initialize audio controller")
@@ -534,12 +535,36 @@ def main():
             logger.error("Failed to initialize EAS monitor")
             return 1
 
+        # Initialize Redis Pub/Sub command subscriber
+        logger.info("Starting Redis command subscriber...")
+        command_subscriber = None
+        subscriber_thread = None
+        try:
+            from app_core.audio.redis_commands import AudioCommandSubscriber
+            import threading
+
+            command_subscriber = AudioCommandSubscriber(audio_controller)
+
+            # Start subscriber in background thread
+            subscriber_thread = threading.Thread(
+                target=command_subscriber.start,
+                daemon=True,
+                name="RedisCommandSubscriber"
+            )
+            subscriber_thread.start()
+            logger.info("✅ Redis command subscriber started")
+        except Exception as e:
+            logger.warning(f"Failed to start command subscriber: {e}")
+            logger.warning("   Audio control commands from app will not work")
+            # Continue - metrics publishing still works
+
         logger.info("=" * 80)
         logger.info("✅ Audio service started successfully")
         logger.info("   - Audio ingestion: ACTIVE")
         logger.info(f"   - Icecast streaming: {'ACTIVE' if auto_streaming else 'DISABLED'}")
         logger.info("   - EAS monitoring: ACTIVE")
         logger.info("   - Metrics publishing: ACTIVE")
+        logger.info(f"   - Command subscriber: {'ACTIVE' if command_subscriber else 'DISABLED'}")
         logger.info("=" * 80)
 
         # Main loop: publish metrics every 5 seconds
@@ -573,6 +598,14 @@ def main():
                 time.sleep(5)
 
         logger.info("Shutting down audio service...")
+
+        # Stop command subscriber
+        if command_subscriber:
+            logger.info("Stopping command subscriber...")
+            try:
+                command_subscriber.stop()
+            except Exception as e:
+                logger.warning(f"Error stopping command subscriber: {e}")
 
         # Stop EAS monitor
         if _eas_monitor:
