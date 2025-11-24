@@ -275,11 +275,17 @@ async function updateMetrics() {
     try {
         const fetchFunc = window.cachedFetch || fetch;
         const response = await fetchFunc('/api/audio/metrics', { cache: 'no-store' });
+
+        if (!response.ok) {
+            console.warn('Metrics request failed', response.status);
+            return;
+        }
+
         const data = await response.json();
 
         // API returns metrics at the top level while WebSocket wraps them
         const snapshot = data?.audio_metrics || data;
-        const liveMetrics = snapshot.live_metrics || [];
+        const liveMetrics = snapshot?.live_metrics || [];
 
         if (!Array.isArray(liveMetrics)) {
             console.debug('No live metrics found in snapshot', snapshot);
