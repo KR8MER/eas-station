@@ -2051,26 +2051,30 @@ def api_discover_audio_devices():
 def api_get_waveform(source_name: str):
     """Get waveform data for a specific audio source.
 
-    Note: In separated architecture, waveform data is not available through Redis
-    due to bandwidth constraints. VU meters (peak/RMS levels) work via /api/audio/metrics.
+    Reads waveform data from Redis, published by the audio-service.
     """
     try:
-        # SEPARATED ARCHITECTURE: Waveform data not available
-        # Waveform visualization is optional. VU meters use /api/audio/metrics instead.
-        # If waveform visualization is critical, consider:
-        # 1. Running audio processing in app container (not recommended)
-        # 2. Adding waveform publishing to audio-service (high Redis bandwidth)
-        # 3. Using alternative visualization (spectrum analyzer, etc.)
-
-        return jsonify({
-            'error': 'Waveform data not available in separated architecture',
-            'hint': 'VU meters (peak/RMS levels) available via /api/audio/metrics',
-            'source_name': source_name,
-            'waveform': [],  # Empty array for compatibility
-            'sample_count': 0,
-            'timestamp': time.time(),
-            'status': 'unavailable',
-        }), 503
+        from app_core.redis_client import get_redis_client
+        
+        # Get waveform data from Redis
+        r = get_redis_client()
+        waveform_key = f"eas:waveform:{source_name}"
+        waveform_json = r.get(waveform_key)
+        
+        if not waveform_json:
+            # No waveform data available - source may not be running
+            return jsonify({
+                'source_name': source_name,
+                'waveform': [],
+                'sample_count': 0,
+                'timestamp': time.time(),
+                'status': 'no_data',
+                'message': 'No waveform data available - source may not be running'
+            }), 200
+        
+        # Parse and return waveform data
+        waveform_data = json.loads(waveform_json)
+        return jsonify(waveform_data), 200
 
     except Exception as exc:
         logger.error('Error getting waveform for %s: %s', source_name, exc)
@@ -2080,29 +2084,33 @@ def api_get_waveform(source_name: str):
 def api_get_spectrogram(source_name: str):
     """Get spectrogram data for a specific audio source (for waterfall display).
 
-    Note: In separated architecture, spectrogram data is not available through Redis
-    due to bandwidth constraints. VU meters (peak/RMS levels) work via /api/audio/metrics.
+    Reads spectrogram data from Redis, published by the audio-service.
     """
     try:
-        # SEPARATED ARCHITECTURE: Spectrogram data not available
-        # Spectrogram visualization is optional. VU meters use /api/audio/metrics instead.
-        # If spectrogram visualization is critical, consider:
-        # 1. Running audio processing in app container (not recommended)
-        # 2. Adding spectrogram publishing to audio-service (very high Redis bandwidth)
-        # 3. Using alternative visualization (simple FFT, spectrum bars, etc.)
-
-        return jsonify({
-            'error': 'Spectrogram data not available in separated architecture',
-            'hint': 'VU meters (peak/RMS levels) available via /api/audio/metrics',
-            'source_name': source_name,
-            'spectrogram': [],  # Empty array for compatibility
-            'time_frames': 0,
-            'frequency_bins': 0,
-            'sample_rate': 48000,  # Default value
-            'fft_size': 1024,  # Default value
-            'timestamp': time.time(),
-            'status': 'unavailable',
-        }), 503
+        from app_core.redis_client import get_redis_client
+        
+        # Get spectrogram data from Redis
+        r = get_redis_client()
+        spectrogram_key = f"eas:spectrogram:{source_name}"
+        spectrogram_json = r.get(spectrogram_key)
+        
+        if not spectrogram_json:
+            # No spectrogram data available - source may not be running
+            return jsonify({
+                'source_name': source_name,
+                'spectrogram': [],
+                'time_frames': 0,
+                'frequency_bins': 0,
+                'sample_rate': 48000,
+                'fft_size': 1024,
+                'timestamp': time.time(),
+                'status': 'no_data',
+                'message': 'No spectrogram data available - source may not be running'
+            }), 200
+        
+        # Parse and return spectrogram data
+        spectrogram_data = json.loads(spectrogram_json)
+        return jsonify(spectrogram_data), 200
 
     except Exception as exc:
         logger.error('Error getting spectrogram for %s: %s', source_name, exc)
