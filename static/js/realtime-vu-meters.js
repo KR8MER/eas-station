@@ -33,12 +33,19 @@ function initializeRealtimeVUMeter(audioElement, sourceName) {
         }
 
         const audioContext = new AudioContext();
-        
+
+        // Resume audio context if it's suspended (required by browser autoplay policies)
+        if (audioContext.state === 'suspended') {
+            audioContext.resume().catch(err => {
+                console.debug('Could not resume audio context:', err);
+            });
+        }
+
         // Create analyzer node
         const analyzer = audioContext.createAnalyser();
         analyzer.fftSize = 256; // Small FFT for fast response
         analyzer.smoothingTimeConstant = 0.3; // Moderate smoothing for realistic VU behavior
-        
+
         // Create source from audio element (only if not already connected)
         // Check if element already has a source node to avoid DOMException
         let source;
@@ -49,28 +56,43 @@ function initializeRealtimeVUMeter(audioElement, sourceName) {
             console.debug(`Audio element for ${sourceName} already has a source node - skipping Web Audio VU meter`);
             return;
         }
-        
-        // Connect: source -> analyzer -> destination
+
+        // CRITICAL: Connect source -> analyzer -> destination
+        // This routing allows VU meter analysis while passing audio to speakers
         source.connect(analyzer);
         analyzer.connect(audioContext.destination);
-        
+
         // Store analyzer info
         const bufferLength = analyzer.frequencyBinCount;
         const dataArray = new Uint8Array(bufferLength);
-        
+
         // Cache DOM elements to avoid repeated lookups at 60Hz
         const safeId = sanitizeId(sourceName);
         const peakBar = document.getElementById(`peak-meter-${safeId}`);
         const rmsBar = document.getElementById(`rms-meter-${safeId}`);
         const peakLabel = document.getElementById(`peak-label-${safeId}`);
         const rmsLabel = document.getElementById(`rms-label-${safeId}`);
-        
+
+        // Listen for audio context state changes and resume if suspended
+        const resumeAudioContext = () => {
+            if (audioContext.state === 'suspended') {
+                audioContext.resume().catch(err => {
+                    console.debug('Could not resume audio context:', err);
+                });
+            }
+        };
+
+        // Resume context when user interacts with audio element
+        audioElement.addEventListener('play', resumeAudioContext);
+        audioElement.addEventListener('playing', resumeAudioContext);
+
         audioAnalyzers.set(sourceName, {
             audioContext,
             analyzer,
             dataArray,
             bufferLength,
             audioElement,
+            source,
             lastPeak: -120,
             lastRMS: -120,
             peakHold: -120,
@@ -81,9 +103,9 @@ function initializeRealtimeVUMeter(audioElement, sourceName) {
             peakLabel,
             rmsLabel
         });
-        
-        console.log(`Real-time VU meter initialized for ${sourceName}`);
-        
+
+        console.log(`Real-time VU meter initialized for ${sourceName} (audio context state: ${audioContext.state})`);
+
         // Start animation loop if not already running
         if (!animationFrameId) {
             startVUMeterAnimation();
@@ -100,6 +122,22 @@ function cleanupRealtimeVUMeter(sourceName) {
     const analyzer = audioAnalyzers.get(sourceName);
     if (analyzer) {
         try {
+            // Disconnect the source and analyzer nodes before closing context
+            if (analyzer.source) {
+                try {
+                    analyzer.source.disconnect();
+                } catch (e) {
+                    console.debug(`Source already disconnected for ${sourceName}`);
+                }
+            }
+            if (analyzer.analyzer) {
+                try {
+                    analyzer.analyzer.disconnect();
+                } catch (e) {
+                    console.debug(`Analyzer already disconnected for ${sourceName}`);
+                }
+            }
+            // Close the audio context
             if (analyzer.audioContext && analyzer.audioContext.state !== 'closed') {
                 analyzer.audioContext.close();
             }
