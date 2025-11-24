@@ -1721,26 +1721,71 @@ def api_stop_audio_source(source_name: str):
 def api_get_audio_metrics():
     """Get real-time metrics for all audio sources."""
     try:
-        # Get in-memory metrics from controller
-        controller = _get_audio_controller()
+        # SEPARATED ARCHITECTURE: Try Redis first
+        redis_metrics = _read_audio_metrics_from_redis()
         source_metrics = []
+        broadcast_stats = {}
+        active_source = None
 
-        for source_name, adapter in controller._sources.items():
-            if adapter.metrics:
-                source_metrics.append({
-                    'source_id': source_name,
-                    'source_name': adapter.config.name,
-                    'source_type': adapter.config.source_type.value,
-                    'source_status': adapter.status.value,
-                    'timestamp': adapter.metrics.timestamp,
-                    'peak_level_db': _sanitize_float(adapter.metrics.peak_level_db),
-                    'rms_level_db': _sanitize_float(adapter.metrics.rms_level_db),
-                    'sample_rate': adapter.metrics.sample_rate,
-                    'channels': adapter.metrics.channels,
-                    'frames_captured': adapter.metrics.frames_captured,
-                    'silence_detected': _sanitize_bool(adapter.metrics.silence_detected),
-                    'buffer_utilization': _sanitize_float(adapter.metrics.buffer_utilization),
-                })
+        if redis_metrics:
+            # Parse audio controller data from Redis
+            try:
+                import json
+                audio_controller_data = redis_metrics.get('audio_controller')
+                if isinstance(audio_controller_data, str):
+                    audio_controller_data = json.loads(audio_controller_data)
+
+                if audio_controller_data:
+                    active_source = audio_controller_data.get('active_source')
+                    redis_sources = audio_controller_data.get('sources', {})
+
+                    # Build source metrics from Redis data (limited info)
+                    for source_name, source_data in redis_sources.items():
+                        source_metrics.append({
+                            'source_id': source_name,
+                            'source_name': source_name,
+                            'source_type': 'unknown',  # Not in Redis data
+                            'source_status': source_data.get('status', 'unknown'),
+                            'timestamp': redis_metrics.get('timestamp', time.time()),
+                            'sample_rate': source_data.get('sample_rate'),
+                            'redis_mode': True,
+                        })
+
+                # Parse broadcast queue data
+                broadcast_queue_data = redis_metrics.get('broadcast_queue')
+                if isinstance(broadcast_queue_data, str):
+                    broadcast_queue_data = json.loads(broadcast_queue_data)
+                if broadcast_queue_data:
+                    broadcast_stats = broadcast_queue_data
+
+                logger.debug(f"Using Redis metrics: {len(source_metrics)} sources, active={active_source}")
+            except Exception as e:
+                logger.warning(f"Failed to parse Redis metrics, falling back to local: {e}")
+                redis_metrics = None
+
+        # Fall back to local controller if Redis unavailable
+        if not redis_metrics:
+            controller = _get_audio_controller()
+
+            for source_name, adapter in controller._sources.items():
+                if adapter.metrics:
+                    source_metrics.append({
+                        'source_id': source_name,
+                        'source_name': adapter.config.name,
+                        'source_type': adapter.config.source_type.value,
+                        'source_status': adapter.status.value,
+                        'timestamp': adapter.metrics.timestamp,
+                        'peak_level_db': _sanitize_float(adapter.metrics.peak_level_db),
+                        'rms_level_db': _sanitize_float(adapter.metrics.rms_level_db),
+                        'sample_rate': adapter.metrics.sample_rate,
+                        'channels': adapter.metrics.channels,
+                        'frames_captured': adapter.metrics.frames_captured,
+                        'silence_detected': _sanitize_bool(adapter.metrics.silence_detected),
+                        'buffer_utilization': _sanitize_float(adapter.metrics.buffer_utilization),
+                    })
+
+            broadcast_stats = controller.get_broadcast_queue().get_stats()
+            active_source = controller.get_active_source()
 
         # Also get recent database metrics
         db_metrics = (
@@ -1767,13 +1812,11 @@ def api_get_audio_metrics():
                 'timestamp': metric.timestamp.isoformat() if metric.timestamp else None,
             })
 
-        broadcast_stats = controller.get_broadcast_queue().get_stats()
-
         return jsonify({
             'live_metrics': source_metrics,
             'recent_metrics': db_metrics_list,
             'total_sources': len(source_metrics),
-            'active_source': controller.get_active_source(),
+            'active_source': active_source,
             'broadcast_stats': broadcast_stats,
         })
 
