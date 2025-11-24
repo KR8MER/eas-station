@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import csv
 import io
-import json
 import os
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
@@ -47,6 +46,7 @@ from app_utils.eas_decode import (
     build_plain_language_summary,
 )
 from app_utils.time import format_local_datetime, utc_now
+from app_utils.optimized_parsing import json_loads, json_dumps
 
 # Import precedence levels for priority tracking
 try:
@@ -404,7 +404,7 @@ def load_or_cache_summary_payload(message) -> Optional[Dict[str, Any]]:
 
     try:
         with open(disk_path, "r", encoding="utf-8") as handle:
-            payload = json.load(handle)
+            payload = json_loads(handle)
     except (OSError, json.JSONDecodeError):
         current_app.logger.debug("Unable to load summary payload from %s", disk_path)
         return None
@@ -644,7 +644,7 @@ def backfill_eas_message_payloads(logger) -> None:
             if disk_path:
                 try:
                     with open(disk_path, "r", encoding="utf-8") as handle:
-                        payload = json.load(handle)
+                        payload = json_loads(handle)
                 except (OSError, json.JSONDecodeError) as exc:
                     logger.debug(
                         "Unable to backfill summary payload for message %s: %s",
@@ -1460,7 +1460,7 @@ def generate_compliance_log_csv(entries: Sequence[Dict[str, Any]]) -> str:
     for entry in entries:
         timestamp = format_local_datetime(entry.get("timestamp"), include_utc=True)
         details = entry.get("details") or {}
-        details_json = json.dumps(details, ensure_ascii=False, sort_keys=True)
+        details_json = json_dumps(details, ensure_ascii=False, sort_keys=True)
         writer.writerow(
             [
                 timestamp,
