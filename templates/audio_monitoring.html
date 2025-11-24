@@ -638,7 +638,7 @@ function renderAudioSources(fullRender = true) {
                             <audio
                                 controls
                                 id="audio-${source.name}"
-                                preload="none"
+                                preload="metadata"
                                 data-source-name="${escapeHtml(source.name)}"
                                 data-icecast-url="${source.icecast_url ? escapeHtml(source.icecast_url) : ''}"
                                 data-proxy-url="/api/audio/stream/${encodeURIComponent(source.name)}"
