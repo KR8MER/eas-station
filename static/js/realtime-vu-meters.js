@@ -50,6 +50,13 @@ function initializeRealtimeVUMeter(audioElement, sourceName) {
         const bufferLength = analyzer.frequencyBinCount;
         const dataArray = new Uint8Array(bufferLength);
         
+        // Cache DOM elements to avoid repeated lookups at 60Hz
+        const safeId = sanitizeId(sourceName);
+        const peakBar = document.getElementById(`peak-meter-${safeId}`);
+        const rmsBar = document.getElementById(`rms-meter-${safeId}`);
+        const peakLabel = document.getElementById(`peak-label-${safeId}`);
+        const rmsLabel = document.getElementById(`rms-label-${safeId}`);
+        
         audioAnalyzers.set(sourceName, {
             audioContext,
             analyzer,
@@ -59,7 +66,12 @@ function initializeRealtimeVUMeter(audioElement, sourceName) {
             lastPeak: -120,
             lastRMS: -120,
             peakHold: -120,
-            peakHoldTime: 0
+            peakHoldTime: 0,
+            // Cached DOM elements
+            peakBar,
+            rmsBar,
+            peakLabel,
+            rmsLabel
         });
         
         console.log(`Real-time VU meter initialized for ${sourceName}`);
@@ -115,11 +127,11 @@ function startVUMeterAnimation() {
  * Update VU meter display for a specific source
  */
 function updateVUMeterForSource(sourceName, analyzer) {
-    const safeId = sanitizeId(sourceName);
-    const peakBar = document.getElementById(`peak-meter-${safeId}`);
-    const rmsBar = document.getElementById(`rms-meter-${safeId}`);
-    const peakLabel = document.getElementById(`peak-label-${safeId}`);
-    const rmsLabel = document.getElementById(`rms-label-${safeId}`);
+    // Use cached DOM elements for performance
+    const peakBar = analyzer.peakBar;
+    const rmsBar = analyzer.rmsBar;
+    const peakLabel = analyzer.peakLabel;
+    const rmsLabel = analyzer.rmsLabel;
     
     if (!peakBar || !analyzer.analyzer) {
         return;
