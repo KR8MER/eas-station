@@ -1655,13 +1655,21 @@ function updateLevelMetersFromSnapshot(snapshot) {
             return;
         }
 
+        // Validate metric values - use defaults if null/undefined
+        const peakValue = (typeof metric.peak_level_db === 'number' && !Number.isNaN(metric.peak_level_db))
+            ? metric.peak_level_db
+            : -120.0;
+        const rmsValue = (typeof metric.rms_level_db === 'number' && !Number.isNaN(metric.rms_level_db))
+            ? metric.rms_level_db
+            : -120.0;
+
         // Get or initialize state for this meter
         let state = vuMeterState.get(metric.source_id);
         if (!state) {
             state = {
-                lastPeak: metric.peak_level_db,
-                lastRms: metric.rms_level_db,
-                peakHold: metric.peak_level_db,
+                lastPeak: peakValue,
+                lastRms: rmsValue,
+                peakHold: peakValue,
                 peakHoldTime: now
             };
             vuMeterState.set(metric.source_id, state);
@@ -1671,7 +1679,7 @@ function updateLevelMetersFromSnapshot(snapshot) {
         // Peak rises quickly but falls slowly for realistic VU behavior
         // EMA formula: smoothed = old * (1 - alpha) + new * alpha
         // Higher alpha = more weight on new value = faster response
-        const targetPeak = metric.peak_level_db;
+        const targetPeak = peakValue;
         let smoothedPeak;
         if (targetPeak > state.lastPeak) {
             // Rise quickly (attack) - high alpha for fast response
@@ -1694,7 +1702,7 @@ function updateLevelMetersFromSnapshot(snapshot) {
 
         // Smooth RMS value using exponential moving average
         // RMS uses moderate smoothing for stable level indication
-        const smoothedRms = state.lastRms * (1 - RMS_SMOOTHING) + metric.rms_level_db * RMS_SMOOTHING;
+        const smoothedRms = state.lastRms * (1 - RMS_SMOOTHING) + rmsValue * RMS_SMOOTHING;
 
         // Update state
         state.lastPeak = smoothedPeak;

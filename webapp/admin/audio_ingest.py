@@ -1739,15 +1739,21 @@ def api_get_audio_metrics():
                     active_source = audio_controller_data.get('active_source')
                     redis_sources = audio_controller_data.get('sources', {})
 
-                    # Build source metrics from Redis data (limited info)
+                    # Build source metrics from Redis data
                     for source_name, source_data in redis_sources.items():
                         source_metrics.append({
                             'source_id': source_name,
                             'source_name': source_name,
                             'source_type': 'unknown',  # Not in Redis data
                             'source_status': source_data.get('status', 'unknown'),
-                            'timestamp': redis_metrics.get('timestamp', time.time()),
+                            'timestamp': source_data.get('timestamp', redis_metrics.get('timestamp', time.time())),
                             'sample_rate': source_data.get('sample_rate'),
+                            'channels': source_data.get('channels', 2),
+                            'peak_level_db': source_data.get('peak_level_db', -120.0),
+                            'rms_level_db': source_data.get('rms_level_db', -120.0),
+                            'buffer_utilization': source_data.get('buffer_utilization', 0.0),
+                            'frames_captured': source_data.get('frames_captured', 0),
+                            'silence_detected': source_data.get('silence_detected', False),
                             'redis_mode': True,
                         })
 

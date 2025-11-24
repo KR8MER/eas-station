@@ -235,6 +235,20 @@ def get_combined_metrics() -> dict:
                             "status": source.status.value if hasattr(source.status, 'value') else str(source.status),
                             "sample_rate": getattr(source, 'sample_rate', None),
                         }
+
+                        # Include VU meter metrics if available
+                        if hasattr(source, 'metrics') and source.metrics:
+                            metrics_obj = source.metrics
+                            source_stats.update({
+                                "peak_level_db": float(metrics_obj.peak_level_db) if metrics_obj.peak_level_db is not None else -120.0,
+                                "rms_level_db": float(metrics_obj.rms_level_db) if metrics_obj.rms_level_db is not None else -120.0,
+                                "buffer_utilization": float(metrics_obj.buffer_utilization) if metrics_obj.buffer_utilization is not None else 0.0,
+                                "channels": metrics_obj.channels if hasattr(metrics_obj, 'channels') else 2,
+                                "frames_captured": metrics_obj.frames_captured if hasattr(metrics_obj, 'frames_captured') else 0,
+                                "silence_detected": bool(metrics_obj.silence_detected) if hasattr(metrics_obj, 'silence_detected') else False,
+                                "timestamp": metrics_obj.timestamp if hasattr(metrics_obj, 'timestamp') else None,
+                            })
+
                         controller_stats["sources"][name] = source_stats
                     except Exception as e:
                         logger.error(f"Error getting stats for source '{name}': {e}")
