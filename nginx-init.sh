@@ -24,15 +24,28 @@ purge_certificate_material() {
 generate_self_signed_certificate() {
     mkdir -p "/etc/letsencrypt/live/$DOMAIN_NAME"
 
+    ALT_NAMES_CONFIG=$(build_subject_alt_name)
+
     openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
         -keyout /etc/letsencrypt/live/$DOMAIN_NAME/privkey.pem \
         -out /etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem \
-        -subj "/C=US/ST=State/L=City/O=EAS Station/CN=$DOMAIN_NAME"
+        -subj "/C=US/ST=State/L=City/O=EAS Station/CN=$DOMAIN_NAME" \
+        -addext "subjectAltName=${ALT_NAMES_CONFIG}"
 
     cp /etc/letsencrypt/live/$DOMAIN_NAME/fullchain.pem \
        /etc/letsencrypt/live/$DOMAIN_NAME/chain.pem
 
     touch "$SELF_SIGNED_MARKER"
+}
+
+build_subject_alt_name() {
+    ALT_NAMES="DNS:${DOMAIN_NAME}"
+
+    for NAME in $ADDITIONAL_SERVER_NAMES; do
+        ALT_NAMES="${ALT_NAMES},DNS:${NAME}"
+    done
+
+    echo "$ALT_NAMES"
 }
 
 is_self_signed_certificate() {
@@ -178,7 +191,7 @@ if [ -f "/app-config/.env" ]; then
     # Use a safer approach that works with busybox sh
     while IFS='=' read -r key value; do
         case "$key" in
-            DOMAIN_NAME|SSL_EMAIL|CERTBOT_STAGING)
+            DOMAIN_NAME|SSL_EMAIL|CERTBOT_STAGING|ADDITIONAL_SERVER_NAMES)
                 export "$key=$value"
                 echo "Loaded $key from persistent config"
                 ;;
@@ -190,12 +203,16 @@ fi
 DOMAIN_NAME="${DOMAIN_NAME:-localhost}"
 EMAIL="${SSL_EMAIL:-admin@example.com}"
 STAGING="${CERTBOT_STAGING:-0}"
+ADDITIONAL_SERVER_NAMES="${ADDITIONAL_SERVER_NAMES:-}"
 SELF_SIGNED_MARKER="/etc/letsencrypt/live/$DOMAIN_NAME/.self-signed"
 
 echo "========================================="
 echo "EAS Station nginx Initialization"
 echo "========================================="
 echo "Domain: $DOMAIN_NAME"
+if [ -n "$ADDITIONAL_SERVER_NAMES" ]; then
+    echo "Additional server names: $ADDITIONAL_SERVER_NAMES"
+fi
 echo "Email: $EMAIL"
 echo "Staging mode: $STAGING"
 echo "========================================="
@@ -208,7 +225,7 @@ mkdir -p /var/log/nginx
 purge_stale_self_signed_material
 
 # Substitute environment variables in nginx config
-envsubst '${DOMAIN_NAME}' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
+envsubst '${DOMAIN_NAME} ${ADDITIONAL_SERVER_NAMES}' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
 
 # Check if we already have certificates
 CURRENT_CERT_SELF_SIGNED=1
