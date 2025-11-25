@@ -50,7 +50,8 @@ from redis.exceptions import RedisError, ConnectionError as RedisConnectionError
 logger = logging.getLogger(__name__)
 
 # Redis connection settings
-REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
+# Default to 'redis' for Docker, not 'localhost' (prevents connection refused errors)
+REDIS_HOST = os.getenv("REDIS_HOST", "redis")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
 REDIS_DB = int(os.getenv("REDIS_DB", "0"))
 REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", None)
