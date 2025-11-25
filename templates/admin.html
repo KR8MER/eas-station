@@ -1013,16 +1013,60 @@
                     </div>
 
                     <!-- Zigbee Integration -->
-                    <div class="card border-secondary-subtle shadow-sm mb-4">
-                        <div class="card-header bg-secondary-subtle">
+                    <div class="card border-warning-subtle shadow-sm mb-4">
+                        <div class="card-header bg-warning-subtle">
                             <h5 class="mb-0">
-                                <i class="fas fa-broadcast-tower"></i> Zigbee Smart Home Integration
+                                <i class="fas fa-broadcast-tower"></i> Zigbee Smart Home (Argon Industria V5 Module)
                             </h5>
                         </div>
                         <div class="card-body">
-                            <div class="alert alert-secondary mb-0">
-                                <i class="fas fa-tools"></i>
-                                <strong>Coming Soon:</strong> Zigbee integration will allow EAS Station to control smart lights, sirens, and other Zigbee devices during emergencies.
+                            <p class="mb-3">
+                                <strong>Zigbee Coordinator Module</strong> for controlling smart lights, sirens, switches, and sensors during emergency alerts.
+                                The Argon Industria V5 Zigbee module connects via UART to your Raspberry Pi.
+                            </p>
+
+                            <div class="alert alert-info d-flex align-items-start mb-3">
+                                <i class="fas fa-cog me-3 mt-1"></i>
+                                <div>
+                                    <strong>Configuration:</strong> Zigbee module settings are managed in
+                                    <a href="/settings/environment" class="alert-link">Environment Variables</a> under the "Zigbee Module" category.
+                                    Configure serial port (<code>ZIGBEE_PORT</code>), baud rate, channel, and PAN ID.
+                                </div>
+                            </div>
+
+                            <div class="alert alert-warning mb-3">
+                                <i class="fas fa-info-circle"></i>
+                                <strong>Initial Setup Required:</strong> Communication with the Zigbee coordinator is configured, but device pairing and automation features are in development.
+                                Enable the module in Environment Variables to begin testing basic communication.
+                            </div>
+
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <div class="d-grid">
+                                        <a href="/settings/environment" class="btn btn-outline-secondary" onclick="setTimeout(() => document.getElementById('variable-search')?.focus(), 500); setTimeout(() => { const search = document.getElementById('variable-search'); if(search) { search.value = 'zigbee'; search.dispatchEvent(new Event('input', {bubbles: true})); } }, 600);">
+                                            <i class="fas fa-cog me-2"></i>Configure Zigbee Module
+                                        </a>
+                                    </div>
+                                    <small class="text-muted d-block mt-2">Serial port, baud rate, channel, and network settings</small>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="d-grid">
+                                        <button class="btn btn-outline-primary" disabled>
+                                            <i class="fas fa-link me-2"></i>Pair Devices (Coming Soon)
+                                        </button>
+                                    </div>
+                                    <small class="text-muted d-block mt-2">Device pairing UI will be added in future update</small>
+                                </div>
+                            </div>
+
+                            <div class="mt-3">
+                                <h6 class="fw-bold mb-2">Recommended Configuration:</h6>
+                                <ul class="small mb-0">
+                                    <li><code>ZIGBEE_PORT=/dev/ttyAMA0</code> - Default UART port for Argon module</li>
+                                    <li><code>ZIGBEE_BAUDRATE=115200</code> - Standard speed for Zigbee coordinators</li>
+                                    <li><code>ZIGBEE_CHANNEL=15</code> - Avoids WiFi interference (channels 1, 6, 11)</li>
+                                    <li><code>ZIGBEE_PAN_ID</code> - Leave empty for auto-generated network ID</li>
+                                </ul>
                             </div>
                         </div>
                     </div>
