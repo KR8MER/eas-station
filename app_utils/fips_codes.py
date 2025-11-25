@@ -3248,20 +3248,29 @@ US_FIPS_COUNTY_TABLE = """
 
 
 def _to_same_county_code(code: str) -> str:
-    """Convert a county FIPS code into a 5-digit base code (without portion digit)."""
+    """Convert a county FIPS code into a 6-digit SAME code with portion digit.
+
+    SAME codes are formatted as PSSCCC where:
+    - P = portion digit (0 = entire county, 1-9 = subdivisions)
+    - SS = state FIPS code
+    - CCC = county FIPS code
+
+    For county codes from the FIPS table (5 digits), this function prepends '0'
+    to indicate "entire county".
+    """
 
     digits = ''.join(ch for ch in code if ch.isdigit())
     if not digits:
         raise ValueError(f'Invalid county code: {code!r}')
-    # Return 5-digit code (state + county FIPS) without portion digit
-    # The portion digit (0-9) should be added by the UI layer
+    # If 5 digits, prepend '0' for "entire county" portion digit
     if len(digits) == 5:
-        return digits
-    # If it's 6 digits, strip the portion digit (first character)
+        return '0' + digits
+    # If 6 digits, return as-is (already has portion digit)
     if len(digits) == 6:
-        return digits[1:]
-    # For other lengths, ensure we have exactly 5 digits
-    return digits.zfill(5)[-5:]
+        return digits
+    # For other lengths, normalize to 5 digits then prepend '0'
+    normalized = digits.zfill(5)[-5:]
+    return '0' + normalized
 
 
 def _format_subdivision_display_name(
