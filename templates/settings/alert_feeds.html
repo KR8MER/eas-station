@@ -344,7 +344,25 @@
                         {% endif %}
                     </div>
                 </div>
+                <div class="status-item">
+                    <div class="status-label">Poll Status</div>
+                    <div class="status-value" id="noaaLastPollStatus">
+                        {% if noaa_status.last_poll_status %}
+                        <span class="status-badge {% if noaa_status.last_poll_status == 'SUCCESS' %}active{% elif noaa_status.last_poll_status == 'ERROR' %}inactive{% else %}warning{% endif %}">
+                            {{ noaa_status.last_poll_status }}
+                        </span>
+                        {% else %}
+                        Unknown
+                        {% endif %}
+                    </div>
+                </div>
             </div>
+            {% if noaa_status.last_poll_error %}
+            <div class="alert alert-error" style="margin-top: 1rem; padding: 1rem; background-color: #FEE2E2; border: 1px solid #EF4444; border-radius: 0.5rem; color: #991B1B;">
+                <strong>⚠️ Last Poll Error:</strong><br>
+                <code style="display: block; margin-top: 0.5rem; padding: 0.5rem; background-color: #FEF2F2; border-radius: 0.25rem; overflow-x: auto; font-size: 0.875rem;">{{ noaa_status.last_poll_error }}</code>
+            </div>
+            {% endif %}
 
             <form id="noaaConfigForm">
                 <div class="config-card">
@@ -402,7 +420,25 @@
                         {% endif %}
                     </div>
                 </div>
+                <div class="status-item">
+                    <div class="status-label">Poll Status</div>
+                    <div class="status-value" id="ipawsLastPollStatus">
+                        {% if ipaws_status.last_poll_status %}
+                        <span class="status-badge {% if ipaws_status.last_poll_status == 'SUCCESS' %}active{% elif ipaws_status.last_poll_status == 'ERROR' %}inactive{% else %}warning{% endif %}">
+                            {{ ipaws_status.last_poll_status }}
+                        </span>
+                        {% else %}
+                        Unknown
+                        {% endif %}
+                    </div>
+                </div>
             </div>
+            {% if ipaws_status.last_poll_error %}
+            <div class="alert alert-error" style="margin-top: 1rem; padding: 1rem; background-color: #FEE2E2; border: 1px solid #EF4444; border-radius: 0.5rem; color: #991B1B;">
+                <strong>⚠️ Last Poll Error:</strong><br>
+                <code style="display: block; margin-top: 0.5rem; padding: 0.5rem; background-color: #FEF2F2; border-radius: 0.25rem; overflow-x: auto; font-size: 0.875rem;">{{ ipaws_status.last_poll_error }}</code>
+            </div>
+            {% endif %}
 
             <form id="ipawsConfigForm">
                 <div class="config-card">

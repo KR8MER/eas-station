@@ -425,6 +425,7 @@ class CAPPoller:
 
         self.last_poll_sources: List[str] = []
         self.last_duplicates_filtered: int = 0
+        self.last_fetch_errors: List[str] = []  # Track errors during fetch for frontend logging
 
         # Verify tables exist (don’t crash if missing)
         try:
@@ -482,12 +483,20 @@ class CAPPoller:
             'User-Agent': default_user_agent,
             'Accept': 'application/geo+json, application/json;q=0.9',
         })
+        # Configure SSL certificate verification
+        ssl_verify_disable = os.getenv('SSL_VERIFY_DISABLE', '').strip().lower() in ('1', 'true', 'yes')
         ca_bundle_override = os.getenv('REQUESTS_CA_BUNDLE') or os.getenv('CAP_POLLER_CA_BUNDLE')
-        if ca_bundle_override:
-            self.logger.debug('Using custom CA bundle for CAP polling: %s', ca_bundle_override)
+
+        if ssl_verify_disable:
+            self.logger.warning('⚠️  SSL certificate verification is DISABLED (SSL_VERIFY_DISABLE=1). This is insecure and not recommended for production.')
+            self.session.verify = False
+        elif ca_bundle_override:
+            self.logger.info('Using custom CA bundle for CAP polling: %s', ca_bundle_override)
             self.session.verify = ca_bundle_override
         else:
-            self.session.verify = certifi.where()
+            certifi_path = certifi.where()
+            self.logger.info('Using certifi CA bundle for SSL verification: %s', certifi_path)
+            self.session.verify = certifi_path
 
         # LED
         self.led_controller = None
@@ -1249,6 +1258,9 @@ class CAPPoller:
         alerts_by_identifier: Dict[str, Dict] = {}
         alerts_without_identifier: List[Dict] = []
 
+        # Reset error tracking for this fetch cycle
+        self.last_fetch_errors = []
+
         for endpoint in self.cap_endpoints:
             try:
                 self.logger.info(f"Fetching alerts from: {endpoint}")
@@ -1318,22 +1330,28 @@ class CAPPoller:
                         self.logger.warning("Alert has no identifier, including anyway")
                         alerts_without_identifier.append(alert)
             except requests.exceptions.SSLError as exc:
-                self.logger.error(
-                    "TLS certificate verification failed for %s: %s. "
-                    "Provide a CA bundle via REQUESTS_CA_BUNDLE or CAP_POLLER_CA_BUNDLE if your environment "
-                    "uses custom certificates.",
-                    endpoint,
-                    exc,
+                error_msg = (
+                    f"TLS certificate verification failed for {endpoint}: {str(exc)}. "
+                    f"Provide a CA bundle via REQUESTS_CA_BUNDLE or CAP_POLLER_CA_BUNDLE if your environment "
+                    f"uses custom certificates, or set SSL_VERIFY_DISABLE=1 to disable verification (not recommended)."
                 )
+                self.logger.error(error_msg)
+                self.last_fetch_errors.append(f"SSL Error: {error_msg}")
             except requests.exceptions.Timeout as exc:
-                self.logger.error(
+                error_msg = (
                     f"Timeout fetching from {endpoint} after {timeout}s. "
                     f"API may be slow or rate limiting requests. Error: {str(exc)}"
                 )
+                self.logger.error(error_msg)
+                self.last_fetch_errors.append(f"Timeout: {error_msg}")
             except requests.exceptions.RequestException as exc:
-                self.logger.error(f"Error fetching from {endpoint}: {str(exc)}")
+                error_msg = f"Error fetching from {endpoint}: {str(exc)}"
+                self.logger.error(error_msg)
+                self.last_fetch_errors.append(f"Request Error: {error_msg}")
             except Exception as exc:
-                self.logger.error(f"Unexpected error fetching from {endpoint}: {str(exc)}")
+                error_msg = f"Unexpected error fetching from {endpoint}: {str(exc)}"
+                self.logger.error(error_msg)
+                self.last_fetch_errors.append(f"Unexpected Error: {error_msg}")
 
         unique_alerts.extend(alerts_by_identifier.values())
         unique_alerts.extend(alerts_without_identifier)
@@ -2190,6 +2208,14 @@ class CAPPoller:
             stats['alerts_fetched'] = len(alerts_data)
             stats['sources'] = list(self.last_poll_sources)
             stats['duplicates_filtered'] = self.last_duplicates_filtered
+
+            # Check for fetch errors and log them to the database
+            if self.last_fetch_errors:
+                error_summary = "; ".join(self.last_fetch_errors)
+                stats['error_message'] = error_summary
+                stats['status'] = 'ERROR' if len(alerts_data) == 0 else 'PARTIAL_SUCCESS'
+                self.logger.warning(f"Fetch errors occurred: {error_summary}")
+                self.log_system_event('ERROR', f"CAP polling encountered errors: {error_summary}", stats)
 
             for alert_data in alerts_data:
                 props = alert_data.get('properties', {})
