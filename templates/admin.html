@@ -1134,7 +1134,7 @@
                                 <i class="fas fa-cog me-3 mt-1"></i>
                                 <div>
                                     <strong>Configuration:</strong> VFD display settings are managed in
-                                    <a href="/settings/environment" class="alert-link">Environment Variables</a> under the "VFD Display" category.
+                                    <a href="/settings/environment?category=vfd" class="alert-link">Environment Variables</a> under the "VFD Display" category.
                                     Configure serial port (<code>VFD_PORT</code>) and baud rate (<code>VFD_BAUDRATE</code>).
                                 </div>
                             </div>
@@ -1150,7 +1150,7 @@
                                 </div>
                                 <div class="col-md-6">
                                     <div class="d-grid">
-                                        <a href="/settings/environment" class="btn btn-outline-secondary" onclick="setTimeout(() => document.getElementById('variable-search')?.focus(), 500); setTimeout(() => { const search = document.getElementById('variable-search'); if(search) { search.value = 'vfd'; search.dispatchEvent(new Event('input', {bubbles: true})); } }, 600);">
+                                        <a href="/settings/environment?category=vfd" class="btn btn-outline-secondary" onclick="setTimeout(() => document.getElementById('variable-search')?.focus(), 500); setTimeout(() => { const search = document.getElementById('variable-search'); if(search) { search.value = 'vfd'; search.dispatchEvent(new Event('input', {bubbles: true})); } }, 600);">
                                             <i class="fas fa-cog me-2"></i>Configure VFD Settings
                                         </a>
                                     </div>
@@ -1177,7 +1177,7 @@
                                 <i class="fas fa-cog me-3 mt-1"></i>
                                 <div>
                                     <strong>Configuration:</strong> OLED display settings are managed in
-                                    <a href="/settings/environment" class="alert-link">Environment Variables</a> under the "OLED Display" category.
+                                    <a href="/settings/environment?category=oled" class="alert-link">Environment Variables</a> under the "OLED Display" category.
                                     Enable/disable, I2C bus address (<code>OLED_I2C_ADDRESS</code>), resolution, and rotation settings.
                                 </div>
                             </div>
@@ -1189,7 +1189,7 @@
                             </div>
 
                             <div class="d-grid">
-                                <a href="/settings/environment" class="btn btn-outline-secondary" onclick="setTimeout(() => document.getElementById('variable-search')?.focus(), 500); setTimeout(() => { const search = document.getElementById('variable-search'); if(search) { search.value = 'oled'; search.dispatchEvent(new Event('input', {bubbles: true})); } }, 600);">
+                                <a href="/settings/environment?category=oled" class="btn btn-outline-secondary" onclick="setTimeout(() => document.getElementById('variable-search')?.focus(), 500); setTimeout(() => { const search = document.getElementById('variable-search'); if(search) { search.value = 'oled'; search.dispatchEvent(new Event('input', {bubbles: true})); } }, 600);">
                                     <i class="fas fa-cog me-2"></i>Configure OLED Settings
                                 </a>
                             </div>
@@ -1214,7 +1214,7 @@
                                 <i class="fas fa-cog me-3 mt-1"></i>
                                 <div>
                                     <strong>Configuration:</strong> Zigbee module settings are managed in
-                                    <a href="/settings/environment" class="alert-link">Environment Variables</a> under the "Zigbee Module" category.
+                                    <a href="/settings/environment?category=zigbee" class="alert-link">Environment Variables</a> under the "Zigbee Module" category.
                                     Configure serial port (<code>ZIGBEE_PORT</code>), baud rate, channel, and PAN ID.
                                 </div>
                             </div>
@@ -1228,7 +1228,7 @@
                             <div class="row g-3">
                                 <div class="col-md-6">
                                     <div class="d-grid">
-                                        <a href="/settings/environment" class="btn btn-outline-secondary" onclick="setTimeout(() => document.getElementById('variable-search')?.focus(), 500); setTimeout(() => { const search = document.getElementById('variable-search'); if(search) { search.value = 'zigbee'; search.dispatchEvent(new Event('input', {bubbles: true})); } }, 600);">
+                                        <a href="/settings/environment?category=zigbee" class="btn btn-outline-secondary" onclick="setTimeout(() => document.getElementById('variable-search')?.focus(), 500); setTimeout(() => { const search = document.getElementById('variable-search'); if(search) { search.value = 'zigbee'; search.dispatchEvent(new Event('input', {bubbles: true})); } }, 600);">
                                             <i class="fas fa-cog me-2"></i>Configure Zigbee Module
                                         </a>
                                     </div>

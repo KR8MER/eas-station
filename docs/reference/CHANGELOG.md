@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file. The format is b
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project currently
 tracks releases under the 2.x series.
 
+## [2.12.18] - 2025-11-26
+### Fixed
+- Redirected the policy docs URLs to the canonical `/terms` and `/privacy` routes and updated the documentation index to point to those pages so users no longer see divergent copies of the legal notices.
+
+## [2.12.17] - 2025-11-25
+### Fixed
+- Redirect permission-denied responses to the dashboard blueprint's admin route so settings pages (including `/settings/alert-feeds`) return a proper 403 flow instead of a 500 BuildError when the non-namespaced endpoint is unavailable.
+
 ## [2.12.15] - 2025-11-22
 ### Changed
 - Downsampled the continuous EAS monitor to 8 kHz (with automatic resampling from higher-rate sources) so SAME FSK decoding runs at an efficient rate without wasting CPU on unnecessary bandwidth.
