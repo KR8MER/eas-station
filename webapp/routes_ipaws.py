@@ -170,13 +170,15 @@ def _get_ipaws_status() -> Dict:
         'poll_interval': poll_interval,
         'last_poll': None,
         'last_poll_status': None,
-        'last_poll_alerts': 0
+        'last_poll_alerts': 0,
+        'last_poll_error': None
     }
 
     if last_poll:
         status['last_poll'] = last_poll.timestamp
         status['last_poll_status'] = last_poll.status
         status['last_poll_alerts'] = last_poll.alerts_new or 0
+        status['last_poll_error'] = last_poll.error_message
 
     return status
 
@@ -254,13 +256,15 @@ def _get_noaa_status() -> Dict:
         'poll_interval': poll_interval,
         'last_poll': None,
         'last_poll_status': None,
-        'last_poll_alerts': 0
+        'last_poll_alerts': 0,
+        'last_poll_error': None
     }
 
     if last_poll:
         status['last_poll'] = last_poll.timestamp
         status['last_poll_status'] = last_poll.status
         status['last_poll_alerts'] = last_poll.alerts_new or 0
+        status['last_poll_error'] = last_poll.error_message
 
     return status
 
