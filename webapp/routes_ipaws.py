@@ -224,22 +224,65 @@ def _restart_ipaws_poller() -> bool:
         return False
 
 
-@ipaws_bp.route('/settings/ipaws')
+def _get_noaa_status() -> Dict:
+    """Get current NOAA poller status and configuration."""
+    config = _read_current_config()
+
+    noaa_user_agent = config.get('NOAA_USER_AGENT', '').strip()
+    cap_endpoints = config.get('CAP_ENDPOINTS', '').strip()
+    poll_interval = config.get('POLL_INTERVAL_SEC', '120')
+
+    # Get last poll info from database
+    from app_utils.alert_sources import ALERT_SOURCE_NOAA
+    last_poll = db.session.query(PollHistory).filter(
+        PollHistory.data_source.contains(ALERT_SOURCE_NOAA)
+    ).order_by(PollHistory.timestamp.desc()).first()
+
+    status = {
+        'configured': bool(noaa_user_agent),
+        'user_agent': noaa_user_agent,
+        'custom_endpoints': cap_endpoints,
+        'poll_interval': poll_interval,
+        'last_poll': None,
+        'last_poll_status': None,
+        'last_poll_alerts': 0
+    }
+
+    if last_poll:
+        status['last_poll'] = last_poll.timestamp.isoformat() if last_poll.timestamp else None
+        status['last_poll_status'] = last_poll.status
+        status['last_poll_alerts'] = last_poll.alerts_new or 0
+
+    return status
+
+
+@ipaws_bp.route('/settings/alert-feeds')
 @require_permission('settings.view')
-def ipaws_settings():
-    """Render IPAWS configuration page."""
+def alert_feeds_settings():
+    """Render consolidated alert feeds configuration page."""
     try:
-        status = _get_ipaws_status()
+        ipaws_status = _get_ipaws_status()
+        noaa_status = _get_noaa_status()
 
         return render_template(
-            'settings/ipaws.html',
-            status=status,
+            'settings/alert_feeds.html',
+            ipaws_status=ipaws_status,
+            noaa_status=noaa_status,
             environments=IPAWS_ENVIRONMENTS,
             feed_types=IPAWS_FEED_TYPES
         )
     except Exception as exc:
-        logger.error(f"Error rendering IPAWS settings: {exc}")
-        return f"Error loading IPAWS settings: {exc}", 500
+        logger.error(f"Error rendering alert feeds settings: {exc}")
+        return f"Error loading alert feeds settings: {exc}", 500
+
+
+# Redirect old URL to new unified page
+@ipaws_bp.route('/settings/ipaws')
+@require_permission('settings.view')
+def ipaws_settings_redirect():
+    """Redirect old IPAWS settings URL to new unified page."""
+    from flask import redirect, url_for
+    return redirect(url_for('ipaws.alert_feeds_settings'))
 
 
 @ipaws_bp.route('/api/ipaws/status')
@@ -328,6 +371,68 @@ def api_ipaws_disable():
         })
     except Exception as exc:
         logger.error(f"Error disabling IPAWS: {exc}")
+        return jsonify({'error': str(exc)}), 500
+
+
+@ipaws_bp.route('/api/noaa/configure', methods=['POST'])
+@require_permission('settings.edit')
+def api_noaa_configure():
+    """API endpoint to configure NOAA feed settings."""
+    try:
+        data = request.get_json()
+
+        if not data:
+            raise BadRequest("No data provided")
+
+        user_agent = data.get('user_agent', '').strip()
+        poll_interval = data.get('poll_interval', '120')
+
+        if not user_agent:
+            raise BadRequest("User agent is required for NOAA compliance")
+
+        # Validate poll interval
+        try:
+            interval_int = int(poll_interval)
+            if interval_int < 30:
+                raise BadRequest("Poll interval must be at least 30 seconds")
+        except ValueError:
+            raise BadRequest("Invalid poll interval")
+
+        # Update config file
+        _update_env_file('NOAA_USER_AGENT', user_agent)
+        _update_env_file('POLL_INTERVAL_SEC', poll_interval)
+
+        # Restart noaa-poller
+        try:
+            result = subprocess.run(
+                ['docker', 'compose', 'restart', 'noaa-poller'],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            restart_success = result.returncode == 0
+            if restart_success:
+                logger.info("NOAA poller restarted successfully")
+            else:
+                logger.error(f"Failed to restart NOAA poller: {result.stderr}")
+        except Exception as exc:
+            logger.error(f"Error restarting NOAA poller: {exc}")
+            restart_success = False
+
+        return jsonify({
+            'success': True,
+            'user_agent': user_agent,
+            'poll_interval': poll_interval,
+            'poller_restarted': restart_success,
+            'message': 'NOAA configuration updated successfully' + (
+                ' and poller restarted' if restart_success else ' (manual restart required)'
+            )
+        })
+
+    except BadRequest as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as exc:
+        logger.error(f"Error configuring NOAA: {exc}")
         return jsonify({'error': str(exc)}), 500
 
 

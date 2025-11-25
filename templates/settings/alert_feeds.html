@@ -1,0 +1,598 @@
+{% extends "base.html" %}
+
+{% block title %}Alert Feeds Configuration - EAS Station{% endblock %}
+
+{% block extra_css %}
+<style>
+    .settings-container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 2rem;
+    }
+
+    .settings-header {
+        margin-bottom: 2rem;
+    }
+
+    .settings-header h1 {
+        font-size: 2rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .settings-header p {
+        color: var(--text-secondary);
+        margin-bottom: 1rem;
+    }
+
+    .feed-sections {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 2rem;
+        margin-bottom: 2rem;
+    }
+
+    @media (max-width: 1024px) {
+        .feed-sections {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .feed-section {
+        background: var(--surface-color);
+        border: 2px solid var(--border-color);
+        border-radius: 0.5rem;
+        padding: 1.5rem;
+    }
+
+    .feed-section h2 {
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .status-badge {
+        padding: 0.375rem 0.75rem;
+        border-radius: 0.25rem;
+        font-weight: 600;
+        font-size: 0.875rem;
+        margin-left: auto;
+    }
+
+    .status-badge.active {
+        background: #D1FAE5;
+        color: #065F46;
+    }
+
+    .status-badge.inactive {
+        background: #FEE2E2;
+        color: #991B1B;
+    }
+
+    .config-card {
+        background: var(--bg-color);
+        border: 1px solid var(--border-color);
+        border-radius: 0.375rem;
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .config-card h3 {
+        font-size: 1.125rem;
+        font-weight: 600;
+        margin-bottom: 0.75rem;
+    }
+
+    .form-group {
+        margin-bottom: 1rem;
+    }
+
+    .form-group label {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        color: var(--text-color);
+        font-size: 0.875rem;
+    }
+
+    .form-group input,
+    .form-group select {
+        width: 100%;
+        padding: 0.625rem;
+        border: 1px solid var(--border-color);
+        border-radius: 0.375rem;
+        background: var(--surface-color);
+        color: var(--text-color);
+        font-size: 0.875rem;
+    }
+
+    .form-group input:focus,
+    .form-group select:focus {
+        outline: none;
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.1);
+    }
+
+    .form-help {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+        margin-top: 0.25rem;
+    }
+
+    .environment-option,
+    .feed-option {
+        padding: 0.625rem;
+        margin-bottom: 0.375rem;
+        border: 2px solid var(--border-color);
+        border-radius: 0.375rem;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-size: 0.875rem;
+    }
+
+    .environment-option:hover,
+    .feed-option:hover {
+        border-color: var(--primary-color);
+        background: rgba(var(--primary-rgb), 0.05);
+    }
+
+    .environment-option.selected,
+    .feed-option.selected {
+        border-color: var(--primary-color);
+        background: rgba(var(--primary-rgb), 0.1);
+    }
+
+    .option-label {
+        display: flex;
+        align-items: center;
+        gap: 0.625rem;
+    }
+
+    .option-content {
+        flex: 1;
+    }
+
+    .option-name {
+        font-weight: 600;
+        color: var(--text-color);
+    }
+
+    .option-desc {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+        margin-top: 0.125rem;
+    }
+
+    .env-badge {
+        padding: 0.2rem 0.5rem;
+        border-radius: 0.25rem;
+        font-size: 0.6875rem;
+        font-weight: 700;
+        text-transform: uppercase;
+    }
+
+    .env-badge.test {
+        background: #FEF3C7;
+        color: #92400E;
+    }
+
+    .env-badge.live {
+        background: #FEE2E2;
+        color: #991B1B;
+    }
+
+    .status-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+    }
+
+    .status-item {
+        padding: 0.625rem;
+        background: var(--surface-color);
+        border-radius: 0.375rem;
+        border: 1px solid var(--border-color);
+    }
+
+    .status-label {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+        margin-bottom: 0.125rem;
+    }
+
+    .status-value {
+        font-weight: 600;
+        color: var(--text-color);
+        font-size: 0.875rem;
+    }
+
+    .btn-primary {
+        background: var(--primary-color);
+        color: white;
+        border: none;
+        padding: 0.625rem 1.25rem;
+        border-radius: 0.375rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-size: 0.875rem;
+        width: 100%;
+    }
+
+    .btn-primary:hover {
+        background: var(--primary-hover);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px var(--shadow-color);
+    }
+
+    .btn-primary:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .btn-secondary {
+        background: var(--surface-color);
+        color: var(--text-color);
+        border: 1px solid var(--border-color);
+        padding: 0.625rem 1.25rem;
+        border-radius: 0.375rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-size: 0.875rem;
+        width: 100%;
+    }
+
+    .btn-secondary:hover {
+        background: var(--bg-card);
+        border-color: var(--primary-color);
+    }
+
+    .button-group {
+        display: flex;
+        gap: 0.75rem;
+        margin-top: 1rem;
+    }
+
+    .alert {
+        padding: 0.875rem;
+        border-radius: 0.375rem;
+        margin-bottom: 1.5rem;
+        font-size: 0.875rem;
+    }
+
+    .alert-success {
+        background: #D1FAE5;
+        border: 1px solid #10B981;
+        color: #065F46;
+    }
+
+    .alert-error {
+        background: #FEE2E2;
+        border: 1px solid #EF4444;
+        color: #991B1B;
+    }
+
+    .alert-warning {
+        background: #FEF3C7;
+        border: 1px solid #F59E0B;
+        color: #92400E;
+    }
+
+    .shared-settings {
+        background: var(--surface-color);
+        border: 2px solid var(--border-color);
+        border-radius: 0.5rem;
+        padding: 1.5rem;
+    }
+
+    .shared-settings h2 {
+        font-size: 1.25rem;
+        font-weight: 600;
+        margin-bottom: 1rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="settings-container">
+    <div class="settings-header">
+        <h1>
+            <i class="fas fa-rss"></i>
+            Alert Feeds Configuration
+        </h1>
+        <p>Configure NOAA Weather and FEMA IPAWS alert feeds. All settings are saved to persistent storage.</p>
+    </div>
+
+    <div id="alertContainer"></div>
+
+    <!-- Two Column Layout for NOAA and IPAWS -->
+    <div class="feed-sections">
+        <!-- NOAA Configuration -->
+        <div class="feed-section">
+            <h2>
+                <i class="fas fa-cloud" style="color: #3B82F6;"></i>
+                NOAA Weather Alerts
+                {% if noaa_status.configured %}
+                <span class="status-badge active">✓ Active</span>
+                {% else %}
+                <span class="status-badge inactive">Not Configured</span>
+                {% endif %}
+            </h2>
+
+            <div class="status-grid">
+                <div class="status-item">
+                    <div class="status-label">Status</div>
+                    <div class="status-value">
+                        {% if noaa_status.configured %}Enabled{% else %}Disabled{% endif %}
+                    </div>
+                </div>
+                <div class="status-item">
+                    <div class="status-label">Last Poll</div>
+                    <div class="status-value" id="noaaLastPoll">
+                        {% if noaa_status.last_poll %}
+                        {{ noaa_status.last_poll | format_datetime }}
+                        {% else %}
+                        Never
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <form id="noaaConfigForm">
+                <div class="config-card">
+                    <h3>User Agent (Required)</h3>
+                    <div class="form-group">
+                        <label for="noaaUserAgent">NOAA User Agent String</label>
+                        <input type="text" id="noaaUserAgent" name="user_agent"
+                               value="{{ noaa_status.user_agent }}"
+                               placeholder="EAS Station/2.12 (+https://example.com; contact@example.com)"
+                               required>
+                        <div class="form-help">
+                            NOAA requires identification for API compliance. Format: "AppName/Version (contact info)"
+                        </div>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-primary">
+                    <i class="fas fa-save"></i> Update NOAA Settings
+                </button>
+            </form>
+        </div>
+
+        <!-- IPAWS Configuration -->
+        <div class="feed-section">
+            <h2>
+                <i class="fas fa-satellite-dish" style="color: #EF4444;"></i>
+                FEMA IPAWS Alerts
+                {% if ipaws_status.configured %}
+                <span class="status-badge active">✓ Active</span>
+                {% else %}
+                <span class="status-badge inactive">Not Configured</span>
+                {% endif %}
+            </h2>
+
+            <div class="status-grid">
+                <div class="status-item">
+                    <div class="status-label">Environment</div>
+                    <div class="status-value">
+                        {% if ipaws_status.environment == 'staging' %}
+                        STAGING
+                        {% elif ipaws_status.environment == 'production' %}
+                        PRODUCTION
+                        {% else %}
+                        Not Set
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="status-item">
+                    <div class="status-label">Last Poll</div>
+                    <div class="status-value" id="ipawsLastPoll">
+                        {% if ipaws_status.last_poll %}
+                        {{ ipaws_status.last_poll | format_datetime }}
+                        {% else %}
+                        Never
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <form id="ipawsConfigForm">
+                <div class="config-card">
+                    <h3>1. Environment</h3>
+                    <div class="form-help" style="margin-bottom: 0.5rem;">
+                        Start with STAGING for testing
+                    </div>
+                    {% for env_key, env_data in environments.items() %}
+                    <div class="environment-option {% if ipaws_status.environment == env_key %}selected{% endif %}"
+                         onclick="selectEnvironment('{{ env_key }}')">
+                        <label class="option-label">
+                            <input type="radio" name="environment" value="{{ env_key }}"
+                                   {% if ipaws_status.environment == env_key %}checked{% endif %}>
+                            <div class="option-content">
+                                <div class="option-name">
+                                    {{ env_data.name }}
+                                    <span class="env-badge {% if env_key == 'staging' %}test{% else %}live{% endif %}">
+                                        {{ env_data.badge }}
+                                    </span>
+                                </div>
+                                <div class="option-desc">{{ env_data.description }}</div>
+                            </div>
+                        </label>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <div class="config-card">
+                    <h3>2. Feed Type</h3>
+                    <select name="feed_type" class="form-control" style="width: 100%; padding: 0.625rem;">
+                        {% for feed_key, feed_data in feed_types.items() %}
+                        <option value="{{ feed_key }}" {% if ipaws_status.feed_type == feed_key %}selected{% endif %}>
+                            {{ feed_data.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <div class="form-help" style="margin-top: 0.5rem;">
+                        PUBLIC includes all alert types (recommended)
+                    </div>
+                </div>
+
+                <div class="button-group">
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save"></i> Apply IPAWS
+                    </button>
+                    {% if ipaws_status.configured %}
+                    <button type="button" class="btn-secondary" onclick="disableIPAWS()">
+                        <i class="fas fa-ban"></i> Disable
+                    </button>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Shared Settings -->
+    <div class="shared-settings">
+        <h2><i class="fas fa-clock"></i> Shared Poll Interval</h2>
+        <p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 1rem;">
+            Both NOAA and IPAWS pollers use this interval. FEMA recommends 2 minutes (120 seconds) minimum.
+        </p>
+        <div class="form-group">
+            <label for="sharedPollInterval">Poll Interval (seconds)</label>
+            <input type="number" id="sharedPollInterval"
+                   value="{{ ipaws_status.poll_interval }}" min="30" max="3600" step="30">
+            <div class="form-help">
+                Changes will be applied when you update either NOAA or IPAWS settings above.
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function selectEnvironment(env) {
+    document.querySelectorAll('.environment-option').forEach(el => {
+        el.classList.remove('selected');
+    });
+    event.currentTarget.classList.add('selected');
+    document.querySelector(`input[name="environment"][value="${env}"]`).checked = true;
+}
+
+function showAlert(message, type = 'success') {
+    const container = document.getElementById('alertContainer');
+    const alert = document.createElement('div');
+    alert.className = `alert alert-${type}`;
+    alert.innerHTML = `
+        <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'}"></i>
+        ${message}
+    `;
+    container.innerHTML = '';
+    container.appendChild(alert);
+    setTimeout(() => alert.remove(), 5000);
+}
+
+// NOAA Configuration
+document.getElementById('noaaConfigForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const formData = new FormData(e.target);
+    const data = {
+        user_agent: formData.get('user_agent'),
+        poll_interval: document.getElementById('sharedPollInterval').value
+    };
+
+    try {
+        const response = await fetch('/api/noaa/configure', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            showAlert(result.message, 'success');
+            setTimeout(() => location.reload(), 2000);
+        } else {
+            showAlert(result.error || 'Configuration failed', 'error');
+        }
+    } catch (error) {
+        showAlert('Error saving configuration: ' + error.message, 'error');
+    }
+});
+
+// IPAWS Configuration
+document.getElementById('ipawsConfigForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const formData = new FormData(e.target);
+    const data = {
+        environment: formData.get('environment'),
+        feed_type: formData.get('feed_type'),
+        poll_interval: document.getElementById('sharedPollInterval').value
+    };
+
+    if (!data.environment || !data.feed_type) {
+        showAlert('Please select both environment and feed type', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/ipaws/configure', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            showAlert(result.message, 'success');
+            setTimeout(() => location.reload(), 2000);
+        } else {
+            showAlert(result.error || 'Configuration failed', 'error');
+        }
+    } catch (error) {
+        showAlert('Error saving configuration: ' + error.message, 'error');
+    }
+});
+
+async function disableIPAWS() {
+    if (!confirm('Are you sure you want to disable IPAWS feed?')) return;
+
+    try {
+        const response = await fetch('/api/ipaws/disable', { method: 'POST' });
+        const result = await response.json();
+
+        if (response.ok) {
+            showAlert(result.message, 'success');
+            setTimeout(() => location.reload(), 2000);
+        } else {
+            showAlert(result.error || 'Failed to disable IPAWS', 'error');
+        }
+    } catch (error) {
+        showAlert('Error disabling IPAWS: ' + error.message, 'error');
+    }
+}
+
+// Auto-refresh status every 30 seconds
+setInterval(async function() {
+    try {
+        const response = await fetch('/api/ipaws/status');
+        const result = await response.json();
+
+        if (result.last_poll) {
+            document.getElementById('ipawsLastPoll').textContent = new Date(result.last_poll).toLocaleString();
+        }
+    } catch (error) {
+        console.error('Error refreshing status:', error);
+    }
+}, 30000);
+</script>
+{% endblock %}
