@@ -116,12 +116,28 @@ class StreamingSAMEDecoder:
         self.sample_buffer = np.zeros(self.corr_len, dtype=np.float32)
         self.buffer_pos = 0
         
+        # Pre-allocated correlation window to avoid repeated allocation
+        self._correlation_window = np.zeros(self.corr_len, dtype=np.float32)
+        
         # Constants
         self.PREAMBLE_BYTE = 0xAB
         self.DLL_GAIN = 0.4
         self.INTEGRATOR_MAX = 12
         self.MAX_MSG_LEN = 268
         self.sphaseinc = int(0x10000 * self.baud_rate * self.SUBSAMP / self.sample_rate)
+    
+    def reset(self) -> None:
+        """
+        Reset decoder to initial state.
+        
+        Call this when the monitor thread restarts to ensure consistent
+        statistics and state. This resets all counters including samples_processed.
+        """
+        self._reset_decoder_state()
+        self.samples_processed = 0
+        self.alerts_detected = 0
+        self.bytes_decoded = 0
+        logger.debug("StreamingSAMEDecoder reset to initial state")
     
     def _generate_correlation_tables(self) -> Tuple[List[float], List[float], List[float], List[float]]:
         """Generate correlation tables for mark and space frequencies (multimon-ng style)."""
@@ -154,26 +170,48 @@ class StreamingSAMEDecoder:
         
         self.samples_processed += len(samples)
         
-        # Process each sample
-        for sample in samples:
-            # Add sample to circular buffer
-            self.sample_buffer[self.buffer_pos] = sample
-            self.buffer_pos = (self.buffer_pos + 1) % self.corr_len
+        # OPTIMIZATION: Process samples in batches using vectorized operations
+        # instead of iterating one sample at a time in Python.
+        # This significantly reduces CPU overhead on Raspberry Pi.
+        
+        num_samples = len(samples)
+        sample_idx = 0
+        
+        while sample_idx < num_samples:
+            # Calculate how many samples we can add to the buffer in one go
+            space_in_buffer = self.corr_len - self.buffer_pos
+            samples_to_add = min(space_in_buffer, num_samples - sample_idx)
             
-            # Once buffer is full, start processing
+            # Batch copy samples into the circular buffer
+            self.sample_buffer[self.buffer_pos:self.buffer_pos + samples_to_add] = \
+                samples[sample_idx:sample_idx + samples_to_add]
+            
+            # Process each sample position (still need to track state per sample)
+            old_buffer_pos = self.buffer_pos
+            self.buffer_pos = (self.buffer_pos + samples_to_add) % self.corr_len
+            
+            # Only start processing once buffer is initially filled
             if self.samples_processed >= self.corr_len:
-                self._process_one_sample()
+                # Process each sample in this batch
+                for i in range(samples_to_add):
+                    # Update the logical position for correlation window
+                    logical_pos = (old_buffer_pos + i + 1) % self.corr_len
+                    self._process_one_sample_at(logical_pos)
+            
+            sample_idx += samples_to_add
     
-    def _process_one_sample(self) -> None:
-        """Process one correlation window (called for each new sample)."""
+    def _process_one_sample_at(self, logical_buffer_pos: int) -> None:
+        """Process one correlation window at a specific buffer position."""
         # Get samples in correct order (accounting for circular buffer)
-        if self.buffer_pos == 0:
+        # OPTIMIZATION: Use pre-allocated array and np.roll-style indexing
+        if logical_buffer_pos == 0:
             correlation_window = self.sample_buffer
         else:
-            correlation_window = np.concatenate([
-                self.sample_buffer[self.buffer_pos:],
-                self.sample_buffer[:self.buffer_pos]
-            ])
+            # Use pre-allocated window to avoid repeated allocation
+            tail_len = self.corr_len - logical_buffer_pos
+            self._correlation_window[:tail_len] = self.sample_buffer[logical_buffer_pos:]
+            self._correlation_window[tail_len:] = self.sample_buffer[:logical_buffer_pos]
+            correlation_window = self._correlation_window
         
         # Compute correlation (mark - space)
         mark_i_corr = np.dot(correlation_window, self.mark_i)

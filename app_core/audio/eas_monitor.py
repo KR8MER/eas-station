@@ -698,6 +698,10 @@ class ContinuousEASMonitor:
             # causing the runtime display to jump between values (e.g., 6 min -> 2 sec -> 6 min)
             self._start_time = time.time()
             
+            # CRITICAL FIX: Reset the streaming decoder to clear samples_processed counter
+            # This ensures runtime metrics stay consistent after restart
+            self._streaming_decoder.reset()
+            
             # Start new monitoring thread
             self._monitor_thread = threading.Thread(
                 target=self._monitor_loop,

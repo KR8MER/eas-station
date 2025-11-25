@@ -68,9 +68,14 @@ class BroadcastAudioAdapter:
         # Subscribe to broadcast queue
         self._subscriber_queue = broadcast_queue.subscribe(subscriber_id)
 
-        # Local buffer for read_audio()
-        self._buffer = np.array([], dtype=np.float32)
+        # OPTIMIZATION: Use a list of chunks instead of repeated np.concatenate
+        # This avoids O(n) array allocations on every chunk append
+        self._chunk_list: list = []
+        self._chunk_total_samples: int = 0
         self._buffer_lock = threading.Lock()
+        
+        # Maximum buffer size (5 seconds of audio)
+        self._max_buffer_samples = sample_rate * 5
 
         # Statistics for monitoring audio continuity
         self._underrun_count = 0
@@ -81,6 +86,33 @@ class BroadcastAudioAdapter:
         logger.info(
             f"BroadcastAudioAdapter '{subscriber_id}' subscribed to '{broadcast_queue.name}'"
         )
+
+    def _consolidate_chunks(self) -> np.ndarray:
+        """
+        Consolidate chunk list into a single contiguous array.
+        
+        OPTIMIZATION: Only concatenates when needed (when extracting samples),
+        instead of on every chunk append. This amortizes the O(n) cost.
+        """
+        if not self._chunk_list:
+            return np.array([], dtype=np.float32)
+        if len(self._chunk_list) == 1:
+            return self._chunk_list[0]
+        result = np.concatenate(self._chunk_list)
+        self._chunk_list = [result]
+        self._chunk_total_samples = len(result)
+        return result
+
+    def _trim_buffer_if_needed(self) -> None:
+        """Trim buffer if it exceeds maximum size, keeping recent audio."""
+        if self._chunk_total_samples <= self._max_buffer_samples:
+            return
+        
+        # Consolidate and trim
+        buffer = self._consolidate_chunks()
+        trimmed = buffer[-self._max_buffer_samples:]
+        self._chunk_list = [trimmed]
+        self._chunk_total_samples = len(trimmed)
 
     def read_audio(self, num_samples: int) -> Optional[np.ndarray]:
         """
@@ -98,11 +130,11 @@ class BroadcastAudioAdapter:
             self._total_reads += 1
 
             # Try to fill buffer if we don't have enough samples
-            while len(self._buffer) < num_samples:
+            while self._chunk_total_samples < num_samples:
                 try:
-                    # Increased timeout to 2.0s to prevent false underruns
-                    # Broadcast pump publishes ~10 chunks/sec, so 2s should always get data
-                    chunk = self._subscriber_queue.get(timeout=2.0)
+                    # OPTIMIZATION: Reduced timeout from 2.0s to 0.5s to be more responsive
+                    # The EAS monitor processes 100ms chunks, so long timeouts cause stuttering
+                    chunk = self._subscriber_queue.get(timeout=0.5)
 
                     # Log successful read for first few to verify subscription works
                     if self._total_reads < 5:
@@ -112,7 +144,7 @@ class BroadcastAudioAdapter:
                         )
                 except Exception as e:
                     # No more audio available right now
-                    if len(self._buffer) < num_samples:
+                    if self._chunk_total_samples < num_samples:
                         # Buffer underrun - log warning for monitoring
                         self._underrun_count += 1
                         now = time.time()
@@ -127,8 +159,8 @@ class BroadcastAudioAdapter:
                             queue_size = self._subscriber_queue.qsize()
                             logger.warning(
                                 f"❌ {self.subscriber_id}: Underrun #{self._underrun_count}! "
-                                f"Queue timeout after 2.0s, queue_size={queue_size}, "
-                                f"buffer={len(self._buffer)}/{num_samples} samples, "
+                                f"Queue timeout after 0.5s, queue_size={queue_size}, "
+                                f"buffer={self._chunk_total_samples}/{num_samples} samples, "
                                 f"exception={type(e).__name__}"
                             )
                             self._last_underrun_log = now
@@ -136,37 +168,46 @@ class BroadcastAudioAdapter:
                     break
 
                 if chunk is None:
-                    if len(self._buffer) < num_samples:
+                    if self._chunk_total_samples < num_samples:
                         self._underrun_count += 1
                         logger.warning(
                             f"{self.subscriber_id}: Received None chunk, "
-                            f"insufficient buffer ({len(self._buffer)}/{num_samples} samples)"
+                            f"insufficient buffer ({self._chunk_total_samples}/{num_samples} samples)"
                         )
                         return None
                     break
 
-                # Append chunk to buffer
-                self._buffer = np.concatenate([self._buffer, chunk])
+                # OPTIMIZATION: Append chunk to list instead of np.concatenate
+                # This avoids O(n) array allocation on every chunk
+                self._chunk_list.append(chunk)
+                self._chunk_total_samples += len(chunk)
                 self._last_audio_time = time.time()
 
-                # Limit buffer size to prevent unbounded growth
-                # Keep max 5 seconds worth of audio
-                max_buffer_samples = self.sample_rate * 5
-                if len(self._buffer) > max_buffer_samples:
-                    # Trim from front (drop oldest audio)
-                    self._buffer = self._buffer[-max_buffer_samples:]
+                # Trim if buffer is too large
+                self._trim_buffer_if_needed()
 
             # Extract requested samples
-            if len(self._buffer) >= num_samples:
-                samples = self._buffer[:num_samples].copy()
-                self._buffer = self._buffer[num_samples:]
+            if self._chunk_total_samples >= num_samples:
+                # Consolidate chunks only when we need to extract data
+                buffer = self._consolidate_chunks()
+                samples = buffer[:num_samples].copy()
+                
+                # Keep remaining samples
+                remaining = buffer[num_samples:]
+                if len(remaining) > 0:
+                    self._chunk_list = [remaining]
+                    self._chunk_total_samples = len(remaining)
+                else:
+                    self._chunk_list = []
+                    self._chunk_total_samples = 0
+                
                 return samples
 
             # This shouldn't happen due to while loop above, but safety check
             self._underrun_count += 1
             logger.warning(
                 f"{self.subscriber_id}: Unexpected buffer state - "
-                f"have {len(self._buffer)}, need {num_samples}"
+                f"have {self._chunk_total_samples}, need {num_samples}"
             )
             return None
 
@@ -190,38 +231,46 @@ class BroadcastAudioAdapter:
             self._total_reads += 1
             
             # Try to fill buffer if we don't have enough samples
-            while len(self._buffer) < chunk_samples:
+            while self._chunk_total_samples < chunk_samples:
                 try:
                     # Use the caller's timeout (important for Icecast prebuffering)
                     chunk = self._subscriber_queue.get(timeout=timeout)
                 except:  # noqa: E722
                     # Queue.Empty or other timeout-related exception
                     # No more audio available right now
-                    if len(self._buffer) < chunk_samples:
+                    if self._chunk_total_samples < chunk_samples:
                         # Not enough data - return None
                         return None
                     break
                 
                 if chunk is None:
-                    if len(self._buffer) < chunk_samples:
+                    if self._chunk_total_samples < chunk_samples:
                         return None
                     break
 
-                # Append chunk to buffer
-                self._buffer = np.concatenate([self._buffer, chunk])
+                # OPTIMIZATION: Append chunk to list instead of np.concatenate
+                self._chunk_list.append(chunk)
+                self._chunk_total_samples += len(chunk)
                 self._last_audio_time = time.time()
                 
-                # Limit buffer size to prevent unbounded growth
-                # Keep max 5 seconds worth of audio
-                max_buffer_samples = self.sample_rate * 5
-                if len(self._buffer) > max_buffer_samples:
-                    # Trim from front (drop oldest audio)
-                    self._buffer = self._buffer[-max_buffer_samples:]
+                # Trim if buffer is too large
+                self._trim_buffer_if_needed()
             
             # Extract requested samples
-            if len(self._buffer) >= chunk_samples:
-                samples = self._buffer[:chunk_samples].copy()
-                self._buffer = self._buffer[chunk_samples:]
+            if self._chunk_total_samples >= chunk_samples:
+                # Consolidate chunks only when we need to extract data
+                buffer = self._consolidate_chunks()
+                samples = buffer[:chunk_samples].copy()
+                
+                # Keep remaining samples
+                remaining = buffer[chunk_samples:]
+                if len(remaining) > 0:
+                    self._chunk_list = [remaining]
+                    self._chunk_total_samples = len(remaining)
+                else:
+                    self._chunk_list = []
+                    self._chunk_total_samples = 0
+                
                 return samples
             
             # Not enough data
@@ -244,15 +293,18 @@ class BroadcastAudioAdapter:
             NumPy array of recent audio samples, or None if buffer is empty
         """
         with self._buffer_lock:
-            if len(self._buffer) == 0:
+            if self._chunk_total_samples == 0:
                 logger.warning(
                     f"{self.subscriber_id}: get_recent_audio() called but buffer is empty"
                 )
                 return None
             
+            # Consolidate chunks to access data
+            buffer = self._consolidate_chunks()
+            
             # Return up to num_samples from the current buffer
             # If we have less than requested, return what we have
-            available_samples = min(len(self._buffer), num_samples)
+            available_samples = min(len(buffer), num_samples)
             
             if available_samples < num_samples:
                 logger.debug(
@@ -261,7 +313,7 @@ class BroadcastAudioAdapter:
                 )
             
             # Return copy of recent audio without consuming from buffer
-            return self._buffer[:available_samples].copy()
+            return buffer[:available_samples].copy()
 
     def get_active_source(self) -> Optional[str]:
         """Get name of currently active audio source."""
@@ -277,7 +329,7 @@ class BroadcastAudioAdapter:
         """
         with self._buffer_lock:
             queue_size = self._subscriber_queue.qsize()
-            buffer_samples = len(self._buffer)
+            buffer_samples = self._chunk_total_samples
             buffer_seconds = buffer_samples / self.sample_rate if self.sample_rate > 0 else 0
 
             # Calculate underrun rate
