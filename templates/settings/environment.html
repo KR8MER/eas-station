@@ -428,11 +428,17 @@
             renderCategoryNav();
             renderCategories();
 
-            // Activate first category
+            // Activate requested category (via query param) or default to first
+            const urlParams = new URLSearchParams(window.location.search);
+            const requestedCategory = (urlParams.get('category') || '').toLowerCase();
             const firstCat = Object.keys(categoriesData)[0];
-            if (firstCat) {
-                console.log('Activating first category:', firstCat);
-                activateCategory(firstCat);
+            const targetCategory = (requestedCategory && categoriesData[requestedCategory])
+                ? requestedCategory
+                : firstCat;
+
+            if (targetCategory) {
+                console.log('Activating category:', targetCategory);
+                activateCategory(targetCategory);
             }
 
             hideLoading();

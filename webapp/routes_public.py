@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 from collections import defaultdict
 from html import escape
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from flask import Flask, render_template, request, url_for, Response
@@ -49,6 +50,7 @@ from app_core.models import (
 )
 from app_core.system_health import get_system_health
 from app_utils import format_bytes, format_uptime, utc_now
+from webapp import documentation
 from app_utils.pdf_generator import generate_pdf_document
 
 
@@ -56,6 +58,29 @@ def register(app: Flask, logger) -> None:
     """Attach public and operator-facing pages to the Flask app."""
 
     route_logger = logger.getChild("routes_public")
+    policy_docs_root = Path(app.root_path) / "docs" / "policies"
+
+    def _render_policy_page(doc_filename: str, page_title: str):
+        policy_path = policy_docs_root / doc_filename
+        try:
+            with policy_path.open("r", encoding="utf-8") as md_file:
+                markdown_content = md_file.read()
+            html_content = documentation._markdown_to_html(markdown_content)
+            structure = documentation._get_docs_structure()
+            return render_template(
+                "doc_viewer.html",
+                title=page_title,
+                content=html_content,
+                doc_path=f"policies/{policy_path.stem}",
+                structure=structure,
+            )
+        except FileNotFoundError:
+            route_logger.error("Policy document not found: %s", policy_path)
+        except Exception as exc:  # pragma: no cover - renderable fallback
+            route_logger.error("Error rendering policy page %s: %s", doc_filename, exc)
+
+        # Fallback to legacy static templates to keep the route available
+        return render_template(f"{policy_path.stem}.html")
 
     @app.route("/")
     def index():
@@ -582,23 +607,11 @@ def register(app: Flask, logger) -> None:
 
     @app.route("/terms")
     def terms_page():
-        try:
-            return render_template("terms.html")
-        except Exception as exc:  # pragma: no cover - fallback content
-            route_logger.error("Error rendering terms page: %s", exc)
-            return (
-                "<h1>Terms of Use</h1><p>Refer to docs/policies/TERMS_OF_USE.md in the repository for the full terms.</p>"
-            )
+        return _render_policy_page("TERMS_OF_USE.md", "Terms of Use")
 
     @app.route("/privacy")
     def privacy_page():
-        try:
-            return render_template("privacy.html")
-        except Exception as exc:  # pragma: no cover - fallback content
-            route_logger.error("Error rendering privacy page: %s", exc)
-            return (
-                "<h1>Privacy Policy</h1><p>Refer to docs/policies/PRIVACY_POLICY.md in the repository for the full policy.</p>"
-            )
+        return _render_policy_page("PRIVACY_POLICY.md", "Privacy Policy")
 
     @app.route("/system_health")
     def system_health_page():

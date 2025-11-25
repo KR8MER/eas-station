@@ -371,7 +371,9 @@ def _permission_denied_response(permission_name: str):
         )
 
     flash("You do not have permission to access that page.")
-    return redirect(url_for("admin"))
+    # Redirect to the admin dashboard route within its blueprint to avoid
+    # BuildError when a non-namespaced endpoint is unavailable.
+    return redirect(url_for("dashboard.admin"))
 
 
 def require_permission(permission_name: str):

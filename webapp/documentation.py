@@ -32,7 +32,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from flask import Flask, render_template, abort, make_response
+from flask import Flask, render_template, abort, make_response, redirect, url_for
 from markupsafe import escape, Markup
 
 logger = logging.getLogger(__name__)
@@ -311,10 +311,18 @@ def _get_docs_structure() -> Dict[str, List[Dict[str, str]]]:
         # Create URL path
         url_path = str(rel_path.with_suffix('')).replace('\\', '/')
 
+        # Policies are canonicalized to dedicated routes to avoid duplicate content
+        if rel_path == Path('policies/TERMS_OF_USE.md'):
+            url = '/terms'
+        elif rel_path == Path('policies/PRIVACY_POLICY.md'):
+            url = '/privacy'
+        else:
+            url = f'/docs/{url_path}'
+
         structure[category].append({
             'title': title,
             'path': str(rel_path),
-            'url': f'/docs/{url_path}'
+            'url': url
         })
 
     # Sort each category
@@ -402,6 +410,14 @@ def register_documentation_routes(app: Flask, logger_instance: Any) -> None:
     @app.route('/docs/<path:doc_path>')
     def view_doc(doc_path: str):
         """View a specific documentation file."""
+        normalized_path = doc_path.removesuffix('.md')
+
+        if normalized_path == 'policies/TERMS_OF_USE':
+            return redirect(url_for('terms_page'))
+
+        if normalized_path == 'policies/PRIVACY_POLICY':
+            return redirect(url_for('privacy_page'))
+
         # Security: prevent directory traversal
         if '..' in doc_path or doc_path.startswith('/'):
             abort(404)

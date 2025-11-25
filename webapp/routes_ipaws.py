@@ -30,6 +30,8 @@ from typing import Dict, List, Optional
 from flask import Blueprint, jsonify, render_template, request
 from werkzeug.exceptions import BadRequest
 
+from dotenv import dotenv_values
+
 from app_core.auth.roles import require_permission
 from app_core.models import db, PollHistory
 from app_utils.alert_sources import ALERT_SOURCE_IPAWS
@@ -96,22 +98,29 @@ def _get_config_path() -> Path:
 def _read_current_config() -> Dict[str, str]:
     """Read current IPAWS configuration from .env file."""
     config_path = _get_config_path()
-    config = {}
+    config: Dict[str, str] = {}
 
-    if not config_path.exists():
-        return config
+    # First, attempt to load from the persistent config file (if it exists)
+    if config_path.exists():
+        try:
+            file_values = dotenv_values(config_path)
+            config.update({k: v for k, v in file_values.items() if v is not None})
+        except Exception as exc:
+            logger.error(f"Failed to read config file: {exc}")
 
-    try:
-        with open(config_path, 'r') as f:
-            for line in f:
-                line = line.strip()
-                if not line or line.startswith('#'):
-                    continue
-                if '=' in line:
-                    key, value = line.split('=', 1)
-                    config[key.strip()] = value.strip()
-    except Exception as exc:
-        logger.error(f"Failed to read config file: {exc}")
+    # Always merge runtime environment variables so the UI reflects the
+    # active configuration even if the persistent file is missing or empty.
+    # Environment variables should take precedence because they are what
+    # the running services are using at runtime.
+    for key in (
+        'IPAWS_CAP_FEED_URLS',
+        'POLL_INTERVAL_SEC',
+        'NOAA_USER_AGENT',
+        'CAP_ENDPOINTS',
+    ):
+        env_value = os.environ.get(key, '').strip()
+        if env_value:
+            config[key] = env_value
 
     return config
 
