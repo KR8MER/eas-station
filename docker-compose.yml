@@ -174,7 +174,7 @@ services:
       - app
     networks:
       - eas-network
-    command: ["python", "poller/cap_poller.py", "--continuous", "--interval", "180"]
+    command: ["python", "poller/cap_poller.py", "--continuous", "--interval", "120"]
     restart: unless-stopped
     env_file:
       - stack.env  # For Portainer Git deployments - provides defaults
@@ -220,7 +220,7 @@ services:
       - poller/cap_poller.py
       - --continuous
       - --interval
-      - "180"
+      - "120"
       - --log-level
       - "${LOG_LEVEL:-INFO}"
     restart: unless-stopped
