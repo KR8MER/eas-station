@@ -186,14 +186,9 @@
     max-height: 112px;
     width: auto;
     display: block;
-    padding: var(--logo-padding);
-    background: var(--logo-backdrop);
-    border-radius: var(--logo-radius);
-    border: 1px solid var(--logo-border-color);
-    box-shadow: var(--logo-shadow);
-    transition: background-color var(--transition-medium),
-                box-shadow var(--transition-medium),
-                border-color var(--transition-medium);
+    /* Drop shadow follows logo shape for clean appearance */
+    filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.35));
+    transition: filter var(--transition-medium);
 }
 
 /* Responsive logo sizing */
