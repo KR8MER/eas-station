@@ -72,31 +72,31 @@
     transform: translateY(0);
 }
 
-/* Primary button enhancements */
+/* Primary button enhancements - uses theme shadow-color for consistency */
 .btn-primary {
-    box-shadow: 0 2px 4px rgba(32, 72, 133, 0.15);
+    box-shadow: 0 2px 4px var(--shadow-color);
 }
 
 .btn-primary:hover:not(:disabled) {
-    box-shadow: 0 4px 8px rgba(32, 72, 133, 0.2);
+    box-shadow: 0 4px 8px var(--shadow-color);
 }
 
 /* Success button enhancements */
 .btn-success {
-    box-shadow: 0 2px 4px rgba(46, 176, 141, 0.15);
+    box-shadow: 0 2px 4px var(--shadow-color);
 }
 
 .btn-success:hover:not(:disabled) {
-    box-shadow: 0 4px 8px rgba(46, 176, 141, 0.2);
+    box-shadow: 0 4px 8px var(--shadow-color);
 }
 
 /* Danger button enhancements */
 .btn-danger {
-    box-shadow: 0 2px 4px rgba(224, 82, 99, 0.15);
+    box-shadow: 0 2px 4px var(--shadow-color);
 }
 
 .btn-danger:hover:not(:disabled) {
-    box-shadow: 0 4px 8px rgba(224, 82, 99, 0.2);
+    box-shadow: 0 4px 8px var(--shadow-color);
 }
 
 /* Outline button refinements */
@@ -220,25 +220,28 @@
     padding: 0.35em 0.75em;
 }
 
-/* Status badges with subtle backgrounds */
+/* Status badges - use Bootstrap's default backgrounds, just add subtle gradients
+   Note: These override Bootstrap's solid colors with subtle gradients for polish.
+   The rgba values here match the theme's --success-color, --warning-color, etc.
+   for the default Cosmo theme. Dark themes override these in base.css. */
 .badge.bg-success {
-    background: linear-gradient(135deg, rgba(46, 176, 141, 0.9), rgba(46, 176, 141, 1)) !important;
+    background: linear-gradient(135deg, var(--success-color), var(--success-color)) !important;
 }
 
 .badge.bg-warning {
-    background: linear-gradient(135deg, rgba(246, 185, 104, 0.9), rgba(246, 185, 104, 1)) !important;
+    background: linear-gradient(135deg, var(--warning-color), var(--warning-color)) !important;
 }
 
 .badge.bg-danger {
-    background: linear-gradient(135deg, rgba(224, 82, 99, 0.9), rgba(224, 82, 99, 1)) !important;
+    background: linear-gradient(135deg, var(--danger-color), var(--danger-color)) !important;
 }
 
 .badge.bg-info {
-    background: linear-gradient(135deg, rgba(47, 90, 161, 0.9), rgba(47, 90, 161, 1)) !important;
+    background: linear-gradient(135deg, var(--info-color), var(--info-color)) !important;
 }
 
 .badge.bg-primary {
-    background: linear-gradient(135deg, rgba(32, 72, 133, 0.9), rgba(32, 72, 133, 1)) !important;
+    background: linear-gradient(135deg, var(--primary-color), var(--primary-color)) !important;
 }
 
 /* ============================================
@@ -690,11 +693,11 @@
 
 /* ============================================
    SELECTION STYLING
-   Refined text selection
+   Refined text selection using theme shadow-color
    ============================================ */
 
 ::selection {
-    background-color: rgba(32, 72, 133, 0.2);
+    background-color: var(--shadow-color);
     color: inherit;
 }
 
