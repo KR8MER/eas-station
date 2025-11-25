@@ -39,7 +39,7 @@ If you're new to EAS Station, start here:
 ### Configuration & Setup
 | Document | Description |
 |----------|-------------|
-| [📡 SDR Setup Guide](guides/sdr_setup_guide) | Radio receiver configuration |
+| [📡 SDR Setup Guide](hardware/SDR_SETUP) | Radio receiver configuration |
 | [🌐 IPAWS Integration](guides/ipaws_feed_integration) | Federal alert source setup |
 | [🔄 Environment Migration](guides/ENV_MIGRATION_GUIDE) | Moving between versions |
 | [🗄️ Database Setup](guides/DATABASE_CONSISTENCY_FIXES) | PostgreSQL/PostGIS configuration |

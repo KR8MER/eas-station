@@ -57,13 +57,20 @@ The system now supports **67 event codes** (up from 61) and can encode/decode al
 
 **Separated Service Design** - Modern, reliable, production-grade architecture:
 
-```
-Audio Service           Web Application
-├─ Audio Ingestion      ├─ REST API
-├─ EAS Monitoring       ├─ WebSocket
-├─ SAME Decoding        ├─ Web UI
-└─ Metrics ──────►      └─ Configuration
-                 Redis (State Storage)
+```mermaid
+graph LR
+    A[Alert Sources<br/>NOAA/IPAWS] --> P[Poller Service]
+    P --> DB[(PostgreSQL<br/>PostGIS)]
+    DB --> W[Web Service<br/>Flask]
+    DB --> AS[Audio Service<br/>SAME Encoder]
+    AS --> TX[Transmitter]
+    W --> UI[Web Browser]
+
+    style A fill:#3b82f6,color:#fff
+    style DB fill:#8b5cf6,color:#fff
+    style W fill:#10b981,color:#fff
+    style AS fill:#f59e0b,color:#000
+    style UI fill:#6366f1,color:#fff
 ```
 
 **Benefits:**
@@ -72,9 +79,29 @@ Audio Service           Web Application
 - ✅ **Fast** - Dedicated resources per service
 - ✅ **Debuggable** - Separate logs, independent restart
 
-See **[DEPLOYMENT_GUIDE.md](docs/archive/root-docs/DEPLOYMENT_GUIDE.md)** for details.
-
 ## 🚀 Quick Start
+
+### Deployment Flow
+
+```mermaid
+flowchart TD
+    START[Clone Repository] --> ENV[Copy .env.example to .env]
+    ENV --> CONFIG{Configure<br/>Settings?}
+    CONFIG -->|Later| BUILD[docker compose up -d]
+    CONFIG -->|Now| EDIT[Edit .env file]
+    EDIT --> BUILD
+    BUILD --> HTTPS{Production<br/>or Local?}
+    HTTPS -->|Production| DOMAIN[Set DOMAIN_NAME in .env]
+    HTTPS -->|Local| ACCEPT[Accept self-signed cert]
+    DOMAIN --> RESTART[docker compose restart]
+    ACCEPT --> WEB[Open https://localhost]
+    RESTART --> WEB
+    WEB --> DONE[✓ Running!]
+
+    style START fill:#3b82f6,color:#fff
+    style BUILD fill:#8b5cf6,color:#fff
+    style DONE fill:#10b981,color:#fff
+```
 
 ### One-Command Installation
 
@@ -103,62 +130,34 @@ Then open **https://localhost** in your browser (HTTPS enabled by default).
 
 ## 📚 Documentation
 
-<table>
-<tr>
-<td width="50%">
+```mermaid
+graph TD
+    START{What do you<br/>want to do?}
+    START -->|Install & Setup| SETUP[📖 Quick Start Guide]
+    START -->|Configure Hardware| HW[📡 SDR Setup<br/>🎧 Audio Setup]
+    START -->|Daily Operations| OPS[📘 User Guide<br/>🛠️ Admin Guide]
+    START -->|Development| DEV[💻 Developer Guide<br/>🎨 Frontend Docs]
 
-### For Users
-- **[📖 Getting Started](docs/INDEX)**
-  Installation, configuration, first alert
+    SETUP --> DOCS[📚 Full Documentation]
+    HW --> DOCS
+    OPS --> DOCS
+    DEV --> DOCS
 
-- **[🛠️ Setup Instructions](docs/guides/SETUP_INSTRUCTIONS)**
-  First-run wizard walkthrough and environment validation tips
-
-- **[📘 User Guide](docs/guides/HELP)**
-  Daily operations, alert management, hardware
-
-- **[📡 SDR Setup Guide](docs/SDR_SETUP)**
-  USB device passthrough, troubleshooting, udev rules
-
-- **[🔧 Admin Guide](docs/guides/PORTAINER_DEPLOYMENT)**
-  Deployment, database, maintenance
-
-- **[🔒 HTTPS Setup](docs/guides/HTTPS_SETUP)**
-  SSL/TLS configuration, Let's Encrypt certificates, nginx reverse proxy
-
-- **[🎧 Audio Monitoring](docs/audio/AUDIO_MONITORING)**
-  Live stream viewer, level metering, troubleshooting steps
-
-</td>
-<td width="50%">
-
-### For Developers
-- **[💻 Developer Guide](docs/development/AGENTS)**
-  Architecture, contribution guidelines, testing
-
-- **[🎨 Frontend Docs](docs/frontend/FRONTEND_INDEX)**
-  UI components, theming, JavaScript API
-
-- **[📡 API Reference](docs/frontend/JAVASCRIPT_API)**
-  REST API and JavaScript API documentation
-
-</td>
-</tr>
-</table>
-
-For complete documentation coverage, see **[Documentation Index](docs/INDEX)** with searchable topics.
-
-### Browse Full Documentation
-
-📖 **[View Complete Documentation Site](https://kr8mer.github.io/eas-station/)** (Coming Soon)
-
-Or build locally:
-
-```bash
-pip install -r requirements-docs.txt
-mkdocs serve
-# Open http://localhost:8000
+    style START fill:#3b82f6,color:#fff
+    style DOCS fill:#10b981,color:#fff
 ```
+
+### Quick Links
+
+| For... | Start Here |
+|--------|------------|
+| **First Time Setup** | [Setup Instructions](docs/guides/SETUP_INSTRUCTIONS) → [Quick Start](#quick-start) |
+| **Radio Configuration** | [SDR Setup Guide](docs/hardware/SDR_SETUP) |
+| **Daily Operations** | [User Guide](docs/guides/HELP) |
+| **Deployment** | [Portainer Guide](docs/guides/PORTAINER_DEPLOYMENT) |
+| **Development** | [Developer Guide](docs/development/AGENTS) |
+
+**📖 [Complete Documentation Index](docs/INDEX)** - Searchable topics and detailed guides
 
 ## 📡 API Endpoints
 

@@ -79,7 +79,7 @@ This page provides an index of all professional diagrams and flowcharts availabl
 
 **File:** [`assets/diagrams/sdr-setup-flow.svg`](assets/diagrams/sdr-setup-flow.svg)
 
-**Related Documentation:** [SDR Setup Guide](guides/sdr_setup_guide)
+**Related Documentation:** [SDR Setup Guide](hardware/SDR_SETUP)
 
 ---
 

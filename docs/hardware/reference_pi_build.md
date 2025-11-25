@@ -623,7 +623,7 @@ Yellow lightning bolt icon or throttling logs indicate insufficient power:
 
 - [Official Raspberry Pi Documentation](https://www.raspberrypi.com/documentation/)
 - [GPIO Pinout Reference](https://pinout.xyz/)
-- [RTL-SDR Quick Start](../guides/SDR_QUICKSTART)
+- [SDR Setup Guide](SDR_SETUP)
 - [Audio Hardware Setup](../deployment/audio_hardware)
 - [GPIO Integration Guide](gpio)
 - [Deployment Checklist](../deployment/post_install)

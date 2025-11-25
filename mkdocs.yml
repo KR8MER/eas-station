@@ -133,7 +133,7 @@ nav:
       - Environment Migration: guides/ENV_MIGRATION_GUIDE.md
       - IPAWS Feed Integration: guides/ipaws_feed_integration.md
       - Radio USB Passthrough: guides/radio_usb_passthrough.md
-      - SDR Setup Guide: guides/sdr_setup_guide.md
+      - SDR Setup Guide: hardware/SDR_SETUP.md
       - One Button Upgrade: guides/one_button_upgrade.md
       - Audio Monitoring Dashboard: audio/AUDIO_MONITORING.md
   - Development:

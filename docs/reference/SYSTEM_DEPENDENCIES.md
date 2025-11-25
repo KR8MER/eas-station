@@ -513,7 +513,7 @@ All system packages listed in this document are open-source software. See `depen
 
 - [dependency_attribution.md](dependency_attribution) - Complete dependency licensing information
 - [ICECAST_STREAMING.md](../guides/ICECAST_STREAMING) - Icecast setup and configuration
-- [SDR_QUICKSTART.md](../guides/SDR_QUICKSTART) - Software Defined Radio setup
+- [SDR Setup Guide](../hardware/SDR_SETUP) - Software Defined Radio setup
 - [audio_hardware.md](../deployment/audio_hardware) - USB audio interface configuration
 
 ---
