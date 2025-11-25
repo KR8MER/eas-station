@@ -537,33 +537,35 @@
                         <div class="col-md-4">
                             <h5>Bulk Operations</h5>
                             <div class="card shadow-sm h-100">
-                            <h6>Delete by Type</h6>
-                            <select id="deleteType" class="form-select mb-3">
-                                <option value="">Select boundary type...</option>
-                                <option value="electric">⚡ Electric Providers</option>
-                                <option value="villages">🏘️ Villages</option>
-                                <option value="school">🏫 School Districts</option>
-                                <option value="fire">🔥 Fire Districts</option>
-                                <option value="ems">🚑 EMS Districts</option>
-                                <option value="township">🏘️ Townships</option>
-                                <option value="telephone">📞 Telephone Providers</option>
-                                <option value="railroads">🚆 Railroads</option>
-                                <option value="rivers">🌊 Rivers & Streams</option>
-                                <option value="waterbodies">💧 Lakes & Ponds</option>
-                                <option value="county">🗺️ County Outlines</option>
-                                <option value="custom">➕ Custom Type…</option>
-                            </select>
-                            <div class="mb-3" id="customDeleteBoundaryTypeWrapper" style="display: none;">
-                                <label for="customDeleteBoundaryType" class="form-label fw-bold">Custom Type Name</label>
-                                <input type="text" id="customDeleteBoundaryType" class="form-control" placeholder="e.g. Rail Corridors">
-                                <div class="form-text">Enter the custom type you previously uploaded to remove it from the system.</div>
-                            </div>
-                            <button onclick="deleteBoundariesByType()" class="btn btn-warning w-100 mb-2">
-                                <i class="fas fa-trash-alt"></i> Delete by Type
-                            </button>
-                                <button onclick="clearAllBoundaries()" class="btn btn-danger w-100">
-                                    <i class="fas fa-exclamation-triangle"></i> Clear ALL
-                                </button>
+                                <div class="card-body">
+                                    <h6>Delete by Type</h6>
+                                    <select id="deleteType" class="form-select mb-3">
+                                        <option value="">Select boundary type...</option>
+                                        <option value="electric">⚡ Electric Providers</option>
+                                        <option value="villages">🏘️ Villages</option>
+                                        <option value="school">🏫 School Districts</option>
+                                        <option value="fire">🔥 Fire Districts</option>
+                                        <option value="ems">🚑 EMS Districts</option>
+                                        <option value="township">🏘️ Townships</option>
+                                        <option value="telephone">📞 Telephone Providers</option>
+                                        <option value="railroads">🚆 Railroads</option>
+                                        <option value="rivers">🌊 Rivers & Streams</option>
+                                        <option value="waterbodies">💧 Lakes & Ponds</option>
+                                        <option value="county">🗺️ County Outlines</option>
+                                        <option value="custom">➕ Custom Type…</option>
+                                    </select>
+                                    <div class="mb-3" id="customDeleteBoundaryTypeWrapper" style="display: none;">
+                                        <label for="customDeleteBoundaryType" class="form-label fw-bold">Custom Type Name</label>
+                                        <input type="text" id="customDeleteBoundaryType" class="form-control" placeholder="e.g. Rail Corridors">
+                                        <div class="form-text">Enter the custom type you previously uploaded to remove it from the system.</div>
+                                    </div>
+                                    <button onclick="deleteBoundariesByType()" class="btn btn-warning w-100 mb-2">
+                                        <i class="fas fa-trash-alt"></i> Delete by Type
+                                    </button>
+                                    <button onclick="clearAllBoundaries()" class="btn btn-danger w-100">
+                                        <i class="fas fa-exclamation-triangle"></i> Clear ALL
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1944,7 +1946,7 @@
                 </tr>
             `;
             try {
-                const response = await fetch('/eas/messages?limit=100', {
+                const response = await fetch('/admin/eas_messages?limit=100', {
                     headers: { 'Accept': 'application/json' }
                 });
                 if (response.status === 401) {
@@ -2065,7 +2067,7 @@
         }
         async function deleteEasMessage(messageId) {
             try {
-                const response = await fetch(`/eas/messages/${messageId}`, {
+                const response = await fetch(`/admin/eas_messages/${messageId}`, {
                     method: 'DELETE',
                     headers: { 'Accept': 'application/json' },
                 });
@@ -2085,7 +2087,7 @@
         }
         async function purgeEasMessages(olderThanDays) {
             try {
-                const response = await fetch('/eas/messages/purge', {
+                const response = await fetch('/admin/eas_messages/purge', {
                     method: 'POST',
                     headers: {
                         'Accept': 'application/json',
