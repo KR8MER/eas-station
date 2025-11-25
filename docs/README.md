@@ -8,18 +8,7 @@
 
 ## 🚀 Getting Started
 
-```mermaid
-flowchart LR
-    NEW[New User?] --> INSTALL[1. Install]
-    INSTALL --> CONFIG[2. Configure]
-    CONFIG --> TEST[3. Test]
-    TEST --> OPERATE[4. Daily Use]
-
-    style NEW fill:#3b82f6,color:#fff
-    style OPERATE fill:#10b981,color:#fff
-```
-
-**5-Minute Quick Start:**
+**Quick Start Path:**
 1. **[Installation](../README.md#quick-start)** - One command to get running
 2. **[Setup Wizard](guides/SETUP_INSTRUCTIONS)** - First-run configuration
 3. **[User Guide](guides/HELP)** - Daily operations
@@ -35,8 +24,8 @@ flowchart LR
 | Guide | What You'll Learn |
 |-------|-------------------|
 | **[User Guide](guides/HELP)** | Dashboard, alerts, monitoring |
-| **[Audio Monitoring](audio/AUDIO_MONITORING)** | Live audio streams, troubleshooting |
 | **[Setup Instructions](guides/SETUP_INSTRUCTIONS)** | First-time configuration |
+| **[HTTPS Setup](guides/HTTPS_SETUP)** | Secure access configuration |
 
 ### 🔧 For Administrators
 
@@ -44,10 +33,10 @@ flowchart LR
 
 | Guide | What You'll Learn |
 |-------|-------------------|
-| **[Portainer Deployment](guides/PORTAINER_DEPLOYMENT)** | Complete deployment guide |
+| **[Portainer Deployment](deployment/PORTAINER_DEPLOYMENT)** | Complete deployment guide |
 | **[SDR Setup](hardware/SDR_SETUP)** | Radio receiver configuration |
-| **[HTTPS Setup](guides/HTTPS_SETUP)** | SSL/TLS certificates |
-| **[Database Setup](guides/DATABASE_CONSISTENCY_FIXES)** | PostgreSQL troubleshooting |
+| **[Hardware Build](hardware/reference_pi_build)** | Raspberry Pi setup |
+| **[Database Troubleshooting](troubleshooting/DATABASE_CONSISTENCY_FIXES)** | PostgreSQL issues |
 
 ### 💻 For Developers
 
@@ -66,50 +55,18 @@ flowchart LR
 
 ### Architecture
 
-```mermaid
-graph TB
-    subgraph "Alert Sources"
-        NOAA[NOAA Weather]
-        IPAWS[IPAWS Federal]
-    end
+EAS Station integrates multiple alert sources (NOAA Weather, IPAWS Federal) and processes them through a sophisticated pipeline that includes:
 
-    subgraph "Processing"
-        POLL[Alert Poller]
-        DB[(PostgreSQL<br/>+ PostGIS)]
-        WEB[Web Interface]
-    end
-
-    subgraph "Output"
-        AUDIO[Audio Service]
-        GPIO[GPIO Relays]
-        LED[LED Signs]
-    end
-
-    NOAA --> POLL
-    IPAWS --> POLL
-    POLL --> DB
-    DB --> WEB
-    DB --> AUDIO
-    AUDIO --> GPIO
-    AUDIO --> LED
-
-    style NOAA fill:#3b82f6,color:#fff
-    style IPAWS fill:#3b82f6,color:#fff
-    style DB fill:#8b5cf6,color:#fff
-    style WEB fill:#10b981,color:#fff
-    style AUDIO fill:#f59e0b,color:#000
-```
-
-**[View Full Architecture Details →](architecture/SYSTEM_ARCHITECTURE)**
-
-### Key Features
-
-- 🌐 Multi-source alert aggregation (NOAA, IPAWS, custom)
+- 🌐 Multi-source alert aggregation
 - 📻 FCC-compliant SAME encoding
 - 🗺️ PostGIS spatial filtering
 - 📡 SDR broadcast verification
 - 🔒 Built-in HTTPS with Let's Encrypt
 - ⚡ GPIO relay and LED sign control
+
+**[View Full Architecture Details →](architecture/SYSTEM_ARCHITECTURE)**
+
+**[View Visual Diagrams →](DIAGRAMS)**
 
 ---
 
@@ -117,17 +74,22 @@ graph TB
 
 ```
 docs/
-├── guides/              ← How-to guides for operators
+├── guides/              ← Essential operator guides (5 files)
 ├── hardware/            ← SDR, GPIO, Raspberry Pi setup
 ├── audio/               ← Audio system documentation
+├── deployment/          ← Deployment and maintenance guides
+├── evaluations/         ← Hardware evaluation reports
+├── troubleshooting/     ← Problem-solving guides
 ├── development/         ← Developer documentation
 ├── architecture/        ← System design and theory
-├── deployment/          ← Deployment guides
-├── reference/           ← Technical reference
-└── roadmap/             ← Future features
+├── frontend/            ← Web UI documentation
+├── reference/           ← Technical reference materials
+├── security/            ← Security documentation
+├── roadmap/             ← Future features and planning
+└── resources/           ← Vendor PDFs and external docs
 ```
 
-**[Complete Index](INDEX)** - Searchable list of all topics
+**[Complete Index](INDEX)** - Searchable list of all documentation
 
 ---
 
@@ -149,7 +111,7 @@ docs/
 
 ### Troubleshooting
 
-- [Database connection issues](guides/DATABASE_CONSISTENCY_FIXES)
+- [Database connection issues](troubleshooting/DATABASE_CONSISTENCY_FIXES)
 - [SDR not detecting](hardware/SDR_SETUP#troubleshooting)
 - [Audio problems](audio/AUDIO_MONITORING#troubleshooting)
 - [Common errors](guides/HELP#troubleshooting)
@@ -157,18 +119,6 @@ docs/
 ---
 
 ## 🆘 Getting Help
-
-```mermaid
-flowchart LR
-    ISSUE{Having<br/>an issue?}
-    ISSUE -->|Installation| SETUP[Setup Instructions]
-    ISSUE -->|Hardware| SDR[SDR Setup Guide]
-    ISSUE -->|Operation| HELP[User Guide]
-    ISSUE -->|Still stuck| GH[GitHub Issues]
-
-    style ISSUE fill:#ef4444,color:#fff
-    style GH fill:#3b82f6,color:#fff
-```
 
 1. **Check the documentation** - Start with [INDEX](INDEX)
 2. **Review troubleshooting** - See [Common Issues](guides/HELP#troubleshooting)
@@ -206,6 +156,6 @@ We welcome contributions! See:
 ---
 
 **Last Updated**: 2025-11-25
-**Documentation Version**: 2.1.x+
+**Documentation Version**: 3.0 (Reorganized Structure)
 
 **[Return to Main README](../README.md)** | **[View Complete Index](INDEX)**
