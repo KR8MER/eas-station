@@ -212,7 +212,10 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
 
-      CONFIG_PATH: /app-config/.env  # Point to persistent location
+      CONFIG_PATH: /app-config/noaa.env  # Separate config for NOAA poller
+
+      # Poller configuration
+      CAP_POLLER_MODE: NOAA
 
       # SDR settings
       SDR_ARGS: ${SDR_ARGS:-driver=airspy}
@@ -257,11 +260,10 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
 
-      CONFIG_PATH: /app-config/.env  # Point to persistent location
+      CONFIG_PATH: /app-config/ipaws.env  # Separate config for IPAWS poller
 
       # Poller configuration
       CAP_POLLER_MODE: IPAWS
-      CAP_ENDPOINTS: ${IPAWS_CAP_FEED_URLS:-}
 
       # SDR settings
       SDR_ARGS: ${SDR_ARGS:-driver=airspy}

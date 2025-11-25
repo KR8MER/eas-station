@@ -178,7 +178,8 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-alerts}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      CONFIG_PATH: /app-config/.env
+      CONFIG_PATH: /app-config/noaa.env
+      CAP_POLLER_MODE: NOAA
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -208,9 +209,8 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-alerts}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      CONFIG_PATH: /app-config/.env
+      CONFIG_PATH: /app-config/ipaws.env
       CAP_POLLER_MODE: IPAWS
-      CAP_ENDPOINTS: ${IPAWS_CAP_FEED_URLS:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
 

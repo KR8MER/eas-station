@@ -68,6 +68,7 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 # Load from CONFIG_PATH if set (persistent volume), with override=True
+# Each poller service should have its own config file (noaa.env, ipaws.env)
 _config_path = os.environ.get('CONFIG_PATH')
 if _config_path:
     load_dotenv(_config_path, override=True)
