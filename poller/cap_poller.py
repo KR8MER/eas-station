@@ -559,7 +559,11 @@ class CAPPoller:
                     configured_endpoints.append(cleaned)
 
         _extend_from_csv(os.getenv('CAP_ENDPOINTS'))
-        _extend_from_csv(os.getenv('IPAWS_CAP_FEED_URLS'))
+
+        # Only read IPAWS environment variables if in IPAWS mode
+        # This prevents NOAA poller from inheriting IPAWS URLs from /app-config/.env
+        if self.poller_mode == 'IPAWS':
+            _extend_from_csv(os.getenv('IPAWS_CAP_FEED_URLS'))
 
         if cap_endpoints:
             configured_endpoints.extend([endpoint for endpoint in cap_endpoints if endpoint])
