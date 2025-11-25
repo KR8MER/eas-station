@@ -1,8 +1,6 @@
 # Ohio Emergency Alert System (EAS) Plan Documentation
 
-**Document Version:** December 2018 (FCC Approved: March 18, 2019)  
-**Status:** ⚠️ REQUIRES UPDATES - Missing current event codes  
-**Last Review:** 2025
+**Document Version:** December 2018 (FCC Approved: March 18, 2019)
 
 ---
 
@@ -11,13 +9,12 @@
 1. [System Overview](#system-overview)
 2. [Ohio EAS Authority & Structure](#ohio-eas-authority--structure)
 3. [Event Codes Reference](#event-codes-reference)
-4. [Missing Event Codes](#missing-event-codes)
-5. [Ohio EAS Structure](#ohio-eas-structure)
-6. [State & Local Primary Stations](#state--local-primary-stations)
-7. [Ohio EAS Monitoring Network](#ohio-eas-monitoring-network)
-8. [Notification Procedures](#notification-procedures)
-9. [Committee Contacts](#committee-contacts)
-10. [NOAA Weather Radio Coverage](#noaa-weather-radio-stations-serving-ohio)
+4. [Ohio EAS Structure](#ohio-eas-structure)
+5. [State & Local Primary Stations](#state--local-primary-stations)
+6. [Ohio EAS Monitoring Network](#ohio-eas-monitoring-network)
+7. [Notification Procedures](#notification-procedures)
+8. [Committee Contacts](#committee-contacts)
+9. [NOAA Weather Radio Coverage](#noaa-weather-radio-stations-serving-ohio)
 
 ---
 
@@ -151,7 +148,7 @@ graph LR
 
 ```mermaid
 graph TB
-    subgraph "CRITICAL - Immediate Action Required"
+    subgraph "National Emergency Notifications"
         EAN[EAN - Emergency Action Notification]
         TOR[TOR - Tornado Warning]
         EQW[EQW - Earthquake Warning]
@@ -159,8 +156,8 @@ graph TB
         EVI[EVI - Evacuation Immediate]
         SPW[SPW - Shelter In Place]
     end
-    
-    subgraph "HIGH PRIORITY - Immediate Threat"
+
+    subgraph "Immediate Threat Warnings"
         FFW[FFW - Flash Flood Warning]
         HMW[HMW - Hazardous Materials]
         FRW[FRW - Fire Warning]
@@ -173,7 +170,7 @@ graph TB
         CAE[CAE - Child Abduction<br>AMBER Alert]
         CEM[CEM - Civil Emergency]
         RHW[RHW - Radiological Hazard]
-        SQW[SQW - Snow Squall ⚠️ NEW]
+        SQW[SQW - Snow Squall ]
     end
     
     subgraph "ADMINISTRATIVE"
@@ -208,8 +205,8 @@ graph TB
     style EAT fill:#95a5a6,stroke:#7f8c8d,stroke-width:2px,color:#fff
 ```
 
-### ⚠️ REQUIRED WARNING CODES
-**All stations MUST program these codes into EAS equipment:**
+### Required Event Codes
+Event codes required by FCC regulations for all EAS participants:
 
 | Code | Event Name | Description |
 |------|------------|-------------|
@@ -234,8 +231,8 @@ graph TB
 | **SPW** | Shelter In Place Warning | Shelter indoors immediately |
 | **TOR** | Tornado Warning | Tornado sighted or indicated |
 
-### OPTIONAL CODES
-**Programming at station discretion:**
+### Optional Event Codes
+Event codes available for programming at station discretion:
 
 | Code | Event Name | Code | Event Name |
 |------|------------|------|------------|
@@ -250,199 +247,6 @@ graph TB
 | **SNW** | Special Marine Warning | **SPS** | Special Weather Statement |
 | **TOA** | Tornado Watch | **WSW** | Winter Storm Warning |
 | **WSA** | Winter Storm Watch | | |
-
----
-
-## ⚠️ MISSING EVENT CODES
-
-### Update Status Overview
-
-```mermaid
-pie title Ohio EAS Event Code Status
-    "Required Codes Present" : 20
-    "Optional Codes Present" : 22
-    "Missing Critical Codes" : 8
-    "Missing High Priority" : 12
-    "Missing Medium/Low" : 15
-```
-
-### Critical Missing Codes (Added Since 2018)
-
-The following event codes have been added to the national EAS system since the 2018 Ohio plan approval and are **NOT** currently included in the Ohio plan:
-
-#### High-Priority Weather Warnings (Ohio-Relevant)
-
-```mermaid
-graph TB
-    subgraph "CRITICAL - Immediate Implementation Required"
-        SQW[SQW - Snow Squall Warning<br>⚠️ Critical for Ohio winters<br>Zero-visibility conditions]
-        EQE[EQE - Earthquake Early Warning<br>⚠️ National priority<br>Seconds matter for safety]
-        ISW[ISW - Ice Storm Warning<br>⚠️ Critical for Ohio<br>Infrastructure damage]
-    end
-    
-    subgraph "HIGH PRIORITY - Seasonal Threats"
-        LSW[LSW - Lake Effect Snow<br>Critical for lakeshore areas]
-        WCW[WCW - Wind Chill Warning<br>Dangerous cold exposure]
-        LFW[LFW - Lakeshore Flood<br>Lake Erie storm surge]
-        DSW[DSW - Dust Storm Warning<br>I-70/I-71 corridor risk]
-    end
-    
-    subgraph "MODERATE PRIORITY - Regional Threats"
-        SSW[SSW - Storm Surge Warning<br>Coastal/Lake Erie]
-        TSW[TSW - Tsunami Warning<br>Low probability]
-        HUW[HUW - Hurricane Warning<br>Rare but possible]
-        TRW[TRW - Tropical Storm<br>Remnant systems]
-    end
-    
-    style SQW fill:#8b0000,stroke:#600,stroke-width:3px,color:#fff
-    style EQE fill:#8b0000,stroke:#600,stroke-width:3px,color:#fff
-    style ISW fill:#8b0000,stroke:#600,stroke-width:3px,color:#fff
-    
-    style LSW fill:#e74c3c,stroke:#c0392b,stroke-width:2px,color:#fff
-    style WCW fill:#e74c3c,stroke:#c0392b,stroke-width:2px,color:#fff
-    style LFW fill:#e74c3c,stroke:#c0392b,stroke-width:2px,color:#fff
-    style DSW fill:#e74c3c,stroke:#c0392b,stroke-width:2px,color:#fff
-    
-    style SSW fill:#f39c12,stroke:#e67e22,stroke-width:2px,color:#fff
-    style TSW fill:#f39c12,stroke:#e67e22,stroke-width:2px,color:#fff
-    style HUW fill:#f39c12,stroke:#e67e22,stroke-width:2px,color:#fff
-    style TRW fill:#f39c12,stroke:#e67e22,stroke-width:2px,color:#fff
-```
-
-**WEATHER WARNINGS - HIGH PRIORITY:**
-
-| Code | Event Name | Status | Priority | Ohio Relevance |
-|------|------------|--------|----------|----------------|
-| **SQW** | Snow Squall Warning | ❌ MISSING | **CRITICAL** | Heavy lake-effect, I-90 corridor |
-| **DSW** | Dust Storm Warning | ❌ MISSING | HIGH | Farm counties, interstate safety |
-| **SSW** | Storm Surge Warning | ❌ MISSING | HIGH | Lake Erie shoreline |
-| **TSW** | Tsunami Warning | ❌ MISSING | HIGH | Low probability, national coverage |
-| **HUW** | Hurricane Warning | ❌ MISSING | HIGH | Rare but remnants affect Ohio |
-| **TRW** | Tropical Storm Warning | ❌ MISSING | HIGH | Remnant systems common |
-
-**ADDITIONAL WEATHER CODES:**
-
-| Code | Event Name | Status | Priority | Ohio Relevance |
-|------|------------|--------|----------|----------------|
-| **AVW** | Avalanche Warning | ❌ MISSING | MEDIUM | Not applicable to Ohio |
-| **AVA** | Avalanche Watch | ❌ MISSING | LOW | Not applicable to Ohio |
-| **CFW** | Coastal Flood Warning | ❌ MISSING | MEDIUM | Lake Erie = inland sea |
-| **CFA** | Coastal Flood Watch | ❌ MISSING | LOW | Lake Erie shoreline |
-| **CFS** | Coastal Flood Statement | ❌ MISSING | LOW | Lake Erie shoreline |
-| **EQE** | Earthquake Early Warning | ❌ MISSING | **CRITICAL** | National priority system |
-| **ECW** | Extreme Cold Warning | ❌ MISSING | MEDIUM | Common Ohio winter threat |
-| **ECA** | Extreme Cold Watch | ❌ MISSING | LOW | Common Ohio winter threat |
-| **EHW** | Extreme Heat Warning | ❌ MISSING | MEDIUM | Summer health risk |
-| **FWW** | Fire Weather Warning | ❌ MISSING | MEDIUM | Dry season brush fires |
-| **FZW** | Freeze Warning | ❌ MISSING | MEDIUM | Agriculture impact |
-| **HFW** | Hard Freeze Warning | ❌ MISSING | MEDIUM | Agriculture impact |
-| **HTA** | Heat Advisory | ❌ MISSING | LOW | Summer health advisory |
-| **HLS** | Hurricane Statement | ❌ MISSING | MEDIUM | Follow-up information |
-| **HUA** | Hurricane Watch | ❌ MISSING | MEDIUM | Advance warning |
-| **ISW** | Ice Storm Warning | ❌ MISSING | HIGH | Critical Ohio winter threat |
-| **LFW** | Lakeshore Flood Warning | ❌ MISSING | MEDIUM | Lake Erie seiche events |
-| **LFA** | Lakeshore Flood Watch | ❌ MISSING | LOW | Lake Erie shoreline |
-| **LSW** | Lake Effect Snow Warning | ❌ MISSING | MEDIUM | Critical for snow belt |
-| **SSA** | Storm Surge Watch | ❌ MISSING | MEDIUM | Lake Erie |
-| **TRA** | Tropical Storm Watch | ❌ MISSING | MEDIUM | Advance warning |
-| **TSA** | Tsunami Watch | ❌ MISSING | MEDIUM | Not applicable to Ohio |
-| **VOW** | Volcano Warning | ❌ MISSING | LOW | Not applicable to Ohio |
-| **WCW** | Wind Chill Warning | ❌ MISSING | MEDIUM | Critical Ohio winter threat |
-| **WCA** | Wind Chill Watch | ❌ MISSING | LOW | Common Ohio winter condition |
-
-**OTHER CRITICAL CODES:**
-
-| Code | Event Name | Status | Priority |
-|------|------------|--------|----------|
-| **DMO** | Demo/Practice Warning | ✅ PRESENT | N/A |
-| **EQE** | Earthquake Early Warning | ❌ MISSING | **CRITICAL** |
-
----
-
-## Action Items
-
-### Implementation Roadmap
-
-```mermaid
-gantt
-    title Ohio EAS Plan Update Timeline
-    dateFormat YYYY-MM-DD
-    section Phase 1 - Critical Codes
-    Identify missing codes          :done, p1a, 2025-01-01, 30d
-    Priority assessment             :done, p1b, after p1a, 14d
-    Equipment compatibility testing :active, p1c, after p1b, 45d
-    
-    section Phase 2 - Plan Update
-    Draft updated plan              :p2a, after p1c, 30d
-    SECC review & approval          :p2b, after p2a, 21d
-    Submit to FCC                   :p2c, after p2b, 7d
-    FCC review period               :p2d, after p2c, 90d
-    
-    section Phase 3 - Implementation
-    Notify all stations             :p3a, after p2d, 14d
-    Equipment programming           :p3b, after p3a, 60d
-    System-wide testing             :p3c, after p3b, 30d
-    Full operational capability     :milestone, p3d, after p3c, 0d
-```
-
-### Immediate Actions Required
-
-1. **Update Ohio EAS Plan** to include missing event codes
-2. **Prioritize encoding/decoding** for:
-   - ✅ **SQW** - Snow Squall Warning (CRITICAL for Ohio winters)
-   - ✅ **EQE** - Earthquake Early Warning (National priority)
-   - ✅ **ISW** - Ice Storm Warning (Critical for Ohio)
-   - ✅ **LSW** - Lake Effect Snow Warning (Critical for lakeshore areas)
-   - ✅ **WCW** - Wind Chill Warning (Critical for Ohio winters)
-   - ✅ **LFW** - Lakeshore Flood Warning (Relevant for Lake Erie)
-
-3. **Test encoder/decoder compatibility** with all current FCC event codes
-
-4. **Submit updated plan** to FCC for approval
-
-5. **Notify all participating stations** of required updates
-
-### Equipment Compatibility Testing
-
-```mermaid
-graph LR
-    subgraph "Testing Process"
-        A[Identify Equipment<br>Models in Use]
-        B[Check Firmware<br>Versions]
-        C[Test New Codes]
-        D[Document Results]
-        E[Update Plan]
-    end
-    
-    A --> B
-    B --> C
-    C --> D
-    D --> E
-    
-    subgraph "Common Equipment"
-        SAGE[SAGE Digital ENDEC]
-        DASDEC[DASDEC EAS]
-        TFT[TFT EAS Units]
-        CUSTOM[Custom/Software<br>Solutions]
-    end
-    
-    E --> SAGE
-    E --> DASDEC
-    E --> TFT
-    E --> CUSTOM
-    
-    style A fill:#3498db,stroke:#2980b9,color:#fff
-    style B fill:#3498db,stroke:#2980b9,color:#fff
-    style C fill:#3498db,stroke:#2980b9,color:#fff
-    style D fill:#3498db,stroke:#2980b9,color:#fff
-    style E fill:#2ecc71,stroke:#27ae60,color:#fff
-```
-
-3. **Test encoder/decoder compatibility** with all current FCC event codes
-
-4. **Submit updated plan** to FCC for approval
-
-5. **Notify all participating stations** of required updates
 
 ---
 
@@ -1377,13 +1181,6 @@ Complete contact information for all 12 operational area chairs and vice-chairs 
 ### Current Status
 - **Plan Date:** December 2018
 - **FCC Approval:** March 18, 2019
-- **Next Update:** OVERDUE - Event codes missing
-
-### Change Log
-| Date | Version | Changes |
-|------|---------|---------|
-| Dec 2018 | Current | Published version |
-| TBD | Next | **Must add missing event codes** |
 
 ---
 
@@ -1401,7 +1198,6 @@ Complete contact information for all 12 operational area chairs and vice-chairs 
 **Prepared From:** State of Ohio Emergency Alert System (EAS) Plan, December 2018
 **FCC Approval Date:** March 18, 2019
 **Documentation Created:** 2025-01-12
-**Status:** ⚠️ Requires updates for missing event codes
 
 **Supersedes:** All previously published State EAS Plans
 
