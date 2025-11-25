@@ -43,6 +43,9 @@ If you're new to EAS Station, start here:
 | [Contributing Guide](process/CONTRIBUTING) | How to contribute |
 | [System Architecture](architecture/SYSTEM_ARCHITECTURE) | Overall system design |
 | [Theory of Operation](architecture/THEORY_OF_OPERATION) | How the system works |
+| [Data Flow Sequences](architecture/DATA_FLOW_SEQUENCES) | Detailed mermaid diagrams |
+| [Display System Architecture](architecture/DISPLAY_SYSTEM_ARCHITECTURE) | Display subsystem diagrams |
+| [EAS Decoding Summary](architecture/EAS_DECODING_SUMMARY) | Architecture analysis |
 
 ## 🎨 Frontend Documentation
 
@@ -50,6 +53,7 @@ If you're new to EAS Station, start here:
 |----------|-------------|
 | [User Interface Guide](frontend/USER_INTERFACE_GUIDE) | Web interface navigation |
 | [JavaScript API](frontend/JAVASCRIPT_API) | API documentation |
+| [Component Library](frontend/COMPONENT_LIBRARY) | UI component reference |
 
 ## 🔧 Troubleshooting
 
@@ -81,15 +85,15 @@ If you're new to EAS Station, start here:
 ```
 docs/
 ├── guides/          # 5 essential user guides
-├── architecture/    # 2 system architecture docs
+├── architecture/    # 5 system architecture docs (with diagrams)
 ├── audio/           # 1 audio monitoring guide
 ├── deployment/      # 1 deployment guide
 ├── development/     # 1 developer guide
-├── frontend/        # 2 UI documentation files
+├── frontend/        # 3 UI documentation files
 ├── hardware/        # 1 SDR setup guide
 ├── troubleshooting/ # 2 problem-solving guides
 ├── security/        # 2 security guides
-├── reference/       # 2 reference materials
+├── reference/       # 3 reference materials
 ├── roadmap/         # 1 roadmap document
 ├── policies/        # 2 legal documents
 └── process/         # 1 contributing guide
@@ -113,7 +117,7 @@ docs/
 
 | Metric | Value |
 |--------|-------|
-| Total Documentation Files | 27 |
+| Total Documentation Files | 31 |
 | Essential User Guides | 5 |
 | Technical Documents | 8 |
 | Legal/Policy Documents | 4 |
