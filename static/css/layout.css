@@ -187,10 +187,10 @@
     width: auto;
     display: block;
     padding: var(--logo-padding);
-    background: transparent;
+    background: var(--logo-backdrop);
     border-radius: var(--logo-radius);
-    border: none;
-    box-shadow: none;
+    border: 1px solid var(--logo-border-color);
+    box-shadow: var(--logo-shadow);
     transition: background-color var(--transition-medium),
                 box-shadow var(--transition-medium),
                 border-color var(--transition-medium);

@@ -1024,7 +1024,8 @@ a:focus {
     color: var(--text-color) !important;
 }
 
-[data-theme-mode="dark"] .bg-dark-subtle .text-dark {
+[data-theme-mode="dark"] .bg-dark-subtle .text-dark,
+[data-theme-mode="dark"] .bg-dark-subtle.text-dark {
     color: var(--text-color) !important;
 }
 
@@ -1396,15 +1397,22 @@ a:focus {
 [data-theme="dark"] .bg-dark-subtle,
 [data-theme="coffee"] .bg-dark-subtle,
 [data-theme="aurora"] .bg-dark-subtle,
-[data-theme="nebula"] .bg-dark-subtle {
+[data-theme="nebula"] .bg-dark-subtle,
+[data-theme="midnight"] .bg-dark-subtle {
     background-color: rgba(0, 0, 0, 0.3) !important;
     color: var(--text-color) !important;
 }
 
 [data-theme="dark"] .bg-dark-subtle .text-dark,
+[data-theme="dark"] .bg-dark-subtle.text-dark,
 [data-theme="coffee"] .bg-dark-subtle .text-dark,
+[data-theme="coffee"] .bg-dark-subtle.text-dark,
 [data-theme="aurora"] .bg-dark-subtle .text-dark,
-[data-theme="nebula"] .bg-dark-subtle .text-dark {
+[data-theme="aurora"] .bg-dark-subtle.text-dark,
+[data-theme="nebula"] .bg-dark-subtle .text-dark,
+[data-theme="nebula"] .bg-dark-subtle.text-dark,
+[data-theme="midnight"] .bg-dark-subtle .text-dark,
+[data-theme="midnight"] .bg-dark-subtle.text-dark {
     color: var(--text-color) !important;
 }
 
