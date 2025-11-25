@@ -39,7 +39,7 @@ import time
 import wave
 import math
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from collections import OrderedDict
 from typing import Optional, Callable, List
 
@@ -123,6 +123,27 @@ def _store_received_alert(
                     issue_datetime = datetime.fromisoformat(issue_time) if isinstance(issue_time, str) else issue_time
                 if purge_time:
                     purge_datetime = datetime.fromisoformat(purge_time) if isinstance(purge_time, str) else purge_time
+
+        # Suppress duplicate alerts that arrive within a short window
+        # Duplicates can occur when multiple receivers hear the same alert
+        # or when the SAME header is decoded repeatedly from the same message.
+        dedup_cutoff = utc_now() - timedelta(minutes=10)
+        duplicate_filters = [ReceivedEASAlert.received_at >= dedup_cutoff]
+        if raw_same_header:
+            duplicate_filters.append(ReceivedEASAlert.raw_same_header == raw_same_header)
+        else:
+            duplicate_filters.append(ReceivedEASAlert.event_code == event_code)
+            duplicate_filters.append(ReceivedEASAlert.originator_code == originator_code)
+            if callsign:
+                duplicate_filters.append(ReceivedEASAlert.callsign == callsign)
+
+        duplicate_exists = db.session.query(ReceivedEASAlert.id).filter(*duplicate_filters).first()
+        if duplicate_exists:
+            logger.info(
+                "Duplicate received alert suppressed within 10-minute window: %s",
+                raw_same_header or event_code,
+            )
+            return
 
         # Create database record
         received_alert = ReceivedEASAlert(
