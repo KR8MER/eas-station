@@ -612,6 +612,12 @@ class CAPPoller:
         # Storage zone codes: UGC/zone codes that should trigger storage (in addition to SAME codes)
         self.storage_zone_codes = set(self.location_settings.get('storage_zone_codes', []))
 
+        # Log configuration for troubleshooting alert matching issues
+        self.logger.info(f"📍 Location: {self.location_name} ({self.county_upper})")
+        self.logger.info(f"📋 Zone codes: {sorted(self.zone_codes)}")
+        self.logger.info(f"🔢 SAME/FIPS codes: {sorted(self.same_codes)}")
+        self.logger.info(f"💾 Storage zone codes: {sorted(self.storage_zone_codes)}")
+
     # ---------- Engine with retry ----------
     def _ensure_source_columns(self):
         try:
