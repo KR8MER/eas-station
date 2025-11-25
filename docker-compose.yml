@@ -191,6 +191,9 @@ services:
 
       CONFIG_PATH: /app-config/.env  # Point to persistent location
 
+      # Poller configuration
+      CAP_POLLER_MODE: NOAA
+
       # SDR settings
       SDR_ARGS: ${SDR_ARGS:-driver=airspy}
     extra_hosts:
