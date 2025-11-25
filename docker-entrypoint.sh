@@ -24,10 +24,33 @@ if [ ! -f "/app/.env" ]; then
 fi
 
 # Initialize persistent .env file if using CONFIG_PATH (persistent volume)
-if [ -n "$CONFIG_PATH" ]; then
-    CONFIG_DIR=$(dirname "$CONFIG_PATH")
+# Allow poller-specific overrides (IPAWS/NOAA) so sidecar containers honour
+# the mounted /app-config volume even if CONFIG_PATH is not provided directly.
+CONFIG_PATH_EFFECTIVE="$CONFIG_PATH"
+POLLER_MODE_UPPER="$(echo "${CAP_POLLER_MODE:-}" | tr '[:lower:]' '[:upper:]')"
 
-    echo "Using persistent config location: $CONFIG_PATH"
+if [ -z "$CONFIG_PATH_EFFECTIVE" ]; then
+    if [ "$POLLER_MODE_UPPER" = "IPAWS" ] && [ -n "$IPAWS_CONFIG_PATH" ]; then
+        CONFIG_PATH_EFFECTIVE="$IPAWS_CONFIG_PATH"
+    elif [ "$POLLER_MODE_UPPER" = "NOAA" ] && [ -n "$NOAA_CONFIG_PATH" ]; then
+        CONFIG_PATH_EFFECTIVE="$NOAA_CONFIG_PATH"
+    elif [ -n "$IPAWS_CONFIG_PATH" ]; then
+        CONFIG_PATH_EFFECTIVE="$IPAWS_CONFIG_PATH"
+    elif [ -n "$NOAA_CONFIG_PATH" ]; then
+        CONFIG_PATH_EFFECTIVE="$NOAA_CONFIG_PATH"
+    fi
+fi
+
+# Ensure downstream processes see CONFIG_PATH even when only the
+# poller-specific variables were provided.
+if [ -n "$CONFIG_PATH_EFFECTIVE" ] && [ -z "$CONFIG_PATH" ]; then
+    export CONFIG_PATH="$CONFIG_PATH_EFFECTIVE"
+fi
+
+if [ -n "$CONFIG_PATH_EFFECTIVE" ]; then
+    CONFIG_DIR=$(dirname "$CONFIG_PATH_EFFECTIVE")
+
+    echo "Using persistent config location: $CONFIG_PATH_EFFECTIVE"
 
     # Create directory if it doesn't exist
     if [ ! -d "$CONFIG_DIR" ]; then
@@ -36,10 +59,10 @@ if [ -n "$CONFIG_PATH" ]; then
     fi
 
     # Create .env file if it doesn't exist or initialize from environment if empty
-    if [ ! -f "$CONFIG_PATH" ]; then
-        echo "Initializing persistent .env file at: $CONFIG_PATH"
+    if [ ! -f "$CONFIG_PATH_EFFECTIVE" ]; then
+        echo "Initializing persistent .env file at: $CONFIG_PATH_EFFECTIVE"
         # Create with header
-        cat > "$CONFIG_PATH" <<'EOF'
+        cat > "$CONFIG_PATH_EFFECTIVE" <<'EOF'
 # EAS Station Environment Configuration
 #
 # This file is managed by the Setup Wizard and persists across deployments.
@@ -47,17 +70,17 @@ if [ -n "$CONFIG_PATH" ]; then
 #
 
 EOF
-        chmod 666 "$CONFIG_PATH"
-        echo "✅ Created .env file at $CONFIG_PATH"
+        chmod 666 "$CONFIG_PATH_EFFECTIVE"
+        echo "✅ Created .env file at $CONFIG_PATH_EFFECTIVE"
     else
-        echo "✅ Using existing .env file at: $CONFIG_PATH ($(stat -f%z "$CONFIG_PATH" 2>/dev/null || stat -c%s "$CONFIG_PATH" 2>/dev/null || echo "unknown") bytes)"
+        echo "✅ Using existing .env file at: $CONFIG_PATH_EFFECTIVE ($(stat -f%z "$CONFIG_PATH_EFFECTIVE" 2>/dev/null || stat -c%s "$CONFIG_PATH_EFFECTIVE" 2>/dev/null || echo "unknown") bytes)"
         # Ensure it's writable
-        chmod 666 "$CONFIG_PATH" 2>/dev/null || echo "⚠️  Warning: Could not set permissions on $CONFIG_PATH"
+        chmod 666 "$CONFIG_PATH_EFFECTIVE" 2>/dev/null || echo "⚠️  Warning: Could not set permissions on $CONFIG_PATH_EFFECTIVE"
     fi
 
     # Check if the file is essentially empty (< 100 bytes and no non-comment lines) and populate from environment
-    FILE_SIZE=$(stat -c%s "$CONFIG_PATH" 2>/dev/null || stat -f%z "$CONFIG_PATH" 2>/dev/null || echo "0")
-    HAS_CONFIG=$(grep -v "^#" "$CONFIG_PATH" 2>/dev/null | grep -v "^[[:space:]]*$" | wc -l)
+    FILE_SIZE=$(stat -c%s "$CONFIG_PATH_EFFECTIVE" 2>/dev/null || stat -f%z "$CONFIG_PATH_EFFECTIVE" 2>/dev/null || echo "0")
+    HAS_CONFIG=$(grep -v "^#" "$CONFIG_PATH_EFFECTIVE" 2>/dev/null | grep -v "^[[:space:]]*$" | wc -l)
 
     if [ "$FILE_SIZE" -lt 100 ] && [ "$HAS_CONFIG" -eq 0 ]; then
         echo "⚙️  Persistent .env file is empty (no configuration)"
@@ -65,7 +88,7 @@ EOF
 
         # Append environment variables to the config file
         # This transfers configuration from stack.env (loaded as env vars) to the persistent file
-        cat >> "$CONFIG_PATH" <<EOF
+        cat >> "$CONFIG_PATH_EFFECTIVE" <<EOF
 
 # =============================================================================
 # CORE SETTINGS (REQUIRED) - Auto-populated from environment
@@ -189,7 +212,7 @@ AUDIO_SDR_ENABLED=${AUDIO_SDR_ENABLED:-false}
 EOF
 
         echo "   ✅ Initialized persistent config with values from stack.env"
-        echo "   📝 File location: $CONFIG_PATH"
+        echo "   📝 File location: $CONFIG_PATH_EFFECTIVE"
         echo "   ℹ️  The application will now start normally without setup wizard"
     fi
 fi
