@@ -146,23 +146,26 @@ def ensure_storage_zone_codes_column(logger) -> bool:
             logger.info(
                 "Adding location_settings.storage_zone_codes column for selective alert storage"
             )
-            # Add the column with JSONB type and default value
+            # Add the column with JSONB type
+            # Default: copy from zone_codes (all local county zones trigger storage)
+            # Rationale: If alert mentions our county at all, store it
             db.session.execute(
                 text(
                     """
                     ALTER TABLE location_settings
-                    ADD COLUMN storage_zone_codes JSONB NOT NULL DEFAULT '["OHZ003", "OHC137"]'::jsonb
+                    ADD COLUMN storage_zone_codes JSONB
                     """
                 )
             )
 
-            # Update existing rows to copy zone_codes if storage_zone_codes is somehow null
+            # Initialize storage_zone_codes to match zone_codes
+            # This means: if alert is relevant enough to broadcast, it's relevant enough to store
+            # Users can later customize this via UI if they want different behavior
             db.session.execute(
                 text(
                     """
                     UPDATE location_settings
-                    SET storage_zone_codes = COALESCE(zone_codes, '["OHZ003", "OHC137"]'::jsonb)
-                    WHERE storage_zone_codes IS NULL
+                    SET storage_zone_codes = COALESCE(zone_codes, '[]'::jsonb)
                     """
                 )
             )
