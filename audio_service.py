@@ -642,81 +642,106 @@ def main():
                 from scipy import signal
                 from app_core.audio.ingest import AudioSourceStatus
                 
-                def generate_wav_stream(adapter):
-                    """Generator that yields downsampled WAV chunks."""
+                def generate_wav_stream(adapter, source_name):
+                    """Generator that yields downsampled WAV chunks.
+
+                    Uses BroadcastQueue subscription to avoid competing with other audio consumers
+                    (Icecast, EAS monitor, etc). Each subscriber gets independent copy of all audio chunks.
+                    """
+                    import queue as queue_module
+
                     # Source configuration
                     source_sample_rate = adapter.config.sample_rate
                     source_channels = adapter.config.channels
-                    
+
                     # Stream configuration: 22.05kHz mono (human voice is clear at this rate)
                     stream_sample_rate = 22050
                     stream_channels = 1  # Mono saves 50% bandwidth
                     bits_per_sample = 16
-                    
+
                     # Calculate decimation factor (use floor division for integer result)
                     decimation = source_sample_rate // stream_sample_rate
                     if decimation < 1:
                         decimation = 1
                         stream_sample_rate = source_sample_rate
-                    
-                    # Send WAV header
-                    wav_header = io.BytesIO()
-                    wav_header.write(b'RIFF')
-                    wav_header.write(struct.pack('<I', 0xFFFFFFFF))
-                    wav_header.write(b'WAVE')
-                    wav_header.write(b'fmt ')
-                    wav_header.write(struct.pack('<I', 16))
-                    wav_header.write(struct.pack('<H', 1))  # PCM
-                    wav_header.write(struct.pack('<H', stream_channels))
-                    wav_header.write(struct.pack('<I', stream_sample_rate))
-                    wav_header.write(struct.pack('<I', stream_sample_rate * stream_channels * bits_per_sample // 8))
-                    wav_header.write(struct.pack('<H', stream_channels * bits_per_sample // 8))
-                    wav_header.write(struct.pack('<H', bits_per_sample))
-                    wav_header.write(b'data')
-                    wav_header.write(struct.pack('<I', 0xFFFFFFFF))
-                    yield wav_header.getvalue()
-                    
-                    # Stream audio chunks
-                    silence_duration = 0.05
-                    silence_samples = int(stream_sample_rate * stream_channels * silence_duration)
-                    
-                    while _running:
-                        try:
-                            audio_chunk = adapter.get_audio_chunk(timeout=0.2)
-                            if audio_chunk is None:
-                                # Yield silence to keep stream alive
+
+                    # Subscribe to BroadcastQueue for non-competitive audio access
+                    # Use unique subscriber ID per connection
+                    subscriber_id = f"web-stream-{source_name}-{threading.current_thread().ident}"
+                    broadcast_queue = _audio_controller.get_broadcast_queue()
+                    subscription_queue = broadcast_queue.subscribe(subscriber_id)
+
+                    try:
+                        # Send WAV header
+                        wav_header = io.BytesIO()
+                        wav_header.write(b'RIFF')
+                        wav_header.write(struct.pack('<I', 0xFFFFFFFF))
+                        wav_header.write(b'WAVE')
+                        wav_header.write(b'fmt ')
+                        wav_header.write(struct.pack('<I', 16))
+                        wav_header.write(struct.pack('<H', 1))  # PCM
+                        wav_header.write(struct.pack('<H', stream_channels))
+                        wav_header.write(struct.pack('<I', stream_sample_rate))
+                        wav_header.write(struct.pack('<I', stream_sample_rate * stream_channels * bits_per_sample // 8))
+                        wav_header.write(struct.pack('<H', stream_channels * bits_per_sample // 8))
+                        wav_header.write(struct.pack('<H', bits_per_sample))
+                        wav_header.write(b'data')
+                        wav_header.write(struct.pack('<I', 0xFFFFFFFF))
+                        yield wav_header.getvalue()
+
+                        # Stream audio chunks
+                        silence_duration = 0.05
+                        silence_samples = int(stream_sample_rate * stream_channels * silence_duration)
+
+                        logger.info(f"Web stream '{subscriber_id}' started, subscribed to broadcast queue")
+
+                        while _running:
+                            try:
+                                # Read from subscription queue (non-competitive)
+                                audio_chunk = subscription_queue.get(timeout=0.2)
+                                if audio_chunk is None:
+                                    # Yield silence to keep stream alive
+                                    silence_chunk = np.zeros(silence_samples, dtype=np.int16)
+                                    yield silence_chunk.tobytes()
+                                    time.sleep(0.01)
+                                    continue
+
+                                if not isinstance(audio_chunk, np.ndarray):
+                                    audio_chunk = np.array(audio_chunk, dtype=np.float32)
+
+                                # Convert stereo to mono if needed (mix channels)
+                                if source_channels > 1 and stream_channels == 1:
+                                    # Ensure chunk length is divisible by channels
+                                    remainder = len(audio_chunk) % source_channels
+                                    if remainder != 0:
+                                        audio_chunk = audio_chunk[:-remainder]
+                                    if len(audio_chunk) > 0:
+                                        audio_chunk = np.mean(audio_chunk.reshape(-1, source_channels), axis=1)
+
+                                # Downsample if needed (simple decimation for low latency)
+                                if decimation > 1 and len(audio_chunk) > 0:
+                                    # Use simple decimation (every Nth sample) for minimal latency
+                                    # This is faster than zero_phase filtering and maintains real-time performance
+                                    audio_chunk = audio_chunk[::decimation]
+
+                                # Convert to int16 PCM
+                                pcm_data = (np.clip(audio_chunk, -1.0, 1.0) * 32767).astype(np.int16)
+                                yield pcm_data.tobytes()
+
+                            except queue_module.Empty:
+                                # No audio available, yield silence
                                 silence_chunk = np.zeros(silence_samples, dtype=np.int16)
                                 yield silence_chunk.tobytes()
                                 time.sleep(0.01)
-                                continue
-                            
-                            if not isinstance(audio_chunk, np.ndarray):
-                                audio_chunk = np.array(audio_chunk, dtype=np.float32)
-                            
-                            # Convert stereo to mono if needed (mix channels)
-                            if source_channels > 1 and stream_channels == 1:
-                                # Ensure chunk length is divisible by channels
-                                remainder = len(audio_chunk) % source_channels
-                                if remainder != 0:
-                                    audio_chunk = audio_chunk[:-remainder]
-                                if len(audio_chunk) > 0:
-                                    audio_chunk = np.mean(audio_chunk.reshape(-1, source_channels), axis=1)
-                            
-                            # Downsample if needed (simple decimation for low latency)
-                            if decimation > 1 and len(audio_chunk) > 0:
-                                # Use simple decimation (every Nth sample) for minimal latency
-                                # This is faster than zero_phase filtering and maintains real-time performance
-                                audio_chunk = audio_chunk[::decimation]
-                            
-                            # Convert to int16 PCM
-                            pcm_data = (np.clip(audio_chunk, -1.0, 1.0) * 32767).astype(np.int16)
-                            yield pcm_data.tobytes()
-                            
-                        except Exception as e:
-                            logger.debug(f"Error in stream generator: {e}")
-                            silence_chunk = np.zeros(silence_samples, dtype=np.int16)
-                            yield silence_chunk.tobytes()
-                            time.sleep(0.01)
+                            except Exception as e:
+                                logger.debug(f"Error in stream generator: {e}")
+                                silence_chunk = np.zeros(silence_samples, dtype=np.int16)
+                                yield silence_chunk.tobytes()
+                                time.sleep(0.01)
+                    finally:
+                        # Unsubscribe when client disconnects
+                        broadcast_queue.unsubscribe(subscriber_id)
+                        logger.info(f"Web stream '{subscriber_id}' ended, unsubscribed from broadcast queue")
                 
                 try:
                     if not _audio_controller:
@@ -733,7 +758,7 @@ def main():
                         }), 503
                     
                     return Response(
-                        stream_with_context(generate_wav_stream(adapter)),
+                        stream_with_context(generate_wav_stream(adapter, source_name)),
                         mimetype='audio/wav',
                         headers={
                             'Content-Disposition': f'inline; filename="{source_name}.wav"',

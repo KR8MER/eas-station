@@ -2163,9 +2163,26 @@ class CAPPoller:
         capture_events: List[Dict[str, Any]] = []
 
         try:
+            # Log poller mode and endpoints
+            poller_mode_display = f" [{self.poller_mode}]" if self.poller_mode else ""
+            endpoint_summary = f" ({len(self.cap_endpoints)} endpoint{'s' if len(self.cap_endpoints) != 1 else ''})"
+
             self.logger.info(
-                f"Starting CAP alert polling cycle for {self.location_name} at {format_local_datetime(poll_start_utc)}"
+                f"Starting CAP alert polling cycle{poller_mode_display}{endpoint_summary} for {self.location_name} at {format_local_datetime(poll_start_utc)}"
             )
+
+            # Log first endpoint being polled for visibility
+            if self.cap_endpoints:
+                first_endpoint = self.cap_endpoints[0]
+                if 'tdl.apps.fema.gov' in first_endpoint:
+                    env_marker = " [STAGING/TDL]"
+                elif 'apps.fema.gov' in first_endpoint:
+                    env_marker = " [PRODUCTION]"
+                elif 'weather.gov' in first_endpoint:
+                    env_marker = " [NOAA Weather]"
+                else:
+                    env_marker = ""
+                self.logger.info(f"Polling: {first_endpoint}{env_marker}")
 
             self._refresh_radio_configuration()
 
