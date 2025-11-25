@@ -165,7 +165,7 @@ def _get_ipaws_status() -> Dict:
     }
 
     if last_poll:
-        status['last_poll'] = last_poll.timestamp.isoformat() if last_poll.timestamp else None
+        status['last_poll'] = last_poll.timestamp
         status['last_poll_status'] = last_poll.status
         status['last_poll_alerts'] = last_poll.alerts_new or 0
 
@@ -249,7 +249,7 @@ def _get_noaa_status() -> Dict:
     }
 
     if last_poll:
-        status['last_poll'] = last_poll.timestamp.isoformat() if last_poll.timestamp else None
+        status['last_poll'] = last_poll.timestamp
         status['last_poll_status'] = last_poll.status
         status['last_poll_alerts'] = last_poll.alerts_new or 0
 
