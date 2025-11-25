@@ -610,6 +610,10 @@ class CAPPoller:
         if override_start:
             default_start = override_start
 
+        def _truncate_url(url: str, max_len: int = 60) -> str:
+            """Truncate URL for logging purposes."""
+            return url[:max_len] + '...' if len(url) > max_len else url
+
         if configured_endpoints:
             # Process {timestamp} placeholders in configured URLs
             # This handles URLs saved via the UI with template placeholders
@@ -621,13 +625,13 @@ class CAPPoller:
                         processed_endpoints.append(processed_endpoint)
                         self.logger.debug(
                             "Processed timestamp placeholder in URL: %s -> %s",
-                            endpoint[:60] + '...' if len(endpoint) > 60 else endpoint,
-                            processed_endpoint[:60] + '...' if len(processed_endpoint) > 60 else processed_endpoint,
+                            _truncate_url(endpoint),
+                            _truncate_url(processed_endpoint),
                         )
                     except Exception as exc:
                         self.logger.warning(
                             "Failed to process timestamp placeholder in URL '%s': %s. Using URL as-is.",
-                            endpoint[:60] + '...' if len(endpoint) > 60 else endpoint,
+                            _truncate_url(endpoint),
                             exc,
                         )
                         processed_endpoints.append(endpoint)
