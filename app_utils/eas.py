@@ -721,8 +721,6 @@ def _fetch_embedded_audio(
         Tuple of (audio_samples, source_uri) or (None, None) if no audio found
     """
     import requests
-    import io
-    import wave
     
     # Find audio resources - look for EAS Broadcast Content or audio mime types
     audio_resources = []
@@ -794,9 +792,6 @@ def _convert_audio_to_samples(
     
     Supports WAV, MP3 (via pydub if available), and other formats.
     """
-    import io
-    import wave
-    
     mime_lower = mime_type.lower()
     
     # Try WAV first
@@ -811,7 +806,6 @@ def _convert_audio_to_samples(
                     
                     # Convert to mono if stereo
                     if channels == 2:
-                        import struct
                         if sample_width == 2:
                             samples = struct.unpack(f'<{len(frames)//2}h', frames)
                             mono_samples = [(samples[i] + samples[i+1]) // 2 
@@ -819,7 +813,6 @@ def _convert_audio_to_samples(
                         else:
                             mono_samples = list(frames[::2])
                     else:
-                        import struct
                         if sample_width == 2:
                             mono_samples = list(struct.unpack(f'<{len(frames)//2}h', frames))
                         elif sample_width == 1:
@@ -840,7 +833,6 @@ def _convert_audio_to_samples(
     if 'mp3' in mime_lower or 'mpeg' in mime_lower or audio_data[:3] == b'ID3' or audio_data[:2] == b'\xff\xfb':
         try:
             from pydub import AudioSegment
-            import struct
             
             audio_io = io.BytesIO(audio_data)
             audio = AudioSegment.from_mp3(audio_io)
