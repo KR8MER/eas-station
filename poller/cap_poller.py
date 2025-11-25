@@ -97,9 +97,15 @@ def _resolve_config_path() -> Optional[Path]:
 
 _config_path = _resolve_config_path()
 if _config_path:
-    load_dotenv(_config_path, override=True)
+    # Pull defaults from config files without overriding any values already
+    # provided by the persistent environment (e.g., container or system env).
+    load_dotenv(_config_path, override=False)
 else:
-    load_dotenv(override=True)
+    load_dotenv(override=False)
+
+# Always load a local .env file last so it only fills in missing values and
+# never overrides anything supplied by the container or environment volume.
+load_dotenv(override=False)
 from sqlalchemy import create_engine, text, func, or_
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import SQLAlchemyError, OperationalError, IntegrityError
@@ -1443,6 +1449,7 @@ class CAPPoller:
         sources_seen: Set[str] = set()
         duplicates_filtered = 0
         duplicates_replaced = 0
+        signature_cache: Set[str] = set()
         alerts_by_identifier: Dict[str, Dict] = {}
         alerts_without_identifier: List[Dict] = []
 
@@ -1492,6 +1499,24 @@ class CAPPoller:
                     props['source'] = canonical_source
                     if canonical_source != ALERT_SOURCE_UNKNOWN:
                         sources_seen.add(canonical_source)
+
+                    sender_name = (props.get('senderName') or '').strip().upper()
+                    sent_value = (props.get('sent') or '').strip()
+                    headline_value = (props.get('headline') or '').strip()
+                    signature_parts = [canonical_source or ALERT_SOURCE_UNKNOWN, identifier, sender_name, sent_value, headline_value]
+                    signature_text = "|".join(signature_parts)
+                    signature_hash = hashlib.sha256(signature_text.encode('utf-8', 'ignore')).hexdigest()
+
+                    if signature_hash in signature_cache:
+                        duplicates_filtered += 1
+                        self.logger.info(
+                            "Duplicate NOAA/IPAWS payload skipped (source=%s, identifier=%s)",
+                            canonical_source,
+                            identifier or 'unknown',
+                        )
+                        continue
+
+                    signature_cache.add(signature_hash)
 
                     if identifier:
                         existing_alert = alerts_by_identifier.get(identifier)
