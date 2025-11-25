@@ -163,6 +163,103 @@
             opacity: 1;
         }
 
+        .mini-stat {
+            background: var(--light-color);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 0.75rem 1rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-weight: 600;
+            color: var(--text-color);
+        }
+
+        .mini-stat .value {
+            font-size: 1.15rem;
+            color: var(--primary-color);
+        }
+
+        .boundary-empty-state {
+            border: 2px dashed var(--border-color);
+            border-radius: 12px;
+            padding: 2rem;
+            background: var(--bg-color);
+            text-align: center;
+            color: var(--text-muted-color, #6c757d);
+        }
+
+        .boundary-empty-state i {
+            font-size: 2rem;
+            color: var(--info-color);
+        }
+
+        .badge-pill {
+            border-radius: 999px;
+            padding: 0.35rem 0.75rem;
+        }
+
+        .manage-card {
+            background: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+        }
+
+        .manage-card .card-header {
+            background: transparent;
+            border-color: var(--border-color);
+        }
+
+        .manage-card .card-body {
+            background: var(--surface-color);
+        }
+
+        .hint-box {
+            background: var(--light-color);
+            border: 1px dashed var(--border-color);
+            border-radius: 12px;
+            padding: 0.75rem 0.9rem;
+        }
+
+        .boundary-chip {
+            background: var(--bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 0.6rem 0.75rem;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .boundary-chip:hover {
+            border-color: var(--primary-color);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+        }
+
+        .boundary-chip .badge-soft {
+            background: rgba(13, 110, 253, 0.08);
+            color: var(--primary-color);
+        }
+
+        .boundary-scroll {
+            max-height: 240px;
+            overflow-y: auto;
+        }
+
+        .badge-soft-success {
+            background: rgba(25, 135, 84, 0.12);
+            color: var(--success-color);
+        }
+
+        .badge-soft-info {
+            background: rgba(13, 110, 253, 0.12);
+            color: var(--info-color);
+        }
+
+        .badge-soft-warning {
+            background: rgba(255, 193, 7, 0.18);
+            color: var(--warning-color);
+        }
+
         @media (max-width: 768px) {
             .stats-grid, .operation-grid {
                 grid-template-columns: 1fr;
@@ -522,23 +619,91 @@
                     <!-- Page Header -->
                     <div class="mb-4">
                         <h4 class="mb-2"><i class="fas fa-tasks text-success"></i> Manage Boundary Data</h4>
-                        <p class="text-muted">View, edit, and delete existing boundary data in the system.</p>
+                        <p class="text-muted">Stay organized with filters, refreshed counts, and safer bulk actions.</p>
                     </div>
-                    <div class="row">
-                        <div class="col-md-8">
-                            <h5>Current Boundaries</h5>
-                            <div id="boundariesList" class="mt-3">
-                                <div class="text-center py-4">
-                                    <div class="loading-spinner"></div>
-                                    <span class="ms-2">Loading boundaries...</span>
+                    <div class="row g-3 align-items-stretch">
+                        <div class="col-lg-8">
+                            <div class="card shadow-sm h-100 manage-card">
+                                <div class="card-header bg-transparent border-0 pb-0">
+                                    <div class="d-flex flex-column flex-lg-row justify-content-lg-between gap-3 align-items-lg-center">
+                                        <div>
+                                            <h5 class="mb-1">Current Boundaries</h5>
+                                            <p class="text-muted small mb-0">Filter by type or name, then take action.</p>
+                                        </div>
+                                        <div class="d-flex flex-wrap gap-2 align-items-center">
+                                            <span class="mini-stat" title="Total boundaries loaded">
+                                                <i class="fas fa-layer-group text-primary"></i>
+                                                <span class="value" id="boundaryTotalCount">--</span>
+                                                <span class="text-muted small">records</span>
+                                            </span>
+                                            <span class="mini-stat" title="Unique boundary types">
+                                                <i class="fas fa-shapes text-info"></i>
+                                                <span class="value" id="boundaryTypeCount">--</span>
+                                                <span class="text-muted small">types</span>
+                                            </span>
+                                            <button class="btn btn-outline-primary btn-sm" id="refreshBoundariesBtn">
+                                                <i class="fas fa-sync-alt"></i> Refresh
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row g-3 align-items-center">
+                                        <div class="col-lg-6">
+                                            <div class="form-floating">
+                                                <input type="text" id="boundarySearchInput" class="form-control" placeholder="Search by name or description" autocomplete="off">
+                                                <label for="boundarySearchInput">Search boundaries</label>
+                                            </div>
+                                        </div>
+                                        <div class="col-lg-3">
+                                            <div class="form-floating">
+                                                <select id="boundaryFilterSelect" class="form-select">
+                                                    <option value="">All boundary types</option>
+                                                    <option value="electric">⚡ Electric Providers</option>
+                                                    <option value="villages">🏘️ Villages</option>
+                                                    <option value="school">🏫 School Districts</option>
+                                                    <option value="fire">🔥 Fire Districts</option>
+                                                    <option value="ems">🚑 EMS Districts</option>
+                                                    <option value="township">🏘️ Townships</option>
+                                                    <option value="telephone">📞 Telephone Providers</option>
+                                                    <option value="railroads">🚆 Railroads</option>
+                                                    <option value="rivers">🌊 Rivers & Streams</option>
+                                                    <option value="waterbodies">💧 Lakes & Ponds</option>
+                                                    <option value="county">🗺️ County Outlines</option>
+                                                    <option value="custom">➕ Custom Type…</option>
+                                                </select>
+                                                <label for="boundaryFilterSelect">Filter by type</label>
+                                            </div>
+                                        </div>
+                                        <div class="col-lg-3 text-lg-end">
+                                            <small class="text-muted" id="boundaryLastUpdated"><i class="fas fa-clock me-1"></i>Last refreshed: --</small>
+                                        </div>
+                                    </div>
+                                    <div id="boundariesList" class="mt-3">
+                                        <div class="text-center py-4">
+                                            <div class="loading-spinner"></div>
+                                            <span class="ms-2">Loading boundaries...</span>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-4">
-                            <h5>Bulk Operations</h5>
-                            <div class="card shadow-sm h-100">
+                        <div class="col-lg-4">
+                            <div class="card shadow-sm h-100 manage-card">
+                                <div class="card-header bg-transparent border-0 pb-0">
+                                    <h5 class="mb-1">Bulk Operations</h5>
+                                    <p class="text-muted small mb-0">Use filters first, then choose targeted cleanup.</p>
+                                </div>
                                 <div class="card-body">
-                                    <h6>Delete by Type</h6>
+                                    <div class="hint-box mb-3">
+                                        <div class="d-flex align-items-start gap-2">
+                                            <i class="fas fa-info-circle text-info mt-1"></i>
+                                            <div class="small text-muted">
+                                                Keep your data tidy: filter to confirm the affected boundaries before deleting.
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <h6 class="fw-bold">Delete by Type</h6>
                                     <select id="deleteType" class="form-select mb-3">
                                         <option value="">Select boundary type...</option>
                                         <option value="electric">⚡ Electric Providers</option>
@@ -559,13 +724,33 @@
                                         <input type="text" id="customDeleteBoundaryType" class="form-control" placeholder="e.g. Rail Corridors">
                                         <div class="form-text">Enter the custom type you previously uploaded to remove it from the system.</div>
                                     </div>
-                                    <button onclick="deleteBoundariesByType()" class="btn btn-warning w-100 mb-2">
-                                        <i class="fas fa-trash-alt"></i> Delete by Type
-                                    </button>
-                                    <button onclick="clearAllBoundaries()" class="btn btn-danger w-100">
-                                        <i class="fas fa-exclamation-triangle"></i> Clear ALL
-                                    </button>
+                                    <div class="d-grid gap-2">
+                                        <button onclick="deleteBoundariesByType()" class="btn btn-warning">
+                                            <i class="fas fa-trash-alt"></i> Delete by Type
+                                        </button>
+                                        <button onclick="clearAllBoundaries()" class="btn btn-danger">
+                                            <i class="fas fa-exclamation-triangle"></i> Clear ALL
+                                        </button>
+                                    </div>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card shadow-sm mt-3 manage-card">
+                        <div class="card-body d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+                            <div class="d-flex align-items-center gap-3">
+                                <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 46px; height: 46px;">
+                                    <i class="fas fa-lightbulb"></i>
+                                </div>
+                                <div>
+                                    <h6 class="mb-1">Pro tips</h6>
+                                    <p class="mb-0 text-muted small">Preview uploads to validate metadata, then refresh this list to keep stats current.</p>
+                                </div>
+                            </div>
+                            <div class="d-flex flex-wrap gap-2">
+                                <span class="badge badge-pill badge-soft-success">GeoJSON uploads</span>
+                                <span class="badge badge-pill badge-soft-info">Type-aware deletes</span>
+                                <span class="badge badge-pill badge-soft-warning">Counts refresh live</span>
                             </div>
                         </div>
                     </div>
@@ -1378,6 +1563,12 @@
         const DEFAULT_BOUNDARY_TYPES = new Set(Object.keys(BOUNDARY_TYPE_CONFIG));
         const ADMIN_SETUP_MODE = {{ 'true' if setup_mode else 'false' }};
         let latestOperationStatus = {};
+        let boundaryCache = {
+            features: [],
+            grouped: {},
+            stats: { total: 0, types: 0 },
+            lastLoaded: null
+        };
         const EAS_EVENT_CODES = {{ eas_event_codes|tojson }};
         const EAS_DEFAULTS = {
             originator: {{ eas_originator|tojson }},
@@ -1523,7 +1714,8 @@
             const selects = [
                 document.getElementById('boundaryType'),
                 document.getElementById('previewBoundaryType'),
-                document.getElementById('deleteType')
+                document.getElementById('deleteType'),
+                document.getElementById('boundaryFilterSelect')
             ].filter(Boolean);
             selects.forEach(select => {
                 Array.from(select.options).forEach(option => {
@@ -1559,6 +1751,21 @@
             const editAlertModalElement = document.getElementById('editAlertModal');
             if (editAlertModalElement) {
                 editAlertModal = new bootstrap.Modal(editAlertModalElement);
+            }
+            const searchInput = document.getElementById('boundarySearchInput');
+            const filterSelect = document.getElementById('boundaryFilterSelect');
+            const refreshButton = document.getElementById('refreshBoundariesBtn');
+            if (searchInput) {
+                searchInput.addEventListener('input', renderBoundariesList);
+            }
+            if (filterSelect) {
+                filterSelect.addEventListener('change', renderBoundariesList);
+            }
+            if (refreshButton) {
+                refreshButton.addEventListener('click', () => {
+                    setBoundaryLoadingState();
+                    loadBoundaries();
+                });
             }
             loadBoundaries();
             loadSystemHealth();
@@ -4939,12 +5146,132 @@
                 resultsDiv.innerHTML = `<div class="alert alert-danger">❌ Error: ${error.message}</div>`;
             }
         }
+        function setBoundaryLoadingState() {
+            const listDiv = document.getElementById('boundariesList');
+            if (listDiv) {
+                listDiv.innerHTML = `
+                    <div class="text-center py-4">
+                        <div class="loading-spinner"></div>
+                        <span class="ms-2">Refreshing boundaries...</span>
+                    </div>
+                `;
+            }
+        }
+        function updateBoundaryStats() {
+            const totalEl = document.getElementById('boundaryTotalCount');
+            const typeEl = document.getElementById('boundaryTypeCount');
+            const updatedEl = document.getElementById('boundaryLastUpdated');
+            if (totalEl) {
+                totalEl.textContent = boundaryCache.stats.total.toLocaleString();
+            }
+            if (typeEl) {
+                typeEl.textContent = boundaryCache.stats.types.toLocaleString();
+            }
+            if (updatedEl) {
+                updatedEl.textContent = boundaryCache.lastLoaded
+                    ? `Last refreshed: ${boundaryCache.lastLoaded.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                    : 'Last refreshed: --';
+            }
+        }
+        function renderBoundariesList() {
+            const listDiv = document.getElementById('boundariesList');
+            if (!listDiv) {
+                return;
+            }
+            const searchTerm = (document.getElementById('boundarySearchInput')?.value || '').toLowerCase().trim();
+            const selectedType = sanitizeBoundaryTypeInput((document.getElementById('boundaryFilterSelect')?.value || '').trim());
+            const groups = boundaryCache.grouped || {};
+            const entries = Object.entries(groups).sort((a, b) => {
+                const labelA = (a[1]?.label || formatBoundaryLabel(a[0] || '')).toLowerCase();
+                const labelB = (b[1]?.label || formatBoundaryLabel(b[0] || '')).toLowerCase();
+                return labelA.localeCompare(labelB);
+            });
+            if (!entries.length) {
+                listDiv.innerHTML = `
+                    <div class="boundary-empty-state">
+                        <i class="fas fa-map-marked-alt mb-2"></i>
+                        <h6 class="fw-bold">No boundary data found</h6>
+                        <p class="mb-2">Upload GeoJSON, then refresh to see organized cards by type.</p>
+                        <div class="small text-muted">Preview uploads first to validate metadata.</div>
+                    </div>
+                `;
+                return;
+            }
+            let html = '<div class="row g-3">';
+            let hasResults = false;
+            entries.forEach(([typeKey, group]) => {
+                const boundaries = Array.isArray(group.items) ? group.items : [];
+                const displayLabel = group.label || formatBoundaryLabel(typeKey);
+                const filtered = boundaries.filter(boundary => {
+                    const boundaryType = sanitizeBoundaryTypeInput(boundary.canonical_type || boundary.type || boundary.raw_type || typeKey);
+                    if (selectedType && boundaryType !== selectedType) {
+                        return false;
+                    }
+                    if (!searchTerm) {
+                        return true;
+                    }
+                    const name = (boundary.name || '').toLowerCase();
+                    const description = (boundary.description || '').toLowerCase();
+                    const owner = (boundary.owner || '').toLowerCase();
+                    return name.includes(searchTerm) || description.includes(searchTerm) || owner.includes(searchTerm);
+                });
+                if (!filtered.length) {
+                    return;
+                }
+                hasResults = true;
+                html += `
+                    <div class="col-md-6 col-xl-4">
+                        <div class="card shadow-sm h-100 border-0 manage-card">
+                            <div class="card-body d-flex flex-column gap-2">
+                                <div class="d-flex justify-content-between align-items-start gap-2">
+                                    <div>
+                                        <h6 class="mb-0">${escapeHtml(displayLabel)}</h6>
+                                        <small class="text-muted">${filtered.length} entr${filtered.length === 1 ? 'y' : 'ies'}</small>
+                                    </div>
+                                    <span class="badge bg-primary-subtle text-primary">${boundaries.length} total</span>
+                                </div>
+                                <div class="d-flex flex-column gap-2 boundary-scroll">
+                `;
+                filtered.slice(0, 12).forEach(boundary => {
+                    const safeName = escapeHtml(boundary.name || 'Unnamed boundary');
+                    const safeDesc = escapeHtml(boundary.description || boundary.owner || 'No description');
+                    html += `
+                        <div class="boundary-chip d-flex justify-content-between align-items-start gap-2">
+                            <div class="flex-grow-1">
+                                <div class="fw-semibold text-truncate" title="${safeName}">${safeName}</div>
+                                <div class="text-muted small text-truncate" title="${safeDesc}">${safeDesc}</div>
+                            </div>
+                            <button onclick="deleteBoundary(${boundary.id}, '${(boundary.name || 'this boundary').replace(/'/g, "\\'")}')" class="btn btn-outline-danger btn-sm" title="Delete boundary">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    `;
+                });
+                if (filtered.length > 12) {
+                    html += `<small class="text-muted">…and ${filtered.length - 12} more matches</small>`;
+                }
+                html += '
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                ';
+            });
+            html += '</div>';
+            listDiv.innerHTML = hasResults ? html : `
+                <div class="boundary-empty-state">
+                    <i class="fas fa-search mb-2"></i>
+                    <h6 class="fw-bold">No boundaries match your filters</h6>
+                    <p class="mb-0">Try clearing the search or choosing a different type.</p>
+                </div>
+            `;
+        }
         // Load boundaries
         async function loadBoundaries() {
             try {
+                setBoundaryLoadingState();
                 const response = await fetch('/api/boundaries');
                 const data = await response.json();
-                const listDiv = document.getElementById('boundariesList');
                 if (data.features && data.features.length > 0) {
                     const boundariesByType = {};
                     data.features.forEach(feature => {
@@ -4964,37 +5291,36 @@
                         label: group.label || formatBoundaryLabel(key)
                     }));
                     ensureDynamicBoundaryOptions(dynamicTypes);
-                    let html = '<div class="row">';
-                    for (const [typeKey, group] of Object.entries(boundariesByType)) {
-                        const boundaries = group.items;
-                        const displayLabel = group.label || formatBoundaryLabel(typeKey);
-                        html += `
-                            <div class="col-md-6 col-lg-4 mb-3">
-                                <div class="card shadow-sm h-100">
-                                    <div class="card-body">
-                                        <h6>${escapeHtml(displayLabel)} (${boundaries.length})</h6>
-                                        <div style="max-height: 200px; overflow-y: auto;">
-                        `;
-                        boundaries.slice(0, 10).forEach(boundary => {
-                            html += `
-                                <div class="d-flex justify-content-between align-items-center border-bottom py-1">
-                                    <small class="text-truncate" style="max-width: 150px;" title="${boundary.name}">${boundary.name}</small>
-                                    <button onclick="deleteBoundary(${boundary.id}, '${boundary.name.replace(/'/g, "\\'")}')"
-                                            class="btn btn-outline-danger btn-sm">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
-                                </div>
-                            `;
-                        });
-                        if (boundaries.length > 10) {
-                            html += `<small class="text-muted">... and ${boundaries.length - 10} more</small>`;
-                        }
-                        html += '</div></div></div>';
-                    }
-                    html += '</div>';
-                    listDiv.innerHTML = html;
+                    boundaryCache = {
+                        features: data.features,
+                        grouped: boundariesByType,
+                        stats: {
+                            total: data.features.length,
+                            types: Object.keys(boundariesByType).length
+                        },
+                        lastLoaded: new Date()
+                    };
+                    updateBoundaryStats();
+                    renderBoundariesList();
                 } else {
-                    listDiv.innerHTML = '<div class="alert alert-info">No boundaries found. Use the upload form to add boundary files.</div>';
+                    boundaryCache = {
+                        features: [],
+                        grouped: {},
+                        stats: { total: 0, types: 0 },
+                        lastLoaded: new Date()
+                    };
+                    updateBoundaryStats();
+                    renderBoundariesList();
+                    const listDiv = document.getElementById('boundariesList');
+                    if (listDiv) {
+                        listDiv.innerHTML = `
+                            <div class="boundary-empty-state">
+                                <i class="fas fa-cloud-upload-alt mb-2"></i>
+                                <h6 class="fw-bold">No boundaries found</h6>
+                                <p class="mb-0">Upload GeoJSON files to start managing your boundary data.</p>
+                            </div>
+                        `;
+                    }
                 }
                 initializeCustomTypeControls();
             } catch (error) {
