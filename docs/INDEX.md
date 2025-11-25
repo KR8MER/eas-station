@@ -134,11 +134,13 @@ Professional diagrams and flowcharts for system understanding:
 |----------|-------------|
 | [📖 About EAS Station](reference/ABOUT) | Project background and goals |
 | [📄 Changelog](reference/CHANGELOG) | Version history and changes |
-| [🧭 Feature Matrix](reference/FEATURE_MATRIX) | Documentation coverage by feature |
-| [📊 Setup Wizard Documentation](reference/SETUP_WIZARD) | Setup wizard internals |
-| [🎵 New Features (2025-11)](reference/NEW_FEATURES_2025-11) | Recent features |
 | [📡 EAS Event Codes](reference/EAS_EVENT_CODES_COMPLETE) | Complete event code list |
-| [🗃️ Documentation Archive](archive/README) | Historical bug reports & security analyses |
+| [🎵 New Features (2025-11)](reference/NEW_FEATURES_2025-11) | Recent features |
+| [📋 Project Philosophy](reference/project-philosophy) | Goals and principles |
+| [📊 Setup Wizard Reference](reference/SETUP_WIZARD) | Setup wizard technical details |
+| [📅 RWT Scheduling](reference/RWT_SCHEDULING) | Required Weekly Test scheduling |
+| [📄 Alert PDF Export](reference/alerts-pdf-export) | PDF export functionality |
+| [🗃️ Documentation Archive](archive/README) | Historical analyses and reports |
 
 ## 📁 File Organization
 
@@ -189,11 +191,12 @@ docs/
 | Metric | Value |
 |--------|-------|
 | Essential User Guides | 5 |
-| Hardware Guides | 7 |
+| Essential References | 9 |
+| Hardware Guides | 10 |
 | Audio Documentation | 6 |
-| Developer Docs | 8+ |
+| Developer Documentation | 18 |
+| Archived Historical Docs | 20+ |
 | Total Documentation Directories | 14 |
-| Vendor Resources | Separate folder |
 
 ## 🧭 Navigation Tips
 
