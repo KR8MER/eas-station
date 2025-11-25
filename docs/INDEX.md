@@ -73,6 +73,7 @@ If you're new to EAS Station, start here:
 |----------|-------------|
 | [About EAS Station](reference/ABOUT) | Project background |
 | [Changelog](reference/CHANGELOG) | Version history |
+| [Ohio EAS Documentation](reference/OHIO_EAS_DOCUMENTATION) | Ohio EAS system reference |
 | [Feature Roadmap](roadmap/dasdec3-feature-roadmap) | Planned features |
 
 ## 📁 File Organization
@@ -112,7 +113,7 @@ docs/
 
 | Metric | Value |
 |--------|-------|
-| Total Documentation Files | 26 |
+| Total Documentation Files | 27 |
 | Essential User Guides | 5 |
 | Technical Documents | 8 |
 | Legal/Policy Documents | 4 |
