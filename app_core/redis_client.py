@@ -193,7 +193,8 @@ def get_redis_client(
             _redis_client = None
 
     # Get connection parameters
-    redis_host = os.getenv("REDIS_HOST", "localhost")
+    # Default to 'redis' for Docker, not 'localhost' (prevents connection refused errors)
+    redis_host = os.getenv("REDIS_HOST", "redis")
     redis_port = int(os.getenv("REDIS_PORT", "6379"))
     redis_db = int(os.getenv("REDIS_DB", "0"))
     redis_password = os.getenv("REDIS_PASSWORD")

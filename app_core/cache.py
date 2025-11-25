@@ -60,7 +60,8 @@ def init_cache(app):
         config['CACHE_DIR'] = cache_dir
         os.makedirs(cache_dir, exist_ok=True)
     elif cache_type == 'redis':
-        redis_url = os.environ.get('CACHE_REDIS_URL', 'redis://localhost:6379/0')
+        # Default to 'redis' hostname for Docker, not 'localhost'
+        redis_url = os.environ.get('CACHE_REDIS_URL', 'redis://redis:6379/0')
         config['CACHE_REDIS_URL'] = redis_url
     
     app.config.update(config)

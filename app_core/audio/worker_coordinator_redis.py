@@ -312,7 +312,9 @@ def read_shared_metrics() -> Optional[Dict[str, Any]]:
         return metrics
 
     except RedisError as e:
-        logger.error(f"Failed to read shared metrics from Redis: {e}")
+        # Log as debug instead of error - Redis unavailability is expected in separated architecture
+        # when audio-service is starting up or Redis is temporarily unreachable
+        logger.debug(f"Failed to read shared metrics from Redis: {e}")
         return None
 
 
