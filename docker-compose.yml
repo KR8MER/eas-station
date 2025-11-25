@@ -193,6 +193,9 @@ services:
 
       # Poller configuration
       CAP_POLLER_MODE: NOAA
+      # Clear IPAWS URLs so NOAA poller builds weather.gov endpoints
+      IPAWS_CAP_FEED_URLS: ""
+      CAP_ENDPOINTS: ""
 
       # SDR settings
       SDR_ARGS: ${SDR_ARGS:-driver=airspy}
