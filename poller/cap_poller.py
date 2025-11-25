@@ -597,34 +597,61 @@ class CAPPoller:
         if cap_endpoints:
             configured_endpoints.extend([endpoint for endpoint in cap_endpoints if endpoint])
 
+        # Calculate default timestamp for IPAWS URLs with {timestamp} placeholder
+        # This is needed for URLs configured via the UI which use template placeholders
+        lookback_hours = os.getenv('IPAWS_DEFAULT_LOOKBACK_HOURS', '12')
+        try:
+            lookback_hours_int = max(1, int(lookback_hours))
+        except ValueError:
+            lookback_hours_int = 12
+
+        default_start = (utc_now() - timedelta(hours=lookback_hours_int)).strftime('%Y-%m-%dT%H:%M:%SZ')
+        override_start = (os.getenv('IPAWS_DEFAULT_START') or '').strip()
+        if override_start:
+            default_start = override_start
+
         if configured_endpoints:
+            # Process {timestamp} placeholders in configured URLs
+            # This handles URLs saved via the UI with template placeholders
+            processed_endpoints: List[str] = []
+            for endpoint in configured_endpoints:
+                if '{timestamp}' in endpoint:
+                    try:
+                        processed_endpoint = endpoint.format(timestamp=default_start)
+                        processed_endpoints.append(processed_endpoint)
+                        self.logger.debug(
+                            "Processed timestamp placeholder in URL: %s -> %s",
+                            endpoint[:60] + '...' if len(endpoint) > 60 else endpoint,
+                            processed_endpoint[:60] + '...' if len(processed_endpoint) > 60 else processed_endpoint,
+                        )
+                    except Exception as exc:
+                        self.logger.warning(
+                            "Failed to process timestamp placeholder in URL '%s': %s. Using URL as-is.",
+                            endpoint[:60] + '...' if len(endpoint) > 60 else endpoint,
+                            exc,
+                        )
+                        processed_endpoints.append(endpoint)
+                else:
+                    processed_endpoints.append(endpoint)
+
             # Preserve order but remove duplicates
             seen: Set[str] = set()
             unique_endpoints: List[str] = []
-            for endpoint in configured_endpoints:
+            for endpoint in processed_endpoints:
                 if endpoint not in seen:
                     unique_endpoints.append(endpoint)
                     seen.add(endpoint)
             self.cap_endpoints = unique_endpoints
         else:
             if self.poller_mode == 'IPAWS':
-                lookback_hours = os.getenv('IPAWS_DEFAULT_LOOKBACK_HOURS', '12')
-                try:
-                    lookback_hours_int = max(1, int(lookback_hours))
-                except ValueError:
-                    lookback_hours_int = 12
-
-                default_start = (utc_now() - timedelta(hours=lookback_hours_int)).strftime('%Y-%m-%dT%H:%M:%SZ')
-                override_start = (os.getenv('IPAWS_DEFAULT_START') or '').strip()
-                if override_start:
-                    default_start = override_start
-
+                # Default to production IPAWS server (not TDL/staging)
+                # Users can override with IPAWS_DEFAULT_ENDPOINT_TEMPLATE env var
                 endpoint_template = (
                     os.getenv(
                         'IPAWS_DEFAULT_ENDPOINT_TEMPLATE',
-                        'https://tdl.apps.fema.gov/IPAWSOPEN_EAS_SERVICE/rest/public/recent/{timestamp}',
+                        'https://apps.fema.gov/IPAWSOPEN_EAS_SERVICE/rest/public/recent/{timestamp}',
                     )
-                    or 'https://tdl.apps.fema.gov/IPAWSOPEN_EAS_SERVICE/rest/public/recent/{timestamp}'
+                    or 'https://apps.fema.gov/IPAWSOPEN_EAS_SERVICE/rest/public/recent/{timestamp}'
                 )
                 try:
                     default_endpoint = endpoint_template.format(timestamp=default_start)
