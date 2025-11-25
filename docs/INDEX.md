@@ -10,11 +10,11 @@ If you're new to EAS Station, start here:
 |----------|-------------|----------|
 | [🔧 Main README](https://github.com/KR8MER/eas-station/blob/main/README.md) | Installation and overview | Everyone |
 | [⚡ 5-Minute Quick Start](guides/HELP#getting-started) | Get running immediately | New users |
-| [🐳 Portainer Deployment](guides/PORTAINER_DEPLOYMENT) | Container-based setup | System admins |
+| [🐳 Portainer Deployment](deployment/PORTAINER_DEPLOYMENT) | Container-based setup | System admins |
 
 ## 📊 Visual Documentation
 
-**NEW:** Professional diagrams and flowcharts for system understanding:
+Professional diagrams and flowcharts for system understanding:
 
 | Diagram | Description | Use Case |
 |---------|-------------|----------|
@@ -27,43 +27,42 @@ If you're new to EAS Station, start here:
 
 ## 👥 User Documentation
 
-### Daily Operations
+### Essential Guides
 | Document | Description |
 |----------|-------------|
 | [📋 Help & Operations Guide](guides/HELP) | Complete operator manual |
-| [🎨 Frontend User Guide](frontend/USER_INTERFACE_GUIDE) | Web interface navigation and usage |
-| [🎯 Alert Management](guides/HELP#managing-boundaries-and-alerts) | Creating and managing alerts |
-| [📊 System Monitoring](guides/HELP#routine-operations) | Dashboard and health checks |
-| [🔧 Troubleshooting](guides/HELP#troubleshooting) | Common issues and solutions |
-
-### Configuration & Setup
-| Document | Description |
-|----------|-------------|
-| [📡 SDR Setup Guide](hardware/SDR_SETUP) | Radio receiver configuration |
-| [🌐 IPAWS Integration](guides/ipaws_feed_integration) | Federal alert source setup |
-| [🔄 Environment Migration](guides/ENV_MIGRATION_GUIDE) | Moving between versions |
-| [🗄️ Database Setup](guides/DATABASE_CONSISTENCY_FIXES) | PostgreSQL/PostGIS configuration |
 | [🛠️ Setup Instructions](guides/SETUP_INSTRUCTIONS) | Initial wizard and environment checklist |
+| [🔒 HTTPS Setup](guides/HTTPS_SETUP) | SSL/TLS certificates |
+| [🌐 IPAWS Integration](guides/ipaws_feed_integration) | Federal alert source setup |
+| [🔄 One-Button Upgrade](guides/one_button_upgrade) | Automated update process |
 
 ### Hardware Integration
 | Document | Description |
 |----------|-------------|
-| [⚡ GPIO Relay Control](guides/HELP#managing-receivers) | Transmitter keying setup |
-| [🔊 Audio Configuration](guides/HELP#audio-generation-errors) | Sound card and audio routing |
-| [🎧 Professional Audio Subsystem](PROFESSIONAL_AUDIO_SUBSYSTEM) | **NEW:** 24/7 audio monitoring architecture |
-| [🔗 Audio System Access Guide](AUDIO_SYSTEM_ACCESS_GUIDE) | **NEW:** Quick reference for audio features |
+| [📡 SDR Setup Guide](hardware/SDR_SETUP) | Radio receiver configuration |
+| [🖥️ Raspberry Pi Build](hardware/reference_pi_build) | Reference hardware configuration |
+| [⚡ GPIO Control](hardware/gpio) | Transmitter keying setup |
+| [📻 Radio USB Passthrough](hardware/radio_usb_passthrough) | USB radio devices |
+| [🔌 Serial Bridge Setup](hardware/SERIAL_ETHERNET_BRIDGE_SETUP) | Lantronix and Linovision adapters |
+| [📊 Bill of Materials](hardware/BILL_OF_MATERIALS) | Hardware shopping list |
+
+### Audio System
+| Document | Description |
+|----------|-------------|
 | [🎧 Audio Monitoring Dashboard](audio/AUDIO_MONITORING) | Live stream viewer and troubleshooting |
-| [💡 LED Sign Integration](guides/HELP#led-sign-not-responding) | Alpha Protocol signage |
-| [🔌 Serial Bridge Setup](guides/SERIAL_ETHERNET_BRIDGE_SETUP) | Configure Lantronix and Linovision adapters |
-| [📻 Radio Management](guides/radio_usb_passthrough) | USB radio devices |
+| [🔊 Professional Audio Subsystem](audio/PROFESSIONAL_AUDIO_SUBSYSTEM) | 24/7 audio monitoring architecture |
+| [🎵 Audio Pipeline Architecture](audio/AUDIO_PIPELINE_ARCHITECTURE) | Audio processing internals |
+| [📻 Icecast Streaming](audio/ICECAST_STREAMING) | Icecast server setup |
+| [📡 iHeartMedia Streams](audio/IHEARTMEDIA_STREAMS) | Commercial stream integration |
 
 ### Web Interface & Frontend
 | Document | Description |
 |----------|-------------|
 | [🎨 UI Components Library](frontend/COMPONENT_LIBRARY) | Complete component reference |
-| [📱 Responsive Design Guide](frontend/RESPONSIVE_DESIGN) | Mobile-first design principles |
-| [🎨 Theming & Customization](frontend/THEMING_CUSTOMIZATION) | Theme system and branding |
+| [📱 User Interface Guide](frontend/USER_INTERFACE_GUIDE) | Web interface navigation |
 | [🚀 JavaScript API](frontend/JAVASCRIPT_API) | Frontend API documentation |
+| [🎨 Theming & Customization](frontend/THEMING_CUSTOMIZATION) | Theme system and branding |
+| [📱 Responsive Design Guide](frontend/RESPONSIVE_DESIGN) | Mobile-first design principles |
 
 ## 🛠️ Developer Documentation
 
@@ -72,33 +71,53 @@ If you're new to EAS Station, start here:
 |----------|-------------|
 | [🏗️ Architecture Overview](architecture/THEORY_OF_OPERATION) | System design and components |
 | [💻 Development Setup](development/AGENTS) | Local development environment |
-| [🎨 Frontend Documentation](frontend/FRONTEND_INDEX) | Complete UI and frontend guide |
-| [🔧 API Reference](https://github.com/KR8MER/eas-station/blob/main/README.md#-api-endpoints) | REST API documentation |
-| [🗺️ Project Structure](development/AGENTS) | Code organization guide |
-
-### Contributing
-| Document | Description |
-|----------|-------------|
 | [📋 Contributing Guide](process/CONTRIBUTING) | How to contribute code |
 | [✅ Pull Request Process](process/PR_DESCRIPTION) | PR guidelines and templates |
-| [🐛 Issue Reporting](process/CONTRIBUTING#how-to-contribute) | Bug report guidelines |
-| [📝 Code Standards](development/AGENTS) | Style and quality standards |
-| [🎨 Frontend Development](frontend/FRONTEND_INDEX) | UI development guidelines |
 
-### Historical Development References (Archive)
-Legacy files that still contain useful background material are now located under `docs/development/archive/`:
+### Architecture & Design
+| Document | Description |
+|----------|-------------|
+| [🏛️ System Architecture](architecture/SYSTEM_ARCHITECTURE) | Overall system design |
+| [🔄 Data Flow Sequences](architecture/DATA_FLOW_SEQUENCES) | Data processing workflows |
+| [📊 Display System Architecture](architecture/DISPLAY_SYSTEM_ARCHITECTURE) | Display subsystem design |
+| [📡 EAS Decoding Summary](architecture/EAS_DECODING_SUMMARY) | Alert decoding internals |
 
-| Document | Why it matters |
-|----------|----------------|
-| [🤖 AI Assistant Guide](development/archive/CLAUDE.md) | Workflow guardrails for automation/AI contributors |
-| [🧱 Frontend Architecture](development/archive/FRONTEND_ARCHITECTURE.md) | Deep dive into the display system and Flask UI layers |
-| [🖥️ Display Quick Reference](development/archive/DISPLAY_QUICK_REFERENCE.md) | One-page cheat sheet for OLED/LED display modes |
-| [⚙️ Config Persistence](development/archive/CONFIG_PERSISTENCE.md) | Raspberry Pi volume/backups for persistent installs |
-| [🚀 Pi Quick Start](development/archive/QUICKSTART_PI.md) | Step-by-step OLED + GPIO bring-up on Raspberry Pi |
-| [🔌 OLED/GPIO Troubleshooting](development/archive/OLED_GPIO_TROUBLESHOOTING.md) | Direct fixes when Docker cannot access GPIO hardware |
-| [🖼️ OLED Sample Screens](development/archive/OLED_SAMPLE_SCREENS.md) | Reference layouts for 128x64 modules |
-| [✨ Feature Enhancement Summary](development/archive/FEATURE_ENHANCEMENT_SUMMARY.md) | Context for major UI/UX upgrades |
-| [🛠️ Fix + Proof Pack](development/archive/FIX_SUMMARY.md) | Bug write-up with links to smoking-gun & visual proof artifacts |
+## 🏢 Operational Documentation
+
+### Deployment & Maintenance
+| Document | Description |
+|----------|-------------|
+| [🐳 Docker Deployment](https://github.com/KR8MER/eas-station/blob/main/README.md#-quick-start) | Container setup and management |
+| [🚀 Portainer Deployment](deployment/PORTAINER_DEPLOYMENT) | Complete Portainer guide |
+| [🗄️ Portainer Database Setup](deployment/portainer/PORTAINER_DATABASE_SETUP) | External database configuration |
+| [🌐 Portainer Network Setup](deployment/portainer/PORTAINER_NETWORK_SETUP) | Reverse proxy and DNS guidance |
+| [🧰 Post Install Checklist](deployment/post_install) | Finalize services and accounts |
+| [🔄 Environment Migration](deployment/ENV_MIGRATION_GUIDE) | Moving between versions |
+
+### Hardware Evaluations
+| Document | Description |
+|----------|-------------|
+| [📡 Hardware SAME Decoder Evaluation](evaluations/HARDWARE_SAME_DECODER_EVALUATION) | Hardware decoder options |
+| [🤖 Hailo AI Evaluation](evaluations/HAILO_AI_EVALUATION) | AI accelerator testing |
+| [🔌 Zigbee Module Evaluation](evaluations/ZIGBEE_MODULE_EVALUATION) | Zigbee hardware options |
+| [📡 Cellular HAT Evaluation](evaluations/CELLULAR_HAT_EVALUATION) | Cellular connectivity options |
+
+### Troubleshooting
+| Document | Description |
+|----------|-------------|
+| [🔧 Common Issues](guides/HELP#troubleshooting) | Solutions for common problems |
+| [🗄️ Database Issues](troubleshooting/DATABASE_CONSISTENCY_FIXES) | PostgreSQL/PostGIS troubleshooting |
+| [📡 SDR Waterfall Issues](troubleshooting/SDR_WATERFALL_TROUBLESHOOTING) | SDR troubleshooting |
+| [🎵 Sample Rate Mismatch](troubleshooting/SAMPLE_RATE_MISMATCH_TROUBLESHOOTING) | Audio sample rate issues |
+| [🔌 IPv6 Connectivity](troubleshooting/FIX_IPV6_CONNECTIVITY) | IPv6 network issues |
+
+### Security & Compliance
+| Document | Description |
+|----------|-------------|
+| [🔐 Security Best Practices](security/SECURITY) | Security guidelines |
+| [🔒 Password Guide](security/SECURITY_PASSWORD_GUIDE) | Password management |
+| [📜 Terms of Use](policies/TERMS_OF_USE) | Usage terms |
+| [🔏 Privacy Policy](policies/PRIVACY_POLICY) | Privacy information |
 
 ## 📈 Project Information
 
@@ -107,8 +126,8 @@ Legacy files that still contain useful background material are now located under
 |----------|-------------|
 | [🗺️ Project Roadmap](roadmap/master_todo) | Current development priorities |
 | [🎯 Feature Timeline](roadmap/dasdec3-feature-roadmap) | Release schedule and milestones |
-| [🏆 DASDEC3 Comparison](dasdec3-comparison) | Hardware replacement analysis |
-| [📋 Project Philosophy](project-philosophy) | Goals and principles |
+| [🏆 DASDEC3 Comparison](roadmap/DASDEC3_COMPARISON) | Hardware replacement analysis |
+| [📋 Project Philosophy](reference/project-philosophy) | Goals and principles |
 
 ### Reference Materials
 | Document | Description |
@@ -116,60 +135,45 @@ Legacy files that still contain useful background material are now located under
 | [📖 About EAS Station](reference/ABOUT) | Project background and goals |
 | [📄 Changelog](reference/CHANGELOG) | Version history and changes |
 | [🧭 Feature Matrix](reference/FEATURE_MATRIX) | Documentation coverage by feature |
-| [🎵 Audio System Changelog (2025-11-07)](CHANGELOG_2025-11-07) | **NEW:** Professional audio subsystem build log |
-| [📊 Documentation Audit](documentation_audit) | Documentation status and maintenance tracking |
+| [📊 Setup Wizard Documentation](reference/SETUP_WIZARD) | Setup wizard internals |
+| [🎵 New Features (2025-11)](reference/NEW_FEATURES_2025-11) | Recent features |
+| [📡 EAS Event Codes](reference/EAS_EVENT_CODES_COMPLETE) | Complete event code list |
 | [🗃️ Documentation Archive](archive/README) | Historical bug reports & security analyses |
-| [🔐 Security Policy](development/AGENTS) | Security considerations |
-| [📜 License](https://github.com/KR8MER/eas-station/blob/main/LICENSE) | AGPL-3.0 License (dual-licensed with Commercial License) |
-
-## 🏢 Operational Documentation
-
-### Deployment & Maintenance
-| Document | Description |
-|----------|-------------|
-| [🐳 Docker Deployment](https://github.com/KR8MER/eas-station/blob/main/README.md#-quick-start) | Container setup and management |
-| [🚀 Portainer Quick Start](deployment/portainer/PORTAINER_QUICK_START) | Five-minute stack deployment |
-| [🗄️ Portainer Database Setup](deployment/portainer/PORTAINER_DATABASE_SETUP) | External database configuration |
-| [🌐 Portainer Network Setup](deployment/portainer/PORTAINER_NETWORK_SETUP) | Reverse proxy and DNS guidance |
-| [🔄 One-Button Upgrade](guides/one_button_upgrade) | Automated update process |
-| [🧰 Post Install Checklist](deployment/post_install) | Finalize services and accounts |
-| [📊 Performance Tuning](audio#performance-optimization) | Optimization guidelines |
-| [🔍 Monitoring & Logging](guides/HELP#troubleshooting) | System observability |
-
-### Compliance & Standards
-| Document | Description |
-|----------|-------------|
-| [📡 FCC Part 11 Compliance](reference/CFR-2010-title47-vol1-sec11-31.xml) | Regulatory requirements |
-| [🌐 CAP Protocol Guide](guides/ipaws_feed_integration) | Common Alert Protocol implementation |
-| [📻 SAME Encoding Standards](architecture/THEORY_OF_OPERATION) | Standard Alert Messaging Protocol |
-| [🗺️ Geographic Standards](guides/HELP#managing-boundaries-and-alerts) | Location-based filtering rules |
 
 ## 📁 File Organization
 
 ```
 docs/
-├── guides/          # User guides and tutorials
-├── development/     # Developer documentation
-├── architecture/    # System architecture docs
-├── roadmap/         # Project planning and milestones
-├── reference/       # Reference materials
-├── policies/        # Project policies and governance
-├── process/         # Development processes
-└── development/archive/  # Historical development artifacts
+├── guides/              # Essential user guides (5 files)
+├── hardware/            # Hardware setup and configuration
+├── audio/               # Audio system documentation
+├── frontend/            # Web UI and frontend docs
+├── development/         # Developer documentation
+├── architecture/        # System architecture docs
+├── deployment/          # Deployment guides
+├── evaluations/         # Hardware evaluation reports
+├── troubleshooting/     # Problem-solving guides
+├── security/            # Security documentation
+├── reference/           # Technical reference materials
+├── roadmap/             # Project planning and milestones
+├── policies/            # Project policies and governance
+├── process/             # Development processes
+├── resources/           # Vendor documentation and PDFs
+└── archive/             # Historical documentation
 ```
 
 ## 🔍 Finding Information
 
 ### By User Type
-- **🎯 New Users**: Start with [Quick Start](https://github.com/KR8MER/eas-station/blob/main/README.md#-quick-start)
+- **🎯 New Users**: Start with [Quick Start](#quick-start)
 - **👨‍💻 Operators**: See [Help & Operations Guide](guides/HELP)
-- **🔧 System Admins**: Check [Deployment Guides](https://github.com/KR8MER/eas-station/blob/main/README.md#-quick-start)
+- **🔧 System Admins**: Check [Deployment Guides](#deployment--maintenance)
 - **💻 Developers**: Review [Development Setup](development/AGENTS)
 
 ### By Task
-- **🚀 Installation**: [Installation Guides](#quick-start)
-- **⚙️ Configuration**: [Configuration & Setup](#configuration-setup)
-- **🔧 Troubleshooting**: [Help & Operations](guides/HELP#troubleshooting)
+- **🚀 Installation**: [Quick Start](#quick-start)
+- **⚙️ Configuration**: [Essential Guides](#essential-guides)
+- **🔧 Troubleshooting**: [Troubleshooting Section](#troubleshooting)
 - **🛠️ Development**: [Developer Documentation](#developer-documentation)
 - **📈 Project Info**: [Project Information](#project-information)
 
@@ -180,27 +184,16 @@ docs/
 3. **Review Logs**: Check application logs with `docker compose logs -f`
 4. **Community Support**: [GitHub Discussions](https://github.com/KR8MER/eas-station/discussions)
 
-## 📝 Documentation Status
-
-| Section | Status | Last Updated |
-|---------|--------|--------------|
-| User Guides | ✅ Complete | 2025-01-28 |
-| Developer Docs | ✅ Complete | 2025-01-28 |
-| API Reference | ✅ Complete | 2025-01-28 |
-| Compliance Docs | ✅ Complete | 2025-01-28 |
-| Architecture | ✅ Complete | 2025-01-28 |
-| Audio Subsystem | ✅ Complete | 2025-11-07 |
-| Documentation Audit | ✅ Updated | 2025-11-08 |
-
-## 📊 Documentation Metrics
+## 📊 Documentation Statistics
 
 | Metric | Value |
 |--------|-------|
-| Total Markdown Files | 43+ |
-| Total Documentation Lines | 9,500+ |
-| PDF Documents | 3 (vendor references) |
-| XML Reference Documents | 1 (FCC regulations) |
-| Documentation Directories | 8 |
+| Essential User Guides | 5 |
+| Hardware Guides | 7 |
+| Audio Documentation | 6 |
+| Developer Docs | 8+ |
+| Total Documentation Directories | 14 |
+| Vendor Resources | Separate folder |
 
 ## 🧭 Navigation Tips
 
@@ -212,6 +205,6 @@ docs/
 
 ---
 
-**Last Updated**: 2025-11-08
-**Version**: 2.1
+**Last Updated**: 2025-11-25
+**Version**: 3.0 (Reorganized Structure)
 **For questions or contributions, see the [Contributing Guide](process/CONTRIBUTING)**
