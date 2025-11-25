@@ -329,7 +329,7 @@
                 <div class="status-label">Last Poll</div>
                 <div class="status-value" id="lastPollTime">
                     {% if status.last_poll %}
-                    {{ status.last_poll | format_datetime }}
+                    {{ status.last_poll | format_local_datetime }}
                     {% else %}
                     Never
                     {% endif %}
