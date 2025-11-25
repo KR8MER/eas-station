@@ -668,13 +668,12 @@ class CAPPoller:
                     default_start,
                 )
             else:
-                self.cap_endpoints = [
-                    f"https://api.weather.gov/alerts/active?zone={code}"
-                    for code in self.location_settings['zone_codes']
-                ] or [
-                    f"https://api.weather.gov/alerts/active?zone={code}"
-                    for code in DEFAULT_LOCATION_SETTINGS['zone_codes']
-                ]
+                # Batch zone codes into single requests to reduce API calls and avoid rate limiting
+                # NOAA API supports comma-separated zone codes (e.g., ?zone=OHZ004,OHZ005,OHZ006)
+                # We batch to keep URL length reasonable (under ~2000 chars for compatibility)
+                self.cap_endpoints = self._build_batched_noaa_endpoints(
+                    self.location_settings['zone_codes'] or DEFAULT_LOCATION_SETTINGS['zone_codes']
+                )
 
         self.zone_codes = set(self.location_settings['zone_codes'])
         fips_codes, _ = sanitize_fips_codes(self.location_settings.get('fips_codes'))
@@ -687,6 +686,59 @@ class CAPPoller:
         self.logger.info(f"📋 Zone codes: {sorted(self.zone_codes)}")
         self.logger.info(f"🔢 SAME/FIPS codes: {sorted(self.same_codes)}")
         self.logger.info(f"💾 Storage zone codes: {sorted(self.storage_zone_codes)}")
+
+    # ---------- NOAA API Batching ----------
+    def _build_batched_noaa_endpoints(self, zone_codes: List[str], max_url_length: int = 2000) -> List[str]:
+        """Build batched NOAA API endpoints by combining zone codes.
+        
+        The NOAA Weather API supports comma-separated zone codes in a single request,
+        which dramatically reduces the number of API calls needed. For example:
+        - Before: 16 requests (one per zone code)
+        - After: 1-2 requests (all zones combined)
+        
+        This prevents rate limiting and reduces load on the NOAA API.
+        
+        Args:
+            zone_codes: List of zone codes (e.g., ['OHZ004', 'OHZ005', 'OHC137'])
+            max_url_length: Maximum URL length to stay compatible with servers/proxies
+            
+        Returns:
+            List of batched endpoint URLs
+        """
+        if not zone_codes:
+            return []
+        
+        base_url = "https://api.weather.gov/alerts/active?zone="
+        base_len = len(base_url)
+        
+        endpoints: List[str] = []
+        current_batch: List[str] = []
+        current_len = base_len
+        
+        for code in zone_codes:
+            # Each code adds its length plus a comma (except for first in batch)
+            code_len = len(code) + (1 if current_batch else 0)  # +1 for comma separator
+            
+            if current_len + code_len > max_url_length and current_batch:
+                # Current batch would exceed limit, finalize it and start new batch
+                endpoints.append(base_url + ",".join(current_batch))
+                current_batch = [code]
+                current_len = base_len + len(code)
+            else:
+                current_batch.append(code)
+                current_len += code_len
+        
+        # Add final batch
+        if current_batch:
+            endpoints.append(base_url + ",".join(current_batch))
+        
+        # Log batching info when multiple zones are combined into fewer requests
+        if len(zone_codes) > 1 and len(endpoints) < len(zone_codes):
+            self.logger.info(
+                f"Batched {len(zone_codes)} zone codes into {len(endpoints)} API request(s) to reduce rate limiting"
+            )
+        
+        return endpoints
 
     # ---------- Engine with retry ----------
     def _ensure_source_columns(self):
@@ -1363,7 +1415,8 @@ class CAPPoller:
                 for alert in features:
                     props = alert.get('properties', {})
 
-                    identifier = (props.get('identifier') or '').strip()
+                    # NOAA API uses 'id' field, IPAWS/CAP uses 'identifier' - check both
+                    identifier = (props.get('identifier') or props.get('id') or '').strip()
                     if identifier:
                         props['identifier'] = identifier
 
@@ -1631,7 +1684,8 @@ class CAPPoller:
         try:
             properties = alert_data.get('properties', {})
             geometry = alert_data.get('geometry')
-            identifier = properties.get('identifier')
+            # NOAA API uses 'id' field, IPAWS/CAP uses 'identifier' - check both
+            identifier = properties.get('identifier') or properties.get('id')
             if not identifier:
                 event = properties.get('event', 'Unknown')
                 sent = properties.get('sent', str(time.time()))
