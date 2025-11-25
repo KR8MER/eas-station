@@ -237,6 +237,27 @@
         font-size: 0.875rem;
     }
 
+    /* Search highlighting */
+    .variable-group.search-match {
+        background: var(--bg-card);
+        border: 2px solid var(--primary-color);
+        border-radius: 0.375rem;
+        padding: 1rem;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 4px 12px var(--shadow-color);
+    }
+
+    .variable-group.search-hidden {
+        display: none;
+    }
+
+    .search-highlight {
+        background: rgba(var(--bs-warning-rgb), 0.3);
+        padding: 0.125rem 0.25rem;
+        border-radius: 0.25rem;
+        font-weight: 600;
+    }
+
     @media (max-width: 991px) {
         .category-nav {
             position: static;
@@ -255,7 +276,7 @@
 <div class="settings-container">
     <!-- Header -->
     <div class="settings-header">
-        <div class="d-flex justify-content-between align-items-start">
+        <div class="d-flex justify-content-between align-items-start mb-3">
             <div>
                 <h1><i class="fas fa-cog"></i> Environment Settings</h1>
                 <p>Manage application configuration and environment variables. Changes require a restart to take effect.</p>
@@ -265,6 +286,22 @@
                     <i class="fas fa-download me-2"></i>Download .env Backup
                 </a>
             </div>
+        </div>
+
+        <!-- Search Box -->
+        <div class="mb-3">
+            <div class="input-group">
+                <span class="input-group-text"><i class="fas fa-search"></i></span>
+                <input type="text"
+                       class="form-control"
+                       id="variable-search"
+                       placeholder="Search environment variables by name or description..."
+                       autocomplete="off">
+                <button class="btn btn-outline-secondary" type="button" id="clear-search" style="display: none;">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <small class="text-muted" id="search-results"></small>
         </div>
 
         {% if not can_configure %}
@@ -990,6 +1027,169 @@
 
     // Load settings on page load
     document.addEventListener('DOMContentLoaded', loadSettings);
+
+    // Search functionality
+    let searchTimeout = null;
+    const searchInput = document.getElementById('variable-search');
+    const clearSearchBtn = document.getElementById('clear-search');
+    const searchResults = document.getElementById('search-results');
+
+    if (searchInput) {
+        searchInput.addEventListener('input', function() {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => performSearch(this.value), 300);
+        });
+
+        searchInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                clearSearch();
+            }
+        });
+    }
+
+    if (clearSearchBtn) {
+        clearSearchBtn.addEventListener('click', clearSearch);
+    }
+
+    function performSearch(query) {
+        const normalizedQuery = query.trim().toLowerCase();
+
+        if (!normalizedQuery) {
+            clearSearch();
+            return;
+        }
+
+        // Show clear button
+        if (clearSearchBtn) {
+            clearSearchBtn.style.display = 'block';
+        }
+
+        let matchCount = 0;
+        let matchingCategories = new Set();
+
+        // Search all variables
+        for (const [catId, catData] of Object.entries(categoriesData)) {
+            const categorySection = document.getElementById(`category-${catId}`);
+            if (!categorySection) continue;
+
+            let categoryHasMatches = false;
+
+            for (const variable of catData.variables) {
+                const variableGroup = categorySection.querySelector(`#var-${variable.key}`)?.closest('.variable-group');
+                if (!variableGroup) continue;
+
+                // Search in key, label, and description
+                const keyMatch = variable.key.toLowerCase().includes(normalizedQuery);
+                const labelMatch = variable.label.toLowerCase().includes(normalizedQuery);
+                const descMatch = variable.description?.toLowerCase().includes(normalizedQuery) || false;
+
+                const isMatch = keyMatch || labelMatch || descMatch;
+
+                if (isMatch) {
+                    matchCount++;
+                    categoryHasMatches = true;
+                    matchingCategories.add(catId);
+                    variableGroup.classList.add('search-match');
+                    variableGroup.classList.remove('search-hidden');
+
+                    // Highlight matching text
+                    highlightText(variableGroup, normalizedQuery);
+                } else {
+                    variableGroup.classList.remove('search-match');
+                    variableGroup.classList.add('search-hidden');
+                    removeHighlight(variableGroup);
+                }
+            }
+
+            // Show/hide category buttons in nav
+            const catButton = document.querySelector(`[data-category="${catId}"]`);
+            if (catButton) {
+                if (categoryHasMatches) {
+                    catButton.style.display = 'block';
+                } else {
+                    catButton.style.display = 'none';
+                }
+            }
+        }
+
+        // Update search results text
+        if (searchResults) {
+            if (matchCount === 0) {
+                searchResults.textContent = 'No variables found matching your search.';
+                searchResults.style.color = 'var(--danger-color)';
+            } else {
+                searchResults.textContent = `Found ${matchCount} variable${matchCount !== 1 ? 's' : ''} in ${matchingCategories.size} categor${matchingCategories.size !== 1 ? 'ies' : 'y'}`;
+                searchResults.style.color = 'var(--success-color)';
+            }
+        }
+
+        // Auto-activate first matching category
+        if (matchingCategories.size > 0) {
+            const firstMatch = Array.from(matchingCategories)[0];
+            activateCategory(firstMatch);
+        }
+    }
+
+    function highlightText(element, query) {
+        // Highlight in label
+        const label = element.querySelector('.variable-label');
+        if (label) {
+            const labelText = label.childNodes[0];
+            if (labelText && labelText.nodeType === Node.TEXT_NODE) {
+                const text = labelText.textContent;
+                const regex = new RegExp(`(${escapeRegex(query)})`, 'gi');
+                if (regex.test(text)) {
+                    const highlighted = text.replace(regex, '<span class="search-highlight">$1</span>');
+                    const temp = document.createElement('span');
+                    temp.innerHTML = highlighted;
+                    labelText.replaceWith(temp);
+                }
+            }
+        }
+
+        // Highlight in description
+        const desc = element.querySelector('.variable-description');
+        if (desc && desc.textContent.toLowerCase().includes(query)) {
+            const text = desc.textContent;
+            const regex = new RegExp(`(${escapeRegex(query)})`, 'gi');
+            desc.innerHTML = text.replace(regex, '<span class="search-highlight">$1</span>');
+        }
+    }
+
+    function removeHighlight(element) {
+        element.querySelectorAll('.search-highlight').forEach(span => {
+            const parent = span.parentNode;
+            parent.replaceChild(document.createTextNode(span.textContent), span);
+            parent.normalize();
+        });
+    }
+
+    function clearSearch() {
+        if (searchInput) {
+            searchInput.value = '';
+        }
+        if (clearSearchBtn) {
+            clearSearchBtn.style.display = 'none';
+        }
+        if (searchResults) {
+            searchResults.textContent = '';
+        }
+
+        // Remove all search classes and highlights
+        document.querySelectorAll('.variable-group').forEach(group => {
+            group.classList.remove('search-match', 'search-hidden');
+            removeHighlight(group);
+        });
+
+        // Show all category buttons
+        document.querySelectorAll('.category-btn').forEach(btn => {
+            btn.style.display = 'block';
+        });
+    }
+
+    function escapeRegex(string) {
+        return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
 
     // GPIO Pin Builder Functions
     function updateGPIOPinsValue() {
