@@ -933,32 +933,82 @@
                     </div>
 
                     <!-- VFD Display Configuration -->
-                    <div class="card border-secondary-subtle shadow-sm mb-4">
-                        <div class="card-header bg-secondary-subtle">
+                    <div class="card border-success-subtle shadow-sm mb-4">
+                        <div class="card-header bg-success-subtle">
                             <h5 class="mb-0">
-                                <i class="fas fa-tv"></i> VFD Display (Vacuum Fluorescent Display)
+                                <i class="fas fa-tv"></i> VFD Display (Noritake GU140x32F-7000B)
                             </h5>
                         </div>
                         <div class="card-body">
-                            <div class="alert alert-secondary mb-0">
-                                <i class="fas fa-tools"></i>
-                                <strong>Coming Soon:</strong> VFD display integration will be added in a future update. VFD displays provide high-brightness, high-contrast output ideal for emergency alert notifications.
+                            <p class="mb-3">
+                                <strong>High-brightness Vacuum Fluorescent Display</strong> for emergency alert messages and status information.
+                                Noritake displays provide excellent visibility and industrial reliability.
+                            </p>
+
+                            <div class="alert alert-info d-flex align-items-start mb-3">
+                                <i class="fas fa-cog me-3 mt-1"></i>
+                                <div>
+                                    <strong>Configuration:</strong> VFD display settings are managed in
+                                    <a href="/settings/environment" class="alert-link">Environment Variables</a> under the "VFD Display" category.
+                                    Configure serial port (<code>VFD_PORT</code>) and baud rate (<code>VFD_BAUDRATE</code>).
+                                </div>
+                            </div>
+
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <div class="d-grid">
+                                        <a href="/vfd_control" class="btn btn-primary">
+                                            <i class="fas fa-sliders-h me-2"></i>VFD Control Panel
+                                        </a>
+                                    </div>
+                                    <small class="text-muted d-block mt-2">Real-time display control, text, graphics, and image upload</small>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="d-grid">
+                                        <a href="/settings/environment" class="btn btn-outline-secondary" onclick="setTimeout(() => document.getElementById('variable-search')?.focus(), 500); setTimeout(() => { const search = document.getElementById('variable-search'); if(search) { search.value = 'vfd'; search.dispatchEvent(new Event('input', {bubbles: true})); } }, 600);">
+                                            <i class="fas fa-cog me-2"></i>Configure VFD Settings
+                                        </a>
+                                    </div>
+                                    <small class="text-muted d-block mt-2">Serial port and communication settings</small>
+                                </div>
                             </div>
                         </div>
                     </div>
 
                     <!-- OLED Display Configuration -->
-                    <div class="card border-secondary-subtle shadow-sm mb-4">
-                        <div class="card-header bg-secondary-subtle">
+                    <div class="card border-success-subtle shadow-sm mb-4">
+                        <div class="card-header bg-success-subtle">
                             <h5 class="mb-0">
-                                <i class="fas fa-desktop"></i> OLED Display (SSD1306/SH1106)
+                                <i class="fas fa-desktop"></i> OLED Display (Argon Industria SSD1306)
                             </h5>
                         </div>
                         <div class="card-body">
-                            <div class="alert alert-secondary mb-0">
-                                <i class="fas fa-tools"></i>
-                                <strong>Coming Soon:</strong> OLED display integration will be added in a future update. Supports common I2C OLED displays for compact status and alert information.
+                            <p class="mb-3">
+                                <strong>I2C OLED Display Module</strong> integrated with the Argon Industria case.
+                                Provides compact, high-contrast status and alert information on a 128×64 pixel display.
+                            </p>
+
+                            <div class="alert alert-info d-flex align-items-start mb-3">
+                                <i class="fas fa-cog me-3 mt-1"></i>
+                                <div>
+                                    <strong>Configuration:</strong> OLED display settings are managed in
+                                    <a href="/settings/environment" class="alert-link">Environment Variables</a> under the "OLED Display" category.
+                                    Enable/disable, I2C bus address (<code>OLED_I2C_ADDRESS</code>), resolution, and rotation settings.
+                                </div>
                             </div>
+
+                            <div class="alert alert-warning mb-3">
+                                <i class="fas fa-exclamation-triangle"></i>
+                                <strong>GPIO Pins Reserved:</strong> Physical header pins 1-8 (BCM pins 2, 3, 4, 14 plus power/ground) are reserved for the Argon OLED enclosure.
+                                These pins cannot be used for other GPIO functions.
+                            </div>
+
+                            <div class="d-grid">
+                                <a href="/settings/environment" class="btn btn-outline-secondary" onclick="setTimeout(() => document.getElementById('variable-search')?.focus(), 500); setTimeout(() => { const search = document.getElementById('variable-search'); if(search) { search.value = 'oled'; search.dispatchEvent(new Event('input', {bubbles: true})); } }, 600);">
+                                    <i class="fas fa-cog me-2"></i>Configure OLED Settings
+                                </a>
+                            </div>
+                            <small class="text-muted d-block mt-2">I2C configuration, resolution, rotation, and font settings</small>
                         </div>
                     </div>
 
