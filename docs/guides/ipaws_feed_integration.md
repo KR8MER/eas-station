@@ -6,46 +6,85 @@ Simple Notification Service (SNS) pilot.
 
 ## Key Takeaways
 
-- IPAWS exposes unauthenticated REST feeds for Emergency Alert System (EAS), Non-Weather
-  Emergency Messages (NWEM), Wireless Emergency Alerts (WEA), and the aggregated Public feed.
-- Vendors should poll staging feeds first, no more frequently than every two minutes, and
-  cache responses before redistributing alerts to end users.
-- Feeds return CAP XML payloads; the shared poller now parses those documents (including
-  polygons, circles, and SAME geocodes) into the existing alert ingestion workflow without
-  requiring separate code paths.
-- Alerts stored in PostGIS are now stamped with their originating feed (NOAA, IPAWS, or manual)
-  and the poller logs duplicate identifiers filtered from multi-feed runs.
-- IPAWS is piloting SNS topics that mirror the public feed to support push-style
-  integrations. Subscription options include email, HTTPS webhooks, and several AWS-native
-  targets.
+- **No Authentication Required**: IPAWS provides publicly accessible REST feeds with no API keys,
+  passwords, or registration required.
+- **Feed Types**: IPAWS exposes feeds for Emergency Alert System (EAS), Non-Weather Emergency
+  Messages (NWEM), Wireless Emergency Alerts (WEA), PUBLIC (all alerts), and PUBLIC_NON_EAS.
+- **Polling Best Practices**: FEMA recommends polling **no more frequently than every 2 minutes
+  (120 seconds)**. Cache responses on your server before redistributing to end users.
+- **CAP XML Support**: Feeds return CAP 1.2 XML payloads. The poller automatically parses these
+  documents (including polygons, circles, and SAME geocodes) into the existing alert ingestion
+  workflow without requiring separate code paths.
+- **Source Tracking**: Alerts stored in PostGIS are stamped with their originating feed
+  (NOAA, IPAWS, or MANUAL) and the poller automatically deduplicates alerts across multi-feed runs.
+- **Caching Implemented**: EAS Station uses PostgreSQL + PostGIS for persistent storage and Redis
+  for runtime caching, ensuring efficient alert distribution and geographic queries.
+- **SNS Push Option**: IPAWS is piloting AWS SNS topics for push-style integrations (email,
+  HTTPS webhooks, Lambda, Kinesis). Currently only `EAS_PUBLIC_FEED` topic is available.
 
 ## REST Feed Consumption Strategy
 
-1. **Start in Staging**  
-   Use the provided staging URLs during development and QA:
+### 1. Start in Staging (Testing Environment)
 
-   - `https://tdl.apps.fema.gov/IPAWSOPEN_EAS_SERVICE/rest/eas/recent/<timestamp>`
-   - `https://tdl.apps.fema.gov/IPAWSOPEN_EAS_SERVICE/rest/nwem/recent/<timestamp>`
-   - `https://tdl.apps.fema.gov/IPAWSOPEN_EAS_SERVICE/rest/PublicWEA/recent/<timestamp>`
-   - `https://tdl.apps.fema.gov/IPAWSOPEN_EAS_SERVICE/rest/public/recent/<timestamp>`
-   - `https://tdl.apps.fema.gov/IPAWSOPEN_EAS_SERVICE/rest/public_non_eas/recent/<timestamp>`
+Use the **STAGING** environment during development and QA. These feeds contain test alerts:
 
-   Replace `<timestamp>` with the ISO-8601 marker for the most recent alert we processed.
+| Feed Type | Staging URL |
+|-----------|-------------|
+| **PUBLIC** (All alerts) | `https://tdl.apps.fema.gov/IPAWSOPEN_EAS_SERVICE/rest/public/recent/{timestamp}` |
+| **EAS** | `https://tdl.apps.fema.gov/IPAWSOPEN_EAS_SERVICE/rest/eas/recent/{timestamp}` |
+| **WEA** | `https://tdl.apps.fema.gov/IPAWSOPEN_EAS_SERVICE/rest/PublicWEA/recent/{timestamp}` |
+| **NWEM** | `https://tdl.apps.fema.gov/IPAWSOPEN_EAS_SERVICE/rest/nwem/recent/{timestamp}` |
+| **PUBLIC_NON_EAS** | `https://tdl.apps.fema.gov/IPAWSOPEN_EAS_SERVICE/rest/public_non_eas/recent/{timestamp}` |
 
-2. **Implement Back-off and Caching**  
-   - Respect the two-minute polling guidance to avoid throttling.
-   - Store the raw CAP XML payloads in our database or object storage for downstream
-     dissemination.
-   - De-duplicate by `identifier` and `sent` timestamp to prevent replay. The shared poller
-     performs this automatically and records how many duplicates were discarded each cycle.
+**Configuration:**
+```bash
+# In .env file:
+IPAWS_CAP_FEED_URLS=https://tdl.apps.fema.gov/IPAWSOPEN_EAS_SERVICE/rest/public/recent/{timestamp}
+POLL_INTERVAL_SEC=120  # 2 minutes (FEMA recommended)
+```
 
-3. **Redistribute Internally**  
-   - Surface alerts through our existing WebSocket, REST, and LED sign delivery pipelines.
-   - Maintain audit logs noting the source feed and retrieval time.
+### 2. Transition to Production (Live Alerts)
 
-4. **Transition to Production**  
-   Once staging integration is validated, swap the base domain to `https://apps.fema.gov`
-   and monitor for differences in volume or schema.
+After thorough testing in staging, switch to **PRODUCTION** endpoints for real alerts:
+
+| Feed Type | Production URL |
+|-----------|----------------|
+| **PUBLIC** (All alerts) | `https://apps.fema.gov/IPAWSOPEN_EAS_SERVICE/rest/public/recent/{timestamp}` |
+| **EAS** | `https://apps.fema.gov/IPAWSOPEN_EAS_SERVICE/rest/eas/recent/{timestamp}` |
+| **WEA** | `https://apps.fema.gov/IPAWSOPEN_EAS_SERVICE/rest/PublicWEA/recent/{timestamp}` |
+| **NWEM** | `https://apps.fema.gov/IPAWSOPEN_EAS_SERVICE/rest/nwem/recent/{timestamp}` |
+| **PUBLIC_NON_EAS** | `https://apps.fema.gov/IPAWSOPEN_EAS_SERVICE/rest/public_non_eas/recent/{timestamp}` |
+
+**Configuration:**
+```bash
+# In .env file:
+IPAWS_CAP_FEED_URLS=https://apps.fema.gov/IPAWSOPEN_EAS_SERVICE/rest/public/recent/{timestamp}
+POLL_INTERVAL_SEC=120  # 2 minutes (FEMA recommended)
+```
+
+**Note:** The `{timestamp}` placeholder is automatically replaced by the poller using ISO-8601 format
+based on `IPAWS_DEFAULT_LOOKBACK_HOURS` (default: 12 hours) or the most recent alert processed.
+
+### 3. Polling and Caching (Already Implemented)
+
+EAS Station implements FEMA's best practices:
+
+- ✅ **2-Minute Polling**: Default interval is 120 seconds (configurable via `POLL_INTERVAL_SEC`)
+- ✅ **Automatic Caching**: PostgreSQL + PostGIS for persistent storage, Redis for runtime cache
+- ✅ **Deduplication**: Alerts are deduplicated by `identifier` + `sent` timestamp automatically
+- ✅ **Source Tracking**: All alerts are stamped with source (NOAA/IPAWS/MANUAL) in database
+- ✅ **Exponential Backoff**: On errors, polling backs off exponentially (60s → 120s → 240s → 300s)
+
+### 4. Alert Distribution
+
+Alerts are automatically distributed through:
+
+- **Web Dashboard**: Real-time map display with alert details
+- **REST API**: `/api/alerts` endpoint for programmatic access
+- **WebSockets**: Real-time push to connected clients
+- **LED/OLED Displays**: Physical alert indicators (if configured)
+- **EAS Broadcast**: SAME/EAS encoding and audio generation (if enabled)
+- **GPIO Triggers**: Hardware relay control for external systems
 
 ## SNS Pub/Sub Integration Strategy
 
@@ -66,14 +105,53 @@ Simple Notification Service (SNS) pilot.
      desired dissemination channels.
    - Instrument metrics on delivery latency, failures, and retry counts.
 
-## Next Steps for Our Team
+## Quick Start Guide
 
-- Prototype a staging poller that uses the public feed, respects caching guidance, and
-  hydrates our internal models.
-- Evaluate the HTTPS SNS subscription path by exposing a webhook endpoint (e.g.,
-  `/api/ipaws/sns`) capable of processing confirmation and notification messages.
-- Coordinate with the IPAWS Engineering Branch (fema-ipaws-eng@fema.dhs.gov) to register
-  our staging subscription and confirm production onboarding requirements.
+### 1. Configure IPAWS Feed
+
+Edit your `.env` file (or `/app-config/.env` in persistent environments):
+
+```bash
+# Start with STAGING for testing
+IPAWS_CAP_FEED_URLS=https://tdl.apps.fema.gov/IPAWSOPEN_EAS_SERVICE/rest/public/recent/{timestamp}
+POLL_INTERVAL_SEC=120  # 2 minutes (FEMA recommended)
+
+# After testing, switch to PRODUCTION
+# IPAWS_CAP_FEED_URLS=https://apps.fema.gov/IPAWSOPEN_EAS_SERVICE/rest/public/recent/{timestamp}
+```
+
+### 2. Restart the IPAWS Poller
+
+```bash
+docker compose restart ipaws-poller
+```
+
+### 3. Monitor Alert Ingestion
+
+Check the logs to verify alerts are being received:
+
+```bash
+docker compose logs -f ipaws-poller
+```
+
+You should see logs like:
+```
+Successfully fetched X alerts from IPAWS feed
+Saved Y new alerts to database
+```
+
+### 4. View Alerts in Dashboard
+
+Open your EAS Station web interface and navigate to the alerts dashboard to see incoming IPAWS alerts on the map.
+
+## Optional: SNS Push Integration
+
+For push-based alert delivery instead of polling:
+
+1. Contact IPAWS Engineering Branch (fema-ipaws-eng@fema.dhs.gov) to request SNS topic subscription
+2. Implement webhook endpoint (e.g., `/api/ipaws/sns`) to handle SNS notifications
+3. Configure your endpoint to process both subscription confirmation and alert notification messages
+4. Keep REST polling as a fallback during SNS testing
 
 ## Additional Resources
 
