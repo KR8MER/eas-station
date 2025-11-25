@@ -700,6 +700,188 @@ def _run_command(command: Sequence[str], logger) -> None:
             logger.warning(f"Failed to run command {' '.join(command)}: {exc}")
 
 
+def _fetch_embedded_audio(
+    resources: List[Dict[str, str]],
+    target_sample_rate: int,
+    logger,
+    timeout: int = 30,
+) -> Tuple[Optional[List[int]], Optional[str]]:
+    """Fetch and convert embedded audio from CAP resources.
+    
+    IPAWS alerts can contain pre-recorded audio in <resource> elements.
+    This function downloads the audio and converts it to PCM samples.
+    
+    Args:
+        resources: List of resource dicts from CAP XML parsing
+        target_sample_rate: Target sample rate for output
+        logger: Logger instance
+        timeout: Download timeout in seconds
+        
+    Returns:
+        Tuple of (audio_samples, source_uri) or (None, None) if no audio found
+    """
+    import requests
+    
+    # Find audio resources - look for EAS Broadcast Content or audio mime types
+    audio_resources = []
+    for resource in resources:
+        mime_type = (resource.get('mimeType') or '').lower()
+        resource_desc = (resource.get('resourceDesc') or '').lower()
+        uri = resource.get('uri', '')
+        
+        # Check for audio mime types or EAS broadcast content
+        is_audio = (
+            'audio' in mime_type or
+            'eas broadcast' in resource_desc or
+            uri.endswith(('.mp3', '.wav', '.ogg', '.m4a'))
+        )
+        
+        if is_audio and uri:
+            audio_resources.append(resource)
+    
+    if not audio_resources:
+        return None, None
+    
+    # Try each audio resource until one works
+    for resource in audio_resources:
+        uri = resource.get('uri', '')
+        mime_type = resource.get('mimeType', '')
+        resource_desc = resource.get('resourceDesc', '')
+        
+        logger.info(
+            f"Fetching embedded audio from IPAWS: {resource_desc or 'unnamed'} "
+            f"({mime_type}) from {uri[:80]}..."
+        )
+        
+        try:
+            response = requests.get(uri, timeout=timeout, stream=True)
+            response.raise_for_status()
+            
+            audio_data = response.content
+            logger.info(f"Downloaded {len(audio_data)} bytes of audio from IPAWS")
+            
+            # Convert audio to PCM samples
+            samples = _convert_audio_to_samples(audio_data, mime_type, target_sample_rate, logger)
+            
+            if samples:
+                logger.info(
+                    f"Successfully converted IPAWS audio: {len(samples)} samples "
+                    f"({len(samples) / target_sample_rate:.1f}s at {target_sample_rate}Hz)"
+                )
+                return samples, uri
+            else:
+                logger.warning(f"Failed to convert audio from {uri}")
+                
+        except requests.exceptions.Timeout:
+            logger.warning(f"Timeout fetching audio from {uri}")
+        except requests.exceptions.RequestException as e:
+            logger.warning(f"Failed to fetch audio from {uri}: {e}")
+        except Exception as e:
+            logger.error(f"Error processing audio from {uri}: {e}")
+    
+    return None, None
+
+
+def _convert_audio_to_samples(
+    audio_data: bytes,
+    mime_type: str,
+    target_sample_rate: int,
+    logger,
+) -> Optional[List[int]]:
+    """Convert audio bytes to PCM samples at target sample rate.
+    
+    Supports WAV, MP3 (via pydub if available), and other formats.
+    """
+    mime_lower = mime_type.lower()
+    
+    # Try WAV first
+    if 'wav' in mime_lower or audio_data[:4] == b'RIFF':
+        try:
+            with io.BytesIO(audio_data) as audio_io:
+                with wave.open(audio_io, 'rb') as wav:
+                    channels = wav.getnchannels()
+                    sample_width = wav.getsampwidth()
+                    frame_rate = wav.getframerate()
+                    frames = wav.readframes(wav.getnframes())
+                    
+                    # Convert to mono if stereo
+                    if channels == 2:
+                        if sample_width == 2:
+                            samples = struct.unpack(f'<{len(frames)//2}h', frames)
+                            mono_samples = [(samples[i] + samples[i+1]) // 2 
+                                          for i in range(0, len(samples), 2)]
+                        else:
+                            mono_samples = list(frames[::2])
+                    else:
+                        if sample_width == 2:
+                            mono_samples = list(struct.unpack(f'<{len(frames)//2}h', frames))
+                        elif sample_width == 1:
+                            mono_samples = [(b - 128) * 256 for b in frames]
+                        else:
+                            logger.warning(f"Unsupported WAV sample width: {sample_width}")
+                            return None
+                    
+                    # Resample if needed
+                    if frame_rate != target_sample_rate:
+                        mono_samples = _resample_audio(mono_samples, frame_rate, target_sample_rate)
+                    
+                    return mono_samples
+        except Exception as e:
+            logger.warning(f"Failed to parse WAV audio: {e}")
+    
+    # Try MP3 via pydub
+    if 'mp3' in mime_lower or 'mpeg' in mime_lower or audio_data[:3] == b'ID3' or audio_data[:2] == b'\xff\xfb':
+        try:
+            from pydub import AudioSegment
+            
+            audio_io = io.BytesIO(audio_data)
+            audio = AudioSegment.from_mp3(audio_io)
+            
+            # Convert to mono
+            audio = audio.set_channels(1)
+            
+            # Resample to target rate
+            audio = audio.set_frame_rate(target_sample_rate)
+            
+            # Get raw samples
+            raw_data = audio.raw_data
+            samples = list(struct.unpack(f'<{len(raw_data)//2}h', raw_data))
+            
+            return samples
+            
+        except ImportError:
+            logger.warning("pydub not available for MP3 conversion. Install with: pip install pydub")
+        except Exception as e:
+            logger.warning(f"Failed to convert MP3 audio: {e}")
+    
+    logger.warning(f"Unsupported audio format: {mime_type}")
+    return None
+
+
+def _resample_audio(samples: List[int], source_rate: int, target_rate: int) -> List[int]:
+    """Simple linear interpolation resampling."""
+    if source_rate == target_rate:
+        return samples
+    
+    ratio = target_rate / source_rate
+    new_length = int(len(samples) * ratio)
+    
+    if new_length < 1:
+        return samples
+    
+    result = []
+    for i in range(new_length):
+        src_idx = i / ratio
+        idx_low = int(src_idx)
+        idx_high = min(idx_low + 1, len(samples) - 1)
+        frac = src_idx - idx_low
+        
+        value = int(samples[idx_low] * (1 - frac) + samples[idx_high] * frac)
+        result.append(value)
+    
+    return result
+
+
 class EASAudioGenerator:
     def __init__(self, config: Dict[str, object], logger) -> None:
         self.config = config
@@ -764,13 +946,40 @@ class EASAudioGenerator:
             preview = message_text.replace('\n', ' ')
             self.logger.debug('Alert narration preview: %s', preview[:240])
 
-        voice_samples = self.tts_engine.generate(message_text)
+        # Check for embedded audio from IPAWS CAP resources FIRST
+        # This allows originators to provide pre-recorded audio messages
+        embedded_audio_samples: Optional[List[int]] = None
+        embedded_audio_source: Optional[str] = None
+        
+        raw_json = payload.get('raw_json', {})
+        if isinstance(raw_json, dict):
+            properties = raw_json.get('properties', {})
+            resources = properties.get('resources', [])
+            if resources:
+                self.logger.info(f"Found {len(resources)} CAP resources, checking for embedded audio...")
+                embedded_audio_samples, embedded_audio_source = _fetch_embedded_audio(
+                    resources, self.sample_rate, self.logger
+                )
+        
+        voice_samples: Optional[List[int]] = None
         tts_segment: List[int] = []
         tts_warning: Optional[str] = None
         provider = self.tts_engine.provider
+        
+        if embedded_audio_samples:
+            # Use embedded audio from IPAWS instead of TTS
+            self.logger.info(
+                f"Using embedded IPAWS audio ({len(embedded_audio_samples)} samples) "
+                f"instead of TTS synthesis"
+            )
+            voice_samples = embedded_audio_samples
+            provider = 'ipaws_embedded'
+        else:
+            # Fall back to TTS generation
+            voice_samples = self.tts_engine.generate(message_text)
 
         if voice_samples:
-            # Normalize TTS audio to match SAME/AFSK amplitude
+            # Normalize audio to match SAME/AFSK amplitude
             # Reduced to 70% of SAME amplitude to prevent clipping/distortion
             normalized_voice_samples = _normalize_audio_amplitude(voice_samples, amplitude * 0.7)
             pre_voice_silence = _generate_silence(1.0, self.sample_rate)
@@ -847,6 +1056,8 @@ class EASAudioGenerator:
         }
         text_body['voiceover_provider'] = provider or None
         text_body['tts_warning'] = tts_warning
+        if embedded_audio_source:
+            text_body['embedded_audio_source'] = embedded_audio_source
 
         with open(text_path, 'w', encoding='utf-8') as handle:
             json.dump(text_body, handle, indent=2)
