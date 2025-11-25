@@ -815,6 +815,62 @@ def admin_location_reference():
             500,
         )
 
+@maintenance_bp.route("/admin/lookup_county_fips", methods=["POST"])
+def admin_lookup_county_fips():
+    """Look up FIPS codes for counties by state and county name."""
+    try:
+        from app_utils.fips_codes import get_us_state_county_tree
+
+        data = request.get_json() or {}
+        state_code = data.get("state_code", "").strip().upper()
+        county_query = data.get("county_name", "").strip().lower()
+
+        if not state_code:
+            return jsonify({"error": "State code is required"}), 400
+
+        # Get the state/county tree
+        state_tree = get_us_state_county_tree()
+
+        # Find the state
+        state_data = None
+        for state in state_tree:
+            if state.get("abbr", "").upper() == state_code:
+                state_data = state
+                break
+
+        if not state_data:
+            return jsonify({"error": f"State {state_code} not found"}), 404
+
+        # If no county query, return all counties for the state
+        if not county_query:
+            counties = [
+                {
+                    "name": county.get("name", ""),
+                    "fips": county.get("same", "")
+                }
+                for county in state_data.get("counties", [])
+            ]
+            return jsonify({"counties": counties})
+
+        # Search for matching counties
+        matching_counties = []
+        for county in state_data.get("counties", []):
+            county_name = county.get("name", "").lower()
+            if county_query in county_name:
+                matching_counties.append({
+                    "name": county.get("name", ""),
+                    "fips": county.get("same", "")
+                })
+
+        if not matching_counties:
+            return jsonify({"error": f"No counties found matching '{county_query}' in {state_code}"}), 404
+
+        return jsonify({"counties": matching_counties})
+
+    except Exception as exc:
+        logger.error("Error looking up FIPS codes: %s", exc)
+        return jsonify({"error": f"Failed to lookup FIPS codes: {str(exc)}"}), 500
+
 @maintenance_bp.route("/admin/import_alert", methods=["POST"])
 def import_specific_alert():
     data = request.get_json(silent=True) or request.form or {}
