@@ -178,11 +178,15 @@ class StreamingSAMEDecoder:
         sample_idx = 0
         
         while sample_idx < num_samples:
-            # Calculate how many samples we can add to the buffer in one go
+            # Calculate how many samples we can add to the buffer in one go.
+            # This handles the circular buffer by only copying up to the end,
+            # then wrapping on the next iteration if needed.
             space_in_buffer = self.corr_len - self.buffer_pos
             samples_to_add = min(space_in_buffer, num_samples - sample_idx)
             
-            # Batch copy samples into the circular buffer
+            # Batch copy samples into the circular buffer.
+            # Since we limited samples_to_add to space_in_buffer, this slice
+            # is guaranteed to fit within bounds [buffer_pos, corr_len).
             self.sample_buffer[self.buffer_pos:self.buffer_pos + samples_to_add] = \
                 samples[sample_idx:sample_idx + samples_to_add]
             
@@ -194,20 +198,35 @@ class StreamingSAMEDecoder:
             if self.samples_processed >= self.corr_len:
                 # Process each sample in this batch
                 for i in range(samples_to_add):
-                    # Update the logical position for correlation window
+                    # logical_pos represents where the correlation window ENDS in the buffer.
+                    # We add +1 because after writing sample i, the next valid window ends
+                    # at position (old_buffer_pos + i + 1). The correlation window spans
+                    # [logical_pos - corr_len + 1, logical_pos] in the circular buffer.
                     logical_pos = (old_buffer_pos + i + 1) % self.corr_len
                     self._process_one_sample_at(logical_pos)
             
             sample_idx += samples_to_add
     
     def _process_one_sample_at(self, logical_buffer_pos: int) -> None:
-        """Process one correlation window at a specific buffer position."""
+        """
+        Process one correlation window ending at the specified buffer position.
+        
+        Args:
+            logical_buffer_pos: The position in the circular buffer where the
+                              correlation window ends (0 to corr_len-1).
+        
+        The correlation window contains the most recent corr_len samples,
+        starting from logical_buffer_pos and wrapping around if needed.
+        """
         # Get samples in correct order (accounting for circular buffer)
         # OPTIMIZATION: Use pre-allocated array and np.roll-style indexing
         if logical_buffer_pos == 0:
+            # Special case: window aligns with buffer start, no reordering needed
             correlation_window = self.sample_buffer
         else:
-            # Use pre-allocated window to avoid repeated allocation
+            # Reorder samples to get contiguous window:
+            # [logical_buffer_pos:] contains older samples (start of window)
+            # [:logical_buffer_pos] contains newer samples (end of window)
             tail_len = self.corr_len - logical_buffer_pos
             self._correlation_window[:tail_len] = self.sample_buffer[logical_buffer_pos:]
             self._correlation_window[tail_len:] = self.sample_buffer[:logical_buffer_pos]

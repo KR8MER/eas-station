@@ -51,7 +51,8 @@ class BroadcastAudioAdapter:
         self,
         broadcast_queue: BroadcastQueue,
         subscriber_id: str,
-        sample_rate: int = 44100  # Native sample rate from audio sources
+        sample_rate: int = 44100,  # Native sample rate from audio sources
+        read_timeout: float = 0.5  # Timeout for queue reads in seconds
     ):
         """
         Initialize broadcast adapter.
@@ -60,10 +61,14 @@ class BroadcastAudioAdapter:
             broadcast_queue: BroadcastQueue instance to subscribe to
             subscriber_id: Unique ID for this subscription (e.g., "eas-monitor")
             sample_rate: Expected sample rate from audio sources (native stream rate)
+            read_timeout: Timeout for queue reads in seconds (default 0.5s).
+                         Lower values = more responsive but may cause underruns.
+                         Higher values = more resilient to network/system jitter.
         """
         self.broadcast_queue = broadcast_queue
         self.subscriber_id = subscriber_id
         self.sample_rate = sample_rate
+        self._read_timeout = max(0.1, float(read_timeout))  # Minimum 100ms
 
         # Subscribe to broadcast queue
         self._subscriber_queue = broadcast_queue.subscribe(subscriber_id)
@@ -84,7 +89,8 @@ class BroadcastAudioAdapter:
         self._last_audio_time: Optional[float] = None
 
         logger.info(
-            f"BroadcastAudioAdapter '{subscriber_id}' subscribed to '{broadcast_queue.name}'"
+            f"BroadcastAudioAdapter '{subscriber_id}' subscribed to '{broadcast_queue.name}' "
+            f"(timeout={self._read_timeout}s)"
         )
 
     def _consolidate_chunks(self) -> np.ndarray:
@@ -132,9 +138,8 @@ class BroadcastAudioAdapter:
             # Try to fill buffer if we don't have enough samples
             while self._chunk_total_samples < num_samples:
                 try:
-                    # OPTIMIZATION: Reduced timeout from 2.0s to 0.5s to be more responsive
-                    # The EAS monitor processes 100ms chunks, so long timeouts cause stuttering
-                    chunk = self._subscriber_queue.get(timeout=0.5)
+                    # Use configurable timeout for better adaptability to different environments
+                    chunk = self._subscriber_queue.get(timeout=self._read_timeout)
 
                     # Log successful read for first few to verify subscription works
                     if self._total_reads < 5:
@@ -159,7 +164,7 @@ class BroadcastAudioAdapter:
                             queue_size = self._subscriber_queue.qsize()
                             logger.warning(
                                 f"❌ {self.subscriber_id}: Underrun #{self._underrun_count}! "
-                                f"Queue timeout after 0.5s, queue_size={queue_size}, "
+                                f"Queue timeout after {self._read_timeout}s, queue_size={queue_size}, "
                                 f"buffer={self._chunk_total_samples}/{num_samples} samples, "
                                 f"exception={type(e).__name__}"
                             )
