@@ -67,9 +67,35 @@ PROJECT_ROOT = os.path.abspath(os.path.join(CURRENT_DIR, os.pardir))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-# Load from CONFIG_PATH if set (persistent volume), with override=True
+# Load persistent configuration with poller-specific overrides.
 # Each poller service should have its own config file (noaa.env, ipaws.env)
-_config_path = os.environ.get('CONFIG_PATH')
+def _resolve_config_path() -> Optional[Path]:
+    mode = os.environ.get('CAP_POLLER_MODE', '').strip().upper()
+    ipaws_path = os.environ.get('IPAWS_CONFIG_PATH', '').strip()
+    noaa_path = os.environ.get('NOAA_CONFIG_PATH', '').strip()
+    shared_path = os.environ.get('CONFIG_PATH', '').strip()
+
+    if mode == 'IPAWS':
+        if ipaws_path:
+            return Path(ipaws_path)
+        if shared_path:
+            return Path(shared_path)
+        return Path('/app-config/ipaws.env')
+
+    if mode == 'NOAA':
+        if noaa_path:
+            return Path(noaa_path)
+        if shared_path:
+            return Path(shared_path)
+        return Path('/app-config/noaa.env')
+
+    if shared_path:
+        return Path(shared_path)
+
+    return None
+
+
+_config_path = _resolve_config_path()
 if _config_path:
     load_dotenv(_config_path, override=True)
 else:

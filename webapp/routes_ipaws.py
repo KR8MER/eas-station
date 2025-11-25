@@ -88,11 +88,27 @@ IPAWS_ENVIRONMENTS = {
 
 
 def _get_config_path() -> Path:
-    """Get the path to the persistent config file."""
-    config_path_env = os.environ.get('CONFIG_PATH', '')
+    """Get the path to the persistent IPAWS config file.
+
+    The IPAWS poller runs as its own service and reads configuration from a
+    dedicated file (typically `/app-config/ipaws.env`). If the UI writes to the
+    wrong file (such as the main application `.env`), the poller silently falls
+    back to the staging defaults. Prioritize an explicit IPAWS config path so
+    the poller and UI stay in sync.
+    """
+
+    # Explicit override for IPAWS configuration
+    ipaws_path_env = os.environ.get('IPAWS_CONFIG_PATH', '').strip()
+    if ipaws_path_env:
+        return Path(ipaws_path_env)
+
+    # Fallback to shared CONFIG_PATH to maintain backward compatibility
+    config_path_env = os.environ.get('CONFIG_PATH', '').strip()
     if config_path_env:
         return Path(config_path_env)
-    return Path('.env')
+
+    # Default to the poller-specific config file location
+    return Path('/app-config/ipaws.env')
 
 
 def _read_current_config() -> Dict[str, str]:
