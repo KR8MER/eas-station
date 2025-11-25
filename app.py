@@ -193,9 +193,10 @@ _docker_icecast_enabled = os.environ.get('ICECAST_ENABLED')
 _config_path = os.environ.get('CONFIG_PATH')
 if _config_path:
     logger.info(f"Loading environment from persistent config: {_config_path}")
-    load_dotenv(_config_path, override=True)
+    # Use override=False so docker-compose.yml environment variables take precedence
+    load_dotenv(_config_path, override=False)
 else:
-    load_dotenv(override=True)
+    load_dotenv(override=False)
 
 # Restore Icecast auto-config from docker environment if auto-streaming is enabled
 # This prevents persistent .env from breaking auto-streaming with mismatched passwords
