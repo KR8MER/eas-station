@@ -1,0 +1,846 @@
+/**
+ * EAS Station - Professional UI Polish
+ * Subtle refinements for a more polished, professional appearance
+ * Version: 1.0.0
+ */
+
+/* ============================================
+   ENHANCED CARD STYLING
+   More refined shadows and hover states
+   ============================================ */
+
+.card {
+    border-radius: var(--radius-lg, 12px);
+    box-shadow: 
+        0 1px 3px rgba(0, 0, 0, 0.05),
+        0 4px 6px rgba(0, 0, 0, 0.03),
+        0 10px 20px rgba(0, 0, 0, 0.02);
+    transition: 
+        transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+        box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+        border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.card:hover {
+    box-shadow: 
+        0 2px 4px rgba(0, 0, 0, 0.06),
+        0 8px 12px rgba(0, 0, 0, 0.04),
+        0 16px 32px rgba(0, 0, 0, 0.03);
+}
+
+.card-header {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0.4));
+    padding: 1rem 1.25rem;
+}
+
+[data-theme-mode="dark"] .card-header,
+[data-theme="dark"] .card-header,
+[data-theme="coffee"] .card-header,
+[data-theme="aurora"] .card-header,
+[data-theme="nebula"] .card-header,
+[data-theme="midnight"] .card-header {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.card-body {
+    padding: 1.25rem;
+}
+
+/* ============================================
+   REFINED BUTTON STYLING
+   Smoother hover states and better focus rings
+   ============================================ */
+
+.btn {
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    border-radius: var(--radius-md, 8px);
+    transition: 
+        transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+        box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+        background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+        border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+}
+
+.btn:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+/* Primary button enhancements */
+.btn-primary {
+    box-shadow: 0 2px 4px rgba(32, 72, 133, 0.15);
+}
+
+.btn-primary:hover:not(:disabled) {
+    box-shadow: 0 4px 8px rgba(32, 72, 133, 0.2);
+}
+
+/* Success button enhancements */
+.btn-success {
+    box-shadow: 0 2px 4px rgba(46, 176, 141, 0.15);
+}
+
+.btn-success:hover:not(:disabled) {
+    box-shadow: 0 4px 8px rgba(46, 176, 141, 0.2);
+}
+
+/* Danger button enhancements */
+.btn-danger {
+    box-shadow: 0 2px 4px rgba(224, 82, 99, 0.15);
+}
+
+.btn-danger:hover:not(:disabled) {
+    box-shadow: 0 4px 8px rgba(224, 82, 99, 0.2);
+}
+
+/* Outline button refinements */
+.btn-outline-primary,
+.btn-outline-secondary,
+.btn-outline-success,
+.btn-outline-danger,
+.btn-outline-warning,
+.btn-outline-info {
+    border-width: 1.5px;
+}
+
+/* Icon buttons - consistent sizing */
+.btn i,
+.btn .fas,
+.btn .far,
+.btn .fab {
+    font-size: 0.9em;
+}
+
+/* ============================================
+   FORM CONTROL REFINEMENTS
+   Improved focus states and visual feedback
+   ============================================ */
+
+.form-control,
+.form-select {
+    border-radius: var(--radius-md, 8px);
+    padding: 0.625rem 0.875rem;
+    transition: 
+        border-color 0.2s ease-in-out,
+        box-shadow 0.2s ease-in-out,
+        background-color 0.2s ease-in-out;
+}
+
+.form-control:focus,
+.form-select:focus {
+    border-color: var(--primary-color);
+    box-shadow: 
+        0 0 0 3px rgba(32, 72, 133, 0.12),
+        0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.form-control::placeholder {
+    opacity: 0.6;
+}
+
+/* Form labels - better hierarchy */
+.form-label {
+    font-weight: 500;
+    font-size: 0.875rem;
+    margin-bottom: 0.375rem;
+    color: var(--text-secondary);
+}
+
+/* Form text - subtle styling */
+.form-text {
+    font-size: 0.8125rem;
+    margin-top: 0.375rem;
+    opacity: 0.85;
+}
+
+/* ============================================
+   TABLE ENHANCEMENTS
+   Cleaner, more professional tables
+   ============================================ */
+
+.table {
+    border-radius: var(--radius-lg, 12px);
+    overflow: hidden;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+.table thead th {
+    font-weight: 600;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 0.875rem 1rem;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.table tbody td {
+    padding: 0.875rem 1rem;
+    vertical-align: middle;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+[data-theme-mode="dark"] .table tbody td,
+[data-theme="dark"] .table tbody td,
+[data-theme="coffee"] .table tbody td,
+[data-theme="aurora"] .table tbody td,
+[data-theme="nebula"] .table tbody td,
+[data-theme="midnight"] .table tbody td {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.table-hover tbody tr {
+    transition: background-color 0.15s ease-in-out;
+}
+
+/* ============================================
+   BADGE REFINEMENTS
+   More polished badge styling
+   ============================================ */
+
+.badge {
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    padding: 0.35em 0.65em;
+    border-radius: var(--radius-sm, 6px);
+}
+
+.badge.rounded-pill {
+    border-radius: 999px;
+    padding: 0.35em 0.75em;
+}
+
+/* Status badges with subtle backgrounds */
+.badge.bg-success {
+    background: linear-gradient(135deg, rgba(46, 176, 141, 0.9), rgba(46, 176, 141, 1)) !important;
+}
+
+.badge.bg-warning {
+    background: linear-gradient(135deg, rgba(246, 185, 104, 0.9), rgba(246, 185, 104, 1)) !important;
+}
+
+.badge.bg-danger {
+    background: linear-gradient(135deg, rgba(224, 82, 99, 0.9), rgba(224, 82, 99, 1)) !important;
+}
+
+.badge.bg-info {
+    background: linear-gradient(135deg, rgba(47, 90, 161, 0.9), rgba(47, 90, 161, 1)) !important;
+}
+
+.badge.bg-primary {
+    background: linear-gradient(135deg, rgba(32, 72, 133, 0.9), rgba(32, 72, 133, 1)) !important;
+}
+
+/* ============================================
+   NAVIGATION POLISH
+   Refined navbar appearance
+   ============================================ */
+
+.navbar {
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+}
+
+.navbar .nav-link {
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    padding: 0.5rem 0.875rem !important;
+    border-radius: var(--radius-md, 8px);
+    transition: 
+        background-color 0.2s ease-in-out,
+        color 0.2s ease-in-out,
+        transform 0.15s ease-in-out;
+}
+
+.navbar .nav-link:hover {
+    background-color: rgba(255, 255, 255, 0.15);
+}
+
+.navbar .dropdown-menu {
+    border: none;
+    border-radius: var(--radius-lg, 12px);
+    box-shadow: 
+        0 4px 6px rgba(0, 0, 0, 0.07),
+        0 12px 24px rgba(0, 0, 0, 0.12),
+        0 24px 48px rgba(0, 0, 0, 0.08);
+    padding: 0.5rem;
+    margin-top: 0.5rem;
+    animation: dropdownFadeIn 0.2s ease-out;
+}
+
+@keyframes dropdownFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.navbar .dropdown-item {
+    border-radius: var(--radius-md, 8px);
+    padding: 0.5rem 0.75rem;
+    margin: 0.125rem 0;
+    font-weight: 450;
+}
+
+.navbar .dropdown-header {
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 600;
+    padding: 0.625rem 0.75rem 0.375rem;
+    opacity: 0.7;
+}
+
+.navbar .dropdown-divider {
+    margin: 0.375rem 0.5rem;
+}
+
+/* ============================================
+   FOOTER REFINEMENTS
+   More polished footer appearance
+   ============================================ */
+
+.footer {
+    background: linear-gradient(180deg, var(--dark-color), rgba(0, 0, 0, 0.95));
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.footer a {
+    transition: color 0.2s ease-in-out;
+}
+
+.footer a:hover {
+    text-decoration: none;
+}
+
+.footer-links a {
+    padding: 0.25rem 0.5rem;
+    border-radius: var(--radius-sm, 6px);
+    transition: 
+        background-color 0.2s ease-in-out,
+        color 0.2s ease-in-out;
+}
+
+.footer-links a:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+/* Tech stack badges - refined appearance */
+.tech-stack-badges img {
+    transition: transform 0.2s ease-in-out, opacity 0.2s ease-in-out;
+    opacity: 0.85;
+}
+
+.tech-stack-badges img:hover {
+    transform: translateY(-2px);
+    opacity: 1;
+}
+
+/* ============================================
+   ALERT REFINEMENTS
+   More professional alert styling
+   ============================================ */
+
+.alert {
+    border-radius: var(--radius-lg, 12px);
+    border-width: 0;
+    border-left-width: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    padding: 1rem 1.25rem;
+}
+
+.alert-success {
+    border-left-color: var(--success-color);
+    background: linear-gradient(135deg, rgba(46, 176, 141, 0.08), rgba(46, 176, 141, 0.04));
+}
+
+.alert-warning {
+    border-left-color: var(--warning-color);
+    background: linear-gradient(135deg, rgba(246, 185, 104, 0.12), rgba(246, 185, 104, 0.06));
+}
+
+.alert-danger {
+    border-left-color: var(--danger-color);
+    background: linear-gradient(135deg, rgba(224, 82, 99, 0.08), rgba(224, 82, 99, 0.04));
+}
+
+.alert-info {
+    border-left-color: var(--info-color);
+    background: linear-gradient(135deg, rgba(47, 90, 161, 0.08), rgba(47, 90, 161, 0.04));
+}
+
+/* ============================================
+   MODAL REFINEMENTS
+   Smoother modal appearance
+   ============================================ */
+
+.modal-content {
+    border: none;
+    border-radius: var(--radius-xl, 16px);
+    box-shadow: 
+        0 8px 16px rgba(0, 0, 0, 0.08),
+        0 24px 48px rgba(0, 0, 0, 0.12),
+        0 48px 96px rgba(0, 0, 0, 0.08);
+    overflow: hidden;
+}
+
+.modal-header {
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+[data-theme-mode="dark"] .modal-header,
+[data-theme="dark"] .modal-header,
+[data-theme="coffee"] .modal-header,
+[data-theme="aurora"] .modal-header,
+[data-theme="nebula"] .modal-header,
+[data-theme="midnight"] .modal-header {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.modal-body {
+    padding: 1.5rem;
+}
+
+.modal-footer {
+    padding: 1rem 1.5rem;
+    border-top: 1px solid rgba(0, 0, 0, 0.06);
+    gap: 0.5rem;
+}
+
+[data-theme-mode="dark"] .modal-footer,
+[data-theme="dark"] .modal-footer,
+[data-theme="coffee"] .modal-footer,
+[data-theme="aurora"] .modal-footer,
+[data-theme="nebula"] .modal-footer,
+[data-theme="midnight"] .modal-footer {
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.modal-title {
+    font-weight: 600;
+    font-size: 1.125rem;
+}
+
+/* Modal backdrop refinement */
+.modal-backdrop {
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+}
+
+/* ============================================
+   PROGRESS BAR REFINEMENTS
+   Smoother progress bars
+   ============================================ */
+
+.progress {
+    border-radius: var(--radius-full, 999px);
+    height: 0.625rem;
+    overflow: hidden;
+    background-color: rgba(0, 0, 0, 0.06);
+}
+
+[data-theme-mode="dark"] .progress,
+[data-theme="dark"] .progress,
+[data-theme="coffee"] .progress,
+[data-theme="aurora"] .progress,
+[data-theme="nebula"] .progress,
+[data-theme="midnight"] .progress {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.progress-bar {
+    border-radius: var(--radius-full, 999px);
+    transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ============================================
+   SPINNER REFINEMENTS
+   Smoother loading spinners
+   ============================================ */
+
+.spinner-border {
+    animation: spinner-border 0.75s linear infinite;
+}
+
+.spinner-grow {
+    animation: spinner-grow 0.75s linear infinite;
+}
+
+/* ============================================
+   TOAST REFINEMENTS
+   More polished toast notifications
+   ============================================ */
+
+.toast {
+    border: none;
+    border-radius: var(--radius-lg, 12px);
+    box-shadow: 
+        0 4px 12px rgba(0, 0, 0, 0.1),
+        0 16px 32px rgba(0, 0, 0, 0.08);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+}
+
+/* ============================================
+   PAGINATION REFINEMENTS
+   Cleaner pagination styling
+   ============================================ */
+
+.pagination {
+    gap: 0.25rem;
+}
+
+.page-link {
+    border: none;
+    border-radius: var(--radius-md, 8px) !important;
+    padding: 0.5rem 0.875rem;
+    font-weight: 500;
+    transition: 
+        background-color 0.2s ease-in-out,
+        color 0.2s ease-in-out,
+        transform 0.15s ease-in-out;
+}
+
+.page-link:hover {
+    transform: translateY(-1px);
+}
+
+.page-item.active .page-link {
+    box-shadow: 0 2px 8px rgba(32, 72, 133, 0.25);
+}
+
+/* ============================================
+   METRIC CARDS POLISH
+   Refined metric/stat cards
+   ============================================ */
+
+.metric-card,
+.stat-card {
+    border-radius: var(--radius-xl, 16px);
+    transition: 
+        transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+        box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.metric-card:hover,
+.stat-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 
+        0 8px 16px rgba(0, 0, 0, 0.06),
+        0 20px 40px rgba(0, 0, 0, 0.04);
+}
+
+.metric-value,
+.stat-number {
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+
+.metric-label,
+.stat-label {
+    font-weight: 500;
+    letter-spacing: 0.04em;
+}
+
+/* ============================================
+   LAYER CONTROLS POLISH
+   Refined map layer controls
+   ============================================ */
+
+.layer-section {
+    border-radius: var(--radius-lg, 12px);
+    transition: 
+        border-color 0.2s ease-in-out,
+        box-shadow 0.2s ease-in-out;
+}
+
+.layer-section:hover {
+    border-color: var(--primary-soft);
+    box-shadow: 0 4px 12px rgba(32, 72, 133, 0.08);
+}
+
+.form-check.form-switch .form-check-input {
+    cursor: pointer;
+    transition: 
+        background-color 0.2s ease-in-out,
+        border-color 0.2s ease-in-out;
+}
+
+/* ============================================
+   PAGE HEADER POLISH
+   Refined page headers
+   ============================================ */
+
+.page-header {
+    border-radius: var(--radius-xl, 16px);
+    position: relative;
+    overflow: hidden;
+}
+
+.page-header::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.1) 0%,
+        rgba(255, 255, 255, 0) 50%,
+        rgba(0, 0, 0, 0.05) 100%
+    );
+    pointer-events: none;
+}
+
+.page-title {
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+.page-subtitle {
+    letter-spacing: 0.01em;
+}
+
+/* ============================================
+   SCROLLBAR STYLING
+   Refined scrollbar appearance
+   ============================================ */
+
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.03);
+    border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.15);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.25);
+    background-clip: content-box;
+}
+
+[data-theme-mode="dark"] ::-webkit-scrollbar-track,
+[data-theme="dark"] ::-webkit-scrollbar-track,
+[data-theme="coffee"] ::-webkit-scrollbar-track,
+[data-theme="aurora"] ::-webkit-scrollbar-track,
+[data-theme="nebula"] ::-webkit-scrollbar-track,
+[data-theme="midnight"] ::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+[data-theme-mode="dark"] ::-webkit-scrollbar-thumb,
+[data-theme="dark"] ::-webkit-scrollbar-thumb,
+[data-theme="coffee"] ::-webkit-scrollbar-thumb,
+[data-theme="aurora"] ::-webkit-scrollbar-thumb,
+[data-theme="nebula"] ::-webkit-scrollbar-thumb,
+[data-theme="midnight"] ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    background-clip: content-box;
+}
+
+[data-theme-mode="dark"] ::-webkit-scrollbar-thumb:hover,
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover,
+[data-theme="coffee"] ::-webkit-scrollbar-thumb:hover,
+[data-theme="aurora"] ::-webkit-scrollbar-thumb:hover,
+[data-theme="nebula"] ::-webkit-scrollbar-thumb:hover,
+[data-theme="midnight"] ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.25);
+    background-clip: content-box;
+}
+
+/* Firefox scrollbar */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 0, 0, 0.15) transparent;
+}
+
+[data-theme-mode="dark"] *,
+[data-theme="dark"] *,
+[data-theme="coffee"] *,
+[data-theme="aurora"] *,
+[data-theme="nebula"] *,
+[data-theme="midnight"] * {
+    scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+/* ============================================
+   SELECTION STYLING
+   Refined text selection
+   ============================================ */
+
+::selection {
+    background-color: rgba(32, 72, 133, 0.2);
+    color: inherit;
+}
+
+[data-theme-mode="dark"] ::selection,
+[data-theme="dark"] ::selection,
+[data-theme="coffee"] ::selection,
+[data-theme="aurora"] ::selection,
+[data-theme="nebula"] ::selection,
+[data-theme="midnight"] ::selection {
+    background-color: rgba(107, 150, 255, 0.3);
+}
+
+/* ============================================
+   FOCUS VISIBLE STYLING
+   Better keyboard focus indicators
+   ============================================ */
+
+:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
+/* ============================================
+   SUBTLE ANIMATIONS
+   Micro-interactions for polish
+   ============================================ */
+
+/* Subtle pulse animation for status indicators */
+@keyframes subtlePulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.7;
+    }
+}
+
+.status-dot-pulse {
+    animation: subtlePulse 2s ease-in-out infinite;
+}
+
+/* Smooth fade-in for page content */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+main {
+    animation: fadeInUp 0.3s ease-out;
+}
+
+/* ============================================
+   ICON REFINEMENTS
+   Better icon sizing and spacing
+   ============================================ */
+
+.fas, .far, .fab {
+    vertical-align: -0.1em;
+}
+
+/* Icon in card headers */
+.card-header .fas,
+.card-header .far,
+.card-header .fab {
+    opacity: 0.85;
+}
+
+/* ============================================
+   EMPTY STATE STYLING
+   Polished empty state appearance
+   ============================================ */
+
+.empty-state {
+    padding: 3rem 2rem;
+}
+
+.empty-state-icon {
+    opacity: 0.4;
+    margin-bottom: 1rem;
+}
+
+.empty-state-title {
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+.empty-state-message {
+    opacity: 0.75;
+    max-width: 320px;
+    margin: 0 auto;
+}
+
+/* ============================================
+   RESPONSIVE REFINEMENTS
+   Mobile-specific polish
+   ============================================ */
+
+@media (max-width: 768px) {
+    .card {
+        border-radius: var(--radius-md, 8px);
+    }
+    
+    .modal-content {
+        border-radius: var(--radius-lg, 12px);
+    }
+    
+    .page-header {
+        border-radius: var(--radius-md, 8px);
+    }
+    
+    .btn {
+        padding: 0.5rem 1rem;
+    }
+}
+
+/* ============================================
+   PRINT REFINEMENTS
+   Clean printing styles
+   ============================================ */
+
+@media print {
+    .card {
+        box-shadow: none !important;
+        border: 1px solid #dee2e6 !important;
+    }
+    
+    .btn {
+        box-shadow: none !important;
+    }
+    
+    main {
+        animation: none !important;
+    }
+}
