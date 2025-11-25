@@ -266,7 +266,7 @@ def _get_noaa_status() -> Dict:
 
 
 @ipaws_bp.route('/settings/alert-feeds')
-@require_permission('settings.view')
+@require_permission('system.view_config')
 def alert_feeds_settings():
     """Render consolidated alert feeds configuration page."""
     try:
@@ -287,7 +287,7 @@ def alert_feeds_settings():
 
 # Redirect old URL to new unified page
 @ipaws_bp.route('/settings/ipaws')
-@require_permission('settings.view')
+@require_permission('system.view_config')
 def ipaws_settings_redirect():
     """Redirect old IPAWS settings URL to new unified page."""
     from flask import redirect, url_for
@@ -295,7 +295,7 @@ def ipaws_settings_redirect():
 
 
 @ipaws_bp.route('/api/ipaws/status')
-@require_permission('settings.view')
+@require_permission('system.view_config')
 def api_ipaws_status():
     """API endpoint to get current IPAWS status."""
     try:
@@ -307,7 +307,7 @@ def api_ipaws_status():
 
 
 @ipaws_bp.route('/api/ipaws/configure', methods=['POST'])
-@require_permission('settings.edit')
+@require_permission('system.configure')
 def api_ipaws_configure():
     """API endpoint to configure IPAWS feed."""
     try:
@@ -364,7 +364,7 @@ def api_ipaws_configure():
 
 
 @ipaws_bp.route('/api/ipaws/disable', methods=['POST'])
-@require_permission('settings.edit')
+@require_permission('system.configure')
 def api_ipaws_disable():
     """API endpoint to disable IPAWS feed."""
     try:
@@ -384,7 +384,7 @@ def api_ipaws_disable():
 
 
 @ipaws_bp.route('/api/noaa/configure', methods=['POST'])
-@require_permission('settings.edit')
+@require_permission('system.configure')
 def api_noaa_configure():
     """API endpoint to configure NOAA feed settings."""
     try:
