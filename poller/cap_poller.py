@@ -102,7 +102,7 @@ else:
     load_dotenv(override=True)
 from sqlalchemy import create_engine, text, func, or_
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.exc import SQLAlchemyError, OperationalError
+from sqlalchemy.exc import SQLAlchemyError, OperationalError, IntegrityError
 
 # =======================================================================================
 # Timezones and helpers
@@ -1114,6 +1114,7 @@ class CAPPoller:
 
         parameters = self._extract_cap_parameters(info_elem, ns)
         geometry, area_desc, geocodes = self._extract_area_details(info_elem, ns)
+        resources = self._extract_cap_resources(info_elem, ns)
 
         properties = {
             'identifier': identifier,
@@ -1138,6 +1139,7 @@ class CAPPoller:
             'areaDesc': area_desc,
             'geocode': geocodes,
             'parameters': parameters,
+            'resources': resources,
             'source': ALERT_SOURCE_IPAWS,
         }
 
@@ -1184,6 +1186,64 @@ class CAPPoller:
             parameters.setdefault(name, []).append(value)
 
         return parameters
+
+    def _extract_cap_resources(self, info_elem: Optional[ET.Element], ns: Dict[str, str]) -> List[Dict[str, str]]:
+        """Extract resource elements from CAP info block.
+        
+        CAP 1.2 alerts can contain <resource> elements with embedded or linked content,
+        including audio files. IPAWS alerts often include pre-recorded audio messages.
+        
+        Returns:
+            List of resource dicts with keys: resourceDesc, mimeType, uri, derefUri, digest
+        """
+        resources: List[Dict[str, str]] = []
+        if info_elem is None:
+            return resources
+
+        for resource in info_elem.findall('cap:resource', ns):
+            resource_dict: Dict[str, str] = {}
+            
+            # Required fields
+            resource_desc = resource.findtext('cap:resourceDesc', default='', namespaces=ns)
+            if resource_desc:
+                resource_dict['resourceDesc'] = resource_desc.strip()
+            
+            mime_type = resource.findtext('cap:mimeType', default='', namespaces=ns)
+            if mime_type:
+                resource_dict['mimeType'] = mime_type.strip()
+            
+            # Optional fields - URI for external resource
+            uri = resource.findtext('cap:uri', default='', namespaces=ns)
+            if uri:
+                resource_dict['uri'] = uri.strip()
+            
+            # Optional fields - derefUri for base64-encoded inline content
+            deref_uri = resource.findtext('cap:derefUri', default='', namespaces=ns)
+            if deref_uri:
+                resource_dict['derefUri'] = deref_uri.strip()
+            
+            # Optional fields - digest for integrity verification
+            digest = resource.findtext('cap:digest', default='', namespaces=ns)
+            if digest:
+                resource_dict['digest'] = digest.strip()
+            
+            # Size in bytes (optional)
+            size = resource.findtext('cap:size', default='', namespaces=ns)
+            if size:
+                resource_dict['size'] = size.strip()
+            
+            # Only include if we have at least a description or URI
+            if resource_dict.get('resourceDesc') or resource_dict.get('uri') or resource_dict.get('derefUri'):
+                resources.append(resource_dict)
+                
+                # Log audio resources for debugging
+                if mime_type and 'audio' in mime_type.lower():
+                    self.logger.info(
+                        f"Found audio resource in CAP alert: {resource_desc or 'unnamed'} "
+                        f"(type: {mime_type}, uri: {uri[:50] + '...' if uri and len(uri) > 50 else uri or 'embedded'})"
+                    )
+
+        return resources
 
     def _extract_area_details(self, info_elem: Optional[ET.Element], ns: Dict[str, str]) -> Tuple[Optional[Dict], str, Dict[str, List[str]]]:
         if info_elem is None:
@@ -1906,57 +1966,36 @@ class CAPPoller:
             ).first()
 
             if existing:
-                for k, v in payload.items():
-                    # Update raw_json to maintain audit trail
-                    if hasattr(existing, k):
-                        setattr(existing, k, v)
-                old_geom = existing.geom
-                self._set_alert_geometry(existing, geometry_data)
-                existing.updated_at = utc_now()
-                self.db_session.commit()
+                return self._update_existing_alert(existing, payload, geometry_data)
 
-                # Use PostGIS ST_Equals for reliable geometry comparison
-                geom_changed = self._has_geometry_changed(old_geom, existing.geom)
+            return self._insert_new_alert(payload, geometry_data, alert_data)
 
-                if geom_changed or self._needs_intersection_calculation(existing):
-                    self.process_intersections(existing)
-                if self.led_controller and not self.is_alert_expired(existing):
-                    self.update_led_display()
-                self.logger.info(f"Updated alert: {existing.event}")
-                return False, existing, None
+        except IntegrityError as e:
+            # Race condition: another process inserted the same alert between our
+            # SELECT and INSERT. Rollback and retry as an UPDATE.
+            self.logger.warning(
+                f"IntegrityError saving alert {payload.get('identifier', 'unknown')}, "
+                f"retrying as update: {e}"
+            )
+            self.db_session.rollback()
 
-            new_alert = CAPAlert(**payload)
-            new_alert.created_at = utc_now()
-            new_alert.updated_at = utc_now()
-            self._set_alert_geometry(new_alert, geometry_data)
-
-            self.db_session.add(new_alert)
-            self.db_session.commit()
-
-            if new_alert.geom:
-                self.process_intersections(new_alert)
-            if self.led_controller and not self.is_alert_expired(new_alert):
-                self.update_led_display()
-
-            capture_metadata: Optional[Dict[str, Any]] = None
-            if self.eas_broadcaster:
-                try:
-                    broadcast_result = self.eas_broadcaster.handle_alert(new_alert, payload)
-                    if broadcast_result and broadcast_result.get("same_triggered"):
-                        capture_results = self._coordinate_radio_captures(new_alert, broadcast_result)
-                        capture_metadata = {
-                            "alert_identifier": getattr(new_alert, "identifier", None),
-                            "broadcast": broadcast_result,
-                            "captures": capture_results,
-                        }
-                    else:
-                        capture_metadata = {"broadcast": broadcast_result}
-                except Exception as exc:
-                    self.logger.error(f"EAS broadcast failed for {new_alert.identifier}: {exc}")
-                    capture_metadata = {"error": str(exc)}
-
-            self.logger.info(f"Saved new alert: {new_alert.identifier} - {new_alert.event}")
-            return True, new_alert, capture_metadata
+            # Re-fetch the existing alert and update it
+            try:
+                existing = self.db_session.query(CAPAlert).filter_by(
+                    identifier=payload['identifier']
+                ).first()
+                if existing:
+                    return self._update_existing_alert(existing, payload, geometry_data)
+                else:
+                    # Alert was deleted between our attempts - this is very rare
+                    self.logger.error(
+                        f"Alert {payload.get('identifier')} not found after IntegrityError"
+                    )
+                    return False, None, None
+            except Exception as retry_err:
+                self.logger.error(f"Failed to update alert after IntegrityError: {retry_err}")
+                self.db_session.rollback()
+                return False, None, None
 
         except SQLAlchemyError as e:
             self.logger.error(f"Database error saving alert: {e}")
@@ -1966,6 +2005,72 @@ class CAPPoller:
             self.logger.error(f"Error saving CAP alert: {e}")
             self.db_session.rollback()
             return False, None, None
+
+    def _update_existing_alert(
+        self,
+        existing: CAPAlert,
+        payload: Dict,
+        geometry_data: Optional[Dict]
+    ) -> Tuple[bool, Optional[CAPAlert], None]:
+        """Update an existing alert with new data."""
+        for k, v in payload.items():
+            # Update raw_json to maintain audit trail
+            if hasattr(existing, k):
+                setattr(existing, k, v)
+        old_geom = existing.geom
+        self._set_alert_geometry(existing, geometry_data)
+        existing.updated_at = utc_now()
+        self.db_session.commit()
+
+        # Use PostGIS ST_Equals for reliable geometry comparison
+        geom_changed = self._has_geometry_changed(old_geom, existing.geom)
+
+        if geom_changed or self._needs_intersection_calculation(existing):
+            self.process_intersections(existing)
+        if self.led_controller and not self.is_alert_expired(existing):
+            self.update_led_display()
+        self.logger.info(f"Updated alert: {existing.event}")
+        return False, existing, None
+
+    def _insert_new_alert(
+        self,
+        payload: Dict,
+        geometry_data: Optional[Dict],
+        alert_data: Dict
+    ) -> Tuple[bool, Optional[CAPAlert], Optional[Dict[str, Any]]]:
+        """Insert a new alert into the database."""
+        new_alert = CAPAlert(**payload)
+        new_alert.created_at = utc_now()
+        new_alert.updated_at = utc_now()
+        self._set_alert_geometry(new_alert, geometry_data)
+
+        self.db_session.add(new_alert)
+        self.db_session.commit()
+
+        if new_alert.geom:
+            self.process_intersections(new_alert)
+        if self.led_controller and not self.is_alert_expired(new_alert):
+            self.update_led_display()
+
+        capture_metadata: Optional[Dict[str, Any]] = None
+        if self.eas_broadcaster:
+            try:
+                broadcast_result = self.eas_broadcaster.handle_alert(new_alert, payload)
+                if broadcast_result and broadcast_result.get("same_triggered"):
+                    capture_results = self._coordinate_radio_captures(new_alert, broadcast_result)
+                    capture_metadata = {
+                        "alert_identifier": getattr(new_alert, "identifier", None),
+                        "broadcast": broadcast_result,
+                        "captures": capture_results,
+                    }
+                else:
+                    capture_metadata = {"broadcast": broadcast_result}
+            except Exception as exc:
+                self.logger.error(f"EAS broadcast failed for {new_alert.identifier}: {exc}")
+                capture_metadata = {"error": str(exc)}
+
+        self.logger.info(f"Saved new alert: {new_alert.identifier} - {new_alert.event}")
+        return True, new_alert, capture_metadata
 
     # ---------- LED ----------
     def is_alert_expired(self, alert, max_age_days: int = 30) -> bool:
