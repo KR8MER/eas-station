@@ -52,7 +52,8 @@ WORKDIR /app
 # Install Python dependencies first for better layer caching
 COPY requirements.txt ./
 RUN pip install --no-cache-dir --upgrade pip setuptools wheel \
-    && pip install --no-cache-dir --timeout 300 --retries 5 -r requirements.txt
+    && pip install --no-cache-dir --timeout 300 --retries 5 -r requirements.txt \
+    && python3 -c "import certifi; print('Certifi CA bundle:', certifi.where())"
 
 # Copy the rest of the application source into the image
 COPY . ./

@@ -494,9 +494,15 @@ class CAPPoller:
             self.logger.info('Using custom CA bundle for CAP polling: %s', ca_bundle_override)
             self.session.verify = ca_bundle_override
         else:
-            certifi_path = certifi.where()
-            self.logger.info('Using certifi CA bundle for SSL verification: %s', certifi_path)
-            self.session.verify = certifi_path
+            # Try system CA bundle first (more up-to-date), fall back to certifi
+            system_ca_bundle = '/etc/ssl/certs/ca-certificates.crt'
+            if os.path.exists(system_ca_bundle):
+                self.logger.info('Using system CA bundle for SSL verification: %s', system_ca_bundle)
+                self.session.verify = system_ca_bundle
+            else:
+                certifi_path = certifi.where()
+                self.logger.info('Using certifi CA bundle for SSL verification: %s', certifi_path)
+                self.session.verify = certifi_path
 
         # LED
         self.led_controller = None
