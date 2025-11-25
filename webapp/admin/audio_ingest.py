@@ -2346,7 +2346,107 @@ def api_stream_audio(source_name: str):
         except Exception as exc:
             logger.error(f'Unexpected error in audio stream generator for {source_name}: {exc}', exc_info=True)
 
+    def _build_stream_headers(extra_headers: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+        headers = {
+            'Content-Disposition': f'inline; filename="{source_name}.wav"',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+            'X-Content-Type-Options': 'nosniff',
+        }
+
+        if extra_headers:
+            headers.update(extra_headers)
+
+        return headers
+
+    def _stream_silence_response(sample_rate: int = 48000, channels: int = 2) -> Response:
+        """Return an endless silence stream so players never fail hard."""
+        import numpy as np
+
+        def generate_silence():
+            import io
+            import struct
+
+            wav_header = io.BytesIO()
+            wav_header.write(b'RIFF')
+            wav_header.write(struct.pack('<I', 0xFFFFFFFF))
+            wav_header.write(b'WAVE')
+            wav_header.write(b'fmt ')
+            wav_header.write(struct.pack('<I', 16))
+            wav_header.write(struct.pack('<H', 1))
+            wav_header.write(struct.pack('<H', channels))
+            wav_header.write(struct.pack('<I', sample_rate))
+            wav_header.write(struct.pack('<I', sample_rate * channels * 2))
+            wav_header.write(struct.pack('<H', channels * 2))
+            wav_header.write(struct.pack('<H', 16))
+            wav_header.write(b'data')
+            wav_header.write(struct.pack('<I', 0xFFFFFFFF))
+
+            yield wav_header.getvalue()
+
+            silence_chunk = np.zeros(int(sample_rate * channels * 0.05), dtype=np.int16).tobytes()
+            while True:
+                yield silence_chunk
+                time.sleep(0.05)
+
+        logger.warning('Falling back to continuous silence stream for %s', source_name)
+
+        return Response(
+            stream_with_context(generate_silence()),
+            mimetype='audio/wav',
+            headers=_build_stream_headers({'X-Stream-Source': 'silence-fallback'})
+        )
+
+    def _proxy_icecast_stream() -> Optional[Response]:
+        icecast_url = _get_icecast_stream_url(source_name)
+        if not icecast_url:
+            return None
+
+        try:
+            logger.info('Attempting Icecast proxy stream for %s -> %s', source_name, icecast_url)
+            icecast_resp = requests.get(icecast_url, stream=True, timeout=5)
+
+            if icecast_resp.status_code != 200:
+                logger.error(
+                    'Icecast stream unavailable for %s (status %s)',
+                    source_name,
+                    icecast_resp.status_code,
+                )
+                return None
+
+            content_type = icecast_resp.headers.get('Content-Type', 'audio/mpeg')
+
+            def generate_proxy():
+                for chunk in icecast_resp.iter_content(chunk_size=8192):
+                    if chunk:
+                        yield chunk
+
+            return Response(
+                stream_with_context(generate_proxy()),
+                mimetype=content_type,
+                headers=_build_stream_headers({'X-Stream-Source': 'icecast-proxy'})
+            )
+        except Exception as exc:
+            logger.error('Icecast proxy failed for %s: %s', source_name, exc)
+            return None
+
     try:
+        # First, try to stream directly from the in-process controller when available.
+        try:
+            controller = _get_audio_controller()
+            active_adapter = getattr(controller, '_sources', {}).get(source_name)
+
+            if active_adapter is not None:
+                logger.info('Streaming audio locally for %s via in-process controller', source_name)
+                return Response(
+                    stream_with_context(generate_wav_stream(active_adapter)),
+                    mimetype='audio/wav',
+                    headers=_build_stream_headers({'X-Stream-Source': 'local-controller'})
+                )
+        except Exception as exc:
+            logger.warning('Local audio stream fallback failed for %s: %s', source_name, exc)
+
         # SEPARATED ARCHITECTURE: Proxy streaming requests to audio-service container
         # The app container doesn't have audio adapters, but the audio-service container does.
         # We proxy the streaming request to audio-service:5001 which serves the actual audio.
@@ -2373,60 +2473,48 @@ def api_stream_audio(source_name: str):
                                 yield chunk
                     except Exception as e:
                         logger.error(f'Error proxying stream for {source_name}: {e}')
-                
+
                 return Response(
                     stream_with_context(generate_proxy()),
                     mimetype='audio/wav',
-                    headers={
-                        'Content-Disposition': f'inline; filename="{source_name}.wav"',
-                        'Cache-Control': 'no-cache, no-store, must-revalidate',
-                        'Pragma': 'no-cache',
-                        'Expires': '0',
-                        'X-Content-Type-Options': 'nosniff',
-                    }
+                    headers=_build_stream_headers({'X-Stream-Source': 'audio-service'})
                 )
             else:
-                # Audio service returned an error - forward it
-                try:
-                    error_data = resp.json()
-                    return jsonify(error_data), resp.status_code
-                except:
-                    return jsonify({
-                        'error': f'Audio service returned status {resp.status_code}',
-                        'source_name': source_name
-                    }), resp.status_code
-                    
+                logger.error(
+                    'Audio service returned non-200 for %s: %s',
+                    source_name,
+                    resp.status_code,
+                )
+                icecast_response = _proxy_icecast_stream()
+                if icecast_response:
+                    return icecast_response
+
+                return _stream_silence_response()
+
         except requests.exceptions.Timeout:
             logger.error(f'Timeout connecting to audio-service for {source_name}')
-            return jsonify({
-                'error': 'Audio service timeout',
-                'hint': 'The audio-service container may not be running or is not responding',
-                'source_name': source_name,
-            }), 503
-            
+            icecast_response = _proxy_icecast_stream()
+            if icecast_response:
+                return icecast_response
+
+            return _stream_silence_response()
+
         except requests.exceptions.ConnectionError:
             logger.error(f'Connection error to audio-service for {source_name}')
-            
-            # Fall back to Icecast if available
-            icecast_url = _get_icecast_stream_url(source_name)
-            if icecast_url:
-                return jsonify({
-                    'error': 'Audio service unavailable - use Icecast instead',
-                    'icecast_url': icecast_url,
-                    'hint': 'The audio-service container is not reachable. Using Icecast streaming as fallback.',
-                    'source_name': source_name,
-                }), 503
-            else:
-                return jsonify({
-                    'error': 'Audio service unavailable',
-                    'hint': 'The audio-service container is not running. Check Docker logs: docker logs eas-audio-service',
-                    'documentation': 'For VU meters, audio-service must be running. For basic playback, configure Icecast.',
-                    'source_name': source_name,
-                }), 503
+
+            icecast_response = _proxy_icecast_stream()
+            if icecast_response:
+                return icecast_response
+
+            return _stream_silence_response()
 
     except Exception as exc:
         logger.error('Error proxying audio stream for %s: %s', source_name, exc, exc_info=True)
-        return jsonify({'error': str(exc)}), 500
+        icecast_response = _proxy_icecast_stream()
+        if icecast_response:
+            return icecast_response
+
+        return _stream_silence_response()
 
 # NOTE: Legacy audio streaming code removed (lines 2094-2350)
 # In separated architecture, audio streaming requires direct adapter access
