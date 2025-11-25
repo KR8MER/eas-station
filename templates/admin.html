@@ -330,6 +330,11 @@
                         </button>
                     </li>
                     <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="hardware-tab" data-bs-toggle="tab" data-bs-target="#hardware-integrations" type="button" role="tab">
+                            <i class="fas fa-microchip"></i> Hardware Integrations
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
                         <button class="nav-link" id="location-tab" data-bs-toggle="tab" data-bs-target="#location-settings" type="button" role="tab">
                             <i class="fas fa-map-marker-alt"></i> Location Settings
                         </button>
@@ -829,6 +834,150 @@
                     </noscript>
                 </div>
 
+                <!-- Hardware Integrations Tab -->
+                <div class="tab-pane fade" id="hardware-integrations" role="tabpanel">
+                    <!-- Page Header -->
+                    <div class="mb-4">
+                        <h4 class="mb-2"><i class="fas fa-microchip text-primary"></i> Hardware Integrations</h4>
+                        <p class="text-muted">Configure external hardware devices and peripherals connected to the EAS Station.</p>
+                    </div>
+
+                    <!-- Quick Links to Hardware Pages -->
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-6">
+                            <div class="alert alert-info d-flex align-items-start mb-0" role="alert">
+                                <i class="fas fa-signal me-3 mt-1"></i>
+                                <div>
+                                    <strong>Radio/SDR Configuration:</strong> Configure SDR receivers, frequencies, and radio monitoring on the
+                                    <a href="{{ url_for('radio_settings') }}" class="alert-link">Radio Settings</a> page.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="alert alert-info d-flex align-items-start mb-0" role="alert">
+                                <i class="fas fa-plug me-3 mt-1"></i>
+                                <div>
+                                    <strong>GPIO Pin Configuration:</strong> Manage GPIO pins for transmitter relays and custom hardware on the
+                                    <a href="{{ url_for('gpio_pin_map') }}" class="alert-link">GPIO Pin Map</a> page.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- LED Sign Configuration -->
+                    <div class="card border-primary-subtle shadow-sm mb-4">
+                        <div class="card-header bg-primary-subtle">
+                            <h5 class="mb-0">
+                                <i class="fas fa-sign"></i> LED Sign (Alpha Protocol)
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <form id="ledSignForm">
+                                <div class="row g-3">
+                                    <div class="col-12">
+                                        <label for="hardwareLedLines" class="form-label fw-bold">Default Display Lines</label>
+                                        <textarea class="form-control" id="hardwareLedLines" name="led_default_lines" rows="4" placeholder="Line 1&#10;Line 2&#10;Line 3&#10;Line 4">{{ (location_settings.led_default_lines or []) | join('\n') }}</textarea>
+                                        <small class="text-muted">Default text shown on LED sign (4 lines for Alpha protocol signs). Used for canned messages and previews.</small>
+                                    </div>
+
+                                    <div class="col-12">
+                                        <h6 class="fw-bold mt-3 mb-3">Serial Adapter Configuration</h6>
+                                        <div class="alert alert-info mb-3">
+                                            <i class="fas fa-info-circle"></i>
+                                            <strong>Connection Method:</strong> This system uses a Lantronix (or compatible) serial-to-Ethernet adapter to connect the LED sign.
+                                            The adapter emulates a serial port over TCP/IP, allowing network-based control of RS232/RS485 LED signs.
+                                        </div>
+                                    </div>
+
+                                    <div class="col-md-6">
+                                        <label for="hardwareLedSerialMode" class="form-label fw-bold">Serial Mode</label>
+                                        <select class="form-select" id="hardwareLedSerialMode" name="led_serial_mode">
+                                            <option value="RS232" selected>RS232 (Standard Serial)</option>
+                                            <option value="RS485">RS485 (Multi-drop / Long Distance)</option>
+                                        </select>
+                                        <small class="text-muted">
+                                            <strong>RS232:</strong> Standard serial, short distances (&lt;50ft), single device<br>
+                                            <strong>RS485:</strong> Long distances (up to 4000ft), multiple devices, industrial
+                                        </small>
+                                    </div>
+
+                                    <div class="col-md-6">
+                                        <label for="hardwareLedBaudRate" class="form-label fw-bold">Baud Rate</label>
+                                        <select class="form-select" id="hardwareLedBaudRate" name="led_baud_rate">
+                                            <option value="9600" selected>9600 (Standard)</option>
+                                            <option value="19200">19200 (Fast)</option>
+                                            <option value="38400">38400</option>
+                                            <option value="57600">57600</option>
+                                            <option value="115200">115200</option>
+                                        </select>
+                                        <small class="text-muted">Must match both your Lantronix adapter and LED sign settings</small>
+                                    </div>
+
+                                    <div class="col-12">
+                                        <div class="alert alert-warning mb-0">
+                                            <i class="fas fa-exclamation-triangle"></i>
+                                            <strong>Important:</strong> These settings are informational and stored in the database.
+                                            You must also configure these same serial settings on your Lantronix adapter to match your LED sign's hardware.
+                                        </div>
+                                    </div>
+
+                                    <div class="col-12 d-flex align-items-center">
+                                        <button type="submit" class="btn btn-primary">
+                                            <i class="fas fa-save"></i> Save LED Sign Settings
+                                        </button>
+                                        <span class="text-muted small ms-3" id="ledSignStatus"></span>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- VFD Display Configuration -->
+                    <div class="card border-secondary-subtle shadow-sm mb-4">
+                        <div class="card-header bg-secondary-subtle">
+                            <h5 class="mb-0">
+                                <i class="fas fa-tv"></i> VFD Display (Vacuum Fluorescent Display)
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="alert alert-secondary mb-0">
+                                <i class="fas fa-tools"></i>
+                                <strong>Coming Soon:</strong> VFD display integration will be added in a future update. VFD displays provide high-brightness, high-contrast output ideal for emergency alert notifications.
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- OLED Display Configuration -->
+                    <div class="card border-secondary-subtle shadow-sm mb-4">
+                        <div class="card-header bg-secondary-subtle">
+                            <h5 class="mb-0">
+                                <i class="fas fa-desktop"></i> OLED Display (SSD1306/SH1106)
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="alert alert-secondary mb-0">
+                                <i class="fas fa-tools"></i>
+                                <strong>Coming Soon:</strong> OLED display integration will be added in a future update. Supports common I2C OLED displays for compact status and alert information.
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Zigbee Integration -->
+                    <div class="card border-secondary-subtle shadow-sm mb-4">
+                        <div class="card-header bg-secondary-subtle">
+                            <h5 class="mb-0">
+                                <i class="fas fa-broadcast-tower"></i> Zigbee Smart Home Integration
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="alert alert-secondary mb-0">
+                                <i class="fas fa-tools"></i>
+                                <strong>Coming Soon:</strong> Zigbee integration will allow EAS Station to control smart lights, sirens, and other Zigbee devices during emergencies.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- User Management Tab -->
                 <div class="tab-pane fade" id="user-management" role="tabpanel">
                     <!-- Page Header -->
@@ -1103,57 +1252,13 @@
                                 <label for="locationMapZoom" class="form-label fw-bold">Map Default Zoom</label>
                                 <input type="number" class="form-control" id="locationMapZoom" name="map_default_zoom" value="{{ location_settings.map_default_zoom | default('9') }}">
                             </div>
-                            <div class="col-12">
-                                <label for="locationLedLines" class="form-label fw-bold">LED Sign Default Lines</label>
-                                <textarea class="form-control" id="locationLedLines" name="led_default_lines" rows="4" placeholder="Each line shown on the LED sign">{{ (location_settings.led_default_lines or []) | join('\n') }}</textarea>
-                                <small class="text-muted">These lines are used for canned messages and previews.</small>
-                            </div>
 
-                            <!-- LED Adapter Configuration -->
-                            <div class="col-12">
-                                <div class="card border-primary-subtle shadow-sm mt-3">
-                                    <div class="card-header bg-primary-subtle">
-                                        <h5 class="mb-0">
-                                            <i class="fas fa-network-wired"></i> LED Sign Adapter Configuration
-                                        </h5>
-                                    </div>
-                                    <div class="card-body">
-                                        <div class="alert alert-info mb-3">
-                                            <i class="fas fa-info-circle"></i>
-                                            <strong>Connection Method:</strong> This system uses a Lantronix (or compatible) serial-to-Ethernet adapter to connect the LED sign.
-                                            The adapter emulates a serial port over TCP/IP, allowing network-based control of RS232/RS485 LED signs.
-                                        </div>
-
-                                        <div class="row g-3">
-                                            <div class="col-md-6">
-                                                <label for="ledSerialMode" class="form-label fw-bold">Serial Mode</label>
-                                                <select class="form-select" id="ledSerialMode" name="led_serial_mode">
-                                                    <option value="RS232" selected>RS232 (Standard Serial)</option>
-                                                    <option value="RS485">RS485 (Multi-drop / Long Distance)</option>
-                                                </select>
-                                                <small class="text-muted">
-                                                    <strong>RS232:</strong> Standard serial, short distances (&lt;50ft), single device<br>
-                                                    <strong>RS485:</strong> Long distances (up to 4000ft), multiple devices, industrial
-                                                </small>
-                                            </div>
-                                            <div class="col-md-6">
-                                                <label for="ledBaudRate" class="form-label fw-bold">Baud Rate</label>
-                                                <select class="form-select" id="ledBaudRate" name="led_baud_rate">
-                                                    <option value="9600" selected>9600 (Standard)</option>
-                                                    <option value="19200">19200 (Fast)</option>
-                                                    <option value="38400">38400</option>
-                                                    <option value="57600">57600</option>
-                                                    <option value="115200">115200</option>
-                                                </select>
-                                                <small class="text-muted">Must match both your Lantronix adapter and LED sign settings</small>
-                                            </div>
-                                        </div>
-
-                                        <div class="alert alert-warning mt-3 mb-0">
-                                            <i class="fas fa-exclamation-triangle"></i>
-                                            <strong>Important:</strong> These settings are informational and stored in the database.
-                                            You must also configure these same serial settings on your Lantronix adapter to match your LED sign's hardware.
-                                        </div>
+                            <div class="col-12 mt-3">
+                                <div class="alert alert-info d-flex align-items-start" role="alert">
+                                    <i class="fas fa-microchip me-3 mt-1"></i>
+                                    <div>
+                                        <strong>LED Sign Settings Moved:</strong> LED sign configuration has been moved to the
+                                        <a href="#" onclick="document.getElementById('hardware-tab').click(); return false;" class="alert-link">Hardware Integrations</a> tab.
                                     </div>
                                 </div>
                             </div>
@@ -1565,6 +1670,7 @@
             setupKeyboardShortcuts();
             initializeAlertManagement();
             initializeLocationSettings();
+            initializeHardwareSettings();
             initializeEasPanel();
             initializeCustomTypeControls();
             refreshOperationStatus();
@@ -4253,8 +4359,108 @@
             }
             populateLocationSettingsForm(locationSettingsCache || window.APP_LOCATION || {});
             loadLocationSettings(true);
-            loadLedAdapterConfig();
+            // NOTE: LED adapter config is now loaded in Hardware tab
         }
+
+        function initializeHardwareSettings() {
+            const form = document.getElementById('ledSignForm');
+            if (!form) {
+                return;
+            }
+
+            form.addEventListener('submit', saveLedSignSettings);
+
+            // Load current LED adapter configuration
+            loadHardwareLedAdapterConfig();
+        }
+
+        async function saveLedSignSettings(event) {
+            event.preventDefault();
+            const statusEl = document.getElementById('ledSignStatus');
+
+            if (statusEl) {
+                statusEl.textContent = 'Saving...';
+                statusEl.className = 'text-muted small ms-3';
+            }
+
+            try {
+                // Save LED default lines
+                const linesTextarea = document.getElementById('hardwareLedLines');
+                const lines = linesTextarea ? linesTextarea.value.split('\n').filter(l => l.trim()) : [];
+
+                const locationPayload = {
+                    led_default_lines: lines
+                };
+
+                const locationResponse = await fetch('/admin/location_settings', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(locationPayload)
+                });
+
+                if (!locationResponse.ok) {
+                    throw new Error('Failed to save LED default lines');
+                }
+
+                // Save LED adapter configuration
+                await saveHardwareLedAdapterConfig();
+
+                if (statusEl) {
+                    statusEl.textContent = 'Saved successfully at ' + new Date().toLocaleTimeString();
+                    statusEl.className = 'text-success small ms-3';
+                }
+                showStatus('LED sign settings saved successfully', 'success');
+            } catch (error) {
+                console.error('Failed to save LED sign settings:', error);
+                if (statusEl) {
+                    statusEl.textContent = 'Save failed';
+                    statusEl.className = 'text-danger small ms-3';
+                }
+                showStatus('Failed to save LED sign settings: ' + error.message, 'danger');
+            }
+        }
+
+        async function saveHardwareLedAdapterConfig() {
+            const serialMode = document.getElementById('hardwareLedSerialMode')?.value || 'RS232';
+            const baudRate = parseInt(document.getElementById('hardwareLedBaudRate')?.value || '9600');
+
+            const response = await fetch('/api/led/serial_config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    serial_mode: serialMode,
+                    baud_rate: baudRate
+                })
+            });
+
+            const result = await response.json();
+            if (!response.ok || !result.success) {
+                throw new Error(result.error || 'Failed to save LED adapter config');
+            }
+        }
+
+        async function loadHardwareLedAdapterConfig() {
+            try {
+                const response = await fetch('/api/led/serial_config');
+                const result = await response.json();
+
+                if (result.success && result.config) {
+                    const serialModeSelect = document.getElementById('hardwareLedSerialMode');
+                    const baudRateSelect = document.getElementById('hardwareLedBaudRate');
+
+                    if (serialModeSelect && result.config.serial_mode) {
+                        serialModeSelect.value = result.config.serial_mode;
+                    }
+
+                    if (baudRateSelect && result.config.baud_rate) {
+                        baudRateSelect.value = result.config.baud_rate.toString();
+                    }
+                }
+            } catch (error) {
+                console.warn('Failed to load LED adapter configuration:', error);
+            }
+        }
+
         function initializeAlertManagement() {
             loadAdminAlerts();
             const searchInput = document.getElementById('alertSearchInput');
