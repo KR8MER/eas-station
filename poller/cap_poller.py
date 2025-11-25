@@ -469,12 +469,13 @@ class CAPPoller:
             self.logger.warning(f"EAS broadcaster unavailable: {exc}")
             self.eas_broadcaster = None
 
-        # HTTP Session with NOAA Weather API compliance headers
-        # See: https://www.weather.gov/documentation/services-web-api
-        # NOAA requires:
-        # 1. User-Agent: Identifies the application and provides contact info
-        # 2. Accept: Specifies the desired response format (geo+json for CAP alerts)
-        # No API key or authentication is required for the NOAA Weather API
+        # HTTP Session with compliance headers for both NOAA and IPAWS
+        # NOAA Weather API: https://www.weather.gov/documentation/services-web-api
+        # - Requires User-Agent with contact info
+        # - Returns application/geo+json for CAP alerts
+        # IPAWS/FEMA: https://www.fema.gov/about/openfema/data-sets
+        # - Returns application/atom+xml or application/cap+xml
+        # - Accepts wildcard or specific XML formats
         self.session = requests.Session()
         default_user_agent = os.getenv(
             'NOAA_USER_AGENT',
@@ -482,7 +483,8 @@ class CAPPoller:
         )
         self.session.headers.update({
             'User-Agent': default_user_agent,
-            'Accept': 'application/geo+json, application/json;q=0.9',
+            # Accept multiple formats: geo+json (NOAA), atom+xml (IPAWS), cap+xml (generic CAP)
+            'Accept': 'application/geo+json, application/atom+xml, application/cap+xml, application/xml, application/json;q=0.9',
         })
         # Configure SSL certificate verification
         ssl_verify_disable = os.getenv('SSL_VERIFY_DISABLE', '').strip().lower() in ('1', 'true', 'yes')
@@ -2331,7 +2333,10 @@ class CAPPoller:
                         try:
                             # Create a temporary alert object for broadcasting without persisting
                             from app_core.models import CAPAlert
-                            temp_alert = CAPAlert(**parsed)
+                            # Remove geometry data before creating CAPAlert object (not a valid constructor argument)
+                            broadcast_payload = dict(parsed)
+                            broadcast_payload.pop('_geometry_data', None)
+                            temp_alert = CAPAlert(**broadcast_payload)
                             broadcast_result = self.eas_broadcaster.handle_alert(temp_alert, alert_data)
                             if broadcast_result and broadcast_result.get("same_triggered"):
                                 self.logger.info(f"EAS broadcast triggered for {event}")
