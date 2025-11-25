@@ -232,17 +232,28 @@ for attempt in range(max_retries):
             fixes_applied.append("Dropped storage_zone_codes column")
 
         # Fix 2: Clean up duplicate alembic_version entries (migration conflicts)
-        cur.execute("SELECT COUNT(*) FROM alembic_version")
-        version_count = cur.fetchone()[0]
-        if version_count > 1:
-            # Keep only the most recent version
-            cur.execute("""
-                DELETE FROM alembic_version
-                WHERE version_num NOT IN (
-                    SELECT version_num FROM alembic_version LIMIT 1
-                )
-            """)
-            fixes_applied.append(f"Cleaned {version_count - 1} duplicate migration version(s)")
+        cur.execute(
+            """
+            SELECT COUNT(*)
+            FROM information_schema.tables
+            WHERE table_schema = 'public'
+              AND table_name = 'alembic_version'
+            """
+        )
+        if cur.fetchone()[0] == 1:
+            cur.execute("SELECT COUNT(*) FROM alembic_version")
+            version_count = cur.fetchone()[0]
+            if version_count > 1:
+                # Keep only the most recent version
+                cur.execute("""
+                    DELETE FROM alembic_version
+                    WHERE version_num NOT IN (
+                        SELECT version_num FROM alembic_version LIMIT 1
+                    )
+                """)
+                fixes_applied.append(f"Cleaned {version_count - 1} duplicate migration version(s)")
+        else:
+            fixes_applied.append("Skipped alembic_version cleanup (table missing)")
 
         if fixes_applied:
             conn.commit()
