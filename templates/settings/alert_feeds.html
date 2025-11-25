@@ -338,7 +338,7 @@
                     <div class="status-label">Last Poll</div>
                     <div class="status-value" id="noaaLastPoll">
                         {% if noaa_status.last_poll %}
-                        {{ noaa_status.last_poll | format_datetime }}
+                        {{ noaa_status.last_poll | format_local_datetime }}
                         {% else %}
                         Never
                         {% endif %}
@@ -396,7 +396,7 @@
                     <div class="status-label">Last Poll</div>
                     <div class="status-value" id="ipawsLastPoll">
                         {% if ipaws_status.last_poll %}
-                        {{ ipaws_status.last_poll | format_datetime }}
+                        {{ ipaws_status.last_poll | format_local_datetime }}
                         {% else %}
                         Never
                         {% endif %}
