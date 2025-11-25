@@ -732,7 +732,8 @@ class CAPPoller:
         if current_batch:
             endpoints.append(base_url + ",".join(current_batch))
         
-        if len(endpoints) < len(zone_codes):
+        # Log batching info when multiple zones are combined into fewer requests
+        if len(zone_codes) > 1 and len(endpoints) < len(zone_codes):
             self.logger.info(
                 f"Batched {len(zone_codes)} zone codes into {len(endpoints)} API request(s) to reduce rate limiting"
             )
