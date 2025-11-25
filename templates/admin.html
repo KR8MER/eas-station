@@ -5582,12 +5582,12 @@
                 if (filtered.length > 12) {
                     html += `<small class="text-muted">…and ${filtered.length - 12} more matches</small>`;
                 }
-                html += '
+                html += `
                                 </div>
                             </div>
                         </div>
                     </div>
-                ';
+                `;
             });
             html += '</div>';
             listDiv.innerHTML = hasResults ? html : `
