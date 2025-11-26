@@ -2065,23 +2065,34 @@
         const endpoint = receiverId ? `${CRUD_ENDPOINT}/${receiverId}` : CRUD_ENDPOINT;
 
         try {
+            console.log('[SDR] Submitting receiver:', method, endpoint, payload);
             const response = await fetch(endpoint, {
                 method,
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             });
 
+            console.log('[SDR] Response status:', response.status, response.ok);
             const result = await response.json();
+            console.log('[SDR] Response data:', result);
+
             if (!response.ok) {
                 throw new Error(result.error || 'Request failed');
             }
 
+            console.log('[SDR] Closing modal...');
             receiverModal.hide();
+            console.log('[SDR] Modal closed successfully');
+
             setStatus(receiverId ? 'Receiver updated successfully.' : 'Receiver created successfully.', 'success');
+
+            console.log('[SDR] Refreshing receivers...');
             await refreshReceivers({ endpoint: CRUD_ENDPOINT, silent: true });
+            console.log('[SDR] Receivers refreshed');
+
             scheduleAutoRefresh();
         } catch (error) {
-            console.error('Failed to save receiver', error);
+            console.error('[SDR] Failed to save receiver', error);
             setStatus(error.message || 'Failed to save receiver.', 'danger');
         }
     }
