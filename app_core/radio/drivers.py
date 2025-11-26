@@ -500,9 +500,14 @@ class _SoapySDRReceiver(ReceiverInterface):
             if self.config.gain is not None:
                 device.setGain(SoapySDR.SOAPY_SDR_RX, channel, float(self.config.gain))
 
+            # Configure stream with appropriate MTU for USB bandwidth
+            # AirSpy and other SDRs benefit from larger buffer sizes to prevent
+            # USB transfer overhead and stream errors
+            stream_mtu = 16384  # Samples per USB transfer (optimized for AirSpy)
             stream = device.setupStream(
                 SoapySDR.SOAPY_SDR_RX,
                 SoapySDR.SOAPY_SDR_CF32,
+                kwargs={"bufflen": stream_mtu}  # Set MTU to reduce USB errors
             )
             device.activateStream(stream)
         except Exception as exc:
@@ -647,7 +652,9 @@ class _SoapySDRReceiver(ReceiverInterface):
                 )
                 handle = self._handle = new_handle
                 self._initialize_sample_buffer(new_handle.numpy)
-                buffer = new_handle.numpy.zeros(4096, dtype=new_handle.numpy.complex64)
+                # Use larger buffer to match stream MTU and reduce USB transfer overhead
+                # This prevents SOAPY_SDR_STREAM_ERROR (-4) on high-speed SDRs like AirSpy
+                buffer = new_handle.numpy.zeros(16384, dtype=new_handle.numpy.complex64)
                 retry_delay = self._retry_backoff
                 continue
 
