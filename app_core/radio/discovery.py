@@ -208,7 +208,44 @@ def get_device_capabilities(driver: str, device_args: Optional[Dict[str, str]] =
 
     except Exception as exc:
         logger.error(f"Failed to query device capabilities for driver '{driver}': {exc}")
-        return None
+
+        # Return fallback default capabilities based on driver type
+        # This allows UI to work even if device is busy/in-use
+        driver_lower = driver.lower()
+
+        if 'airspy' in driver_lower:
+            logger.info(f"Returning fallback Airspy capabilities (device may be in use)")
+            return {
+                "driver": driver,
+                "hardware_info": {"fallback": "true", "reason": "Device busy or unavailable"},
+                "num_channels": 1,
+                "sample_rates": [
+                    312500, 625000, 1250000,  # Decimated rates
+                    2500000, 10000000         # Base rates
+                ],
+                "bandwidths": [],
+                "gains": {"LNA": {"min": 0, "max": 15, "step": 1}},
+                "frequency_ranges": [{"min": 24000000, "max": 1800000000}],
+                "antennas": ["RX"],
+            }
+        elif 'rtl' in driver_lower:
+            logger.info(f"Returning fallback RTL-SDR capabilities (device may be in use)")
+            return {
+                "driver": driver,
+                "hardware_info": {"fallback": "true", "reason": "Device busy or unavailable"},
+                "num_channels": 1,
+                "sample_rates": [
+                    250000, 1024000, 1536000, 1792000, 1920000,
+                    2048000, 2160000, 2400000, 2560000, 2880000, 3200000
+                ],
+                "bandwidths": [],
+                "gains": {"TUNER": {"min": 0, "max": 49.6, "step": None}},
+                "frequency_ranges": [{"min": 24000000, "max": 1766000000}],
+                "antennas": ["RX"],
+            }
+        else:
+            # For unknown drivers, return None (will trigger 404)
+            return None
 
 
 def check_soapysdr_installation() -> Dict[str, Any]:
