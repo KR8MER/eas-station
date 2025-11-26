@@ -2673,69 +2673,82 @@ def build_database_url_from_env() -> str:
     return f"postgresql+psycopg2://{auth_segment}@{host}:{port}/{database}"
 
 def main():
-    parser = argparse.ArgumentParser(description='Emergency CAP Alert Poller (configurable feeds)')
-    parser.add_argument('--database-url',
-                        default=build_database_url_from_env(),
-                        help='SQLAlchemy DB URL (defaults from env POSTGRES_* or DATABASE_URL)')
-    parser.add_argument('--led-ip', help='LED sign IP address')
-    parser.add_argument('--led-port', type=int, default=10001, help='LED sign port (default: 10001)')
-    parser.add_argument('--log-level', default=os.getenv('LOG_LEVEL', 'INFO'),
-                        choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'], help='Logging level')
-    parser.add_argument('--continuous', action='store_true', help='Run continuously')
-    parser.add_argument('--interval', type=int, default=int(os.getenv('POLL_INTERVAL_SEC', '300')),
-                        help='Polling interval seconds (default: 300, minimum: 30)')
-    radio_default = _env_flag('CAP_POLLER_ENABLE_RADIO', False)
-    parser.add_argument(
-        '--radio-captures',
-        dest='radio_captures',
-        action=argparse.BooleanOptionalAction,
-        default=radio_default,
-        help=(
-            'Let the CAP poller request SDR capture files via RadioManager when alert audio plays. '
-            'This does not manage continuous SDR monitoring. '
-            'Defaults to disabled; set CAP_POLLER_ENABLE_RADIO=1 or pass --radio-captures to enable.'
-        ),
-    )
-    parser.add_argument('--cap-endpoint', dest='cap_endpoints', action='append', default=[],
-                        help='Custom CAP feed endpoint (repeatable)')
-    parser.add_argument('--cap-endpoints', dest='cap_endpoints_csv',
-                        help='Comma-separated CAP feed endpoints to poll')
-    parser.add_argument('--fix-geometry', action='store_true', help='Fix geometry for existing alerts and exit')
-    args = parser.parse_args()
-
-    # Logging to stdout (container-friendly)
+    # Initialize logging early to ensure all errors are captured
+    # This must happen before any other operations to catch import/init errors
+    log_level = os.getenv('LOG_LEVEL', 'INFO')
     logging.basicConfig(
-        level=getattr(logging, args.log_level),
+        level=getattr(logging, log_level, logging.INFO),
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[logging.StreamHandler(sys.stdout)]
     )
     logger = logging.getLogger(__name__)
-
-    startup_utc = utc_now()
-    # Use dynamic location information instead of hardcoded "PUTNAM COUNTY"
-    poller_mode = (os.getenv('CAP_POLLER_MODE', 'NOAA') or 'NOAA').strip().upper()
-    logger.info(f"Starting CAP Alert Poller with LED Integration - Mode: {poller_mode}")
-    logger.info(f"Startup time: {format_local_datetime(startup_utc)}")
-    if args.led_ip:
-        logger.info(f"LED Sign: {args.led_ip}:{args.led_port}")
-
-    cli_endpoints = list(args.cap_endpoints or [])
-    if args.cap_endpoints_csv:
-        cli_endpoints.extend([
-            endpoint.strip()
-            for endpoint in args.cap_endpoints_csv.split(',')
-            if endpoint.strip()
-        ])
-
-    poller = CAPPoller(
-        args.database_url,
-        args.led_ip,
-        args.led_port,
-        cap_endpoints=cli_endpoints or None,
-        enable_radio_captures=args.radio_captures,
-    )
-
+    
+    # Wrap entire main logic in try/except to prevent silent crashes
+    # This prevents Docker restart loops by sleeping before exit on fatal errors
+    poller = None
     try:
+        parser = argparse.ArgumentParser(description='Emergency CAP Alert Poller (configurable feeds)')
+        parser.add_argument('--database-url',
+                            default=build_database_url_from_env(),
+                            help='SQLAlchemy DB URL (defaults from env POSTGRES_* or DATABASE_URL)')
+        parser.add_argument('--led-ip', help='LED sign IP address')
+        parser.add_argument('--led-port', type=int, default=10001, help='LED sign port (default: 10001)')
+        parser.add_argument('--log-level', default=os.getenv('LOG_LEVEL', 'INFO'),
+                            choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'], help='Logging level')
+        parser.add_argument('--continuous', action='store_true', help='Run continuously')
+        parser.add_argument('--interval', type=int, default=int(os.getenv('POLL_INTERVAL_SEC', '300')),
+                            help='Polling interval seconds (default: 300, minimum: 30)')
+        radio_default = _env_flag('CAP_POLLER_ENABLE_RADIO', False)
+        parser.add_argument(
+            '--radio-captures',
+            dest='radio_captures',
+            action=argparse.BooleanOptionalAction,
+            default=radio_default,
+            help=(
+                'Let the CAP poller request SDR capture files via RadioManager when alert audio plays. '
+                'This does not manage continuous SDR monitoring. '
+                'Defaults to disabled; set CAP_POLLER_ENABLE_RADIO=1 or pass --radio-captures to enable.'
+            ),
+        )
+        parser.add_argument('--cap-endpoint', dest='cap_endpoints', action='append', default=[],
+                            help='Custom CAP feed endpoint (repeatable)')
+        parser.add_argument('--cap-endpoints', dest='cap_endpoints_csv',
+                            help='Comma-separated CAP feed endpoints to poll')
+        parser.add_argument('--fix-geometry', action='store_true', help='Fix geometry for existing alerts and exit')
+        args = parser.parse_args()
+
+        # Update logging level if specified via command line
+        if args.log_level != log_level:
+            logging.getLogger().setLevel(getattr(logging, args.log_level, logging.INFO))
+
+        startup_utc = utc_now()
+        # Use dynamic location information instead of hardcoded "PUTNAM COUNTY"
+        poller_mode = (os.getenv('CAP_POLLER_MODE', 'NOAA') or 'NOAA').strip().upper()
+        logger.info(f"Starting CAP Alert Poller with LED Integration - Mode: {poller_mode}")
+        logger.info(f"Startup time: {format_local_datetime(startup_utc)}")
+        if args.led_ip:
+            logger.info(f"LED Sign: {args.led_ip}:{args.led_port}")
+
+        cli_endpoints = list(args.cap_endpoints or [])
+        if args.cap_endpoints_csv:
+            cli_endpoints.extend([
+                endpoint.strip()
+                for endpoint in args.cap_endpoints_csv.split(',')
+                if endpoint.strip()
+            ])
+
+        # Create the poller - this can fail due to database connection issues
+        # The CAPPoller constructor has its own retry logic for database connections
+        logger.info("Initializing CAP poller...")
+        poller = CAPPoller(
+            args.database_url,
+            args.led_ip,
+            args.led_port,
+            cap_endpoints=cli_endpoints or None,
+            enable_radio_captures=args.radio_captures,
+        )
+        logger.info("CAP poller initialized successfully")
+
         if args.fix_geometry:
             logger.info("Running geometry fix for existing alerts...")
             stats = poller.fix_existing_geometry()
@@ -2791,8 +2804,25 @@ def main():
         else:
             stats = poller.poll_and_process()
             print(json_dumps(stats, indent=2))
+            
+    except KeyboardInterrupt:
+        logger.info("Received interrupt signal during startup, shutting down")
+    except Exception as e:
+        # Catch ALL exceptions during initialization or main loop
+        # This prevents Docker restart loops by sleeping before exit
+        logger.error(f"Fatal error in CAP poller: {e}", exc_info=True)
+        logger.error(
+            "Sleeping for 120 seconds before exit to prevent Docker restart loop. "
+            "Please check the logs above for the root cause of the failure."
+        )
+        time.sleep(120)
+        sys.exit(1)
     finally:
-        poller.close()
+        if poller is not None:
+            try:
+                poller.close()
+            except Exception as close_err:
+                logger.error(f"Error closing poller: {close_err}")
 
 if __name__ == '__main__':
     main()
