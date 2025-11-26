@@ -1,13 +1,13 @@
 # Repository Statistics
 
-**Generated:** 2025-11-26 19:51:39 UTC
+**Generated:** 2025-11-26 19:55:56 UTC
 
 ## Overview
 
 - **Total Files:** 597
 - **Total Directories:** 74
-- **Total Lines:** 201,986
-- **Code Lines:** 114,058
+- **Total Lines:** 201,988
+- **Code Lines:** 114,060
 - **Comment Lines:** 57,676
 - **Total Routes:** 189
 
@@ -39,7 +39,7 @@
 | JavaScript | 5,719 | 4,228 | 727 |
 | Shell | 2,507 | 1,822 | 316 |
 | Text | 2,212 | 2,068 | 0 |
-| YAML | 2,053 | 1,479 | 375 |
+| YAML | 2,055 | 1,481 | 375 |
 | SVG | 1,755 | 1,332 | 176 |
 | XML | 1,591 | 1,584 | 0 |
 | SQL | 312 | 272 | 0 |
