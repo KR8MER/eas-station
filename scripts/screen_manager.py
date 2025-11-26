@@ -1089,15 +1089,17 @@ class ScreenManager:
         # Render the frame
         self._display_alert_scroll_frame(top_alert)
 
+        # Advance scroll offset based on elapsed time and configured speed
+        max_offset = max(1, self._cached_scroll_max_offset)
+        expected_frames = elapsed / frame_interval if frame_interval > 0 else 1
+        pixels_to_advance = max(1, int(self._oled_scroll_speed * expected_frames))
+        self._oled_scroll_offset += pixels_to_advance
+        if self._oled_scroll_offset >= max_offset:
+            self._oled_scroll_offset = 0
+
         # Update timing - use actual current time for precision
         self._last_oled_alert_render_time = current_time
         self._last_oled_update = now
-
-        # Advance scroll offset proportional to elapsed time for smooth scrolling
-        # This compensates for any timing variations
-        expected_frames = elapsed / frame_interval
-        pixels_to_advance = int(self._oled_scroll_speed * expected_frames)
-        self._oled_scroll_offset += pixels_to_advance
 
         return True
 

@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file. The format is b
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project currently
 tracks releases under the 2.x series.
 
+## [2.12.20] - 2025-11-27
+### Fixed
+- Restored OLED alert scrolling by advancing the seamless scroll window based on elapsed frame time and speed settings so high-priority messages animate smoothly instead of freezing on a single frame.
+
 ## [2.12.19] - 2025-11-26
 ### Fixed
 - Converted nginx upstream configuration to use variable-based proxy_pass that respects the `resolver ipv6=off` directive, preventing "Connection refused" errors when Docker DNS returns IPv6 addresses for the backend container that only binds to IPv4.
