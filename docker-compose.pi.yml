@@ -15,7 +15,7 @@
 # Hardware allocation:
 #   - sdr-service: /dev/bus/usb (USB SDR devices - defined in base docker-compose.yml)
 #   - hardware-service: /dev/gpiomem, /dev/gpiochip0, /dev/i2c-1 (GPIO + OLED displays)
-#   - app: /dev (read-only for SMART disk monitoring only)
+#   - app: No hardware access (web UI only)
 
 services:
   app:
@@ -28,9 +28,7 @@ services:
       POSTGRES_DB: casaos
       POSTGRES_USER: casaos
       POSTGRES_PASSWORD: casaos
-    devices:
-      # Read-only access to block devices for SMART disk monitoring
-      - /dev:/dev:ro
+    # NOTE: /dev mount removed - conflicts with Docker's pts device creation
     # NOTE: GPIO/screen access removed - now in hardware-service
     # Configuration: start-pi.sh syncs local .env to persistent volume before starting
 
