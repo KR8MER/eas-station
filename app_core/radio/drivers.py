@@ -271,6 +271,10 @@ class _SoapySDRReceiver(ReceiverInterface):
 
         return health
 
+    def is_running(self) -> bool:  # noqa: D401 - documented in base class
+        """Check if the receiver capture thread is actively running."""
+        return self._running.is_set()
+
     def start(self) -> None:  # noqa: D401 - documented in base class
         if self._running.is_set():
             return
