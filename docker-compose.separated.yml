@@ -63,7 +63,7 @@ services:
       - app-config:/app-config
     environment:
       # Database connection
-      POSTGRES_HOST: ${POSTGRES_HOST:-host.docker.internal}
+      POSTGRES_HOST: ${POSTGRES_HOST:-alerts-db}
       POSTGRES_PORT: ${POSTGRES_PORT:-5432}
       POSTGRES_DB: ${POSTGRES_DB:-alerts}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
@@ -118,7 +118,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
       # Database connection
-      POSTGRES_HOST: ${POSTGRES_HOST:-host.docker.internal}
+      POSTGRES_HOST: ${POSTGRES_HOST:-alerts-db}
       POSTGRES_PORT: ${POSTGRES_PORT:-5432}
       POSTGRES_DB: ${POSTGRES_DB:-alerts}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
@@ -173,7 +173,7 @@ services:
     volumes:
       - app-config:/app-config
     environment:
-      POSTGRES_HOST: ${POSTGRES_HOST:-host.docker.internal}
+      POSTGRES_HOST: ${POSTGRES_HOST:-alerts-db}
       POSTGRES_PORT: ${POSTGRES_PORT:-5432}
       POSTGRES_DB: ${POSTGRES_DB:-alerts}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
@@ -204,7 +204,7 @@ services:
     volumes:
       - app-config:/app-config
     environment:
-      POSTGRES_HOST: ${POSTGRES_HOST:-host.docker.internal}
+      POSTGRES_HOST: ${POSTGRES_HOST:-alerts-db}
       POSTGRES_PORT: ${POSTGRES_PORT:-5432}
       POSTGRES_DB: ${POSTGRES_DB:-alerts}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}

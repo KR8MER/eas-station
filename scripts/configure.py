@@ -48,10 +48,10 @@ class Config:
     if not SQLALCHEMY_DATABASE_URI:
         # Build from individual POSTGRES_* variables (same logic as app.py)
         user = os.environ.get('POSTGRES_USER', 'postgres') or 'postgres'
-        password = os.environ.get('POSTGRES_PASSWORD', '')
-        host = os.environ.get('POSTGRES_HOST', 'host.docker.internal') or 'host.docker.internal'
+        password = os.environ.get('POSTGRES_PASSWORD', 'postgres') or 'postgres'
+        host = os.environ.get('POSTGRES_HOST', 'alerts-db') or 'alerts-db'
         port = os.environ.get('POSTGRES_PORT', '5432') or '5432'
-        database = os.environ.get('POSTGRES_DB', user) or user
+        database = os.environ.get('POSTGRES_DB', 'alerts') or 'alerts'
 
         # URL-encode credentials to handle special characters (same as app.py)
         user_part = quote(user, safe='')

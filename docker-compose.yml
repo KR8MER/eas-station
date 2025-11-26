@@ -75,7 +75,7 @@ services:
       - app-config:/app-config
     environment:
       # Database connection
-      POSTGRES_HOST: ${POSTGRES_HOST:-host.docker.internal}
+      POSTGRES_HOST: ${POSTGRES_HOST:-alerts-db}
       POSTGRES_PORT: ${POSTGRES_PORT:-5432}
       POSTGRES_DB: ${POSTGRES_DB:-alerts}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
@@ -132,7 +132,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro  # Allow container engine health checks
     environment:
       # Database connection - external database (change POSTGRES_HOST to your database server)
-      POSTGRES_HOST: ${POSTGRES_HOST:-host.docker.internal}
+      POSTGRES_HOST: ${POSTGRES_HOST:-alerts-db}
       POSTGRES_PORT: ${POSTGRES_PORT:-5432}
       POSTGRES_DB: ${POSTGRES_DB:-alerts}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
@@ -183,7 +183,7 @@ services:
       - app-config:/app-config  # Persistent volume for .env file
     environment:
       # Database connection - external database
-      POSTGRES_HOST: ${POSTGRES_HOST:-host.docker.internal}
+      POSTGRES_HOST: ${POSTGRES_HOST:-alerts-db}
       POSTGRES_PORT: ${POSTGRES_PORT:-5432}
       POSTGRES_DB: ${POSTGRES_DB:-alerts}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
@@ -234,7 +234,7 @@ services:
       - app-config:/app-config  # Persistent volume for .env file
     environment:
       # Database connection - external database
-      POSTGRES_HOST: ${POSTGRES_HOST:-host.docker.internal}
+      POSTGRES_HOST: ${POSTGRES_HOST:-alerts-db}
       POSTGRES_PORT: ${POSTGRES_PORT:-5432}
       POSTGRES_DB: ${POSTGRES_DB:-alerts}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
