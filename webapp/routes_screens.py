@@ -671,28 +671,50 @@ def register(app: Flask, logger) -> None:
             if screen_manager:
                 try:
                     import app_core.oled as oled_module
+                    # Check if controller exists and mark as enabled immediately
                     if oled_module.oled_controller:
                         state["oled"]["enabled"] = True
-                        state["oled"]["width"] = oled_module.oled_controller.width
-                        state["oled"]["height"] = oled_module.oled_controller.height
+
+                        # Get basic controller info
+                        try:
+                            state["oled"]["width"] = oled_module.oled_controller.width
+                            state["oled"]["height"] = oled_module.oled_controller.height
+                        except Exception as e:
+                            route_logger.warning(f"Error getting OLED dimensions: {e}")
+
+                        # Get current screen name if available
+                        try:
+                            if hasattr(screen_manager, '_current_oled_screen'):
+                                current_screen = screen_manager._current_oled_screen
+                                if current_screen:
+                                    state["oled"]["current_screen"] = current_screen.name if hasattr(current_screen, 'name') else str(current_screen)
+                        except Exception as e:
+                            route_logger.warning(f"Error getting OLED current screen: {e}")
 
                         # Get current alert state if scrolling
-                        if hasattr(screen_manager, '_oled_scroll_effect') and screen_manager._oled_scroll_effect:
-                            state["oled"]["alert_active"] = True
-                            state["oled"]["scroll_offset"] = screen_manager._oled_scroll_offset
-                            state["oled"]["alert_text"] = screen_manager._current_alert_text or ""
-                            state["oled"]["scroll_speed"] = screen_manager._oled_scroll_speed
+                        try:
+                            if hasattr(screen_manager, '_oled_scroll_effect') and screen_manager._oled_scroll_effect:
+                                state["oled"]["alert_active"] = True
+                                state["oled"]["scroll_offset"] = screen_manager._oled_scroll_offset
+                                state["oled"]["alert_text"] = screen_manager._current_alert_text or ""
+                                state["oled"]["scroll_speed"] = screen_manager._oled_scroll_speed
 
-                            # Get cached header
-                            if hasattr(screen_manager, '_cached_header_text'):
-                                state["oled"]["header_text"] = screen_manager._cached_header_text
+                                # Get cached header
+                                if hasattr(screen_manager, '_cached_header_text'):
+                                    state["oled"]["header_text"] = screen_manager._cached_header_text
+                        except Exception as e:
+                            route_logger.warning(f"Error getting OLED alert state: {e}")
 
-                        # Get preview image
-                        preview_image = oled_module.oled_controller.get_preview_image_base64()
-                        if preview_image:
-                            state["oled"]["preview_image"] = preview_image
+                        # Get preview image - don't let this failure affect enabled status
+                        try:
+                            preview_image = oled_module.oled_controller.get_preview_image_base64()
+                            if preview_image:
+                                state["oled"]["preview_image"] = preview_image
+                        except Exception as e:
+                            route_logger.warning(f"Error getting OLED preview image: {e}")
+
                 except Exception as e:
-                    route_logger.debug(f"Error getting OLED state: {e}")
+                    route_logger.warning(f"Error checking OLED controller: {e}")
 
                 # Get VFD state
                 try:

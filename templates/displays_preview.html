@@ -191,8 +191,26 @@
 {% block content %}
 <div class="container-fluid mt-4">
     <div class="page-header">
-        <h1><i class="fas fa-tv"></i> Live Display Preview</h1>
-        <p>Real-time visualization of all display outputs with proper colors and animations</p>
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+            <div>
+                <h1><i class="fas fa-tv"></i> Live Display Preview</h1>
+                <p>Real-time visualization of all display outputs with proper colors and animations</p>
+            </div>
+            <div style="text-align: right;">
+                <button id="refresh-btn" class="btn btn-light" onclick="manualRefresh()" title="Refresh now">
+                    <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+                <div style="margin-top: 8px; font-size: 0.85rem; opacity: 0.9;">
+                    <span id="last-update">Last update: Never</span>
+                </div>
+                <div style="margin-top: 4px;">
+                    <label style="font-size: 0.85rem; opacity: 0.9; cursor: pointer;">
+                        <input type="checkbox" id="auto-refresh-toggle" checked onchange="toggleAutoRefresh()">
+                        Auto-refresh (1s)
+                    </label>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div class="row">
@@ -448,12 +466,14 @@ async function updateDisplayStates() {
         updateStatusIndicator('vfd', newState.vfd.enabled);
         updateStatusIndicator('led', newState.led.enabled);
 
-        // Update info text
+        // Update info text with more useful information
         if (newState.oled.enabled && newState.oled.alert_active) {
+            const alertText = newState.oled.alert_text ? ` - "${newState.oled.alert_text.substring(0, 30)}${newState.oled.alert_text.length > 30 ? '...' : ''}"` : '';
             document.getElementById('oled-info').textContent =
-                `Alert scrolling at ${newState.oled.scroll_speed}px/frame, offset: ${newState.oled.scroll_offset}`;
+                `${newState.oled.width}x${newState.oled.height} | Alert active (${newState.oled.scroll_speed}px/frame, offset: ${newState.oled.scroll_offset})${alertText}`;
         } else if (newState.oled.enabled) {
-            document.getElementById('oled-info').textContent = 'Display active - No alerts';
+            const screenInfo = newState.oled.current_screen ? ` | Screen: ${newState.oled.current_screen}` : '';
+            document.getElementById('oled-info').textContent = `${newState.oled.width}x${newState.oled.height} | Active${screenInfo}`;
         } else {
             document.getElementById('oled-info').textContent = 'Display offline';
         }
@@ -465,6 +485,9 @@ async function updateDisplayStates() {
         renderOLED(newState.oled);
         renderVFD(newState.vfd);
         renderLED(newState.led);
+
+        // Update timestamp
+        updateLastUpdateTime();
 
     } catch (error) {
         console.error('Error updating display states:', error);
@@ -488,14 +511,68 @@ function animate() {
     animationFrameId = requestAnimationFrame(animate);
 }
 
+// Auto-refresh interval ID
+let refreshIntervalId = null;
+
+// Manual refresh function
+async function manualRefresh() {
+    const btn = document.getElementById('refresh-btn');
+    const icon = btn.querySelector('i');
+
+    // Add spinning animation
+    icon.classList.add('fa-spin');
+    btn.disabled = true;
+
+    await updateDisplayStates();
+
+    // Remove spinning animation
+    setTimeout(() => {
+        icon.classList.remove('fa-spin');
+        btn.disabled = false;
+    }, 500);
+}
+
+// Toggle auto-refresh
+function toggleAutoRefresh() {
+    const enabled = document.getElementById('auto-refresh-toggle').checked;
+
+    if (enabled) {
+        startAutoRefresh();
+    } else {
+        stopAutoRefresh();
+    }
+}
+
+// Start auto-refresh interval
+function startAutoRefresh() {
+    if (refreshIntervalId) {
+        clearInterval(refreshIntervalId);
+    }
+    refreshIntervalId = setInterval(updateDisplayStates, 1000);
+}
+
+// Stop auto-refresh interval
+function stopAutoRefresh() {
+    if (refreshIntervalId) {
+        clearInterval(refreshIntervalId);
+        refreshIntervalId = null;
+    }
+}
+
+// Update last update timestamp
+function updateLastUpdateTime() {
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString();
+    document.getElementById('last-update').textContent = `Last update: ${timeStr}`;
+}
+
 // Initialize on load
 document.addEventListener('DOMContentLoaded', function() {
     initDisplays();
     updateDisplayStates();
 
-    // Poll for updates every 500ms
-    // REDUCED: 10 seconds instead of 500ms - displays don't update that fast
-    setInterval(updateDisplayStates, 10000);
+    // Start auto-refresh
+    startAutoRefresh();
 
     // Start animation loop
     animate();
@@ -506,6 +583,7 @@ window.addEventListener('beforeunload', function() {
     if (animationFrameId) {
         cancelAnimationFrame(animationFrameId);
     }
+    stopAutoRefresh();
 });
 </script>
 {% endblock %}

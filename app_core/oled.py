@@ -865,6 +865,35 @@ class ArgonOLEDController:
         self._last_image = image.copy()
         self.device.display(image)
 
+    def flash_invert(self, duration: float = 0.15) -> None:
+        """Briefly invert the display for visual feedback.
+
+        This provides immediate visual confirmation that a button press was detected,
+        helping users verify GPIO functionality.
+
+        Args:
+            duration: How long to show the inverted display in seconds (default: 0.15)
+        """
+        if self._last_image is None:
+            return
+
+        try:
+            import time
+            from PIL import ImageOps
+
+            # Invert the last displayed image
+            inverted = ImageOps.invert(self._last_image.convert("L")).convert("1")
+            self.device.display(inverted)
+
+            # Wait for the specified duration
+            time.sleep(duration)
+
+            # Restore the original image
+            self.device.display(self._last_image)
+
+        except Exception as e:  # pragma: no cover - defensive
+            logger.warning(f"Failed to flash invert display: {e}")
+
     def get_preview_image_base64(self) -> Optional[str]:
         """Get the last displayed image as a base64-encoded PNG.
 
