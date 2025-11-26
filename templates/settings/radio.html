@@ -1256,6 +1256,8 @@
 
             deviceSelect.innerHTML = '<option value="">-- Select a device --</option>';
 
+            let preSelectedDevice = null;
+
             if (data.devices && data.devices.length > 0) {
                 data.devices.forEach(device => {
                     const option = document.createElement('option');
@@ -1268,8 +1270,26 @@
                     // Pre-select device if editing and serial matches
                     if (preSelectSerial && device.serial && device.serial === preSelectSerial) {
                         option.selected = true;
+                        preSelectedDevice = device;
                     }
                 });
+
+                // Auto-select if only one device is detected and no pre-selection was specified
+                if (!preSelectedDevice && data.devices.length === 1) {
+                    deviceSelect.selectedIndex = 1; // Select the first device (index 1, after "Select a device")
+                    preSelectedDevice = data.devices[0];
+                }
+
+                // If a device was pre-selected or auto-selected, populate hidden fields and trigger sample rate population
+                if (preSelectedDevice) {
+                    document.getElementById('receiverDriver').value = preSelectedDevice.driver;
+                    document.getElementById('receiverSerial').value = preSelectedDevice.serial || '';
+
+                    // Trigger sample rate population if service type is already selected
+                    if (currentServiceType) {
+                        await populateSampleRates(currentServiceType);
+                    }
+                }
             } else {
                 deviceSelect.innerHTML = '<option value="">-- No devices detected --</option>';
             }
