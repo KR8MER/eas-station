@@ -503,11 +503,13 @@ class _SoapySDRReceiver(ReceiverInterface):
             # Configure stream with appropriate MTU for USB bandwidth
             # AirSpy and other SDRs benefit from larger buffer sizes to prevent
             # USB transfer overhead and stream errors
+            # SoapySDR setupStream signature: setupStream(direction, format, [channels], args={})
             stream_mtu = 16384  # Samples per USB transfer (optimized for AirSpy)
             stream = device.setupStream(
                 SoapySDR.SOAPY_SDR_RX,
                 SoapySDR.SOAPY_SDR_CF32,
-                kwargs={"bufflen": stream_mtu}  # Set MTU to reduce USB errors
+                [channel],  # channels list
+                {"bufflen": str(stream_mtu)}  # args dict (bufflen as string)
             )
             device.activateStream(stream)
         except Exception as exc:
