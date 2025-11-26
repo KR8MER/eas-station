@@ -255,7 +255,7 @@ ENV_CATEGORIES = {
                 'label': 'Host',
                 'type': 'text',
                 'required': True,
-                'default': 'alerts-db',
+                'default': 'host.docker.internal',
                 'description': 'Database server hostname or IP',
             },
             {

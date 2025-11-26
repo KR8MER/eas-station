@@ -38,7 +38,7 @@ def get_database_url():
     from urllib.parse import quote
     user = os.getenv("POSTGRES_USER", "postgres")
     password = os.getenv("POSTGRES_PASSWORD", "")
-    host = os.getenv("POSTGRES_HOST", "alerts-db")
+    host = os.getenv("POSTGRES_HOST", "host.docker.internal")
     port = os.getenv("POSTGRES_PORT", "5432")
     database = os.getenv("POSTGRES_DB", "alerts")
     
