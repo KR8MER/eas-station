@@ -21,6 +21,7 @@ from __future__ import annotations
 
 """Custom screen management routes for LED and VFD displays."""
 
+import json
 from typing import Any, Dict, List
 
 from flask import Flask, jsonify, render_template, request
@@ -639,8 +640,33 @@ def register(app: Flask, logger) -> None:
 
     @app.route("/api/displays/current-state")
     def get_displays_current_state():
-        """Get the current state of all displays."""
+        """Get the current state of all displays.
+
+        In multi-container architecture, display state is published by the hardware-service
+        container to Redis. This endpoint reads from Redis instead of accessing hardware directly.
+        """
         try:
+            # Try to get display state from Redis (published by hardware-service)
+            try:
+                from app_core.redis_client import get_redis_client
+                redis_client = get_redis_client()
+
+                # Get display state from Redis
+                display_state_json = redis_client.get("hardware:display_state")
+
+                if display_state_json:
+                    # Parse and return the state from hardware-service
+                    state = json.loads(display_state_json)
+                    route_logger.debug("Display state retrieved from Redis (hardware-service)")
+                    return jsonify(state)
+                else:
+                    route_logger.warning("No display state in Redis - hardware-service may not be running")
+
+            except Exception as e:
+                route_logger.warning(f"Failed to get display state from Redis: {e}")
+
+            # Fallback: Try to get state directly (for single-container deployments)
+            route_logger.debug("Falling back to direct hardware access")
             from scripts.screen_manager import screen_manager
 
             state = {
