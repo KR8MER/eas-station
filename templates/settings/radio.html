@@ -2437,7 +2437,7 @@
 
         // Set default frequency for NOAA Weather Radio
         document.getElementById('receiverFrequency').value = '162550000';
-        document.getElementById('receiverFrequencyMHz').value = '162.550';
+        document.getElementById('receiverFrequencyInput').value = '162.550';
 
         if (device.device_id) {
             document.getElementById('receiverChannel').value = device.device_id;
@@ -2609,7 +2609,7 @@
         document.getElementById('receiverIdentifier').value = presetKey;
         document.getElementById('receiverDriver').value = preset.driver;
         document.getElementById('receiverFrequency').value = preset.frequency_hz;
-        document.getElementById('receiverFrequencyMHz').value = (preset.frequency_hz / 1e6).toFixed(3);
+        document.getElementById('receiverFrequencyInput').value = (preset.frequency_hz / 1e6).toFixed(3);
         document.getElementById('receiverSampleRate').value = preset.sample_rate;
         document.getElementById('receiverGain').value = preset.gain;
         document.getElementById('receiverNotes').value = preset.notes || '';
