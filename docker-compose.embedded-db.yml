@@ -189,7 +189,7 @@ services:
       - /dev:/dev:ro  # Read-only access to all devices for SMART monitoring
     privileged: true  # Required to allow /dev/pts creation despite read-only /dev mount
     healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health', timeout=5)"]
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:5000/health', timeout=5)\""]
       interval: 10s
       timeout: 10s
       retries: 5

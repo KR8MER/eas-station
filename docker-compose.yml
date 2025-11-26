@@ -164,7 +164,7 @@ services:
     # USB devices, GPIO, and other hardware access moved to audio-service container.
     # For hardware access, see audio-service configuration in docker-compose.separated.yml
     healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health', timeout=5)"]
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:5000/health', timeout=5)\""]
       interval: 10s
       timeout: 10s
       retries: 5
