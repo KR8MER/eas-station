@@ -99,26 +99,43 @@ def _resolve_config_path() -> Optional[Path]:
 # This ensures all containers (app, noaa-poller, ipaws-poller) use the same database.
 # The app's config is the source of truth for database connection settings.
 _app_config_path = Path('/app-config/.env')
+print(f"[CAP_POLLER] Checking for app config at: {_app_config_path}")
+print(f"[CAP_POLLER] App config exists: {_app_config_path.exists()}")
 if _app_config_path.exists():
+    print(f"[CAP_POLLER] Loading app config from: {_app_config_path}")
     load_dotenv(_app_config_path, override=False)
+    print(f"[CAP_POLLER] App config loaded successfully")
+else:
+    print(f"[CAP_POLLER] App config not found, skipping")
 
 # Then load poller-specific config for non-database settings (polling intervals, etc.)
 _config_path = _resolve_config_path()
+print(f"[CAP_POLLER] Resolved poller config path: {_config_path}")
+print(f"[CAP_POLLER] Poller config exists: {_config_path.exists() if _config_path else False}")
 if _config_path and _config_path.exists():
     # Load poller config, but don't let it override database settings from app config
+    print(f"[CAP_POLLER] Loading poller config from: {_config_path}")
     load_dotenv(_config_path, override=False)
+    print(f"[CAP_POLLER] Poller config loaded successfully")
+else:
+    print(f"[CAP_POLLER] Poller config not found or not configured")
 
 # Always load a local .env file last so it only fills in missing values and
 # never overrides anything supplied by the container or environment volume.
+print(f"[CAP_POLLER] Loading fallback .env file (if exists)")
 load_dotenv(override=False)
+print(f"[CAP_POLLER] Environment loading complete")
+print(f"[CAP_POLLER] Importing SQLAlchemy and app modules...")
 from sqlalchemy import create_engine, text, func, or_
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import SQLAlchemyError, OperationalError, IntegrityError
+print(f"[CAP_POLLER] SQLAlchemy imported successfully")
 
 # =======================================================================================
 # Timezones and helpers
 # =======================================================================================
 
+print(f"[CAP_POLLER] Importing app_utils...")
 from app_utils import (
     format_local_datetime as util_format_local_datetime,
     local_now as util_local_now,
@@ -126,6 +143,7 @@ from app_utils import (
     set_location_timezone,
     utc_now as util_utc_now,
 )
+print(f"[CAP_POLLER] Importing app_utils.alert_sources...")
 from app_utils.alert_sources import (
     ALERT_SOURCE_IPAWS,
     ALERT_SOURCE_NOAA,
@@ -133,15 +151,20 @@ from app_utils.alert_sources import (
     normalize_alert_source,
     summarise_sources,
 )
+print(f"[CAP_POLLER] Importing app_utils.location_settings...")
 from app_utils.location_settings import (
     DEFAULT_LOCATION_SETTINGS,
     ensure_list,
     normalise_upper,
     sanitize_fips_codes,
 )
+print(f"[CAP_POLLER] Importing app_utils.eas...")
 from app_utils.eas import EASBroadcaster, load_eas_config
+print(f"[CAP_POLLER] Importing app_core.radio...")
 from app_core.radio import RadioManager, ensure_radio_tables
+print(f"[CAP_POLLER] Importing app_utils.optimized_parsing...")
 from app_utils.optimized_parsing import json_loads, json_dumps, parse_xml_string, get_element_tree_module
+print(f"[CAP_POLLER] All app module imports complete!")
 
 # Use optimized XML parser (lxml if available, else xml.etree.ElementTree)
 ET = get_element_tree_module()
@@ -2654,6 +2677,7 @@ def build_database_url_from_env() -> str:
 
     url = os.getenv("DATABASE_URL")
     if url:
+        print(f"[CAP_POLLER] Using DATABASE_URL from environment")
         return url
 
     user = os.getenv("POSTGRES_USER", "postgres") or "postgres"
@@ -2661,6 +2685,13 @@ def build_database_url_from_env() -> str:
     host = os.getenv("POSTGRES_HOST", "alerts-db") or "alerts-db"
     port = os.getenv("POSTGRES_PORT", "5432") or "5432"
     database = os.getenv("POSTGRES_DB", "alerts") or "alerts"
+
+    print(f"[CAP_POLLER] Building database URL from environment:")
+    print(f"[CAP_POLLER]   POSTGRES_USER: {user}")
+    print(f"[CAP_POLLER]   POSTGRES_HOST: {host}")
+    print(f"[CAP_POLLER]   POSTGRES_PORT: {port}")
+    print(f"[CAP_POLLER]   POSTGRES_DB: {database}")
+    print(f"[CAP_POLLER]   POSTGRES_PASSWORD: {'***' if password else '(empty)'}")
 
     user_part = quote(user, safe="")
     password_part = quote(password, safe="") if password else ""
@@ -2673,7 +2704,11 @@ def build_database_url_from_env() -> str:
     return f"postgresql+psycopg2://{auth_segment}@{host}:{port}/{database}"
 
 def main():
+    print("[CAP_POLLER] ========================================")
+    print("[CAP_POLLER] main() function called - poller starting")
+    print("[CAP_POLLER] ========================================")
     parser = argparse.ArgumentParser(description='Emergency CAP Alert Poller (configurable feeds)')
+    print("[CAP_POLLER] Building database URL...")
     parser.add_argument('--database-url',
                         default=build_database_url_from_env(),
                         help='SQLAlchemy DB URL (defaults from env POSTGRES_* or DATABASE_URL)')
