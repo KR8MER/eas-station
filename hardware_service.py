@@ -223,12 +223,17 @@ def initialize_screen_manager(app):
         logger.info("Continuing without display support")
 
 
-def initialize_gpio_controller():
+def initialize_gpio_controller(db_session=None):
     """Initialize GPIO controller for relay/transmitter control."""
     global _gpio_controller
 
     try:
-        from app_utils.gpio import GPIOController
+        from app_utils.gpio import (
+            GPIOController,
+            GPIOBehaviorManager,
+            load_gpio_pin_configs_from_env,
+            load_gpio_behavior_matrix_from_env,
+        )
 
         # Check if GPIO is enabled
         gpio_enabled = os.getenv("GPIO_ENABLED", "false").lower() in ("true", "1", "yes")
@@ -237,8 +242,38 @@ def initialize_gpio_controller():
             logger.info("GPIO controller disabled (GPIO_ENABLED=false)")
             return
 
-        _gpio_controller = GPIOController()
-        logger.info("✅ GPIO controller initialized")
+        # Load GPIO pin configurations from environment
+        gpio_configs = load_gpio_pin_configs_from_env(logger)
+        if not gpio_configs:
+            logger.info("No GPIO pins configured (check EAS_GPIO_PIN or GPIO_ADDITIONAL_PINS)")
+            return
+
+        # Create GPIO controller with database session for audit logging
+        _gpio_controller = GPIOController(
+            db_session=db_session,
+            logger=logger,
+        )
+
+        # Add each configured pin to the controller
+        for config in gpio_configs:
+            try:
+                _gpio_controller.add_pin(config)
+            except Exception as e:
+                logger.error(f"Failed to add GPIO pin {config.pin}: {e}")
+
+        # Load and configure GPIO behavior matrix
+        behavior_matrix = load_gpio_behavior_matrix_from_env(logger)
+        if behavior_matrix:
+            gpio_behavior_manager = GPIOBehaviorManager(
+                controller=_gpio_controller,
+                pin_configs=gpio_configs,
+                behavior_matrix=behavior_matrix,
+                logger=logger,
+            )
+            _gpio_controller.behavior_manager = gpio_behavior_manager
+            logger.info(f"✅ GPIO controller initialized with {len(gpio_configs)} pin(s) and behavior matrix")
+        else:
+            logger.info(f"✅ GPIO controller initialized with {len(gpio_configs)} pin(s)")
 
     except Exception as e:
         logger.warning(f"⚠️  GPIO controller not available: {e}")
@@ -344,9 +379,10 @@ def main():
         logger.info("Initializing screen manager...")
         initialize_screen_manager(app)
 
-        # Initialize GPIO controller
+        # Initialize GPIO controller (needs db session for audit logging)
         logger.info("Initializing GPIO controller...")
-        initialize_gpio_controller()
+        with app.app_context():
+            initialize_gpio_controller(db_session=db.session)
 
         # Start health check loop
         health_check_loop()
