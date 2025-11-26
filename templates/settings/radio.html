@@ -1481,39 +1481,47 @@
                     }
                 }
             } catch (error) {
-                console.warn('Failed to fetch hardware capabilities, using defaults:', error);
+                console.warn('Failed to fetch hardware capabilities, using driver-based defaults:', error);
+
+                // API failed - use hardcoded defaults based on driver type
+                if (driver) {
+                    const driverLower = driver.toLowerCase();
+                    const isAirspy = driverLower.includes('airspy');
+
+                    let defaultRates = [];
+                    if (isAirspy) {
+                        // Airspy default rates
+                        defaultRates = [312500, 625000, 1250000, 2500000, 10000000];
+                    } else {
+                        // RTL-SDR or generic default rates
+                        defaultRates = [250000, 1024000, 1920000, 2048000, 2400000, 2560000];
+                    }
+
+                    // Populate dropdown with defaults
+                    sampleRateSelect.disabled = false;
+                    sampleRateSelect.innerHTML = '';
+
+                    defaultRates.forEach(rate => {
+                        const option = document.createElement('option');
+                        option.value = rate;
+                        if (rate >= 1000000) {
+                            option.textContent = `${(rate / 1000000).toFixed(1)} MHz (${rate.toLocaleString()} Hz)`;
+                        } else {
+                            option.textContent = `${(rate / 1000).toFixed(1)} kHz (${rate.toLocaleString()} Hz)`;
+                        }
+                        sampleRateSelect.appendChild(option);
+                    });
+
+                    sampleRateHelp.textContent = `Default rates for ${driver.toUpperCase()} (device busy - using fallback)`;
+                    return; // Success with fallback
+                }
             }
         }
 
-        // Fallback to hardcoded options if no hardware info or API failed
-        if (!sampleRateOptions[serviceType] || sampleRateOptions[serviceType].length === 0) {
-            sampleRateSelect.disabled = true;
-            sampleRateSelect.innerHTML = '<option value="">Select SDR device/driver first</option>';
-            sampleRateHelp.textContent = 'Choose SDR device to see hardware-specific sample rates';
-            return;
-        }
-
-        const options = sampleRateOptions[serviceType];
-        sampleRateSelect.disabled = false;
-        sampleRateSelect.innerHTML = '';
-
-        options.forEach(option => {
-            const opt = document.createElement('option');
-            opt.value = option.value;
-            opt.textContent = option.label;
-            if (option.recommended) {
-                opt.selected = true;
-            }
-            sampleRateSelect.appendChild(opt);
-        });
-
-        // Update help text based on service type
-        const helpTexts = {
-            'NOAA': 'Lower rates save CPU - NOAA signals are only ~25kHz wide',
-            'FM': 'Higher rates capture wider spectrum - FM signals are ~200kHz wide',
-            'AM': 'Lower rates are sufficient - AM signals are only ~10kHz wide'
-        };
-        sampleRateHelp.textContent = helpTexts[serviceType] || 'Choose appropriate bandwidth for signal';
+        // Final fallback if no driver is set
+        sampleRateSelect.disabled = true;
+        sampleRateSelect.innerHTML = '<option value="">Select SDR device first</option>';
+        sampleRateHelp.textContent = 'Choose SDR device to see hardware-specific sample rates';
     }
 
     document.querySelectorAll('input[name="serviceType"]').forEach(radio => {
