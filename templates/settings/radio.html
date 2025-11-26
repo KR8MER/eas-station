@@ -1411,10 +1411,24 @@
         }
 
         // Check if we have hardware info to query actual capabilities
-        const driverSelect = document.getElementById('receiverDriver');
-        const serialInput = document.getElementById('receiverSerial');
-        const driver = driverSelect ? driverSelect.value : null;
-        const serial = serialInput ? serialInput.value : null;
+        const driverField = document.getElementById('receiverDriver');
+        const serialField = document.getElementById('receiverSerial');
+        let driver = driverField ? driverField.value : null;
+        let serial = serialField ? serialField.value : null;
+
+        // FAILSAFE: If hidden field is empty, read from device dropdown
+        if (!driver) {
+            const deviceDropdown = document.getElementById('receiverDevice');
+            const selectedOption = deviceDropdown?.selectedOptions[0];
+            if (selectedOption && selectedOption.dataset.driver) {
+                driver = selectedOption.dataset.driver;
+                serial = selectedOption.dataset.serial || '';
+                console.log('[SDR] FAILSAFE: Read driver from dropdown:', driver);
+                // Also update hidden fields
+                if (driverField) driverField.value = driver;
+                if (serialField) serialField.value = serial;
+            }
+        }
 
         console.log('[SDR] Driver field value:', driver, 'Serial:', serial);
 
