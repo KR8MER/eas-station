@@ -150,6 +150,7 @@ class ScreenManager:
         self._oled_button_lock = threading.Lock()
         self._oled_button_held = False
         self._oled_button_initialized = False
+        self._oled_alert_paused = False  # Track if alert scrolling is paused
         # Pixel-by-pixel scrolling configuration
         self._oled_scroll_offset = 0
         self._oled_scroll_effect = None
@@ -442,13 +443,35 @@ class ScreenManager:
     def _handle_oled_button_press(self) -> None:  # pragma: no cover - hardware callback
         self._oled_button_held = False
 
+        # Provide immediate visual feedback that button was pressed
+        try:
+            import app_core.oled as oled_module
+            if oled_module.oled_controller:
+                # Flash invert in a separate thread to avoid blocking
+                import threading
+                threading.Thread(
+                    target=oled_module.oled_controller.flash_invert,
+                    args=(0.1,),  # 100ms flash
+                    daemon=True
+                ).start()
+        except Exception as e:
+            logger.debug(f"Could not flash OLED on button press: {e}")
+
     def _handle_oled_button_hold(self) -> None:  # pragma: no cover - hardware callback
         self._oled_button_held = True
-        self._queue_oled_button_action('snapshot')
+        # When alert is active, long press dismisses it; otherwise take snapshot
+        if self._current_alert_id is not None:
+            self._queue_oled_button_action('dismiss_alert')
+        else:
+            self._queue_oled_button_action('snapshot')
 
     def _handle_oled_button_release(self) -> None:  # pragma: no cover - hardware callback
         if not self._oled_button_held:
-            self._queue_oled_button_action('advance')
+            # When alert is active, short press pauses/resumes; otherwise advance screen
+            if self._current_alert_id is not None:
+                self._queue_oled_button_action('toggle_pause')
+            else:
+                self._queue_oled_button_action('advance')
         self._oled_button_held = False
 
     def _process_oled_button_actions(self) -> None:
@@ -459,13 +482,21 @@ class ScreenManager:
 
         for action in pending:
             if action == 'advance':
-                # If alert is showing, dismiss it; otherwise advance rotation
-                if self._current_alert_id is not None:
-                    logger.info("Button press: Dismissing alert preemption")
-                    self._reset_oled_alert_state()
+                # Advance to next screen in rotation
+                self._advance_oled_rotation()
+            elif action == 'toggle_pause':
+                # Toggle pause state for alert scrolling
+                self._oled_alert_paused = not self._oled_alert_paused
+                if self._oled_alert_paused:
+                    logger.info("Button press: Paused alert scrolling")
                 else:
-                    self._advance_oled_rotation()
+                    logger.info("Button press: Resumed alert scrolling")
+            elif action == 'dismiss_alert':
+                # Dismiss the current alert
+                logger.info("Button hold: Dismissing alert")
+                self._reset_oled_alert_state()
             elif action == 'snapshot':
+                # Take a snapshot of current system state
                 self._display_oled_snapshot()
 
     def _advance_oled_rotation(self) -> None:
@@ -1089,13 +1120,14 @@ class ScreenManager:
         # Render the frame
         self._display_alert_scroll_frame(top_alert)
 
-        # Advance scroll offset based on elapsed time and configured speed
-        max_offset = max(1, self._cached_scroll_max_offset)
-        expected_frames = elapsed / frame_interval if frame_interval > 0 else 1
-        pixels_to_advance = max(1, int(self._oled_scroll_speed * expected_frames))
-        self._oled_scroll_offset += pixels_to_advance
-        if self._oled_scroll_offset > max_offset:
-            self._oled_scroll_offset = 0
+        # Only advance scroll offset if not paused
+        if not self._oled_alert_paused:
+            max_offset = max(1, self._cached_scroll_max_offset)
+            expected_frames = elapsed / frame_interval if frame_interval > 0 else 1
+            pixels_to_advance = max(1, int(self._oled_scroll_speed * expected_frames))
+            self._oled_scroll_offset += pixels_to_advance
+            if self._oled_scroll_offset > max_offset:
+                self._oled_scroll_offset = 0
 
         # Update timing - use actual current time for precision
         self._last_oled_alert_render_time = current_time
@@ -1124,6 +1156,7 @@ class ScreenManager:
         # Reset state
         self._oled_scroll_effect = True  # Just a flag to indicate scrolling is active
         self._oled_scroll_offset = 0
+        self._oled_alert_paused = False  # Reset pause state for new alert
         self._last_oled_alert_render_time = time.monotonic()  # Initialize to current time to prevent huge first-frame jump
         self._cached_header_text = None  # Clear cache for new alert
         self._cached_header_image = None
@@ -1296,6 +1329,7 @@ class ScreenManager:
         """Reset OLED alert scroll state."""
         self._oled_scroll_offset = 0
         self._oled_scroll_effect = None
+        self._oled_alert_paused = False  # Reset pause state
         self._cached_header_text = None
         self._cached_header_image = None
         self._cached_scroll_canvas = None
