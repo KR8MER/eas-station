@@ -124,6 +124,50 @@ services:
       retries: 3
       start_period: 10s
 
+  hardware-service:
+    image: eas-station:latest
+    container_name: eas-hardware-service
+    restart: unless-stopped
+    networks:
+      - eas-network
+    command: ["python", "hardware_service.py"]
+    volumes:
+      - app-config:/app-config
+    environment:
+      # Database connection
+      POSTGRES_HOST: ${POSTGRES_HOST:-alerts-db}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_DB: ${POSTGRES_DB:-alerts}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+
+      # Redis connection
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_DB: ${REDIS_DB:-0}
+
+      # Application settings
+      CONFIG_PATH: /app-config/.env
+
+      # Hardware settings
+      GPIO_ENABLED: ${GPIO_ENABLED:-false}
+      SCREENS_AUTO_START: ${SCREENS_AUTO_START:-true}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # NOTE: GPIO/display devices added via docker-compose.pi.yml override
+    # This base configuration works on all platforms (GPIO features disabled)
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import redis; r=redis.Redis(host=\"redis\"); r.ping()' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
   app:
     build:
       context: .
