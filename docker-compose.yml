@@ -244,7 +244,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
 
-      CONFIG_PATH: /app-config/noaa.env  # Separate config for NOAA poller
+      CONFIG_PATH: /app-config/.env  # Use main persistent config (same as app)
 
       # Poller configuration
       CAP_POLLER_MODE: NOAA
@@ -283,7 +283,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
 
-      CONFIG_PATH: /app-config/ipaws.env  # Separate config for IPAWS poller
+      CONFIG_PATH: /app-config/.env  # Use main persistent config (same as app)
 
       # Poller configuration
       CAP_POLLER_MODE: IPAWS
