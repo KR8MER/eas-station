@@ -103,6 +103,14 @@ class ReceiverInterface(ABC):
         """Return the latest health information for the receiver."""
 
     @abstractmethod
+    def is_running(self) -> bool:
+        """Check if the receiver capture thread is actively running.
+
+        Returns:
+            True if the receiver thread is running (even if not yet locked/streaming)
+        """
+
+    @abstractmethod
     def capture_to_file(
         self,
         duration_seconds: float,
@@ -391,9 +399,8 @@ class RadioManager:
         if not receiver:
             raise KeyError(f"No receiver found with identifier '{receiver_id}'")
 
-        # Verify receiver is running
-        status = receiver.get_status()
-        if not status.locked:
+        # Verify receiver thread is running (device may still be connecting)
+        if not receiver.is_running():
             raise RuntimeError(f"Receiver '{receiver_id}' is not running")
 
         # Return a handle that the audio source can use
