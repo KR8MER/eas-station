@@ -898,7 +898,7 @@ def register(app: Flask, logger) -> None:
                     "driver": driver,
                     "hardware_info": {"failsafe": "true", "reason": str(exc)},
                     "num_channels": 1,
-                    "sample_rates": [312500, 625000, 1250000, 2500000, 10000000],
+                    "sample_rates": [2500000, 10000000],  # Airspy R2 only supports 2.5 and 10 MSPS
                     "bandwidths": [],
                     "gains": {"LNA": {"min": 0, "max": 15, "step": 1}},
                     "frequency_ranges": [{"min": 24000000, "max": 1800000000}],

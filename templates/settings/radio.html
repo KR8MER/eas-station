@@ -1518,7 +1518,7 @@
 
                     let defaultRates = [];
                     if (isAirspy) {
-                        defaultRates = [312500, 625000, 1250000, 2500000, 10000000];
+                        defaultRates = [2500000, 10000000];  // Airspy R2 only supports 2.5 and 10 MSPS
                     } else {
                         defaultRates = [250000, 1024000, 1920000, 2048000, 2400000, 2560000];
                     }
@@ -1550,8 +1550,8 @@
 
                     let defaultRates = [];
                     if (isAirspy) {
-                        // Airspy default rates
-                        defaultRates = [312500, 625000, 1250000, 2500000, 10000000];
+                        // Airspy R2 only supports 2.5 and 10 MSPS
+                        defaultRates = [2500000, 10000000];
                     } else {
                         // RTL-SDR or generic default rates
                         defaultRates = [250000, 1024000, 1920000, 2048000, 2400000, 2560000];
