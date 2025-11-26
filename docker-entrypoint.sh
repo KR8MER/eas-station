@@ -79,11 +79,11 @@ EOF
         chmod 666 "$CONFIG_PATH_EFFECTIVE" 2>/dev/null || echo "⚠️  Warning: Could not set permissions on $CONFIG_PATH_EFFECTIVE"
     fi
 
-    # Check if the file is essentially empty (< 100 bytes and no non-comment lines) and populate from environment
-    FILE_SIZE=$(stat -c%s "$CONFIG_PATH_EFFECTIVE" 2>/dev/null || stat -f%z "$CONFIG_PATH_EFFECTIVE" 2>/dev/null || echo "0")
+    # Check if the file has no configuration (only comments/whitespace) and populate from environment
+    # Note: Don't check file size - a file with only the header comment can be > 100 bytes
     HAS_CONFIG=$(grep -v "^#" "$CONFIG_PATH_EFFECTIVE" 2>/dev/null | grep -v "^[[:space:]]*$" | wc -l)
 
-    if [ "$FILE_SIZE" -lt 100 ] && [ "$HAS_CONFIG" -eq 0 ]; then
+    if [ "$HAS_CONFIG" -eq 0 ]; then
         echo "⚙️  Persistent .env file is empty (no configuration)"
         echo "   Initializing from environment variables (stack.env)..."
 

@@ -43,29 +43,41 @@ All database credentials should be explicitly configured via environment variabl
 No default passwords are provided for security.
 """
 
+# CRITICAL DEBUG: Print BEFORE any imports to verify script is running
+print("=" * 80, flush=True)
+print("[CAP_POLLER_INIT] Script execution started!", flush=True)
+print("=" * 80, flush=True)
+
 import os
 import sys
+print("[CAP_POLLER_INIT] os and sys imported", flush=True)
 import time
 import re
 import uuid
+print("[CAP_POLLER_INIT] time, re, uuid imported", flush=True)
 import requests
 import logging
 import hashlib
 import math
+print("[CAP_POLLER_INIT] requests, logging, hashlib, math imported", flush=True)
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 import argparse
+print("[CAP_POLLER_INIT] datetime, pathlib, typing, argparse imported", flush=True)
 
 import pytz
 import certifi
 from dotenv import load_dotenv
 from urllib.parse import quote
+print("[CAP_POLLER_INIT] pytz, certifi, dotenv, urllib imported", flush=True)
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(CURRENT_DIR, os.pardir))
+print(f"[CAP_POLLER_INIT] PROJECT_ROOT: {PROJECT_ROOT}", flush=True)
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
+    print(f"[CAP_POLLER_INIT] Added PROJECT_ROOT to sys.path", flush=True)
 
 # Load persistent configuration with poller-specific overrides.
 # Each poller service should have its own config file (noaa.env, ipaws.env)
