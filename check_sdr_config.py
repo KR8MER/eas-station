@@ -33,7 +33,7 @@ def main():
         print("=" * 70)
 
         for rx in receivers:
-            print(f"\nReceiver: {rx.name} (ID: {rx.identifier})")
+            print(f"\nReceiver: {rx.display_name} (ID: {rx.identifier})")
             print(f"  Driver: {rx.driver}")
             print(f"  Frequency: {rx.frequency_hz / 1e6:.3f} MHz")
             print(f"  Sample Rate: {rx.sample_rate / 1e6:.3f} MHz ({rx.sample_rate:,} Hz)")
