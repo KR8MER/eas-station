@@ -303,15 +303,113 @@ def publish_hardware_metrics():
             except Exception:
                 pass
 
-        # Publish to Redis
+        # Publish basic metrics to Redis
         _redis_client.setex(
             "hardware:metrics",
             60,  # 60 second TTL
             json.dumps(metrics)
         )
 
+        # Publish detailed display state for preview (separate key for larger data)
+        publish_display_state()
+
     except Exception as e:
         logger.debug(f"Failed to publish hardware metrics: {e}")
+
+
+def publish_display_state():
+    """Publish detailed display state including preview images to Redis."""
+    if not _redis_client:
+        return
+
+    try:
+        state = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "oled": {
+                "enabled": False,
+                "width": 128,
+                "height": 64,
+                "current_screen": None,
+                "scroll_offset": 0,
+                "alert_active": False,
+            },
+            "vfd": {
+                "enabled": False,
+                "width": 140,
+                "height": 32,
+                "current_screen": None,
+            },
+            "led": {
+                "enabled": False,
+                "lines": 4,
+                "chars_per_line": 20,
+                "current_message": None,
+                "color": "AMBER",
+            },
+        }
+
+        # Get OLED state
+        try:
+            import app_core.oled as oled_module
+            if oled_module.oled_controller:
+                state["oled"]["enabled"] = True
+                state["oled"]["width"] = oled_module.oled_controller.width
+                state["oled"]["height"] = oled_module.oled_controller.height
+
+                # Get current screen name if available
+                if _screen_manager and hasattr(_screen_manager, '_current_oled_screen'):
+                    current_screen = _screen_manager._current_oled_screen
+                    if current_screen:
+                        state["oled"]["current_screen"] = current_screen.name if hasattr(current_screen, 'name') else str(current_screen)
+
+                # Get current alert state if scrolling
+                if _screen_manager:
+                    if hasattr(_screen_manager, '_oled_scroll_effect') and _screen_manager._oled_scroll_effect:
+                        state["oled"]["alert_active"] = True
+                        state["oled"]["scroll_offset"] = getattr(_screen_manager, '_oled_scroll_offset', 0)
+                        state["oled"]["alert_text"] = getattr(_screen_manager, '_current_alert_text', "") or ""
+                        state["oled"]["scroll_speed"] = getattr(_screen_manager, '_oled_scroll_speed', 4)
+
+                        # Get cached header
+                        if hasattr(_screen_manager, '_cached_header_text'):
+                            state["oled"]["header_text"] = _screen_manager._cached_header_text
+
+                # Get preview image
+                try:
+                    preview_image = oled_module.oled_controller.get_preview_image_base64()
+                    if preview_image:
+                        state["oled"]["preview_image"] = preview_image
+                except Exception as e:
+                    logger.debug(f"Failed to get OLED preview image: {e}")
+
+        except Exception as e:
+            logger.debug(f"Error getting OLED state: {e}")
+
+        # Get VFD state
+        try:
+            from app_core.vfd import vfd_controller
+            if vfd_controller:
+                state["vfd"]["enabled"] = True
+        except Exception as e:
+            logger.debug(f"Error getting VFD state: {e}")
+
+        # Get LED state
+        try:
+            import app_core.led as led_module
+            if led_module.led_controller:
+                state["led"]["enabled"] = True
+        except Exception as e:
+            logger.debug(f"Error getting LED state: {e}")
+
+        # Publish to Redis with short TTL (refreshes every 5 seconds)
+        _redis_client.setex(
+            "hardware:display_state",
+            15,  # 15 second TTL (3x the publish interval for tolerance)
+            json.dumps(state)
+        )
+
+    except Exception as e:
+        logger.debug(f"Failed to publish display state: {e}")
 
 
 def health_check_loop():
