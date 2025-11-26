@@ -12,38 +12,55 @@ Previously, hardware access was scattered across multiple containers, causing:
 
 ### **Three-Layer Hardware Architecture**
 
+```mermaid
+graph TB
+    subgraph USB["🔌 USB Hardware Layer"]
+        SDR[sdr-service<br/>SDR ONLY]
+        style SDR fill:#e1f5ff
+    end
+
+    subgraph GPIO["⚡ GPIO/Display Hardware Layer"]
+        HW[hardware-service<br/>GPIO/OLED/Zigbee]
+        style HW fill:#fff3e0
+    end
+
+    subgraph APP["🌐 Application Layer"]
+        Web[app<br/>Web UI Only]
+        Poller1[noaa-poller<br/>HTTP Only]
+        Poller2[ipaws-poller<br/>HTTP Only]
+        style Web fill:#e8f5e9
+        style Poller1 fill:#e8f5e9
+        style Poller2 fill:#e8f5e9
+    end
+
+    subgraph INFRA["📊 Infrastructure"]
+        Redis[(Redis)]
+        DB[(PostgreSQL)]
+        Icecast[Icecast]
+    end
+
+    SDR -->|Audio Stream| Icecast
+    SDR -->|Metrics| Redis
+    HW -->|Status| Redis
+    Web -->|Read Metrics| Redis
+    Web -->|Config| DB
+    Poller1 -->|Alerts| DB
+    Poller2 -->|Alerts| DB
+
+    Hardware1[/dev/bus/usb<br/>AirSpy, RTL-SDR/] -->|Exclusive| SDR
+    Hardware2[/dev/gpiomem<br/>/dev/gpiochip0<br/>/dev/i2c-1/] -->|Exclusive| HW
+    Hardware3[/dev:ro<br/>SMART Only/] -.->|Read-Only| Web
+
+    style USB fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    style GPIO fill:#fff8e1,stroke:#f57c00,stroke-width:2px
+    style APP fill:#f1f8e9,stroke:#558b2f,stroke-width:2px
+    style INFRA fill:#fce4ec,stroke:#c2185b,stroke-width:2px
 ```
-┌─────────────────┐
-│   sdr-service   │ ◄── SDR hardware ONLY
-│                 │     • /dev/bus/usb (AirSpy, RTL-SDR, etc.)
-│  USB Devices    │     • Audio capture + demodulation
-│                 │     • EAS/SAME decoding
-│                 │     • Icecast streaming
-└─────────────────┘     Fault isolation: If SDR fails, GPIO/displays keep working
 
-┌──────────────────────┐
-│  hardware-service    │ ◄── GPIO/Displays/Zigbee ONLY
-│                      │     • /dev/gpiomem (GPIO memory)
-│  GPIO + Displays     │     • /dev/gpiochip0 (lgpio chip)
-│                      │     • /dev/i2c-1 (OLED I2C bus)
-│                      │     • OLED/LED/VFD screen management
-│                      │     • GPIO relay control
-│                      │     • Zigbee coordinator (if used)
-└──────────────────────┘     Fault isolation: If displays fail, SDR keeps monitoring
-
-┌────────────────┐
-│      app       │ ◄── Web UI ONLY (no GPIO/screens)
-│                │     • Flask routes
-│   Web UI       │     • User authentication
-│                │     • Configuration interface
-│                │     • /dev:ro (SMART monitoring only)
-└────────────────┘     Fault isolation: Web UI crashes don't affect hardware
-
-┌───────────────┐
-│ noaa-poller   │ ◄── NO hardware access
-│ ipaws-poller  │     • HTTP CAP XML feeds only
-└───────────────┘     • Database operations only
-```
+**Fault Isolation Benefits:**
+- 🔴 **SDR fails** → GPIO/displays keep working, web UI stays up
+- 🟡 **Displays fail** → SDR keeps monitoring, audio keeps streaming
+- 🟢 **Web UI fails** → All hardware continues running independently
 
 ---
 
@@ -201,22 +218,48 @@ If `app` container crashes:
 
 ### **Inter-Service Communication**
 
-```
-┌─────────────┐
-│sdr-service  │────▶ Redis (metrics) ────▶ app (dashboard)
-└─────────────┘       │
-                      │
-┌──────────────────┐  │
-│hardware-service  │──┘
-└──────────────────┘
+```mermaid
+sequenceDiagram
+    participant SDR as sdr-service
+    participant HW as hardware-service
+    participant Redis as Redis
+    participant DB as PostgreSQL
+    participant App as app (Web UI)
+    participant Poller as CAP Pollers
 
-┌────────┐
-│  app   │──▶ HTTP API ──▶ hardware-service (GPIO control)
-└────────┘
+    rect rgb(225, 245, 255)
+    Note over SDR: SDR Metrics Publishing
+    SDR->>Redis: Publish SDR metrics<br/>(sdr:metrics)
+    SDR->>Redis: Signal strength, lock status
+    end
 
-┌────────┐
-│pollers │──▶ Database ──▶ app (alerts)
-└────────┘
+    rect rgb(255, 243, 224)
+    Note over HW: Hardware Status Publishing
+    HW->>Redis: Publish hardware metrics<br/>(hardware:metrics)
+    HW->>Redis: GPIO status, screen info
+    end
+
+    rect rgb(232, 245, 233)
+    Note over App: Dashboard Updates
+    App->>Redis: Read all metrics
+    Redis-->>App: Combined status
+    App->>DB: Read configuration
+    end
+
+    rect rgb(255, 243, 224)
+    Note over App,HW: GPIO Control Flow
+    App->>HW: HTTP API: Activate GPIO
+    HW->>HW: Toggle relay
+    HW->>Redis: Publish status update
+    App->>Redis: Read updated status
+    end
+
+    rect rgb(252, 228, 236)
+    Note over Poller: Alert Processing
+    Poller->>Poller: Poll CAP XML
+    Poller->>DB: Store alerts
+    App->>DB: Read alerts
+    end
 ```
 
 ### **Metrics Flow**
@@ -235,17 +278,43 @@ If `app` container crashes:
 ## Migration Guide
 
 ### From Old Architecture
-**Old (before fix)**:
-- `audio-service` - Had USB + GPIO + screens
-- `noaa-poller` - Had USB + GPIO
-- `ipaws-poller` - Had USB + GPIO
-- `app` - Had GPIO
 
-**New (after fix)**:
-- `sdr-service` - USB ONLY
-- `hardware-service` - GPIO/displays ONLY
-- `app` - Web UI only (read-only /dev for SMART)
-- `pollers` - NO hardware access
+```mermaid
+graph LR
+    subgraph OLD["❌ Old Architecture (Hardware Conflicts)"]
+        direction TB
+        A1[audio-service<br/>USB + GPIO + Screens]
+        A2[noaa-poller<br/>USB + GPIO]
+        A3[ipaws-poller<br/>USB + GPIO]
+        A4[app<br/>GPIO]
+
+        style A1 fill:#ffcdd2
+        style A2 fill:#ffcdd2
+        style A3 fill:#ffcdd2
+        style A4 fill:#ffcdd2
+    end
+
+    subgraph NEW["✅ New Architecture (Isolated)"]
+        direction TB
+        B1[sdr-service<br/>USB ONLY]
+        B2[hardware-service<br/>GPIO/Displays ONLY]
+        B3[app<br/>Web UI Only]
+        B4[pollers<br/>NO hardware]
+
+        style B1 fill:#c8e6c9
+        style B2 fill:#fff9c4
+        style B3 fill:#b3e5fc
+        style B4 fill:#b3e5fc
+    end
+
+    OLD -.->|Migration| NEW
+
+    style OLD fill:#ffebee,stroke:#c62828,stroke-width:2px
+    style NEW fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+```
+
+**Before**: Multiple containers fighting over USB and GPIO → **Device contention**
+**After**: Each container has exclusive hardware access → **Zero contention**
 
 ### Deployment Steps
 
