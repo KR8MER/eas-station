@@ -251,14 +251,14 @@
 </div>
 
 <div class="modal fade" id="radioReceiverModal" tabindex="-1" aria-labelledby="radioReceiverModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable">
-        <div class="modal-content">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable modal-dialog-centered">
+        <div class="modal-content" style="max-height: 90vh;">
             <form id="radioReceiverForm">
                 <div class="modal-header">
                     <h5 class="modal-title" id="radioReceiverModalLabel">Receiver</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body">
+                <div class="modal-body" style="max-height: calc(90vh - 130px); overflow-y: auto;">
                     <input type="hidden" id="receiverId" name="id">
                     <div class="row g-2">
                         <div class="col-12">
@@ -1297,6 +1297,36 @@
         }
     });
 
+    // Handle modulation change - disable FM-specific options for NFM (mono only)
+    document.getElementById('receiverModulation')?.addEventListener('change', (e) => {
+        const modulation = e.target.value;
+        const fmStereoCheckbox = document.getElementById('receiverFMStereo');
+        const rbdsCheckbox = document.getElementById('receiverRBDS');
+
+        // NFM is mono-only, WFM supports stereo/RBDS
+        const isNFM = modulation === 'NFM';
+
+        if (fmStereoCheckbox) {
+            fmStereoCheckbox.disabled = isNFM;
+            if (isNFM) {
+                fmStereoCheckbox.checked = false;
+                fmStereoCheckbox.parentElement?.classList.add('text-muted');
+            } else {
+                fmStereoCheckbox.parentElement?.classList.remove('text-muted');
+            }
+        }
+
+        if (rbdsCheckbox) {
+            rbdsCheckbox.disabled = isNFM;
+            if (isNFM) {
+                rbdsCheckbox.checked = false;
+                rbdsCheckbox.parentElement?.classList.add('text-muted');
+            } else {
+                rbdsCheckbox.parentElement?.classList.remove('text-muted');
+            }
+        }
+    });
+
     // Auto-generate identifier from display name
     document.getElementById('receiverDisplayName')?.addEventListener('input', (e) => {
         if (!document.getElementById('receiverId').value) {
@@ -2176,6 +2206,9 @@
         // Open modal first (this resets the form), then populate fields
         openModal();
 
+        // Load SDR devices and pre-select this one
+        await loadSDRDevices(device.serial);
+
         // Pre-fill the add receiver modal with discovered device info
         document.getElementById('receiverDisplayName').value = device.label || device.product || `${device.driver} Device`;
         document.getElementById('receiverIdentifier').value = device.serial || `${device.driver}_${deviceIndex}`;
@@ -2214,29 +2247,54 @@
             if (response.ok) {
                 const capabilities = await response.json();
 
-                // Auto-populate sample rate from device capabilities
+                // Populate sample rate dropdown with actual hardware capabilities
                 if (capabilities.sample_rates && capabilities.sample_rates.length > 0) {
-                    // For NOAA Weather Radio, prefer sample rates around 2-2.5 MHz
-                    const preferredRates = [2400000, 2500000, 2048000, 3200000];
+                    const sampleRateSelect = document.getElementById('receiverSampleRate');
+                    sampleRateSelect.innerHTML = ''; // Clear existing options
+                    sampleRateSelect.disabled = false;
+
+                    // Sort rates from low to high for better UX
+                    const sortedRates = [...capabilities.sample_rates].sort((a, b) => a - b);
+
+                    // For NOAA Weather Radio, prefer sample rates around 250kHz-2.5 MHz for AirSpy
+                    // or 1-2.4 MHz for RTL-SDR
+                    const preferredRates = device.driver === 'airspy'
+                        ? [312500, 625000, 1250000, 2500000]  // AirSpy decimated rates
+                        : [2400000, 2500000, 2048000, 1024000]; // RTL-SDR rates
+
                     let selectedRate = null;
 
-                    // Try to find a preferred rate that's supported
-                    for (const preferred of preferredRates) {
-                        if (capabilities.sample_rates.includes(preferred)) {
-                            selectedRate = preferred;
-                            break;
+                    // Add all supported rates as options
+                    sortedRates.forEach(rate => {
+                        const option = document.createElement('option');
+                        option.value = rate;
+
+                        // Format display: "2.5 MHz (2,500,000 Hz)" or "312.5 kHz (312,500 Hz)"
+                        if (rate >= 1000000) {
+                            option.textContent = `${(rate / 1000000).toFixed(1)} MHz (${rate.toLocaleString()} Hz)`;
+                        } else {
+                            option.textContent = `${(rate / 1000).toFixed(1)} kHz (${rate.toLocaleString()} Hz)`;
                         }
-                    }
 
-                    // If no preferred rate found, use the closest one or first available
+                        // Mark preferred rate
+                        if (!selectedRate && preferredRates.includes(rate)) {
+                            selectedRate = rate;
+                            option.textContent += ' ⭐ Recommended';
+                            option.selected = true;
+                        }
+
+                        sampleRateSelect.appendChild(option);
+                    });
+
+                    // If no preferred rate found, select closest to ideal
                     if (!selectedRate) {
-                        // Find the rate closest to 2.4 MHz
-                        selectedRate = capabilities.sample_rates.reduce((prev, curr) => {
-                            return Math.abs(curr - 2400000) < Math.abs(prev - 2400000) ? curr : prev;
+                        const idealRate = device.driver === 'airspy' ? 312500 : 2400000;
+                        selectedRate = sortedRates.reduce((prev, curr) => {
+                            return Math.abs(curr - idealRate) < Math.abs(prev - idealRate) ? curr : prev;
                         });
+                        // Select the closest rate
+                        sampleRateSelect.value = selectedRate;
                     }
-
-                    document.getElementById('receiverSampleRate').value = selectedRate;
                 }
 
                 // Auto-populate gain from device capabilities
@@ -2262,6 +2320,23 @@
                     }
 
                     document.getElementById('receiverGain').value = recommendedGain;
+                }
+
+                // Set modulation to NFM for NOAA weather radio
+                document.getElementById('receiverModulation').value = 'NFM';
+
+                // Disable FM-specific options for NFM (mono only)
+                const fmStereoCheckbox = document.getElementById('receiverFMStereo');
+                const rbdsCheckbox = document.getElementById('receiverRBDS');
+                if (fmStereoCheckbox) {
+                    fmStereoCheckbox.checked = false;
+                    fmStereoCheckbox.disabled = true;
+                    fmStereoCheckbox.parentElement?.classList.add('text-muted');
+                }
+                if (rbdsCheckbox) {
+                    rbdsCheckbox.checked = false;
+                    rbdsCheckbox.disabled = true;
+                    rbdsCheckbox.parentElement?.classList.add('text-muted');
                 }
 
             } else {
