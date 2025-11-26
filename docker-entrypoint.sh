@@ -83,6 +83,8 @@ EOF
     # Note: Don't check file size - a file with only the header comment can be > 100 bytes
     HAS_CONFIG=$(grep -v "^#" "$CONFIG_PATH_EFFECTIVE" 2>/dev/null | grep -v "^[[:space:]]*$" | wc -l)
 
+    echo "🔍 DEBUG: HAS_CONFIG check result: $HAS_CONFIG config lines found"
+
     if [ "$HAS_CONFIG" -eq 0 ]; then
         echo "⚙️  Persistent .env file is empty (no configuration)"
         echo "   Initializing from environment variables (stack.env)..."
