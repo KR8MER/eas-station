@@ -1734,7 +1734,7 @@
 
         if (receiver) {
             // Editing existing receiver - load devices and pre-select current one
-            loadSDRDevices(receiver.serial);
+            await loadSDRDevices(receiver.serial);
 
             document.getElementById('receiverId').value = receiver.id;
             document.getElementById('receiverDisplayName').value = receiver.display_name;
@@ -1782,8 +1782,8 @@
             sampleRateSelect.disabled = false;
             sampleRateSelect.innerHTML = '<option value="">Loading...</option>';
 
-            // Fetch hardware capabilities for this device
-            if (receiver.driver && (receiver.driver === 'airspy' || receiver.driver === 'rtlsdr')) {
+            // Fetch hardware capabilities for this device (works for any driver)
+            if (receiver.driver) {
                 try {
                     const params = new URLSearchParams();
                     if (receiver.serial) {
@@ -1800,17 +1800,19 @@
                             const sortedRates = [...capabilities.sample_rates].sort((a, b) => a - b);
 
                             // Service-type specific preferred rates
+                            const driverLower = receiver.driver.toLowerCase();
+                            const isAirspy = driverLower.includes('airspy');
                             let preferredRates;
                             if (detectedServiceType === 'NOAA') {
-                                preferredRates = receiver.driver === 'airspy'
+                                preferredRates = isAirspy
                                     ? [312500, 625000, 1250000]
                                     : [250000, 240000, 192000];
                             } else if (detectedServiceType === 'FM') {
-                                preferredRates = receiver.driver === 'airspy'
+                                preferredRates = isAirspy
                                     ? [2500000, 1250000, 625000]
                                     : [2400000, 2500000, 1024000];
                             } else if (detectedServiceType === 'AM') {
-                                preferredRates = receiver.driver === 'airspy'
+                                preferredRates = isAirspy
                                     ? [312500, 625000]
                                     : [96000, 48000];
                             }
@@ -1889,7 +1891,7 @@
             freqDisplay.className = 'alert alert-info mb-0';
         } else {
             // Creating new receiver - all fields start fresh
-            loadSDRDevices(); // Load devices without pre-selection
+            await loadSDRDevices(); // Load devices without pre-selection
 
             document.getElementById('receiverId').value = '';
             document.getElementById('receiverEnabled').checked = true;
