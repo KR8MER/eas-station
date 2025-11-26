@@ -1619,7 +1619,8 @@
     function applyServiceConfig() {
         if (!currentServiceConfig) return;
 
-        document.getElementById('receiverSampleRate').value = currentServiceConfig.sample_rate;
+        // NOTE: sample_rate is NOT set here - it's populated by populateSampleRates()
+        // based on actual hardware capabilities, not hardcoded service config values
         document.getElementById('receiverModulation').value = currentServiceConfig.modulation_type;
         document.getElementById('receiverAudioOutput').checked = currentServiceConfig.audio_output === true;
         document.getElementById('receiverStereo').checked = currentServiceConfig.stereo_enabled === true;
@@ -1651,7 +1652,16 @@
         if (summary) {
             summary.style.display = 'block';
             document.getElementById('summaryModulation').textContent = currentServiceConfig.modulation_type;
-            document.getElementById('summarySampleRate').textContent = `${(currentServiceConfig.sample_rate / 1e6).toFixed(1)} MHz`;
+
+            // Get actual selected sample rate from dropdown (hardware-specific)
+            const selectedSampleRate = document.getElementById('receiverSampleRate').value;
+            if (selectedSampleRate) {
+                const sampleRateMHz = parseFloat(selectedSampleRate) / 1e6;
+                document.getElementById('summarySampleRate').textContent = `${sampleRateMHz.toFixed(1)} MHz`;
+            } else {
+                document.getElementById('summarySampleRate').textContent = 'Not selected';
+            }
+
             document.getElementById('summaryBandwidth').textContent = `${(currentServiceConfig.bandwidth / 1000).toFixed(0)} kHz`;
             document.getElementById('summaryAudio').textContent = currentServiceConfig.audio_output ? 'Enabled' : 'Disabled';
             document.getElementById('summaryStereo').textContent = currentServiceConfig.stereo_enabled ? 'Yes' : 'No';

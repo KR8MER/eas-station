@@ -58,7 +58,7 @@ def get_service_config(service_type: str, frequency_mhz: float) -> Dict:
     if service_type == 'NOAA':
         return {
             'modulation_type': 'NFM',  # Narrowband FM
-            'sample_rate': 250000,  # 250 kHz
+            # NOTE: sample_rate removed - determined by actual hardware capabilities in UI
             'audio_output': True,
             'stereo_enabled': False,  # NOAA is mono
             'deemphasis_us': 75.0,  # North America standard
@@ -74,7 +74,7 @@ def get_service_config(service_type: str, frequency_mhz: float) -> Dict:
     elif service_type == 'FM':
         return {
             'modulation_type': 'WFM',  # Wideband FM
-            'sample_rate': 2400000,  # 2.4 MHz (for full FM multiplex)
+            # NOTE: sample_rate removed - determined by actual hardware capabilities in UI
             'audio_output': True,
             'stereo_enabled': True,  # FM broadcast is stereo
             'deemphasis_us': 75.0,  # North America (50 for Europe/Asia)
@@ -90,7 +90,7 @@ def get_service_config(service_type: str, frequency_mhz: float) -> Dict:
     elif service_type == 'AM':
         return {
             'modulation_type': 'AM',
-            'sample_rate': 1000000,  # 1 MHz
+            # NOTE: sample_rate removed - determined by actual hardware capabilities in UI
             'audio_output': True,
             'stereo_enabled': False,  # AM is mono
             'deemphasis_us': 0.0,  # AM doesn't use de-emphasis
