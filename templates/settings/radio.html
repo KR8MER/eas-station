@@ -1280,7 +1280,7 @@
     }
 
     // Handle device selection
-    document.getElementById('receiverDevice')?.addEventListener('change', (e) => {
+    document.getElementById('receiverDevice')?.addEventListener('change', async (e) => {
         const selectedOption = e.target.selectedOptions[0];
         if (selectedOption && selectedOption.dataset.driver) {
             document.getElementById('receiverDriver').value = selectedOption.dataset.driver;
@@ -1293,6 +1293,11 @@
                     const identifier = displayName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
                     document.getElementById('receiverIdentifier').value = identifier;
                 }
+            }
+
+            // Re-populate sample rates with new driver's capabilities if service type is selected
+            if (currentServiceType) {
+                await populateSampleRates(currentServiceType);
             }
         }
     });
