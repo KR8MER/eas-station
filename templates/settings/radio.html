@@ -1801,14 +1801,12 @@
         if (fmOptionsContainer) fmOptionsContainer.style.display = 'none';
 
         if (receiver) {
-            // Editing existing receiver - load devices and pre-select current one
-            await loadSDRDevices(receiver.serial);
-
+            // Editing existing receiver - set basic fields first
             document.getElementById('receiverId').value = receiver.id;
             document.getElementById('receiverDisplayName').value = receiver.display_name;
             document.getElementById('receiverIdentifier').value = receiver.identifier;
             document.getElementById('receiverDriver').value = receiver.driver;
-            document.getElementById('receiverSerial').value = receiver.serial || '';
+            // Don't set serial yet - let loadSDRDevices() handle it
             document.getElementById('receiverFrequency').value = receiver.frequency_hz;
             document.getElementById('receiverGain').value = receiver.gain ?? '';
             document.getElementById('receiverChannel').value = receiver.channel ?? '';
@@ -1833,6 +1831,16 @@
             document.getElementById('receiverAutoStart').checked = receiver.auto_start !== false;
 
             toggleSquelchInputs(receiver.audio_output === true);
+
+            // Load devices and auto-select - this will set the serial field
+            await loadSDRDevices(receiver.serial);
+
+            // After loadSDRDevices completes, only set serial if it's still empty
+            // This prevents overwriting the auto-selected serial
+            const serialField = document.getElementById('receiverSerial');
+            if (!serialField.value && receiver.serial) {
+                serialField.value = receiver.serial;
+            }
 
             // Determine service type based on frequency
             let detectedServiceType = 'NOAA'; // Default
