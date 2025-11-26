@@ -27,6 +27,7 @@ from .discovery import (
     get_device_capabilities,
     check_soapysdr_installation,
     get_recommended_settings,
+    validate_sample_rate_for_driver,
     NOAA_WEATHER_FREQUENCIES,
     SDR_PRESETS,
 )
@@ -45,6 +46,7 @@ __all__ = [
     "get_device_capabilities",
     "check_soapysdr_installation",
     "get_recommended_settings",
+    "validate_sample_rate_for_driver",
     "NOAA_WEATHER_FREQUENCIES",
     "SDR_PRESETS",
 ]
