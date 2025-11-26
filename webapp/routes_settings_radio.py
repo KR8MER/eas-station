@@ -36,6 +36,7 @@ from app_core.radio import (
     check_soapysdr_installation,
     get_device_capabilities,
     get_recommended_settings,
+    validate_sample_rate_for_driver,
     SDR_PRESETS,
 )
 from app_core.radio.service_config import (
@@ -190,7 +191,21 @@ def _parse_receiver_payload(payload: Dict[str, Any], *, partial: bool = False) -
             if sample_rate <= 0:
                 raise ValueError
             data["sample_rate"] = sample_rate
-        except Exception:
+
+            # Validate sample rate compatibility with driver
+            if "driver" in data:
+                # Get serial for hardware-specific validation if available
+                device_args = None
+                if data.get("serial"):
+                    device_args = {"serial": data["serial"]}
+
+                is_valid, error_msg = validate_sample_rate_for_driver(
+                    data["driver"], sample_rate, device_args
+                )
+                if not is_valid:
+                    return None, error_msg
+
+        except ValueError:
             return None, "Sample rate must be a positive integer."
 
     if "gain" in payload:

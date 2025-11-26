@@ -278,11 +278,90 @@ def get_recommended_settings(driver: str, use_case: str = "noaa_weather") -> Opt
     return SDR_PRESETS.get(preset_key, None)
 
 
+def validate_sample_rate_for_driver(driver: str, sample_rate: int, device_args: Optional[Dict[str, str]] = None) -> tuple[bool, Optional[str]]:
+    """
+    Validate if a sample rate is compatible with a specific SDR driver.
+
+    Args:
+        driver: SDR driver name (e.g., "rtlsdr", "airspy")
+        sample_rate: Sample rate in Hz to validate
+        device_args: Optional device arguments (e.g., {"serial": "12345"})
+
+    Returns:
+        Tuple of (is_valid, error_message). If valid, error_message is None.
+    """
+    # Get actual device capabilities
+    capabilities = get_device_capabilities(driver, device_args)
+
+    if capabilities is None:
+        # Can't query hardware - fall back to known valid rates for common drivers
+        return _validate_sample_rate_fallback(driver, sample_rate)
+
+    supported_rates = capabilities.get("sample_rates", [])
+
+    if not supported_rates:
+        # Hardware didn't report sample rates - use fallback
+        return _validate_sample_rate_fallback(driver, sample_rate)
+
+    # Check if sample rate is in supported list
+    if sample_rate in supported_rates:
+        return True, None
+
+    # Sample rate not supported - provide helpful error
+    sorted_rates = sorted(supported_rates)
+    if len(sorted_rates) <= 5:
+        rate_list = ", ".join(f"{r/1e6:.3f} MHz" for r in sorted_rates)
+    else:
+        rate_list = ", ".join(f"{r/1e6:.3f} MHz" for r in sorted_rates[:5]) + f", ... ({len(sorted_rates)} total)"
+
+    return False, f"Sample rate {sample_rate/1e6:.3f} MHz is not supported by {driver}. Supported rates: {rate_list}"
+
+
+def _validate_sample_rate_fallback(driver: str, sample_rate: int) -> tuple[bool, Optional[str]]:
+    """
+    Fallback validation using known sample rates for common drivers.
+    Used when hardware capabilities cannot be queried.
+    """
+    driver_lower = driver.lower()
+
+    # AirSpy: Base rates are 2.5 MHz and 10 MHz, with decimation
+    if "airspy" in driver_lower:
+        airspy_rates = {2500000, 10000000}
+        # Add decimated rates
+        for base in [2500000, 10000000]:
+            for div in [1, 2, 4, 8, 16, 32]:
+                airspy_rates.add(base // div)
+
+        if sample_rate in airspy_rates:
+            return True, None
+
+        common_rates = sorted([2500000, 1250000, 625000, 312500, 156250], reverse=True)
+        rate_list = ", ".join(f"{r/1e6:.3f} MHz" for r in common_rates)
+        return False, f"Sample rate {sample_rate/1e6:.3f} MHz is incompatible with AirSpy. Common AirSpy rates: {rate_list}"
+
+    # RTL-SDR: Typically supports 225 kHz to 3.2 MHz
+    elif "rtl" in driver_lower:
+        if 225000 <= sample_rate <= 3200000:
+            return True, None
+        return False, f"Sample rate {sample_rate/1e6:.3f} MHz is outside RTL-SDR range (0.225-3.2 MHz). Common: 2.4 MHz, 1.024 MHz"
+
+    # HackRF: 2-20 MHz
+    elif "hackrf" in driver_lower:
+        if 2000000 <= sample_rate <= 20000000:
+            return True, None
+        return False, f"Sample rate {sample_rate/1e6:.3f} MHz is outside HackRF range (2-20 MHz)"
+
+    # Unknown driver - allow any rate but warn
+    logger.warning(f"Unknown driver '{driver}' - cannot validate sample rate {sample_rate}")
+    return True, None
+
+
 __all__ = [
     "enumerate_devices",
     "get_device_capabilities",
     "check_soapysdr_installation",
     "get_recommended_settings",
+    "validate_sample_rate_for_driver",
     "NOAA_WEATHER_FREQUENCIES",
     "SDR_PRESETS",
 ]
