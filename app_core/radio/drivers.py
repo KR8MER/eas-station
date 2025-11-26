@@ -482,6 +482,32 @@ class _SoapySDRReceiver(ReceiverInterface):
                 len(available_devices),
                 [d.get("label", d.get("driver", "unknown")) for d in available_devices]
             )
+
+            # Log detailed device information including serials for troubleshooting
+            for dev in available_devices:
+                dev_driver = dev.get("driver", "unknown")
+                dev_serial = dev.get("serial", "N/A")
+                dev_label = dev.get("label", "N/A")
+                self._interface_logger.debug(
+                    "  Device: driver=%s, serial=%s, label=%s",
+                    dev_driver, dev_serial, dev_label
+                )
+
+            # Check if the requested device is in the list
+            if self.config.serial:
+                matching = [d for d in available_devices
+                           if d.get("serial") == self.config.serial and
+                           d.get("driver") == self.driver_hint]
+                if not matching:
+                    self._interface_logger.warning(
+                        "Requested device with serial '%s' and driver '%s' not found in enumerated devices. "
+                        "Available %s devices: %s",
+                        self.config.serial,
+                        self.driver_hint,
+                        self.driver_hint,
+                        [d.get("serial", "N/A") for d in available_devices
+                         if d.get("driver") == self.driver_hint]
+                    )
         else:
             self._interface_logger.warning(
                 "No SoapySDR devices found. Ensure device is connected and drivers are installed."
@@ -537,6 +563,7 @@ class _SoapySDRReceiver(ReceiverInterface):
                 f"Unable to open SoapySDR device for driver '{self.driver_hint}': {message}"
             ) from original_exc
 
+        # First fallback: Try without serial but keep other parameters
         fallback_args = dict(original_args)
         fallback_args.pop("serial", None)
         if not fallback_args.get("driver"):
@@ -563,15 +590,36 @@ class _SoapySDRReceiver(ReceiverInterface):
         try:
             device = sdr_module.Device(fallback_args)
         except Exception as fallback_exc:
-            annotated_original = self._annotate_lock_hint(str(original_exc))
-            annotated_original = self._annotate_device_open_hint(annotated_original, self.driver_hint, serial)
-            annotated_fallback = self._annotate_lock_hint(str(fallback_exc))
-            annotated_fallback = self._annotate_device_open_hint(annotated_fallback, self.driver_hint, None)
-            raise RuntimeError(
-                "Unable to open SoapySDR device for driver "
-                f"'{self.driver_hint}' using serial '{serial}': {annotated_original}; "
-                f"retry without serial also failed: {annotated_fallback}"
-            ) from fallback_exc
+            # Second fallback: Try with ONLY driver (no serial, no device_id)
+            minimal_args = {"driver": self.driver_hint}
+            self._interface_logger.warning(
+                "Retry without serial failed (%s); attempting with driver only",
+                fallback_exc,
+            )
+
+            try:
+                device = sdr_module.Device(minimal_args)
+                self._emit_event(
+                    "info",
+                    "Opened SDR device with driver-only filter after fallback",
+                    details={"driver": self.driver_hint, "serial": serial},
+                )
+                return device
+            except Exception as minimal_exc:
+                # All retries failed - provide comprehensive error message
+                annotated_original = self._annotate_lock_hint(str(original_exc))
+                annotated_original = self._annotate_device_open_hint(annotated_original, self.driver_hint, serial)
+                annotated_fallback = self._annotate_lock_hint(str(fallback_exc))
+                annotated_fallback = self._annotate_device_open_hint(annotated_fallback, self.driver_hint, None)
+                annotated_minimal = self._annotate_lock_hint(str(minimal_exc))
+                annotated_minimal = self._annotate_device_open_hint(annotated_minimal, self.driver_hint, None)
+
+                raise RuntimeError(
+                    "Unable to open SoapySDR device for driver "
+                    f"'{self.driver_hint}' using serial '{serial}': {annotated_original}; "
+                    f"retry without serial also failed: {annotated_fallback}; "
+                    f"retry with driver-only also failed: {annotated_minimal}"
+                ) from minimal_exc
 
         self._emit_event(
             "info",
