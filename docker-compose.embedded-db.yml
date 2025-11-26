@@ -224,13 +224,9 @@ services:
       # These are configured in the sdr-service container.
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    devices:
-      # Block Device Passthrough for SMART Monitoring
-      # Pass through all block devices for comprehensive SMART health monitoring
-      - /dev:/dev:ro  # Read-only access to all devices for SMART monitoring
-    # Note: Device passthrough removed - app container serves UI only.
-    # USB devices, GPIO, and other hardware access moved to dedicated service containers.
-    privileged: true  # Required to allow /dev/pts creation despite read-only /dev mount
+    # Note: All hardware access removed - app container serves UI only.
+    # USB devices (sdr-service), GPIO (hardware-service) handled by dedicated containers.
+    # SMART monitoring can be added later with specific block device mounts if needed.
     security_opt:
       - no-new-privileges:true
 
