@@ -1,19 +1,21 @@
-# Raspberry Pi GPIO Device Override
+# Raspberry Pi Hardware Device Override
 #
-# This docker-compose override file adds Raspberry Pi-specific GPIO device mappings
-# that are required for GPIO relay control on Raspberry Pi hardware.
+# This docker-compose override file adds Raspberry Pi-specific hardware device mappings
+# for GPIO, displays, and disk monitoring on Raspberry Pi hardware.
 #
 # On non-Raspberry Pi hosts, Docker will fail with "error gathering device information"
-# if /dev/gpiomem or /dev/gpiochip0 are missing. This override allows the base compose
-# files to work on any host, with GPIO features enabled only when needed.
+# if devices are missing. This override allows the base compose files to work on any
+# host, with hardware features enabled only when needed.
 #
 # Usage:
 #   docker-compose -f docker-compose.yml -f docker-compose.pi.yml up -d
 # Or with embedded database:
 #   docker-compose -f docker-compose.embedded-db.yml -f docker-compose.pi.yml up -d
 #
-# The app_utils/gpio.py module will gracefully fall back to a no-op backend if
-# GPIO hardware is not available, so it's safe to run without this override.
+# Hardware allocation:
+#   - sdr-service: /dev/bus/usb (USB SDR devices - defined in base docker-compose.yml)
+#   - hardware-service: /dev/gpiomem, /dev/gpiochip0, /dev/i2c-1 (GPIO + OLED displays)
+#   - app: /dev (read-only for SMART disk monitoring only)
 
 services:
   app:
@@ -27,12 +29,12 @@ services:
       POSTGRES_USER: casaos
       POSTGRES_PASSWORD: casaos
     devices:
-      - /dev/gpiomem:/dev/gpiomem    # GPIO memory access for user-space GPIO control
-      - /dev/gpiochip0:/dev/gpiochip0  # GPIO chip device for modern GPIO libraries (lgpio)
-    privileged: true  # Required for GPIO access on Pi 5
+      # Read-only access to block devices for SMART disk monitoring
+      - /dev:/dev:ro
+    # NOTE: GPIO/screen access removed - now in hardware-service
     # Configuration: start-pi.sh syncs local .env to persistent volume before starting
 
-  audio-service:
+  sdr-service:
     env_file:
       - .env  # Load all settings from local .env
     environment:
@@ -42,7 +44,25 @@ services:
       POSTGRES_DB: casaos
       POSTGRES_USER: casaos
       POSTGRES_PASSWORD: casaos
+    # NOTE: USB devices already in base docker-compose.yml
+    # No GPIO/screen hardware needed in SDR service
+
+  hardware-service:
+    env_file:
+      - .env  # Load all settings from local .env
+    environment:
+      # Hard-code database settings for CasaOS PostgreSQL
+      POSTGRES_HOST: host.docker.internal
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: casaos
+      POSTGRES_USER: casaos
+      POSTGRES_PASSWORD: casaos
+
+      # Enable GPIO and screens on Raspberry Pi
+      GPIO_ENABLED: "true"
+      SCREENS_AUTO_START: "true"
     devices:
-      - /dev/gpiomem:/dev/gpiomem    # GPIO memory access for user-space GPIO control
-      - /dev/gpiochip0:/dev/gpiochip0  # GPIO chip device for modern GPIO libraries (lgpio)
+      - /dev/gpiomem:/dev/gpiomem      # GPIO memory access for user-space control
+      - /dev/gpiochip0:/dev/gpiochip0  # GPIO chip device for modern libraries (lgpio)
+      - /dev/i2c-1:/dev/i2c-1          # I2C bus for OLED displays (Argon One, etc.)
     privileged: true  # Required for GPIO access on Pi 5

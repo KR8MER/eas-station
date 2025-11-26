@@ -64,9 +64,9 @@ services:
     security_opt:
       - no-new-privileges:true
 
-  audio-service:
+  sdr-service:
     image: eas-station:latest
-    container_name: eas-audio-service
+    container_name: eas-sdr-service
     restart: unless-stopped
     networks:
       - eas-network
@@ -104,14 +104,69 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     devices:
-      # SDR Device Passthrough
+      # SDR Device Passthrough - ONLY this container needs USB access
       - /dev/bus/usb:/dev/bus/usb
+    # Privileged mode required for USB device access and dynamic device node creation
+    # Provides CAP_SYS_RAWIO and other capabilities needed for direct hardware I/O
     privileged: true
+    cap_add:
+      - SYS_RAWIO    # Direct I/O access to hardware devices
+      - SYS_ADMIN    # USB device operations
     security_opt:
       - no-new-privileges:true
     depends_on:
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import redis; r=redis.Redis(host=\"redis\"); r.ping()' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  hardware-service:
+    image: eas-station:latest
+    container_name: eas-hardware-service
+    restart: unless-stopped
+    networks:
+      - eas-network
+    command: ["python", "hardware_service.py"]
+    volumes:
+      - app-config:/app-config
+    environment:
+      # Database connection
+      POSTGRES_HOST: ${POSTGRES_HOST:-alerts-db}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_DB: ${POSTGRES_DB:-alerts}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+
+      # Redis connection
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_DB: ${REDIS_DB:-0}
+
+      # Application settings
+      CONFIG_PATH: /app-config/.env
+
+      # Hardware settings
+      GPIO_ENABLED: ${GPIO_ENABLED:-false}
+      SCREENS_AUTO_START: ${SCREENS_AUTO_START:-true}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # NOTE: GPIO/display devices added via docker-compose.pi.yml override
+    # This base configuration works on all platforms (GPIO features disabled)
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import redis; r=redis.Redis(host=\"redis\"); r.ping()' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
   app:
     build:
@@ -189,26 +244,14 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
 
-      CONFIG_PATH: /app-config/noaa.env  # Separate config for NOAA poller
+      CONFIG_PATH: /app-config/.env  # Use main persistent config (same as app)
 
-      # Poller configuration
-      CAP_POLLER_MODE: NOAA
-
-      # SDR settings
-      SDR_ARGS: ${SDR_ARGS:-driver=airspy}
+      # Poller configuration (overrides .env file)
+      CAP_POLLER_MODE: NOAA  # Differentiates NOAA vs IPAWS poller
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    devices:
-      # SDR Device Passthrough
-      # This passes ALL USB devices to the container for SDR access
-      # For dedicated SDR hardware, this is the recommended configuration
-      # For specific device passthrough, see docs/SDR_SETUP.md
-      - /dev/bus/usb:/dev/bus/usb
-
-      # Block Device Passthrough for SMART Monitoring
-      # Pass through all block devices for comprehensive SMART health monitoring
-      - /dev:/dev:ro  # Read-only access to all devices for SMART monitoring
-    privileged: true  # Required to allow /dev/pts creation despite read-only /dev mount
+    # NOTE: SDR/USB access removed - this poller only fetches CAP XML via HTTP
+    # All SDR hardware access is isolated to the sdr-service container
     security_opt:
       - no-new-privileges:true
 
@@ -240,26 +283,14 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
 
-      CONFIG_PATH: /app-config/ipaws.env  # Separate config for IPAWS poller
+      CONFIG_PATH: /app-config/.env  # Use main persistent config (same as app)
 
-      # Poller configuration
-      CAP_POLLER_MODE: IPAWS
-
-      # SDR settings
-      SDR_ARGS: ${SDR_ARGS:-driver=airspy}
+      # Poller configuration (overrides .env file)
+      CAP_POLLER_MODE: IPAWS  # Differentiates NOAA vs IPAWS poller
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    devices:
-      # SDR Device Passthrough
-      # This passes ALL USB devices to the container for SDR access
-      # For dedicated SDR hardware, this is the recommended configuration
-      # For specific device passthrough, see docs/SDR_SETUP.md
-      - /dev/bus/usb:/dev/bus/usb
-
-      # Block Device Passthrough for SMART Monitoring
-      # Pass through all block devices for comprehensive SMART health monitoring
-      - /dev:/dev:ro  # Read-only access to all devices for SMART monitoring
-    privileged: true  # Required to allow /dev/pts creation despite read-only /dev mount
+    # NOTE: SDR/USB access removed - this poller only fetches CAP XML via HTTP
+    # All SDR hardware access is isolated to the sdr-service container
     security_opt:
       - no-new-privileges:true
 
