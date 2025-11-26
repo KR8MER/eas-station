@@ -1352,25 +1352,14 @@
     let currentServiceType = null;
     let currentServiceConfig = null;
 
-    // Sample rate options for different service types
+    // NOTE: These hardcoded sample rate options are NO LONGER USED
+    // Sample rates are now determined dynamically from actual hardware capabilities
+    // See populateSampleRates() function which queries /api/radio/capabilities/{driver}
+    // If you see this fallback being used, it means the driver dropdown is empty
     const sampleRateOptions = {
-        'NOAA': [
-            { value: 96000, label: '96 kHz (Recommended - Low CPU)', recommended: true },
-            { value: 192000, label: '192 kHz (Good balance)', recommended: false },
-            { value: 250000, label: '250 kHz (Wide capture - High CPU)', recommended: false }
-        ],
-        'FM': [
-            { value: 192000, label: '192 kHz (Standard FM)', recommended: false },
-            { value: 240000, label: '240 kHz (Wide FM)', recommended: false },
-            { value: 250000, label: '250 kHz (Wideband FM)', recommended: true },
-            { value: 1024000, label: '1.024 MHz (Full broadcast band)', recommended: false },
-            { value: 2400000, label: '2.4 MHz (Wide spectrum)', recommended: false }
-        ],
-        'AM': [
-            { value: 48000, label: '48 kHz (Recommended - Low CPU)', recommended: true },
-            { value: 96000, label: '96 kHz (Wide capture)', recommended: false },
-            { value: 192000, label: '192 kHz (Very wide)', recommended: false }
-        ]
+        'NOAA': [],
+        'FM': [],
+        'AM': []
     };
 
     async function populateSampleRates(serviceType) {
@@ -1470,9 +1459,10 @@
         }
 
         // Fallback to hardcoded options if no hardware info or API failed
-        if (!sampleRateOptions[serviceType]) {
+        if (!sampleRateOptions[serviceType] || sampleRateOptions[serviceType].length === 0) {
             sampleRateSelect.disabled = true;
-            sampleRateSelect.innerHTML = '<option value="">No sample rates available</option>';
+            sampleRateSelect.innerHTML = '<option value="">Select SDR device/driver first</option>';
+            sampleRateHelp.textContent = 'Choose SDR device to see hardware-specific sample rates';
             return;
         }
 
@@ -1760,42 +1750,105 @@
                 detectedServiceType = 'AM';
             }
 
-            // Populate sample rate dropdown for editing mode
+            // Populate sample rate dropdown for editing mode - use hardware capabilities
             const sampleRateSelect = document.getElementById('receiverSampleRate');
-            if (sampleRateOptions[detectedServiceType]) {
-                sampleRateSelect.disabled = false;
-                sampleRateSelect.innerHTML = '';
+            sampleRateSelect.disabled = false;
+            sampleRateSelect.innerHTML = '<option value="">Loading...</option>';
 
-                const options = sampleRateOptions[detectedServiceType];
-                let foundExisting = false;
-
-                options.forEach(option => {
-                    const opt = document.createElement('option');
-                    opt.value = option.value;
-                    opt.textContent = option.label;
-                    if (receiver.sample_rate && option.value === receiver.sample_rate) {
-                        opt.selected = true;
-                        foundExisting = true;
+            // Fetch hardware capabilities for this device
+            if (receiver.driver && (receiver.driver === 'airspy' || receiver.driver === 'rtlsdr')) {
+                try {
+                    const params = new URLSearchParams();
+                    if (receiver.serial) {
+                        params.append('serial', receiver.serial);
                     }
-                    sampleRateSelect.appendChild(opt);
-                });
+                    const capUrl = `/api/radio/capabilities/${encodeURIComponent(receiver.driver)}${params.toString() ? '?' + params.toString() : ''}`;
+                    const response = await fetch(capUrl);
 
-                // If current sample rate isn't in the predefined list, add it as custom
-                if (!foundExisting && receiver.sample_rate) {
-                    const customOpt = document.createElement('option');
-                    customOpt.value = receiver.sample_rate;
-                    customOpt.textContent = `${(receiver.sample_rate / 1000).toFixed(0)} kHz (Current custom value)`;
-                    customOpt.selected = true;
-                    sampleRateSelect.appendChild(customOpt);
+                    if (response.ok) {
+                        const capabilities = await response.json();
+
+                        if (capabilities.sample_rates && capabilities.sample_rates.length > 0) {
+                            sampleRateSelect.innerHTML = '';
+                            const sortedRates = [...capabilities.sample_rates].sort((a, b) => a - b);
+
+                            // Service-type specific preferred rates
+                            let preferredRates;
+                            if (detectedServiceType === 'NOAA') {
+                                preferredRates = receiver.driver === 'airspy'
+                                    ? [312500, 625000, 1250000]
+                                    : [250000, 240000, 192000];
+                            } else if (detectedServiceType === 'FM') {
+                                preferredRates = receiver.driver === 'airspy'
+                                    ? [2500000, 1250000, 625000]
+                                    : [2400000, 2500000, 1024000];
+                            } else if (detectedServiceType === 'AM') {
+                                preferredRates = receiver.driver === 'airspy'
+                                    ? [312500, 625000]
+                                    : [96000, 48000];
+                            }
+
+                            let foundExisting = false;
+
+                            sortedRates.forEach(rate => {
+                                const option = document.createElement('option');
+                                option.value = rate;
+
+                                // Format display
+                                if (rate >= 1000000) {
+                                    option.textContent = `${(rate / 1000000).toFixed(1)} MHz (${rate.toLocaleString()} Hz)`;
+                                } else {
+                                    option.textContent = `${(rate / 1000).toFixed(1)} kHz (${rate.toLocaleString()} Hz)`;
+                                }
+
+                                // Mark preferred rate
+                                if (preferredRates && preferredRates.includes(rate)) {
+                                    option.textContent += ' ⭐ Recommended';
+                                }
+
+                                // Pre-select current rate
+                                if (receiver.sample_rate && rate === receiver.sample_rate) {
+                                    option.selected = true;
+                                    foundExisting = true;
+                                }
+
+                                sampleRateSelect.appendChild(option);
+                            });
+
+                            // If current sample rate isn't supported by hardware, add it as custom
+                            if (!foundExisting && receiver.sample_rate) {
+                                const customOpt = document.createElement('option');
+                                customOpt.value = receiver.sample_rate;
+                                customOpt.textContent = `${(receiver.sample_rate / 1000000).toFixed(1)} MHz (${receiver.sample_rate.toLocaleString()} Hz) - Current (incompatible!)`;
+                                customOpt.selected = true;
+                                sampleRateSelect.appendChild(customOpt);
+                            }
+
+                            document.getElementById('sampleRateHelp').textContent = `Hardware-specific rates for ${receiver.driver.toUpperCase()} device`;
+                        }
+                    }
+                } catch (error) {
+                    console.error('Failed to fetch hardware capabilities for edit mode:', error);
+                    // Fallback: show current value only
+                    sampleRateSelect.innerHTML = '';
+                    if (receiver.sample_rate) {
+                        const opt = document.createElement('option');
+                        opt.value = receiver.sample_rate;
+                        opt.textContent = `${(receiver.sample_rate / 1000).toFixed(0)} kHz (Current value)`;
+                        opt.selected = true;
+                        sampleRateSelect.appendChild(opt);
+                    }
                 }
-
-                // Update help text
-                const helpTexts = {
-                    'NOAA': 'Lower rates save CPU - NOAA signals are only ~25kHz wide',
-                    'FM': 'Higher rates capture wider spectrum - FM signals are ~200kHz wide',
-                    'AM': 'Lower rates are sufficient - AM signals are only ~10kHz wide'
-                };
-                document.getElementById('sampleRateHelp').textContent = helpTexts[detectedServiceType] || 'Choose appropriate bandwidth for signal';
+            } else {
+                // Unknown/unsupported driver - show current value only
+                sampleRateSelect.innerHTML = '';
+                if (receiver.sample_rate) {
+                    const opt = document.createElement('option');
+                    opt.value = receiver.sample_rate;
+                    opt.textContent = `${(receiver.sample_rate / 1000).toFixed(0)} kHz (Current value)`;
+                    opt.selected = true;
+                    sampleRateSelect.appendChild(opt);
+                }
             }
 
             // For editing, show a simplified view with current values

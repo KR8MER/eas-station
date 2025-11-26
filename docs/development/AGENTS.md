@@ -1339,7 +1339,126 @@ Before committing code, verify:
 
 ---
 
+## 🔍 Debugging Patterns & User Interaction
+
+### CRITICAL: Trust User Bug Reports
+
+**When a user reports that something doesn't work, INVESTIGATE THE CODE - don't assume deployment/cache issues.**
+
+#### Anti-Pattern (DO NOT DO THIS):
+
+```
+User: "The sample rates still show 96k/192k/250k for AirSpy"
+Agent: "Did you clear your browser cache?"
+User: "Yes, I did"
+Agent: "Did you rebuild the containers?"
+User: "Yes"
+Agent: "Try doing a hard refresh with Ctrl+Shift+R"
+User: "I already did that"
+Agent: "Are you sure you pulled the latest code?"
+```
+
+**This is wrong. This assumes PEBKAC (Problem Exists Between Keyboard And Chair).**
+
+#### Correct Pattern (DO THIS):
+
+```
+User: "The sample rates still show 96k/192k/250k for AirSpy"
+Agent: [Investigates code]
+  1. Checks if sample rates are hardcoded somewhere
+  2. Searches for all references to sample_rate in codebase
+  3. Finds that applyServiceConfig() overwrites hardware-aware values
+  4. Identifies the bug in actual code
+  5. Fixes the root cause
+```
+
+### Debugging Philosophy
+
+1. **Assume the user is right** - If they say it doesn't work, it doesn't work
+2. **Investigate code first** - Look for actual bugs before suggesting deployment fixes
+3. **Don't suggest the same fix twice** - If they say they tried it, they tried it
+4. **Look deeper** - There may be multiple layers to a bug (hardcoded values, wrong element IDs, cache issues)
+5. **Search for overrides** - Code that overwrites earlier fixes is a common pattern
+
+### Common Bug Patterns to Check
+
+When a user reports a UI not updating:
+
+1. **JavaScript element ID mismatch** - `getElementById('wrongId')` returns null
+2. **Hardcoded backend values** - Backend API returning hardcoded data that overrides frontend
+3. **Function execution order** - Later function call overwriting earlier fix
+4. **Event listener not firing** - Programmatic value changes don't trigger 'change' events
+5. **CSS specificity** - More specific rule overriding intended style
+6. **Template file being used** - Wrong template file being rendered (check routes)
+
+### Investigation Steps
+
+**Step 1: Verify the fix exists in codebase**
+```bash
+# Check if fix is actually in the file
+grep -n "expected_code_pattern" file.py
+```
+
+**Step 2: Check for code that might override it**
+```bash
+# Search for ALL places that modify the same element/value
+grep -rn "elementId\|variableName" .
+```
+
+**Step 3: Check execution order**
+- Does function A run after function B?
+- Does the later call undo the earlier fix?
+
+**Step 4: Check for cached hardcoded values**
+- Backend APIs returning static data
+- Service configs with hardcoded defaults
+- Database migrations not run
+
+### When Deployment Issues ARE the Problem
+
+Only suggest deployment/cache fixes if:
+
+1. **Code inspection confirms the fix is correct** - No overrides, no bugs found
+2. **User is on an older commit** - `git log` shows they haven't pulled latest
+3. **Container timestamp is old** - `docker images` shows stale build time
+4. **First time suggesting it** - Don't repeat the same suggestion
+
+### Documentation Standard
+
+**Every significant bug fix should document:**
+
+1. **What the user reported** - Exact symptom
+2. **Why previous fixes didn't work** - What was missing
+3. **Root cause** - The actual code bug
+4. **How to prevent similar bugs** - Pattern to avoid
+
+### Example Bug Fix Documentation
+
+```markdown
+## Bug: Stereo/RBDS Not Disabled for NFM
+
+**User Report:** "Stereo and RBDS checkboxes still enabled for NFM"
+
+**Previous Fix Attempt:** Added 'change' event listener on modulation dropdown
+**Why It Failed:** Programmatic `.value` changes don't trigger 'change' events
+
+**Root Cause:**
+1. JavaScript looked for `receiverFMStereo` but HTML had `receiverStereo`
+2. `getElementById()` returned null, so if() check failed
+3. Disable logic never executed
+
+**Final Fix:**
+1. Changed all references from `receiverFMStereo` to `receiverStereo`
+2. Added disable logic to `applyServiceConfig()` for programmatic changes
+3. Kept event listener for manual dropdown changes
+
+**Prevention:** Always verify element IDs match between HTML and JavaScript
+```
+
+---
+
 ## 🤖 Agent Activity Log
 
 - 2024-11-12: Repository automation agent reviewed these guidelines before making any changes. All updates in this session comply with the established standards.
 - 2025-01-14: Updated AGENTS.md with comprehensive theme system documentation, file naming conventions (_old suffix rule), template structure updates (navbar.html active, navbar_old.html deprecated), and JavaScript theme API functions. Added detailed theme architecture section covering all 11 built-in themes, CSS variable structure, import/export functionality, and dark mode best practices.
+- 2025-11-26: Added "Debugging Patterns & User Interaction" section documenting correct debugging approach when users report bugs. Emphasizes investigating code first rather than assuming deployment/cache issues (anti-PEBKAC pattern). Includes common bug patterns, investigation steps, and example bug fix documentation.
