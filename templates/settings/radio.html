@@ -1327,6 +1327,15 @@
         }
     });
 
+    // Handle driver change - re-populate sample rates with hardware-specific values
+    document.getElementById('receiverDriver')?.addEventListener('change', async (e) => {
+        // If a service type is already selected, re-populate sample rates with new driver's capabilities
+        const serviceTypeRadios = document.querySelectorAll('input[name="serviceType"]:checked');
+        if (serviceTypeRadios.length > 0 && currentServiceType) {
+            await populateSampleRates(currentServiceType);
+        }
+    });
+
     // Auto-generate identifier from display name
     document.getElementById('receiverDisplayName')?.addEventListener('input', (e) => {
         if (!document.getElementById('receiverId').value) {
@@ -1364,14 +1373,106 @@
         ]
     };
 
-    function populateSampleRates(serviceType) {
+    async function populateSampleRates(serviceType) {
         const sampleRateSelect = document.getElementById('receiverSampleRate');
         const sampleRateHelp = document.getElementById('sampleRateHelp');
 
-        if (!serviceType || !sampleRateOptions[serviceType]) {
+        if (!serviceType) {
             sampleRateSelect.disabled = true;
             sampleRateSelect.innerHTML = '<option value="">Select service type first</option>';
             sampleRateHelp.textContent = 'Choose appropriate bandwidth for signal';
+            return;
+        }
+
+        // Check if we have hardware info to query actual capabilities
+        const driverSelect = document.getElementById('receiverDriver');
+        const serialInput = document.getElementById('receiverSerial');
+        const driver = driverSelect ? driverSelect.value : null;
+        const serial = serialInput ? serialInput.value : null;
+
+        // Try to get hardware capabilities if driver is selected
+        if (driver && (driver === 'airspy' || driver === 'rtlsdr')) {
+            try {
+                const params = new URLSearchParams();
+                if (serial) {
+                    params.append('serial', serial);
+                }
+                const capUrl = `/api/radio/capabilities/${encodeURIComponent(driver)}${params.toString() ? '?' + params.toString() : ''}`;
+                const response = await fetch(capUrl);
+
+                if (response.ok) {
+                    const capabilities = await response.json();
+
+                    // Use actual hardware capabilities
+                    if (capabilities.sample_rates && capabilities.sample_rates.length > 0) {
+                        sampleRateSelect.disabled = false;
+                        sampleRateSelect.innerHTML = '';
+
+                        const sortedRates = [...capabilities.sample_rates].sort((a, b) => a - b);
+
+                        // Service-type specific preferred rates
+                        let preferredRates;
+                        if (serviceType === 'NOAA') {
+                            preferredRates = driver === 'airspy'
+                                ? [312500, 625000, 1250000]  // AirSpy decimated rates good for NOAA
+                                : [250000, 240000, 192000];  // RTL-SDR rates for NOAA
+                        } else if (serviceType === 'FM') {
+                            preferredRates = driver === 'airspy'
+                                ? [2500000, 1250000, 625000]  // AirSpy rates for FM
+                                : [2400000, 2500000, 1024000]; // RTL-SDR rates for FM
+                        } else if (serviceType === 'AM') {
+                            preferredRates = driver === 'airspy'
+                                ? [312500, 625000]  // AirSpy low rates for AM
+                                : [96000, 48000];  // RTL-SDR low rates for AM
+                        }
+
+                        let selectedRate = null;
+
+                        sortedRates.forEach(rate => {
+                            const option = document.createElement('option');
+                            option.value = rate;
+
+                            // Format display
+                            if (rate >= 1000000) {
+                                option.textContent = `${(rate / 1000000).toFixed(1)} MHz (${rate.toLocaleString()} Hz)`;
+                            } else {
+                                option.textContent = `${(rate / 1000).toFixed(1)} kHz (${rate.toLocaleString()} Hz)`;
+                            }
+
+                            // Mark recommended rate
+                            if (!selectedRate && preferredRates && preferredRates.includes(rate)) {
+                                selectedRate = rate;
+                                option.textContent += ' ⭐ Recommended';
+                                option.selected = true;
+                            }
+
+                            sampleRateSelect.appendChild(option);
+                        });
+
+                        // If no preferred rate found, select closest to ideal
+                        if (!selectedRate && sortedRates.length > 0) {
+                            const idealRate = serviceType === 'NOAA' ? (driver === 'airspy' ? 312500 : 250000)
+                                            : serviceType === 'FM' ? (driver === 'airspy' ? 2500000 : 2400000)
+                                            : (driver === 'airspy' ? 312500 : 96000);
+                            selectedRate = sortedRates.reduce((prev, curr) => {
+                                return Math.abs(curr - idealRate) < Math.abs(prev - idealRate) ? curr : prev;
+                            });
+                            sampleRateSelect.value = selectedRate;
+                        }
+
+                        sampleRateHelp.textContent = `Hardware-specific rates for ${driver.toUpperCase()} device`;
+                        return; // Success - exit early
+                    }
+                }
+            } catch (error) {
+                console.warn('Failed to fetch hardware capabilities, using defaults:', error);
+            }
+        }
+
+        // Fallback to hardcoded options if no hardware info or API failed
+        if (!sampleRateOptions[serviceType]) {
+            sampleRateSelect.disabled = true;
+            sampleRateSelect.innerHTML = '<option value="">No sample rates available</option>';
             return;
         }
 
