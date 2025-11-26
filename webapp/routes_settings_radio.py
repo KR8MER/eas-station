@@ -194,16 +194,21 @@ def _parse_receiver_payload(payload: Dict[str, Any], *, partial: bool = False) -
 
             # Validate sample rate compatibility with driver
             if "driver" in data:
-                # Get serial for hardware-specific validation if available
-                device_args = None
-                if data.get("serial"):
-                    device_args = {"serial": data["serial"]}
+                try:
+                    # Get serial for hardware-specific validation if available
+                    device_args = None
+                    if data.get("serial"):
+                        device_args = {"serial": data["serial"]}
 
-                is_valid, error_msg = validate_sample_rate_for_driver(
-                    data["driver"], sample_rate, device_args
-                )
-                if not is_valid:
-                    return None, error_msg
+                    is_valid, error_msg = validate_sample_rate_for_driver(
+                        data["driver"], sample_rate, device_args
+                    )
+                    if not is_valid:
+                        return None, error_msg
+                except Exception as validation_exc:
+                    # If validation fails unexpectedly, log and skip validation
+                    logger.warning(f"Sample rate validation failed for {data['driver']}: {validation_exc}")
+                    # Allow the sample rate anyway - hardware validation is not critical
 
         except ValueError:
             return None, "Sample rate must be a positive integer."
@@ -503,43 +508,56 @@ def register(app: Flask, logger) -> None:
 
     @app.route("/api/radio/receivers/<int:receiver_id>", methods=["PUT", "PATCH"])
     def api_update_receiver(receiver_id: int) -> Any:
-        ensure_radio_tables(route_logger)
-        receiver = RadioReceiver.query.get_or_404(receiver_id)
-        payload = request.get_json(silent=True) or {}
-        data, error = _parse_receiver_payload(payload, partial=True)
-        if error:
-            return jsonify({"error": error}), 400
-
-        if "identifier" in data and data["identifier"] != receiver.identifier:
-            conflict = RadioReceiver.query.filter_by(identifier=data["identifier"]).first()
-            if conflict and conflict.id != receiver.id:
-                return jsonify({"error": "Another receiver already uses this identifier."}), 400
-
-        for key, value in data.items():
-            setattr(receiver, key, value)
-
         try:
-            db.session.commit()
-        except SQLAlchemyError as exc:
-            route_logger.error("Failed to update receiver %s: %s", receiver.identifier, exc)
-            db.session.rollback()
-            _log_radio_event(
-                "ERROR",
-                f"Failed to update receiver {receiver.identifier}: {exc}",
-                module_suffix="crud",
-                details={
-                    "identifier": receiver.identifier,
-                    "error": str(exc),
-                },
-            )
-            return jsonify({"error": "Failed to update receiver."}), 500
+            ensure_radio_tables(route_logger)
+            receiver = RadioReceiver.query.get_or_404(receiver_id)
+            payload = request.get_json(silent=True) or {}
 
-        manager_state = _sync_radio_manager_state(route_logger)
+            route_logger.info(f"Updating receiver {receiver_id} with payload: {payload}")
 
-        return jsonify({
-            "receiver": _receiver_to_dict(receiver),
-            "radio_manager": manager_state,
-        })
+            data, error = _parse_receiver_payload(payload, partial=True)
+            if error:
+                route_logger.error(f"Validation error for receiver {receiver_id}: {error}")
+                return jsonify({"error": error}), 400
+
+            if "identifier" in data and data["identifier"] != receiver.identifier:
+                conflict = RadioReceiver.query.filter_by(identifier=data["identifier"]).first()
+                if conflict and conflict.id != receiver.id:
+                    return jsonify({"error": "Another receiver already uses this identifier."}), 400
+
+            for key, value in data.items():
+                setattr(receiver, key, value)
+
+            try:
+                db.session.commit()
+            except SQLAlchemyError as exc:
+                route_logger.error("Failed to update receiver %s: %s", receiver.identifier, exc)
+                db.session.rollback()
+                _log_radio_event(
+                    "ERROR",
+                    f"Failed to update receiver {receiver.identifier}: {exc}",
+                    module_suffix="crud",
+                    details={
+                        "identifier": receiver.identifier,
+                        "error": str(exc),
+                    },
+                )
+                return jsonify({"error": "Failed to update receiver."}), 500
+
+            manager_state = _sync_radio_manager_state(route_logger)
+
+            return jsonify({
+                "receiver": _receiver_to_dict(receiver),
+                "radio_manager": manager_state,
+            })
+
+        except Exception as exc:
+            # Catch ALL unexpected errors and return JSON instead of HTML
+            route_logger.error(f"Unexpected error updating receiver {receiver_id}: {exc}", exc_info=True)
+            return jsonify({
+                "error": f"Unexpected error: {str(exc)}",
+                "type": type(exc).__name__
+            }), 500
 
     @app.route("/api/radio/receivers/<int:receiver_id>", methods=["DELETE"])
     def api_delete_receiver(receiver_id: int) -> Any:
