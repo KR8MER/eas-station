@@ -184,12 +184,19 @@ def initialize_vfd_controller():
 def initialize_oled_display():
     """Initialize OLED display."""
     try:
-        from app_core.oled import initialise_oled_display, OLED_AVAILABLE
+        from app_core.oled import initialise_oled_display, ensure_oled_button, OLED_AVAILABLE
 
         if not OLED_AVAILABLE:
             controller = initialise_oled_display(logger)
             if controller:
                 logger.info("✅ OLED display initialized")
+
+                # Initialize OLED button (GPIO pin 4)
+                button = ensure_oled_button(logger)
+                if button:
+                    logger.info("✅ OLED button initialized on GPIO 4")
+                else:
+                    logger.info("OLED button disabled or unavailable")
             else:
                 logger.info("OLED display disabled or unavailable")
         else:

@@ -156,7 +156,7 @@ class ScreenManager:
         self._oled_scroll_offset = 0
         self._oled_scroll_effect = None
         self._oled_scroll_speed = 4  # pixels per frame (increased for faster scrolling)
-        self._oled_scroll_fps = 60  # frames per second (increased for ultra-smooth scrolling)
+        self._oled_scroll_fps = 30  # frames per second (optimized for I2C bus speed to prevent tearing)
         self._oled_screen_scroll_state: Optional[Dict[str, Any]] = None
         self._oled_screen_scroll_offset = 0
         self._last_oled_screen_frame_time = 0.0  # Use monotonic time for precise frame timing
@@ -1213,7 +1213,7 @@ class ScreenManager:
         body_font_name = 'huge'
         logger.info("Using HUGE font for scrolling alert (%s chars)", len(body_text))
 
-        # Calculate text height
+        # Calculate text height and center it vertically in available space
         body_font = controller._fonts.get(body_font_name, controller._fonts.get('xlarge', controller._fonts.get('large', controller._fonts['small'])))
         temp_img = Image.new("1", (1, 1))
         temp_draw = ImageDraw.Draw(temp_img)
@@ -1225,9 +1225,10 @@ class ScreenManager:
             # Fallback for older PIL versions
             text_height = body_font.getsize(body_text)[1]
 
-        # Position text to start immediately at top of body area (y=0 in body coordinates)
-        # This ensures the header and scrolling text don't have a gap between them
-        text_y = 0
+        # Center text vertically in the available body space to maximize use of screen real estate
+        # This prevents wasted space above/below the text
+        vertical_padding = max(0, (body_height - text_height) // 2)
+        text_y = vertical_padding
 
         # Use the seamless scrolling API with OLEDLine
         # This will create a buffer with pattern: [text][separator][text]
