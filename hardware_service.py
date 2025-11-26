@@ -46,8 +46,9 @@ import json
 import redis
 from typing import Optional
 from datetime import datetime, timezone
+from dotenv import load_dotenv
 
-# Configure logging
+# Configure logging early
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] [%(name)s] %(message)s',
@@ -57,6 +58,19 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+# Load environment variables from persistent config volume
+# This must happen before initializing hardware controllers
+_config_path = os.environ.get('CONFIG_PATH')
+if _config_path:
+    if os.path.exists(_config_path):
+        load_dotenv(_config_path, override=True)
+        logger.info(f"✅ Loaded environment from: {_config_path}")
+    else:
+        logger.warning(f"⚠️  CONFIG_PATH set but file not found: {_config_path}")
+        load_dotenv(override=True)  # Fall back to default .env
+else:
+    load_dotenv(override=True)  # Use default .env location
 
 # Global state
 _running = True
