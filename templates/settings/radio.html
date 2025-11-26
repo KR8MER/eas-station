@@ -2173,6 +2173,9 @@
             discoveryModal.hide();
         }
 
+        // Open modal first (this resets the form), then populate fields
+        openModal();
+
         // Pre-fill the add receiver modal with discovered device info
         document.getElementById('receiverDisplayName').value = device.label || device.product || `${device.driver} Device`;
         document.getElementById('receiverIdentifier').value = device.serial || `${device.driver}_${deviceIndex}`;
@@ -2276,7 +2279,7 @@
             document.getElementById('radioReceiverModalLabel').textContent = 'Add Receiver';
         }
 
-        openModal();
+        // Modal is already open - no need to call openModal() again
     };
 
     // Helper function to set defaults based on driver when capabilities aren't available
