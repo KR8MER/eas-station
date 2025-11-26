@@ -1404,8 +1404,8 @@
         const driver = driverSelect ? driverSelect.value : null;
         const serial = serialInput ? serialInput.value : null;
 
-        // Try to get hardware capabilities if driver is selected
-        if (driver && (driver === 'airspy' || driver === 'rtlsdr')) {
+        // Try to get hardware capabilities if driver is selected (works for any driver type)
+        if (driver) {
             try {
                 const params = new URLSearchParams();
                 if (serial) {
@@ -1425,19 +1425,21 @@
                         const sortedRates = [...capabilities.sample_rates].sort((a, b) => a - b);
 
                         // Service-type specific preferred rates
+                        const driverLower = driver.toLowerCase();
+                        const isAirspy = driverLower.includes('airspy');
                         let preferredRates;
                         if (serviceType === 'NOAA') {
-                            preferredRates = driver === 'airspy'
+                            preferredRates = isAirspy
                                 ? [312500, 625000, 1250000]  // AirSpy decimated rates good for NOAA
-                                : [250000, 240000, 192000];  // RTL-SDR rates for NOAA
+                                : [250000, 240000, 192000];  // Generic/RTL-SDR rates for NOAA
                         } else if (serviceType === 'FM') {
-                            preferredRates = driver === 'airspy'
+                            preferredRates = isAirspy
                                 ? [2500000, 1250000, 625000]  // AirSpy rates for FM
-                                : [2400000, 2500000, 1024000]; // RTL-SDR rates for FM
+                                : [2400000, 2500000, 1024000]; // Generic/RTL-SDR rates for FM
                         } else if (serviceType === 'AM') {
-                            preferredRates = driver === 'airspy'
+                            preferredRates = isAirspy
                                 ? [312500, 625000]  // AirSpy low rates for AM
-                                : [96000, 48000];  // RTL-SDR low rates for AM
+                                : [96000, 48000];  // Generic/RTL-SDR low rates for AM
                         }
 
                         let selectedRate = null;
@@ -1465,9 +1467,9 @@
 
                         // If no preferred rate found, select closest to ideal
                         if (!selectedRate && sortedRates.length > 0) {
-                            const idealRate = serviceType === 'NOAA' ? (driver === 'airspy' ? 312500 : 250000)
-                                            : serviceType === 'FM' ? (driver === 'airspy' ? 2500000 : 2400000)
-                                            : (driver === 'airspy' ? 312500 : 96000);
+                            const idealRate = serviceType === 'NOAA' ? (isAirspy ? 312500 : 250000)
+                                            : serviceType === 'FM' ? (isAirspy ? 2500000 : 2400000)
+                                            : (isAirspy ? 312500 : 96000);
                             selectedRate = sortedRates.reduce((prev, curr) => {
                                 return Math.abs(curr - idealRate) < Math.abs(prev - idealRate) ? curr : prev;
                             });
