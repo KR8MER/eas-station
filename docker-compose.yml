@@ -246,8 +246,8 @@ services:
 
       CONFIG_PATH: /app-config/.env  # Use main persistent config (same as app)
 
-      # Poller configuration
-      CAP_POLLER_MODE: NOAA
+      # Poller configuration (overrides .env file)
+      CAP_POLLER_MODE: NOAA  # Differentiates NOAA vs IPAWS poller
     extra_hosts:
       - "host.docker.internal:host-gateway"
     # NOTE: SDR/USB access removed - this poller only fetches CAP XML via HTTP
@@ -285,8 +285,8 @@ services:
 
       CONFIG_PATH: /app-config/.env  # Use main persistent config (same as app)
 
-      # Poller configuration
-      CAP_POLLER_MODE: IPAWS
+      # Poller configuration (overrides .env file)
+      CAP_POLLER_MODE: IPAWS  # Differentiates NOAA vs IPAWS poller
     extra_hosts:
       - "host.docker.internal:host-gateway"
     # NOTE: SDR/USB access removed - this poller only fetches CAP XML via HTTP
