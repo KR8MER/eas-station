@@ -7,14 +7,26 @@ import os
 # Add the project root to Python path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from app_core import create_app
+# Direct database access without Flask app context
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 from app_core.models import RadioReceiver
 
 def main():
-    app = create_app()
+    # Get database connection from environment
+    db_host = os.environ.get('POSTGRES_HOST', 'localhost')
+    db_port = os.environ.get('POSTGRES_PORT', '5432')
+    db_name = os.environ.get('POSTGRES_DB', 'alerts')
+    db_user = os.environ.get('POSTGRES_USER', 'postgres')
+    db_pass = os.environ.get('POSTGRES_PASSWORD', 'postgres')
 
-    with app.app_context():
-        receivers = RadioReceiver.query.filter_by(enabled=True).all()
+    database_url = f"postgresql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
+    engine = create_engine(database_url)
+    Session = sessionmaker(bind=engine)
+    session = Session()
+
+    try:
+        receivers = session.query(RadioReceiver).filter_by(enabled=True).all()
 
         print("=" * 70)
         print("SDR RECEIVER CONFIGURATION DIAGNOSTIC")
@@ -48,6 +60,8 @@ def main():
                         print(f"    - {rate / 1e6:.3f} MHz ({rate:,} Hz)")
 
         print("\n" + "=" * 70)
+    finally:
+        session.close()
 
 if __name__ == "__main__":
     main()
