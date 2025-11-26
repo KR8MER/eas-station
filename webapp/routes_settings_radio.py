@@ -89,7 +89,14 @@ def _log_radio_event(
 
 
 def _receiver_to_dict(receiver: RadioReceiver) -> Dict[str, Any]:
-    latest = receiver.latest_status()
+    # Try to get latest status, but handle DetachedInstanceError gracefully
+    # This can happen if the receiver object is not bound to a session
+    try:
+        latest = receiver.latest_status()
+    except Exception:
+        # If we can't access the relationship, just skip the status
+        latest = None
+
     return {
         "id": receiver.id,
         "identifier": receiver.identifier,
@@ -471,40 +478,62 @@ def register(app: Flask, logger) -> None:
 
     @app.route("/api/radio/receivers", methods=["POST"])
     def api_create_receiver() -> Any:
-        ensure_radio_tables(route_logger)
-        payload = request.get_json(silent=True) or {}
-        data, error = _parse_receiver_payload(payload)
-        if error:
-            return jsonify({"error": error}), 400
-
-        existing = RadioReceiver.query.filter_by(identifier=data["identifier"]).first()
-        if existing:
-            return jsonify({"error": "A receiver with this identifier already exists."}), 400
-
-        receiver = RadioReceiver(**data)
         try:
-            db.session.add(receiver)
-            db.session.commit()
-        except SQLAlchemyError as exc:
-            route_logger.error("Failed to create receiver: %s", exc)
-            db.session.rollback()
-            _log_radio_event(
-                "ERROR",
-                f"Failed to create receiver {data.get('identifier')}: {exc}",
-                module_suffix="crud",
-                details={
-                    "identifier": data.get("identifier"),
-                    "error": str(exc),
-                },
-            )
-            return jsonify({"error": "Failed to save receiver."}), 500
+            ensure_radio_tables(route_logger)
+            payload = request.get_json(silent=True) or {}
 
-        manager_state = _sync_radio_manager_state(route_logger)
+            route_logger.info(f"Creating new receiver with payload: {payload}")
 
-        return jsonify({
-            "receiver": _receiver_to_dict(receiver),
-            "radio_manager": manager_state,
-        }), 201
+            data, error = _parse_receiver_payload(payload)
+            if error:
+                route_logger.error(f"Validation error for new receiver: {error}")
+                return jsonify({"error": error}), 400
+
+            existing = RadioReceiver.query.filter_by(identifier=data["identifier"]).first()
+            if existing:
+                return jsonify({"error": "A receiver with this identifier already exists."}), 400
+
+            receiver = RadioReceiver(**data)
+            try:
+                db.session.add(receiver)
+                db.session.commit()
+                receiver_id = receiver.id
+            except SQLAlchemyError as exc:
+                route_logger.error("Failed to create receiver: %s", exc)
+                db.session.rollback()
+                _log_radio_event(
+                    "ERROR",
+                    f"Failed to create receiver {data.get('identifier')}: {exc}",
+                    module_suffix="crud",
+                    details={
+                        "identifier": data.get("identifier"),
+                        "error": str(exc),
+                    },
+                )
+                return jsonify({"error": "Failed to save receiver."}), 500
+
+            manager_state = _sync_radio_manager_state(route_logger)
+
+            # Re-query the receiver to ensure it's bound to the session
+            receiver = db.session.query(RadioReceiver).filter_by(id=receiver_id).first()
+            if not receiver:
+                return jsonify({"error": "Receiver not found after creation."}), 404
+
+            # Ensure the receiver is in the current session
+            db.session.refresh(receiver)
+
+            return jsonify({
+                "receiver": _receiver_to_dict(receiver),
+                "radio_manager": manager_state,
+            }), 201
+
+        except Exception as exc:
+            # Catch ALL unexpected errors and return JSON instead of HTML
+            route_logger.error(f"Unexpected error creating receiver: {exc}", exc_info=True)
+            return jsonify({
+                "error": f"Unexpected error: {str(exc)}",
+                "type": type(exc).__name__
+            }), 500
 
     @app.route("/api/radio/receivers/<int:receiver_id>", methods=["PUT", "PATCH"])
     def api_update_receiver(receiver_id: int) -> Any:
