@@ -1801,14 +1801,12 @@
         if (fmOptionsContainer) fmOptionsContainer.style.display = 'none';
 
         if (receiver) {
-            // Editing existing receiver - load devices and pre-select current one
-            await loadSDRDevices(receiver.serial);
-
+            // Editing existing receiver - set basic fields first
             document.getElementById('receiverId').value = receiver.id;
             document.getElementById('receiverDisplayName').value = receiver.display_name;
             document.getElementById('receiverIdentifier').value = receiver.identifier;
             document.getElementById('receiverDriver').value = receiver.driver;
-            document.getElementById('receiverSerial').value = receiver.serial || '';
+            // Don't set serial yet - let loadSDRDevices() handle it
             document.getElementById('receiverFrequency').value = receiver.frequency_hz;
             document.getElementById('receiverGain').value = receiver.gain ?? '';
             document.getElementById('receiverChannel').value = receiver.channel ?? '';
@@ -1833,6 +1831,22 @@
             document.getElementById('receiverAutoStart').checked = receiver.auto_start !== false;
 
             toggleSquelchInputs(receiver.audio_output === true);
+
+            // Load devices and auto-select - this will set the serial field
+            await loadSDRDevices(receiver.serial);
+
+            // After loadSDRDevices completes, check what serial was set
+            const serialField = document.getElementById('receiverSerial');
+            console.log('[SDR] After loadSDRDevices, serial field value:', serialField.value);
+            console.log('[SDR] Receiver serial from DB:', receiver.serial);
+
+            // If serial field is still empty but we have one from DB, use it
+            if (!serialField.value && receiver.serial) {
+                console.log('[SDR] Setting serial from DB:', receiver.serial);
+                serialField.value = receiver.serial;
+            }
+
+            console.log('[SDR] Final serial field value before showing modal:', serialField.value);
 
             // Determine service type based on frequency
             let detectedServiceType = 'NOAA'; // Default
@@ -2027,8 +2041,16 @@
     async function submitReceiver(event) {
         event.preventDefault();
 
+        // Debug: Check serial field value before creating FormData
+        const serialFieldDebug = document.getElementById('receiverSerial');
+        console.log('[SDR] Serial field value at submit time:', serialFieldDebug?.value);
+
         const formData = new FormData(form);
         const payload = Object.fromEntries(formData.entries());
+
+        // Debug: Check serial in payload
+        console.log('[SDR] Serial in payload from FormData:', payload.serial);
+
         payload.enabled = formData.get('enabled') !== null;
         payload.auto_start = formData.get('auto_start') !== null;
         payload.audio_output = formData.get('audio_output') !== null;
