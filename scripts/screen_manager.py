@@ -1094,7 +1094,7 @@ class ScreenManager:
         expected_frames = elapsed / frame_interval if frame_interval > 0 else 1
         pixels_to_advance = max(1, int(self._oled_scroll_speed * expected_frames))
         self._oled_scroll_offset += pixels_to_advance
-        if self._oled_scroll_offset >= max_offset:
+        if self._oled_scroll_offset > max_offset:
             self._oled_scroll_offset = 0
 
         # Update timing - use actual current time for precision
@@ -1199,10 +1199,10 @@ class ScreenManager:
         self._cached_body_area_height = body_height
 
         # Calculate max offset for seamless looping
-        # This is original_width + separator_width as per the seamless scrolling algorithm
-        original_width = dimensions.get('original_width', width)
-        separator_width = dimensions.get('separator_width', width)
-        self._cached_scroll_max_offset = original_width + separator_width
+        # Use the padded buffer width minus the visible window so the text can
+        # fully exit the screen and re-enter from the right before wrapping.
+        padded_width = dimensions.get('max_x', scroll_canvas.width)
+        self._cached_scroll_max_offset = max(1, padded_width - width)
 
         header = alert_meta.get('header_text') or alert_meta.get('event') or 'Alert'
         logger.info(
@@ -1268,7 +1268,7 @@ class ScreenManager:
 
         # Crop the visible window from pre-rendered seamless scroll canvas
         # The canvas has pattern: [text][separator][text] for seamless looping
-        crop_left = self._oled_scroll_offset
+        crop_left = min(self._oled_scroll_offset, max(0, self._cached_scroll_canvas.width - width))
         crop_right = crop_left + width
         crop_box = (crop_left, 0, crop_right, self._cached_body_area_height)
 

@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file. The format is b
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project currently
 tracks releases under the 2.x series.
 
+## [2.12.21] - 2025-11-27
+### Fixed
+- Let OLED alert scrolls run across the full padded buffer before wrapping so alert text cleanly exits and re-enters the screen instead of freezing or overlaying fragments.
+
 ## [2.12.20] - 2025-11-27
 ### Fixed
 - Restored OLED alert scrolling by advancing the seamless scroll window based on elapsed frame time and speed settings so high-priority messages animate smoothly instead of freezing on a single frame.
