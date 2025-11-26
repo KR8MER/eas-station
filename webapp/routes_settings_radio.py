@@ -546,11 +546,14 @@ def register(app: Flask, logger) -> None:
 
             manager_state = _sync_radio_manager_state(route_logger)
 
-            # Re-query the receiver to ensure it's bound to the session
-            # _sync_radio_manager_state may cause the receiver to become detached
-            receiver = RadioReceiver.query.get(receiver_id)
+            # Explicitly re-query with a fresh session query to avoid DetachedInstanceError
+            # We use filter_by + first() instead of get() to ensure a fresh query
+            receiver = db.session.query(RadioReceiver).filter_by(id=receiver_id).first()
             if not receiver:
                 return jsonify({"error": "Receiver not found after update."}), 404
+
+            # Ensure the receiver is in the current session
+            db.session.refresh(receiver)
 
             return jsonify({
                 "receiver": _receiver_to_dict(receiver),
