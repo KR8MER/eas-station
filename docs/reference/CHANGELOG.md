@@ -4,6 +4,11 @@ All notable changes to this project are documented in this file. The format is b
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project currently
 tracks releases under the 2.x series.
 
+## [2.12.19] - 2025-11-26
+### Fixed
+- Converted nginx upstream configuration to use variable-based proxy_pass that respects the `resolver ipv6=off` directive, preventing "Connection refused" errors when Docker DNS returns IPv6 addresses for the backend container that only binds to IPv4.
+- Added IPv6 connectivity troubleshooting documentation (`docs/troubleshooting/FIX_IPV6_CONNECTIVITY.md`) so operators can diagnose SSL Labs IPv6 test failures and nginx upstream connection errors.
+
 ## [2.12.18] - 2025-11-26
 ### Fixed
 - Redirected the policy docs URLs to the canonical `/terms` and `/privacy` routes and updated the documentation index to point to those pages so users no longer see divergent copies of the legal notices.
