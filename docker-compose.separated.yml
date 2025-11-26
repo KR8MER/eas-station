@@ -1,23 +1,27 @@
-# EAS Station - Separated Service Architecture
+# EAS Station - Separated Service Architecture with Hardware Isolation
 #
 # This is the SAME as docker-compose.yml - the separated architecture is now the default!
 #
-# Modern Architecture:
-#   - audio-service: Standalone audio processing (SDR, EAS monitoring, metrics)
-#   - app: Web UI only (reads metrics from Redis)
+# Modern Hardware-Isolated Architecture:
+#   - sdr-service: Standalone SDR hardware processing (USB devices only)
+#   - hardware-service: GPIO, displays, Zigbee (isolated from SDR)
+#   - app: Web UI only (reads metrics from Redis, no hardware access)
 #   - redis: State management and pub/sub
+#   - pollers: HTTP-only alert polling (no hardware access)
 #
 # Benefits:
-#   - Web crashes don't affect audio monitoring
-#   - Independent service restart
-#   - Clear CPU attribution per service
-#   - Simpler than old multi-container approach
+#   ✅ Web crashes don't affect hardware monitoring
+#   ✅ SDR failures don't affect GPIO/displays
+#   ✅ Display failures don't affect SDR monitoring
+#   ✅ Independent service restart and fault isolation
+#   ✅ Clear CPU attribution per service
+#   ✅ No USB device contention
 #
 # For the full configuration, use docker-compose.yml directly:
 #   docker-compose up -d
 #
 # This file is kept for backward compatibility and documentation purposes.
-# It demonstrates the separated service architecture that's now standard.
+# It demonstrates the hardware-isolated architecture that's now standard.
 
 version: '3.8'
 
@@ -46,15 +50,15 @@ services:
     security_opt:
       - no-new-privileges:true
 
-  # Audio Service - Dedicated audio processing
-  # Runs independently from web application
+  # SDR Service - Dedicated SDR hardware processing
+  # Runs independently from web application and other hardware
   # Publishes metrics to Redis every 5 seconds
-  audio-service:
+  sdr-service:
     build:
       context: .
       dockerfile: Dockerfile
     image: eas-station:latest
-    container_name: eas-audio-service
+    container_name: eas-sdr-service
     restart: unless-stopped
     networks:
       - eas-network
@@ -83,39 +87,46 @@ services:
       # Icecast configuration
       ICECAST_SERVER: ${ICECAST_SERVER:-icecast}
       ICECAST_PORT: ${ICECAST_INTERNAL_PORT:-8000}
+      ICECAST_EXTERNAL_PORT: ${ICECAST_EXTERNAL_PORT:-8001}
       ICECAST_SOURCE_PASSWORD: ${ICECAST_SOURCE_PASSWORD:-eas_station_source_password}
+      ICECAST_ADMIN_USER: ${ICECAST_ADMIN_USER:-admin}
+      ICECAST_ADMIN_PASSWORD: ${ICECAST_ADMIN_PASSWORD:-changeme_admin}
+      ICECAST_ENABLED: ${ICECAST_ENABLED:-true}
+      ICECAST_PUBLIC_HOSTNAME: ${ICECAST_PUBLIC_HOSTNAME:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     devices:
-      # SDR Device Passthrough
+      # SDR Device Passthrough - ONLY this container needs USB access
       - /dev/bus/usb:/dev/bus/usb
+    # Privileged mode required for USB device access and dynamic device node creation
+    # Provides CAP_SYS_RAWIO and other capabilities needed for direct hardware I/O
     privileged: true
+    cap_add:
+      - SYS_RAWIO    # Direct I/O access to hardware devices
+      - SYS_ADMIN    # USB device operations
     security_opt:
       - no-new-privileges:true
     depends_on:
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import redis; r=redis.Redis(host=\"redis\"); r.ping()' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
-  # Web Application - UI only (no audio processing)
-  # Reads metrics from Redis (published by audio-service)
-  # Multiple workers can run safely - all read from same Redis state
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        SOAPYSDR_DRIVERS: ${SOAPYSDR_DRIVERS:-rtlsdr,airspy}
+  # Hardware Service - Dedicated GPIO/Display hardware management
+  # Isolated from SDR for fault tolerance
+  hardware-service:
     image: eas-station:latest
-    expose:
-      - "5000"
+    container_name: eas-hardware-service
+    restart: unless-stopped
     networks:
       - eas-network
-    env_file:
-      - stack.env
+    command: ["python", "hardware_service.py"]
     volumes:
       - app-config:/app-config
-      - certbot-conf:/etc/letsencrypt:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
       # Database connection
       POSTGRES_HOST: ${POSTGRES_HOST:-alerts-db}
@@ -130,32 +141,81 @@ services:
       REDIS_DB: ${REDIS_DB:-0}
 
       # Application settings
-      SECRET_KEY: ${SECRET_KEY:-}
-      FLASK_ENV: ${FLASK_ENV:-production}
-      FLASK_DEBUG: ${FLASK_DEBUG:-false}
       CONFIG_PATH: /app-config/.env
 
-      # Location defaults
-      DEFAULT_TIMEZONE: ${DEFAULT_TIMEZONE:-America/New_York}
-
-      # Icecast auto-configuration
-      ICECAST_SERVER: ${ICECAST_SERVER:-icecast}
-      ICECAST_PORT: ${ICECAST_INTERNAL_PORT:-8000}
-      ICECAST_EXTERNAL_PORT: ${ICECAST_EXTERNAL_PORT:-8001}
-      ICECAST_SOURCE_PASSWORD: ${ICECAST_SOURCE_PASSWORD:-eas_station_source_password}
-      ICECAST_ENABLED: ${ICECAST_ENABLED:-true}
+      # Hardware settings
+      GPIO_ENABLED: ${GPIO_ENABLED:-false}
+      SCREENS_AUTO_START: ${SCREENS_AUTO_START:-true}
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    devices:
-      - /dev/bus/usb:/dev/bus/usb
-      - /dev:/dev:ro
-    privileged: true
+    # NOTE: GPIO/display devices added via docker-compose.pi.yml override
+    # This base configuration works on all platforms (GPIO features disabled)
     security_opt:
       - no-new-privileges:true
     depends_on:
       redis:
         condition: service_healthy
-      icecast:
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import redis; r=redis.Redis(host=\"redis\"); r.ping()' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Web Application - UI only (no hardware access)
+  # Reads metrics from Redis (published by sdr-service and hardware-service)
+  # Multiple workers can run safely - all read from same Redis state
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # Note: SDR drivers not needed in web-only container
+    image: eas-station:latest
+    expose:
+      - "5000"  # Internal only, accessed via nginx reverse proxy
+    networks:
+      - eas-network
+    env_file:
+      - stack.env  # For Portainer Git deployments - provides defaults
+      # NOTE: .env removed - loads empty file from Git. App loads from CONFIG_PATH at runtime.
+    volumes:
+      - app-config:/app-config  # Persistent volume for .env file
+      - certbot-conf:/etc/letsencrypt:ro  # Allow SSL export routes to read certificates
+      - /var/run/docker.sock:/var/run/docker.sock:ro  # Allow container engine health checks
+    environment:
+      # Database connection - external database (change POSTGRES_HOST to your database server)
+      POSTGRES_HOST: ${POSTGRES_HOST:-alerts-db}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_DB: ${POSTGRES_DB:-alerts}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+
+      # Redis connection (REQUIRED for separated architecture)
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_DB: ${REDIS_DB:-0}
+
+      # Application settings
+      SECRET_KEY: ${SECRET_KEY:-}
+      FLASK_ENV: ${FLASK_ENV:-production}
+      FLASK_DEBUG: ${FLASK_DEBUG:-false}
+      CONFIG_PATH: /app-config/.env  # Point to persistent location
+
+      # Location defaults
+      DEFAULT_TIMEZONE: ${DEFAULT_TIMEZONE:-America/New_York}
+      DEFAULT_COUNTY_NAME: ${DEFAULT_COUNTY_NAME:-}
+      DEFAULT_STATE_CODE: ${DEFAULT_STATE_CODE:-}
+
+      # Note: Audio-related settings (SDR, Icecast) removed from app container.
+      # These are configured in the sdr-service container.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    # Note: Device passthrough removed - app container serves UI only.
+    # USB devices, GPIO, and other hardware access moved to dedicated service containers.
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      redis:
         condition: service_healthy
     restart: unless-stopped
 
@@ -169,19 +229,28 @@ services:
     command: ["python", "poller/cap_poller.py", "--continuous", "--interval", "120"]
     restart: unless-stopped
     env_file:
-      - stack.env
+      - stack.env  # For Portainer Git deployments - provides defaults
+      # NOTE: .env removed - loads empty file from Git. App loads from CONFIG_PATH at runtime.
     volumes:
-      - app-config:/app-config
+      - app-config:/app-config  # Persistent volume for .env file
     environment:
+      # Database connection - external database
       POSTGRES_HOST: ${POSTGRES_HOST:-alerts-db}
       POSTGRES_PORT: ${POSTGRES_PORT:-5432}
       POSTGRES_DB: ${POSTGRES_DB:-alerts}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      CONFIG_PATH: /app-config/noaa.env
-      CAP_POLLER_MODE: NOAA
+
+      CONFIG_PATH: /app-config/.env  # Use main persistent config (same as app)
+
+      # Poller configuration (overrides .env file)
+      CAP_POLLER_MODE: NOAA  # Differentiates NOAA vs IPAWS poller
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    # NOTE: SDR/USB access removed - this poller only fetches CAP XML via HTTP
+    # All SDR hardware access is isolated to the sdr-service container
+    security_opt:
+      - no-new-privileges:true
 
   # IPAWS CAP Alert Poller
   ipaws-poller:
@@ -200,19 +269,28 @@ services:
       - "${LOG_LEVEL:-INFO}"
     restart: unless-stopped
     env_file:
-      - stack.env
+      - stack.env  # For Portainer Git deployments - provides defaults
+      # NOTE: .env removed - loads empty file from Git. App loads from CONFIG_PATH at runtime.
     volumes:
-      - app-config:/app-config
+      - app-config:/app-config  # Persistent volume for .env file
     environment:
+      # Database connection - external database
       POSTGRES_HOST: ${POSTGRES_HOST:-alerts-db}
       POSTGRES_PORT: ${POSTGRES_PORT:-5432}
       POSTGRES_DB: ${POSTGRES_DB:-alerts}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      CONFIG_PATH: /app-config/ipaws.env
-      CAP_POLLER_MODE: IPAWS
+
+      CONFIG_PATH: /app-config/.env  # Use main persistent config (same as app)
+
+      # Poller configuration (overrides .env file)
+      CAP_POLLER_MODE: IPAWS  # Differentiates NOAA vs IPAWS poller
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    # NOTE: SDR/USB access removed - this poller only fetches CAP XML via HTTP
+    # All SDR hardware access is isolated to the sdr-service container
+    security_opt:
+      - no-new-privileges:true
 
   # Icecast Streaming Server
   icecast:
@@ -311,19 +389,22 @@ networks:
 
 # ARCHITECTURE NOTES:
 #
-# This separated architecture provides:
-#   ✅ Fault isolation - web crashes don't affect audio
-#   ✅ Independent scaling - add web workers without duplicating audio
-#   ✅ Clear debugging - separate logs per service
+# This hardware-isolated architecture provides:
+#   ✅ Complete fault isolation - SDR, GPIO, and web are independent
+#   ✅ No USB device contention - only sdr-service has USB access
+#   ✅ Independent scaling - add web workers without duplicating hardware services
+#   ✅ Clear debugging - separate logs per hardware type
 #   ✅ Simple coordination - Redis pub/sub (no complex file locking)
 #   ✅ Performance - dedicated resources per service
 #
 # Monitoring:
-#   docker-compose logs -f audio-service  # Audio processing logs
-#   docker-compose logs -f app            # Web application logs
+#   docker-compose logs -f sdr-service       # SDR hardware logs
+#   docker-compose logs -f hardware-service  # GPIO/display logs
+#   docker-compose logs -f app               # Web application logs
 #   docker-compose exec redis redis-cli HGETALL eas:metrics  # View metrics
 #
-# Compare to old approach (eas-broadcaster, radio-manager, eas-audio-monitor):
-#   - Old: 4+ separate containers, complex coordination
-#   - New: 1 audio-service container, simple Redis pub/sub
-#   - Result: Simpler, more reliable, easier to maintain
+# Hardware Isolation:
+#   sdr-service:      /dev/bus/usb (USB SDR devices only)
+#   hardware-service: /dev/gpiomem, /dev/i2c-1 (GPIO/displays via Pi override)
+#   app:              /dev:ro (read-only SMART monitoring only)
+#   pollers:          NO hardware access (HTTP only)
