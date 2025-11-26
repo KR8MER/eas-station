@@ -878,7 +878,7 @@ def register(app: Flask, logger) -> None:
 
             return jsonify(capabilities)
         except Exception as exc:
-            route_logger.error("Failed to query capabilities for driver '%s': %s", driver, exc)
+            route_logger.error("Failed to query capabilities for driver '%s': %s", driver, exc, exc_info=True)
             _log_radio_event(
                 "ERROR",
                 f"Failed to query capabilities for driver '{driver}': {exc}",
@@ -886,10 +886,38 @@ def register(app: Flask, logger) -> None:
                 details={
                     "error": str(exc),
                     "driver": driver,
-                    "device_args": device_args,
+                    "device_args": device_args if 'device_args' in locals() else {},
                 },
             )
-            return jsonify({"error": str(exc)}), 500
+
+            # FAILSAFE: Return hardcoded defaults instead of 500 error
+            driver_lower = driver.lower()
+            if 'airspy' in driver_lower:
+                route_logger.info("Returning failsafe Airspy capabilities after error")
+                return jsonify({
+                    "driver": driver,
+                    "hardware_info": {"failsafe": "true", "reason": str(exc)},
+                    "num_channels": 1,
+                    "sample_rates": [312500, 625000, 1250000, 2500000, 10000000],
+                    "bandwidths": [],
+                    "gains": {"LNA": {"min": 0, "max": 15, "step": 1}},
+                    "frequency_ranges": [{"min": 24000000, "max": 1800000000}],
+                    "antennas": ["RX"],
+                })
+            elif 'rtl' in driver_lower:
+                route_logger.info("Returning failsafe RTL-SDR capabilities after error")
+                return jsonify({
+                    "driver": driver,
+                    "hardware_info": {"failsafe": "true", "reason": str(exc)},
+                    "num_channels": 1,
+                    "sample_rates": [250000, 1024000, 1920000, 2048000, 2400000, 2560000],
+                    "bandwidths": [],
+                    "gains": {"TUNER": {"min": 0, "max": 49.6, "step": None}},
+                    "frequency_ranges": [{"min": 24000000, "max": 1766000000}],
+                    "antennas": ["RX"],
+                })
+            else:
+                return jsonify({"error": str(exc)}), 500
 
     @app.route("/api/radio/presets", methods=["GET"])
     def api_radio_presets() -> Any:
