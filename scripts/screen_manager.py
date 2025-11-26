@@ -151,6 +151,7 @@ class ScreenManager:
         self._oled_button_held = False
         self._oled_button_initialized = False
         self._oled_alert_paused = False  # Track if alert scrolling is paused
+        self._pending_alert: Optional[Dict[str, Any]] = None  # Higher priority alert waiting to display
         # Pixel-by-pixel scrolling configuration
         self._oled_scroll_offset = 0
         self._oled_scroll_effect = None
@@ -1094,12 +1095,42 @@ class ScreenManager:
         )
         top_alert = alerts[0]
 
-        if (
+        # Check if this is a different alert than what's currently showing
+        is_different_alert = (
             self._current_alert_id != top_alert['id']
             or self._current_alert_priority != top_alert['priority_rank']
             or self._current_alert_text != top_alert['body_text']
-        ):
-            self._prepare_alert_scroll(top_alert)
+        )
+
+        if is_different_alert:
+            # Check if we're currently showing an alert
+            if self._current_alert_id is not None:
+                # Determine if the new alert is higher priority (lower priority_rank = higher priority)
+                is_higher_priority = top_alert['priority_rank'] < (self._current_alert_priority or float('inf'))
+
+                if is_higher_priority:
+                    # Higher priority alert - switch immediately
+                    logger.info(f"Higher priority alert detected (ID {top_alert['id']}), switching immediately")
+                    self._prepare_alert_scroll(top_alert)
+                else:
+                    # Same or lower priority - queue it and let current alert finish one loop
+                    if self._pending_alert is None or self._pending_alert['id'] != top_alert['id']:
+                        logger.info(f"New alert queued (ID {top_alert['id']}), will display after current alert loop")
+                        self._pending_alert = top_alert
+
+                    # Check if we've completed a full scroll loop
+                    if self._oled_scroll_offset == 0 and self._pending_alert is not None:
+                        # Switch to the pending alert
+                        logger.info(f"Scroll loop complete, switching to pending alert (ID {self._pending_alert['id']})")
+                        self._prepare_alert_scroll(self._pending_alert)
+                        self._pending_alert = None
+            else:
+                # No current alert, show this one immediately
+                self._prepare_alert_scroll(top_alert)
+        else:
+            # Same alert still active, clear any pending alert for the same ID
+            if self._pending_alert and self._pending_alert['id'] == top_alert['id']:
+                self._pending_alert = None
 
         if self._oled_scroll_effect is None:
             return True
@@ -1280,13 +1311,22 @@ class ScreenManager:
         header_font = controller._fonts.get('medium', controller._fonts['small'])
         header_height = 14  # Medium font is 14px tall
 
-        # Only recreate header image if text changed (reduces flickering)
-        if self._cached_header_text != header_text or self._cached_header_image is None:
+        # Check if we need to recreate header (text changed or pending alert status changed)
+        has_pending = self._pending_alert is not None
+        header_key = f"{header_text}|{has_pending}"  # Include pending status in cache key
+
+        if self._cached_header_text != header_key or self._cached_header_image is None:
             from PIL import ImageDraw
             # Create inverted header bar like other screens
             header_image = Image.new("1", (width, header_height), color=text_colour)  # Inverted background
             header_draw = ImageDraw.Draw(header_image)
-            header_draw.text((0, 0), "ALERT", font=header_font, fill=background)  # White on black
+
+            # Show "NEW!" indicator if there's a pending alert
+            if has_pending:
+                header_draw.text((0, 0), "NEW!", font=header_font, fill=background)
+            else:
+                header_draw.text((0, 0), "ALERT", font=header_font, fill=background)
+
             # Add time on right side
             try:
                 time_width = int(header_draw.textlength(header_text, font=header_font))
@@ -1294,7 +1334,7 @@ class ScreenManager:
                 time_width = header_font.getsize(header_text)[0]
             header_draw.text((width - time_width - 2, 0), header_text, font=header_font, fill=background)
             self._cached_header_image = header_image
-            self._cached_header_text = header_text
+            self._cached_header_text = header_key
 
         # Create final display image and paste cached header
         display_image = Image.new("1", (width, height), color=background)
@@ -1330,6 +1370,7 @@ class ScreenManager:
         self._oled_scroll_offset = 0
         self._oled_scroll_effect = None
         self._oled_alert_paused = False  # Reset pause state
+        self._pending_alert = None  # Clear any pending alerts
         self._cached_header_text = None
         self._cached_header_image = None
         self._cached_scroll_canvas = None
