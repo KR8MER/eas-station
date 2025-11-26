@@ -13,9 +13,9 @@
 #   docker-compose -f docker-compose.embedded-db.yml -f docker-compose.pi.yml up -d
 #
 # Hardware allocation:
-#   - sdr-service: /dev/bus/usb (USB SDR devices - defined in base docker-compose.yml)
+#   - sdr-service: /dev/bus/usb (USB SDR devices for active streaming)
 #   - hardware-service: /dev/gpiomem, /dev/gpiochip0, /dev/i2c-1 (GPIO + OLED displays)
-#   - app: No hardware access (web UI only)
+#   - app: /dev/bus/usb (USB access for SDR discovery only)
 
 services:
   app:
@@ -28,7 +28,9 @@ services:
       POSTGRES_DB: casaos
       POSTGRES_USER: casaos
       POSTGRES_PASSWORD: casaos
-    # NOTE: /dev mount removed - conflicts with Docker's pts device creation
+    devices:
+      - /dev/bus/usb:/dev/bus/usb  # USB access for SDR discovery (read-only query)
+    # NOTE: Only /dev/bus/usb mounted for discovery - full /dev mount removed to prevent pts errors
     # NOTE: GPIO/screen access removed - now in hardware-service
     # Configuration: start-pi.sh syncs local .env to persistent volume before starting
 
