@@ -147,6 +147,11 @@ class _SoapySDRReceiver(ReceiverInterface):
         self._retry_backoff = 0.25
         self._max_retry_backoff = 5.0
         self._last_logged_error: Optional[str] = None
+        # Connection health tracking
+        self._connection_attempts = 0
+        self._connection_failures = 0
+        self._last_successful_connection: Optional[datetime.datetime] = None
+        self._stream_errors_count = 0
 
     # ------------------------------------------------------------------
     # Lifecycle helpers
@@ -185,18 +190,131 @@ class _SoapySDRReceiver(ReceiverInterface):
                 return f"{message} (hint: {hint})"
         return message
 
+    @staticmethod
+    def _annotate_device_open_hint(message: str, driver: str, serial: Optional[str] = None) -> str:
+        """Enhance device open errors with troubleshooting hints."""
+
+        if not isinstance(message, str):
+            return message
+
+        lowered = message.lower()
+        hints = []
+
+        # Check for common error patterns
+        if "unable to open" in lowered or "failed to open" in lowered:
+            hints.append("Common causes: device not connected, USB permissions issue, "
+                        "device in use by another process, or driver not installed")
+
+        if "permission" in lowered or "access denied" in lowered:
+            hints.append("USB permissions issue detected. On Linux, you may need to add udev rules "
+                        "or run 'sudo usermod -aG plugdev $USER' and reboot")
+
+        if "device busy" in lowered or "resource busy" in lowered:
+            hints.append("Device is in use by another process. Check for other SDR applications "
+                        "or kill processes using: 'lsof | grep sdr'")
+
+        if serial and ("serial" in lowered or "not found" in lowered):
+            hints.append(f"Device with serial '{serial}' not found. Verify device is connected "
+                        f"and serial number is correct using: 'SoapySDRUtil --find=\"driver={driver}\"'")
+
+        # Add device-specific hints
+        if driver == "airspy":
+            hints.append("For Airspy: ensure SoapyAirspy module is installed and libairspy is available. "
+                        "Test with: 'SoapySDRUtil --probe=\"driver=airspy\"'")
+        elif driver == "rtlsdr":
+            hints.append("For RTL-SDR: ensure SoapyRTLSDR module is installed and blacklist dvb_usb_rtl28xxu "
+                        "kernel module if needed")
+
+        if hints:
+            hint_text = "; ".join(hints)
+            return f"{message} (troubleshooting: {hint_text})"
+        return message
+
+    def _enumerate_available_devices(self, sdr_module) -> List[Dict[str, str]]:
+        """Enumerate available SoapySDR devices for diagnostic purposes."""
+        try:
+            devices = sdr_module.Device.enumerate()
+            return [dict(d) for d in devices]
+        except Exception as exc:
+            self._interface_logger.warning("Failed to enumerate devices: %s", exc)
+            return []
+
+    def get_connection_health(self) -> Dict[str, object]:
+        """Get diagnostic information about device connection health.
+
+        Returns:
+            Dictionary containing connection statistics and health metrics
+        """
+        uptime = None
+        if self._last_successful_connection:
+            uptime = (datetime.datetime.now(datetime.timezone.utc) -
+                     self._last_successful_connection).total_seconds()
+
+        health = {
+            "connection_attempts": self._connection_attempts,
+            "connection_failures": self._connection_failures,
+            "stream_errors": self._stream_errors_count,
+            "last_successful_connection": self._last_successful_connection.isoformat() if self._last_successful_connection else None,
+            "uptime_seconds": uptime,
+            "running": self._running.is_set(),
+            "device_open": self._handle is not None,
+        }
+
+        # Calculate success rate
+        if self._connection_attempts > 0:
+            health["connection_success_rate"] = (
+                (self._connection_attempts - self._connection_failures) /
+                self._connection_attempts * 100.0
+            )
+        else:
+            health["connection_success_rate"] = 0.0
+
+        return health
+
     def start(self) -> None:  # noqa: D401 - documented in base class
         if self._running.is_set():
             return
 
-        try:
-            handle = self._open_handle()
-        except Exception as exc:
-            self._update_status(locked=False, last_error=str(exc), context="startup")
-            raise
+        # Retry initial device open with exponential backoff for hardware reliability
+        max_startup_retries = 3
+        retry_delay = self._retry_backoff
+        last_exception = None
+
+        for attempt in range(max_startup_retries):
+            try:
+                handle = self._open_handle()
+                break  # Success - exit retry loop
+            except Exception as exc:
+                last_exception = exc
+                self._update_status(locked=False, last_error=str(exc), context="startup")
+
+                if attempt < max_startup_retries - 1:
+                    self._interface_logger.warning(
+                        "Failed to open device for %s (attempt %d/%d): %s. Retrying in %.1f seconds...",
+                        self.config.identifier,
+                        attempt + 1,
+                        max_startup_retries,
+                        exc,
+                        retry_delay
+                    )
+                    time.sleep(retry_delay)
+                    retry_delay = min(retry_delay * 2.0, self._max_retry_backoff)
+                else:
+                    self._interface_logger.error(
+                        "Failed to open device for %s after %d attempts. "
+                        "Device will continue retrying in background capture loop.",
+                        self.config.identifier,
+                        max_startup_retries
+                    )
+                    # Don't raise - let the capture loop handle retries
+                    handle = None
+        else:
+            # All retries failed - start capture loop anyway to keep retrying
+            handle = None
 
         self._handle = handle
-        self._initialize_sample_buffer(handle.numpy)
+        if handle is not None:
+            self._initialize_sample_buffer(handle.numpy)
 
         self._running.set()
 
@@ -352,6 +470,19 @@ class _SoapySDRReceiver(ReceiverInterface):
         if self.config.identifier:
             args.setdefault("label", self.config.identifier)
 
+        # Log available devices for diagnostics
+        available_devices = self._enumerate_available_devices(SoapySDR)
+        if available_devices:
+            self._interface_logger.info(
+                "Found %d SoapySDR device(s): %s",
+                len(available_devices),
+                [d.get("label", d.get("driver", "unknown")) for d in available_devices]
+            )
+        else:
+            self._interface_logger.warning(
+                "No SoapySDR devices found. Ensure device is connected and drivers are installed."
+            )
+
         try:
             device = SoapySDR.Device(args)
         except Exception as exc:
@@ -390,6 +521,7 @@ class _SoapySDRReceiver(ReceiverInterface):
         serial = original_args.get("serial")
         if not serial:
             message = self._annotate_lock_hint(str(original_exc))
+            message = self._annotate_device_open_hint(message, self.driver_hint, serial)
             raise RuntimeError(
                 f"Unable to open SoapySDR device for driver '{self.driver_hint}': {message}"
             ) from original_exc
@@ -421,7 +553,9 @@ class _SoapySDRReceiver(ReceiverInterface):
             device = sdr_module.Device(fallback_args)
         except Exception as fallback_exc:
             annotated_original = self._annotate_lock_hint(str(original_exc))
+            annotated_original = self._annotate_device_open_hint(annotated_original, self.driver_hint, serial)
             annotated_fallback = self._annotate_lock_hint(str(fallback_exc))
+            annotated_fallback = self._annotate_device_open_hint(annotated_fallback, self.driver_hint, None)
             raise RuntimeError(
                 "Unable to open SoapySDR device for driver "
                 f"'{self.driver_hint}' using serial '{serial}': {annotated_original}; "
@@ -472,15 +606,27 @@ class _SoapySDRReceiver(ReceiverInterface):
             buffer = handle.numpy.zeros(4096, dtype=handle.numpy.complex64)
 
         retry_delay = self._retry_backoff
+        consecutive_failures = 0
 
         while self._running.is_set():
             if handle is None:
                 if not self._running.is_set():
                     break
 
+                consecutive_failures += 1
+                self._connection_attempts += 1
                 try:
+                    self._interface_logger.info(
+                        "Attempting to open device for %s (retry #%d, waiting %.1f seconds)...",
+                        self.config.identifier,
+                        consecutive_failures,
+                        min(retry_delay, self._max_retry_backoff)
+                    )
                     new_handle = self._open_handle()
+                    consecutive_failures = 0  # Reset on success
+                    self._last_successful_connection = datetime.datetime.now(datetime.timezone.utc)
                 except Exception as exc:
+                    self._connection_failures += 1
                     self._update_status(
                         locked=False,
                         last_error=str(exc),
@@ -490,6 +636,11 @@ class _SoapySDRReceiver(ReceiverInterface):
                     retry_delay = min(retry_delay * 2.0, self._max_retry_backoff)
                     continue
 
+                self._interface_logger.info(
+                    "Successfully opened device for %s after %d attempt(s)",
+                    self.config.identifier,
+                    consecutive_failures + 1
+                )
                 handle = self._handle = new_handle
                 self._initialize_sample_buffer(new_handle.numpy)
                 buffer = new_handle.numpy.zeros(4096, dtype=new_handle.numpy.complex64)
@@ -514,6 +665,15 @@ class _SoapySDRReceiver(ReceiverInterface):
                     self._update_sample_buffer(samples)
                     self._process_capture(samples)
             except Exception as exc:
+                consecutive_failures += 1
+                self._stream_errors_count += 1
+                self._interface_logger.warning(
+                    "Stream error for %s (failure #%d, total stream errors: %d): %s. Reconnecting...",
+                    self.config.identifier,
+                    consecutive_failures,
+                    self._stream_errors_count,
+                    exc
+                )
                 self._update_status(
                     locked=False,
                     last_error=str(exc),
