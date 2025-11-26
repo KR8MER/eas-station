@@ -1300,7 +1300,7 @@
     // Handle modulation change - disable FM-specific options for NFM (mono only)
     document.getElementById('receiverModulation')?.addEventListener('change', (e) => {
         const modulation = e.target.value;
-        const fmStereoCheckbox = document.getElementById('receiverFMStereo');
+        const fmStereoCheckbox = document.getElementById('receiverStereo');
         const rbdsCheckbox = document.getElementById('receiverRBDS');
 
         // NFM is mono-only, WFM supports stereo/RBDS
@@ -1621,11 +1621,38 @@
 
         // NOTE: sample_rate is NOT set here - it's populated by populateSampleRates()
         // based on actual hardware capabilities, not hardcoded service config values
-        document.getElementById('receiverModulation').value = currentServiceConfig.modulation_type;
+        const modulationType = currentServiceConfig.modulation_type;
+        document.getElementById('receiverModulation').value = modulationType;
         document.getElementById('receiverAudioOutput').checked = currentServiceConfig.audio_output === true;
-        document.getElementById('receiverStereo').checked = currentServiceConfig.stereo_enabled === true;
+
+        // Handle modulation-specific constraints (NFM is mono-only)
+        const isNFM = modulationType === 'NFM';
+        const fmStereoCheckbox = document.getElementById('receiverStereo');
+        const rbdsCheckbox = document.getElementById('receiverRBDS');
+
+        if (fmStereoCheckbox) {
+            fmStereoCheckbox.checked = currentServiceConfig.stereo_enabled === true;
+            fmStereoCheckbox.disabled = isNFM;
+            if (isNFM) {
+                fmStereoCheckbox.checked = false;
+                fmStereoCheckbox.parentElement?.classList.add('text-muted');
+            } else {
+                fmStereoCheckbox.parentElement?.classList.remove('text-muted');
+            }
+        }
+
+        if (rbdsCheckbox) {
+            rbdsCheckbox.checked = currentServiceConfig.enable_rbds === true;
+            rbdsCheckbox.disabled = isNFM;
+            if (isNFM) {
+                rbdsCheckbox.checked = false;
+                rbdsCheckbox.parentElement?.classList.add('text-muted');
+            } else {
+                rbdsCheckbox.parentElement?.classList.remove('text-muted');
+            }
+        }
+
         document.getElementById('receiverDeemphasis').value = currentServiceConfig.deemphasis_us;
-        document.getElementById('receiverRBDS').checked = currentServiceConfig.enable_rbds === true;
         document.getElementById('receiverSquelchEnabled').checked = currentServiceConfig.squelch_enabled === true;
         document.getElementById('receiverSquelchAlarm').checked = currentServiceConfig.squelch_alarm === true;
         if (typeof currentServiceConfig.squelch_threshold_db === 'number') {
@@ -2437,7 +2464,7 @@
                 document.getElementById('receiverModulation').value = 'NFM';
 
                 // Disable FM-specific options for NFM (mono only)
-                const fmStereoCheckbox = document.getElementById('receiverFMStereo');
+                const fmStereoCheckbox = document.getElementById('receiverStereo');
                 const rbdsCheckbox = document.getElementById('receiverRBDS');
                 if (fmStereoCheckbox) {
                     fmStereoCheckbox.checked = false;
