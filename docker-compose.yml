@@ -106,7 +106,12 @@ services:
     devices:
       # SDR Device Passthrough - ONLY this container needs USB access
       - /dev/bus/usb:/dev/bus/usb
+    # Privileged mode required for USB device access and dynamic device node creation
+    # Provides CAP_SYS_RAWIO and other capabilities needed for direct hardware I/O
     privileged: true
+    cap_add:
+      - SYS_RAWIO    # Direct I/O access to hardware devices
+      - SYS_ADMIN    # USB device operations
     security_opt:
       - no-new-privileges:true
     depends_on:
