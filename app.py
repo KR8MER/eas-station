@@ -642,38 +642,30 @@ logger.info("NOAA Alerts System startup")
 # Register route modules
 register_routes(app, logger)
 
-# Skip background services during migrations to prevent port conflicts
-# SKIP_DB_INIT is set by docker-entrypoint.sh before running migrations
-_skip_services = os.environ.get('SKIP_DB_INIT')
-
 # Start background health monitoring alerts
-if _skip_services:
-    pass  # Skip during migrations
-elif app.config.get('SETUP_MODE'):
+if app.config.get('SETUP_MODE'):
     logger.info('Skipping health alert worker while setup mode is active.')
 else:
     start_health_alert_worker(app, logger)
 
 # Start screen manager for LED/VFD display rotation
-if not _skip_services:
-    try:
-        from scripts.screen_manager import screen_manager
-        screen_manager.init_app(app)
-        if not app.config.get('SETUP_MODE'):
-            screen_manager.start()
-            logger.info('Screen manager started for display rotation')
-    except Exception as screen_mgr_error:
-        logger.warning('Screen manager could not be started: %s', screen_mgr_error)
+try:
+    from scripts.screen_manager import screen_manager
+    screen_manager.init_app(app)
+    if not app.config.get('SETUP_MODE'):
+        screen_manager.start()
+        logger.info('Screen manager started for display rotation')
+except Exception as screen_mgr_error:
+    logger.warning('Screen manager could not be started: %s', screen_mgr_error)
 
 # Start RWT (Required Weekly Test) scheduler
-if not _skip_services:
-    try:
-        from app_core.rwt_scheduler import start_scheduler as start_rwt_scheduler
-        if not app.config.get('SETUP_MODE'):
-            start_rwt_scheduler(app)
-            logger.info('RWT scheduler started for automatic weekly tests')
-    except Exception as rwt_scheduler_error:
-        logger.warning('RWT scheduler could not be started: %s', rwt_scheduler_error)
+try:
+    from app_core.rwt_scheduler import start_scheduler as start_rwt_scheduler
+    if not app.config.get('SETUP_MODE'):
+        start_rwt_scheduler(app)
+        logger.info('RWT scheduler started for automatic weekly tests')
+except Exception as rwt_scheduler_error:
+    logger.warning('RWT scheduler could not be started: %s', rwt_scheduler_error)
 
 # =============================================================================
 # BOUNDARY TYPE METADATA
