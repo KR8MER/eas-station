@@ -64,9 +64,9 @@ services:
     security_opt:
       - no-new-privileges:true
 
-  audio-service:
+  sdr-service:
     image: eas-station:latest
-    container_name: eas-audio-service
+    container_name: eas-sdr-service
     restart: unless-stopped
     networks:
       - eas-network
@@ -104,7 +104,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     devices:
-      # SDR Device Passthrough
+      # SDR Device Passthrough - ONLY this container needs USB access
       - /dev/bus/usb:/dev/bus/usb
     privileged: true
     security_opt:
@@ -112,6 +112,12 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import redis; r=redis.Redis(host=\"redis\"); r.ping()' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
   app:
     build:
@@ -193,22 +199,10 @@ services:
 
       # Poller configuration
       CAP_POLLER_MODE: NOAA
-
-      # SDR settings
-      SDR_ARGS: ${SDR_ARGS:-driver=airspy}
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    devices:
-      # SDR Device Passthrough
-      # This passes ALL USB devices to the container for SDR access
-      # For dedicated SDR hardware, this is the recommended configuration
-      # For specific device passthrough, see docs/SDR_SETUP.md
-      - /dev/bus/usb:/dev/bus/usb
-
-      # Block Device Passthrough for SMART Monitoring
-      # Pass through all block devices for comprehensive SMART health monitoring
-      - /dev:/dev:ro  # Read-only access to all devices for SMART monitoring
-    privileged: true  # Required to allow /dev/pts creation despite read-only /dev mount
+    # NOTE: SDR/USB access removed - this poller only fetches CAP XML via HTTP
+    # All SDR hardware access is isolated to the sdr-service container
     security_opt:
       - no-new-privileges:true
 
@@ -244,22 +238,10 @@ services:
 
       # Poller configuration
       CAP_POLLER_MODE: IPAWS
-
-      # SDR settings
-      SDR_ARGS: ${SDR_ARGS:-driver=airspy}
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    devices:
-      # SDR Device Passthrough
-      # This passes ALL USB devices to the container for SDR access
-      # For dedicated SDR hardware, this is the recommended configuration
-      # For specific device passthrough, see docs/SDR_SETUP.md
-      - /dev/bus/usb:/dev/bus/usb
-
-      # Block Device Passthrough for SMART Monitoring
-      # Pass through all block devices for comprehensive SMART health monitoring
-      - /dev:/dev:ro  # Read-only access to all devices for SMART monitoring
-    privileged: true  # Required to allow /dev/pts creation despite read-only /dev mount
+    # NOTE: SDR/USB access removed - this poller only fetches CAP XML via HTTP
+    # All SDR hardware access is isolated to the sdr-service container
     security_opt:
       - no-new-privileges:true
 
