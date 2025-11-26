@@ -19,8 +19,6 @@
 # This file is kept for backward compatibility and documentation purposes.
 # It demonstrates the separated service architecture that's now standard.
 
-version: '3.8'
-
 services:
   # Redis - State management and coordination
   redis:
@@ -150,6 +148,12 @@ services:
       - /dev/bus/usb:/dev/bus/usb
       - /dev:/dev:ro
     privileged: true
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health', timeout=5)"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
     security_opt:
       - no-new-privileges:true
     depends_on:
@@ -267,7 +271,8 @@ services:
       - SSL_EMAIL=${SSL_EMAIL:-admin@example.com}
       - CERTBOT_STAGING=${CERTBOT_STAGING:-0}
     depends_on:
-      - app
+      app:
+        condition: service_healthy
     security_opt:
       - no-new-privileges:true
 

@@ -20,7 +20,8 @@ services:
       - SSL_EMAIL=${SSL_EMAIL:-admin@example.com}
       - CERTBOT_STAGING=${CERTBOT_STAGING:-0}
     depends_on:
-      - app
+      app:
+        condition: service_healthy
     security_opt:
       - no-new-privileges:true
 
@@ -162,6 +163,12 @@ services:
     # Note: Device passthrough removed - app container serves UI only.
     # USB devices, GPIO, and other hardware access moved to audio-service container.
     # For hardware access, see audio-service configuration in docker-compose.separated.yml
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health', timeout=5)"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
     security_opt:
       - no-new-privileges:true
     depends_on:
