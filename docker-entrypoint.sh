@@ -81,7 +81,10 @@ EOF
 
     # Check if the file has no configuration (only comments/whitespace) and populate from environment
     # Note: Don't check file size - a file with only the header comment can be > 100 bytes
+    # Disable pipefail temporarily because grep returns 1 when no matches found (which is expected)
+    set +o pipefail
     HAS_CONFIG=$(grep -v "^#" "$CONFIG_PATH_EFFECTIVE" 2>/dev/null | grep -v "^[[:space:]]*$" | wc -l)
+    set -o pipefail
 
     echo "🔍 DEBUG: HAS_CONFIG check result: $HAS_CONFIG config lines found"
 
