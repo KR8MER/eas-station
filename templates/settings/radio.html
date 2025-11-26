@@ -1282,11 +1282,21 @@
 
                 // If a device was pre-selected or auto-selected, populate hidden fields and trigger sample rate population
                 if (preSelectedDevice) {
-                    document.getElementById('receiverDriver').value = preSelectedDevice.driver;
-                    document.getElementById('receiverSerial').value = preSelectedDevice.serial || '';
+                    console.log('[SDR] Auto-selected device:', preSelectedDevice);
+                    const driverField = document.getElementById('receiverDriver');
+                    const serialField = document.getElementById('receiverSerial');
+
+                    if (driverField && serialField) {
+                        driverField.value = preSelectedDevice.driver;
+                        serialField.value = preSelectedDevice.serial || '';
+                        console.log('[SDR] Driver field set to:', driverField.value);
+                    } else {
+                        console.error('[SDR] Hidden fields not found!', {driverField, serialField});
+                    }
 
                     // Trigger sample rate population if service type is already selected
                     if (currentServiceType) {
+                        console.log('[SDR] Current service type:', currentServiceType);
                         await populateSampleRates(currentServiceType);
                     }
                 }
@@ -1391,6 +1401,8 @@
         const sampleRateSelect = document.getElementById('receiverSampleRate');
         const sampleRateHelp = document.getElementById('sampleRateHelp');
 
+        console.log('[SDR] populateSampleRates called with serviceType:', serviceType);
+
         if (!serviceType) {
             sampleRateSelect.disabled = true;
             sampleRateSelect.innerHTML = '<option value="">Select service type first</option>';
@@ -1404,6 +1416,8 @@
         const driver = driverSelect ? driverSelect.value : null;
         const serial = serialInput ? serialInput.value : null;
 
+        console.log('[SDR] Driver field value:', driver, 'Serial:', serial);
+
         // Try to get hardware capabilities if driver is selected (works for any driver type)
         if (driver) {
             try {
@@ -1412,7 +1426,9 @@
                     params.append('serial', serial);
                 }
                 const capUrl = `/api/radio/capabilities/${encodeURIComponent(driver)}${params.toString() ? '?' + params.toString() : ''}`;
+                console.log('[SDR] Fetching capabilities from:', capUrl);
                 const response = await fetch(capUrl);
+                console.log('[SDR] API response status:', response.status, response.ok);
 
                 if (response.ok) {
                     const capabilities = await response.json();
