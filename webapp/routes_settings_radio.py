@@ -530,9 +530,6 @@ def register(app: Flask, logger) -> None:
 
             try:
                 db.session.commit()
-                # Refresh the receiver to ensure it's still bound to the session
-                # This prevents "not bound to a Session" errors when accessing relationships
-                db.session.refresh(receiver)
             except SQLAlchemyError as exc:
                 route_logger.error("Failed to update receiver %s: %s", receiver.identifier, exc)
                 db.session.rollback()
@@ -548,6 +545,12 @@ def register(app: Flask, logger) -> None:
                 return jsonify({"error": "Failed to update receiver."}), 500
 
             manager_state = _sync_radio_manager_state(route_logger)
+
+            # Re-query the receiver to ensure it's bound to the session
+            # _sync_radio_manager_state may cause the receiver to become detached
+            receiver = RadioReceiver.query.get(receiver_id)
+            if not receiver:
+                return jsonify({"error": "Receiver not found after update."}), 404
 
             return jsonify({
                 "receiver": _receiver_to_dict(receiver),
