@@ -1509,6 +1509,36 @@
                         sampleRateHelp.textContent = `Hardware-specific rates for ${driver.toUpperCase()} device`;
                         return; // Success - exit early
                     }
+                } else {
+                    // API returned error status (500, 404, etc.) - use fallback
+                    console.warn('[SDR] API returned error status:', response.status, '- using fallback rates');
+
+                    const driverLower = driver.toLowerCase();
+                    const isAirspy = driverLower.includes('airspy');
+
+                    let defaultRates = [];
+                    if (isAirspy) {
+                        defaultRates = [312500, 625000, 1250000, 2500000, 10000000];
+                    } else {
+                        defaultRates = [250000, 1024000, 1920000, 2048000, 2400000, 2560000];
+                    }
+
+                    sampleRateSelect.disabled = false;
+                    sampleRateSelect.innerHTML = '';
+
+                    defaultRates.forEach(rate => {
+                        const option = document.createElement('option');
+                        option.value = rate;
+                        if (rate >= 1000000) {
+                            option.textContent = `${(rate / 1000000).toFixed(1)} MHz (${rate.toLocaleString()} Hz)`;
+                        } else {
+                            option.textContent = `${(rate / 1000).toFixed(1)} kHz (${rate.toLocaleString()} Hz)`;
+                        }
+                        sampleRateSelect.appendChild(option);
+                    });
+
+                    sampleRateHelp.textContent = `Default rates for ${driver.toUpperCase()} (API unavailable - restart app to update)`;
+                    return; // Success with fallback
                 }
             } catch (error) {
                 console.warn('Failed to fetch hardware capabilities, using driver-based defaults:', error);
