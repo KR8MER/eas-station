@@ -1122,6 +1122,7 @@ class ScreenManager:
         # Reset state
         self._oled_scroll_effect = True  # Just a flag to indicate scrolling is active
         self._oled_scroll_offset = 0
+        self._last_oled_alert_render_time = time.monotonic()  # Initialize to current time to prevent huge first-frame jump
         self._cached_header_text = None  # Clear cache for new alert
         self._cached_header_image = None
         self._current_alert_id = alert_meta.get('id')
@@ -1228,8 +1229,8 @@ class ScreenManager:
         # Get current date/time for header in local timezone
         from app_utils.time import local_now
         now = local_now()
-        # Use compact header format to fit in medium inverted bar
-        header_text = now.strftime("%m/%d %I:%M%p").replace(" 0", " ").lower()
+        # Use time-only format to avoid overlap with "ALERT" text in header
+        header_text = now.strftime("%I:%M%p").replace(" 0", " ").lower()
 
         # Get display dimensions
         width = controller.width
