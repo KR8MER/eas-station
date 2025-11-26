@@ -530,6 +530,9 @@ def register(app: Flask, logger) -> None:
 
             try:
                 db.session.commit()
+                # Refresh the receiver to ensure it's still bound to the session
+                # This prevents "not bound to a Session" errors when accessing relationships
+                db.session.refresh(receiver)
             except SQLAlchemyError as exc:
                 route_logger.error("Failed to update receiver %s: %s", receiver.identifier, exc)
                 db.session.rollback()
