@@ -89,6 +89,9 @@ EOF
 
         # Append environment variables to the config file
         # This transfers configuration from stack.env (loaded as env vars) to the persistent file
+        # NOTE: Database settings (POSTGRES_*) are NOT stored here - they must come from
+        # environment variables to ensure all containers use consistent database connection settings.
+        # This prevents issues where pollers use different database settings than the app container.
         cat >> "$CONFIG_PATH_EFFECTIVE" <<EOF
 
 # =============================================================================
@@ -110,11 +113,10 @@ $([ -n "${GIT_COMMIT:-}" ] && echo "GIT_COMMIT=${GIT_COMMIT}" || echo "# GIT_COM
 # =============================================================================
 # DATABASE (PostgreSQL + PostGIS)
 # =============================================================================
-POSTGRES_HOST=${POSTGRES_HOST:-alerts-db}
-POSTGRES_PORT=${POSTGRES_PORT:-5432}
-POSTGRES_DB=${POSTGRES_DB:-alerts}
-POSTGRES_USER=${POSTGRES_USER:-postgres}
-POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+# Database settings are managed via environment variables in docker-compose.yml
+# to ensure consistency across all containers (app, noaa-poller, ipaws-poller).
+# Do NOT set POSTGRES_* values here - they will be ignored in favor of
+# environment variables to prevent configuration drift between containers.
 
 # =============================================================================
 # ALERT POLLING
