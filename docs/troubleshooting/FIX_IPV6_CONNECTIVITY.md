@@ -46,8 +46,6 @@ Requests randomly fail with 499 (client closed connection) or 502 (bad gateway).
 
 **Cause:** nginx tries the IPv6 address first, times out, and the client gives up before the IPv4 fallback succeeds.
 
-> **Note:** If you're seeing 499/502 errors that are NOT IPv6-related (e.g., after startup or when the app container is unhealthy), see [HTTP_499_502_ERRORS.md](HTTP_499_502_ERRORS.md) for general troubleshooting.
-
 ---
 
 ## Root Cause Analysis
