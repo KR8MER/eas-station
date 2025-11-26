@@ -119,6 +119,73 @@ def initialize_database():
     return app, db
 
 
+def initialize_led_controller():
+    """Initialize LED sign controller."""
+    try:
+        from app_core.led import initialise_led_controller, ensure_led_tables, LED_AVAILABLE
+
+        if not LED_AVAILABLE:
+            controller = initialise_led_controller(logger)
+            if controller:
+                logger.info("✅ LED controller initialized")
+                # Ensure database tables exist
+                try:
+                    ensure_led_tables()
+                except Exception as e:
+                    logger.warning(f"⚠️  Failed to ensure LED tables: {e}")
+            else:
+                logger.info("LED controller disabled or unavailable")
+        else:
+            logger.info("LED controller already initialized")
+
+    except Exception as e:
+        logger.warning(f"⚠️  LED controller not available: {e}")
+        logger.info("Continuing without LED support")
+
+
+def initialize_vfd_controller():
+    """Initialize VFD display controller."""
+    try:
+        from app_core.vfd import initialise_vfd_controller, ensure_vfd_tables, VFD_AVAILABLE
+
+        if not VFD_AVAILABLE:
+            controller = initialise_vfd_controller(logger)
+            if controller:
+                logger.info("✅ VFD controller initialized")
+                # Ensure database tables exist
+                try:
+                    ensure_vfd_tables()
+                except Exception as e:
+                    logger.warning(f"⚠️  Failed to ensure VFD tables: {e}")
+            else:
+                logger.info("VFD controller disabled or unavailable")
+        else:
+            logger.info("VFD controller already initialized")
+
+    except Exception as e:
+        logger.warning(f"⚠️  VFD controller not available: {e}")
+        logger.info("Continuing without VFD support")
+
+
+def initialize_oled_display():
+    """Initialize OLED display."""
+    try:
+        from app_core.oled import initialise_oled_display, OLED_AVAILABLE
+
+        if not OLED_AVAILABLE:
+            controller = initialise_oled_display(logger)
+            if controller:
+                logger.info("✅ OLED display initialized")
+            else:
+                logger.info("OLED display disabled or unavailable")
+        else:
+            logger.info("OLED display already initialized")
+
+    except Exception as e:
+        logger.warning(f"⚠️  OLED display not available: {e}")
+        logger.info("Continuing without OLED support")
+
+
 def initialize_screen_manager(app):
     """Initialize screen manager for OLED/LED/VFD displays."""
     global _screen_manager
@@ -248,7 +315,18 @@ def main():
         app, db = initialize_database()
         logger.info("✅ Database connected")
 
-        # Initialize screen manager
+        # Initialize hardware controllers (must be done before screen manager)
+        with app.app_context():
+            logger.info("Initializing LED controller...")
+            initialize_led_controller()
+
+            logger.info("Initializing VFD controller...")
+            initialize_vfd_controller()
+
+            logger.info("Initializing OLED display...")
+            initialize_oled_display()
+
+        # Initialize screen manager (depends on LED/VFD/OLED controllers)
         logger.info("Initializing screen manager...")
         initialize_screen_manager(app)
 
