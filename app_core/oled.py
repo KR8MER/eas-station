@@ -976,7 +976,7 @@ def initialise_oled_display(log: Optional[logging.Logger] = None) -> Optional[Ar
     logger_ref = log or logger
 
     if not OLED_ENABLED:
-        logger_ref.info("OLED display disabled via configuration")
+        logger_ref.debug("OLED display disabled via configuration")
         OLED_AVAILABLE = False
         oled_controller = None
         return None
