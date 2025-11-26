@@ -522,6 +522,9 @@ def register(app: Flask, logger) -> None:
             # Ensure the receiver is in the current session
             db.session.refresh(receiver)
 
+            # Clear the cached receiver list so it shows updated data
+            cache.delete('receivers_list')
+
             return jsonify({
                 "receiver": _receiver_to_dict(receiver),
                 "radio_manager": manager_state,
@@ -584,6 +587,9 @@ def register(app: Flask, logger) -> None:
             # Ensure the receiver is in the current session
             db.session.refresh(receiver)
 
+            # Clear the cached receiver list so it shows updated data
+            cache.delete('receivers_list')
+
             return jsonify({
                 "receiver": _receiver_to_dict(receiver),
                 "radio_manager": manager_state,
@@ -620,6 +626,9 @@ def register(app: Flask, logger) -> None:
             return jsonify({"error": "Failed to delete receiver."}), 500
 
         manager_state = _sync_radio_manager_state(route_logger)
+
+        # Clear the cached receiver list so it shows updated data
+        cache.delete('receivers_list')
 
         return jsonify({"success": True, "radio_manager": manager_state})
 
