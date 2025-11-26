@@ -367,7 +367,13 @@ def _build_database_url() -> str:
     """Build database URL from environment variables.
 
     Prioritizes DATABASE_URL if set, otherwise builds from POSTGRES_* variables.
-    If POSTGRES_PASSWORD is omitted, builds a URL without credentials.
+    
+    Defaults:
+        POSTGRES_HOST: alerts-db
+        POSTGRES_PORT: 5432
+        POSTGRES_DB: alerts
+        POSTGRES_USER: postgres
+        POSTGRES_PASSWORD: postgres
     """
     url = os.getenv('DATABASE_URL')
     if url:
@@ -375,10 +381,10 @@ def _build_database_url() -> str:
 
     # Build from individual POSTGRES_* variables
     user = os.getenv('POSTGRES_USER', 'postgres') or 'postgres'
-    password = os.getenv('POSTGRES_PASSWORD', '')
-    host = os.getenv('POSTGRES_HOST', 'host.docker.internal') or 'host.docker.internal'
+    password = os.getenv('POSTGRES_PASSWORD', 'postgres')
+    host = os.getenv('POSTGRES_HOST', 'alerts-db') or 'alerts-db'
     port = os.getenv('POSTGRES_PORT', '5432') or '5432'
-    database = os.getenv('POSTGRES_DB', user) or user
+    database = os.getenv('POSTGRES_DB', 'alerts') or 'alerts'
 
     # URL-encode credentials to handle special characters
     user_part = quote(user, safe='')

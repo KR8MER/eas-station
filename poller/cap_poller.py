@@ -32,11 +32,11 @@ NOAA Weather API Compliance:
   - API Documentation: https://www.weather.gov/documentation/services-web-api
 
 Database Configuration (via environment variables or --database-url):
-  POSTGRES_HOST      - Database host (default: host.docker.internal; override for Docker services)
+  POSTGRES_HOST      - Database host (default: alerts-db)
   POSTGRES_PORT      - Database port (default: 5432)
-  POSTGRES_DB        - Database name (defaults to POSTGRES_USER)
+  POSTGRES_DB        - Database name (default: alerts)
   POSTGRES_USER      - Database user (default: postgres)
-  POSTGRES_PASSWORD  - Database password (optional, recommended)
+  POSTGRES_PASSWORD  - Database password (default: postgres)
   DATABASE_URL       - Or provide full connection string to override individual vars
 
 All database credentials should be explicitly configured via environment variables when available.
@@ -95,13 +95,18 @@ def _resolve_config_path() -> Optional[Path]:
     return None
 
 
+# CRITICAL: Load database settings from the APP's main persistent config first.
+# This ensures all containers (app, noaa-poller, ipaws-poller) use the same database.
+# The app's config is the source of truth for database connection settings.
+_app_config_path = Path('/app-config/.env')
+if _app_config_path.exists():
+    load_dotenv(_app_config_path, override=False)
+
+# Then load poller-specific config for non-database settings (polling intervals, etc.)
 _config_path = _resolve_config_path()
-if _config_path:
-    # Pull defaults from config files without overriding any values already
-    # provided by the persistent environment (e.g., container or system env).
+if _config_path and _config_path.exists():
+    # Load poller config, but don't let it override database settings from app config
     load_dotenv(_config_path, override=False)
-else:
-    load_dotenv(override=False)
 
 # Always load a local .env file last so it only fills in missing values and
 # never overrides anything supplied by the container or environment volume.
@@ -2652,10 +2657,10 @@ def build_database_url_from_env() -> str:
         return url
 
     user = os.getenv("POSTGRES_USER", "postgres") or "postgres"
-    password = os.getenv("POSTGRES_PASSWORD", "")
-    host = os.getenv("POSTGRES_HOST", "host.docker.internal") or "host.docker.internal"
+    password = os.getenv("POSTGRES_PASSWORD", "postgres")
+    host = os.getenv("POSTGRES_HOST", "alerts-db") or "alerts-db"
     port = os.getenv("POSTGRES_PORT", "5432") or "5432"
-    database = os.getenv("POSTGRES_DB", user) or user
+    database = os.getenv("POSTGRES_DB", "alerts") or "alerts"
 
     user_part = quote(user, safe="")
     password_part = quote(password, safe="") if password else ""
