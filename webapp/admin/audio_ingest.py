@@ -46,6 +46,7 @@ from app_core.audio import AudioIngestController
 from app_core.audio.ingest import AudioSourceConfig, AudioSourceType, AudioSourceStatus
 from app_core.audio.sources import create_audio_source
 from app_core.audio.redis_commands import get_audio_command_publisher
+from app_core.audio.mount_points import generate_mount_point, StreamFormat
 from app_utils import utc_now
 
 logger = logging.getLogger(__name__)
@@ -532,7 +533,7 @@ def _base_radio_metadata(receiver: RadioReceiver, source_name: str) -> Dict[str,
         'squelch_close_ms': int(receiver.squelch_close_ms or 750),
         'carrier_alarm_enabled': bool(receiver.squelch_alarm),
         'source_category': 'sdr',
-        'icecast_mount': f"/{source_name}.mp3",  # Mount point includes .mp3 extension
+        'icecast_mount': generate_mount_point(source_name, format=StreamFormat.MP3),
     }
 
 

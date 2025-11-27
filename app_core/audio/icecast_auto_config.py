@@ -28,6 +28,8 @@ import logging
 import os
 from typing import Optional
 
+from .mount_points import build_stream_url, StreamFormat
+
 logger = logging.getLogger(__name__)
 
 
@@ -114,7 +116,7 @@ class IcecastAutoConfig:
         """Check if Icecast auto-configuration is enabled."""
         return self.enabled
 
-    def get_stream_url(self, source_name: str, external: bool = True) -> Optional[str]:
+    def get_stream_url(self, source_name: str, external: bool = True, format: StreamFormat = StreamFormat.MP3) -> Optional[str]:
         """
         Get the Icecast stream URL for a source.
 
@@ -122,6 +124,7 @@ class IcecastAutoConfig:
             source_name: Name of the audio source
             external: If True, return URL for browser access (with external port)
                      If False, return URL for internal app use
+            format: Stream format (default: MP3)
 
         Returns:
             Stream URL if enabled, None otherwise
@@ -129,21 +132,19 @@ class IcecastAutoConfig:
         if not self.enabled:
             return None
 
+        # Determine hostname and port based on access type
         if external:
             # Browser/external access - use public hostname if configured
-            # If not configured and using container name 'icecast', we can't provide
-            # a valid URL without knowing the host's IP/domain
             if self.public_hostname:
                 hostname = self.public_hostname
             elif self.server == 'icecast':
-                # In containerized deployment, return error placeholder
-                # User needs to set ICECAST_PUBLIC_HOSTNAME or PUBLIC_HOSTNAME
+                # In containerized deployment without public hostname
                 logger.warning(
                     "No public hostname configured for Icecast. Set ICECAST_PUBLIC_HOSTNAME "
                     "environment variable to enable external stream access. "
                     "Using container name 'icecast' which won't work from browsers."
                 )
-                hostname = 'icecast'  # Use container name as placeholder
+                hostname = 'icecast'
             else:
                 hostname = self.server
             port = self.external_port
@@ -152,10 +153,8 @@ class IcecastAutoConfig:
             hostname = self.server
             port = self.port
 
-        # Mount point must include .mp3 extension to match Icecast configuration
-        # Format: /source-name.mp3
-        mount_point = f"{source_name}.mp3" if not source_name.endswith('.mp3') else source_name
-        return f"http://{hostname}:{port}/{mount_point}"
+        # Use centralized mount point generation
+        return build_stream_url(hostname, port, source_name, format=format, use_https=False)
 
     def get_config_dict(self) -> dict:
         """Get configuration as dictionary."""
