@@ -89,6 +89,23 @@ def _log_radio_event(
         )
 
 
+def _make_offline_status(last_error: str, **flags) -> Dict[str, Any]:
+    """Create a status dict for offline/unavailable receiver states."""
+    status = {
+        "reported_at": None,
+        "locked": False,
+        "signal_strength": None,
+        "last_error": last_error,
+        "capture_mode": None,
+        "capture_path": None,
+        "samples_available": False,
+        "sample_count": 0,
+        "running": False,
+    }
+    status.update(flags)
+    return status
+
+
 def _receiver_to_dict(receiver: RadioReceiver) -> Dict[str, Any]:
     # Try to get latest status, but handle DetachedInstanceError gracefully
     # This can happen if the receiver object is not bound to a session
@@ -101,9 +118,12 @@ def _receiver_to_dict(receiver: RadioReceiver) -> Dict[str, Any]:
     # In separated architecture, status comes from Redis (published by sdr-service)
     # Try to get status from Redis first, fall back to database
     redis_status = None
+    redis_available = False
+    radio_manager_found = False
     try:
         from app_core.redis_client import get_redis_client
         redis_client = get_redis_client()
+        redis_available = True
 
         # Read radio_manager metrics from Redis
         radio_manager_raw = redis_client.hget("eas:metrics", "radio_manager")
@@ -111,6 +131,7 @@ def _receiver_to_dict(receiver: RadioReceiver) -> Dict[str, Any]:
             if isinstance(radio_manager_raw, bytes):
                 radio_manager_raw = radio_manager_raw.decode('utf-8')
             radio_manager_data = json.loads(radio_manager_raw)
+            radio_manager_found = True
 
             # Find this receiver's status in the Redis data
             receivers_data = radio_manager_data.get("receivers", {})
@@ -143,6 +164,18 @@ def _receiver_to_dict(receiver: RadioReceiver) -> Dict[str, Any]:
             "capture_mode": latest.capture_mode,
             "capture_path": latest.capture_path,
         }
+    elif radio_manager_found:
+        # Redis has radio_manager metrics but this receiver isn't loaded yet
+        status_data = _make_offline_status(
+            "Receiver not loaded in audio service",
+            not_loaded=True
+        )
+    elif redis_available:
+        # Redis is available but no radio_manager metrics yet (audio-service may not be running)
+        status_data = _make_offline_status(
+            "Audio service not publishing metrics",
+            service_unavailable=True
+        )
     else:
         status_data = None
 

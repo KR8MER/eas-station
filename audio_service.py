@@ -752,7 +752,7 @@ def main():
             from app_core.audio.redis_commands import AudioCommandSubscriber
             import threading
 
-            command_subscriber = AudioCommandSubscriber(audio_controller)
+            command_subscriber = AudioCommandSubscriber(audio_controller, auto_streaming)
 
             # Start subscriber in background thread
             subscriber_thread = threading.Thread(

@@ -641,9 +641,35 @@
         return `sdr-${slug || 'receiver'}`;
     }
 
+    function makeStatusBadgeHtml(badgeClass, label, title, guidance) {
+        let html = `<span class="badge ${badgeClass}" title="${escapeHtml(title)}">${escapeHtml(label)}</span>`;
+        if (guidance) {
+            html += `<div class="small text-muted mt-1">${escapeHtml(guidance)}</div>`;
+        }
+        return html;
+    }
+
     function renderStatusBadge(status) {
         if (!status) {
-            return '<span class="badge bg-secondary">No samples</span>';
+            return makeStatusBadgeHtml('bg-secondary', 'Offline', 'Status unavailable - check audio service', null);
+        }
+
+        // Handle special status states from backend
+        if (status.service_unavailable) {
+            return makeStatusBadgeHtml('bg-secondary', 'Service Offline', 'Audio service not publishing metrics', 'Check audio-service container');
+        }
+
+        if (status.not_loaded) {
+            return makeStatusBadgeHtml('bg-info text-dark', 'Not Loaded', 'Receiver configured but not loaded in audio service', 'Restart audio-service to load');
+        }
+
+        // Check if receiver is running
+        const running = status.running === true;
+        if (!running && !status.locked) {
+            return `
+                <span class="badge bg-secondary">Stopped</span>
+                ${status.last_error ? `<div class="small text-danger mt-1">${escapeHtml(status.last_error)}</div>` : ''}
+            `;
         }
 
         const locked = status.locked === true;
