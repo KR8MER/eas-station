@@ -605,15 +605,37 @@ def publish_metrics_to_redis(metrics):
                 if hasattr(_radio_manager, '_receivers'):
                     for identifier, receiver_instance in _radio_manager._receivers.items():
                         try:
-                            # Only publish spectrum for running receivers
+                            # Check if receiver is running
                             is_running = receiver_instance._running.is_set() if hasattr(receiver_instance, '_running') else False
+
+                            # Get status for diagnostics
+                            status = receiver_instance.get_status() if hasattr(receiver_instance, 'get_status') else None
+
+                            # Always publish spectrum status (even if not running or no samples)
+                            # This allows the UI to show appropriate messages
                             if not is_running:
+                                # Receiver is stopped - publish minimal status
+                                spectrum_payload = {
+                                    'receiver_identifier': identifier,
+                                    'timestamp': time.time(),
+                                    'status': 'stopped',
+                                    'spectrum': [],
+                                    'fft_size': 0,
+                                    'sample_rate': 0,
+                                    'center_frequency': 0,
+                                    'error': 'Receiver is not running'
+                                }
+                                pipe.setex(
+                                    f"eas:spectrum:{identifier}",
+                                    5,
+                                    json.dumps(spectrum_payload)
+                                )
                                 continue
-                            
+
                             # Get IQ samples for spectrum
                             if hasattr(receiver_instance, 'get_samples'):
                                 iq_samples = receiver_instance.get_samples(num_samples=2048)
-                                
+
                                 if iq_samples is not None and len(iq_samples) > 0:
                                     # Compute FFT for spectrum display
                                     fft_size = min(len(iq_samples), 2048)
@@ -658,7 +680,32 @@ def publish_metrics_to_redis(metrics):
                                         json.dumps(spectrum_payload)
                                     )
                                     logger.debug(f"Published spectrum data for receiver '{identifier}'")
-                                    
+                                else:
+                                    # Receiver is running but no samples available - publish status
+                                    config = receiver_instance.config if hasattr(receiver_instance, 'config') else None
+                                    sample_rate = config.sample_rate if config else 2400000
+                                    center_freq = config.frequency_hz if config else 0
+
+                                    error_msg = "Starting up" if status and status.locked else "Waiting for signal lock"
+                                    spectrum_payload = {
+                                        'identifier': identifier,
+                                        'spectrum': [],
+                                        'fft_size': 0,
+                                        'sample_rate': sample_rate,
+                                        'center_frequency': center_freq,
+                                        'freq_min': center_freq - (sample_rate / 2) if sample_rate else 0,
+                                        'freq_max': center_freq + (sample_rate / 2) if sample_rate else 0,
+                                        'timestamp': time.time(),
+                                        'status': 'no_samples',
+                                        'error': error_msg
+                                    }
+                                    pipe.setex(
+                                        f"eas:spectrum:{identifier}",
+                                        5,
+                                        json.dumps(spectrum_payload)
+                                    )
+                                    logger.debug(f"Published no-samples status for receiver '{identifier}': {error_msg}")
+
                         except Exception as e:
                             logger.debug(f"Error publishing spectrum for receiver '{identifier}': {e}")
             except ImportError:
