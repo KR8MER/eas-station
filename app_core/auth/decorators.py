@@ -39,7 +39,7 @@ from flask import (
     url_for,
 )
 
-from .roles import get_current_user
+from .roles import get_current_user, require_permission
 
 
 def _wants_json_response() -> bool:
@@ -182,4 +182,4 @@ def require_role(*role_names: str) -> Callable:
     return decorator
 
 
-__all__ = ['require_auth', 'require_role']
+__all__ = ['require_auth', 'require_role', 'require_permission']
