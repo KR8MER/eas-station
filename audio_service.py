@@ -77,6 +77,7 @@ _redis_client: Optional[redis.Redis] = None
 _audio_controller = None
 _eas_monitor = None
 _auto_streaming_service = None
+_radio_manager = None  # Reference to RadioManager for metrics collection
 
 
 def signal_handler(signum, frame):
@@ -172,6 +173,8 @@ def initialize_database():
 
 def initialize_radio_receivers(app):
     """Initialize and start radio receivers (low-level SoapySDR) from database configuration."""
+    global _radio_manager
+    
     try:
         with app.app_context():
             from app_core.models import RadioReceiver
@@ -185,6 +188,7 @@ def initialize_radio_receivers(app):
 
             # Get or create the radio manager
             radio_manager = get_radio_manager()
+            _radio_manager = radio_manager  # Store reference for metrics collection
 
             # Configure receivers from database records
             radio_manager.configure_from_records(receivers)
@@ -364,15 +368,79 @@ def initialize_eas_monitor(app, audio_controller):
 
 
 def collect_metrics():
-    """Collect metrics from audio controller and EAS monitor."""
+    """Collect metrics from audio controller, radio manager, and EAS monitor."""
     metrics = {
         "audio_controller": None,
         "eas_monitor": None,
         "broadcast_queue": None,
+        "radio_manager": None,  # Add radio manager metrics for app container
         "timestamp": time.time()
     }
 
     try:
+        # Get radio manager stats (for app container to read via Redis)
+        if _radio_manager:
+            try:
+                radio_stats: Dict[str, Any] = {
+                    "available_drivers": list(_radio_manager.available_drivers().keys()),
+                    "loaded_receiver_count": 0,
+                    "running_receiver_count": 0,
+                    "locked_receiver_count": 0,
+                    "receivers_with_samples": 0,
+                    "receivers": {}
+                }
+                
+                if hasattr(_radio_manager, '_receivers'):
+                    radio_stats["loaded_receiver_count"] = len(_radio_manager._receivers)
+                    
+                    for identifier, receiver_instance in _radio_manager._receivers.items():
+                        try:
+                            status = receiver_instance.get_status()
+                            is_running = receiver_instance._running.is_set() if hasattr(receiver_instance, '_running') else False
+                            is_locked = status.locked
+                            
+                            # Check if samples are available
+                            samples_available = False
+                            sample_count = 0
+                            if hasattr(receiver_instance, 'get_samples'):
+                                try:
+                                    samples = receiver_instance.get_samples(num_samples=100)
+                                    if samples is not None:
+                                        samples_available = True
+                                        sample_count = len(samples)
+                                except Exception:
+                                    pass
+                            
+                            if is_running:
+                                radio_stats["running_receiver_count"] += 1
+                            if is_locked:
+                                radio_stats["locked_receiver_count"] += 1
+                            if samples_available:
+                                radio_stats["receivers_with_samples"] += 1
+                            
+                            radio_stats["receivers"][identifier] = {
+                                "identifier": identifier,
+                                "running": is_running,
+                                "locked": is_locked,
+                                "signal_strength": _sanitize_value(status.signal_strength),
+                                "last_error": status.last_error,
+                                "reported_at": status.reported_at.isoformat() if status.reported_at else None,
+                                "samples_available": samples_available,
+                                "sample_count": sample_count,
+                                "config": {
+                                    "frequency_hz": receiver_instance.config.frequency_hz,
+                                    "sample_rate": receiver_instance.config.sample_rate,
+                                    "driver": receiver_instance.config.driver,
+                                    "modulation_type": receiver_instance.config.modulation_type,
+                                } if hasattr(receiver_instance, 'config') else {}
+                            }
+                        except Exception as e:
+                            logger.debug(f"Error getting receiver stats for '{identifier}': {e}")
+                
+                metrics["radio_manager"] = radio_stats
+            except Exception as e:
+                logger.error(f"Error getting radio manager stats: {e}")
+        
         # Get audio controller stats
         if _audio_controller:
             controller_stats: Dict[str, Any] = {

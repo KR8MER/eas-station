@@ -117,12 +117,12 @@ class _SoapySDRReceiver(ReceiverInterface):
     driver_hint: str = ""
     _SOAPY_ERROR_DESCRIPTIONS = {
         -1: "Timeout waiting for samples (SOAPY_SDR_TIMEOUT)",
-        -2: "Sample underflow on the SDR (SOAPY_SDR_UNDERFLOW)",
-        -3: "Sample overflow in the SDR driver (SOAPY_SDR_OVERFLOW)",
-        -4: "Stream reported a driver error (SOAPY_SDR_STREAM_ERROR)",
-        -5: "Corrupted data from device (SOAPY_SDR_CORRUPTION)",
-        -6: "Operation not supported by device (SOAPY_SDR_NOT_SUPPORTED)",
-        -7: "Receiver PLL is not locked (SOAPY_SDR_NOT_LOCKED)",
+        -2: "Stream reported a driver error (SOAPY_SDR_STREAM_ERROR)",
+        -3: "Corrupted data from device (SOAPY_SDR_CORRUPTION)",
+        -4: "Buffer overflow - system cannot keep up with data rate (SOAPY_SDR_OVERFLOW)",
+        -5: "Operation not supported by device (SOAPY_SDR_NOT_SUPPORTED)",
+        -6: "Timing error in stream (SOAPY_SDR_TIME_ERROR)",
+        -7: "Buffer underflow - not enough data provided (SOAPY_SDR_UNDERFLOW)",
     }
 
     def __init__(
@@ -699,7 +699,9 @@ class _SoapySDRReceiver(ReceiverInterface):
         handle = self._handle
         buffer = None
         if handle is not None:
-            buffer = handle.numpy.zeros(4096, dtype=handle.numpy.complex64)
+            # Use larger buffer to reduce USB transfer overhead and prevent SOAPY_SDR_OVERFLOW (-4)
+            # High-speed SDRs like AirSpy generate data faster than smaller buffers can handle
+            buffer = handle.numpy.zeros(16384, dtype=handle.numpy.complex64)
 
         retry_delay = self._retry_backoff
         consecutive_failures = 0
@@ -739,8 +741,7 @@ class _SoapySDRReceiver(ReceiverInterface):
                 )
                 handle = self._handle = new_handle
                 self._initialize_sample_buffer(new_handle.numpy)
-                # Use larger buffer to match stream MTU and reduce USB transfer overhead
-                # This prevents SOAPY_SDR_STREAM_ERROR (-4) on high-speed SDRs like AirSpy
+                # Use larger buffer to reduce USB transfer overhead and prevent SOAPY_SDR_OVERFLOW (-4)
                 buffer = new_handle.numpy.zeros(16384, dtype=new_handle.numpy.complex64)
                 retry_delay = self._retry_backoff
                 continue
@@ -748,8 +749,36 @@ class _SoapySDRReceiver(ReceiverInterface):
             try:
                 result = handle.device.readStream(handle.stream, [buffer], len(buffer))
                 if result.ret < 0:
-                    message = self._describe_soapysdr_error(result.ret)
+                    # Handle different error types differently
+                    error_code = result.ret
+                    message = self._describe_soapysdr_error(error_code)
                     message = self._annotate_lock_hint(message)
+                    
+                    # OVERFLOW (-4) means the internal buffer is full because we're not
+                    # reading fast enough. The SoapyAirspy driver drains the buffer on overflow,
+                    # so we should immediately continue reading without any delay.
+                    # UNDERFLOW (-7) typically occurs during TX but handle it similarly for safety.
+                    if error_code in (-4, -7):
+                        self._stream_errors_count += 1
+                        # Log the first error and then every 100th error to reduce spam
+                        if self._stream_errors_count == 1 or self._stream_errors_count % 100 == 0:
+                            self._interface_logger.warning(
+                                "Transient stream error for %s (error %d, total: %d): %s. Continuing...",
+                                self.config.identifier,
+                                error_code,
+                                self._stream_errors_count,
+                                message
+                            )
+                        self._update_status(
+                            locked=True,  # Still consider locked - this is recoverable
+                            last_error=message,
+                            context="read_stream_transient",
+                        )
+                        # On overflow, immediately continue reading to drain the buffer.
+                        # Do NOT add a delay here as that makes overflow worse.
+                        continue
+                    
+                    # Other errors require full reconnection
                     raise RuntimeError(message)
 
                 if result.ret > 0:

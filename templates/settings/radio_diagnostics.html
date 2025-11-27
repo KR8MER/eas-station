@@ -332,15 +332,40 @@ sudo systemctl restart eas-station</code></pre>
         const container = document.getElementById('receiversContainer');
         const receivers = data.radio_manager?.receivers || {};
         const dbReceivers = data.database?.receivers || [];
+        const healthStatus = data.health_status || 'unknown';
 
         if (Object.keys(receivers).length === 0) {
-            container.innerHTML = `
-                <div class="alert alert-warning" role="alert">
-                    <i class="fas fa-exclamation-triangle me-2"></i>
-                    <strong>No receivers loaded in RadioManager.</strong>
-                    ${dbReceivers.length > 0 ? ' Restart the web application to load configured receivers.' : ' Add a receiver at /settings/radio to get started.'}
-                </div>
-            `;
+            // Check if this is the separated architecture case
+            if (healthStatus === 'info' && dbReceivers.length > 0) {
+                container.innerHTML = `
+                    <div class="alert alert-info" role="alert">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Radio processing runs in the sdr-service container.</strong>
+                        <p class="mb-0 mt-2">
+                            In the Docker architecture, SDR receivers run in a separate container for hardware isolation.
+                            Check the <code>sdr-service</code> container logs for receiver status:
+                            <br><code class="user-select-all">docker-compose logs -f sdr-service</code>
+                        </p>
+                    </div>
+                `;
+            } else if (dbReceivers.length > 0) {
+                container.innerHTML = `
+                    <div class="alert alert-warning" role="alert">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong>No receivers loaded in RadioManager.</strong>
+                        Restart the sdr-service container to load configured receivers.
+                        <br><code class="user-select-all">docker-compose restart sdr-service</code>
+                    </div>
+                `;
+            } else {
+                container.innerHTML = `
+                    <div class="alert alert-warning" role="alert">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong>No receivers configured.</strong>
+                        Add a receiver at <a href="/settings/radio">/settings/radio</a> to get started.
+                    </div>
+                `;
+            }
             return;
         }
 
