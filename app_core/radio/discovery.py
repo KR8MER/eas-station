@@ -387,7 +387,7 @@ def _validate_sample_rate_fallback(driver: str, sample_rate: int) -> tuple[bool,
 
         common_rates = sorted([2500000, 3000000, 6000000, 10000000], reverse=True)
         rate_list = ", ".join(f"{r/1e6:.1f} MHz" for r in common_rates)
-        return False, f"Sample rate {sample_rate/1e6:.3f} MHz may not be supported by AirSpy. Common rates: {rate_list}"
+        return False, f"Sample rate {sample_rate/1e6:.3f} MHz is not a standard AirSpy rate. Supported rates: {rate_list} (and decimated variants)"
 
     # RTL-SDR: Typically supports 225 kHz to 3.2 MHz
     elif "rtl" in driver_lower:

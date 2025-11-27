@@ -1303,62 +1303,109 @@ def register(app: Flask, logger) -> None:
             auto_start_receivers = [r for r in enabled_receivers if r.auto_start]
 
             # In separated architecture, RadioManager runs in audio-service container
-            # The app container only serves the web UI and reads from database
-            # Don't try to access RadioManager locally
+            # Try to read metrics from Redis first (published by audio_service.py)
             available_drivers = []
             loaded_receivers = {}
-            radio_manager = None
-
-            # Get RadioManager status (only if available locally)
+            redis_metrics = None
+            redis_radio_manager = None
+            
             try:
-                radio_manager = get_radio_manager()
-                available_drivers = list(radio_manager.available_drivers().keys())
-            except Exception as exc:
-                # RadioManager not available - this is normal in separated architecture
-                route_logger.debug("RadioManager not available (separated architecture): %s", exc)
+                from app_core.redis_client import get_redis_client
+                import json
+                
+                redis_client = get_redis_client()
+                raw_metrics = redis_client.hgetall("eas:metrics")
+                
+                if raw_metrics:
+                    # Parse radio_manager metrics from Redis
+                    radio_manager_raw = raw_metrics.get(b"radio_manager") or raw_metrics.get("radio_manager")
+                    if radio_manager_raw:
+                        if isinstance(radio_manager_raw, bytes):
+                            radio_manager_raw = radio_manager_raw.decode('utf-8')
+                        redis_radio_manager = json.loads(radio_manager_raw)
+                        
+                        if redis_radio_manager:
+                            available_drivers = redis_radio_manager.get("available_drivers", [])
+                            
+                            # Convert Redis receivers to the expected format
+                            for identifier, receiver_data in redis_radio_manager.get("receivers", {}).items():
+                                # Decode error message if present
+                                error_info = _decode_soapysdr_error(receiver_data.get("last_error")) if receiver_data.get("last_error") else None
+                                
+                                # Look up receiver ID from database
+                                receiver_db = RadioReceiver.query.filter_by(identifier=identifier).first()
+                                receiver_id = receiver_db.id if receiver_db else None
+                                
+                                loaded_receivers[identifier] = {
+                                    "identifier": identifier,
+                                    "receiver_id": receiver_id,
+                                    "running": receiver_data.get("running", False),
+                                    "locked": receiver_data.get("locked", False),
+                                    "signal_strength": receiver_data.get("signal_strength"),
+                                    "last_error": receiver_data.get("last_error"),
+                                    "error_decoded": error_info,
+                                    "reported_at": receiver_data.get("reported_at"),
+                                    "samples_available": receiver_data.get("samples_available", False),
+                                    "sample_count": receiver_data.get("sample_count", 0),
+                                    "config": receiver_data.get("config", {})
+                                }
+                            
+                            route_logger.debug("Loaded radio manager metrics from Redis: %d receivers", len(loaded_receivers))
+                    
+            except Exception as redis_exc:
+                route_logger.debug("Could not read radio metrics from Redis: %s", redis_exc)
+            
+            # Fallback: Try local RadioManager if Redis didn't have data
+            if not loaded_receivers:
+                try:
+                    radio_manager = get_radio_manager()
+                    if not available_drivers:
+                        available_drivers = list(radio_manager.available_drivers().keys())
+                    
+                    # Get loaded receiver instances (only if radio_manager has receivers)
+                    if hasattr(radio_manager, '_receivers') and radio_manager._receivers:
+                        for identifier, receiver_instance in radio_manager._receivers.items():
+                            status = receiver_instance.get_status()
 
-            # Get loaded receiver instances (only if radio_manager is available)
-            if radio_manager and hasattr(radio_manager, '_receivers'):
-                for identifier, receiver_instance in radio_manager._receivers.items():
-                    status = receiver_instance.get_status()
+                            # Decode error message if present
+                            error_info = _decode_soapysdr_error(status.last_error) if status.last_error else None
 
-                    # Decode error message if present
-                    error_info = _decode_soapysdr_error(status.last_error) if status.last_error else None
+                            # Test sample buffer
+                            samples_available = False
+                            sample_count = 0
+                            if hasattr(receiver_instance, 'get_samples'):
+                                try:
+                                    samples = receiver_instance.get_samples(num_samples=100)
+                                    if samples is not None:
+                                        samples_available = True
+                                        sample_count = len(samples)
+                                except Exception as e:
+                                    route_logger.debug(f"Error getting samples from {identifier}: {e}")
 
-                    # Test sample buffer
-                    samples_available = False
-                    sample_count = 0
-                    if hasattr(receiver_instance, 'get_samples'):
-                        try:
-                            samples = receiver_instance.get_samples(num_samples=100)
-                            if samples is not None:
-                                samples_available = True
-                                sample_count = len(samples)
-                        except Exception as e:
-                            route_logger.debug(f"Error getting samples from {identifier}: {e}")
+                            # Look up receiver ID from database
+                            receiver_db = RadioReceiver.query.filter_by(identifier=identifier).first()
+                            receiver_id = receiver_db.id if receiver_db else None
 
-                    # Look up receiver ID from database
-                    receiver_db = RadioReceiver.query.filter_by(identifier=identifier).first()
-                    receiver_id = receiver_db.id if receiver_db else None
-
-                    loaded_receivers[identifier] = {
-                        "identifier": identifier,
-                        "receiver_id": receiver_id,
-                        "running": receiver_instance._running.is_set() if hasattr(receiver_instance, '_running') else False,
-                        "locked": status.locked,
-                        "signal_strength": status.signal_strength,
-                        "last_error": status.last_error,
-                        "error_decoded": error_info,
-                        "reported_at": status.reported_at.isoformat() if status.reported_at else None,
-                        "samples_available": samples_available,
-                        "sample_count": sample_count,
-                        "config": {
-                            "frequency_hz": receiver_instance.config.frequency_hz,
-                            "sample_rate": receiver_instance.config.sample_rate,
-                            "driver": receiver_instance.config.driver,
-                            "modulation_type": receiver_instance.config.modulation_type,
-                        } if hasattr(receiver_instance, 'config') else {}
-                    }
+                            loaded_receivers[identifier] = {
+                                "identifier": identifier,
+                                "receiver_id": receiver_id,
+                                "running": receiver_instance._running.is_set() if hasattr(receiver_instance, '_running') else False,
+                                "locked": status.locked,
+                                "signal_strength": status.signal_strength,
+                                "last_error": status.last_error,
+                                "error_decoded": error_info,
+                                "reported_at": status.reported_at.isoformat() if status.reported_at else None,
+                                "samples_available": samples_available,
+                                "sample_count": sample_count,
+                                "config": {
+                                    "frequency_hz": receiver_instance.config.frequency_hz,
+                                    "sample_rate": receiver_instance.config.sample_rate,
+                                    "driver": receiver_instance.config.driver,
+                                    "modulation_type": receiver_instance.config.modulation_type,
+                                } if hasattr(receiver_instance, 'config') else {}
+                            }
+                except Exception as exc:
+                    route_logger.debug("RadioManager not available locally: %s", exc)
 
             # Calculate summary statistics
             running_count = sum(1 for r in loaded_receivers.values() if r['running'])
@@ -1366,35 +1413,36 @@ def register(app: Flask, logger) -> None:
             with_samples_count = sum(1 for r in loaded_receivers.values() if r['samples_available'])
 
             # Determine overall health status
-            # In separated architecture, the app container's RadioManager exists but has
-            # no receivers configured (they run in the audio-service container).
-            # Check if the manager has no configured receivers to detect this case.
-            manager_has_no_receivers = (
-                radio_manager is None or
-                not hasattr(radio_manager, '_receivers') or
-                len(radio_manager._receivers) == 0
-            )
-            if len(loaded_receivers) == 0 and len(enabled_receivers) > 0 and manager_has_no_receivers:
-                # Separated architecture: RadioManager runs in audio-service container
-                health_status = "info"
-                health_message = "Radio processing handled by audio-service container"
-            elif locked_count > 0 and with_samples_count > 0:
-                health_status = "healthy"
-                health_message = "Audio pipeline operational"
-            elif running_count > 0 and locked_count == 0:
-                health_status = "warning"
-                health_message = "Receivers running but not locked to signal"
-            elif len(enabled_receivers) == 0:
+            if len(loaded_receivers) > 0:
+                # We have receiver data (either from Redis or local)
+                if locked_count > 0 and with_samples_count > 0:
+                    health_status = "healthy"
+                    health_message = "Audio pipeline operational"
+                elif running_count > 0 and locked_count == 0:
+                    health_status = "warning"
+                    health_message = "Receivers running but not locked to signal"
+                else:
+                    health_status = "warning"
+                    health_message = "Some receivers may have issues"
+            elif len(enabled_receivers) > 0:
+                # No receiver data but receivers are configured
+                if redis_radio_manager is not None:
+                    # We got data from Redis but no receivers - sdr-service may not have started them
+                    health_status = "warning"
+                    health_message = "SDR service running but no receivers active - check sdr-service logs"
+                else:
+                    # No Redis data at all - separated architecture, check sdr-service
+                    health_status = "info"
+                    health_message = "Radio processing handled by sdr-service container - check container logs"
+            else:
                 health_status = "info"
                 health_message = "No receivers configured"
-            else:
-                health_status = "warning"
-                health_message = "Some receivers may have issues"
 
             return jsonify({
                 "timestamp": time.time(),
                 "health_status": health_status,
                 "health_message": health_message,
+                "source": "redis" if redis_radio_manager else "local",
                 "database": {
                     "total_receivers": len(receivers_db),
                     "enabled_receivers": len(enabled_receivers),

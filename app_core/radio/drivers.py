@@ -757,11 +757,11 @@ class _SoapySDRReceiver(ReceiverInterface):
                     # OVERFLOW (-4) means the internal buffer is full because we're not
                     # reading fast enough. The SoapyAirspy driver drains the buffer on overflow,
                     # so we should immediately continue reading without any delay.
-                    # UNDERFLOW (-7) is for TX only, but handle it similarly for safety.
+                    # UNDERFLOW (-7) typically occurs during TX but handle it similarly for safety.
                     if error_code in (-4, -7):
                         self._stream_errors_count += 1
-                        # Only log periodically to avoid spam
-                        if self._stream_errors_count % 100 == 1:
+                        # Log the first error and then every 100th error to reduce spam
+                        if self._stream_errors_count == 1 or self._stream_errors_count % 100 == 0:
                             self._interface_logger.warning(
                                 "Transient stream error for %s (error %d, total: %d): %s. Continuing...",
                                 self.config.identifier,
