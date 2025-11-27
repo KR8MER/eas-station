@@ -976,9 +976,9 @@ def ensure_oled_button(log: Optional[logging.Logger] = None) -> Optional[Button]
 
         try:
             # Configure button based on wiring:
-            # - pull_up=True with active_state=None (default): Button connects GPIO to GND when pressed
-            # - pull_up=False with active_state=None: Button connects GPIO to 3.3V when pressed
-            # The OLED_BUTTON_ACTIVE_HIGH env var controls this for different enclosures
+            # - pull_up=True (default): Internal pull-up resistor enabled, button connects GPIO to GND when pressed
+            # - pull_up=False: Internal pull-down resistor enabled, button connects GPIO to 3.3V when pressed
+            # The OLED_BUTTON_ACTIVE_HIGH env var controls this for different enclosure wiring configurations
             button = Button(
                 OLED_BUTTON_GPIO,
                 pull_up=not OLED_BUTTON_ACTIVE_HIGH,

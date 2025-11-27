@@ -252,7 +252,10 @@ def _parse_receiver_payload(payload: Dict[str, Any], *, partial: bool = False) -
                         return None, error_msg
                 except Exception as validation_exc:
                     # If validation fails unexpectedly, log and skip validation
-                    _module_logger.warning(f"Sample rate validation failed for {data['driver']}: {validation_exc}")
+                    _module_logger.warning(
+                        f"Sample rate validation failed for {data['driver']}: {validation_exc}",
+                        exc_info=True
+                    )
                     # Allow the sample rate anyway - hardware validation is not critical
 
         except ValueError:
