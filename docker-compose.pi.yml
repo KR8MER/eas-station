@@ -59,8 +59,9 @@ services:
       POSTGRES_USER: casaos
       POSTGRES_PASSWORD: casaos
 
-      # Enable GPIO and screens on Raspberry Pi
+      # Enable GPIO, OLED and screens on Raspberry Pi
       GPIO_ENABLED: "true"
+      OLED_ENABLED: "true"
       SCREENS_AUTO_START: "true"
     devices:
       - /dev/gpiomem:/dev/gpiomem      # GPIO memory access for user-space control
