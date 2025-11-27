@@ -564,17 +564,28 @@ def remove_radio_managed_audio_source(
     if params.get('managed_by') != 'radio':
         return False
 
-    controller = _audio_controller
-    if controller and source_name in controller._sources:
-        controller.remove_source(source_name)
+    # Notify sdr-service to remove the source via Redis
+    try:
+        publisher = get_audio_command_publisher()
+        result = publisher.delete_source(source_name)
+        if result.get('success'):
+            logger.info(f"Sent source_delete command to sdr-service for {source_name}")
+        else:
+            logger.warning(f"Failed to send source_delete to sdr-service: {result.get('message')}")
+    except Exception as exc:
+        logger.warning('Failed to notify sdr-service about removing %s: %s', source_name, exc)
+        # Fall back to local controller if Redis communication fails
+        controller = _audio_controller
+        if controller and source_name in controller._sources:
+            controller.remove_source(source_name)
 
-    if stop_stream:
-        auto_streaming = _get_auto_streaming_service()
-        if auto_streaming:
-            try:
-                auto_streaming.remove_source(source_name)
-            except Exception as exc:
-                logger.warning('Failed to stop Icecast stream for %s: %s', source_name, exc)
+        if stop_stream:
+            auto_streaming = _get_auto_streaming_service()
+            if auto_streaming:
+                try:
+                    auto_streaming.remove_source(source_name)
+                except Exception as e:
+                    logger.warning('Failed to stop Icecast stream for %s: %s', source_name, e)
 
     db.session.delete(db_config)
     if commit:
@@ -699,55 +710,90 @@ def ensure_sdr_audio_monitor_source(
             db.session.rollback()
             raise
 
-    auto_streaming = _get_auto_streaming_service()
-
-    if controller._sources.get(source_name):
-        if auto_streaming:
-            try:
-                auto_streaming.remove_source(source_name)
-            except Exception as exc:
-                logger.debug('Auto-stream removal for %s during reconfigure failed: %s', source_name, exc)
-        controller.remove_source(source_name)
-
-    runtime_config = AudioSourceConfig(
-        source_type=AudioSourceType.SDR,
-        name=source_name,
-        enabled=True,
-        priority=priority,
-        sample_rate=sample_rate,
-        channels=channels,
-        buffer_size=buffer_size,
-        silence_threshold_db=silence_threshold,
-        silence_duration_seconds=silence_duration,
-        device_params=device_params,
-    )
-
-    adapter = create_audio_source(runtime_config)
-    metadata = adapter.metrics.metadata or {}
-    metadata.update({k: v for k, v in _base_radio_metadata(receiver, source_name).items() if v is not None})
-    metadata.setdefault('carrier_present', None)
-    metadata.setdefault('squelch_state', 'open' if not squelch_enabled else 'pending')
-    metadata.setdefault('squelch_last_rms_db', None)
-    metadata.setdefault('carrier_alarm', False)
-    metadata.setdefault('rbds_program_type_name', None)
-    metadata.setdefault('rbds_last_updated', None)
-    adapter.metrics.metadata = metadata
-    controller.add_source(adapter)
-
+    # In separated architecture, audio processing happens in sdr-service container.
+    # We need to notify the sdr-service via Redis to reload/start the source.
+    # The local controller in webapp is only used for metrics display, not audio processing.
     started = False
     icecast_started = False
-
+    
     if start_flag:
         try:
-            started = controller.start_source(source_name)
+            # Send command to sdr-service to reload and start the source
+            publisher = get_audio_command_publisher()
+            
+            # Build the source config that sdr-service can use
+            source_config = {
+                'source_type': AudioSourceType.SDR.value,
+                'name': source_name,
+                'enabled': True,
+                'priority': priority,
+                'sample_rate': sample_rate,
+                'channels': channels,
+                'buffer_size': buffer_size,
+                'silence_threshold_db': silence_threshold,
+                'silence_duration_seconds': silence_duration,
+                'device_params': device_params,
+            }
+            
+            # Send add_source command (sdr-service will create adapter and start it)
+            result = publisher.add_source(source_config)
+            if result.get('success'):
+                logger.info(f"Sent source_add command to sdr-service for {source_name}")
+                # Also send start command to ensure it starts
+                start_result = publisher.start_source(source_name)
+                if start_result.get('success'):
+                    started = True
+                    logger.info(f"Sent source_start command to sdr-service for {source_name}")
+                else:
+                    logger.warning(f"Failed to send source_start to sdr-service: {start_result.get('message')}")
+            else:
+                logger.warning(f"Failed to send source_add to sdr-service: {result.get('message')}")
+                
         except Exception as exc:
-            logger.warning('Failed to auto-start SDR audio source %s: %s', source_name, exc)
-        else:
-            if started and auto_streaming and auto_streaming.is_available():
-                try:
+            logger.warning('Failed to notify sdr-service about SDR audio source %s: %s', source_name, exc)
+            # Fall back to local controller if Redis communication fails
+            try:
+                controller = _get_audio_controller()
+                auto_streaming = _get_auto_streaming_service()
+
+                if controller._sources.get(source_name):
+                    if auto_streaming:
+                        try:
+                            auto_streaming.remove_source(source_name)
+                        except Exception as e:
+                            logger.debug('Auto-stream removal for %s during reconfigure failed: %s', source_name, e)
+                    controller.remove_source(source_name)
+
+                runtime_config = AudioSourceConfig(
+                    source_type=AudioSourceType.SDR,
+                    name=source_name,
+                    enabled=True,
+                    priority=priority,
+                    sample_rate=sample_rate,
+                    channels=channels,
+                    buffer_size=buffer_size,
+                    silence_threshold_db=silence_threshold,
+                    silence_duration_seconds=silence_duration,
+                    device_params=device_params,
+                )
+
+                adapter = create_audio_source(runtime_config)
+                metadata = adapter.metrics.metadata or {}
+                metadata.update({k: v for k, v in _base_radio_metadata(receiver, source_name).items() if v is not None})
+                metadata.setdefault('carrier_present', None)
+                metadata.setdefault('squelch_state', 'open' if not squelch_enabled else 'pending')
+                metadata.setdefault('squelch_last_rms_db', None)
+                metadata.setdefault('carrier_alarm', False)
+                metadata.setdefault('rbds_program_type_name', None)
+                metadata.setdefault('rbds_last_updated', None)
+                adapter.metrics.metadata = metadata
+                controller.add_source(adapter)
+
+                started = controller.start_source(source_name)
+                if started and auto_streaming and auto_streaming.is_available():
                     icecast_started = bool(auto_streaming.add_source(source_name, adapter))
-                except Exception as exc:
-                    logger.warning('Failed to start Icecast stream for %s: %s', source_name, exc)
+            except Exception as fallback_exc:
+                logger.error('Fallback to local controller also failed: %s', fallback_exc)
 
     return {
         'source_name': source_name,
