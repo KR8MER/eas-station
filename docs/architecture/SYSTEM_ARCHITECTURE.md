@@ -31,92 +31,92 @@ This document provides comprehensive architectural diagrams and flowcharts for t
 
 ### High-Level Architecture
 
+EAS Station uses a **separated service architecture** where hardware access is isolated into dedicated containers for reliability and security:
+
 ```mermaid
 graph TB
     subgraph "External Sources"
         NOAA[NOAA Weather Service<br>CAP Feeds]
         IPAWS[FEMA IPAWS<br>CAP Feeds]
-        SDR_IN[SDR Receivers<br>RF Input]
+        RF[RF Signals<br>162 MHz NOAA WX]
     end
 
-    subgraph "EAS Station Core"
-        subgraph "Ingestion Layer"
-            POLLER[CAP Pollers<br>poller/]
-            VALIDATOR[CAP Validator<br>Schema Enforcement]
-        end
-
-        subgraph "Data Layer"
-            DB[(PostgreSQL 17<br>+ PostGIS 3.4)]
-            SPATIAL[Spatial Engine<br>Boundary Processing]
-        end
-
-        subgraph "Processing Layer"
-            ALERT_MGR[Alert Manager<br>app_core/alerts.py]
-            AUDIO_CTRL[Audio Controller<br>app_core/audio/]
-            RADIO_MGR[Radio Manager<br>app_core/radio/]
-        end
-
+    subgraph "EAS Station Services"
         subgraph "Application Layer"
-            WEB[Web Application<br>Flask + Bootstrap]
-            API[REST API<br>JSON Endpoints]
-            HEALTH[System Health<br>Monitoring]
+            APP[app<br>Flask Web UI<br>Port 5000]
+            NOAA_POLL[noaa-poller<br>CAP Polling]
+            IPAWS_POLL[ipaws-poller<br>CAP Polling]
         end
 
-        subgraph "Output Layer"
-            SAME[SAME Generator<br>app_utils/eas.py]
-            TTS[Text-to-Speech<br>Google/AWS]
-            GPIO[GPIO Control<br>Relay/Transmitter]
-            LED[LED Sign Controller<br>Alpha Protocol]
+        subgraph "Hardware Services"
+            SDR_SVC[sdr-service<br>SDR + Audio<br>USB Access]
+            HW_SVC[hardware-service<br>GPIO/OLED/VFD<br>Port 5001]
+        end
+
+        subgraph "Infrastructure"
+            REDIS[(Redis<br>Cache + IPC)]
+            DB[(PostgreSQL 17<br>+ PostGIS 3.4)]
+            ICECAST[Icecast<br>Audio Streaming]
+            NGINX[nginx<br>Reverse Proxy<br>HTTPS]
         end
     end
 
-    subgraph "Operator Interface"
-        BROWSER[Web Browser<br>Dashboard/Admin]
+    subgraph "Physical Hardware"
+        SDR_DEV[SDR Receivers<br>RTL-SDR/Airspy]
+        GPIO[GPIO Pins<br>Relay Control]
+        OLED[OLED Display<br>SSD1306]
+        LED[LED Signs<br>Alpha Protocol]
+        VFD[VFD Display<br>Noritake]
     end
 
-    subgraph "Broadcast Outputs"
-        TX[RF Transmitter]
-        LED_SIGN[LED Signage]
-        AUDIO_OUT[Audio Files<br>Archive]
+    subgraph "Outputs"
+        TX[FM Transmitter]
+        BROWSER[Web Browser]
+        STREAM[Audio Streams]
     end
 
-    subgraph "Verification"
-        SDR_CAP[SDR Capture<br>Receive/Verify]
-        DECODE[SAME Decoder<br>Verification]
-    end
+    %% Data flows
+    NOAA --> NOAA_POLL
+    IPAWS --> IPAWS_POLL
+    NOAA_POLL --> DB
+    IPAWS_POLL --> DB
+    RF --> SDR_DEV --> SDR_SVC
+    
+    APP --> DB
+    APP --> REDIS
+    SDR_SVC --> REDIS
+    SDR_SVC --> ICECAST
+    HW_SVC --> REDIS
+    
+    SDR_SVC --> SDR_DEV
+    HW_SVC --> GPIO --> TX
+    HW_SVC --> OLED
+    HW_SVC --> LED
+    HW_SVC --> VFD
+    
+    NGINX --> APP
+    BROWSER --> NGINX
+    ICECAST --> STREAM
 
-    %% Connections
-    NOAA --> POLLER
-    IPAWS --> POLLER
-    POLLER --> VALIDATOR
-    VALIDATOR --> ALERT_MGR
-    ALERT_MGR --> DB
-    DB --> SPATIAL
-    SPATIAL --> WEB
-    WEB --> API
-    API --> BROWSER
-    BROWSER --> WEB
-    WEB --> SAME
-    SAME --> TTS
-    TTS --> AUDIO_CTRL
-    AUDIO_CTRL --> GPIO
-    GPIO --> TX
-    WEB --> LED
-    LED --> LED_SIGN
-    SAME --> AUDIO_OUT
-    TX --> SDR_IN
-    SDR_IN --> SDR_CAP
-    SDR_CAP --> RADIO_MGR
-    RADIO_MGR --> DECODE
-    DECODE --> DB
-    HEALTH --> WEB
-
-    style NOAA fill:#e1f5ff
-    style IPAWS fill:#e1f5ff
+    style APP fill:#d4edda
+    style SDR_SVC fill:#e1f5ff
+    style HW_SVC fill:#fff3e0
     style DB fill:#fff3cd
-    style WEB fill:#d4edda
-    style BROWSER fill:#d4edda
+    style REDIS fill:#f8d7da
 ```
+
+### Service Responsibilities
+
+| Service | Hardware Access | Purpose | Config Source |
+|---------|----------------|---------|---------------|
+| **app** | None | Web UI, API, configuration | `/app-config/.env` |
+| **noaa-poller** | None | NOAA CAP XML polling | `/app-config/.env` |
+| **ipaws-poller** | None | FEMA IPAWS polling | `/app-config/.env` |
+| **sdr-service** | USB (`/dev/bus/usb`) | SDR capture, audio processing, SAME decoding | `/app-config/.env` |
+| **hardware-service** | GPIO, I2C | Relay control, displays (OLED/VFD/LED) | `/app-config/.env` |
+| **nginx** | None | HTTPS termination, reverse proxy | Environment vars |
+| **redis** | None | Cache, inter-service communication | Volume-based |
+| **icecast** | None | Audio streaming | `/app-config/.env` |
 
 ### System Layers
 
@@ -905,45 +905,107 @@ flowchart TD
 ```mermaid
 graph TB
     subgraph "Docker Compose Services"
-        APP[App Container<br>Flask Web + API]
-        POLLER[Poller Container<br>NOAA CAP Polling]
-        IPAWS[IPAWS Poller<br>FEMA Polling]
-        DB[PostgreSQL Container<br>Database + PostGIS]
+        APP[app<br>Flask Web + API]
+        NOAA_POLL[noaa-poller<br>CAP Polling]
+        IPAWS_POLL[ipaws-poller<br>FEMA Polling]
+        SDR_SVC[sdr-service<br>SDR + Audio]
+        HW_SVC[hardware-service<br>GPIO/Displays]
+        DB[PostgreSQL<br>+ PostGIS]
+        REDIS[Redis<br>Cache + IPC]
+        ICECAST[Icecast<br>Audio Streaming]
+        NGINX[nginx<br>HTTPS Proxy]
     end
 
-    subgraph "Shared Resources"
-        VOL_DATA[Volume: pgdata]
-        VOL_AUDIO[Volume: static/audio]
-        VOL_LOGS[Volume: logs]
-        NET[Docker Network]
+    subgraph "Shared Volumes"
+        VOL_CONFIG[app-config<br>/app-config/.env]
+        VOL_DATA[alerts-db-data]
+        VOL_REDIS[redis-data]
+        VOL_CERTS[certbot-conf]
+    end
+
+    subgraph "Docker Network"
+        NET[eas-network<br>Bridge + IPv6]
     end
 
     subgraph "External"
-        OPERATOR[Operator Browser]
+        OPERATOR[Browser<br>HTTPS :443]
         NOAA_API[NOAA API]
         IPAWS_API[IPAWS API]
+        USB[USB Devices]
+        I2C[I2C/GPIO]
     end
 
+    %% Network connections
     APP --> NET
-    POLLER --> NET
-    IPAWS --> NET
+    NOAA_POLL --> NET
+    IPAWS_POLL --> NET
+    SDR_SVC --> NET
+    HW_SVC --> NET
     DB --> NET
+    REDIS --> NET
+    ICECAST --> NET
+    NGINX --> NET
 
-    APP --> VOL_AUDIO
-    APP --> VOL_LOGS
-    POLLER --> VOL_LOGS
-    IPAWS --> VOL_LOGS
+    %% Volume mounts
+    APP --> VOL_CONFIG
+    NOAA_POLL --> VOL_CONFIG
+    IPAWS_POLL --> VOL_CONFIG
+    SDR_SVC --> VOL_CONFIG
+    HW_SVC --> VOL_CONFIG
     DB --> VOL_DATA
+    REDIS --> VOL_REDIS
+    NGINX --> VOL_CERTS
 
-    NET --> DB
-    OPERATOR --> APP
-    POLLER --> NOAA_API
-    IPAWS --> IPAWS_API
+    %% External connections
+    NGINX --> OPERATOR
+    NOAA_POLL --> NOAA_API
+    IPAWS_POLL --> IPAWS_API
+    SDR_SVC --> USB
+    HW_SVC --> I2C
+
+    %% Internal dependencies
+    APP --> REDIS
+    APP --> DB
+    SDR_SVC --> REDIS
+    SDR_SVC --> ICECAST
+    HW_SVC --> REDIS
 
     style APP fill:#d4edda
-    style POLLER fill:#cfe2ff
-    style IPAWS fill:#cfe2ff
+    style SDR_SVC fill:#e1f5ff
+    style HW_SVC fill:#fff3e0
     style DB fill:#fff3cd
+    style REDIS fill:#f8d7da
+```
+
+### Service Communication Patterns
+
+```mermaid
+sequenceDiagram
+    participant Browser
+    participant nginx
+    participant app
+    participant Redis
+    participant sdr-service
+    participant hardware-service
+    participant DB
+
+    Browser->>nginx: HTTPS Request
+    nginx->>app: HTTP Proxy
+    app->>DB: Query alerts
+    DB-->>app: Alert data
+    
+    app->>Redis: Publish command
+    Redis-->>sdr-service: Subscribe notification
+    sdr-service->>sdr-service: Process SDR audio
+    sdr-service->>Redis: Audio metrics
+    
+    app->>Redis: GPIO command
+    Redis-->>hardware-service: GPIO trigger
+    hardware-service->>hardware-service: Activate relay
+    hardware-service->>Redis: Status update
+    
+    app-->>nginx: Response
+    nginx-->>Browser: HTTPS Response
 ```
 
 ---
