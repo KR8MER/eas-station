@@ -88,14 +88,14 @@ def get_available_serial_ports():
 
 
 @zigbee_bp.route('/settings/zigbee')
-@require_permission('admin.system')
+@require_permission('system.configure')
 def zigbee_settings():
     """Render the Zigbee monitoring page."""
     return render_template('settings/zigbee.html')
 
 
 @zigbee_bp.route('/api/zigbee/status')
-@require_permission('admin.system')
+@require_permission('system.configure')
 def get_zigbee_status():
     """Get Zigbee coordinator status and configuration."""
     try:
@@ -147,7 +147,7 @@ def get_zigbee_status():
 
 
 @zigbee_bp.route('/api/zigbee/devices')
-@require_permission('admin.system')
+@require_permission('system.configure')
 def get_zigbee_devices():
     """Get list of discovered Zigbee devices."""
     try:
@@ -196,7 +196,7 @@ def get_zigbee_devices():
 
 
 @zigbee_bp.route('/api/zigbee/diagnostics')
-@require_permission('admin.system')
+@require_permission('system.configure')
 def get_zigbee_diagnostics():
     """Get detailed Zigbee diagnostics and troubleshooting info."""
     try:

@@ -69,14 +69,14 @@ def run_command(cmd, check=True):
 
 
 @network_bp.route('/settings/network')
-@require_permission('admin.system')
+@require_permission('system.configure')
 def network_settings():
     """Render the network configuration page."""
     return render_template('settings/network.html')
 
 
 @network_bp.route('/api/network/status')
-@require_permission('admin.system')
+@require_permission('system.configure')
 def get_network_status():
     """Get current network connection status."""
     try:
@@ -144,7 +144,7 @@ def get_network_status():
 
 
 @network_bp.route('/api/network/wifi/scan')
-@require_permission('admin.system')
+@require_permission('system.configure')
 def scan_wifi():
     """Scan for available WiFi networks."""
     try:
@@ -192,7 +192,7 @@ def scan_wifi():
 
 
 @network_bp.route('/api/network/wifi/connect', methods=['POST'])
-@require_permission('admin.system')
+@require_permission('system.configure')
 def connect_wifi():
     """Connect to a WiFi network."""
     try:
@@ -254,7 +254,7 @@ def connect_wifi():
 
 
 @network_bp.route('/api/network/wifi/disconnect', methods=['POST'])
-@require_permission('admin.system')
+@require_permission('system.configure')
 def disconnect_wifi():
     """Disconnect from current WiFi network."""
     try:
@@ -282,7 +282,7 @@ def disconnect_wifi():
 
 
 @network_bp.route('/api/network/wifi/forget', methods=['POST'])
-@require_permission('admin.system')
+@require_permission('system.configure')
 def forget_wifi():
     """Forget a saved WiFi network."""
     try:
