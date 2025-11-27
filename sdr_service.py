@@ -218,6 +218,127 @@ def publish_receiver_metrics():
         logger.debug(f"Failed to publish receiver metrics: {e}")
 
 
+def process_commands():
+    """Process commands from Redis command queue."""
+    if not _radio_manager or not _redis_client:
+        return
+
+    try:
+        # Check for pending commands (non-blocking)
+        command_json = _redis_client.lpop("sdr:commands")
+        if not command_json:
+            return
+
+        command = json.loads(command_json)
+        action = command.get("action")
+        receiver_id = command.get("receiver_id")
+        command_id = command.get("command_id", "unknown")
+
+        logger.info(f"Processing command: {action} for receiver {receiver_id} (command_id={command_id})")
+
+        if action == "restart":
+            # Restart receiver
+            instance = _radio_manager.get_receiver(receiver_id)
+            if not instance:
+                result = {
+                    "command_id": command_id,
+                    "success": False,
+                    "error": f"Receiver '{receiver_id}' not found in RadioManager",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+            else:
+                try:
+                    # Stop and restart
+                    instance.stop()
+                    time.sleep(0.5)  # Brief pause
+                    instance.start()
+
+                    status = instance.get_status()
+                    result = {
+                        "command_id": command_id,
+                        "success": True,
+                        "receiver_id": receiver_id,
+                        "status": {
+                            "locked": status.locked,
+                            "signal_strength": status.signal_strength,
+                            "running": instance.is_running() if hasattr(instance, 'is_running') else False,
+                        },
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
+                    logger.info(f"✅ Successfully restarted receiver {receiver_id}")
+                except Exception as e:
+                    logger.error(f"❌ Failed to restart receiver {receiver_id}: {e}")
+                    result = {
+                        "command_id": command_id,
+                        "success": False,
+                        "error": str(e),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
+
+            # Publish result
+            _redis_client.setex(
+                f"sdr:command_result:{command_id}",
+                30,  # 30 second TTL
+                json.dumps(result)
+            )
+
+        elif action == "get_spectrum":
+            # Get spectrum data for waterfall
+            instance = _radio_manager.get_receiver(receiver_id)
+            if not instance:
+                result = {
+                    "command_id": command_id,
+                    "success": False,
+                    "error": f"Receiver '{receiver_id}' not found",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+            else:
+                try:
+                    num_samples = command.get("num_samples", 2048)
+                    iq_samples = instance.get_samples(num_samples=num_samples)
+
+                    if iq_samples is None or len(iq_samples) == 0:
+                        result = {
+                            "command_id": command_id,
+                            "success": False,
+                            "error": "No samples available from receiver",
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                        }
+                    else:
+                        # Convert complex samples to list of [real, imag] pairs
+                        samples_list = [[float(s.real), float(s.imag)] for s in iq_samples[:num_samples]]
+                        result = {
+                            "command_id": command_id,
+                            "success": True,
+                            "samples": samples_list,
+                            "num_samples": len(samples_list),
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                        }
+                except Exception as e:
+                    logger.error(f"❌ Failed to get spectrum for receiver {receiver_id}: {e}")
+                    result = {
+                        "command_id": command_id,
+                        "success": False,
+                        "error": str(e),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
+
+            # Publish result
+            _redis_client.setex(
+                f"sdr:command_result:{command_id}",
+                30,  # 30 second TTL
+                json.dumps(result)
+            )
+
+        else:
+            logger.warning(f"Unknown command action: {action}")
+
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse command JSON: {e}")
+    except Exception as e:
+        logger.error(f"Error processing command: {e}", exc_info=True)
+
+
 def health_check_loop():
     """Periodic health check and metrics publishing."""
     global _running
@@ -230,13 +351,16 @@ def health_check_loop():
         try:
             current_time = time.time()
 
+            # Process pending commands (non-blocking)
+            process_commands()
+
             # Publish metrics periodically
             if current_time - last_metrics_publish >= metrics_interval:
                 publish_receiver_metrics()
                 last_metrics_publish = current_time
 
             # Sleep briefly
-            time.sleep(1)
+            time.sleep(0.5)  # Check for commands every 500ms
 
         except KeyboardInterrupt:
             break
