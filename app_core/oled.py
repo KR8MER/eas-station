@@ -936,6 +936,7 @@ OLED_FONT_PATH = os.getenv("OLED_FONT_PATH")
 OLED_DEFAULT_INVERT = _env_flag("OLED_DEFAULT_INVERT", "false")
 OLED_BUTTON_GPIO = _env_int("OLED_BUTTON_GPIO", "4")
 OLED_BUTTON_HOLD_SECONDS = max(0.5, _env_float("OLED_BUTTON_HOLD_SECONDS", "1.25"))
+OLED_BUTTON_ACTIVE_HIGH = _env_flag("OLED_BUTTON_ACTIVE_HIGH", "false")
 
 # Scroll animation configuration
 OLED_SCROLL_EFFECT = os.getenv("OLED_SCROLL_EFFECT", "scroll_left").lower()
@@ -974,9 +975,13 @@ def ensure_oled_button(log: Optional[logging.Logger] = None) -> Optional[Button]
             return None
 
         try:
+            # Configure button based on wiring:
+            # - pull_up=True (default): Internal pull-up resistor enabled, button connects GPIO to GND when pressed
+            # - pull_up=False: Internal pull-down resistor enabled, button connects GPIO to 3.3V when pressed
+            # The OLED_BUTTON_ACTIVE_HIGH env var controls this for different enclosure wiring configurations
             button = Button(
                 OLED_BUTTON_GPIO,
-                pull_up=True,
+                pull_up=not OLED_BUTTON_ACTIVE_HIGH,
                 hold_time=OLED_BUTTON_HOLD_SECONDS,
                 bounce_time=0.05,
             )
@@ -990,9 +995,10 @@ def ensure_oled_button(log: Optional[logging.Logger] = None) -> Optional[Button]
 
         oled_button_device = button
         logger_ref.info(
-            "OLED button initialised on GPIO %s with hold time %.2fs",
+            "OLED button initialised on GPIO %s with hold time %.2fs (active_%s)",
             OLED_BUTTON_GPIO,
             OLED_BUTTON_HOLD_SECONDS,
+            "high" if OLED_BUTTON_ACTIVE_HIGH else "low",
         )
         return oled_button_device
 

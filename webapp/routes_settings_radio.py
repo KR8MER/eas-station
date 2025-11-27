@@ -252,7 +252,10 @@ def _parse_receiver_payload(payload: Dict[str, Any], *, partial: bool = False) -
                         return None, error_msg
                 except Exception as validation_exc:
                     # If validation fails unexpectedly, log and skip validation
-                    logger.warning(f"Sample rate validation failed for {data['driver']}: {validation_exc}")
+                    _module_logger.warning(
+                        f"Sample rate validation failed for {data['driver']}: {validation_exc}",
+                        exc_info=True
+                    )
                     # Allow the sample rate anyway - hardware validation is not critical
 
         except ValueError:
@@ -287,7 +290,7 @@ def _parse_receiver_payload(payload: Dict[str, Any], *, partial: bool = False) -
 
     if not partial or "modulation_type" in payload:
         modulation_raw = payload.get("modulation_type", "IQ")
-        route_logger.debug(f"Processing modulation_type: raw={modulation_raw!r}")
+        _module_logger.debug(f"Processing modulation_type: raw={modulation_raw!r}")
         if modulation_raw in (None, ""):
             if not partial:
                 data["modulation_type"] = "IQ"
@@ -297,12 +300,12 @@ def _parse_receiver_payload(payload: Dict[str, Any], *, partial: bool = False) -
             if modulation not in allowed_modulations:
                 return None, "Invalid modulation type."
             data["modulation_type"] = modulation
-            route_logger.debug(f"Set modulation_type to: {modulation}")
+            _module_logger.debug(f"Set modulation_type to: {modulation}")
 
     if not partial or "audio_output" in payload:
         audio_output_raw = payload.get("audio_output")
         audio_output_value = _coerce_bool(audio_output_raw, False)
-        route_logger.debug(f"Processing audio_output: raw={audio_output_raw!r}, coerced={audio_output_value}")
+        _module_logger.debug(f"Processing audio_output: raw={audio_output_raw!r}, coerced={audio_output_value}")
         data["audio_output"] = audio_output_value
 
     if not partial or "stereo_enabled" in payload:

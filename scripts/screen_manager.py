@@ -442,6 +442,7 @@ class ScreenManager:
             self._oled_button_actions.append(action)
 
     def _handle_oled_button_press(self) -> None:  # pragma: no cover - hardware callback
+        logger.debug("OLED button pressed (GPIO 4)")
         self._oled_button_held = False
 
         # Provide immediate visual feedback that button was pressed
@@ -459,6 +460,7 @@ class ScreenManager:
             logger.debug(f"Could not flash OLED on button press: {e}")
 
     def _handle_oled_button_hold(self) -> None:  # pragma: no cover - hardware callback
+        logger.debug("OLED button held (GPIO 4)")
         self._oled_button_held = True
         # When alert is active, long press dismisses it; otherwise take snapshot
         if self._current_alert_id is not None:
@@ -467,6 +469,7 @@ class ScreenManager:
             self._queue_oled_button_action('snapshot')
 
     def _handle_oled_button_release(self) -> None:  # pragma: no cover - hardware callback
+        logger.debug("OLED button released (GPIO 4), held=%s", self._oled_button_held)
         if not self._oled_button_held:
             # When alert is active, short press pauses/resumes; otherwise advance screen
             if self._current_alert_id is not None:
@@ -484,6 +487,7 @@ class ScreenManager:
         for action in pending:
             if action == 'advance':
                 # Advance to next screen in rotation
+                logger.info("Button press: Advancing to next OLED screen")
                 self._advance_oled_rotation()
             elif action == 'toggle_pause':
                 # Toggle pause state for alert scrolling
@@ -498,6 +502,7 @@ class ScreenManager:
                 self._reset_oled_alert_state()
             elif action == 'snapshot':
                 # Take a snapshot of current system state
+                logger.info("Button hold: Taking OLED system snapshot")
                 self._display_oled_snapshot()
 
     def _advance_oled_rotation(self) -> None:
