@@ -303,6 +303,10 @@ except Exception as e:
         raw_json = Column(JSON)
         geom = Column(Geometry('POLYGON', srid=4326))
         source = Column(String(32), nullable=False, default=ALERT_SOURCE_UNKNOWN)
+        # EAS forwarding tracking
+        eas_forwarded = Column(Boolean, default=False, nullable=False)
+        eas_forwarding_reason = Column(String(255))
+        eas_audio_url = Column(String(512))
         created_at = Column(DateTime, default=utc_now)
         updated_at = Column(DateTime, default=utc_now)
 
@@ -2107,6 +2111,10 @@ class CAPPoller:
         new_alert = CAPAlert(**payload)
         new_alert.created_at = utc_now()
         new_alert.updated_at = utc_now()
+        # Initialize EAS forwarding fields
+        new_alert.eas_forwarded = False
+        new_alert.eas_forwarding_reason = None
+        new_alert.eas_audio_url = None
         self._set_alert_geometry(new_alert, geometry_data)
 
         self.db_session.add(new_alert)
@@ -2120,8 +2128,18 @@ class CAPPoller:
         capture_metadata: Optional[Dict[str, Any]] = None
         if self.eas_broadcaster:
             try:
-                broadcast_result = self.eas_broadcaster.handle_alert(new_alert, payload)
+                broadcast_result = self.eas_broadcaster.handle_alert(new_alert, alert_data)
                 if broadcast_result and broadcast_result.get("same_triggered"):
+                    # EAS was triggered - update the alert record
+                    new_alert.eas_forwarded = True
+                    new_alert.eas_forwarding_reason = "EAS broadcast generated"
+                    # Build audio URL from output directory and filename
+                    audio_path = broadcast_result.get("audio_path")
+                    if audio_path:
+                        web_subdir = self.eas_broadcaster.config.get('web_subdir', 'eas_messages')
+                        audio_filename = os.path.basename(audio_path)
+                        new_alert.eas_audio_url = f"/static/{web_subdir}/{audio_filename}"
+                    
                     capture_results = self._coordinate_radio_captures(new_alert, broadcast_result)
                     capture_metadata = {
                         "alert_identifier": getattr(new_alert, "identifier", None),
@@ -2129,10 +2147,30 @@ class CAPPoller:
                         "captures": capture_results,
                     }
                 else:
+                    # EAS was NOT triggered - record the reason
+                    new_alert.eas_forwarded = False
+                    reason = broadcast_result.get("reason") if broadcast_result else "Unknown"
+                    new_alert.eas_forwarding_reason = reason
                     capture_metadata = {"broadcast": broadcast_result}
+                
+                # Commit the EAS forwarding status update
+                self.db_session.commit()
             except Exception as exc:
                 self.logger.error(f"EAS broadcast failed for {new_alert.identifier}: {exc}")
+                new_alert.eas_forwarded = False
+                new_alert.eas_forwarding_reason = f"Error: {str(exc)}"
+                try:
+                    self.db_session.commit()
+                except Exception:
+                    self.db_session.rollback()
                 capture_metadata = {"error": str(exc)}
+        else:
+            # No EAS broadcaster configured
+            new_alert.eas_forwarding_reason = "EAS broadcasting disabled"
+            try:
+                self.db_session.commit()
+            except Exception:
+                self.db_session.rollback()
 
         self.logger.info(f"Saved new alert: {new_alert.identifier} - {new_alert.event}")
         return True, new_alert, capture_metadata
