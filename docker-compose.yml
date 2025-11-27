@@ -322,6 +322,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    security_opt:
+      - no-new-privileges:true
 
   icecast:
     build:
@@ -355,6 +357,8 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+    security_opt:
+      - no-new-privileges:true
     # Note: Configure EAS Station to use Icecast:
     #   1. Go to /settings/audio in the web interface
     #   2. Scroll to "Icecast Streaming Output"
