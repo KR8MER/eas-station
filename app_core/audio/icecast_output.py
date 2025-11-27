@@ -261,11 +261,16 @@ class IcecastStreamer:
             from urllib.parse import quote
             encoded_password = quote(self.config.password, safe='')
 
+            # Strip leading slash from mount point to prevent double slash in URL
+            # Mount points internally have leading slash (/stream.mp3) but icecast:// URL
+            # format doesn't want it: icecast://user:pass@host:port/stream.mp3 (not //stream.mp3)
+            mount_path = self.config.mount.lstrip('/')
+
             # Note: The 10-minute timeout fix is SERVER-SIDE in Icecast config (source-timeout=0)
             # The icecast:// protocol (libshout) doesn't support HTTP timeout options
             icecast_url = (
                 f"icecast://source:{encoded_password}@"
-                f"{self.config.server}:{self.config.port}/{self.config.mount}"
+                f"{self.config.server}:{self.config.port}/{mount_path}"
             )
 
             # FFmpeg command to encode and stream
@@ -918,6 +923,7 @@ class IcecastStreamer:
 
         song_value = self._sanitize_metadata_value(song_value, safe_stream_name)
 
+        # Ensure mount path has leading slash for metadata API endpoint
         mount_path = self.config.mount
         if not mount_path.startswith('/'):
             mount_path = f"/{mount_path}"
