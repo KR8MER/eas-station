@@ -51,7 +51,11 @@ chown icecast2:icecast "$CONFIG_FILE" 2>/dev/null || true
 chmod 644 "$CONFIG_FILE" 2>/dev/null || true
 
 # Update server settings
-update_config "hostname" "${ICECAST_HOSTNAME:-localhost}"
+# Use ICECAST_HOSTNAME if explicitly set, otherwise fallback to ICECAST_PUBLIC_HOSTNAME,
+# and finally default to localhost for local-only access
+EFFECTIVE_HOSTNAME="${ICECAST_HOSTNAME:-${ICECAST_PUBLIC_HOSTNAME:-localhost}}"
+update_config "hostname" "$EFFECTIVE_HOSTNAME"
+echo "INFO: Configured hostname: $EFFECTIVE_HOSTNAME"
 update_config "location" "${ICECAST_LOCATION:-Earth}"
 update_config "admin" "${ICECAST_ADMIN:-icemaster@localhost}"
 
