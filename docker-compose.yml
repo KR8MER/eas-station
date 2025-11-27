@@ -4,6 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile.nginx
     image: eas-nginx:latest
+    init: true  # Properly handle process signals
     restart: unless-stopped
     ports:
       - "8888:8888"    # HTTP (redirects to HTTPS) - binds to both IPv4 and IPv6 (port 8888 to avoid CasaOS conflict)
@@ -67,6 +68,7 @@ services:
   sdr-service:
     image: eas-station:latest
     container_name: eas-sdr-service
+    init: true  # Properly handle process signals
     restart: unless-stopped
     networks:
       - eas-network
@@ -135,6 +137,7 @@ services:
   hardware-service:
     image: eas-station:latest
     container_name: eas-hardware-service
+    init: true  # Properly handle process signals
     restart: unless-stopped
     networks:
       - eas-network
@@ -182,6 +185,7 @@ services:
       dockerfile: Dockerfile
       # Note: SDR drivers not needed in web-only container
     image: eas-station:latest
+    init: true  # Properly handle process signals and prevent zombie processes
     expose:
       - "5000"  # Internal only, accessed via nginx reverse proxy
     networks:
@@ -192,7 +196,8 @@ services:
     volumes:
       - app-config:/app-config  # Persistent volume for .env file
       - certbot-conf:/etc/letsencrypt:ro  # Allow SSL export routes to read certificates
-      - /var/run/docker.sock:/var/run/docker.sock:ro  # Allow container engine health checks
+      # Docker socket removed to prevent /dev/pts permission errors
+      # Health checks can be done via HTTP endpoints instead
     environment:
       # Database connection - external database (change POSTGRES_HOST to your database server)
       POSTGRES_HOST: ${POSTGRES_HOST:-alerts-db}
@@ -233,6 +238,7 @@ services:
 
   noaa-poller:
     image: eas-station:latest
+    init: true  # Properly handle process signals
     depends_on:
       - app
     networks:
@@ -265,6 +271,7 @@ services:
 
   ipaws-poller:
     image: eas-station:latest
+    init: true  # Properly handle process signals
     depends_on:
       - app
     networks:
@@ -331,6 +338,7 @@ services:
       dockerfile: Dockerfile.icecast
     image: eas-icecast:latest
     container_name: eas-icecast
+    init: true  # Properly handle process signals
     restart: unless-stopped
     networks:
       - eas-network
