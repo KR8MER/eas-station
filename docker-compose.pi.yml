@@ -30,7 +30,8 @@ services:
       POSTGRES_PASSWORD: casaos
     devices:
       - /dev/bus/usb:/dev/bus/usb  # USB access for SDR discovery (read-only query)
-    # NOTE: Only /dev/bus/usb mounted for discovery - full /dev mount removed to prevent pts errors
+      - /dev:/dev:ro  # Read-only access to all devices for smartctl/NVMe health monitoring
+    # NOTE: /dev mounted read-only for NVMe health (smartctl) and disk monitoring
     # NOTE: GPIO/screen access removed - now in hardware-service
     # Configuration: start-pi.sh syncs local .env to persistent volume before starting
 
@@ -65,4 +66,6 @@ services:
       - /dev/gpiomem:/dev/gpiomem      # GPIO memory access for user-space control
       - /dev/gpiochip0:/dev/gpiochip0  # GPIO chip device for modern libraries (lgpio)
       - /dev/i2c-1:/dev/i2c-1          # I2C bus for OLED displays (Argon One, etc.)
+      - /dev/ttyUSB0:/dev/ttyUSB0      # VFD display serial port (Noritake)
+      - /dev/ttyAMA0:/dev/ttyAMA0      # Zigbee coordinator serial port (hardware UART)
     privileged: true  # Required for GPIO access on Pi 5

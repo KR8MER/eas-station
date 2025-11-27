@@ -1,0 +1,476 @@
+{% extends "base.html" %}
+
+{% block title %}Network Configuration - EAS Station{% endblock %}
+
+{% block extra_css %}
+<style>
+    .settings-container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 2rem;
+    }
+
+    .settings-header {
+        margin-bottom: 2rem;
+    }
+
+    .settings-header h1 {
+        font-size: 2rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+    }
+
+    .settings-header p {
+        color: var(--text-secondary);
+    }
+
+    .network-section {
+        background: var(--surface-color);
+        border-radius: 0.5rem;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        border: 1px solid var(--border-color);
+    }
+
+    .network-section h3 {
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .network-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    .network-item {
+        padding: 1rem;
+        border: 1px solid var(--border-color);
+        border-radius: 0.375rem;
+        margin-bottom: 0.75rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        background: var(--bg-card);
+        transition: all 0.2s;
+    }
+
+    .network-item:hover {
+        border-color: var(--primary-color);
+        box-shadow: 0 2px 8px var(--shadow-color);
+    }
+
+    .network-item.active {
+        border-color: var(--success-color);
+        background: rgba(40, 167, 69, 0.1);
+    }
+
+    .network-info {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .network-name {
+        font-weight: 600;
+        font-size: 1rem;
+    }
+
+    .network-details {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+    }
+
+    .signal-strength {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
+
+    .signal-bar {
+        width: 3px;
+        background: var(--border-color);
+        border-radius: 1px;
+    }
+
+    .signal-bar.active {
+        background: var(--success-color);
+    }
+
+    .signal-bar:nth-child(1) { height: 6px; }
+    .signal-bar:nth-child(2) { height: 10px; }
+    .signal-bar:nth-child(3) { height: 14px; }
+    .signal-bar:nth-child(4) { height: 18px; }
+
+    .security-badge {
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+        font-size: 0.75rem;
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-color);
+    }
+
+    .security-badge.secure {
+        background: rgba(0, 123, 255, 0.1);
+        color: var(--primary-color);
+        border-color: var(--primary-color);
+    }
+
+    .network-actions {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .status-badge {
+        padding: 0.375rem 0.75rem;
+        border-radius: 0.25rem;
+        font-size: 0.875rem;
+        font-weight: 500;
+    }
+
+    .status-badge.connected {
+        background: rgba(40, 167, 69, 0.1);
+        color: var(--success-color);
+        border: 1px solid var(--success-color);
+    }
+
+    .status-badge.disconnected {
+        background: rgba(108, 117, 125, 0.1);
+        color: var(--text-secondary);
+        border: 1px solid var(--border-color);
+    }
+
+    .connection-info {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 1rem;
+        margin-top: 1rem;
+    }
+
+    .info-card {
+        padding: 1rem;
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 0.375rem;
+    }
+
+    .info-label {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 0.25rem;
+    }
+
+    .info-value {
+        font-size: 1rem;
+        font-weight: 600;
+        font-family: 'Courier New', monospace;
+    }
+
+    .spinner {
+        display: inline-block;
+        width: 1rem;
+        height: 1rem;
+        border: 2px solid rgba(0, 0, 0, 0.1);
+        border-left-color: var(--primary-color);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 3rem 1rem;
+        color: var(--text-secondary);
+    }
+
+    .empty-state i {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="settings-container">
+    <div class="settings-header">
+        <h1><i class="fas fa-wifi"></i> Network Configuration</h1>
+        <p>Manage WiFi connections and network settings</p>
+    </div>
+
+    <!-- Current Connection Status -->
+    <div class="network-section" id="current-status">
+        <h3><i class="fas fa-signal"></i> Current Status</h3>
+        <div id="status-loading">
+            <div class="spinner"></div> Loading network status...
+        </div>
+        <div id="status-content" style="display: none;">
+            <div id="connection-status"></div>
+            <div id="connection-info" class="connection-info"></div>
+        </div>
+    </div>
+
+    <!-- Available Networks -->
+    <div class="network-section">
+        <h3>
+            <i class="fas fa-broadcast-tower"></i> Available WiFi Networks
+            <button class="btn btn-sm btn-primary ms-auto" id="scan-btn">
+                <i class="fas fa-sync-alt"></i> Scan
+            </button>
+        </h3>
+        <div id="scan-loading" style="display: none;">
+            <div class="spinner"></div> Scanning for networks...
+        </div>
+        <ul class="network-list" id="networks-list">
+            <li class="empty-state">
+                <i class="fas fa-wifi"></i>
+                <p>Click "Scan" to find available WiFi networks</p>
+            </li>
+        </ul>
+    </div>
+</div>
+
+<!-- Connect Modal -->
+<div class="modal fade" id="connectModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Connect to WiFi</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">Network Name (SSID)</label>
+                    <input type="text" class="form-control" id="connect-ssid" readonly>
+                </div>
+                <div class="mb-3" id="password-group">
+                    <label class="form-label">Password</label>
+                    <input type="password" class="form-control" id="connect-password">
+                </div>
+                <div id="connect-error" class="alert alert-danger" style="display: none;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="connect-submit">Connect</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/core/api.js') }}"></script>
+<script>
+const NetworkConfig = {
+    currentSsid: null,
+    connectModal: null,
+
+    init() {
+        this.connectModal = new bootstrap.Modal(document.getElementById('connectModal'));
+        this.attachEventListeners();
+        this.loadNetworkStatus();
+    },
+
+    attachEventListeners() {
+        document.getElementById('scan-btn').addEventListener('click', () => this.scanNetworks());
+        document.getElementById('connect-submit').addEventListener('click', () => this.connectToNetwork());
+    },
+
+    async loadNetworkStatus() {
+        try {
+            const response = await api.get('/api/network/status');
+            const data = await response.json();
+
+            if (data.success) {
+                this.displayNetworkStatus(data);
+            }
+        } catch (error) {
+            console.error('Failed to load network status:', error);
+        } finally {
+            document.getElementById('status-loading').style.display = 'none';
+            document.getElementById('status-content').style.display = 'block';
+        }
+    },
+
+    displayNetworkStatus(data) {
+        const statusDiv = document.getElementById('connection-status');
+        const infoDiv = document.getElementById('connection-info');
+
+        // Display connection status
+        if (data.wifi) {
+            statusDiv.innerHTML = `
+                <div class="status-badge connected">
+                    <i class="fas fa-check-circle"></i> Connected to ${data.wifi.ssid}
+                </div>
+            `;
+
+            // Display connection details
+            let infoCards = '';
+            if (data.interfaces) {
+                for (const [iface, addrs] of Object.entries(data.interfaces)) {
+                    for (const addr of addrs) {
+                        infoCards += `
+                            <div class="info-card">
+                                <div class="info-label">${addr.family === 'inet' ? 'IPv4' : 'IPv6'} Address (${iface})</div>
+                                <div class="info-value">${addr.address}/${addr.prefixlen}</div>
+                            </div>
+                        `;
+                    }
+                }
+            }
+            infoDiv.innerHTML = infoCards;
+        } else {
+            statusDiv.innerHTML = `
+                <div class="status-badge disconnected">
+                    <i class="fas fa-times-circle"></i> Not connected
+                </div>
+            `;
+            infoDiv.innerHTML = '';
+        }
+    },
+
+    async scanNetworks() {
+        const btn = document.getElementById('scan-btn');
+        const loadingDiv = document.getElementById('scan-loading');
+        const networksList = document.getElementById('networks-list');
+
+        btn.disabled = true;
+        loadingDiv.style.display = 'block';
+        networksList.innerHTML = '';
+
+        try {
+            const response = await api.get('/api/network/wifi/scan');
+            const data = await response.json();
+
+            if (data.success && data.networks && data.networks.length > 0) {
+                networksList.innerHTML = data.networks.map(network => this.renderNetwork(network)).join('');
+            } else {
+                networksList.innerHTML = `
+                    <li class="empty-state">
+                        <i class="fas fa-wifi-slash"></i>
+                        <p>No networks found</p>
+                    </li>
+                `;
+            }
+        } catch (error) {
+            console.error('Failed to scan networks:', error);
+            networksList.innerHTML = `
+                <li class="empty-state">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <p>Error scanning networks</p>
+                </li>
+            `;
+        } finally {
+            btn.disabled = false;
+            loadingDiv.style.display = 'none';
+        }
+    },
+
+    renderNetwork(network) {
+        const signal = network.signal || 0;
+        const bars = [25, 50, 75, 100].map(threshold =>
+            `<div class="signal-bar ${signal >= threshold ? 'active' : ''}"></div>`
+        ).join('');
+
+        const isSecure = network.security && network.security !== '';
+        const securityBadge = isSecure ?
+            `<span class="security-badge secure"><i class="fas fa-lock"></i> ${network.security}</span>` :
+            `<span class="security-badge"><i class="fas fa-unlock"></i> Open</span>`;
+
+        return `
+            <li class="network-item ${network.in_use ? 'active' : ''}">
+                <div class="network-info">
+                    <div>
+                        <div class="network-name">${network.ssid}</div>
+                        <div class="network-details">
+                            <div class="signal-strength">${bars} ${signal}%</div>
+                            ${securityBadge}
+                        </div>
+                    </div>
+                </div>
+                <div class="network-actions">
+                    ${network.in_use ?
+                        '<button class="btn btn-sm btn-outline-danger" onclick="NetworkConfig.disconnect()"><i class="fas fa-times"></i> Disconnect</button>' :
+                        `<button class="btn btn-sm btn-primary" onclick="NetworkConfig.showConnectModal('${network.ssid}', ${isSecure})"><i class="fas fa-plug"></i> Connect</button>`
+                    }
+                </div>
+            </li>
+        `;
+    },
+
+    showConnectModal(ssid, requiresPassword) {
+        this.currentSsid = ssid;
+        document.getElementById('connect-ssid').value = ssid;
+        document.getElementById('connect-password').value = '';
+        document.getElementById('password-group').style.display = requiresPassword ? 'block' : 'none';
+        document.getElementById('connect-error').style.display = 'none';
+        this.connectModal.show();
+    },
+
+    async connectToNetwork() {
+        const ssid = document.getElementById('connect-ssid').value;
+        const password = document.getElementById('connect-password').value;
+        const submitBtn = document.getElementById('connect-submit');
+        const errorDiv = document.getElementById('connect-error');
+
+        submitBtn.disabled = true;
+        errorDiv.style.display = 'none';
+
+        try {
+            const response = await api.post('/api/network/wifi/connect', {
+                ssid: ssid,
+                password: password
+            });
+            const data = await response.json();
+
+            if (data.success) {
+                this.connectModal.hide();
+                alert(`Successfully connected to ${ssid}`);
+                this.loadNetworkStatus();
+                this.scanNetworks();
+            } else {
+                errorDiv.textContent = data.error || 'Connection failed';
+                errorDiv.style.display = 'block';
+            }
+        } catch (error) {
+            errorDiv.textContent = 'Failed to connect: ' + error.message;
+            errorDiv.style.display = 'block';
+        } finally {
+            submitBtn.disabled = false;
+        }
+    },
+
+    async disconnect() {
+        if (!confirm('Disconnect from WiFi?')) return;
+
+        try {
+            const response = await api.post('/api/network/wifi/disconnect', { device: 'wlan0' });
+            const data = await response.json();
+
+            if (data.success) {
+                alert('Disconnected from WiFi');
+                this.loadNetworkStatus();
+                this.scanNetworks();
+            } else {
+                alert('Failed to disconnect: ' + (data.error || 'Unknown error'));
+            }
+        } catch (error) {
+            alert('Failed to disconnect: ' + error.message);
+        }
+    }
+};
+
+document.addEventListener('DOMContentLoaded', () => NetworkConfig.init());
+</script>
+{% endblock %}

@@ -1,0 +1,609 @@
+{% extends "base.html" %}
+
+{% block title %}Zigbee Monitoring - EAS Station{% endblock %}
+
+{% block extra_css %}
+<style>
+    .settings-container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 2rem;
+    }
+
+    .settings-header {
+        margin-bottom: 2rem;
+    }
+
+    .settings-header h1 {
+        font-size: 2rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+    }
+
+    .settings-header p {
+        color: var(--text-secondary);
+    }
+
+    .zigbee-section {
+        background: var(--surface-color);
+        border-radius: 0.5rem;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        border: 1px solid var(--border-color);
+    }
+
+    .zigbee-section h3 {
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .status-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .status-card {
+        padding: 1rem;
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 0.375rem;
+    }
+
+    .status-label {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 0.5rem;
+    }
+
+    .status-value {
+        font-size: 1.25rem;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .status-badge {
+        display: inline-block;
+        padding: 0.375rem 0.75rem;
+        border-radius: 0.25rem;
+        font-size: 0.875rem;
+        font-weight: 500;
+    }
+
+    .status-badge.enabled {
+        background: rgba(40, 167, 69, 0.1);
+        color: var(--success-color);
+        border: 1px solid var(--success-color);
+    }
+
+    .status-badge.disabled {
+        background: rgba(108, 117, 125, 0.1);
+        color: var(--text-secondary);
+        border: 1px solid var(--border-color);
+    }
+
+    .status-badge.warning {
+        background: rgba(255, 193, 7, 0.1);
+        color: #ffc107;
+        border: 1px solid #ffc107;
+    }
+
+    .status-badge.error {
+        background: rgba(220, 53, 69, 0.1);
+        color: #dc3545;
+        border: 1px solid #dc3545;
+    }
+
+    .diagnostic-check {
+        padding: 0.75rem 1rem;
+        margin-bottom: 0.5rem;
+        border-radius: 0.375rem;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        border: 1px solid var(--border-color);
+        background: var(--bg-card);
+    }
+
+    .diagnostic-check.pass {
+        border-color: var(--success-color);
+        background: rgba(40, 167, 69, 0.05);
+    }
+
+    .diagnostic-check.fail {
+        border-color: #dc3545;
+        background: rgba(220, 53, 69, 0.05);
+    }
+
+    .diagnostic-check.warning {
+        border-color: #ffc107;
+        background: rgba(255, 193, 7, 0.05);
+    }
+
+    .check-icon {
+        width: 2rem;
+        height: 2rem;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .check-icon.pass {
+        background: var(--success-color);
+        color: white;
+    }
+
+    .check-icon.fail {
+        background: #dc3545;
+        color: white;
+    }
+
+    .check-icon.warning {
+        background: #ffc107;
+        color: white;
+    }
+
+    .check-content {
+        flex: 1;
+    }
+
+    .check-name {
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+    }
+
+    .check-message {
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+    }
+
+    .device-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    .device-item {
+        padding: 1rem;
+        border: 1px solid var(--border-color);
+        border-radius: 0.375rem;
+        margin-bottom: 0.75rem;
+        background: var(--bg-card);
+        transition: all 0.2s;
+    }
+
+    .device-item:hover {
+        border-color: var(--primary-color);
+        box-shadow: 0 2px 8px var(--shadow-color);
+    }
+
+    .device-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 0.75rem;
+    }
+
+    .device-name {
+        font-weight: 600;
+        font-size: 1rem;
+    }
+
+    .device-details {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 0.5rem;
+        font-size: 0.875rem;
+    }
+
+    .device-detail {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .detail-label {
+        color: var(--text-secondary);
+        font-weight: 500;
+    }
+
+    .detail-value {
+        font-family: 'Courier New', monospace;
+    }
+
+    .spinner {
+        display: inline-block;
+        width: 1rem;
+        height: 1rem;
+        border: 2px solid rgba(0, 0, 0, 0.1);
+        border-left-color: var(--primary-color);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 3rem 1rem;
+        color: var(--text-secondary);
+    }
+
+    .empty-state i {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+
+    .config-table {
+        width: 100%;
+        font-size: 0.875rem;
+    }
+
+    .config-table td {
+        padding: 0.5rem;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .config-table td:first-child {
+        color: var(--text-secondary);
+        font-weight: 500;
+        width: 40%;
+    }
+
+    .config-table td:last-child {
+        font-family: 'Courier New', monospace;
+    }
+
+    .serial-ports-list {
+        list-style: none;
+        padding: 0;
+        margin-top: 1rem;
+    }
+
+    .serial-port-item {
+        padding: 0.75rem;
+        border: 1px solid var(--border-color);
+        border-radius: 0.375rem;
+        margin-bottom: 0.5rem;
+        background: var(--bg-card);
+        font-size: 0.875rem;
+    }
+
+    .port-device {
+        font-family: 'Courier New', monospace;
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+    }
+
+    .port-description {
+        color: var(--text-secondary);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="settings-container">
+    <div class="settings-header">
+        <h1><i class="fas fa-broadcast-tower"></i> Zigbee Monitoring</h1>
+        <p>Monitor Zigbee coordinator status and connected devices</p>
+    </div>
+
+    <!-- Coordinator Status -->
+    <div class="zigbee-section" id="status-section">
+        <h3>
+            <i class="fas fa-tower-broadcast"></i> Coordinator Status
+            <button class="btn btn-sm btn-primary ms-auto" id="refresh-btn">
+                <i class="fas fa-sync-alt"></i> Refresh
+            </button>
+        </h3>
+        <div id="status-loading">
+            <div class="spinner"></div> Loading Zigbee status...
+        </div>
+        <div id="status-content" style="display: none;">
+            <div class="status-grid" id="status-grid"></div>
+            <div id="coordinator-info"></div>
+        </div>
+    </div>
+
+    <!-- Diagnostics -->
+    <div class="zigbee-section" id="diagnostics-section" style="display: none;">
+        <h3><i class="fas fa-stethoscope"></i> Diagnostics</h3>
+        <div id="diagnostics-content"></div>
+    </div>
+
+    <!-- Connected Devices -->
+    <div class="zigbee-section" id="devices-section">
+        <h3><i class="fas fa-network-wired"></i> Connected Devices</h3>
+        <div id="devices-loading">
+            <div class="spinner"></div> Loading devices...
+        </div>
+        <ul class="device-list" id="devices-list" style="display: none;"></ul>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/core/api.js') }}"></script>
+<script>
+const ZigbeeMonitor = {
+    refreshInterval: null,
+
+    init() {
+        this.attachEventListeners();
+        this.loadZigbeeStatus();
+        this.loadDevices();
+        this.loadDiagnostics();
+
+        // Auto-refresh every 10 seconds
+        this.refreshInterval = setInterval(() => {
+            this.loadZigbeeStatus();
+            this.loadDevices();
+        }, 10000);
+    },
+
+    attachEventListeners() {
+        document.getElementById('refresh-btn').addEventListener('click', () => {
+            this.loadZigbeeStatus();
+            this.loadDevices();
+            this.loadDiagnostics();
+        });
+    },
+
+    async loadZigbeeStatus() {
+        try {
+            const response = await api.get('/api/zigbee/status');
+            const data = await response.json();
+
+            if (data.success) {
+                this.displayStatus(data);
+            }
+        } catch (error) {
+            console.error('Failed to load Zigbee status:', error);
+            document.getElementById('status-grid').innerHTML = `
+                <div class="status-card">
+                    <div class="status-label">Error</div>
+                    <div class="status-value text-danger">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        Failed to load status
+                    </div>
+                </div>
+            `;
+        } finally {
+            document.getElementById('status-loading').style.display = 'none';
+            document.getElementById('status-content').style.display = 'block';
+        }
+    },
+
+    displayStatus(data) {
+        const grid = document.getElementById('status-grid');
+        const infoDiv = document.getElementById('coordinator-info');
+
+        let html = '';
+
+        // Enabled status
+        html += `
+            <div class="status-card">
+                <div class="status-label">Status</div>
+                <div class="status-value">
+                    <span class="status-badge ${data.enabled ? 'enabled' : 'disabled'}">
+                        <i class="fas fa-${data.enabled ? 'check-circle' : 'times-circle'}"></i>
+                        ${data.enabled ? 'Enabled' : 'Disabled'}
+                    </span>
+                </div>
+            </div>
+        `;
+
+        if (data.enabled) {
+            // Port status
+            const portStatus = data.port_status || {};
+            html += `
+                <div class="status-card">
+                    <div class="status-label">Serial Port</div>
+                    <div class="status-value">
+                        <span class="status-badge ${portStatus.accessible ? 'enabled' : 'error'}">
+                            <i class="fas fa-${portStatus.accessible ? 'check' : 'times'}"></i>
+                            ${portStatus.accessible ? 'Accessible' : 'Not Accessible'}
+                        </span>
+                    </div>
+                </div>
+            `;
+
+            // Configuration
+            if (data.config) {
+                html += `
+                    <div class="status-card">
+                        <div class="status-label">Channel</div>
+                        <div class="status-value">${data.config.channel}</div>
+                    </div>
+                    <div class="status-card">
+                        <div class="status-label">PAN ID</div>
+                        <div class="status-value" style="font-family: 'Courier New', monospace;">${data.config.pan_id}</div>
+                    </div>
+                `;
+            }
+
+            // Configuration table
+            if (data.config) {
+                infoDiv.innerHTML = `
+                    <h4 style="margin-top: 1.5rem; margin-bottom: 1rem;">Configuration</h4>
+                    <table class="config-table">
+                        <tr>
+                            <td>Serial Port</td>
+                            <td>${data.config.port}</td>
+                        </tr>
+                        <tr>
+                            <td>Baud Rate</td>
+                            <td>${data.config.baudrate}</td>
+                        </tr>
+                        <tr>
+                            <td>Channel</td>
+                            <td>${data.config.channel}</td>
+                        </tr>
+                        <tr>
+                            <td>PAN ID</td>
+                            <td>${data.config.pan_id}</td>
+                        </tr>
+                    </table>
+                `;
+
+                // Available ports
+                if (data.available_ports && data.available_ports.length > 0) {
+                    infoDiv.innerHTML += `
+                        <h4 style="margin-top: 1.5rem; margin-bottom: 0.5rem;">Available Serial Ports</h4>
+                        <ul class="serial-ports-list">
+                            ${data.available_ports.map(port => `
+                                <li class="serial-port-item">
+                                    <div class="port-device">${port.device}</div>
+                                    <div class="port-description">${port.description}</div>
+                                </li>
+                            `).join('')}
+                        </ul>
+                    `;
+                }
+            }
+        } else {
+            infoDiv.innerHTML = `
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i>
+                    Zigbee is disabled. Enable it in <a href="/settings/environment">Environment Settings</a> by setting <code>ZIGBEE_ENABLED=true</code>.
+                </div>
+            `;
+        }
+
+        grid.innerHTML = html;
+    },
+
+    async loadDevices() {
+        try {
+            const response = await api.get('/api/zigbee/devices');
+            const data = await response.json();
+
+            if (data.success) {
+                this.displayDevices(data.devices);
+            }
+        } catch (error) {
+            console.error('Failed to load devices:', error);
+            document.getElementById('devices-list').innerHTML = `
+                <li class="empty-state">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <p>Failed to load devices</p>
+                </li>
+            `;
+        } finally {
+            document.getElementById('devices-loading').style.display = 'none';
+            document.getElementById('devices-list').style.display = 'block';
+        }
+    },
+
+    displayDevices(devices) {
+        const list = document.getElementById('devices-list');
+
+        if (!devices || devices.length === 0) {
+            list.innerHTML = `
+                <li class="empty-state">
+                    <i class="fas fa-network-wired"></i>
+                    <p>No devices discovered yet</p>
+                    <small>Devices will appear here once they join the Zigbee network</small>
+                </li>
+            `;
+            return;
+        }
+
+        list.innerHTML = devices.map(device => `
+            <li class="device-item">
+                <div class="device-header">
+                    <div class="device-name">
+                        <i class="fas fa-microchip"></i> ${device.name || 'Unknown Device'}
+                    </div>
+                    <span class="status-badge enabled">
+                        <i class="fas fa-check-circle"></i> Online
+                    </span>
+                </div>
+                <div class="device-details">
+                    ${device.ieee ? `
+                        <div class="device-detail">
+                            <span class="detail-label">IEEE:</span>
+                            <span class="detail-value">${device.ieee}</span>
+                        </div>
+                    ` : ''}
+                    ${device.network_address ? `
+                        <div class="device-detail">
+                            <span class="detail-label">Network Address:</span>
+                            <span class="detail-value">${device.network_address}</span>
+                        </div>
+                    ` : ''}
+                    ${device.model ? `
+                        <div class="device-detail">
+                            <span class="detail-label">Model:</span>
+                            <span class="detail-value">${device.model}</span>
+                        </div>
+                    ` : ''}
+                </div>
+            </li>
+        `).join('');
+    },
+
+    async loadDiagnostics() {
+        try {
+            const response = await api.get('/api/zigbee/diagnostics');
+            const data = await response.json();
+
+            if (data.success && data.diagnostics) {
+                this.displayDiagnostics(data.diagnostics);
+                document.getElementById('diagnostics-section').style.display = 'block';
+            }
+        } catch (error) {
+            console.error('Failed to load diagnostics:', error);
+        }
+    },
+
+    displayDiagnostics(diagnostics) {
+        const content = document.getElementById('diagnostics-content');
+
+        if (!diagnostics.checks || diagnostics.checks.length === 0) {
+            content.innerHTML = '<p class="text-muted">No diagnostic information available</p>';
+            return;
+        }
+
+        content.innerHTML = `
+            <div style="margin-bottom: 1rem;">
+                <span class="status-badge ${diagnostics.overall_status === 'pass' ? 'enabled' : diagnostics.overall_status === 'warning' ? 'warning' : 'error'}">
+                    ${diagnostics.summary}
+                </span>
+            </div>
+            ${diagnostics.checks.map(check => `
+                <div class="diagnostic-check ${check.status}">
+                    <div class="check-icon ${check.status}">
+                        <i class="fas fa-${check.status === 'pass' ? 'check' : check.status === 'fail' ? 'times' : 'exclamation'}"></i>
+                    </div>
+                    <div class="check-content">
+                        <div class="check-name">${check.name}</div>
+                        <div class="check-message">${check.message}</div>
+                    </div>
+                </div>
+            `).join('')}
+        `;
+    },
+
+    destroy() {
+        if (this.refreshInterval) {
+            clearInterval(this.refreshInterval);
+        }
+    }
+};
+
+document.addEventListener('DOMContentLoaded', () => ZigbeeMonitor.init());
+window.addEventListener('beforeunload', () => ZigbeeMonitor.destroy());
+</script>
+{% endblock %}
