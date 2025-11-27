@@ -1324,6 +1324,60 @@ class EASBroadcaster:
         self.logger.info('Playing alert audio using %s', ' '.join(command))
         _run_command(command, self.logger)
 
+    def _get_blockchannel(self, alert: object, payload: Dict[str, object]) -> set:
+        """Extract BLOCKCHANNEL values from alert/payload.
+        
+        BLOCKCHANNEL is a CAP/IPAWS parameter that specifies which distribution
+        channels should NOT be used for an alert. Common values include:
+        - EAS: Emergency Alert System (broadcast)
+        - NWEM: Non-Weather Emergency Message
+        - CMAS: Commercial Mobile Alert System (Wireless Emergency Alerts)
+        
+        The parameter can appear in:
+        - payload['raw_json']['properties']['parameters']['BLOCKCHANNEL']
+        - payload['parameters']['BLOCKCHANNEL']
+        - alert.raw_json['properties']['parameters']['BLOCKCHANNEL']
+        
+        Returns:
+            Set of blocked channel names (uppercase), empty set if none blocked
+        """
+        blocked: set = set()
+        
+        def _extract_from_parameters(params: dict) -> None:
+            if not isinstance(params, dict):
+                return
+            # Check uppercase first, then lowercase - use explicit None check to avoid
+            # issues with empty lists being falsy
+            blockchannel = params.get('BLOCKCHANNEL')
+            if blockchannel is None:
+                blockchannel = params.get('blockchannel', [])
+            if isinstance(blockchannel, str):
+                blocked.add(blockchannel.strip().upper())
+            elif isinstance(blockchannel, (list, tuple)):
+                for item in blockchannel:
+                    if item:
+                        blocked.add(str(item).strip().upper())
+        
+        # Check payload['parameters']
+        if isinstance(payload.get('parameters'), dict):
+            _extract_from_parameters(payload['parameters'])
+        
+        # Check payload['raw_json']['properties']['parameters']
+        raw_json = payload.get('raw_json', {})
+        if isinstance(raw_json, dict):
+            props = raw_json.get('properties', {})
+            if isinstance(props, dict):
+                _extract_from_parameters(props.get('parameters', {}))
+        
+        # Check alert.raw_json['properties']['parameters']
+        alert_raw_json = getattr(alert, 'raw_json', None)
+        if isinstance(alert_raw_json, dict):
+            props = alert_raw_json.get('properties', {})
+            if isinstance(props, dict):
+                _extract_from_parameters(props.get('parameters', {}))
+        
+        return blocked
+
     def _enqueue_alert(
         self,
         alert: object,
@@ -1401,6 +1455,21 @@ class EASBroadcaster:
             'special weather statement',
             'dense fog advisory',
         }
+
+        # Check BLOCKCHANNEL parameter - alerts can request to block specific distribution channels
+        # BLOCKCHANNEL is defined in CAP/IPAWS to specify which channels should NOT be used
+        # When "EAS" is in BLOCKCHANNEL, the alert should not trigger EAS broadcast
+        blockchannel = self._get_blockchannel(alert, payload)
+        if 'EAS' in blockchannel:
+            pretty_event = getattr(alert, 'event', '') or payload.get('event') or 'unknown'
+            self.logger.info(
+                'Skipping EAS broadcast for "%s" - BLOCKCHANNEL contains EAS (channels blocked: %s)',
+                pretty_event,
+                ', '.join(blockchannel),
+            )
+            result['reason'] = "EAS blocked by BLOCKCHANNEL parameter"
+            result['blockchannel'] = list(blockchannel)
+            return result
 
         if status not in {'actual', 'test'}:
             self.logger.debug('Skipping EAS generation for status %s', status)

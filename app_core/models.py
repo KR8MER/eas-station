@@ -146,6 +146,12 @@ class CAPAlert(db.Model):
     raw_json = db.Column(db.JSON)
     geom = db.Column(_geometry_type("POLYGON"))
     source = db.Column(db.String(32), nullable=False, default=ALERT_SOURCE_UNKNOWN)
+    
+    # EAS forwarding tracking - records whether this alert triggered an EAS broadcast
+    eas_forwarded = db.Column(db.Boolean, default=False, nullable=False)
+    eas_forwarding_reason = db.Column(db.String(255))  # Why it was or wasn't forwarded
+    eas_audio_url = db.Column(db.String(512))  # URL/path to generated EAS audio file
+    
     created_at = db.Column(db.DateTime(timezone=True), default=utc_now)
     updated_at = db.Column(
         db.DateTime(timezone=True),
