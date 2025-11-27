@@ -141,9 +141,13 @@ services:
     restart: unless-stopped
     networks:
       - eas-network
+    expose:
+      - "5001"  # Hardware proxy API (network/Zigbee management)
     command: ["python", "hardware_service.py"]
     volumes:
       - app-config:/app-config
+      - /run/dbus:/run/dbus:ro  # DBus for NetworkManager communication
+      - /var/run/dbus:/var/run/dbus:ro  # Alternative DBus location
     environment:
       # Database connection
       POSTGRES_HOST: ${POSTGRES_HOST:-alerts-db}
@@ -165,15 +169,16 @@ services:
       SCREENS_AUTO_START: ${SCREENS_AUTO_START:-true}
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    # NetworkManager access requires NET_ADMIN capability and access to host DBus
+    cap_add:
+      - NET_ADMIN  # Network configuration via NetworkManager
     # NOTE: GPIO/display devices added via docker-compose.pi.yml override
     # This base configuration works on all platforms (GPIO features disabled)
-    security_opt:
-      - no-new-privileges:true
     depends_on:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "python -c 'import redis; r=redis.Redis(host=\"redis\"); r.ping()' || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:5001/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -44,9 +44,12 @@ import signal
 import logging
 import json
 import redis
+import subprocess
+import threading
 from typing import Optional
 from datetime import datetime, timezone
 from dotenv import load_dotenv
+from flask import Flask, jsonify, request
 
 # Configure logging early
 logging.basicConfig(
@@ -419,6 +422,256 @@ def publish_display_state():
         logger.debug(f"Failed to publish display state: {e}")
 
 
+def run_command(cmd, check=True, timeout=30):
+    """Execute a shell command and return the result."""
+    try:
+        result = subprocess.run(
+            cmd,
+            shell=True,
+            capture_output=True,
+            text=True,
+            check=check,
+            timeout=timeout
+        )
+        return {
+            'success': True,
+            'stdout': result.stdout.strip(),
+            'stderr': result.stderr.strip(),
+            'returncode': result.returncode
+        }
+    except subprocess.TimeoutExpired:
+        return {
+            'success': False,
+            'error': 'Command timeout',
+            'returncode': -1
+        }
+    except subprocess.CalledProcessError as e:
+        return {
+            'success': False,
+            'stdout': e.stdout.strip() if e.stdout else '',
+            'stderr': e.stderr.strip() if e.stderr else '',
+            'returncode': e.returncode,
+            'error': str(e)
+        }
+    except Exception as e:
+        return {
+            'success': False,
+            'error': str(e),
+            'returncode': -1
+        }
+
+
+def create_api_app():
+    """Create Flask API application for hardware proxy operations."""
+    api_app = Flask(__name__)
+
+    @api_app.route('/health', methods=['GET'])
+    def health():
+        """Health check endpoint."""
+        return jsonify({
+            'status': 'ok',
+            'service': 'hardware-service',
+            'timestamp': datetime.now(timezone.utc).isoformat()
+        })
+
+    # Network Management Proxy Endpoints
+
+    @api_app.route('/api/network/status', methods=['GET'])
+    def get_network_status():
+        """Get current network connection status via nmcli."""
+        try:
+            # Get all connections
+            result = run_command('nmcli -t -f NAME,TYPE,DEVICE,STATE connection show', check=False)
+
+            connections = []
+            if result['success'] and result['stdout']:
+                for line in result['stdout'].split('\n'):
+                    if line.strip():
+                        parts = line.split(':')
+                        if len(parts) >= 4:
+                            connections.append({
+                                'name': parts[0],
+                                'type': parts[1],
+                                'device': parts[2],
+                                'state': parts[3]
+                            })
+
+            # Get active WiFi connection details
+            wifi_info = None
+            result = run_command('nmcli -t -f GENERAL.CONNECTION,IP4.ADDRESS device show', check=False)
+            if result['success']:
+                wifi_info = result['stdout']
+
+            return jsonify({
+                'success': True,
+                'connections': connections,
+                'wifi_info': wifi_info
+            })
+
+        except Exception as e:
+            logger.error(f"Error getting network status: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    @api_app.route('/api/network/scan', methods=['POST'])
+    def scan_wifi():
+        """Scan for available WiFi networks via nmcli."""
+        try:
+            # Rescan networks
+            run_command('nmcli device wifi rescan', check=False)
+            time.sleep(2)  # Wait for scan to complete
+
+            # Get list of available networks
+            result = run_command('nmcli -t -f SSID,SIGNAL,SECURITY,IN-USE device wifi list', check=False)
+
+            networks = []
+            if result['success'] and result['stdout']:
+                for line in result['stdout'].split('\n'):
+                    if line.strip():
+                        parts = line.split(':')
+                        if len(parts) >= 4:
+                            networks.append({
+                                'ssid': parts[0],
+                                'signal': int(parts[1]) if parts[1].isdigit() else 0,
+                                'security': parts[2],
+                                'in_use': parts[3] == '*'
+                            })
+
+            return jsonify({
+                'success': True,
+                'networks': networks
+            })
+
+        except Exception as e:
+            logger.error(f"Error scanning WiFi: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    @api_app.route('/api/network/connect', methods=['POST'])
+    def connect_wifi():
+        """Connect to a WiFi network via nmcli."""
+        try:
+            data = request.json
+            ssid = data.get('ssid')
+            password = data.get('password', '')
+
+            if not ssid:
+                return jsonify({'success': False, 'error': 'SSID required'}), 400
+
+            # Build nmcli command
+            if password:
+                cmd = f'nmcli device wifi connect "{ssid}" password "{password}"'
+            else:
+                cmd = f'nmcli device wifi connect "{ssid}"'
+
+            result = run_command(cmd, check=False)
+
+            return jsonify({
+                'success': result['success'],
+                'message': result.get('stdout', result.get('error', ''))
+            })
+
+        except Exception as e:
+            logger.error(f"Error connecting to WiFi: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    @api_app.route('/api/network/disconnect', methods=['POST'])
+    def disconnect_network():
+        """Disconnect from current network via nmcli."""
+        try:
+            data = request.json
+            connection_name = data.get('connection')
+
+            if not connection_name:
+                return jsonify({'success': False, 'error': 'Connection name required'}), 400
+
+            result = run_command(f'nmcli connection down "{connection_name}"', check=False)
+
+            return jsonify({
+                'success': result['success'],
+                'message': result.get('stdout', result.get('error', ''))
+            })
+
+        except Exception as e:
+            logger.error(f"Error disconnecting network: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    @api_app.route('/api/network/forget', methods=['POST'])
+    def forget_network():
+        """Forget a saved network connection via nmcli."""
+        try:
+            data = request.json
+            connection_name = data.get('connection')
+
+            if not connection_name:
+                return jsonify({'success': False, 'error': 'Connection name required'}), 400
+
+            result = run_command(f'nmcli connection delete "{connection_name}"', check=False)
+
+            return jsonify({
+                'success': result['success'],
+                'message': result.get('stdout', result.get('error', ''))
+            })
+
+        except Exception as e:
+            logger.error(f"Error forgetting network: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    # Zigbee Serial Port Proxy Endpoints
+
+    @api_app.route('/api/zigbee/ports', methods=['GET'])
+    def list_serial_ports():
+        """List available serial ports for Zigbee coordinator."""
+        try:
+            import glob
+            ports = glob.glob('/dev/ttyUSB*') + glob.glob('/dev/ttyACM*') + glob.glob('/dev/ttyAMA*')
+            return jsonify({
+                'success': True,
+                'ports': sorted(ports)
+            })
+        except Exception as e:
+            logger.error(f"Error listing serial ports: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    @api_app.route('/api/zigbee/test_port', methods=['POST'])
+    def test_serial_port():
+        """Test if a serial port is accessible."""
+        try:
+            data = request.json
+            port = data.get('port')
+
+            if not port:
+                return jsonify({'success': False, 'error': 'Port required'}), 400
+
+            # Check if port exists and is readable
+            import os
+            if os.path.exists(port):
+                # Try to open port briefly
+                import serial
+                try:
+                    ser = serial.Serial(port, 115200, timeout=1)
+                    ser.close()
+                    return jsonify({'success': True, 'message': 'Port accessible'})
+                except serial.SerialException as e:
+                    return jsonify({'success': False, 'error': f'Cannot open port: {str(e)}'})
+            else:
+                return jsonify({'success': False, 'error': 'Port does not exist'})
+
+        except Exception as e:
+            logger.error(f"Error testing serial port: {e}")
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    return api_app
+
+
+def run_api_server():
+    """Run Flask API server in background thread."""
+    try:
+        api_app = create_api_app()
+        # Run on port 5001 (app uses 5000)
+        api_app.run(host='0.0.0.0', port=5001, debug=False, use_reloader=False)
+    except Exception as e:
+        logger.error(f"Error running API server: {e}", exc_info=True)
+
+
 def health_check_loop():
     """Periodic health check and metrics publishing."""
     global _running
@@ -488,6 +741,12 @@ def main():
         logger.info("Initializing GPIO controller...")
         with app.app_context():
             initialize_gpio_controller(db_session=db.session)
+
+        # Start Flask API server in background thread
+        logger.info("Starting hardware proxy API server on port 5001...")
+        api_thread = threading.Thread(target=run_api_server, daemon=True)
+        api_thread.start()
+        logger.info("✅ Hardware proxy API server started")
 
         # Start health check loop
         health_check_loop()
