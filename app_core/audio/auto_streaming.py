@@ -40,6 +40,7 @@ from typing import Dict, Optional, TYPE_CHECKING
 
 from .icecast_output import IcecastConfig, IcecastStreamer, StreamFormat
 from .broadcast_adapter import BroadcastAudioAdapter
+from .mount_points import generate_mount_point, StreamFormat as MountStreamFormat
 
 if TYPE_CHECKING:
     from .ingest import AudioIngestController
@@ -197,11 +198,17 @@ class AutoStreamingService:
                 # Create Icecast configuration
                 channels = 2 if getattr(audio_source.config, 'channels', 1) > 1 else 1
 
+                # Convert StreamFormat enum to MountStreamFormat enum
+                mount_format = MountStreamFormat.MP3 if self.default_format == StreamFormat.MP3 else MountStreamFormat.OGG
+
+                # Generate mount point using centralized logic
+                mount_point = generate_mount_point(source_name, format=mount_format)
+
                 config = IcecastConfig(
                     server=self.icecast_server,
                     port=self.icecast_port,
                     password=self.icecast_password,
-                    mount=source_name,  # Mount point = source name
+                    mount=mount_point,
                     name=f"{source_name} - EAS Monitor",
                     description=f"Live stream from {source_name}",
                     genre="Emergency Alert System",
