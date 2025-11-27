@@ -159,14 +159,16 @@ class AudioCommandSubscriber:
     Used by audio-service container to receive and execute commands from app.
     """
 
-    def __init__(self, audio_controller):
+    def __init__(self, audio_controller, auto_streaming_service=None):
         """
         Initialize Redis subscriber with retry logic.
 
         Args:
             audio_controller: AudioIngestController instance to execute commands on
+            auto_streaming_service: Optional AutoStreamingService for Icecast streaming
         """
         self.audio_controller = audio_controller
+        self.auto_streaming_service = auto_streaming_service
         try:
             self.redis_client = get_redis_client(max_retries=5)
             self.pubsub = self.redis_client.pubsub()
@@ -224,10 +226,32 @@ class AudioCommandSubscriber:
             if command == 'source_start':
                 source_name = params['source_name']
                 self.audio_controller.start_source(source_name)
+                
+                # Also add source to Icecast streaming if service is available
+                if self.auto_streaming_service and self.auto_streaming_service.is_available():
+                    try:
+                        adapter = self.audio_controller._sources.get(source_name)
+                        if adapter:
+                            if self.auto_streaming_service.add_source(source_name, adapter):
+                                logger.info(f"✅ Added {source_name} to Icecast streaming")
+                            else:
+                                logger.warning(f"Failed to add {source_name} to Icecast streaming")
+                    except Exception as e:
+                        logger.warning(f"Error adding {source_name} to Icecast: {e}")
+                
                 return {'success': True, 'message': f'Started source {source_name}'}
 
             elif command == 'source_stop':
                 source_name = params['source_name']
+                
+                # Remove source from Icecast streaming if service is available
+                if self.auto_streaming_service:
+                    try:
+                        self.auto_streaming_service.remove_source(source_name)
+                        logger.info(f"Removed {source_name} from Icecast streaming")
+                    except Exception as e:
+                        logger.debug(f"Error removing {source_name} from Icecast: {e}")
+                
                 self.audio_controller.stop_source(source_name)
                 return {'success': True, 'message': f'Stopped source {source_name}'}
 
@@ -244,16 +268,28 @@ class AudioCommandSubscriber:
 
             elif command == 'source_delete':
                 source_name = params['source_name']
+                
+                # Remove source from Icecast streaming if service is available
+                if self.auto_streaming_service:
+                    try:
+                        self.auto_streaming_service.remove_source(source_name)
+                    except Exception as e:
+                        logger.debug(f"Error removing {source_name} from Icecast: {e}")
+                
                 self.audio_controller.remove_source(source_name)
                 return {'success': True, 'message': f'Deleted source {source_name}'}
 
             elif command == 'streaming_start':
-                # TODO: Implement streaming start
-                return {'success': True, 'message': 'Streaming start requested'}
+                if self.auto_streaming_service:
+                    self.auto_streaming_service.start()
+                    return {'success': True, 'message': 'Streaming service started'}
+                return {'success': False, 'message': 'Streaming service not available'}
 
             elif command == 'streaming_stop':
-                # TODO: Implement streaming stop
-                return {'success': True, 'message': 'Streaming stop requested'}
+                if self.auto_streaming_service:
+                    self.auto_streaming_service.stop()
+                    return {'success': True, 'message': 'Streaming service stopped'}
+                return {'success': False, 'message': 'Streaming service not available'}
 
             else:
                 return {'success': False, 'message': f'Unknown command: {command}'}
