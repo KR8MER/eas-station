@@ -347,9 +347,10 @@ class ArgonOLEDController:
                     x = max(0, self.width - text_width)
                 y = max(0, min(self.height - 1, y))
 
-                # Check if text would be out of bounds (including height)
+                # Skip text only if it starts completely outside the display bounds
+                # PIL will naturally clip text that extends beyond the image
                 text_height = self._line_height(font)
-                if y + text_height > self.height:
+                if y >= self.height:
                     continue
 
                 elem_invert = element.get('invert')

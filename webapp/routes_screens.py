@@ -58,6 +58,55 @@ def _convert_led_enum(enum_class, value_str: str, default):
         return default
 
 
+# Display dimensions for bounds checking
+DISPLAY_DIMENSIONS = {
+    "oled": {"width": 128, "height": 64},
+    "vfd": {"width": 140, "height": 32},
+}
+
+
+def _validate_element_bounds(template_data: Dict, display_type: str) -> List[str]:
+    """Validate that screen elements are within display bounds.
+    
+    Args:
+        template_data: Screen template data with elements
+        display_type: Type of display (oled, vfd)
+        
+    Returns:
+        List of warning messages for out-of-bounds elements
+    """
+    warnings = []
+    dims = DISPLAY_DIMENSIONS.get(display_type)
+    if not dims:
+        return warnings
+    
+    max_width = dims["width"]
+    max_height = dims["height"]
+    
+    elements = template_data.get("elements", [])
+    for i, elem in enumerate(elements):
+        elem_type = elem.get("type", "")
+        x = elem.get("x", 0)
+        y = elem.get("y", 0)
+        
+        # Check if starting position is out of bounds
+        if x >= max_width:
+            warnings.append(f"Element {i} ({elem_type}): x={x} exceeds display width ({max_width})")
+        if y >= max_height:
+            warnings.append(f"Element {i} ({elem_type}): y={y} exceeds display height ({max_height})")
+        
+        # Check bar/rectangle dimensions
+        if elem_type in ["bar", "rectangle"]:
+            width = elem.get("width", 0)
+            height = elem.get("height", 0)
+            if x + width > max_width:
+                warnings.append(f"Element {i} ({elem_type}): x+width={x+width} exceeds display width ({max_width})")
+            if y + height > max_height:
+                warnings.append(f"Element {i} ({elem_type}): y+height={y+height} exceeds display height ({max_height})")
+    
+    return warnings
+
+
 def register(app: Flask, logger) -> None:
     """Register custom screen management endpoints."""
 
@@ -125,6 +174,14 @@ def register(app: Flask, logger) -> None:
             # Validate display_type
             if data["display_type"] not in ["led", "vfd", "oled"]:
                 return jsonify({"error": "display_type must be 'led', 'vfd', or 'oled'"}), 400
+
+            # Validate element bounds for OLED/VFD displays
+            template_data = data["template_data"]
+            display_type = data["display_type"]
+            if display_type in ["oled", "vfd"]:
+                warnings = _validate_element_bounds(template_data, display_type)
+                if warnings:
+                    route_logger.warning(f"Screen '{data['name']}' has elements out of bounds: {warnings}")
 
             # Create screen
             screen = DisplayScreen(
