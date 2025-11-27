@@ -140,7 +140,7 @@ sequenceDiagram
     participant DB as PostgreSQL + PostGIS
     participant REDIS as Redis
 
-    loop Every 120 seconds (POLL_INTERVAL_SEC)
+    loop Every POLL_INTERVAL_SEC (default 120s)
         NP->>NOAA: GET /alerts (CAP XML)
         NOAA-->>NP: CAP 1.2 Feed
         NP->>NP: Parse & Validate XML
@@ -153,7 +153,7 @@ sequenceDiagram
         end
     end
 
-    loop Every 120 seconds
+    loop Every POLL_INTERVAL_SEC (default 120s)
         IP->>IPAWS: GET /recent/{timestamp}
         IPAWS-->>IP: CAP 1.2 Feed
         IP->>IP: Parse & Validate XML
