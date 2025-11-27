@@ -19,17 +19,63 @@ Repository: https://github.com/KR8MER/eas-station
 
 from __future__ import annotations
 
-"""Zigbee monitoring and status routes."""
+"""Zigbee monitoring and status routes.
 
-import os
-import serial
-import serial.tools.list_ports
+This module proxies Zigbee serial port operations to hardware-service container,
+which has direct access to serial devices (/dev/ttyUSB*, /dev/ttyACM*, etc).
+
+In the separated container architecture:
+- App container: Runs Flask web UI (no serial port access)
+- Hardware-service container: Has device access for serial ports and Zigbee coordinator
+"""
+
+import requests
 from flask import Blueprint, jsonify, render_template
 from app_core.auth.decorators import require_permission
 from app_core.extensions import get_redis_client
-import json
 
 zigbee_bp = Blueprint('zigbee', __name__)
+
+# Hardware service API endpoint (runs on port 5001)
+HARDWARE_SERVICE_URL = "http://hardware-service:5001"
+
+
+def call_hardware_service(endpoint, method='GET', data=None):
+    """Make HTTP request to hardware-service API."""
+    try:
+        url = f"{HARDWARE_SERVICE_URL}{endpoint}"
+        if method == 'GET':
+            response = requests.get(url, timeout=30)
+        elif method == 'POST':
+            response = requests.post(url, json=data, timeout=30)
+        else:
+            return {'success': False, 'error': f'Unsupported method: {method}'}
+
+        # Return JSON response from hardware-service
+        if response.status_code == 200:
+            return response.json()
+        else:
+            return {
+                'success': False,
+                'error': f'Hardware service returned {response.status_code}',
+                'details': response.text
+            }
+
+    except requests.Timeout:
+        return {
+            'success': False,
+            'error': 'Hardware service timeout'
+        }
+    except requests.ConnectionError:
+        return {
+            'success': False,
+            'error': 'Cannot connect to hardware service. Check if hardware-service container is running.'
+        }
+    except Exception as e:
+        return {
+            'success': False,
+            'error': str(e)
+        }
 
 
 def get_zigbee_config():
@@ -37,54 +83,12 @@ def get_zigbee_config():
     from app_utils.config import get_config
 
     return {
-        'enabled': get_config('ZIGBEE_ENABLED', 'false').lower() == 'true',
+        'enabled': get_config('ZIGBEE_ENABLED', 'false').lower() in ('true', '1', 'yes'),
         'port': get_config('ZIGBEE_PORT', '/dev/ttyAMA0'),
         'baudrate': int(get_config('ZIGBEE_BAUDRATE', '115200')),
         'channel': int(get_config('ZIGBEE_CHANNEL', '15')),
-        'pan_id': get_config('ZIGBEE_PAN_ID', '0x1A62')
+        'pan_id': get_config('ZIGBEE_PAN_ID', '0x1A62'),
     }
-
-
-def check_serial_port(port, baudrate):
-    """Check if a serial port is accessible and working."""
-    try:
-        if not os.path.exists(port):
-            return {
-                'accessible': False,
-                'error': f'Port {port} does not exist'
-            }
-
-        # Try to open the port
-        ser = serial.Serial(port, baudrate, timeout=1)
-        ser.close()
-
-        return {
-            'accessible': True,
-            'port': port,
-            'baudrate': baudrate
-        }
-    except serial.SerialException as e:
-        return {
-            'accessible': False,
-            'error': str(e)
-        }
-    except Exception as e:
-        return {
-            'accessible': False,
-            'error': f'Unexpected error: {str(e)}'
-        }
-
-
-def get_available_serial_ports():
-    """Get list of available serial ports."""
-    ports = []
-    for port in serial.tools.list_ports.comports():
-        ports.append({
-            'device': port.device,
-            'description': port.description,
-            'hwid': port.hwid
-        })
-    return ports
 
 
 @zigbee_bp.route('/settings/zigbee')
@@ -101,7 +105,6 @@ def get_zigbee_status():
     try:
         config = get_zigbee_config()
 
-        # Check if Zigbee is enabled
         if not config['enabled']:
             return jsonify({
                 'success': True,
@@ -109,32 +112,33 @@ def get_zigbee_status():
                 'message': 'Zigbee is disabled in configuration'
             })
 
-        # Check serial port accessibility
-        port_status = check_serial_port(config['port'], config['baudrate'])
+        # Get available serial ports from hardware-service
+        ports_result = call_hardware_service('/api/zigbee/ports', method='GET')
+        available_ports = ports_result.get('ports', []) if ports_result.get('success') else []
 
-        # Get available serial ports
-        available_ports = get_available_serial_ports()
+        # Check configured port accessibility via hardware-service
+        port_test_result = call_hardware_service(
+            '/api/zigbee/test_port',
+            method='POST',
+            data={'port': config['port']}
+        )
 
         # Try to get coordinator info from Redis (published by hardware service)
         coordinator_info = None
         try:
             redis_client = get_redis_client()
-            if redis_client:
-                zigbee_data = redis_client.hgetall('eas:zigbee:coordinator')
-                if zigbee_data:
-                    coordinator_info = {
-                        k.decode() if isinstance(k, bytes) else k:
-                        v.decode() if isinstance(v, bytes) else v
-                        for k, v in zigbee_data.items()
-                    }
-        except Exception as e:
-            coordinator_info = {'error': str(e)}
+            zigbee_data = redis_client.get('zigbee:coordinator')
+            if zigbee_data:
+                import json
+                coordinator_info = json.loads(zigbee_data)
+        except Exception:
+            pass
 
         return jsonify({
             'success': True,
             'enabled': True,
             'config': config,
-            'port_status': port_status,
+            'port_status': port_test_result,
             'available_ports': available_ports,
             'coordinator': coordinator_info
         })
@@ -149,44 +153,44 @@ def get_zigbee_status():
 @zigbee_bp.route('/api/zigbee/devices')
 @require_permission('system.configure')
 def get_zigbee_devices():
-    """Get list of discovered Zigbee devices."""
+    """Get list of discovered Zigbee devices from Redis."""
     try:
         config = get_zigbee_config()
 
         if not config['enabled']:
             return jsonify({
                 'success': True,
-                'devices': [],
-                'message': 'Zigbee is disabled'
+                'enabled': False,
+                'devices': []
             })
 
-        # Try to get device list from Redis (published by hardware service)
-        devices = []
+        # Get device list from Redis (published by hardware service)
         try:
             redis_client = get_redis_client()
-            if redis_client:
-                # Get all device keys
-                device_keys = redis_client.keys('eas:zigbee:device:*')
-                for key in device_keys:
-                    device_data = redis_client.hgetall(key)
-                    if device_data:
-                        device = {
-                            k.decode() if isinstance(k, bytes) else k:
-                            v.decode() if isinstance(v, bytes) else v
-                            for k, v in device_data.items()
-                        }
-                        devices.append(device)
+            import json
+
+            devices = []
+            device_keys = redis_client.keys('zigbee:device:*')
+
+            for key in device_keys:
+                device_data = redis_client.get(key)
+                if device_data:
+                    devices.append(json.loads(device_data))
+
+            return jsonify({
+                'success': True,
+                'enabled': True,
+                'devices': devices,
+                'count': len(devices)
+            })
+
         except Exception as e:
             return jsonify({
-                'success': False,
-                'error': f'Failed to retrieve devices from Redis: {str(e)}'
-            }), 500
-
-        return jsonify({
-            'success': True,
-            'devices': devices,
-            'count': len(devices)
-        })
+                'success': True,
+                'enabled': True,
+                'devices': [],
+                'warning': f'Could not retrieve devices from Redis: {str(e)}'
+            })
 
     except Exception as e:
         return jsonify({
@@ -201,79 +205,43 @@ def get_zigbee_diagnostics():
     """Get detailed Zigbee diagnostics and troubleshooting info."""
     try:
         config = get_zigbee_config()
+
+        # Get available ports
+        ports_result = call_hardware_service('/api/zigbee/ports', method='GET')
+        available_ports = ports_result.get('ports', []) if ports_result.get('success') else []
+
+        # Test configured port
+        port_test = None
+        if config['enabled']:
+            port_test = call_hardware_service(
+                '/api/zigbee/test_port',
+                method='POST',
+                data={'port': config['port']}
+            )
+
         diagnostics = {
             'config': config,
-            'checks': []
+            'available_ports': available_ports,
+            'configured_port_test': port_test,
+            'recommendations': []
         }
 
-        # Check 1: Zigbee enabled
-        diagnostics['checks'].append({
-            'name': 'Zigbee Enabled',
-            'status': 'pass' if config['enabled'] else 'warning',
-            'message': 'Enabled' if config['enabled'] else 'Disabled in configuration'
-        })
-
-        if config['enabled']:
-            # Check 2: Serial port exists
-            port_exists = os.path.exists(config['port'])
-            diagnostics['checks'].append({
-                'name': 'Serial Port Exists',
-                'status': 'pass' if port_exists else 'fail',
-                'message': f"{config['port']} exists" if port_exists else f"{config['port']} not found"
+        # Add recommendations
+        if not config['enabled']:
+            diagnostics['recommendations'].append({
+                'level': 'info',
+                'message': 'Zigbee is disabled. Enable via ZIGBEE_ENABLED environment variable.'
             })
-
-            # Check 3: Serial port accessible
-            if port_exists:
-                port_status = check_serial_port(config['port'], config['baudrate'])
-                diagnostics['checks'].append({
-                    'name': 'Serial Port Accessible',
-                    'status': 'pass' if port_status['accessible'] else 'fail',
-                    'message': 'Port can be opened' if port_status['accessible'] else port_status.get('error', 'Cannot open port')
-                })
-
-            # Check 4: Hardware service running
-            try:
-                redis_client = get_redis_client()
-                hardware_status = None
-                if redis_client:
-                    hardware_status = redis_client.get('eas:health:hardware-service')
-
-                if hardware_status:
-                    diagnostics['checks'].append({
-                        'name': 'Hardware Service',
-                        'status': 'pass',
-                        'message': 'Running and publishing metrics'
-                    })
-                else:
-                    diagnostics['checks'].append({
-                        'name': 'Hardware Service',
-                        'status': 'warning',
-                        'message': 'Not publishing metrics to Redis'
-                    })
-            except Exception as e:
-                diagnostics['checks'].append({
-                    'name': 'Hardware Service',
-                    'status': 'fail',
-                    'message': f'Error checking status: {str(e)}'
-                })
-
-            # Check 5: List available serial ports
-            available_ports = get_available_serial_ports()
-            diagnostics['available_ports'] = available_ports
-
-        # Overall status
-        failed_checks = [c for c in diagnostics['checks'] if c['status'] == 'fail']
-        warning_checks = [c for c in diagnostics['checks'] if c['status'] == 'warning']
-
-        if failed_checks:
-            diagnostics['overall_status'] = 'fail'
-            diagnostics['summary'] = f"{len(failed_checks)} check(s) failed"
-        elif warning_checks:
-            diagnostics['overall_status'] = 'warning'
-            diagnostics['summary'] = f"{len(warning_checks)} warning(s)"
-        else:
-            diagnostics['overall_status'] = 'pass'
-            diagnostics['summary'] = 'All checks passed'
+        elif config['enabled'] and not port_test.get('success'):
+            diagnostics['recommendations'].append({
+                'level': 'error',
+                'message': f"Configured port {config['port']} is not accessible. Check device connection and permissions."
+            })
+        elif not available_ports:
+            diagnostics['recommendations'].append({
+                'level': 'warning',
+                'message': 'No serial ports detected. Connect a Zigbee coordinator device.'
+            })
 
         return jsonify({
             'success': True,
@@ -285,9 +253,3 @@ def get_zigbee_diagnostics():
             'success': False,
             'error': str(e)
         }), 500
-
-
-def register_zigbee_routes(app, logger):
-    """Register Zigbee routes with the Flask app."""
-    app.register_blueprint(zigbee_bp)
-    logger.info("Zigbee monitoring routes registered")
