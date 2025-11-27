@@ -754,12 +754,14 @@ class _SoapySDRReceiver(ReceiverInterface):
                     message = self._describe_soapysdr_error(error_code)
                     message = self._annotate_lock_hint(message)
                     
-                    # OVERFLOW (-4) and UNDERFLOW (-7) are often transient and can recover
-                    # without a full device teardown. Just log and continue.
+                    # OVERFLOW (-4) means the internal buffer is full because we're not
+                    # reading fast enough. The SoapyAirspy driver drains the buffer on overflow,
+                    # so we should immediately continue reading without any delay.
+                    # UNDERFLOW (-7) is for TX only, but handle it similarly for safety.
                     if error_code in (-4, -7):
                         self._stream_errors_count += 1
                         # Only log periodically to avoid spam
-                        if self._stream_errors_count % 10 == 1:
+                        if self._stream_errors_count % 100 == 1:
                             self._interface_logger.warning(
                                 "Transient stream error for %s (error %d, total: %d): %s. Continuing...",
                                 self.config.identifier,
@@ -772,8 +774,8 @@ class _SoapySDRReceiver(ReceiverInterface):
                             last_error=message,
                             context="read_stream_transient",
                         )
-                        # Small delay to let buffers recover, then continue without teardown
-                        time.sleep(0.01)
+                        # On overflow, immediately continue reading to drain the buffer.
+                        # Do NOT add a delay here as that makes overflow worse.
                         continue
                     
                     # Other errors require full reconnection
