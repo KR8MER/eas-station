@@ -1197,6 +1197,51 @@
                         </div>
                     </div>
 
+                    <!-- Network Configuration -->
+                    <div class="card border-info-subtle shadow-sm mb-4">
+                        <div class="card-header bg-info-subtle">
+                            <h5 class="mb-0">
+                                <i class="fas fa-wifi"></i> Network Configuration
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="mb-3">
+                                <strong>WiFi Network Management</strong> for configuring wireless connectivity directly from the web interface.
+                                Scan for networks, connect/disconnect, and view connection status without accessing the command line.
+                            </p>
+
+                            <div class="alert alert-info d-flex align-items-start mb-3">
+                                <i class="fas fa-info-circle me-3 mt-1"></i>
+                                <div>
+                                    <strong>Features:</strong> The network configuration page provides WiFi network scanning with signal strength indicators,
+                                    connection management (connect, disconnect, forget networks), and real-time status display with IP addresses.
+                                </div>
+                            </div>
+
+                            <div class="row g-3">
+                                <div class="col-md-12">
+                                    <div class="d-grid">
+                                        <a href="/settings/network" class="btn btn-primary btn-lg">
+                                            <i class="fas fa-wifi me-2"></i>WiFi Network Settings
+                                        </a>
+                                    </div>
+                                    <small class="text-muted d-block mt-2 text-center">Scan, connect, and manage WiFi networks</small>
+                                </div>
+                            </div>
+
+                            <div class="mt-3">
+                                <h6 class="fw-bold mb-2">What You Can Do:</h6>
+                                <ul class="small mb-0">
+                                    <li>Scan for available WiFi networks with signal strength visualization</li>
+                                    <li>Connect to new networks (with password support for secured networks)</li>
+                                    <li>View current connection status and IP address information</li>
+                                    <li>Disconnect from current network or forget saved networks</li>
+                                    <li>Manage network connections without SSH or command line access</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Zigbee Integration -->
                     <div class="card border-warning-subtle shadow-sm mb-4">
                         <div class="card-header bg-warning-subtle">
@@ -1219,10 +1264,10 @@
                                 </div>
                             </div>
 
-                            <div class="alert alert-warning mb-3">
-                                <i class="fas fa-info-circle"></i>
-                                <strong>Initial Setup Required:</strong> Communication with the Zigbee coordinator is configured, but device pairing and automation features are in development.
-                                Enable the module in Environment Variables to begin testing basic communication.
+                            <div class="alert alert-success mb-3">
+                                <i class="fas fa-check-circle"></i>
+                                <strong>Monitoring Available:</strong> View coordinator status, connected devices, and diagnostics on the Zigbee Monitoring page.
+                                Configure the module in Environment Variables, then monitor real-time status and device activity.
                             </div>
 
                             <div class="row g-3">
@@ -1236,11 +1281,11 @@
                                 </div>
                                 <div class="col-md-6">
                                     <div class="d-grid">
-                                        <button class="btn btn-outline-primary" disabled>
-                                            <i class="fas fa-link me-2"></i>Pair Devices (Coming Soon)
-                                        </button>
+                                        <a href="/settings/zigbee" class="btn btn-primary">
+                                            <i class="fas fa-chart-line me-2"></i>View Zigbee Monitoring
+                                        </a>
                                     </div>
-                                    <small class="text-muted d-block mt-2">Device pairing UI will be added in future update</small>
+                                    <small class="text-muted d-block mt-2">Real-time coordinator status, devices, and diagnostics</small>
                                 </div>
                             </div>
 
