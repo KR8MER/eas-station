@@ -643,7 +643,31 @@
 
     function renderStatusBadge(status) {
         if (!status) {
-            return '<span class="badge bg-secondary">No samples</span>';
+            return '<span class="badge bg-secondary" title="Status unavailable - check audio service">Offline</span>';
+        }
+
+        // Handle special status states from backend
+        if (status.service_unavailable) {
+            return `
+                <span class="badge bg-secondary" title="Audio service not publishing metrics">Service Offline</span>
+                <div class="small text-muted mt-1">Check audio-service container</div>
+            `;
+        }
+
+        if (status.not_loaded) {
+            return `
+                <span class="badge bg-info text-dark" title="Receiver configured but not loaded in audio service">Not Loaded</span>
+                <div class="small text-muted mt-1">Restart audio-service to load</div>
+            `;
+        }
+
+        // Check if receiver is running
+        const running = status.running === true;
+        if (!running && !status.locked) {
+            return `
+                <span class="badge bg-secondary">Stopped</span>
+                ${status.last_error ? `<div class="small text-danger mt-1">${escapeHtml(status.last_error)}</div>` : ''}
+            `;
         }
 
         const locked = status.locked === true;
