@@ -206,5 +206,34 @@ echo ""
 # Stop any existing containers
 docker compose down 2>/dev/null || true
 
+# Check if we need to rebuild (force rebuild on first run or if images are missing)
+NEED_BUILD=0
+if ! docker images | grep -q "eas-station.*latest"; then
+    echo "Images not found, will build..."
+    NEED_BUILD=1
+fi
+
+# Check architecture of existing images
+if [ $NEED_BUILD -eq 0 ]; then
+    IMAGE_ARCH=$(docker image inspect eas-station:latest --format='{{.Architecture}}' 2>/dev/null || echo "unknown")
+    HOST_ARCH=$(uname -m)
+
+    if [ "$IMAGE_ARCH" != "arm64" ] && [ "$HOST_ARCH" = "aarch64" ]; then
+        echo "⚠️  Architecture mismatch detected!"
+        echo "   Image: $IMAGE_ARCH, Host: $HOST_ARCH (ARM64)"
+        echo "   Will rebuild images for correct architecture..."
+        NEED_BUILD=1
+    fi
+fi
+
+if [ $NEED_BUILD -eq 1 ]; then
+    echo ""
+    echo "Building ARM64 images for Raspberry Pi..."
+    echo "This may take 10-15 minutes on first run..."
+    docker compose -f docker-compose.yml -f docker-compose.pi.yml build --no-cache --pull
+    echo "✓ Build complete"
+    echo ""
+fi
+
 # Start with Pi override to enable GPIO
 exec docker compose -f docker-compose.yml -f docker-compose.pi.yml up -d
