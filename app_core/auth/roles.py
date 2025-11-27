@@ -528,3 +528,17 @@ def initialize_default_roles_and_permissions():
 
     db.session.commit()
     current_app.logger.info("Initialized default roles and permissions")
+
+
+__all__ = [
+    'Role',
+    'Permission',
+    'RoleDefinition',
+    'PermissionDefinition',
+    'get_current_user',
+    'has_permission',
+    'require_permission',
+    'require_any_permission',
+    'require_all_permissions',
+    'initialize_default_roles_and_permissions',
+]
