@@ -532,7 +532,7 @@ def _base_radio_metadata(receiver: RadioReceiver, source_name: str) -> Dict[str,
         'squelch_close_ms': int(receiver.squelch_close_ms or 750),
         'carrier_alarm_enabled': bool(receiver.squelch_alarm),
         'source_category': 'sdr',
-        'icecast_mount': f"/{source_name}",
+        'icecast_mount': f"/{source_name}.mp3",  # Mount point includes .mp3 extension
     }
 
 

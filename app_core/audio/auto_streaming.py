@@ -197,11 +197,14 @@ class AutoStreamingService:
                 # Create Icecast configuration
                 channels = 2 if getattr(audio_source.config, 'channels', 1) > 1 else 1
 
+                # Mount point must include .mp3 extension to match Icecast stream format
+                mount_point = f"{source_name}.mp3"
+
                 config = IcecastConfig(
                     server=self.icecast_server,
                     port=self.icecast_port,
                     password=self.icecast_password,
-                    mount=source_name,  # Mount point = source name
+                    mount=mount_point,  # Mount point = source name with .mp3 extension
                     name=f"{source_name} - EAS Monitor",
                     description=f"Live stream from {source_name}",
                     genre="Emergency Alert System",

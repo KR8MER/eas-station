@@ -152,7 +152,10 @@ class IcecastAutoConfig:
             hostname = self.server
             port = self.port
 
-        return f"http://{hostname}:{port}/{source_name}"
+        # Mount point must include .mp3 extension to match Icecast configuration
+        # Format: /source-name.mp3
+        mount_point = f"{source_name}.mp3" if not source_name.endswith('.mp3') else source_name
+        return f"http://{hostname}:{port}/{mount_point}"
 
     def get_config_dict(self) -> dict:
         """Get configuration as dictionary."""
