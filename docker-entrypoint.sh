@@ -323,7 +323,7 @@ attempt=0
 export SKIP_DB_INIT=1
 
 while [ $attempt -lt $max_attempts ]; do
-    if python -m alembic upgrade head 2>&1 | tee /tmp/migration.log; then
+    if python -m alembic upgrade heads 2>&1 | tee /tmp/migration.log; then
         echo "✅ Migrations complete."
         break
     else
