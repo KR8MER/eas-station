@@ -578,6 +578,10 @@ class _SoapySDRReceiver(ReceiverInterface):
         minimal_args = {"driver": self.driver_hint}
         skip_first_fallback = (fallback_args == minimal_args)
 
+        # Initialize fallback_exc before try/except to avoid scoping issues
+        # (exception variables in except clauses are deleted after the block)
+        fallback_exc = None
+
         if not skip_first_fallback:
             self._emit_event(
                 "warning",
@@ -603,8 +607,8 @@ class _SoapySDRReceiver(ReceiverInterface):
                     details={"driver": self.driver_hint, "serial": serial},
                 )
                 return device
-            except Exception as fallback_exc:
-                pass  # Will try minimal args below
+            except Exception as e:
+                fallback_exc = e  # Capture exception to persist beyond except block
         else:
             fallback_exc = original_exc  # Skip first fallback, use original exception
 
