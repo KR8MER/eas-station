@@ -30,8 +30,8 @@ services:
       POSTGRES_PASSWORD: casaos
     devices:
       - /dev/bus/usb:/dev/bus/usb  # USB access for SDR discovery (read-only query)
-      - /dev:/dev:ro  # Read-only access to all devices for smartctl/NVMe health monitoring
-    # NOTE: /dev mounted read-only for NVMe health (smartctl) and disk monitoring
+      # NOTE: /dev:/dev:ro removed - conflicts with init process needing to create /dev/pts
+      # Smartctl/NVMe health monitoring will use alternative methods or run without privileged access
     # NOTE: GPIO/screen access removed - now in hardware-service
     # Configuration: start-pi.sh syncs local .env to persistent volume before starting
 
