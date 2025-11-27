@@ -370,6 +370,134 @@ def initialize_eas_monitor(app, audio_controller):
         return _eas_monitor
 
 
+def process_commands():
+    """Process commands from Redis command queue.
+
+    Supports commands from webapp container:
+    - restart: Restart a receiver
+    - get_spectrum: Get IQ samples for waterfall display
+    """
+    global _radio_manager, _redis_client
+
+    if not _radio_manager or not _redis_client:
+        return
+
+    try:
+        # Check for pending commands (non-blocking)
+        command_json = _redis_client.lpop("sdr:commands")
+        if not command_json:
+            return
+
+        command = json.loads(command_json)
+        action = command.get("action")
+        receiver_id = command.get("receiver_id")
+        command_id = command.get("command_id", "unknown")
+
+        logger.info(f"Processing command: {action} for receiver {receiver_id} (command_id={command_id})")
+
+        if action == "restart":
+            # Restart receiver
+            instance = _radio_manager.get_receiver(receiver_id)
+            if not instance:
+                result = {
+                    "command_id": command_id,
+                    "success": False,
+                    "error": f"Receiver '{receiver_id}' not found in RadioManager",
+                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                }
+            else:
+                try:
+                    # Stop and restart
+                    instance.stop()
+                    time.sleep(0.5)  # Brief pause
+                    instance.start()
+
+                    status = instance.get_status()
+                    result = {
+                        "command_id": command_id,
+                        "success": True,
+                        "receiver_id": receiver_id,
+                        "status": {
+                            "locked": status.locked,
+                            "signal_strength": status.signal_strength,
+                            "running": instance.is_running() if hasattr(instance, 'is_running') else False,
+                        },
+                        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    }
+                    logger.info(f"✅ Successfully restarted receiver {receiver_id}")
+                except Exception as e:
+                    logger.error(f"❌ Failed to restart receiver {receiver_id}: {e}")
+                    result = {
+                        "command_id": command_id,
+                        "success": False,
+                        "error": str(e),
+                        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    }
+
+            # Publish result
+            _redis_client.setex(
+                f"sdr:command_result:{command_id}",
+                30,  # 30 second TTL
+                json.dumps(result)
+            )
+
+        elif action == "get_spectrum":
+            # Get spectrum data for waterfall
+            instance = _radio_manager.get_receiver(receiver_id)
+            if not instance:
+                result = {
+                    "command_id": command_id,
+                    "success": False,
+                    "error": f"Receiver '{receiver_id}' not found",
+                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                }
+            else:
+                try:
+                    num_samples = command.get("num_samples", 2048)
+                    iq_samples = instance.get_samples(num_samples=num_samples)
+
+                    if iq_samples is None or len(iq_samples) == 0:
+                        result = {
+                            "command_id": command_id,
+                            "success": False,
+                            "error": "No samples available from receiver",
+                            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                        }
+                    else:
+                        # Convert complex samples to list of [real, imag] pairs
+                        samples_list = [[float(s.real), float(s.imag)] for s in iq_samples[:num_samples]]
+                        result = {
+                            "command_id": command_id,
+                            "success": True,
+                            "samples": samples_list,
+                            "num_samples": len(samples_list),
+                            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                        }
+                except Exception as e:
+                    logger.error(f"❌ Failed to get spectrum for receiver {receiver_id}: {e}")
+                    result = {
+                        "command_id": command_id,
+                        "success": False,
+                        "error": str(e),
+                        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    }
+
+            # Publish result
+            _redis_client.setex(
+                f"sdr:command_result:{command_id}",
+                30,  # 30 second TTL
+                json.dumps(result)
+            )
+
+        else:
+            logger.warning(f"Unknown command action: {action}")
+
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse command JSON: {e}")
+    except Exception as e:
+        logger.error(f"Error processing command: {e}", exc_info=True)
+
+
 def collect_metrics():
     """Collect metrics from audio controller, radio manager, and EAS monitor."""
     metrics = {
@@ -1005,6 +1133,9 @@ def main():
             try:
                 current_time = time.time()
 
+                # Process pending commands from webapp (non-blocking)
+                process_commands()
+
                 # Publish metrics periodically
                 if current_time - last_metrics_time >= metrics_interval:
                     metrics = collect_metrics()
@@ -1017,8 +1148,8 @@ def main():
                         running = metrics["eas_monitor"].get("running", False)
                         logger.debug(f"EAS Monitor: running={running}, samples={samples}")
 
-                # Sleep briefly
-                time.sleep(1)
+                # Sleep briefly (check for commands every 500ms)
+                time.sleep(0.5)
 
             except KeyboardInterrupt:
                 logger.info("Received keyboard interrupt")

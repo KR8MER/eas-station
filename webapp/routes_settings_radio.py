@@ -1546,7 +1546,7 @@ def register(app: Flask, logger) -> None:
             auto_start_receivers = [r for r in enabled_receivers if r.auto_start]
 
             # In separated architecture, RadioManager runs in sdr-service container
-            # Read metrics from Redis (published by sdr_service.py every 5 seconds)
+            # Read metrics from Redis (published by audio_service.py every 5 seconds)
             available_drivers = []
             loaded_receivers = {}
 
@@ -1556,53 +1556,51 @@ def register(app: Flask, logger) -> None:
 
                 redis_client = get_redis_client()
 
-                # Read from sdr:metrics (published by sdr_service.py)
-                metrics_json = redis_client.get("sdr:metrics")
+                # Read from eas:metrics hash (published by audio_service.py)
+                raw_metrics = redis_client.hgetall("eas:metrics")
 
-                if metrics_json:
-                    if isinstance(metrics_json, bytes):
-                        metrics_json = metrics_json.decode('utf-8')
+                if raw_metrics:
+                    # Parse radio_manager metrics from Redis hash
+                    radio_manager_raw = raw_metrics.get(b"radio_manager") or raw_metrics.get("radio_manager")
+                    if radio_manager_raw:
+                        if isinstance(radio_manager_raw, bytes):
+                            radio_manager_raw = radio_manager_raw.decode('utf-8')
+                        radio_manager_metrics = json.loads(radio_manager_raw)
 
-                    sdr_metrics = json.loads(metrics_json)
+                        if radio_manager_metrics:
+                            available_drivers = radio_manager_metrics.get("available_drivers", [])
 
-                    # Convert sdr-service metrics to expected format
-                    for identifier, receiver_data in sdr_metrics.items():
-                        # Decode error message if present
-                        error_info = _decode_soapysdr_error(receiver_data.get("last_error")) if receiver_data.get("last_error") else None
+                            # Convert audio-service metrics to expected format
+                            for identifier, receiver_data in radio_manager_metrics.get("receivers", {}).items():
+                                # Decode error message if present
+                                error_info = _decode_soapysdr_error(receiver_data.get("last_error")) if receiver_data.get("last_error") else None
 
-                        # Look up receiver ID from database
-                        receiver_db = RadioReceiver.query.filter_by(identifier=identifier).first()
-                        receiver_id = receiver_db.id if receiver_db else None
+                                # Look up receiver ID from database
+                                receiver_db = RadioReceiver.query.filter_by(identifier=identifier).first()
+                                receiver_id = receiver_db.id if receiver_db else None
 
-                        # Get connection health data
-                        connection_health = receiver_data.get("connection_health", {})
+                                loaded_receivers[identifier] = {
+                                    "identifier": identifier,
+                                    "receiver_id": receiver_id,
+                                    "running": receiver_data.get("running", False),
+                                    "locked": receiver_data.get("locked", False),
+                                    "signal_strength": receiver_data.get("signal_strength"),
+                                    "last_error": receiver_data.get("last_error"),
+                                    "error_decoded": error_info,
+                                    "reported_at": receiver_data.get("reported_at"),
+                                    "samples_available": receiver_data.get("samples_available", False),
+                                    "sample_count": receiver_data.get("sample_count", 0),
+                                    "config": receiver_data.get("config", {})
+                                }
 
-                        loaded_receivers[identifier] = {
-                            "identifier": identifier,
-                            "receiver_id": receiver_id,
-                            "running": receiver_data.get("running", False),
-                            "locked": receiver_data.get("locked", False),
-                            "signal_strength": receiver_data.get("signal_strength"),
-                            "last_error": receiver_data.get("last_error"),
-                            "error_decoded": error_info,
-                            "reported_at": receiver_data.get("reported_at"),
-                            "samples_available": connection_health.get("samples_available", False),
-                            "sample_count": connection_health.get("buffer_fill", 0),
-                            "config": {
-                                "frequency_hz": getattr(receiver_db, 'frequency_hz', None) if receiver_db else None,
-                                "sample_rate": getattr(receiver_db, 'sample_rate', None) if receiver_db else None,
-                                "driver": getattr(receiver_db, 'driver', None) if receiver_db else None,
-                            }
-                        }
-
-                    route_logger.debug("Loaded SDR metrics from Redis: %d receivers", len(loaded_receivers))
+                            route_logger.debug("Loaded radio manager metrics from Redis: %d receivers", len(loaded_receivers))
                 else:
-                    route_logger.debug("No SDR metrics found in Redis (key: sdr:metrics)")
+                    route_logger.debug("No metrics found in Redis (key: eas:metrics)")
 
             except Exception as redis_exc:
-                route_logger.warning("Could not read SDR metrics from Redis: %s", redis_exc)
+                route_logger.warning("Could not read metrics from Redis: %s", redis_exc)
 
-            # Get available drivers from database receiver records
+            # Get available drivers from database receiver records as fallback
             # (In separated architecture, we can't query RadioManager directly)
             if not available_drivers:
                 try:
