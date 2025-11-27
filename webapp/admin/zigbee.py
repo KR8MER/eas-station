@@ -253,3 +253,10 @@ def get_zigbee_diagnostics():
             'success': False,
             'error': str(e)
         }), 500
+
+
+
+def register_zigbee_routes(app, logger):
+    """Register Zigbee management routes with the Flask app."""
+    app.register_blueprint(zigbee_bp)
+    logger.info("Zigbee management routes registered (proxied to hardware-service)")

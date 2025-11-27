@@ -275,11 +275,13 @@ for attempt in range(max_retries):
             cur.execute("SELECT COUNT(*) FROM alembic_version")
             version_count = cur.fetchone()[0]
             if version_count > 1:
-                # Keep only the most recent version
+                # Keep only the most recent version (ordered deterministically)
                 cur.execute("""
                     DELETE FROM alembic_version
                     WHERE version_num NOT IN (
-                        SELECT version_num FROM alembic_version LIMIT 1
+                        SELECT version_num FROM alembic_version
+                        ORDER BY version_num DESC
+                        LIMIT 1
                     )
                 """)
                 fixes_applied.append(f"Cleaned {version_count - 1} duplicate migration version(s)")
