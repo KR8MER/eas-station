@@ -19,6 +19,7 @@ Repository: https://github.com/KR8MER/eas-station
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from typing import Any, Dict, List, Optional, Tuple
@@ -97,6 +98,54 @@ def _receiver_to_dict(receiver: RadioReceiver) -> Dict[str, Any]:
         # If we can't access the relationship, just skip the status
         latest = None
 
+    # In separated architecture, status comes from Redis (published by sdr-service)
+    # Try to get status from Redis first, fall back to database
+    redis_status = None
+    try:
+        from app_core.redis_client import get_redis_client
+        redis_client = get_redis_client()
+
+        # Read radio_manager metrics from Redis
+        radio_manager_raw = redis_client.hget("eas:metrics", "radio_manager")
+        if radio_manager_raw:
+            if isinstance(radio_manager_raw, bytes):
+                radio_manager_raw = radio_manager_raw.decode('utf-8')
+            radio_manager_data = json.loads(radio_manager_raw)
+
+            # Find this receiver's status in the Redis data
+            receivers_data = radio_manager_data.get("receivers", {})
+            if receiver.identifier in receivers_data:
+                redis_receiver = receivers_data[receiver.identifier]
+                redis_status = {
+                    "reported_at": redis_receiver.get("reported_at"),
+                    "locked": redis_receiver.get("locked", False),
+                    "signal_strength": redis_receiver.get("signal_strength"),
+                    "last_error": redis_receiver.get("last_error"),
+                    "capture_mode": None,  # Not tracked in Redis
+                    "capture_path": None,  # Not tracked in Redis
+                    "samples_available": redis_receiver.get("samples_available", False),
+                    "sample_count": redis_receiver.get("sample_count", 0),
+                    "running": redis_receiver.get("running", False),
+                }
+    except Exception:
+        # Redis not available or error parsing - fall back to database status
+        pass
+
+    # Use Redis status if available (it's more current), otherwise use database status
+    if redis_status is not None:
+        status_data = redis_status
+    elif latest is not None:
+        status_data = {
+            "reported_at": latest.reported_at.isoformat() if latest.reported_at else None,
+            "locked": bool(latest.locked),
+            "signal_strength": latest.signal_strength,
+            "last_error": latest.last_error,
+            "capture_mode": latest.capture_mode,
+            "capture_path": latest.capture_path,
+        }
+    else:
+        status_data = None
+
     return {
         "id": receiver.id,
         "identifier": receiver.identifier,
@@ -120,18 +169,7 @@ def _receiver_to_dict(receiver: RadioReceiver) -> Dict[str, Any]:
         "squelch_open_ms": receiver.squelch_open_ms,
         "squelch_close_ms": receiver.squelch_close_ms,
         "squelch_alarm": receiver.squelch_alarm,
-        "latest_status": (
-            {
-                "reported_at": latest.reported_at.isoformat() if latest and latest.reported_at else None,
-                "locked": bool(latest.locked) if latest else None,
-                "signal_strength": latest.signal_strength if latest else None,
-                "last_error": latest.last_error if latest else None,
-                "capture_mode": latest.capture_mode if latest else None,
-                "capture_path": latest.capture_path if latest else None,
-            }
-            if latest
-            else None
-        ),
+        "latest_status": status_data,
     }
 
 
@@ -1077,21 +1115,11 @@ def register(app: Flask, logger) -> None:
         Can be accessed by numeric ID or string identifier:
         - /api/radio/spectrum/1
         - /api/radio/spectrum/by-identifier/wxj93
+
+        In the separated Docker architecture, spectrum data is published to Redis
+        by the sdr-service container and read here.
         """
         try:
-            # Try to import NumPy, but handle gracefully if not available
-            try:
-                import numpy as np
-            except ImportError:
-                route_logger.error("NumPy not available for spectrum generation")
-                _log_radio_event(
-                    "ERROR",
-                    "NumPy not available for spectrum generation",
-                    module_suffix="spectrum",
-                    details={"receiver_id": receiver_id, "identifier": identifier},
-                )
-                return jsonify({"error": "Spectrum feature requires NumPy"}), 503
-
             # Look up receiver by ID or identifier
             if identifier:
                 receiver = RadioReceiver.query.filter_by(identifier=identifier).first()
@@ -1103,22 +1131,67 @@ def register(app: Flask, logger) -> None:
             else:
                 receiver = RadioReceiver.query.get_or_404(receiver_id)
 
+            receiver_identifier = receiver.identifier
+
+            # First, try to get spectrum data from Redis (published by sdr-service container)
+            try:
+                from app_core.redis_client import get_redis_client
+                redis_client = get_redis_client()
+
+                # Try to read pre-computed spectrum from Redis
+                spectrum_key = f"eas:spectrum:{receiver_identifier}"
+                spectrum_raw = redis_client.get(spectrum_key)
+
+                if spectrum_raw:
+                    try:
+                        if isinstance(spectrum_raw, bytes):
+                            spectrum_raw = spectrum_raw.decode('utf-8')
+                        spectrum_payload = json.loads(spectrum_raw)
+
+                        # Return spectrum data from Redis
+                        return jsonify({
+                            "receiver_id": receiver.id,
+                            "identifier": receiver_identifier,
+                            "display_name": receiver.display_name,
+                            "sample_rate": spectrum_payload.get('sample_rate', receiver.sample_rate),
+                            "center_frequency": spectrum_payload.get('center_frequency', receiver.frequency_hz),
+                            "freq_min": spectrum_payload.get('freq_min', receiver.frequency_hz - (receiver.sample_rate / 2)),
+                            "freq_max": spectrum_payload.get('freq_max', receiver.frequency_hz + (receiver.sample_rate / 2)),
+                            "fft_size": spectrum_payload.get('fft_size', 2048),
+                            "spectrum": spectrum_payload.get('spectrum', []),
+                            "timestamp": spectrum_payload.get('timestamp', time.time()),
+                            "source": "redis"  # Indicate data came from sdr-service via Redis
+                        })
+                    except (json.JSONDecodeError, KeyError) as e:
+                        route_logger.debug(f"Error parsing spectrum from Redis: {e}")
+
+            except Exception as redis_exc:
+                route_logger.debug(f"Could not read spectrum from Redis: {redis_exc}")
+
+            # Fallback: Try local RadioManager (only works if SDR is in same container)
+            try:
+                import numpy as np
+            except ImportError:
+                route_logger.error("NumPy not available for spectrum generation")
+                return jsonify({
+                    "error": "Spectrum data not available",
+                    "hint": "SDR receiver runs in sdr-service container. Check if sdr-service is running."
+                }), 503
+
             # Get the radio manager and receiver
             radio_manager = get_radio_manager()
-            receiver_instance = radio_manager.get_receiver(receiver.identifier)
+            receiver_instance = radio_manager.get_receiver(receiver_identifier)
 
             if not receiver_instance:
-                route_logger.warning(
-                    "Receiver instance not found in RadioManager for identifier=%s (id=%s). "
-                    "Available receivers: %s",
-                    receiver.identifier,
-                    receiver_id,
-                    list(radio_manager._receivers.keys())
+                route_logger.debug(
+                    "Receiver instance not found in local RadioManager for identifier=%s. "
+                    "In separated architecture, spectrum data should come from Redis.",
+                    receiver_identifier,
                 )
                 return jsonify({
-                    "error": "Receiver not running",
-                    "hint": "Receiver may need to be started or reloaded"
-                }), 404
+                    "error": "Spectrum data not available",
+                    "hint": "In Docker, the SDR runs in sdr-service container. Check container logs: docker-compose logs sdr-service"
+                }), 503
 
             # Get recent IQ samples
             iq_samples = receiver_instance.get_samples(num_samples=2048)
@@ -1126,7 +1199,7 @@ def register(app: Flask, logger) -> None:
             if iq_samples is None or len(iq_samples) == 0:
                 route_logger.warning(
                     "No samples available from receiver %s (id=%s). Status: %s",
-                    receiver.identifier,
+                    receiver_identifier,
                     receiver_id,
                     receiver_instance.get_status()
                 )
@@ -1163,8 +1236,8 @@ def register(app: Flask, logger) -> None:
             freq_max = receiver.frequency_hz + (sample_rate / 2)
 
             return jsonify({
-                "receiver_id": receiver_id,
-                "identifier": receiver.identifier,
+                "receiver_id": receiver.id,
+                "identifier": receiver_identifier,
                 "display_name": receiver.display_name,
                 "sample_rate": sample_rate,
                 "center_frequency": receiver.frequency_hz,
@@ -1172,7 +1245,8 @@ def register(app: Flask, logger) -> None:
                 "freq_max": freq_max,
                 "fft_size": fft_size,
                 "spectrum": spectrum_data,
-                "timestamp": time.time()
+                "timestamp": time.time(),
+                "source": "local"  # Indicate data came from local RadioManager
             })
 
         except Exception as exc:

@@ -58,6 +58,9 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+# Constants for spectrum computation
+FFT_MIN_MAGNITUDE = 1e-10  # Minimum magnitude to avoid log(0) in dB conversion
+
 # Load environment variables from persistent config volume
 # This must happen before initializing audio sources
 _config_path = os.environ.get('CONFIG_PATH')
@@ -593,6 +596,75 @@ def publish_metrics_to_redis(metrics):
                                 )
                 except Exception as e:
                     logger.debug(f"Error publishing visualization data for '{name}': {e}")
+        
+        # Publish spectrum data for each SDR receiver (for waterfall display in web UI)
+        if _radio_manager:
+            try:
+                import numpy as np
+                
+                if hasattr(_radio_manager, '_receivers'):
+                    for identifier, receiver_instance in _radio_manager._receivers.items():
+                        try:
+                            # Only publish spectrum for running receivers
+                            is_running = receiver_instance._running.is_set() if hasattr(receiver_instance, '_running') else False
+                            if not is_running:
+                                continue
+                            
+                            # Get IQ samples for spectrum
+                            if hasattr(receiver_instance, 'get_samples'):
+                                iq_samples = receiver_instance.get_samples(num_samples=2048)
+                                
+                                if iq_samples is not None and len(iq_samples) > 0:
+                                    # Compute FFT for spectrum display
+                                    fft_size = min(len(iq_samples), 2048)
+                                    window = np.hanning(fft_size)
+                                    windowed = iq_samples[:fft_size] * window
+                                    fft_result = np.fft.fftshift(np.fft.fft(windowed))
+                                    
+                                    # Convert to magnitude (dB)
+                                    magnitude = np.abs(fft_result)
+                                    magnitude = np.where(magnitude > 0, magnitude, FFT_MIN_MAGNITUDE)
+                                    magnitude_db = 20 * np.log10(magnitude)
+                                    
+                                    # Normalize to 0-1 range for display
+                                    min_db = float(magnitude_db.min())
+                                    max_db = float(magnitude_db.max())
+                                    if max_db > min_db:
+                                        normalized = (magnitude_db - min_db) / (max_db - min_db)
+                                    else:
+                                        normalized = np.zeros_like(magnitude_db)
+                                    
+                                    # Get receiver config for frequency info
+                                    config = receiver_instance.config if hasattr(receiver_instance, 'config') else None
+                                    frequency_hz = config.frequency_hz if config else 0
+                                    sample_rate = config.sample_rate if config else 0
+                                    
+                                    spectrum_payload = {
+                                        'identifier': identifier,
+                                        'spectrum': _sanitize_value(normalized.tolist()),
+                                        'fft_size': fft_size,
+                                        'sample_rate': sample_rate,
+                                        'center_frequency': frequency_hz,
+                                        'freq_min': frequency_hz - (sample_rate / 2) if sample_rate else 0,
+                                        'freq_max': frequency_hz + (sample_rate / 2) if sample_rate else 0,
+                                        'timestamp': time.time(),
+                                        'status': 'available'
+                                    }
+                                    
+                                    # Store spectrum data with short expiry (5 seconds - waterfall needs frequent updates)
+                                    pipe.setex(
+                                        f"eas:spectrum:{identifier}",
+                                        5,
+                                        json.dumps(spectrum_payload)
+                                    )
+                                    logger.debug(f"Published spectrum data for receiver '{identifier}'")
+                                    
+                        except Exception as e:
+                            logger.debug(f"Error publishing spectrum for receiver '{identifier}': {e}")
+            except ImportError:
+                logger.debug("NumPy not available for spectrum generation")
+            except Exception as e:
+                logger.debug(f"Error publishing spectrum data: {e}")
         
         pipe.execute()
 
