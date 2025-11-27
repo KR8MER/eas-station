@@ -512,9 +512,6 @@ def collect_metrics():
     except Exception as e:
         logger.error(f"Error collecting metrics: {e}")
 
-    except Exception as e:
-        logger.error(f"Error collecting metrics: {e}")
-
     return metrics
 
 

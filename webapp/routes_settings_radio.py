@@ -249,6 +249,7 @@ def _parse_receiver_payload(payload: Dict[str, Any], *, partial: bool = False) -
 
     if not partial or "modulation_type" in payload:
         modulation_raw = payload.get("modulation_type", "IQ")
+        route_logger.debug(f"Processing modulation_type: raw={modulation_raw!r}")
         if modulation_raw in (None, ""):
             if not partial:
                 data["modulation_type"] = "IQ"
@@ -258,9 +259,13 @@ def _parse_receiver_payload(payload: Dict[str, Any], *, partial: bool = False) -
             if modulation not in allowed_modulations:
                 return None, "Invalid modulation type."
             data["modulation_type"] = modulation
+            route_logger.debug(f"Set modulation_type to: {modulation}")
 
     if not partial or "audio_output" in payload:
-        data["audio_output"] = _coerce_bool(payload.get("audio_output"), False)
+        audio_output_raw = payload.get("audio_output")
+        audio_output_value = _coerce_bool(audio_output_raw, False)
+        route_logger.debug(f"Processing audio_output: raw={audio_output_raw!r}, coerced={audio_output_value}")
+        data["audio_output"] = audio_output_value
 
     if not partial or "stereo_enabled" in payload:
         data["stereo_enabled"] = _coerce_bool(payload.get("stereo_enabled"), True)
