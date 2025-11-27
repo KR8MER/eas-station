@@ -335,7 +335,8 @@ services:
       # Icecast configuration via environment variables
       - ICECAST_LOCATION=EAS Monitoring Station
       - ICECAST_ADMIN=${ICECAST_CONTACT:-admin@example.com}
-      - ICECAST_HOSTNAME=${ICECAST_HOSTNAME:-localhost}
+      - ICECAST_HOSTNAME=${ICECAST_HOSTNAME:-}
+      - ICECAST_PUBLIC_HOSTNAME=${ICECAST_PUBLIC_HOSTNAME:-}
       - ICECAST_MAX_CLIENTS=${ICECAST_MAX_CLIENTS:-100}
       - ICECAST_MAX_SOURCES=${ICECAST_MAX_SOURCES:-50}
 
