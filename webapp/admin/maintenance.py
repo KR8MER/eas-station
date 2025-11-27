@@ -472,7 +472,7 @@ def register_maintenance_routes(app, logger):
     
     # Register the blueprint with the app
     app.register_blueprint(maintenance_bp)
-    current_app.logger.info("Maintenance routes registered")
+    logger.info("Maintenance routes registered")
 
 
 # Route definitions
