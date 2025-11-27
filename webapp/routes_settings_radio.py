@@ -163,6 +163,9 @@ def _receiver_to_dict(receiver: RadioReceiver) -> Dict[str, Any]:
             "last_error": latest.last_error,
             "capture_mode": latest.capture_mode,
             "capture_path": latest.capture_path,
+            "samples_available": False,  # Database status doesn't track sample buffer
+            "sample_count": 0,
+            "running": False,  # Database status doesn't track running state
         }
     elif radio_manager_found:
         # Redis has radio_manager metrics but this receiver isn't loaded yet
@@ -177,7 +180,11 @@ def _receiver_to_dict(receiver: RadioReceiver) -> Dict[str, Any]:
             service_unavailable=True
         )
     else:
-        status_data = None
+        # No status available at all - provide minimal structure
+        status_data = _make_offline_status(
+            "No status available",
+            offline=True
+        )
 
     return {
         "id": receiver.id,
@@ -1184,19 +1191,40 @@ def register(app: Flask, logger) -> None:
                             spectrum_raw = spectrum_raw.decode('utf-8')
                         spectrum_payload = json.loads(spectrum_raw)
 
-                        # Return spectrum data from Redis
+                        # Check if this is an error status from sdr-service
+                        status = spectrum_payload.get('status')
+                        if status in ('stopped', 'no_samples'):
+                            # Return error info but with 200 OK so UI can display it properly
+                            return jsonify({
+                                "receiver_id": receiver.id,
+                                "identifier": receiver_identifier,
+                                "display_name": receiver.display_name,
+                                "sample_rate": spectrum_payload.get('sample_rate', receiver.sample_rate),
+                                "center_frequency": spectrum_payload.get('center_frequency', receiver.frequency_hz),
+                                "freq_min": spectrum_payload.get('freq_min', receiver.frequency_hz - (receiver.sample_rate / 2) if receiver.sample_rate else 0),
+                                "freq_max": spectrum_payload.get('freq_max', receiver.frequency_hz + (receiver.sample_rate / 2) if receiver.sample_rate else 0),
+                                "fft_size": 0,
+                                "spectrum": [],
+                                "timestamp": spectrum_payload.get('timestamp', time.time()),
+                                "source": "redis",
+                                "status": status,
+                                "error": spectrum_payload.get('error', 'No samples available')
+                            })
+
+                        # Return normal spectrum data from Redis
                         return jsonify({
                             "receiver_id": receiver.id,
                             "identifier": receiver_identifier,
                             "display_name": receiver.display_name,
                             "sample_rate": spectrum_payload.get('sample_rate', receiver.sample_rate),
                             "center_frequency": spectrum_payload.get('center_frequency', receiver.frequency_hz),
-                            "freq_min": spectrum_payload.get('freq_min', receiver.frequency_hz - (receiver.sample_rate / 2)),
-                            "freq_max": spectrum_payload.get('freq_max', receiver.frequency_hz + (receiver.sample_rate / 2)),
+                            "freq_min": spectrum_payload.get('freq_min', receiver.frequency_hz - (receiver.sample_rate / 2) if receiver.sample_rate else 0),
+                            "freq_max": spectrum_payload.get('freq_max', receiver.frequency_hz + (receiver.sample_rate / 2) if receiver.sample_rate else 0),
                             "fft_size": spectrum_payload.get('fft_size', 2048),
                             "spectrum": spectrum_payload.get('spectrum', []),
                             "timestamp": spectrum_payload.get('timestamp', time.time()),
-                            "source": "redis"  # Indicate data came from sdr-service via Redis
+                            "source": "redis",
+                            "status": "available"
                         })
                     except (json.JSONDecodeError, KeyError) as e:
                         route_logger.debug(f"Error parsing spectrum from Redis: {e}")
