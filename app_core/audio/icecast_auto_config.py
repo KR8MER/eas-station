@@ -139,12 +139,15 @@ class IcecastAutoConfig:
                 hostname = self.public_hostname
             elif self.server == 'icecast':
                 # In containerized deployment without public hostname
-                logger.warning(
-                    "No public hostname configured for Icecast. Set ICECAST_PUBLIC_HOSTNAME "
-                    "environment variable to enable external stream access. "
-                    "Using container name 'icecast' which won't work from browsers."
+                # Use 'localhost' as fallback since browser access won't work with 
+                # container name 'icecast'. This allows local development and testing.
+                # For production remote access, users should set ICECAST_PUBLIC_HOSTNAME.
+                logger.debug(
+                    "No ICECAST_PUBLIC_HOSTNAME configured. Using 'localhost' as fallback "
+                    "for browser access. For remote access, set ICECAST_PUBLIC_HOSTNAME "
+                    "to your server's public IP or hostname."
                 )
-                hostname = 'icecast'
+                hostname = 'localhost'
             else:
                 hostname = self.server
             port = self.external_port
