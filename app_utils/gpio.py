@@ -334,7 +334,7 @@ def _ensure_pin_factory(
                         )
             else:
                 if issue_recorder is not None:
-                    issue_recorder(str(exc))
+                    issue_recorder(str(fallback_exc))
                 if logger:
                     reason = fallback_exc or RuntimeError(
                         "gpiozero pin factory returned None"

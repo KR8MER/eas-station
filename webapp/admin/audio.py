@@ -34,6 +34,7 @@ from typing import Any, Dict, List, Optional
 from flask import (
     Blueprint,
     abort,
+    current_app,
     flash,
     g,
     jsonify,
@@ -78,7 +79,7 @@ def register_audio_routes(app, logger, eas_config):
     
     # Register the blueprint with the app
     app.register_blueprint(audio_bp)
-    logger.info("Audio routes registered")
+    current_app.logger.info("Audio routes registered")
 
 
 # Route definitions
@@ -86,7 +87,7 @@ def register_audio_routes(app, logger, eas_config):
 @audio_bp.route('/audio')
 def audio_history():
     try:
-        eas_enabled = app.config.get('EAS_BROADCAST_ENABLED', False)
+        eas_enabled = current_app.config.get('EAS_BROADCAST_ENABLED', False)
         # Validate pagination parameters
         page = request.args.get('page', 1, type=int)
         page = max(1, page)  # Ensure page is at least 1
@@ -379,7 +380,7 @@ def audio_history():
             severities = sorted({value for value in cap_severities if value})
             statuses = sorted({value for value in cap_statuses + manual_statuses if value})
         except Exception as filter_error:
-            logger.warning('Unable to load audio filter metadata: %s', filter_error)
+            current_app.logger.warning('Unable to load audio filter metadata: %s', filter_error)
             events = []
             severities = []
             statuses = []
@@ -407,7 +408,7 @@ def audio_history():
         )
 
     except Exception as exc:
-        logger.error('Error loading audio archive: %s', exc)
+        current_app.logger.error('Error loading audio archive: %s', exc)
         return render_template(
             'errors/audio_archive_error.html',
             error=str(exc),
@@ -469,7 +470,7 @@ def audio_detail(message_id: int):
         )
 
     except Exception as exc:
-        logger.error('Error loading audio detail %s: %s', message_id, exc)
+        current_app.logger.error('Error loading audio detail %s: %s', message_id, exc)
         flash('Unable to load audio detail at this time.', 'error')
         return redirect(url_for('audio_history'))
 
@@ -518,7 +519,7 @@ def eas_message_summary(message_id: int):
         abort(404, description='Summary not available.')
 
     body = json.dumps(payload, indent=2, ensure_ascii=False)
-    response = app.response_class(body, mimetype='application/json')
+    response = current_app.response_class(body, mimetype='application/json')
     filename = message.text_filename or f'eas_message_{message.id}_summary.json'
     response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
     response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate'
@@ -528,7 +529,7 @@ def eas_message_summary(message_id: int):
 
 @audio_bp.route('/admin/eas_messages', methods=['GET'])
 def admin_eas_messages():
-    eas_enabled = app.config.get('EAS_BROADCAST_ENABLED', False)
+    eas_enabled = current_app.config.get('EAS_BROADCAST_ENABLED', False)
 
     try:
         limit = request.args.get('limit', type=int) or 50
@@ -556,7 +557,7 @@ def admin_eas_messages():
 
         return jsonify({'messages': items, 'total': total, 'eas_enabled': eas_enabled})
     except Exception as exc:
-        logger.error(f"Failed to list EAS messages: {exc}")
+        current_app.logger.error(f"Failed to list EAS messages: {exc}")
         return jsonify({'error': 'Unable to load EAS messages'}), 500
 
 @audio_bp.route('/admin/eas_messages/<int:message_id>', methods=['DELETE'])
@@ -577,7 +578,7 @@ def admin_delete_eas_message(message_id: int):
         ))
         db.session.commit()
     except Exception as exc:
-        logger.error(f"Failed to delete EAS message {message_id}: {exc}")
+        current_app.logger.error(f"Failed to delete EAS message {message_id}: {exc}")
         db.session.rollback()
         return jsonify({'error': 'Failed to delete EAS message.'}), 500
 
@@ -646,7 +647,7 @@ def admin_purge_eas_messages():
         ))
         db.session.commit()
     except Exception as exc:
-        logger.error(f"Failed to purge EAS messages: {exc}")
+        current_app.logger.error(f"Failed to purge EAS messages: {exc}")
         db.session.rollback()
         return jsonify({'error': 'Failed to purge EAS messages.'}), 500
 
@@ -792,7 +793,7 @@ def admin_manual_eas_generate():
             manual_config,
             location_settings=None,
         )
-        generator = EASAudioGenerator(manual_config, logger)
+        generator = EASAudioGenerator(manual_config, current_app.logger)
         components = generator.build_manual_components(
             alert_object,
             header,
@@ -802,7 +803,7 @@ def admin_manual_eas_generate():
             include_tts=include_tts,
         )
     except Exception as exc:  # pragma: no cover - defensive
-        logger.error(f"Failed to build manual EAS package: {exc}")
+        current_app.logger.error(f"Failed to build manual EAS package: {exc}")
         return jsonify({'error': 'Unable to generate EAS audio components.'}), 500
 
     def _safe_base(value: str) -> str:
@@ -812,9 +813,9 @@ def admin_manual_eas_generate():
     base_name = _safe_base(identifier)
     sample_rate = components.get('sample_rate', sample_rate)
 
-    output_root = str(manual_config.get('output_dir') or app.config.get('EAS_OUTPUT_DIR') or '').strip()
+    output_root = str(manual_config.get('output_dir') or current_app.config.get('EAS_OUTPUT_DIR') or '').strip()
     if not output_root:
-        logger.error('Manual EAS output directory is not configured.')
+        current_app.logger.error('Manual EAS output directory is not configured.')
         return jsonify({'error': 'Manual EAS output directory is not configured.'}), 500
 
     manual_root = os.path.join(output_root, 'manual')
@@ -825,7 +826,7 @@ def admin_manual_eas_generate():
     event_dir = os.path.join(manual_root, slug)
     os.makedirs(event_dir, exist_ok=True)
     storage_root = '/'.join(part for part in ['manual', slug] if part)
-    web_prefix = app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
+    web_prefix = current_app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
 
     def _package_audio(samples: List[int], suffix: str) -> Optional[Dict[str, Any]]:
         if not samples:
@@ -1003,7 +1004,7 @@ def admin_manual_eas_generate():
         db.session.commit()
     except Exception as exc:
         db.session.rollback()
-        logger.error('Failed to persist manual EAS activation: %s', exc)
+        current_app.logger.error('Failed to persist manual EAS activation: %s', exc)
         return jsonify({'error': 'Unable to persist manual activation details.'}), 500
 
     response_payload['activation'] = {
@@ -1039,7 +1040,7 @@ def admin_manual_eas_events():
             .all()
         )
 
-        web_prefix = app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
+        web_prefix = current_app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
         items = []
 
         for event in events:
@@ -1091,7 +1092,7 @@ def admin_manual_eas_events():
 
         return jsonify({'events': items, 'total': total})
     except Exception as exc:
-        logger.error('Failed to list manual EAS activations: %s', exc)
+        current_app.logger.error('Failed to list manual EAS activations: %s', exc)
         return jsonify({'error': 'Unable to load manual activations.'}), 500
 
 @audio_bp.route('/manual_eas/<int:event_id>/audio/<string:component>', methods=['GET'])
@@ -1144,7 +1145,7 @@ def manual_eas_print(event_id: int):
 
     event = ManualEASActivation.query.get_or_404(event_id)
     components_payload = event.components_payload or {}
-    web_prefix = app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
+    web_prefix = current_app.config.get('EAS_OUTPUT_WEB_SUBDIR', 'eas_messages').strip('/')
 
     def _component_with_url(meta: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         if not meta:
@@ -1195,7 +1196,7 @@ def manual_eas_export(event_id: int):
     if not event.summary_filename:
         return abort(404)
 
-    output_root = str(app.config.get('EAS_OUTPUT_DIR') or '').strip()
+    output_root = str(current_app.config.get('EAS_OUTPUT_DIR') or '').strip()
     if not output_root:
         return abort(404)
 

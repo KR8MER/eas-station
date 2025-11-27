@@ -29,7 +29,7 @@ from functools import wraps
 from typing import Any, Dict, List
 from pathlib import Path
 
-from flask import Blueprint, jsonify, render_template, request, current_app
+from flask import Blueprint, flash, jsonify, redirect, render_template, request, current_app, url_for
 from werkzeug.exceptions import BadRequest
 
 from app_core.location import get_location_settings, _derive_county_zone_codes_from_fips
@@ -723,7 +723,7 @@ ENV_CATEGORIES = {
                 'type': 'text',
                 'default': '0x3C',
                 'description': 'SSD1306 device address (hex like 0x3C or decimal).',
-                'pattern': '^(0x[0-9A-Fa-f]{2}|\d{1,3})$',
+                'pattern': r'^(0x[0-9A-Fa-f]{2}|\d{1,3})$',
                 'category': 'oled_enabled',
             },
             {

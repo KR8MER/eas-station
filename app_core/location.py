@@ -44,6 +44,7 @@ from app_utils import set_location_timezone
 from .extensions import db
 from .models import LocationSettings
 from .zones import (
+    ZoneInfo,
     forecast_zones_for_same_code,
     get_zone_lookup,
     normalise_zone_codes,
@@ -78,7 +79,7 @@ def _log_warning(message: str) -> None:
 
 def _derive_county_zone_codes_from_fips(
     fips_codes: Sequence[str],
-    zone_lookup: Optional[Dict[str, "ZoneInfo"]] = None,
+    zone_lookup: Optional[Dict[str, ZoneInfo]] = None,
 ) -> List[str]:
     derived: List[str] = []
     seen: Set[str] = set()

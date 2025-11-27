@@ -168,6 +168,8 @@ def refresh_master_lock() -> bool:
     Returns:
         True if lock was refreshed, False if lock lost
     """
+    global _is_master_worker
+
     if not _is_master_worker:
         return False
 

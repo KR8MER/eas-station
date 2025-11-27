@@ -31,7 +31,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from urllib.parse import quote
 
 import requests
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 from sqlalchemy import desc, or_, text
 from sqlalchemy.exc import OperationalError
 
@@ -58,6 +58,9 @@ from app_utils import UTC_TZ, format_bytes, get_location_timezone, local_now, ut
 
 # Create Blueprint for maintenance routes
 maintenance_bp = Blueprint('maintenance', __name__)
+
+# Repository root path for finding tools scripts
+repo_root = Path(__file__).resolve().parent.parent.parent
 
 # NOAA Weather API Configuration
 # API Documentation: https://www.weather.gov/documentation/services-web-api
@@ -180,7 +183,7 @@ def _start_background_operation(
         returncode: Optional[int] = None
         try:
             # Log operation name only, not full command (may contain sensitive data)
-            logger.info("Starting %s operation", name)
+            current_app.logger.info("Starting %s operation", name)
             completed = subprocess.run(
                 command,
                 capture_output=True,
@@ -193,15 +196,15 @@ def _start_background_operation(
             success = returncode == 0
             if success:
                 message = stdout_text.splitlines()[-1] if stdout_text else f"{description} completed successfully."
-                logger.info("%s operation finished successfully", name)
+                current_app.logger.info("%s operation finished successfully", name)
             else:
                 fallback_message = stderr_text.splitlines()[-1] if stderr_text else ""
                 if not fallback_message and stdout_text:
                     fallback_message = stdout_text.splitlines()[-1]
                 message = fallback_message or f"{description} failed with exit code {returncode}."
-                logger.error("%s operation failed with exit code %s", name, returncode)
+                current_app.logger.error("%s operation failed with exit code %s", name, returncode)
         except Exception as exc:  # pragma: no cover - defensive
-            logger.exception("%s operation failed with an unexpected error", name)
+            current_app.logger.exception("%s operation failed with an unexpected error", name)
             message = f"{description} failed: {exc}"
             stderr_text = str(exc)
         finally:
@@ -469,7 +472,7 @@ def register_maintenance_routes(app, logger):
     
     # Register the blueprint with the app
     app.register_blueprint(maintenance_bp)
-    logger.info("Maintenance routes registered")
+    current_app.logger.info("Maintenance routes registered")
 
 
 # Route definitions
@@ -496,7 +499,7 @@ def run_one_click_backup():
             "backup",
             command,
             cwd=repo_root,
-            logger=logger,
+            logger=current_app.logger,
             description="Backup",
         )
     except RuntimeError as exc:
@@ -536,7 +539,7 @@ def run_one_click_upgrade():
             "upgrade",
             command,
             cwd=repo_root,
-            logger=logger,
+            logger=current_app.logger,
             description="Upgrade",
         )
     except RuntimeError as exc:
@@ -557,10 +560,10 @@ def check_db_health():
         db.session.execute(text("SELECT 1"))
         connectivity_status = "Connected"
     except OperationalError as exc:
-        logger.error("Database connectivity check failed: %s", exc)
+        current_app.logger.error("Database connectivity check failed: %s", exc)
         return jsonify({"error": "Database connectivity check failed."}), 500
     except Exception as exc:  # pragma: no cover - defensive
-        logger.error("Unexpected error during database health check: %s", exc)
+        current_app.logger.error("Unexpected error during database health check: %s", exc)
         return (
             jsonify(
                 {
@@ -578,7 +581,7 @@ def check_db_health():
         if size_bytes is not None:
             database_size = format_bytes(size_bytes)
     except Exception as exc:  # pragma: no cover - defensive
-        logger.warning("Could not determine database size: %s", exc)
+        current_app.logger.warning("Could not determine database size: %s", exc)
 
     active_connections: Union[str, int] = "Unavailable"
     try:
@@ -591,7 +594,7 @@ def check_db_health():
         if connection_count is not None:
             active_connections = int(connection_count)
     except Exception as exc:  # pragma: no cover - defensive
-        logger.warning("Could not determine active connection count: %s", exc)
+        current_app.logger.warning("Could not determine active connection count: %s", exc)
 
     return jsonify(
         {
@@ -651,7 +654,7 @@ def optimize_database():
         db.session.add(log_entry)
         db.session.commit()
 
-        logger.info("Database optimized successfully. Space reclaimed: %s", format_bytes(space_reclaimed) if space_reclaimed > 0 else "0 bytes")
+        current_app.logger.info("Database optimized successfully. Space reclaimed: %s", format_bytes(space_reclaimed) if space_reclaimed > 0 else "0 bytes")
 
         return jsonify({
             "message": "Database optimized successfully",
@@ -661,7 +664,7 @@ def optimize_database():
         })
 
     except Exception as exc:
-        logger.error("Error optimizing database: %s", exc)
+        current_app.logger.error("Error optimizing database: %s", exc)
         db.session.rollback()
         return jsonify({"error": f"Database optimization failed: {str(exc)}"}), 500
 
@@ -697,7 +700,7 @@ def env_config():
             })
 
         except Exception as exc:
-            logger.error("Failed to read env file: %s", exc)
+            current_app.logger.error("Failed to read env file: %s", exc)
             return jsonify({"error": f"Failed to read configuration: {exc}"}), 500
 
     # POST - Update the env file
@@ -716,7 +719,7 @@ def env_config():
             backup_path = env_file_path.with_suffix(".env.backup")
             import shutil
             shutil.copy2(env_file_path, backup_path)
-            logger.info("Created backup of %s at %s", env_file_path.name, backup_path)
+            current_app.logger.info("Created backup of %s at %s", env_file_path.name, backup_path)
 
         # Write new content
         with open(env_file_path, "w") as f:
@@ -738,7 +741,7 @@ def env_config():
         db.session.add(log_entry)
         db.session.commit()
 
-        logger.warning("Environment configuration updated. Restart required for changes to take effect.")
+        current_app.logger.warning("Environment configuration updated. Restart required for changes to take effect.")
 
         return jsonify({
             "message": "Configuration updated successfully. Restart the application for changes to take effect.",
@@ -747,7 +750,7 @@ def env_config():
         })
 
     except Exception as exc:
-        logger.error("Failed to update env file: %s", exc)
+        current_app.logger.error("Failed to update env file: %s", exc)
         db.session.rollback()
         return jsonify({"error": f"Failed to update configuration: {exc}"}), 500
 
@@ -768,7 +771,7 @@ def trigger_poll():
 
         return jsonify({"message": "CAP poll triggered successfully"})
     except Exception as exc:
-        logger.error("Error triggering poll: %s", exc)
+        current_app.logger.error("Error triggering poll: %s", exc)
         return jsonify({"error": str(exc)}), 500
 
 @maintenance_bp.route("/admin/location_settings", methods=["GET", "PUT"])
@@ -796,7 +799,7 @@ def admin_location_settings():
         )
         return jsonify({"success": "Location settings updated", "settings": updated})
     except Exception as exc:
-        logger.error("Error processing location settings update: %s", exc)
+        current_app.logger.error("Error processing location settings update: %s", exc)
         return jsonify({"error": f"Failed to process location settings: {exc}"}), 500
 
 @maintenance_bp.route("/admin/location_reference", methods=["GET"])
@@ -805,7 +808,7 @@ def admin_location_reference():
         summary = describe_location_reference()
         return jsonify(summary)
     except Exception as exc:  # pragma: no cover - defensive
-        logger.error("Failed to load location reference data: %s", exc)
+        current_app.logger.error("Failed to load location reference data: %s", exc)
         return (
             jsonify(
                 {
@@ -868,7 +871,7 @@ def admin_lookup_county_fips():
         return jsonify({"counties": matching_counties})
 
     except Exception as exc:
-        logger.error("Error looking up FIPS codes: %s", exc)
+        current_app.logger.error("Error looking up FIPS codes: %s", exc)
         return jsonify({"error": f"Failed to lookup FIPS codes: {str(exc)}"}), 500
 
 @maintenance_bp.route("/admin/import_alert", methods=["POST"])
@@ -922,7 +925,7 @@ def import_specific_alert():
 
     now_utc = utc_now()
     if end_dt and end_dt > now_utc:
-        logger.info(
+        current_app.logger.info(
             "Clamping manual NOAA import end time %s to current UTC %s",
             end_dt.isoformat(),
             now_utc.isoformat(),
@@ -1007,7 +1010,7 @@ def import_specific_alert():
                     if existing.geom:
                         calculate_alert_intersections(existing)
                 except Exception as intersection_error:
-                    logger.warning(
+                    current_app.logger.warning(
                         "Intersection recalculation failed for alert %s: %s",
                         alert_identifier,
                         intersection_error,
@@ -1024,7 +1027,7 @@ def import_specific_alert():
                     if new_alert.geom:
                         calculate_alert_intersections(new_alert)
                 except Exception as intersection_error:
-                    logger.warning(
+                    current_app.logger.warning(
                         "Intersection calculation failed for new alert %s: %s",
                         alert_identifier,
                         intersection_error,
@@ -1059,7 +1062,7 @@ def import_specific_alert():
 
     except Exception as exc:
         db.session.rollback()
-        logger.error("Manual NOAA alert import failed: %s", exc)
+        current_app.logger.error("Manual NOAA alert import failed: %s", exc)
         return jsonify({"error": f"Failed to import NOAA alert data: {exc}"}), 500
 
     return jsonify(
@@ -1118,7 +1121,7 @@ def admin_list_alerts():
             }
         )
     except Exception as exc:
-        logger.error("Failed to load alerts for admin listing: %s", exc)
+        current_app.logger.error("Failed to load alerts for admin listing: %s", exc)
         return jsonify({"error": "Failed to load alerts."}), 500
 
 @maintenance_bp.route("/admin/alerts/<int:alert_id>", methods=["GET", "PATCH", "DELETE"])
@@ -1143,7 +1146,7 @@ def admin_alert_detail(alert_id: int):
                         synchronize_session=False
                     )
             except Exception as led_cleanup_error:
-                logger.warning(
+                current_app.logger.warning(
                     "Failed to clean LED messages for alert %s during deletion: %s",
                     identifier,
                     led_cleanup_error,
@@ -1173,13 +1176,13 @@ def admin_alert_detail(alert_id: int):
             db.session.add(log_entry)
             db.session.commit()
 
-            logger.info("Admin deleted alert %s (%s)", identifier, alert_id)
+            current_app.logger.info("Admin deleted alert %s (%s)", identifier, alert_id)
             return jsonify(
                 {"message": f"Alert {identifier} deleted.", "identifier": identifier}
             )
         except Exception as exc:
             db.session.rollback()
-            logger.error(
+            current_app.logger.error(
                 "Failed to delete alert %s (%s): %s", identifier, alert_id, exc
             )
             return jsonify({"error": "Failed to delete alert."}), 500
@@ -1278,7 +1281,7 @@ def admin_alert_detail(alert_id: int):
         db.session.add(log_entry)
         db.session.commit()
 
-        logger.info(
+        current_app.logger.info(
             "Admin updated alert %s fields: %s",
             alert.identifier,
             ", ".join(sorted(updates.keys())),
@@ -1293,7 +1296,7 @@ def admin_alert_detail(alert_id: int):
         )
     except Exception as exc:
         db.session.rollback()
-        logger.error(
+        current_app.logger.error(
             "Failed to update alert %s (%s): %s", alert.identifier, alert.id, exc
         )
         return jsonify({"error": "Failed to update alert."}), 500
@@ -1341,7 +1344,7 @@ def mark_expired():
 
     except Exception as exc:
         db.session.rollback()
-        logger.error("Error marking expired alerts: %s", exc)
+        current_app.logger.error("Error marking expired alerts: %s", exc)
         return jsonify({"error": str(exc)}), 500
 
 
