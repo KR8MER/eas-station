@@ -44,4 +44,7 @@ def get_radio_manager():
         radio_manager.attach_app(app)
     return radio_manager
 
-__all__ = ["db", "get_radio_manager"]
+# Import get_redis_client for backward compatibility
+from app_core.redis_client import get_redis_client
+
+__all__ = ["db", "get_radio_manager", "get_redis_client"]
