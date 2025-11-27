@@ -89,6 +89,23 @@ def _log_radio_event(
         )
 
 
+def _make_offline_status(last_error: str, **flags) -> Dict[str, Any]:
+    """Create a status dict for offline/unavailable receiver states."""
+    status = {
+        "reported_at": None,
+        "locked": False,
+        "signal_strength": None,
+        "last_error": last_error,
+        "capture_mode": None,
+        "capture_path": None,
+        "samples_available": False,
+        "sample_count": 0,
+        "running": False,
+    }
+    status.update(flags)
+    return status
+
+
 def _receiver_to_dict(receiver: RadioReceiver) -> Dict[str, Any]:
     # Try to get latest status, but handle DetachedInstanceError gracefully
     # This can happen if the receiver object is not bound to a session
@@ -149,33 +166,16 @@ def _receiver_to_dict(receiver: RadioReceiver) -> Dict[str, Any]:
         }
     elif radio_manager_found:
         # Redis has radio_manager metrics but this receiver isn't loaded yet
-        # Provide a placeholder status indicating it's not loaded
-        status_data = {
-            "reported_at": None,
-            "locked": False,
-            "signal_strength": None,
-            "last_error": "Receiver not loaded in audio service",
-            "capture_mode": None,
-            "capture_path": None,
-            "samples_available": False,
-            "sample_count": 0,
-            "running": False,
-            "not_loaded": True,
-        }
+        status_data = _make_offline_status(
+            "Receiver not loaded in audio service",
+            not_loaded=True
+        )
     elif redis_available:
         # Redis is available but no radio_manager metrics yet (audio-service may not be running)
-        status_data = {
-            "reported_at": None,
-            "locked": False,
-            "signal_strength": None,
-            "last_error": "Audio service not publishing metrics",
-            "capture_mode": None,
-            "capture_path": None,
-            "samples_available": False,
-            "sample_count": 0,
-            "running": False,
-            "service_unavailable": True,
-        }
+        status_data = _make_offline_status(
+            "Audio service not publishing metrics",
+            service_unavailable=True
+        )
     else:
         status_data = None
 

@@ -641,24 +641,26 @@
         return `sdr-${slug || 'receiver'}`;
     }
 
+    function makeStatusBadgeHtml(badgeClass, label, title, guidance) {
+        let html = `<span class="badge ${badgeClass}" title="${escapeHtml(title)}">${escapeHtml(label)}</span>`;
+        if (guidance) {
+            html += `<div class="small text-muted mt-1">${escapeHtml(guidance)}</div>`;
+        }
+        return html;
+    }
+
     function renderStatusBadge(status) {
         if (!status) {
-            return '<span class="badge bg-secondary" title="Status unavailable - check audio service">Offline</span>';
+            return makeStatusBadgeHtml('bg-secondary', 'Offline', 'Status unavailable - check audio service', null);
         }
 
         // Handle special status states from backend
         if (status.service_unavailable) {
-            return `
-                <span class="badge bg-secondary" title="Audio service not publishing metrics">Service Offline</span>
-                <div class="small text-muted mt-1">Check audio-service container</div>
-            `;
+            return makeStatusBadgeHtml('bg-secondary', 'Service Offline', 'Audio service not publishing metrics', 'Check audio-service container');
         }
 
         if (status.not_loaded) {
-            return `
-                <span class="badge bg-info text-dark" title="Receiver configured but not loaded in audio service">Not Loaded</span>
-                <div class="small text-muted mt-1">Restart audio-service to load</div>
-            `;
+            return makeStatusBadgeHtml('bg-info text-dark', 'Not Loaded', 'Receiver configured but not loaded in audio service', 'Restart audio-service to load');
         }
 
         // Check if receiver is running
