@@ -530,7 +530,8 @@
     const summaryLocked = document.getElementById('summaryLocked');
 
     const CRUD_ENDPOINT = '/api/radio/receivers';
-    const MONITORING_ENDPOINT = '/api/monitoring/radio';
+    const DIAGNOSTICS_ENDPOINT = "/api/radio/diagnostics/status";
+    const MONITORING_ENDPOINT = DIAGNOSTICS_ENDPOINT;  // Use diagnostics for live status
     const AUTO_REFRESH_INTERVAL_MS = 15000;
     const openMonitorIds = new Set();
     const monitorLoaders = new Map();
@@ -2012,7 +2013,52 @@
 
     // Old frequency conversion code removed - now handled by service-based validation
 
-    async function loadReceivers(endpoint = CRUD_ENDPOINT) {
+    async function loadReceiversFromDiagnostics() {
+        // Fetch live status from diagnostics API (sdr-service via Redis)
+        const response = await fetch(DIAGNOSTICS_ENDPOINT);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        const diagnostics = await response.json();
+        
+        // Get database receivers for configuration
+        const dbResponse = await fetch(CRUD_ENDPOINT);
+        if (!dbResponse.ok) {
+            throw new Error(`HTTP ${dbResponse.status}`);
+        }
+        const dbResult = await dbResponse.json();
+        const dbReceivers = Array.isArray(dbResult.receivers) ? dbResult.receivers : [];
+        
+        // Merge database config with live status from RadioManager
+        const liveReceivers = diagnostics.radio_manager?.receivers || {};
+        
+        return dbReceivers.map(dbReceiver => {
+            const liveStatus = liveReceivers[dbReceiver.identifier];
+            
+            if (liveStatus) {
+                // Merge live status with database config
+                return {
+                    ...dbReceiver,
+                    latest_status: {
+                        reported_at: liveStatus.reported_at,
+                        locked: liveStatus.locked || false,
+                        signal_strength: liveStatus.signal_strength,
+                        last_error: liveStatus.last_error,
+                        capture_mode: null,
+                        capture_path: null,
+                    }
+                };
+            }
+            
+            // No live status, return database config with offline status
+            return dbReceiver;
+        });
+    }
+
+    async function loadReceivers(endpoint = CRUD_ENDPOINT, useDiagnostics = false) {
+        if (useDiagnostics || endpoint === DIAGNOSTICS_ENDPOINT) {
+            return await loadReceiversFromDiagnostics();
+        }
         const response = await fetch(endpoint);
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);
@@ -2038,7 +2084,7 @@
             if (showSpinner) {
                 toggleRefreshButton(true);
             }
-            const data = await loadReceivers(endpoint);
+            const data = await loadReceivers(endpoint, endpoint === MONITORING_ENDPOINT);
             receivers = data;
             renderReceivers();
             setLastUpdated(deriveLatestStatusTimestamp() || new Date());
