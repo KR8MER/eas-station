@@ -47,6 +47,10 @@ from app_core.redis_client import get_redis_client, redis_operation
 
 logger = logging.getLogger(__name__)
 
+# Redis connection settings (for logging purposes)
+REDIS_HOST = os.getenv("REDIS_HOST", "redis")
+REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+
 # Channel names
 AUDIO_COMMAND_CHANNEL = 'eas:audio:commands'
 AUDIO_RESPONSE_CHANNEL = 'eas:audio:responses'
@@ -257,8 +261,41 @@ class AudioCommandSubscriber:
 
             elif command == 'source_add':
                 config = params['config']
-                self.audio_controller.add_source(**config)
-                return {'success': True, 'message': 'Source added'}
+                source_name = config.get('name')
+                
+                # Import required modules
+                from app_core.audio.ingest import AudioSourceConfig, AudioSourceType
+                from app_core.audio.sources import create_audio_source
+                
+                # Create runtime configuration
+                source_type = AudioSourceType(config.get('source_type', 'sdr'))
+                runtime_config = AudioSourceConfig(
+                    source_type=source_type,
+                    name=source_name,
+                    enabled=config.get('enabled', True),
+                    priority=config.get('priority', 10),
+                    sample_rate=config.get('sample_rate', 44100),
+                    channels=config.get('channels', 1),
+                    buffer_size=config.get('buffer_size', 4096),
+                    silence_threshold_db=config.get('silence_threshold_db', -60.0),
+                    silence_duration_seconds=config.get('silence_duration_seconds', 5.0),
+                    device_params=config.get('device_params', {}),
+                )
+                
+                # Remove existing source if it exists
+                if source_name in self.audio_controller._sources:
+                    if self.auto_streaming_service:
+                        try:
+                            self.auto_streaming_service.remove_source(source_name)
+                        except Exception as e:
+                            logger.debug(f"Error removing {source_name} from Icecast: {e}")
+                    self.audio_controller.remove_source(source_name)
+                
+                # Create adapter and add to controller
+                adapter = create_audio_source(runtime_config)
+                self.audio_controller.add_source(adapter)
+                logger.info(f"Added audio source {source_name} via Redis command")
+                return {'success': True, 'message': f'Source {source_name} added'}
 
             elif command == 'source_update':
                 source_name = params['source_name']
