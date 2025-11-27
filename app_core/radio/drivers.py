@@ -530,12 +530,21 @@ class _SoapySDRReceiver(ReceiverInterface):
             # AirSpy and other SDRs benefit from larger buffer sizes to prevent
             # USB transfer overhead and stream errors
             # SoapySDR setupStream signature: setupStream(direction, format, [channels], args={})
+            # Note: Some drivers need bufflen as string, others as int - use string for compatibility
             stream_mtu = 16384  # Samples per USB transfer (optimized for AirSpy)
+            stream_args = {}
+
+            # Try setting buffer length if supported by the driver
+            # AirSpy: uses internal buffering, bufflen may not be supported
+            # RTL-SDR: supports bufflen parameter
+            if self.driver_hint == "rtlsdr":
+                stream_args["bufflen"] = str(stream_mtu)
+
             stream = device.setupStream(
                 SoapySDR.SOAPY_SDR_RX,
                 SoapySDR.SOAPY_SDR_CF32,
                 [channel],  # channels list
-                {"bufflen": str(stream_mtu)}  # args dict (bufflen as string)
+                stream_args  # driver-specific stream args
             )
             device.activateStream(stream)
         except Exception as exc:
