@@ -270,13 +270,21 @@ def initialize_audio_controller(app):
         logger.info(f"Loaded {len(_audio_controller._sources)} audio source configurations")
 
         # Start auto-start sources
-        for db_config in saved_configs:
-            if db_config.enabled and db_config.auto_start:
+        auto_start_sources = [db_config for db_config in saved_configs if db_config.enabled and db_config.auto_start]
+        if auto_start_sources:
+            logger.info(f"Auto-starting {len(auto_start_sources)} enabled source(s)...")
+            for db_config in auto_start_sources:
                 try:
-                    logger.info(f"Auto-starting source: {db_config.name}")
-                    _audio_controller.start_source(db_config.name)
+                    logger.info(f"Auto-starting source: '{db_config.name}' (type: {db_config.source_type})")
+                    result = _audio_controller.start_source(db_config.name)
+                    if result:
+                        logger.info(f"✅ Successfully started '{db_config.name}'")
+                    else:
+                        logger.warning(f"⚠️ Failed to start '{db_config.name}' (start returned False)")
                 except Exception as e:
-                    logger.error(f"Error auto-starting '{db_config.name}': {e}")
+                    logger.error(f"❌ Exception auto-starting '{db_config.name}': {e}", exc_info=True)
+        else:
+            logger.info("No sources configured for auto-start")
 
         logger.info("✅ Audio controller initialized")
         return _audio_controller
@@ -883,12 +891,14 @@ def main():
         app = initialize_database()
 
         # Initialize radio receivers (SoapySDR)
-        logger.info("Initializing radio receivers...")
+        logger.info("Initializing radio receivers (SDR hardware)...")
         try:
             initialize_radio_receivers(app)
+            logger.info("✅ Radio receivers initialized successfully")
         except Exception as e:
-            logger.warning(f"Failed to initialize radio receivers: {e}")
-            # Continue - audio sources might still work
+            logger.error(f"❌ Failed to initialize radio receivers: {e}", exc_info=True)
+            logger.warning("⚠️ Continuing without radio receivers - SDR audio sources will not work!")
+            # Continue - other audio sources (streams, files) might still work
 
         # Initialize audio controller
         logger.info("Initializing audio controller...")
@@ -907,20 +917,33 @@ def main():
         if auto_streaming and audio_controller:
             from app_core.audio.ingest import AudioSourceStatus
 
-            logger.info("Adding running audio sources to Icecast streaming...")
+            logger.info("Checking audio sources for Icecast streaming...")
+
+            # Log status of all sources for diagnostics
+            total_sources = len(audio_controller._sources)
+            logger.info(f"Total configured sources: {total_sources}")
+
             for source_name, source_adapter in audio_controller._sources.items():
+                status_str = source_adapter.status.name if hasattr(source_adapter.status, 'name') else str(source_adapter.status)
+                logger.info(f"Source '{source_name}' status: {status_str}")
+
+                if source_adapter.status == AudioSourceStatus.ERROR:
+                    error_msg = source_adapter.error_message or "Unknown error"
+                    logger.error(f"❌ Source '{source_name}' failed to start: {error_msg}")
+                    continue
+
                 # Only add sources that are actually running
                 if source_adapter.status != AudioSourceStatus.RUNNING:
-                    logger.debug(f"Skipping {source_name} - not running (status: {source_adapter.status})")
+                    logger.warning(f"⚠️ Skipping '{source_name}' - not running (status: {status_str})")
                     continue
 
                 try:
                     if auto_streaming.add_source(source_name, source_adapter):
-                        logger.info(f"✅ Added running source {source_name} to Icecast streaming")
+                        logger.info(f"✅ Added source '{source_name}' to Icecast streaming")
                     else:
-                        logger.warning(f"Failed to add {source_name} to Icecast streaming")
+                        logger.warning(f"⚠️ Failed to add '{source_name}' to Icecast streaming")
                 except Exception as e:
-                    logger.error(f"Error adding {source_name} to Icecast: {e}", exc_info=True)
+                    logger.error(f"❌ Error adding '{source_name}' to Icecast: {e}", exc_info=True)
 
         # Initialize EAS monitor
         logger.info("Initializing EAS monitor...")
