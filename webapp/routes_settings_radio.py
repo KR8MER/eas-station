@@ -19,6 +19,7 @@ Repository: https://github.com/KR8MER/eas-station
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from typing import Any, Dict, List, Optional, Tuple
@@ -89,7 +90,6 @@ def _log_radio_event(
 
 
 def _receiver_to_dict(receiver: RadioReceiver) -> Dict[str, Any]:
-    import json as json_module
     # Try to get latest status, but handle DetachedInstanceError gracefully
     # This can happen if the receiver object is not bound to a session
     try:
@@ -110,7 +110,7 @@ def _receiver_to_dict(receiver: RadioReceiver) -> Dict[str, Any]:
         if radio_manager_raw:
             if isinstance(radio_manager_raw, bytes):
                 radio_manager_raw = radio_manager_raw.decode('utf-8')
-            radio_manager_data = json_module.loads(radio_manager_raw)
+            radio_manager_data = json.loads(radio_manager_raw)
 
             # Find this receiver's status in the Redis data
             receivers_data = radio_manager_data.get("receivers", {})
@@ -1119,7 +1119,6 @@ def register(app: Flask, logger) -> None:
         In the separated Docker architecture, spectrum data is published to Redis
         by the sdr-service container and read here.
         """
-        import json as json_module
         try:
             # Look up receiver by ID or identifier
             if identifier:
@@ -1147,7 +1146,7 @@ def register(app: Flask, logger) -> None:
                     try:
                         if isinstance(spectrum_raw, bytes):
                             spectrum_raw = spectrum_raw.decode('utf-8')
-                        spectrum_payload = json_module.loads(spectrum_raw)
+                        spectrum_payload = json.loads(spectrum_raw)
 
                         # Return spectrum data from Redis
                         return jsonify({
@@ -1163,7 +1162,7 @@ def register(app: Flask, logger) -> None:
                             "timestamp": spectrum_payload.get('timestamp', time.time()),
                             "source": "redis"  # Indicate data came from sdr-service via Redis
                         })
-                    except (json_module.JSONDecodeError, KeyError) as e:
+                    except (json.JSONDecodeError, KeyError) as e:
                         route_logger.debug(f"Error parsing spectrum from Redis: {e}")
 
             except Exception as redis_exc:

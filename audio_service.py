@@ -58,6 +58,9 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+# Constants for spectrum computation
+FFT_MIN_MAGNITUDE = 1e-10  # Minimum magnitude to avoid log(0) in dB conversion
+
 # Load environment variables from persistent config volume
 # This must happen before initializing audio sources
 _config_path = os.environ.get('CONFIG_PATH')
@@ -620,7 +623,7 @@ def publish_metrics_to_redis(metrics):
                                     
                                     # Convert to magnitude (dB)
                                     magnitude = np.abs(fft_result)
-                                    magnitude = np.where(magnitude > 0, magnitude, 1e-10)
+                                    magnitude = np.where(magnitude > 0, magnitude, FFT_MIN_MAGNITUDE)
                                     magnitude_db = 20 * np.log10(magnitude)
                                     
                                     # Normalize to 0-1 range for display
