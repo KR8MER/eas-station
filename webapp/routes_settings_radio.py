@@ -22,13 +22,14 @@ from __future__ import annotations
 import json
 import logging
 import time
+import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
 from flask import Flask, jsonify, render_template, request
 from sqlalchemy.exc import SQLAlchemyError
 
 from app_core.cache import cache
-from app_core.extensions import db, get_radio_manager
+from app_core.extensions import db, get_radio_manager, get_redis_client
 from app_core.location import get_location_settings
 from app_core.models import RadioReceiver
 from app_core.radio import (
@@ -720,32 +721,80 @@ def register(app: Flask, logger) -> None:
 
     @app.route("/api/radio/receivers/<int:receiver_id>/restart", methods=["POST"])
     def api_restart_receiver(receiver_id: int) -> Any:
-        """Restart a receiver to recover from errors."""
+        """Restart a receiver to recover from errors.
+
+        This sends a restart command via Redis to sdr-service container,
+        which has direct access to RadioManager and SDR hardware.
+        """
         ensure_radio_tables(route_logger)
         receiver_record = RadioReceiver.query.get_or_404(receiver_id)
 
-        radio_manager = get_radio_manager()
-
-        # Get the receiver instance from RadioManager
-        receiver_instance = radio_manager.get_receiver(receiver_record.identifier)
-
-        if not receiver_instance:
-            return jsonify({
-                "error": f"Receiver '{receiver_record.identifier}' not loaded in RadioManager",
-                "hint": "Try restarting the web application to reload receivers"
-            }), 404
-
         try:
-            # Stop the receiver
-            route_logger.info("Stopping receiver %s for restart", receiver_record.identifier)
-            receiver_instance.stop()
+            # Generate unique command ID for tracking
+            command_id = str(uuid.uuid4())
 
-            # Start it again
-            route_logger.info("Starting receiver %s", receiver_record.identifier)
-            receiver_instance.start()
+            # Get Redis client
+            redis_client = get_redis_client()
 
-            # Get updated status
-            status = receiver_instance.get_status()
+            # Send restart command to sdr-service
+            command = {
+                "action": "restart",
+                "receiver_id": receiver_record.identifier,
+                "command_id": command_id,
+            }
+
+            route_logger.info(
+                "Sending restart command to sdr-service for receiver %s (command_id=%s)",
+                receiver_record.identifier,
+                command_id
+            )
+
+            redis_client.rpush("sdr:commands", json.dumps(command))
+
+            # Wait for result (with timeout)
+            timeout = 10  # seconds
+            start_time = time.time()
+            result = None
+
+            while time.time() - start_time < timeout:
+                result_json = redis_client.get(f"sdr:command_result:{command_id}")
+                if result_json:
+                    result = json.loads(result_json)
+                    break
+                time.sleep(0.2)  # Poll every 200ms
+
+            if not result:
+                route_logger.error(
+                    "Timeout waiting for restart command result (command_id=%s)",
+                    command_id
+                )
+                return jsonify({
+                    "error": "Timeout waiting for sdr-service to process restart command",
+                    "hint": "Check if sdr-service container is running: docker-compose logs sdr-service"
+                }), 504
+
+            if not result.get("success"):
+                error_msg = result.get("error", "Unknown error")
+                route_logger.error(
+                    "Failed to restart receiver %s: %s",
+                    receiver_record.identifier,
+                    error_msg
+                )
+                _log_radio_event(
+                    "ERROR",
+                    f"Failed to restart receiver {receiver_record.identifier}: {error_msg}",
+                    module_suffix="actions",
+                    details={
+                        "identifier": receiver_record.identifier,
+                        "error": error_msg,
+                    },
+                )
+                return jsonify({
+                    "error": f"Failed to restart receiver: {error_msg}"
+                }), 500
+
+            # Success!
+            receiver_status = result.get("status", {})
 
             _log_radio_event(
                 "INFO",
@@ -753,23 +802,24 @@ def register(app: Flask, logger) -> None:
                 module_suffix="actions",
                 details={
                     "identifier": receiver_record.identifier,
-                    "locked": status.locked,
-                    "signal_strength": status.signal_strength,
-                    "last_error": status.last_error,
+                    "locked": receiver_status.get("locked"),
+                    "signal_strength": receiver_status.get("signal_strength"),
                 },
             )
 
             return jsonify({
                 "success": True,
                 "message": f"Receiver '{receiver_record.display_name}' restarted successfully",
-                "status": {
-                    "locked": status.locked,
-                    "signal_strength": status.signal_strength,
-                    "last_error": status.last_error
-                }
+                "status": receiver_status
             })
+
         except Exception as exc:
-            route_logger.error("Failed to restart receiver %s: %s", receiver_record.identifier, exc, exc_info=True)
+            route_logger.error(
+                "Failed to send restart command for receiver %s: %s",
+                receiver_record.identifier,
+                exc,
+                exc_info=True
+            )
             _log_radio_event(
                 "ERROR",
                 f"Failed to restart receiver {receiver_record.identifier}: {exc}",
@@ -1232,86 +1282,136 @@ def register(app: Flask, logger) -> None:
             except Exception as redis_exc:
                 route_logger.debug(f"Could not read spectrum from Redis: {redis_exc}")
 
-            # Fallback: Try local RadioManager (only works if SDR is in same container)
+            # Fallback: Request spectrum from sdr-service via Redis command queue
             try:
                 import numpy as np
             except ImportError:
                 route_logger.error("NumPy not available for spectrum generation")
                 return jsonify({
                     "error": "Spectrum data not available",
-                    "hint": "SDR receiver runs in sdr-service container. Check if sdr-service is running."
+                    "hint": "NumPy is required for spectrum generation"
                 }), 503
 
-            # Get the radio manager and receiver
-            radio_manager = get_radio_manager()
-            receiver_instance = radio_manager.get_receiver(receiver_identifier)
+            try:
+                # Generate unique command ID
+                command_id = str(uuid.uuid4())
 
-            if not receiver_instance:
+                # Get Redis client (reuse if already retrieved)
+                if 'redis_client' not in locals():
+                    redis_client = get_redis_client()
+
+                # Send get_spectrum command to sdr-service
+                command = {
+                    "action": "get_spectrum",
+                    "receiver_id": receiver_identifier,
+                    "command_id": command_id,
+                    "num_samples": 2048,
+                }
+
                 route_logger.debug(
-                    "Receiver instance not found in local RadioManager for identifier=%s. "
-                    "In separated architecture, spectrum data should come from Redis.",
+                    "Requesting spectrum from sdr-service for receiver %s (command_id=%s)",
                     receiver_identifier,
+                    command_id
+                )
+
+                redis_client.rpush("sdr:commands", json.dumps(command))
+
+                # Wait for result (with timeout)
+                timeout = 5  # seconds
+                start_time = time.time()
+                result = None
+
+                while time.time() - start_time < timeout:
+                    result_json = redis_client.get(f"sdr:command_result:{command_id}")
+                    if result_json:
+                        result = json.loads(result_json)
+                        break
+                    time.sleep(0.1)  # Poll every 100ms
+
+                if not result:
+                    route_logger.warning(
+                        "Timeout waiting for spectrum data from sdr-service (command_id=%s)",
+                        command_id
+                    )
+                    return jsonify({
+                        "error": "Timeout waiting for sdr-service",
+                        "hint": "Check if sdr-service container is running: docker-compose logs sdr-service"
+                    }), 504
+
+                if not result.get("success"):
+                    error_msg = result.get("error", "Unknown error")
+                    route_logger.debug(
+                        "Failed to get spectrum for receiver %s: %s",
+                        receiver_identifier,
+                        error_msg
+                    )
+                    return jsonify({
+                        "error": "Spectrum data not available",
+                        "hint": error_msg
+                    }), 503
+
+                # Extract IQ samples from result
+                samples_list = result.get("samples", [])
+                if not samples_list:
+                    return jsonify({
+                        "error": "No samples available",
+                        "hint": "Receiver may be starting up or not locked to signal"
+                    }), 503
+
+                # Convert [real, imag] pairs to complex numpy array
+                iq_samples = np.array([complex(s[0], s[1]) for s in samples_list])
+
+                # Compute FFT
+                fft_size = min(len(iq_samples), 2048)
+                window = np.hanning(fft_size)
+                windowed = iq_samples[:fft_size] * window
+                fft_result = np.fft.fftshift(np.fft.fft(windowed))
+
+                # Convert to magnitude (dB)
+                magnitude = np.abs(fft_result)
+                magnitude = np.where(magnitude > 0, magnitude, 1e-10)  # Avoid log(0)
+                magnitude_db = 20 * np.log10(magnitude)
+
+                # Normalize to 0-1 range for display
+                min_db = magnitude_db.min()
+                max_db = magnitude_db.max()
+                if max_db > min_db:
+                    normalized = (magnitude_db - min_db) / (max_db - min_db)
+                else:
+                    normalized = np.zeros_like(magnitude_db)
+
+                # Convert to list for JSON
+                spectrum_data = normalized.tolist()
+
+                # Calculate frequency bins
+                sample_rate = receiver.sample_rate if receiver.sample_rate else 2400000
+                freq_min = receiver.frequency_hz - (sample_rate / 2)
+                freq_max = receiver.frequency_hz + (sample_rate / 2)
+
+                return jsonify({
+                    "receiver_id": receiver.id,
+                    "identifier": receiver_identifier,
+                    "display_name": receiver.display_name,
+                    "sample_rate": sample_rate,
+                    "center_frequency": receiver.frequency_hz,
+                    "freq_min": freq_min,
+                    "freq_max": freq_max,
+                    "fft_size": fft_size,
+                    "spectrum": spectrum_data,
+                    "timestamp": time.time(),
+                    "source": "sdr-service"  # Indicate data came from sdr-service container
+                })
+
+            except Exception as command_exc:
+                route_logger.error(
+                    "Failed to get spectrum via command queue: %s",
+                    command_exc,
+                    exc_info=True
                 )
                 return jsonify({
-                    "error": "Spectrum data not available",
-                    "hint": "In Docker, the SDR runs in sdr-service container. Check container logs: docker-compose logs sdr-service"
+                    "error": "Failed to get spectrum data",
+                    "hint": "Check sdr-service container logs: docker-compose logs sdr-service"
                 }), 503
-
-            # Get recent IQ samples
-            iq_samples = receiver_instance.get_samples(num_samples=2048)
-
-            if iq_samples is None or len(iq_samples) == 0:
-                route_logger.warning(
-                    "No samples available from receiver %s (id=%s). Status: %s",
-                    receiver_identifier,
-                    receiver_id,
-                    receiver_instance.get_status()
-                )
-                return jsonify({
-                    "error": "No samples available",
-                    "hint": "Receiver may be starting up or not locked to signal"
-                }), 503
-
-            # Compute FFT
-            fft_size = min(len(iq_samples), 2048)
-            window = np.hanning(fft_size)
-            windowed = iq_samples[:fft_size] * window
-            fft_result = np.fft.fftshift(np.fft.fft(windowed))
-
-            # Convert to magnitude (dB)
-            magnitude = np.abs(fft_result)
-            magnitude = np.where(magnitude > 0, magnitude, 1e-10)  # Avoid log(0)
-            magnitude_db = 20 * np.log10(magnitude)
-
-            # Normalize to 0-1 range for display
-            min_db = magnitude_db.min()
-            max_db = magnitude_db.max()
-            if max_db > min_db:
-                normalized = (magnitude_db - min_db) / (max_db - min_db)
-            else:
-                normalized = np.zeros_like(magnitude_db)
-
-            # Convert to list for JSON
-            spectrum_data = normalized.tolist()
-
-            # Calculate frequency bins
-            sample_rate = receiver.sample_rate if receiver.sample_rate else 2400000
-            freq_min = receiver.frequency_hz - (sample_rate / 2)
-            freq_max = receiver.frequency_hz + (sample_rate / 2)
-
-            return jsonify({
-                "receiver_id": receiver.id,
-                "identifier": receiver_identifier,
-                "display_name": receiver.display_name,
-                "sample_rate": sample_rate,
-                "center_frequency": receiver.frequency_hz,
-                "freq_min": freq_min,
-                "freq_max": freq_max,
-                "fft_size": fft_size,
-                "spectrum": spectrum_data,
-                "timestamp": time.time(),
-                "source": "local"  # Indicate data came from local RadioManager
-            })
 
         except Exception as exc:
             route_logger.error("Failed to get spectrum data for receiver %s: %s", receiver_id, exc)
@@ -1445,40 +1545,40 @@ def register(app: Flask, logger) -> None:
             enabled_receivers = [r for r in receivers_db if r.enabled]
             auto_start_receivers = [r for r in enabled_receivers if r.auto_start]
 
-            # In separated architecture, RadioManager runs in audio-service container
-            # Try to read metrics from Redis first (published by audio_service.py)
+            # In separated architecture, RadioManager runs in sdr-service container
+            # Read metrics from Redis (published by audio_service.py every 5 seconds)
             available_drivers = []
             loaded_receivers = {}
-            redis_metrics = None
-            redis_radio_manager = None
-            
+
             try:
                 from app_core.redis_client import get_redis_client
                 import json
-                
+
                 redis_client = get_redis_client()
+
+                # Read from eas:metrics hash (published by audio_service.py)
                 raw_metrics = redis_client.hgetall("eas:metrics")
-                
+
                 if raw_metrics:
-                    # Parse radio_manager metrics from Redis
+                    # Parse radio_manager metrics from Redis hash
                     radio_manager_raw = raw_metrics.get(b"radio_manager") or raw_metrics.get("radio_manager")
                     if radio_manager_raw:
                         if isinstance(radio_manager_raw, bytes):
                             radio_manager_raw = radio_manager_raw.decode('utf-8')
-                        redis_radio_manager = json.loads(radio_manager_raw)
-                        
-                        if redis_radio_manager:
-                            available_drivers = redis_radio_manager.get("available_drivers", [])
-                            
-                            # Convert Redis receivers to the expected format
-                            for identifier, receiver_data in redis_radio_manager.get("receivers", {}).items():
+                        radio_manager_metrics = json.loads(radio_manager_raw)
+
+                        if radio_manager_metrics:
+                            available_drivers = radio_manager_metrics.get("available_drivers", [])
+
+                            # Convert audio-service metrics to expected format
+                            for identifier, receiver_data in radio_manager_metrics.get("receivers", {}).items():
                                 # Decode error message if present
                                 error_info = _decode_soapysdr_error(receiver_data.get("last_error")) if receiver_data.get("last_error") else None
-                                
+
                                 # Look up receiver ID from database
                                 receiver_db = RadioReceiver.query.filter_by(identifier=identifier).first()
                                 receiver_id = receiver_db.id if receiver_db else None
-                                
+
                                 loaded_receivers[identifier] = {
                                     "identifier": identifier,
                                     "receiver_id": receiver_id,
@@ -1492,63 +1592,21 @@ def register(app: Flask, logger) -> None:
                                     "sample_count": receiver_data.get("sample_count", 0),
                                     "config": receiver_data.get("config", {})
                                 }
-                            
+
                             route_logger.debug("Loaded radio manager metrics from Redis: %d receivers", len(loaded_receivers))
-                    
+                else:
+                    route_logger.debug("No metrics found in Redis (key: eas:metrics)")
+
             except Exception as redis_exc:
-                route_logger.debug("Could not read radio metrics from Redis: %s", redis_exc)
-            
-            # Fallback: Try local RadioManager if Redis didn't have data
-            if not loaded_receivers:
+                route_logger.warning("Could not read metrics from Redis: %s", redis_exc)
+
+            # Get available drivers from database receiver records as fallback
+            # (In separated architecture, we can't query RadioManager directly)
+            if not available_drivers:
                 try:
-                    radio_manager = get_radio_manager()
-                    if not available_drivers:
-                        available_drivers = list(radio_manager.available_drivers().keys())
-                    
-                    # Get loaded receiver instances (only if radio_manager has receivers)
-                    if hasattr(radio_manager, '_receivers') and radio_manager._receivers:
-                        for identifier, receiver_instance in radio_manager._receivers.items():
-                            status = receiver_instance.get_status()
-
-                            # Decode error message if present
-                            error_info = _decode_soapysdr_error(status.last_error) if status.last_error else None
-
-                            # Test sample buffer
-                            samples_available = False
-                            sample_count = 0
-                            if hasattr(receiver_instance, 'get_samples'):
-                                try:
-                                    samples = receiver_instance.get_samples(num_samples=100)
-                                    if samples is not None:
-                                        samples_available = True
-                                        sample_count = len(samples)
-                                except Exception as e:
-                                    route_logger.debug(f"Error getting samples from {identifier}: {e}")
-
-                            # Look up receiver ID from database
-                            receiver_db = RadioReceiver.query.filter_by(identifier=identifier).first()
-                            receiver_id = receiver_db.id if receiver_db else None
-
-                            loaded_receivers[identifier] = {
-                                "identifier": identifier,
-                                "receiver_id": receiver_id,
-                                "running": receiver_instance._running.is_set() if hasattr(receiver_instance, '_running') else False,
-                                "locked": status.locked,
-                                "signal_strength": status.signal_strength,
-                                "last_error": status.last_error,
-                                "error_decoded": error_info,
-                                "reported_at": status.reported_at.isoformat() if status.reported_at else None,
-                                "samples_available": samples_available,
-                                "sample_count": sample_count,
-                                "config": {
-                                    "frequency_hz": receiver_instance.config.frequency_hz,
-                                    "sample_rate": receiver_instance.config.sample_rate,
-                                    "driver": receiver_instance.config.driver,
-                                    "modulation_type": receiver_instance.config.modulation_type,
-                                } if hasattr(receiver_instance, 'config') else {}
-                            }
-                except Exception as exc:
-                    route_logger.debug("RadioManager not available locally: %s", exc)
+                    available_drivers = list(set(r.driver for r in receivers_db if r.driver))
+                except Exception:
+                    available_drivers = []
 
             # Calculate summary statistics
             running_count = sum(1 for r in loaded_receivers.values() if r['running'])
