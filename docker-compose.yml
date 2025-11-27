@@ -112,6 +112,14 @@ services:
     cap_add:
       - SYS_RAWIO    # Direct I/O access to hardware devices
       - SYS_ADMIN    # USB device operations
+    # USB device streaming requires locked memory for DMA buffers
+    # Without this, USB reads fail with SOAPY_SDR_STREAM_ERROR (-4)
+    ulimits:
+      memlock:
+        soft: -1  # Unlimited locked memory for USB DMA
+        hard: -1
+    # Shared memory for USB buffers and IPC
+    shm_size: '256mb'
     security_opt:
       - no-new-privileges:true
     depends_on:
