@@ -179,9 +179,21 @@ def check_health_endpoint() -> Dict[str, List[str]]:
     
     try:
         import requests
-        
+
         # Check health endpoint
-        response = requests.get("http://localhost/health/dependencies", timeout=10)
+        # In containerized environment, access via nginx container or direct app container
+        # If running in app container, nginx is at 'nginx' hostname
+        # If running elsewhere, use localhost
+        health_url = os.getenv("HEALTH_CHECK_URL", "http://nginx/health/dependencies")
+        if health_url.startswith("http://localhost"):
+            # Also try nginx container name for Docker deployments
+            try:
+                response = requests.get("http://nginx/health/dependencies", timeout=10)
+            except Exception:
+                # Fall back to localhost if nginx container not accessible
+                response = requests.get("http://localhost/health/dependencies", timeout=10)
+        else:
+            response = requests.get(health_url, timeout=10)
         
         if response.status_code == 200:
             data = response.json()

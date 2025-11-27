@@ -268,10 +268,10 @@ sudo systemctl restart eas-station</code></pre>
 
         // Generate signal bars HTML
         // Bars increase in height from left to right: 6px, 10px, 14px, 18px
-        // Fill from right to left (tallest first) like cell phone signal bars
+        // Fill from left to right (smallest first) like cell phone signal bars
         const barsHtml = Array.from({length: 4}, (_, i) => {
             const height = 6 + (i * 4); // 6, 10, 14, 18 pixels
-            const active = i >= (4 - bars); // Fill rightmost (tallest) bars first
+            const active = i < bars; // Fill leftmost (shortest) bars first
             return `<div style="display:inline-block; width:3px; height:${height}px; margin:0 1px; background:${active ? '#28a745' : '#dee2e6'}; border-radius:1px; vertical-align:bottom;"></div>`;
         }).join('');
 
