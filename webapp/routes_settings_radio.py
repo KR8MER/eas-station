@@ -1549,6 +1549,7 @@ def register(app: Flask, logger) -> None:
             # Read metrics from Redis (published by audio_service.py every 5 seconds)
             available_drivers = []
             loaded_receivers = {}
+            redis_radio_manager = None
 
             try:
                 from app_core.redis_client import get_redis_client
@@ -1566,6 +1567,7 @@ def register(app: Flask, logger) -> None:
                         if isinstance(radio_manager_raw, bytes):
                             radio_manager_raw = radio_manager_raw.decode('utf-8')
                         radio_manager_metrics = json.loads(radio_manager_raw)
+                        redis_radio_manager = radio_manager_metrics
 
                         if radio_manager_metrics:
                             available_drivers = radio_manager_metrics.get("available_drivers", [])
