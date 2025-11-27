@@ -1346,7 +1346,11 @@ class EASBroadcaster:
         def _extract_from_parameters(params: dict) -> None:
             if not isinstance(params, dict):
                 return
-            blockchannel = params.get('BLOCKCHANNEL') or params.get('blockchannel', [])
+            # Check uppercase first, then lowercase - use explicit None check to avoid
+            # issues with empty lists being falsy
+            blockchannel = params.get('BLOCKCHANNEL')
+            if blockchannel is None:
+                blockchannel = params.get('blockchannel', [])
             if isinstance(blockchannel, str):
                 blocked.add(blockchannel.strip().upper())
             elif isinstance(blockchannel, (list, tuple)):
@@ -1463,7 +1467,7 @@ class EASBroadcaster:
                 pretty_event,
                 ', '.join(blockchannel),
             )
-            result['reason'] = f"EAS blocked by BLOCKCHANNEL parameter"
+            result['reason'] = "EAS blocked by BLOCKCHANNEL parameter"
             result['blockchannel'] = list(blockchannel)
             return result
 

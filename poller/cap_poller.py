@@ -2107,7 +2107,13 @@ class CAPPoller:
         geometry_data: Optional[Dict],
         alert_data: Dict
     ) -> Tuple[bool, Optional[CAPAlert], Optional[Dict[str, Any]]]:
-        """Insert a new alert into the database."""
+        """Insert a new alert into the database.
+        
+        Args:
+            payload: Parsed alert data for database storage (without raw_json structure)
+            geometry_data: GeoJSON geometry data for PostGIS storage
+            alert_data: Original alert data with raw_json containing BLOCKCHANNEL, etc.
+        """
         new_alert = CAPAlert(**payload)
         new_alert.created_at = utc_now()
         new_alert.updated_at = utc_now()
@@ -2117,6 +2123,7 @@ class CAPPoller:
         new_alert.eas_audio_url = None
         self._set_alert_geometry(new_alert, geometry_data)
 
+        # First commit: Save alert to database to get the ID needed for EAS message linking
         self.db_session.add(new_alert)
         self.db_session.commit()
 
@@ -2128,6 +2135,7 @@ class CAPPoller:
         capture_metadata: Optional[Dict[str, Any]] = None
         if self.eas_broadcaster:
             try:
+                # Pass alert_data (not payload) because it contains raw_json with BLOCKCHANNEL
                 broadcast_result = self.eas_broadcaster.handle_alert(new_alert, alert_data)
                 if broadcast_result and broadcast_result.get("same_triggered"):
                     # EAS was triggered - update the alert record
@@ -2153,7 +2161,7 @@ class CAPPoller:
                     new_alert.eas_forwarding_reason = reason
                     capture_metadata = {"broadcast": broadcast_result}
                 
-                # Commit the EAS forwarding status update
+                # Second commit: Update EAS forwarding status after broadcast decision
                 self.db_session.commit()
             except Exception as exc:
                 self.logger.error(f"EAS broadcast failed for {new_alert.identifier}: {exc}")
