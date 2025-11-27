@@ -250,6 +250,44 @@ sudo systemctl restart eas-station</code></pre>
         return (hz / 1e6).toFixed(3) + ' MHz';
     }
 
+    function formatSignalStrength(magnitude) {
+        if (magnitude === null || magnitude === undefined) return '—';
+
+        // Convert linear magnitude to RSSI in dBm
+        // Using 20*log10(magnitude) gives relative power in dB
+        // Full scale (magnitude=1.0) is referenced as 0 dBm
+        const rssi = magnitude > 0 ? 20 * Math.log10(magnitude) : -120;
+
+        // Determine signal bars (like cell phone signal)
+        let bars = 0;
+        if (rssi > -50) bars = 4;        // Excellent
+        else if (rssi > -70) bars = 3;   // Good
+        else if (rssi > -85) bars = 2;   // Fair
+        else if (rssi > -100) bars = 1;  // Poor
+        else bars = 0;                   // No signal
+
+        // Generate signal bars HTML
+        const barsHtml = Array.from({length: 4}, (_, i) => {
+            const height = 6 + (i * 4); // 6, 10, 14, 18 pixels
+            const active = i < bars;
+            return `<div style="display:inline-block; width:3px; height:${height}px; margin:0 1px; background:${active ? '#28a745' : '#dee2e6'}; border-radius:1px; vertical-align:bottom;"></div>`;
+        }).join('');
+
+        // Determine color based on RSSI
+        let color = '#6c757d';  // gray (no signal)
+        if (rssi > -50) color = '#28a745';      // green (excellent)
+        else if (rssi > -70) color = '#28a745'; // green (good)
+        else if (rssi > -85) color = '#ffc107'; // yellow (fair)
+        else if (rssi > -100) color = '#dc3545'; // red (poor)
+
+        return `
+            <div style="display:flex; align-items:center; gap:0.5rem;">
+                <div style="display:inline-flex; gap:1px;">${barsHtml}</div>
+                <span style="color:${color}; font-weight:600;">${rssi.toFixed(1)} dBm</span>
+            </div>
+        `;
+    }
+
     function updateHealthStatus(data) {
         const healthCard = document.getElementById('healthCard');
         const healthSpinner = document.getElementById('healthSpinner');
@@ -426,8 +464,8 @@ sudo systemctl restart eas-station</code></pre>
                                             <td>${receiver.locked ? '<i class="fas fa-check text-success"></i> Yes' : '<i class="fas fa-times text-danger"></i> No'}</td>
                                         </tr>
                                         <tr>
-                                            <td class="text-muted">Signal Strength</td>
-                                            <td>${receiver.signal_strength !== null ? receiver.signal_strength.toFixed(4) : '—'}</td>
+                                            <td class="text-muted">Signal Strength (RSSI)</td>
+                                            <td>${formatSignalStrength(receiver.signal_strength)}</td>
                                         </tr>
                                         <tr>
                                             <td class="text-muted">Sample Buffer</td>

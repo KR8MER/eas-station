@@ -34,6 +34,8 @@ from .environment import register_environment_routes
 from .intersections import register_intersection_routes
 from .maintenance import register_maintenance_routes
 from .health_endpoints import register_health_routes
+from .network import register_network_routes
+from .zigbee import register_zigbee_routes
 
 
 def register(app, logger):
@@ -51,6 +53,8 @@ def register(app, logger):
     register_auth_routes(app, logger)
     register_dashboard_routes(app, logger, eas_config)
     register_health_routes(app)  # New health check endpoints for separated architecture
+    register_network_routes(app, logger)  # WiFi configuration management
+    register_zigbee_routes(app, logger)  # Zigbee monitoring and status
 
     # Note: Audio controller initialization removed for separated architecture.
     # In separated architecture, audio processing runs in dedicated audio-service container.
