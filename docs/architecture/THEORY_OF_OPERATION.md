@@ -2,20 +2,125 @@
 
 The EAS Station platform orchestrates NOAA and IPAWS Common Alerting Protocol (CAP) messages from ingestion to FCC-compliant broadcast and verification. This document explains the end-to-end data flow, highlights the subsystems that participate in each phase, and provides historical context for the Specific Area Message Encoding (SAME) protocol that anchors the audio workflow.
 
-## High-Level Flow
+---
+
+## System Architecture Overview
+
+EAS Station uses a **separated service architecture** with complete hardware isolation for reliability and fault tolerance:
+
+```mermaid
+graph TB
+    subgraph External["External Sources"]
+        NOAA[NOAA Weather Service<br/>CAP XML Feeds]
+        IPAWS[FEMA IPAWS<br/>CAP XML Feeds]
+        RF[RF Signals<br/>162 MHz NOAA WX]
+    end
+
+    subgraph Containers["Docker Services"]
+        subgraph AppLayer["Application Layer"]
+            APP[app<br/>Flask Web UI<br/>Port 5000]
+            NOAA_POLL[noaa-poller<br/>CAP Polling]
+            IPAWS_POLL[ipaws-poller<br/>CAP Polling]
+        end
+
+        subgraph HardwareLayer["Hardware Services"]
+            SDR[sdr-service<br/>SDR + Audio<br/>USB Access]
+            HW[hardware-service<br/>GPIO/OLED/VFD<br/>Port 5001]
+        end
+
+        subgraph Infrastructure["Infrastructure"]
+            REDIS[(Redis<br/>Cache + IPC)]
+            DB[(PostgreSQL<br/>+ PostGIS)]
+            ICECAST[Icecast<br/>Audio Streaming]
+            NGINX[nginx<br/>Reverse Proxy<br/>HTTPS]
+        end
+    end
+
+    subgraph Hardware["Physical Hardware"]
+        SDR_DEV[SDR Receivers<br/>RTL-SDR/Airspy]
+        GPIO[GPIO Pins<br/>Relay Control]
+        OLED[OLED Display<br/>SSD1306]
+        LED[LED Signs<br/>Alpha Protocol]
+        VFD_DEV[VFD Display<br/>Noritake]
+    end
+
+    subgraph Output["Outputs"]
+        TX[FM Transmitter]
+        BROWSER[Web Browser]
+        STREAM[Audio Streams]
+    end
+
+    %% Data flows
+    NOAA --> NOAA_POLL
+    IPAWS --> IPAWS_POLL
+    NOAA_POLL --> DB
+    IPAWS_POLL --> DB
+    RF --> SDR_DEV --> SDR
+    
+    APP --> DB
+    APP --> REDIS
+    SDR --> REDIS
+    SDR --> ICECAST
+    HW --> REDIS
+    
+    SDR --> SDR_DEV
+    HW --> GPIO --> TX
+    HW --> OLED
+    HW --> LED
+    HW --> VFD_DEV
+    
+    NGINX --> APP
+    BROWSER --> NGINX
+    ICECAST --> STREAM
+
+    style APP fill:#d4edda
+    style SDR fill:#e1f5ff
+    style HW fill:#fff3e0
+    style DB fill:#fff3cd
+    style REDIS fill:#f8d7da
+```
+
+### Service Responsibilities
+
+| Service | Hardware Access | Purpose |
+|---------|----------------|---------|
+| **app** | None (read-only /dev for SMART) | Web UI, API, configuration |
+| **noaa-poller** | None | NOAA CAP XML feed polling |
+| **ipaws-poller** | None | FEMA IPAWS feed polling |
+| **sdr-service** | USB (`/dev/bus/usb`) | SDR capture, audio processing, SAME decoding |
+| **hardware-service** | GPIO, I2C (`/dev/gpiomem`, `/dev/i2c-1`) | Relay control, displays (OLED/VFD/LED) |
+
+---
+
+## High-Level Data Flow
 
 ```mermaid
 flowchart TD
-    A[CAP Sources\nNOAA + IPAWS] -->|poller/cap_poller.py| B[Ingestion Pipeline]
+    A[CAP Sources<br/>NOAA + IPAWS] -->|HTTP Polling<br/>noaa-poller<br/>ipaws-poller| B[Ingestion Pipeline]
     B -->|app_core/alerts.py| C[Persistence Layer]
-    C -->|PostgreSQL 17 + PostGIS 3.4| D[(alerts, boundaries, receivers)]
-    C -->|app_core/location.py\napp_core/boundaries.py| E[Spatial Intelligence]
-    D -->|webapp routes + APIs| F[Operator Experience]
-    F -->|Manual activation\nScheduled tests| G[EAS Workflow]
-    G -->|webapp/eas/workflow.py| H[SAME Generator]
-    H -->|app_utils/eas.py| I[Audio Renderer\n+ GPIO Control]
-    I -->|SDR capture + led_sign_controller.py| J[Verification & Secondary Channels]
-    J -->|app_core/system_health.py\nwebapp/routes/alert_verification.py| K[Compliance Dashboard]
+    C -->|PostgreSQL 17<br/>+ PostGIS 3.4| D[(Database<br/>alerts, boundaries<br/>receivers, configs)]
+    C -->|app_core/location.py<br/>app_core/boundaries.py| E[Spatial Intelligence]
+    D -->|Flask webapp<br/>REST APIs| F[Operator Experience]
+    F -->|Manual activation<br/>Scheduled RWT| G[EAS Workflow]
+    G -->|app_utils/eas.py<br/>app_utils/eas_fsk.py| H[SAME Generator]
+    H -->|hardware-service<br/>GPIO Control| I[Broadcast Output]
+    
+    subgraph Verification["Verification Loop"]
+        J[sdr-service<br/>RF Capture]
+        K[streaming_same_decoder.py<br/>Real-time Decode]
+        L[Compliance Dashboard]
+    end
+    
+    I -->|RF Signal| J
+    J --> K
+    K --> D
+    D --> L
+    L --> F
+
+    style A fill:#3b82f6,color:#fff
+    style D fill:#8b5cf6,color:#fff
+    style F fill:#10b981,color:#fff
+    style I fill:#f59e0b,color:#000
 ```
 
 Each node references an actual module, package, or service in the repository so operators and developers can trace the implementation.
