@@ -27,7 +27,10 @@ Provides thread-safe access and lifecycle management.
 import logging
 import os
 import threading
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .eas_monitor import ContinuousEASMonitor
 
 logger = logging.getLogger(__name__)
 

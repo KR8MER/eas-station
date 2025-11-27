@@ -21,7 +21,7 @@ from __future__ import annotations
 
 """Administrative endpoints for managing alert-boundary intersections."""
 
-from flask import Blueprint
+from flask import Blueprint, current_app
 
 from typing import Dict
 
@@ -102,7 +102,7 @@ def fix_county_intersections():
         )
     except Exception as exc:  # pragma: no cover - defensive
         db.session.rollback()
-        route_logger.error("Error fixing county intersections: %s", exc)
+        current_app.logger.error("Error fixing county intersections: %s", exc)
         return jsonify({"error": f"Failed to fix intersections: {exc}"}), 500
 
 @intersections_bp.route("/admin/recalculate_intersections", methods=["POST"])
@@ -110,10 +110,10 @@ def recalculate_intersections():
     """Recalculate all alert-boundary intersections."""
 
     try:
-        route_logger.info("Starting full intersection recalculation")
+        current_app.logger.info("Starting full intersection recalculation")
 
         deleted_count = db.session.query(Intersection).delete()
-        route_logger.info("Cleared %s existing intersections", deleted_count)
+        current_app.logger.info("Cleared %s existing intersections", deleted_count)
 
         alerts_with_geometry = (
             db.session.query(CAPAlert).filter(CAPAlert.geom.isnot(None)).all()
@@ -133,7 +133,7 @@ def recalculate_intersections():
                 stats["intersections_created"] += intersections_created
             except Exception as exc:  # pragma: no cover - defensive
                 stats["errors"] += 1
-                route_logger.error(
+                current_app.logger.error(
                     "Error processing alert %s: %s", alert.identifier, exc
                 )
 
@@ -146,10 +146,10 @@ def recalculate_intersections():
         if stats["errors"] > 0:
             message += f" ({stats['errors']} errors)"
 
-        route_logger.info(message)
+        current_app.logger.info(message)
         return jsonify({"success": message, "stats": stats})
     except Exception as exc:  # pragma: no cover - defensive
-        route_logger.error("Error in recalculate_intersections: %s", exc)
+        current_app.logger.error("Error in recalculate_intersections: %s", exc)
         db.session.rollback()
         return jsonify({"error": f"Failed to recalculate intersections: {exc}"}), 500
 
@@ -168,7 +168,7 @@ def calculate_intersections_for_alert(alert_id: int):
         ).count()
         if existing_count > 0:
             Intersection.query.filter_by(cap_alert_id=alert_id).delete()
-            route_logger.info(
+            current_app.logger.info(
                 "Removed %s existing intersections for alert %s",
                 existing_count,
                 alert_id,
@@ -224,7 +224,7 @@ def calculate_intersections_for_alert(alert_id: int):
         )
     except Exception as exc:  # pragma: no cover - defensive
         db.session.rollback()
-        route_logger.error(
+        current_app.logger.error(
             "Error calculating intersections for alert %s: %s", alert_id, exc
         )
         return jsonify({"error": str(exc)}), 500
@@ -276,7 +276,7 @@ def calculate_all_intersections():
 
             if processed_alerts % 10 == 0:
                 db.session.commit()
-                route_logger.info(
+                current_app.logger.info(
                     "Processed %s/%s alerts", processed_alerts, total_alerts
                 )
 
@@ -304,7 +304,7 @@ def calculate_all_intersections():
         )
     except Exception as exc:  # pragma: no cover - defensive
         db.session.rollback()
-        route_logger.error("Error calculating all intersections: %s", exc)
+        current_app.logger.error("Error calculating all intersections: %s", exc)
         return jsonify({"error": str(exc)}), 500
 
 @intersections_bp.route("/admin/calculate_single_alert/<int:alert_id>", methods=["POST"])
@@ -367,7 +367,7 @@ def calculate_single_alert(alert_id: int):
             except Exception as boundary_error:  # pragma: no cover - defensive
                 error_msg = f"Boundary {boundary.id}: {boundary_error}"
                 errors.append(error_msg)
-                route_logger.warning(error_msg)
+                current_app.logger.warning(error_msg)
 
         db.session.commit()
 
@@ -383,7 +383,7 @@ def calculate_single_alert(alert_id: int):
         )
     except Exception as exc:  # pragma: no cover - defensive
         db.session.rollback()
-        route_logger.error(
+        current_app.logger.error(
             "Error calculating single alert intersections: %s", exc
         )
         return jsonify({"error": f"Failed to calculate intersections: {exc}"}), 500

@@ -76,6 +76,9 @@ except ImportError as e:
 HEARTBEAT_INTERVAL = 5.0  # Master updates heartbeat every 5 seconds
 STALE_HEARTBEAT_THRESHOLD = 15.0  # Consider master dead after 15 seconds
 
+# File-based fallback paths (used when Redis is unavailable)
+METRICS_FILE = "/tmp/eas_station_shared_metrics.json"
+
 # Global state
 _is_master_worker: bool = False
 _heartbeat_thread: Optional[threading.Thread] = None

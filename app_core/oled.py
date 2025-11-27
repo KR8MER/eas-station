@@ -27,7 +27,7 @@ import threading
 import textwrap
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 from app_utils.gpio import ensure_gpiozero_pin_factory
 

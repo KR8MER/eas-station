@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List, Optional, Set
 
-from flask import Blueprint, Flask, jsonify, request
+from flask import Blueprint, Flask, current_app, jsonify, request
 from sqlalchemy import func, text
 
 from app_core.boundaries import (
@@ -423,7 +423,7 @@ def preview_geojson():
 
         try:
             geojson_data = json_loads(file_contents)
-        except json.JSONDecodeError:
+        except JSONDecodeError:
             return jsonify({"error": "Invalid GeoJSON format"}), 400
 
         features = geojson_data.get("features")
@@ -490,7 +490,7 @@ def preview_geojson():
 
         return jsonify(response_data)
     except Exception as exc:  # pragma: no cover - defensive
-        route_logger.error("Error previewing GeoJSON: %s", exc)
+        current_app.logger.error("Error previewing GeoJSON: %s", exc)
         return jsonify({"error": f"Failed to preview GeoJSON: {exc}"}), 500
 
 @boundaries_bp.route("/admin/upload_boundaries", methods=["POST"])
@@ -514,7 +514,7 @@ def upload_boundaries():
 
         try:
             geojson_data = json_loads(file.read().decode("utf-8"))
-        except json.JSONDecodeError:
+        except JSONDecodeError:
             return jsonify({"error": "Invalid GeoJSON format"}), 400
 
         features = geojson_data.get("features", [])
@@ -557,7 +557,7 @@ def upload_boundaries():
 
         try:
             db.session.commit()
-            route_logger.info(
+            current_app.logger.info(
                 "Successfully uploaded %s %s boundaries",
                 boundaries_added,
                 boundary_label,
@@ -582,7 +582,7 @@ def upload_boundaries():
 
         return jsonify(response_data)
     except Exception as exc:  # pragma: no cover - defensive
-        route_logger.error("Error uploading boundaries: %s", exc)
+        current_app.logger.error("Error uploading boundaries: %s", exc)
         return jsonify({"error": f"Upload failed: {exc}"}), 500
 
 @boundaries_bp.route("/admin/list_shapefiles", methods=["GET"])
@@ -638,7 +638,7 @@ def list_shapefiles():
         })
 
     except Exception as exc:
-        route_logger.error("Error listing shapefiles: %s", exc)
+        current_app.logger.error("Error listing shapefiles: %s", exc)
         return jsonify({"error": f"Failed to list shapefiles: {exc}"}), 500
 
 @boundaries_bp.route("/admin/upload_shapefile", methods=["POST"])
@@ -749,7 +749,7 @@ def upload_shapefile():
 
         try:
             db.session.commit()
-            route_logger.info(
+            current_app.logger.info(
                 "Successfully uploaded %s %s boundaries from shapefile",
                 boundaries_added,
                 boundary_label,
@@ -776,7 +776,7 @@ def upload_shapefile():
         return jsonify(response_data)
 
     except Exception as exc:
-        route_logger.error("Error uploading shapefile: %s", exc)
+        current_app.logger.error("Error uploading shapefile: %s", exc)
         return jsonify({"error": f"Shapefile upload failed: {exc}"}), 500
 
 @boundaries_bp.route("/admin/clear_boundaries/<boundary_type>", methods=["DELETE"])
@@ -823,7 +823,7 @@ def clear_boundaries(boundary_type: str):
         return jsonify({"success": message, "deleted_count": deleted_count})
     except Exception as exc:  # pragma: no cover - defensive
         db.session.rollback()
-        route_logger.error("Error clearing boundaries: %s", exc)
+        current_app.logger.error("Error clearing boundaries: %s", exc)
         return jsonify({"error": f"Failed to clear boundaries: {exc}"}), 500
 
 @boundaries_bp.route("/admin/clear_all_boundaries", methods=["DELETE"])
@@ -873,7 +873,7 @@ def clear_all_boundaries():
         return jsonify({"success": "All boundaries cleared", "deleted_count": deleted_count})
     except Exception as exc:  # pragma: no cover - defensive
         db.session.rollback()
-        route_logger.error("Error clearing all boundaries: %s", exc)
+        current_app.logger.error("Error clearing all boundaries: %s", exc)
         return jsonify({"error": f"Failed to clear all boundaries: {exc}"}), 500
 
 

@@ -405,7 +405,7 @@ def load_or_cache_summary_payload(message) -> Optional[Dict[str, Any]]:
     try:
         with open(disk_path, "r", encoding="utf-8") as handle:
             payload = json_loads(handle)
-    except (OSError, json.JSONDecodeError):
+    except (OSError, JSONDecodeError):
         current_app.logger.debug("Unable to load summary payload from %s", disk_path)
         return None
 
@@ -645,7 +645,7 @@ def backfill_eas_message_payloads(logger) -> None:
                 try:
                     with open(disk_path, "r", encoding="utf-8") as handle:
                         payload = json_loads(handle)
-                except (OSError, json.JSONDecodeError) as exc:
+                except (OSError, JSONDecodeError) as exc:
                     logger.debug(
                         "Unable to backfill summary payload for message %s: %s",
                         message.id,
