@@ -163,8 +163,19 @@ def initialize_database():
     postgres_user = os.getenv("POSTGRES_USER", "postgres")
     postgres_password = os.getenv("POSTGRES_PASSWORD", "postgres")
 
+    # Security warning for default credentials
+    if postgres_password == "postgres":
+        logger.warning(
+            "Using default database password 'postgres'. "
+            "Set POSTGRES_PASSWORD environment variable for production deployments."
+        )
+
+    # Escape password for URL (handles special characters like @, :, etc.)
+    from urllib.parse import quote_plus
+    escaped_password = quote_plus(postgres_password)
+
     app.config["SQLALCHEMY_DATABASE_URI"] = (
-        f"postgresql://{postgres_user}:{postgres_password}@"
+        f"postgresql://{postgres_user}:{escaped_password}@"
         f"{postgres_host}:{postgres_port}/{postgres_db}"
     )
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False

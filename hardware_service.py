@@ -115,15 +115,26 @@ def initialize_database():
     # Create minimal Flask app for database access
     app = Flask(__name__)
 
-    # Database configuration
-    postgres_host = os.getenv("POSTGRES_HOST", "localhost")
+    # Database configuration (container-aware defaults)
+    postgres_host = os.getenv("POSTGRES_HOST", "alerts-db")  # Default to Docker service name
     postgres_port = os.getenv("POSTGRES_PORT", "5432")
     postgres_db = os.getenv("POSTGRES_DB", "alerts")
     postgres_user = os.getenv("POSTGRES_USER", "postgres")
     postgres_password = os.getenv("POSTGRES_PASSWORD", "postgres")
 
+    # Security warning for default credentials
+    if postgres_password == "postgres":
+        logger.warning(
+            "Using default database password 'postgres'. "
+            "Set POSTGRES_PASSWORD environment variable for production deployments."
+        )
+
+    # Escape password for URL (handles special characters like @, :, etc.)
+    from urllib.parse import quote_plus
+    escaped_password = quote_plus(postgres_password)
+
     app.config["SQLALCHEMY_DATABASE_URI"] = (
-        f"postgresql://{postgres_user}:{postgres_password}@"
+        f"postgresql://{postgres_user}:{escaped_password}@"
         f"{postgres_host}:{postgres_port}/{postgres_db}"
     )
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
@@ -423,11 +434,29 @@ def publish_display_state():
 
 
 def run_command(cmd, check=True, timeout=30):
-    """Execute a shell command and return the result."""
+    """Execute a shell command safely and return the result.
+
+    Args:
+        cmd: Either a string (for simple commands with no user input) or a list (for commands with arguments)
+        check: If True, raise CalledProcessError for non-zero exit codes
+        timeout: Command timeout in seconds
+
+    Returns:
+        dict with success, stdout, stderr, returncode, and optional error
+    """
     try:
+        # If cmd is a string, split it for safe execution (NO user input should use this path)
+        # If cmd is a list, use it directly (REQUIRED for user input)
+        if isinstance(cmd, str):
+            # Only allow string commands for hardcoded commands with no user input
+            # This path should NOT be used with any user-supplied data
+            cmd_list = cmd.split()
+        else:
+            cmd_list = cmd
+
         result = subprocess.run(
-            cmd,
-            shell=True,
+            cmd_list,
+            shell=False,  # SECURITY: Never use shell=True with user input
             capture_output=True,
             text=True,
             check=check,
@@ -550,17 +579,20 @@ def create_api_app():
         """Connect to a WiFi network via nmcli."""
         try:
             data = request.json
+            if not data:
+                return jsonify({'success': False, 'error': 'No JSON data provided'}), 400
+
             ssid = data.get('ssid')
             password = data.get('password', '')
 
             if not ssid:
                 return jsonify({'success': False, 'error': 'SSID required'}), 400
 
-            # Build nmcli command
+            # Build nmcli command safely using list (prevents command injection)
             if password:
-                cmd = f'nmcli device wifi connect "{ssid}" password "{password}"'
+                cmd = ['nmcli', 'device', 'wifi', 'connect', ssid, 'password', password]
             else:
-                cmd = f'nmcli device wifi connect "{ssid}"'
+                cmd = ['nmcli', 'device', 'wifi', 'connect', ssid]
 
             result = run_command(cmd, check=False)
 
@@ -570,7 +602,7 @@ def create_api_app():
             })
 
         except Exception as e:
-            logger.error(f"Error connecting to WiFi: {e}")
+            logger.error(f"Error connecting to WiFi: {e}", exc_info=True)
             return jsonify({'success': False, 'error': str(e)}), 500
 
     @api_app.route('/api/network/disconnect', methods=['POST'])
@@ -578,12 +610,17 @@ def create_api_app():
         """Disconnect from current network via nmcli."""
         try:
             data = request.json
+            if not data:
+                return jsonify({'success': False, 'error': 'No JSON data provided'}), 400
+
             connection_name = data.get('connection')
 
             if not connection_name:
                 return jsonify({'success': False, 'error': 'Connection name required'}), 400
 
-            result = run_command(f'nmcli connection down "{connection_name}"', check=False)
+            # Use list arguments to prevent command injection
+            cmd = ['nmcli', 'connection', 'down', connection_name]
+            result = run_command(cmd, check=False)
 
             return jsonify({
                 'success': result['success'],
@@ -591,7 +628,7 @@ def create_api_app():
             })
 
         except Exception as e:
-            logger.error(f"Error disconnecting network: {e}")
+            logger.error(f"Error disconnecting network: {e}", exc_info=True)
             return jsonify({'success': False, 'error': str(e)}), 500
 
     @api_app.route('/api/network/forget', methods=['POST'])
@@ -599,12 +636,17 @@ def create_api_app():
         """Forget a saved network connection via nmcli."""
         try:
             data = request.json
+            if not data:
+                return jsonify({'success': False, 'error': 'No JSON data provided'}), 400
+
             connection_name = data.get('connection')
 
             if not connection_name:
                 return jsonify({'success': False, 'error': 'Connection name required'}), 400
 
-            result = run_command(f'nmcli connection delete "{connection_name}"', check=False)
+            # Use list arguments to prevent command injection
+            cmd = ['nmcli', 'connection', 'delete', connection_name]
+            result = run_command(cmd, check=False)
 
             return jsonify({
                 'success': result['success'],
@@ -612,7 +654,7 @@ def create_api_app():
             })
 
         except Exception as e:
-            logger.error(f"Error forgetting network: {e}")
+            logger.error(f"Error forgetting network: {e}", exc_info=True)
             return jsonify({'success': False, 'error': str(e)}), 500
 
     # Zigbee Serial Port Proxy Endpoints

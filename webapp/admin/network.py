@@ -120,3 +120,9 @@ def forget_wifi():
     """Forget a saved network connection via hardware-service."""
     data = request.get_json()
     return jsonify(call_hardware_service('/api/network/forget', method='POST', data=data))
+
+
+def register_network_routes(app, logger):
+    """Register network management routes with the Flask app."""
+    app.register_blueprint(network_bp)
+    logger.info("Network management routes registered (proxied to hardware-service)")
