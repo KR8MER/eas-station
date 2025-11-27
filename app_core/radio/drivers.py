@@ -530,12 +530,21 @@ class _SoapySDRReceiver(ReceiverInterface):
             # AirSpy and other SDRs benefit from larger buffer sizes to prevent
             # USB transfer overhead and stream errors
             # SoapySDR setupStream signature: setupStream(direction, format, [channels], args={})
+            # Note: Some drivers need bufflen as string, others as int - use string for compatibility
             stream_mtu = 16384  # Samples per USB transfer (optimized for AirSpy)
+            stream_args = {}
+
+            # Try setting buffer length if supported by the driver
+            # AirSpy: uses internal buffering, bufflen may not be supported
+            # RTL-SDR: supports bufflen parameter
+            if self.driver_hint == "rtlsdr":
+                stream_args["bufflen"] = str(stream_mtu)
+
             stream = device.setupStream(
                 SoapySDR.SOAPY_SDR_RX,
                 SoapySDR.SOAPY_SDR_CF32,
                 [channel],  # channels list
-                {"bufflen": str(stream_mtu)}  # args dict (bufflen as string)
+                stream_args  # driver-specific stream args
             )
             device.activateStream(stream)
         except Exception as exc:
@@ -578,6 +587,10 @@ class _SoapySDRReceiver(ReceiverInterface):
         minimal_args = {"driver": self.driver_hint}
         skip_first_fallback = (fallback_args == minimal_args)
 
+        # Initialize fallback_exc before try/except to avoid scoping issues
+        # (exception variables in except clauses are deleted after the block)
+        fallback_exc = None
+
         if not skip_first_fallback:
             self._emit_event(
                 "warning",
@@ -603,8 +616,8 @@ class _SoapySDRReceiver(ReceiverInterface):
                     details={"driver": self.driver_hint, "serial": serial},
                 )
                 return device
-            except Exception as fallback_exc:
-                pass  # Will try minimal args below
+            except Exception as e:
+                fallback_exc = e  # Capture exception to persist beyond except block
         else:
             fallback_exc = original_exc  # Skip first fallback, use original exception
 
