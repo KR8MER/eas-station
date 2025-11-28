@@ -1002,7 +1002,6 @@ def main():
                 import struct
                 import io
                 import numpy as np
-                from scipy import signal
                 from app_core.audio.ingest import AudioSourceStatus
                 
                 def generate_wav_stream(adapter, source_name):
@@ -1022,11 +1021,9 @@ def main():
                     stream_channels = 1  # Mono saves 50% bandwidth
                     bits_per_sample = 16
 
-                    # Calculate decimation factor (use floor division for integer result)
-                    decimation = source_sample_rate // stream_sample_rate
-                    if decimation < 1:
-                        decimation = 1
-                        stream_sample_rate = source_sample_rate
+                    # Check if resampling is needed and pre-compute the ratio
+                    needs_resample = source_sample_rate != stream_sample_rate
+                    resample_ratio = stream_sample_rate / source_sample_rate if needs_resample else 1.0
 
                     # Subscribe to BroadcastQueue for non-competitive audio access
                     # Use unique subscriber ID per connection
@@ -1081,11 +1078,14 @@ def main():
                                     if len(audio_chunk) > 0:
                                         audio_chunk = np.mean(audio_chunk.reshape(-1, source_channels), axis=1)
 
-                                # Downsample if needed (simple decimation for low latency)
-                                if decimation > 1 and len(audio_chunk) > 0:
-                                    # Use simple decimation (every Nth sample) for minimal latency
-                                    # This is faster than zero_phase filtering and maintains real-time performance
-                                    audio_chunk = audio_chunk[::decimation]
+                                # Resample to target sample rate using linear interpolation
+                                # This ensures the output matches the WAV header sample rate exactly,
+                                # fixing the high-pitched squeal caused by sample rate mismatch
+                                if needs_resample and len(audio_chunk) > 0:
+                                    new_length = max(int(len(audio_chunk) * resample_ratio), 1)
+                                    old_indices = np.arange(len(audio_chunk))
+                                    new_indices = np.linspace(0, len(audio_chunk) - 1, new_length)
+                                    audio_chunk = np.interp(new_indices, old_indices, audio_chunk).astype(np.float32)
 
                                 # Convert to int16 PCM
                                 pcm_data = (np.clip(audio_chunk, -1.0, 1.0) * 32767).astype(np.int16)
