@@ -104,6 +104,24 @@
             mode: 'light',
             description: 'Crisp coastal palette with aqua highlights',
             builtin: true
+        },
+        'charcoal': {
+            name: 'Charcoal',
+            mode: 'dark',
+            description: 'Deep gray dark theme with excellent contrast',
+            builtin: true
+        },
+        'obsidian': {
+            name: 'Obsidian',
+            mode: 'dark',
+            description: 'Pure black AMOLED theme for true blacks',
+            builtin: true
+        },
+        'slate': {
+            name: 'Slate',
+            mode: 'dark',
+            description: 'Blue-gray professional dark theme',
+            builtin: true
         }
     };
 
