@@ -140,6 +140,14 @@ class IcecastStreamer:
         self._last_buffer_warning = 0.0  # Throttle buffer warnings to avoid log spam
         self._consecutive_empty_reads = 0  # Track consecutive failed reads from audio source
 
+        # Connection health tracking for exponential backoff (Issue 3 fix)
+        self._connection_health = {
+            'last_connect_time': 0.0,
+            'reconnect_attempts': 0,
+            'backoff_time': 1.0,  # Start at 1 second
+            'max_backoff': 60.0,   # Cap at 60 seconds
+        }
+
         # Extended metadata (album art, song length, etc.)
         self._last_artwork_url: Optional[str] = None
         self._last_song_length: Optional[str] = None
@@ -344,6 +352,46 @@ class IcecastStreamer:
             logger.error(f"Failed to start FFmpeg Icecast streamer: {e}")
             return False
 
+    def _get_chunk_timeout(self, buffer_level: int, buffer_max: int) -> float:
+        """Calculate read timeout based on source type and buffer health.
+
+        HTTP/Icecast sources need longer timeouts than local SDR to handle
+        network latency and buffering. When buffer is low, increase timeout
+        to give source time to recover.
+
+        Args:
+            buffer_level: Current buffer fill level (number of chunks)
+            buffer_max: Maximum buffer capacity (number of chunks)
+
+        Returns:
+            Timeout in seconds for audio source read
+        """
+        source_type = type(self.audio_source).__name__
+
+        # Base timeouts by source type
+        # HTTP/Icecast sources: 2.0s (handles network buffering)
+        # Local SDR/AudioSourceManager: 0.5s (fast local access)
+        base_timeouts = {
+            'IcecastIngestSource': 2.0,
+            'HTTPIngestSource': 2.0,
+            'StreamIngestSource': 2.0,
+            'AudioSourceManager': 0.5,
+            'BroadcastAudioAdapter': 0.5,
+        }
+
+        base = base_timeouts.get(source_type, 1.0)  # Default to 1.0s
+
+        # Calculate buffer health (0.0 = empty, 1.0 = full)
+        buffer_health = buffer_level / buffer_max if buffer_max > 0 else 0.5
+
+        # If buffer is low, increase timeout to give source time to recover
+        if buffer_health < 0.25:
+            return base * 2.0  # Double timeout when critically low
+        elif buffer_health < 0.5:
+            return base * 1.5  # 50% increase when low
+
+        return base
+
     def _feed_loop(self) -> None:
         """Feed audio to FFmpeg for encoding and streaming."""
         logger.debug("Icecast feed loop started")
@@ -356,6 +404,8 @@ class IcecastStreamer:
         buffer = deque(maxlen=600)  # Up to 30 seconds of audio (600 * 50ms chunks) - increased from 500
         prebuffer_target = 150  # Pre-fill with 7.5 seconds before starting - increased from 100 to prevent buffer empty errors
         buffer_low_watermark = 150  # Warn if buffer drops below 7.5 seconds (25% of max) - increased from 100
+        # Minimum acceptable chunks to start streaming (Issue 3 fix: accept partial buffer)
+        min_acceptable_chunks = 50  # 2.5 seconds - enough to start without major stuttering
 
         logger.info(
             f"Pre-buffering {prebuffer_target} chunks (~{prebuffer_target*50}ms) "
@@ -367,23 +417,43 @@ class IcecastStreamer:
         source_status = getattr(self.audio_source, 'status', 'unknown')
         logger.info(f"Audio source for {self.config.mount}: {source_type}, Status: {source_status}")
 
-        prebuffer_timeout = time.time() + 15.0  # 15 seconds max to prebuffer
+        # Relaxed timeout for prebuffering (Issue 3 fix: increased from 15s to 30s)
+        prebuffer_timeout = time.time() + 30.0  # 30 seconds max to prebuffer
         prebuffer_attempts = 0
 
         while len(buffer) < prebuffer_target and time.time() < prebuffer_timeout:
-            samples = self.audio_source.get_audio_chunk(timeout=1.0)  # Increased from 0.5s to 1.0s
+            # Gradually relax timeout as we approach hard limit
+            elapsed = time.time() - (prebuffer_timeout - 30.0)
+            time_remaining = 30.0 - elapsed
+            read_timeout = min(1.0, max(0.1, time_remaining / 10))
+
+            samples = self.audio_source.get_audio_chunk(timeout=read_timeout)
             prebuffer_attempts += 1
             if samples is not None:
                 pcm_bytes = self._samples_to_pcm_bytes(samples)
                 buffer.append(pcm_bytes)
+                # Progress feedback every 50 chunks
+                if len(buffer) % 50 == 0:
+                    logger.info(
+                        f"Icecast prebuffering for mount {self.config.mount}: {len(buffer)}/{prebuffer_target} chunks "
+                        f"({len(buffer)*50}ms of audio)"
+                    )
 
+        # Handle prebuffer timeout with graceful degradation (Issue 3 fix)
         if len(buffer) < prebuffer_target:
-            logger.error(
-                f"Pre-buffer timeout for mount {self.config.mount}: "
-                f"only filled {len(buffer)}/{prebuffer_target} chunks "
-                f"(~{len(buffer)*50}ms of audio) after {prebuffer_attempts} attempts. "
-                f"Audio source {source_type} may not be providing data. Check source status!"
-            )
+            if len(buffer) >= min_acceptable_chunks:
+                # Partial buffer is acceptable - start with warning instead of failing
+                logger.warning(
+                    f"Pre-buffer timeout for mount {self.config.mount} with {len(buffer)}/{prebuffer_target} "
+                    f"chunks ({len(buffer)*50}ms) - starting with partial buffer"
+                )
+            else:
+                # Buffer too small - log error but don't fail (audio source may recover)
+                logger.error(
+                    f"Pre-buffer failed for mount {self.config.mount}: only {len(buffer)} chunks "
+                    f"after {prebuffer_attempts} attempts (minimum {min_acceptable_chunks} required). "
+                    f"Audio source {source_type} may not be providing data. Check source status!"
+                )
         else:
             logger.info(
                 f"Pre-buffer complete for mount {self.config.mount}: "
@@ -399,8 +469,10 @@ class IcecastStreamer:
 
             try:
                 wrote_chunk = False
-                # Read audio from source and add to buffer
-                samples = self.audio_source.get_audio_chunk(timeout=0.5)  # Increased from 0.1s to 0.5s
+                # Read audio from source with adaptive timeout based on source type (Issue 4 fix)
+                # HTTP/Icecast sources need longer timeouts than local SDR
+                chunk_timeout = self._get_chunk_timeout(len(buffer), buffer.maxlen)
+                samples = self.audio_source.get_audio_chunk(timeout=chunk_timeout)
 
                 if samples is not None:
                     pcm_bytes = self._samples_to_pcm_bytes(samples)
@@ -408,20 +480,28 @@ class IcecastStreamer:
                     self._consecutive_empty_reads = 0  # Reset counter on successful read
                 else:
                     # Track consecutive empty reads to diagnose source issues
-                    # Note: With 0.5s timeout per read, timing is: N reads * 0.5s
                     self._consecutive_empty_reads += 1
-                    if self._consecutive_empty_reads == 20:  # After 10 seconds (20 * 0.5s)
-                        logger.error(
-                            f"Audio source for mount {self.config.mount} has not provided data for 10+ seconds. "
-                            f"Buffer: {len(buffer)}/{buffer.maxlen} chunks. "
-                            "Check if audio source is running and configured correctly."
-                        )
-                    elif self._consecutive_empty_reads == 200:  # After 100 seconds (200 * 0.5s) - extended to avoid disrupting legitimate slow sources
-                        logger.critical(
-                            f"Audio source for mount {self.config.mount} completely starved for 100+ seconds! "
-                            f"This indicates a serious issue with the audio source. "
-                            f"Buffer exhausted. Check logs for audio source errors."
-                        )
+                    # Use configurable intervals that account for variable timeout
+                    # Guard against zero timeout (shouldn't happen but be defensive)
+                    safe_timeout = max(0.1, chunk_timeout)
+                    starvation_seconds = self._consecutive_empty_reads * safe_timeout
+                    # Calculate logging intervals based on timeout (min 1 to avoid division by zero)
+                    log_interval_10s = max(1, int(10.0 / safe_timeout))
+                    log_interval_60s = max(1, int(60.0 / safe_timeout))
+                    
+                    if starvation_seconds >= 10.0 and self._consecutive_empty_reads % log_interval_10s == 0:
+                        if starvation_seconds < 30.0:
+                            logger.warning(
+                                f"Audio source for mount {self.config.mount} has not provided data for {starvation_seconds:.0f}+ seconds. "
+                                f"Buffer: {len(buffer)}/{buffer.maxlen} chunks. "
+                                "Check if audio source is running and configured correctly."
+                            )
+                        elif starvation_seconds >= 60.0 and self._consecutive_empty_reads % log_interval_60s == 0:
+                            logger.error(
+                                f"Audio source for mount {self.config.mount} starved for {starvation_seconds:.0f}+ seconds! "
+                                f"Buffer: {len(buffer)}/{buffer.maxlen} chunks. "
+                                "This indicates a serious issue with the audio source."
+                            )
 
                 # Feed FFmpeg from buffer (always try to send, even if we just got None)
                 # This keeps FFmpeg fed even when source is temporarily slow
@@ -500,13 +580,15 @@ class IcecastStreamer:
         logger.debug("Icecast feed loop stopped")
 
     def _restart_ffmpeg(self, reason: str) -> bool:
-        """Tear down and re-launch the FFmpeg encoder pipeline."""
+        """Tear down and re-launch the FFmpeg encoder pipeline with adaptive backoff."""
 
         if self._stop_event.is_set():
             return False
 
         process = self._ffmpeg_process
         stderr_thread = self._stderr_reader_thread
+        health = self._connection_health
+        now = time.time()
 
         logger.warning(f"FFmpeg process restart triggered for mount {self.config.mount}: {reason}")
 
@@ -537,15 +619,36 @@ class IcecastStreamer:
         if self._stop_event.is_set():
             return False
 
-        # Add delay before restart to prevent rapid restart cycles
-        logger.info(f"Waiting {ICECAST_RESTART_DELAY} seconds before restarting FFmpeg for mount {self.config.mount}...")
-        time.sleep(ICECAST_RESTART_DELAY)
+        # Apply exponential backoff if connection is failing repeatedly
+        # If last connection was within 30 seconds, it means we're failing quickly
+        if health['last_connect_time'] > 0 and now - health['last_connect_time'] < 30:
+            # Connection is failing repeatedly - apply backoff
+            wait_time = min(health['backoff_time'], health['max_backoff'])
+            health['reconnect_attempts'] += 1
+            logger.warning(
+                f"Icecast backoff for mount {self.config.mount}: waiting {wait_time:.1f}s "
+                f"(attempt {health['reconnect_attempts']})"
+            )
+            time.sleep(wait_time)
+            # Exponential backoff: 1s, 2s, 4s, 8s... up to max_backoff
+            health['backoff_time'] = min(health['backoff_time'] * 2, health['max_backoff'])
+        else:
+            # Connection was stable - reset backoff and use standard delay
+            health['backoff_time'] = 1.0
+            health['reconnect_attempts'] = 0
+            logger.info(f"Waiting {ICECAST_RESTART_DELAY} seconds before restarting FFmpeg for mount {self.config.mount}...")
+            time.sleep(ICECAST_RESTART_DELAY)
+
+        health['last_connect_time'] = time.time()
 
         if self._stop_event.is_set():
             return False
 
         if self._start_ffmpeg():
             self._last_write_time = time.time()
+            # Reset backoff on successful connection
+            health['backoff_time'] = 1.0
+            health['reconnect_attempts'] = 0
             logger.info(f"FFmpeg restarted successfully for mount {self.config.mount}")
             return True
 
