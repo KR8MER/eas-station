@@ -152,6 +152,17 @@ class _SoapySDRReceiver(ReceiverInterface):
         self._connection_failures = 0
         self._last_successful_connection: Optional[datetime.datetime] = None
         self._stream_errors_count = 0
+        # Timeout backoff tracking for handling consecutive timeouts (Issue 2 fix)
+        self._consecutive_timeouts = 0
+        self._max_consecutive_timeouts = 10  # Raise error after 10 consecutive timeouts
+        self._timeout_backoff = 0.01  # Start at 10ms, increase exponentially
+        self._max_timeout_backoff = 0.5  # Cap at 500ms
+        # Spectrum/FFT computation for waterfall display (Issue 1)
+        self._spectrum_buffer = None  # Ring buffer for FFT data
+        self._spectrum_update_interval = 0.1  # Update spectrum every 100ms
+        self._last_spectrum_update = 0.0
+        self._fft_size = 2048
+        self._window = None  # Hanning window, initialized lazily
 
     # ------------------------------------------------------------------
     # Lifecycle helpers
@@ -754,12 +765,48 @@ class _SoapySDRReceiver(ReceiverInterface):
                     message = self._describe_soapysdr_error(error_code)
                     message = self._annotate_lock_hint(message)
                     
+                    # TIMEOUT (-1) - SDR not providing samples; use exponential backoff
+                    # This handles USB jitter and temporary communication issues
+                    if error_code == -1:
+                        self._consecutive_timeouts += 1
+                        
+                        # If too many consecutive timeouts, raise error for full reconnection
+                        if self._consecutive_timeouts > self._max_consecutive_timeouts:
+                            timeout_duration = self._consecutive_timeouts * self._timeout_backoff
+                            self._interface_logger.error(
+                                "SDR %s not providing samples for %.2fs (%d consecutive timeouts). Reconnecting...",
+                                self.config.identifier,
+                                timeout_duration,
+                                self._consecutive_timeouts
+                            )
+                            self._consecutive_timeouts = 0
+                            self._timeout_backoff = 0.01
+                            raise RuntimeError(f"SDR timeout: no samples for {timeout_duration:.2f}s")
+                        
+                        # Exponential backoff: 10ms, 20ms, 40ms... up to max_timeout_backoff
+                        backoff = min(self._timeout_backoff, self._max_timeout_backoff)
+                        time.sleep(backoff)
+                        self._timeout_backoff = min(self._timeout_backoff * 2, self._max_timeout_backoff)
+                        
+                        # Log every 5th timeout to avoid spam but provide visibility
+                        if self._consecutive_timeouts % 5 == 0:
+                            self._interface_logger.debug(
+                                "SDR %s timeout (consecutive: %d, backoff: %.3fs)",
+                                self.config.identifier,
+                                self._consecutive_timeouts,
+                                backoff
+                            )
+                        continue
+                    
                     # OVERFLOW (-4) means the internal buffer is full because we're not
                     # reading fast enough. The SoapyAirspy driver drains the buffer on overflow,
                     # so we should immediately continue reading without any delay.
                     # UNDERFLOW (-7) typically occurs during TX but handle it similarly for safety.
                     if error_code in (-4, -7):
                         self._stream_errors_count += 1
+                        # Reset timeout tracking on successful buffer activity
+                        self._consecutive_timeouts = 0
+                        self._timeout_backoff = 0.01
                         # Log the first error and then every 100th error to reduce spam
                         if self._stream_errors_count == 1 or self._stream_errors_count % 100 == 0:
                             self._interface_logger.warning(
@@ -780,6 +827,10 @@ class _SoapySDRReceiver(ReceiverInterface):
                     
                     # Other errors require full reconnection
                     raise RuntimeError(message)
+
+                # Success - reset timeout tracking
+                self._consecutive_timeouts = 0
+                self._timeout_backoff = 0.01
 
                 if result.ret > 0:
                     magnitude = float(handle.numpy.mean(handle.numpy.abs(buffer[: result.ret])))
@@ -972,6 +1023,93 @@ class _SoapySDRReceiver(ReceiverInterface):
                         self._sample_buffer[start_pos:],
                         self._sample_buffer[:self._sample_buffer_pos]
                     ])
+
+    def compute_spectrum(self, samples=None, fft_size: Optional[int] = None):
+        """Compute power spectral density using FFT with Hann window.
+
+        This method computes the spectrum for waterfall/spectrum visualization
+        in the web UI. Uses the Welch method approximation with Hann windowing
+        to reduce spectral leakage.
+
+        Args:
+            samples: IQ samples to compute spectrum for. If None, uses recent samples from buffer.
+            fft_size: FFT size to use. If None, uses configured _fft_size (default 2048).
+
+        Returns:
+            numpy array of power spectrum in dB (normalized to 0-100 scale),
+            or None if no samples available
+        """
+        handle = self._handle
+        if not handle:
+            return None
+
+        numpy = handle.numpy
+        fft_size = fft_size or self._fft_size
+
+        # Get samples if not provided
+        if samples is None:
+            samples = self.get_samples(num_samples=fft_size)
+
+        if samples is None or len(samples) < fft_size:
+            return None
+
+        # Initialize Hann window lazily
+        if self._window is None or len(self._window) != fft_size:
+            self._window = numpy.hanning(fft_size)
+
+        # Take the first fft_size samples and apply Hann window
+        windowed = samples[:fft_size] * self._window
+
+        # Compute FFT (shift zero frequency to center for display)
+        fft_result = numpy.fft.fftshift(numpy.fft.fft(windowed, n=fft_size))
+
+        # Convert to power spectrum (magnitude squared)
+        # Use maximum to avoid log(0)
+        power = numpy.abs(fft_result) ** 2
+        power = numpy.maximum(power, 1e-20)
+
+        # Convert to dB scale (10*log10 for power)
+        power_db = 10 * numpy.log10(power)
+
+        # Normalize to 0-100 scale for visualization
+        # Typical SDR dynamic range is about 80-100 dB
+        # Map -80 dB to 0 and 0 dB to 100
+        normalized = numpy.clip((power_db + 80) / 80 * 100, 0, 100)
+
+        return normalized.astype(numpy.float32)
+
+    def get_spectrum_info(self) -> Optional[Dict]:
+        """Get spectrum data with frequency axis information.
+
+        Returns:
+            Dictionary with spectrum data and metadata, or None if not available:
+            - spectrum: Power spectrum values (0-100 normalized)
+            - freq_min: Minimum frequency in Hz
+            - freq_max: Maximum frequency in Hz  
+            - center_frequency: Center frequency in Hz
+            - sample_rate: Sample rate in Hz
+            - fft_size: FFT size used
+            - timestamp: Time of computation
+        """
+        spectrum = self.compute_spectrum()
+        if spectrum is None:
+            return None
+
+        # Get frequency range from config
+        center_freq = self.config.frequency_hz
+        sample_rate = self.config.sample_rate
+        freq_min = center_freq - (sample_rate / 2)
+        freq_max = center_freq + (sample_rate / 2)
+
+        return {
+            "spectrum": spectrum.tolist(),
+            "freq_min": freq_min,
+            "freq_max": freq_max,
+            "center_frequency": center_freq,
+            "sample_rate": sample_rate,
+            "fft_size": self._fft_size,
+            "timestamp": time.time(),
+        }
 
 
 class RTLSDRReceiver(_SoapySDRReceiver):
