@@ -32,16 +32,22 @@ class _DummyReceiver(ReceiverInterface):
         super().__init__(config, event_logger=event_logger)
         self.started = 0
         self.stopped = 0
+        self._running = False
         self._status = ReceiverStatus(identifier=config.identifier, locked=False)
 
     def start(self) -> None:
         self.started += 1
+        self._running = True
 
     def stop(self) -> None:
         self.stopped += 1
+        self._running = False
 
     def get_status(self) -> ReceiverStatus:
         return self._status
+
+    def is_running(self) -> bool:
+        return self._running
 
     def capture_to_file(self, duration_seconds, output_dir, prefix, *, mode="iq"):
         raise NotImplementedError
@@ -101,6 +107,11 @@ def test_receiver_config_preserves_auto_start_flag():
         stereo_enabled = True
         deemphasis_us = 75.0
         enable_rbds = False
+        squelch_enabled = False
+        squelch_threshold_db = -65.0
+        squelch_open_ms = 150
+        squelch_close_ms = 750
+        squelch_alarm = False
 
     config = RadioReceiver.to_receiver_config(_Stub())
     assert config.enabled is True

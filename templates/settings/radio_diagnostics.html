@@ -272,7 +272,7 @@ sudo systemctl restart eas-station</code></pre>
         const barsHtml = Array.from({length: 4}, (_, i) => {
             const height = 6 + (i * 4); // 6, 10, 14, 18 pixels
             const active = i < bars; // Fill leftmost (shortest) bars first
-            return `<div style="display:inline-block; width:3px; height:${height}px; margin:0 1px; background:${active ? '#28a745' : '#dee2e6'}; border-radius:1px; vertical-align:bottom;"></div>`;
+            return `<div style="display:inline-block; width:3px; height:${height}px; margin:0 1px; background:${active ? '#28a745' : '#dee2e6'}; border-radius:1px;"></div>`;
         }).join('');
 
         // Determine color based on RSSI
@@ -283,8 +283,8 @@ sudo systemctl restart eas-station</code></pre>
         else if (rssi > -100) color = '#dc3545'; // red (poor)
 
         return `
-            <div style="display:flex; align-items:center; gap:0.5rem;">
-                <div style="display:inline-flex; gap:1px;">${barsHtml}</div>
+            <div style="display:flex; align-items:flex-end; gap:0.5rem;">
+                <div style="display:flex; align-items:flex-end; gap:1px;">${barsHtml}</div>
                 <span style="color:${color}; font-weight:600;">${rssi.toFixed(1)} dBm</span>
             </div>
         `;
