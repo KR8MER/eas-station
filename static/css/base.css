@@ -184,8 +184,8 @@
     --bg-card: #ffffff;
     --bg-primary: #33691e;
     --text-color: #1b5e20;
-    --text-secondary: #558b2f;
-    --text-muted: #7cb342;
+    --text-secondary: #2e7d32;
+    --text-muted: #558b2f;
     --border-color: #c5e1a5;
     --shadow-color: rgba(67, 160, 71, 0.12);
     --shadow: rgba(67, 160, 71, 0.12);
@@ -262,8 +262,8 @@
     --bg-card: #ffffff;
     --bg-primary: #1b5e20;
     --text-color: #1b5e20;
-    --text-secondary: #388e3c;
-    --text-muted: #66bb6a;
+    --text-secondary: #2e7d32;
+    --text-muted: #388e3c;
     --border-color: #c8e6c9;
     --shadow-color: rgba(46, 125, 50, 0.12);
     --shadow: rgba(46, 125, 50, 0.12);
@@ -301,8 +301,8 @@
     --bg-card: #ffffff;
     --bg-primary: #0d47a1;
     --text-color: #0d47a1;
-    --text-secondary: #1976d2;
-    --text-muted: #64b5f6;
+    --text-secondary: #1565c0;
+    --text-muted: #1976d2;
     --border-color: #bbdefb;
     --shadow-color: rgba(21, 101, 192, 0.12);
     --shadow: rgba(21, 101, 192, 0.12);
@@ -340,8 +340,8 @@
     --bg-card: #ffffff;
     --bg-primary: #4a148c;
     --text-color: #4a148c;
-    --text-secondary: #7b1fa2;
-    --text-muted: #ba68c8;
+    --text-secondary: #6a1b9a;
+    --text-muted: #7b1fa2;
     --border-color: #e1bee7;
     --shadow-color: rgba(106, 27, 154, 0.12);
     --shadow: rgba(106, 27, 154, 0.12);
@@ -378,9 +378,9 @@
     --surface-color: #ffffff;
     --bg-card: #ffffff;
     --bg-primary: #880e4f;
-    --text-color: #880e4f;
-    --text-secondary: #c2185b;
-    --text-muted: #f06292;
+    --text-color: #4a0e2c;
+    --text-secondary: #7b1042;
+    --text-muted: #ad1457;
     --border-color: #f8bbd0;
     --shadow-color: rgba(194, 24, 91, 0.12);
     --shadow: rgba(194, 24, 91, 0.12);
@@ -412,14 +412,14 @@
     --info-color: #42a5f5;
     --critical-color: #e53935;
     --light-color: #fff3e0;
-    --dark-color: #e65100;
+    --dark-color: #4e342e;
     --bg-color: #fff8e1;
     --surface-color: #ffffff;
     --bg-card: #ffffff;
-    --bg-primary: #e65100;
-    --text-color: #e65100;
-    --text-secondary: #f57c00;
-    --text-muted: #ffb74d;
+    --bg-primary: #4e342e;
+    --text-color: #3e2723;
+    --text-secondary: #5d4037;
+    --text-muted: #8d6e63;
     --border-color: #ffe0b2;
     --shadow-color: rgba(230, 81, 0, 0.12);
     --shadow: rgba(230, 81, 0, 0.12);
@@ -451,14 +451,14 @@
     --info-color: #42a5f5;
     --critical-color: #e53935;
     --light-color: #fffde7;
-    --dark-color: #f57f17;
+    --dark-color: #5d4037;
     --bg-color: #fffde7;
     --surface-color: #ffffff;
     --bg-card: #ffffff;
-    --bg-primary: #f57f17;
-    --text-color: #f57f17;
-    --text-secondary: #f9a825;
-    --text-muted: #fdd835;
+    --bg-primary: #5d4037;
+    --text-color: #3e2723;
+    --text-secondary: #5d4037;
+    --text-muted: #8d6e63;
     --border-color: #fff9c4;
     --shadow-color: rgba(245, 127, 23, 0.12);
     --shadow: rgba(245, 127, 23, 0.12);
@@ -564,14 +564,14 @@
     --info-color: #6ec8ff;
     --critical-color: #ff4f6f;
     --light-color: #fff1e6;
-    --dark-color: #7a341a;
+    --dark-color: #4e342e;
     --bg-color: #fff5eb;
     --surface-color: #ffffff;
     --bg-card: #ffffff;
-    --bg-primary: #7a341a;
-    --text-color: #7a341a;
-    --text-secondary: #d47447;
-    --text-muted: #ffab76;
+    --bg-primary: #4e342e;
+    --text-color: #3e2723;
+    --text-secondary: #5d4037;
+    --text-muted: #8d6e63;
     --border-color: #ffd9c2;
     --shadow-color: rgba(255, 120, 73, 0.18);
     --shadow: rgba(255, 120, 73, 0.18);
@@ -660,6 +660,117 @@
     --logo-backdrop: rgba(255, 255, 255, 0.98);
     --logo-border-color: rgba(2, 132, 199, 0.22);
     --logo-shadow: 0 10px 24px rgba(2, 132, 199, 0.15);
+}
+
+/* Charcoal Theme - Deep gray dark theme with excellent contrast */
+[data-theme="charcoal"] {
+    --primary-color: #64b5f6;
+    --primary-soft: #42a5f5;
+    --secondary-color: #ba68c8;
+    --secondary-soft: #ab47bc;
+    --accent-color: #4fc3f7;
+    --success-color: #81c784;
+    --danger-color: #e57373;
+    --warning-color: #ffb74d;
+    --info-color: #4dd0e1;
+    --critical-color: #f06292;
+    --light-color: #424242;
+    --dark-color: #1a1a1a;
+    --bg-color: #212121;
+    --surface-color: #2d2d2d;
+    --bg-card: #2d2d2d;
+    --bg-primary: #1a1a1a;
+    --text-color: #fafafa;
+    --text-secondary: #e0e0e0;
+    --text-muted: #9e9e9e;
+    --border-color: #424242;
+    --shadow-color: rgba(0, 0, 0, 0.6);
+    --shadow: rgba(0, 0, 0, 0.6);
+    --accent-primary: #4fc3f7;
+    --accent-secondary: #ab47bc;
+    --info: #4dd0e1;
+    --success: #81c784;
+    --warning: #ffb74d;
+    --danger: #e57373;
+
+    /* Branding */
+    --logo-backdrop: rgba(45, 45, 45, 0.95);
+    --logo-border-color: rgba(79, 195, 247, 0.4);
+    --logo-shadow: 0 16px 40px rgba(0, 0, 0, 0.7);
+}
+
+/* Obsidian Theme - Pure black AMOLED theme for true blacks */
+[data-theme="obsidian"] {
+    --primary-color: #90caf9;
+    --primary-soft: #64b5f6;
+    --secondary-color: #ce93d8;
+    --secondary-soft: #ba68c8;
+    --accent-color: #80deea;
+    --success-color: #a5d6a7;
+    --danger-color: #ef9a9a;
+    --warning-color: #ffe082;
+    --info-color: #81d4fa;
+    --critical-color: #f48fb1;
+    --light-color: #212121;
+    --dark-color: #000000;
+    --bg-color: #000000;
+    --surface-color: #121212;
+    --bg-card: #121212;
+    --bg-primary: #000000;
+    --text-color: #ffffff;
+    --text-secondary: #e0e0e0;
+    --text-muted: #757575;
+    --border-color: #333333;
+    --shadow-color: rgba(0, 0, 0, 0.8);
+    --shadow: rgba(0, 0, 0, 0.8);
+    --accent-primary: #80deea;
+    --accent-secondary: #ba68c8;
+    --info: #81d4fa;
+    --success: #a5d6a7;
+    --warning: #ffe082;
+    --danger: #ef9a9a;
+
+    /* Branding */
+    --logo-backdrop: rgba(18, 18, 18, 0.95);
+    --logo-border-color: rgba(128, 222, 234, 0.35);
+    --logo-shadow: 0 20px 50px rgba(0, 0, 0, 0.9);
+}
+
+/* Slate Theme - Blue-gray professional dark theme */
+[data-theme="slate"] {
+    --primary-color: #7dd3fc;
+    --primary-soft: #38bdf8;
+    --secondary-color: #a78bfa;
+    --secondary-soft: #8b5cf6;
+    --accent-color: #22d3ee;
+    --success-color: #34d399;
+    --danger-color: #fb7185;
+    --warning-color: #fbbf24;
+    --info-color: #38bdf8;
+    --critical-color: #f472b6;
+    --light-color: #475569;
+    --dark-color: #0f172a;
+    --bg-color: #1e293b;
+    --surface-color: #334155;
+    --bg-card: #334155;
+    --bg-primary: #0f172a;
+    --text-color: #f1f5f9;
+    --text-secondary: #cbd5e1;
+    --text-muted: #94a3b8;
+    --border-color: #475569;
+    --shadow-color: rgba(15, 23, 42, 0.6);
+    --shadow: rgba(15, 23, 42, 0.6);
+    --accent-primary: #22d3ee;
+    --accent-secondary: #8b5cf6;
+    --info: #38bdf8;
+    --success: #34d399;
+    --warning: #fbbf24;
+    --danger: #fb7185;
+
+    /* Branding */
+    --logo-backdrop: rgba(51, 65, 85, 0.95);
+    --logo-border-color: rgba(34, 211, 238, 0.4);
+    --logo-shadow: 0 18px 45px rgba(15, 23, 42, 0.7);
 }
 
 /* ============================================
@@ -797,10 +908,71 @@ a:focus {
     color: var(--text-color);
 }
 
+/* Base table header styling for light themes */
 .table th {
     background: linear-gradient(120deg, var(--primary-soft), var(--secondary-soft));
     border-top: none;
     color: #fff;
+    font-weight: 600;
+}
+
+/* Fix table headers for light themes with light primary/secondary colors - use darker backgrounds */
+[data-theme="yellow"] .table th,
+[data-theme="orange"] .table th,
+[data-theme="sunset"] .table th,
+[data-theme="tide"] .table th {
+    background: linear-gradient(120deg, var(--primary-color), var(--secondary-color));
+    color: #fff;
+}
+
+/* Table header styling for dark themes - use darker backgrounds with light text */
+[data-theme-mode="dark"] .table th {
+    background: linear-gradient(120deg, var(--bg-primary), var(--dark-color));
+    color: var(--text-color);
+    border-bottom: 2px solid var(--border-color);
+}
+
+/* Explicit dark theme table header fixes */
+[data-theme="dark"] .table th,
+[data-theme="coffee"] .table th,
+[data-theme="aurora"] .table th,
+[data-theme="nebula"] .table th,
+[data-theme="midnight"] .table th,
+[data-theme="charcoal"] .table th,
+[data-theme="obsidian"] .table th,
+[data-theme="slate"] .table th {
+    background: linear-gradient(120deg, var(--bg-primary), var(--dark-color));
+    color: var(--text-color);
+    border-bottom: 2px solid var(--border-color);
+}
+
+/* Bootstrap table-light class in dark themes */
+[data-theme-mode="dark"] .table-light th,
+[data-theme-mode="dark"] thead.table-light th {
+    background: rgba(255, 255, 255, 0.08) !important;
+    color: var(--text-color) !important;
+    border-color: var(--border-color) !important;
+}
+
+[data-theme="dark"] .table-light th,
+[data-theme="dark"] thead.table-light th,
+[data-theme="coffee"] .table-light th,
+[data-theme="coffee"] thead.table-light th,
+[data-theme="aurora"] .table-light th,
+[data-theme="aurora"] thead.table-light th,
+[data-theme="nebula"] .table-light th,
+[data-theme="nebula"] thead.table-light th,
+[data-theme="midnight"] .table-light th,
+[data-theme="midnight"] thead.table-light th,
+[data-theme="charcoal"] .table-light th,
+[data-theme="charcoal"] thead.table-light th,
+[data-theme="obsidian"] .table-light th,
+[data-theme="obsidian"] thead.table-light th,
+[data-theme="slate"] .table-light th,
+[data-theme="slate"] thead.table-light th {
+    background: rgba(255, 255, 255, 0.08) !important;
+    color: var(--text-color) !important;
+    border-color: var(--border-color) !important;
 }
 
 /* ============================================
@@ -1254,6 +1426,102 @@ a:focus {
 }
 
 /* ============================================
+   CARD HEADER FIXES FOR DARK THEMES
+   Fix Bootstrap bg-* card headers to be readable
+   ============================================ */
+
+/* Card headers with bg-primary/secondary/info in dark themes */
+[data-theme-mode="dark"] .card-header.bg-primary,
+[data-theme-mode="dark"] .card-header.bg-secondary,
+[data-theme-mode="dark"] .card-header.bg-info,
+[data-theme-mode="dark"] .card-header.bg-dark {
+    background: linear-gradient(135deg, var(--bg-primary), var(--dark-color)) !important;
+    color: var(--text-color) !important;
+    border-bottom: 1px solid var(--border-color) !important;
+}
+
+/* Ensure text in these headers is readable */
+[data-theme-mode="dark"] .card-header.bg-primary.text-white,
+[data-theme-mode="dark"] .card-header.bg-secondary.text-white,
+[data-theme-mode="dark"] .card-header.bg-info.text-white,
+[data-theme-mode="dark"] .card-header.bg-dark.text-white {
+    color: var(--text-color) !important;
+}
+
+/* Fix for each specific dark theme */
+[data-theme="dark"] .card-header.bg-primary,
+[data-theme="dark"] .card-header.bg-secondary,
+[data-theme="dark"] .card-header.bg-info,
+[data-theme="dark"] .card-header.bg-dark,
+[data-theme="coffee"] .card-header.bg-primary,
+[data-theme="coffee"] .card-header.bg-secondary,
+[data-theme="coffee"] .card-header.bg-info,
+[data-theme="coffee"] .card-header.bg-dark,
+[data-theme="aurora"] .card-header.bg-primary,
+[data-theme="aurora"] .card-header.bg-secondary,
+[data-theme="aurora"] .card-header.bg-info,
+[data-theme="aurora"] .card-header.bg-dark,
+[data-theme="nebula"] .card-header.bg-primary,
+[data-theme="nebula"] .card-header.bg-secondary,
+[data-theme="nebula"] .card-header.bg-info,
+[data-theme="nebula"] .card-header.bg-dark,
+[data-theme="midnight"] .card-header.bg-primary,
+[data-theme="midnight"] .card-header.bg-secondary,
+[data-theme="midnight"] .card-header.bg-info,
+[data-theme="midnight"] .card-header.bg-dark,
+[data-theme="charcoal"] .card-header.bg-primary,
+[data-theme="charcoal"] .card-header.bg-secondary,
+[data-theme="charcoal"] .card-header.bg-info,
+[data-theme="charcoal"] .card-header.bg-dark,
+[data-theme="obsidian"] .card-header.bg-primary,
+[data-theme="obsidian"] .card-header.bg-secondary,
+[data-theme="obsidian"] .card-header.bg-info,
+[data-theme="obsidian"] .card-header.bg-dark,
+[data-theme="slate"] .card-header.bg-primary,
+[data-theme="slate"] .card-header.bg-secondary,
+[data-theme="slate"] .card-header.bg-info,
+[data-theme="slate"] .card-header.bg-dark {
+    background: linear-gradient(135deg, var(--bg-primary), var(--dark-color)) !important;
+    color: var(--text-color) !important;
+    border-bottom: 1px solid var(--border-color) !important;
+}
+
+[data-theme="dark"] .card-header.bg-primary.text-white,
+[data-theme="dark"] .card-header.bg-secondary.text-white,
+[data-theme="dark"] .card-header.bg-info.text-white,
+[data-theme="dark"] .card-header.bg-dark.text-white,
+[data-theme="coffee"] .card-header.bg-primary.text-white,
+[data-theme="coffee"] .card-header.bg-secondary.text-white,
+[data-theme="coffee"] .card-header.bg-info.text-white,
+[data-theme="coffee"] .card-header.bg-dark.text-white,
+[data-theme="aurora"] .card-header.bg-primary.text-white,
+[data-theme="aurora"] .card-header.bg-secondary.text-white,
+[data-theme="aurora"] .card-header.bg-info.text-white,
+[data-theme="aurora"] .card-header.bg-dark.text-white,
+[data-theme="nebula"] .card-header.bg-primary.text-white,
+[data-theme="nebula"] .card-header.bg-secondary.text-white,
+[data-theme="nebula"] .card-header.bg-info.text-white,
+[data-theme="nebula"] .card-header.bg-dark.text-white,
+[data-theme="midnight"] .card-header.bg-primary.text-white,
+[data-theme="midnight"] .card-header.bg-secondary.text-white,
+[data-theme="midnight"] .card-header.bg-info.text-white,
+[data-theme="midnight"] .card-header.bg-dark.text-white,
+[data-theme="charcoal"] .card-header.bg-primary.text-white,
+[data-theme="charcoal"] .card-header.bg-secondary.text-white,
+[data-theme="charcoal"] .card-header.bg-info.text-white,
+[data-theme="charcoal"] .card-header.bg-dark.text-white,
+[data-theme="obsidian"] .card-header.bg-primary.text-white,
+[data-theme="obsidian"] .card-header.bg-secondary.text-white,
+[data-theme="obsidian"] .card-header.bg-info.text-white,
+[data-theme="obsidian"] .card-header.bg-dark.text-white,
+[data-theme="slate"] .card-header.bg-primary.text-white,
+[data-theme="slate"] .card-header.bg-secondary.text-white,
+[data-theme="slate"] .card-header.bg-info.text-white,
+[data-theme="slate"] .card-header.bg-dark.text-white {
+    color: var(--text-color) !important;
+}
+
+/* ============================================
    INDIVIDUAL DARK THEME OVERRIDES
    Apply same fixes to all dark theme variants
    ============================================ */
@@ -1270,7 +1538,19 @@ a:focus {
 [data-theme="aurora"] .bg-light,
 [data-theme="nebula"] .bg-white,
 [data-theme="nebula"] .card,
-[data-theme="nebula"] .bg-light {
+[data-theme="nebula"] .bg-light,
+[data-theme="midnight"] .bg-white,
+[data-theme="midnight"] .card,
+[data-theme="midnight"] .bg-light,
+[data-theme="charcoal"] .bg-white,
+[data-theme="charcoal"] .card,
+[data-theme="charcoal"] .bg-light,
+[data-theme="obsidian"] .bg-white,
+[data-theme="obsidian"] .card,
+[data-theme="obsidian"] .bg-light,
+[data-theme="slate"] .bg-white,
+[data-theme="slate"] .card,
+[data-theme="slate"] .bg-light {
     background-color: var(--surface-color) !important;
     color: var(--text-color) !important;
 }
@@ -1279,21 +1559,33 @@ a:focus {
 [data-theme="dark"] .text-dark,
 [data-theme="coffee"] .text-dark,
 [data-theme="aurora"] .text-dark,
-[data-theme="nebula"] .text-dark {
+[data-theme="nebula"] .text-dark,
+[data-theme="midnight"] .text-dark,
+[data-theme="charcoal"] .text-dark,
+[data-theme="obsidian"] .text-dark,
+[data-theme="slate"] .text-dark {
     color: var(--text-color) !important;
 }
 
 [data-theme="dark"] .text-muted,
 [data-theme="coffee"] .text-muted,
 [data-theme="aurora"] .text-muted,
-[data-theme="nebula"] .text-muted {
+[data-theme="nebula"] .text-muted,
+[data-theme="midnight"] .text-muted,
+[data-theme="charcoal"] .text-muted,
+[data-theme="obsidian"] .text-muted,
+[data-theme="slate"] .text-muted {
     color: var(--text-muted) !important;
 }
 
 [data-theme="dark"] .text-secondary,
 [data-theme="coffee"] .text-secondary,
 [data-theme="aurora"] .text-secondary,
-[data-theme="nebula"] .text-secondary {
+[data-theme="nebula"] .text-secondary,
+[data-theme="midnight"] .text-secondary,
+[data-theme="charcoal"] .text-secondary,
+[data-theme="obsidian"] .text-secondary,
+[data-theme="slate"] .text-secondary {
     color: var(--text-secondary) !important;
 }
 
@@ -1305,7 +1597,15 @@ a:focus {
 [data-theme="aurora"] .form-control,
 [data-theme="aurora"] .form-select,
 [data-theme="nebula"] .form-control,
-[data-theme="nebula"] .form-select {
+[data-theme="nebula"] .form-select,
+[data-theme="midnight"] .form-control,
+[data-theme="midnight"] .form-select,
+[data-theme="charcoal"] .form-control,
+[data-theme="charcoal"] .form-select,
+[data-theme="obsidian"] .form-control,
+[data-theme="obsidian"] .form-select,
+[data-theme="slate"] .form-control,
+[data-theme="slate"] .form-select {
     background-color: var(--surface-color);
     color: var(--text-color);
     border-color: var(--border-color);
@@ -1314,7 +1614,11 @@ a:focus {
 [data-theme="dark"] .form-control::placeholder,
 [data-theme="coffee"] .form-control::placeholder,
 [data-theme="aurora"] .form-control::placeholder,
-[data-theme="nebula"] .form-control::placeholder {
+[data-theme="nebula"] .form-control::placeholder,
+[data-theme="midnight"] .form-control::placeholder,
+[data-theme="charcoal"] .form-control::placeholder,
+[data-theme="obsidian"] .form-control::placeholder,
+[data-theme="slate"] .form-control::placeholder {
     color: var(--text-muted);
 }
 
@@ -1322,7 +1626,11 @@ a:focus {
 [data-theme="dark"] .modal-content,
 [data-theme="coffee"] .modal-content,
 [data-theme="aurora"] .modal-content,
-[data-theme="nebula"] .modal-content {
+[data-theme="nebula"] .modal-content,
+[data-theme="midnight"] .modal-content,
+[data-theme="charcoal"] .modal-content,
+[data-theme="obsidian"] .modal-content,
+[data-theme="slate"] .modal-content {
     background-color: var(--surface-color);
     color: var(--text-color);
 }
@@ -1331,7 +1639,11 @@ a:focus {
 [data-theme="dark"] .dropdown-menu,
 [data-theme="coffee"] .dropdown-menu,
 [data-theme="aurora"] .dropdown-menu,
-[data-theme="nebula"] .dropdown-menu {
+[data-theme="nebula"] .dropdown-menu,
+[data-theme="midnight"] .dropdown-menu,
+[data-theme="charcoal"] .dropdown-menu,
+[data-theme="obsidian"] .dropdown-menu,
+[data-theme="slate"] .dropdown-menu {
     background-color: var(--surface-color);
     color: var(--text-color);
     border-color: var(--border-color);
@@ -1340,7 +1652,11 @@ a:focus {
 [data-theme="dark"] .dropdown-item,
 [data-theme="coffee"] .dropdown-item,
 [data-theme="aurora"] .dropdown-item,
-[data-theme="nebula"] .dropdown-item {
+[data-theme="nebula"] .dropdown-item,
+[data-theme="midnight"] .dropdown-item,
+[data-theme="charcoal"] .dropdown-item,
+[data-theme="obsidian"] .dropdown-item,
+[data-theme="slate"] .dropdown-item {
     color: var(--text-color);
 }
 
@@ -1348,7 +1664,11 @@ a:focus {
 [data-theme="dark"] .list-group-item,
 [data-theme="coffee"] .list-group-item,
 [data-theme="aurora"] .list-group-item,
-[data-theme="nebula"] .list-group-item {
+[data-theme="nebula"] .list-group-item,
+[data-theme="midnight"] .list-group-item,
+[data-theme="charcoal"] .list-group-item,
+[data-theme="obsidian"] .list-group-item,
+[data-theme="slate"] .list-group-item {
     background-color: var(--surface-color);
     color: var(--text-color);
     border-color: var(--border-color);
@@ -1358,7 +1678,11 @@ a:focus {
 [data-theme="dark"] .table,
 [data-theme="coffee"] .table,
 [data-theme="aurora"] .table,
-[data-theme="nebula"] .table {
+[data-theme="nebula"] .table,
+[data-theme="midnight"] .table,
+[data-theme="charcoal"] .table,
+[data-theme="obsidian"] .table,
+[data-theme="slate"] .table {
     color: var(--text-color);
     border-color: var(--border-color);
 }
@@ -1366,7 +1690,11 @@ a:focus {
 [data-theme="dark"] .table thead th,
 [data-theme="coffee"] .table thead th,
 [data-theme="aurora"] .table thead th,
-[data-theme="nebula"] .table thead th {
+[data-theme="nebula"] .table thead th,
+[data-theme="midnight"] .table thead th,
+[data-theme="charcoal"] .table thead th,
+[data-theme="obsidian"] .table thead th,
+[data-theme="slate"] .table thead th {
     color: var(--text-color);
 }
 
@@ -1378,7 +1706,15 @@ a:focus {
 [data-theme="aurora"] .badge.bg-warning.text-dark,
 [data-theme="aurora"] .bg-warning.text-dark,
 [data-theme="nebula"] .badge.bg-warning.text-dark,
-[data-theme="nebula"] .bg-warning.text-dark {
+[data-theme="nebula"] .bg-warning.text-dark,
+[data-theme="midnight"] .badge.bg-warning.text-dark,
+[data-theme="midnight"] .bg-warning.text-dark,
+[data-theme="charcoal"] .badge.bg-warning.text-dark,
+[data-theme="charcoal"] .bg-warning.text-dark,
+[data-theme="obsidian"] .badge.bg-warning.text-dark,
+[data-theme="obsidian"] .bg-warning.text-dark,
+[data-theme="slate"] .badge.bg-warning.text-dark,
+[data-theme="slate"] .bg-warning.text-dark {
     color: #1a1a1a !important;
 }
 
@@ -1389,7 +1725,15 @@ a:focus {
 [data-theme="aurora"] .badge.bg-info.text-dark,
 [data-theme="aurora"] .bg-info.text-dark,
 [data-theme="nebula"] .badge.bg-info.text-dark,
-[data-theme="nebula"] .bg-info.text-dark {
+[data-theme="nebula"] .bg-info.text-dark,
+[data-theme="midnight"] .badge.bg-info.text-dark,
+[data-theme="midnight"] .bg-info.text-dark,
+[data-theme="charcoal"] .badge.bg-info.text-dark,
+[data-theme="charcoal"] .bg-info.text-dark,
+[data-theme="obsidian"] .badge.bg-info.text-dark,
+[data-theme="obsidian"] .bg-info.text-dark,
+[data-theme="slate"] .badge.bg-info.text-dark,
+[data-theme="slate"] .bg-info.text-dark {
     color: #1a1a1a !important;
 }
 
@@ -1398,7 +1742,10 @@ a:focus {
 [data-theme="coffee"] .bg-dark-subtle,
 [data-theme="aurora"] .bg-dark-subtle,
 [data-theme="nebula"] .bg-dark-subtle,
-[data-theme="midnight"] .bg-dark-subtle {
+[data-theme="midnight"] .bg-dark-subtle,
+[data-theme="charcoal"] .bg-dark-subtle,
+[data-theme="obsidian"] .bg-dark-subtle,
+[data-theme="slate"] .bg-dark-subtle {
     background-color: rgba(0, 0, 0, 0.3) !important;
     color: var(--text-color) !important;
 }
