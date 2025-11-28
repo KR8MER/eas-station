@@ -772,16 +772,20 @@ class _SoapySDRReceiver(ReceiverInterface):
                         
                         # If too many consecutive timeouts, raise error for full reconnection
                         if self._consecutive_timeouts > self._max_consecutive_timeouts:
-                            timeout_duration = self._consecutive_timeouts * self._timeout_backoff
+                            # Calculate approximate total timeout duration
+                            # This is a rough estimate since backoff is exponential
+                            # Sum of geometric series: a * (r^n - 1) / (r - 1) where a=0.01, r=2
+                            n = self._consecutive_timeouts
+                            timeout_duration = 0.01 * (2 ** min(n, 6) - 1)  # Cap at 6 iterations of doubling
                             self._interface_logger.error(
-                                "SDR %s not providing samples for %.2fs (%d consecutive timeouts). Reconnecting...",
+                                "SDR %s not providing samples for ~%.2fs (%d consecutive timeouts). Reconnecting...",
                                 self.config.identifier,
                                 timeout_duration,
                                 self._consecutive_timeouts
                             )
                             self._consecutive_timeouts = 0
                             self._timeout_backoff = 0.01
-                            raise RuntimeError(f"SDR timeout: no samples for {timeout_duration:.2f}s")
+                            raise RuntimeError(f"SDR timeout: no samples for ~{timeout_duration:.2f}s")
                         
                         # Exponential backoff: 10ms, 20ms, 40ms... up to max_timeout_backoff
                         backoff = min(self._timeout_backoff, self._max_timeout_backoff)
@@ -1054,8 +1058,14 @@ class _SoapySDRReceiver(ReceiverInterface):
             return None
 
         # Initialize Hann window lazily
+        # Use numpy.hanning for compatibility with both old and new numpy versions
+        # (numpy.hann was added in numpy 2.x, but hanning works in all versions)
         if self._window is None or len(self._window) != fft_size:
-            self._window = numpy.hanning(fft_size)
+            # Try modern hann first, fall back to hanning for older numpy
+            try:
+                self._window = numpy.hann(fft_size)
+            except AttributeError:
+                self._window = numpy.hanning(fft_size)
 
         # Take the first fft_size samples and apply Hann window
         windowed = samples[:fft_size] * self._window

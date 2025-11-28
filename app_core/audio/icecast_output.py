@@ -482,15 +482,21 @@ class IcecastStreamer:
                     # Track consecutive empty reads to diagnose source issues
                     self._consecutive_empty_reads += 1
                     # Use configurable intervals that account for variable timeout
-                    starvation_seconds = self._consecutive_empty_reads * chunk_timeout
-                    if starvation_seconds >= 10.0 and self._consecutive_empty_reads % max(1, int(10.0 / chunk_timeout)) == 0:
+                    # Guard against zero timeout (shouldn't happen but be defensive)
+                    safe_timeout = max(0.1, chunk_timeout)
+                    starvation_seconds = self._consecutive_empty_reads * safe_timeout
+                    # Calculate logging intervals based on timeout (min 1 to avoid division by zero)
+                    log_interval_10s = max(1, int(10.0 / safe_timeout))
+                    log_interval_60s = max(1, int(60.0 / safe_timeout))
+                    
+                    if starvation_seconds >= 10.0 and self._consecutive_empty_reads % log_interval_10s == 0:
                         if starvation_seconds < 30.0:
                             logger.warning(
                                 f"Audio source for mount {self.config.mount} has not provided data for {starvation_seconds:.0f}+ seconds. "
                                 f"Buffer: {len(buffer)}/{buffer.maxlen} chunks. "
                                 "Check if audio source is running and configured correctly."
                             )
-                        elif starvation_seconds >= 60.0 and self._consecutive_empty_reads % max(1, int(60.0 / chunk_timeout)) == 0:
+                        elif starvation_seconds >= 60.0 and self._consecutive_empty_reads % log_interval_60s == 0:
                             logger.error(
                                 f"Audio source for mount {self.config.mount} starved for {starvation_seconds:.0f}+ seconds! "
                                 f"Buffer: {len(buffer)}/{buffer.maxlen} chunks. "
