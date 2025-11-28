@@ -188,12 +188,12 @@ class AutoStreamingService:
                 return False
 
             try:
-                # Detect sample rate from audio source
-                sample_rate = 44100  # Default
-                if hasattr(audio_source, 'config') and hasattr(audio_source.config, 'sample_rate'):
-                    sample_rate = audio_source.config.sample_rate
-                elif hasattr(audio_source, 'sample_rate'):
-                    sample_rate = audio_source.sample_rate
+                # CRITICAL: Use broadcast queue's standard sample rate (44100 Hz)
+                # The broadcast queue resamples all audio to this rate before publishing,
+                # so all Icecast streams must be configured for this rate regardless of
+                # their source's native sample rate.
+                # This fixes the sample rate mismatch bug that caused squealing and crashes.
+                broadcast_sample_rate = 44100
 
                 # Create Icecast configuration
                 channels = 2 if getattr(audio_source.config, 'channels', 1) > 1 else 1
@@ -215,7 +215,7 @@ class AutoStreamingService:
                     bitrate=bitrate or self.default_bitrate,
                     format=self.default_format,
                     public=False,
-                    sample_rate=sample_rate,
+                    sample_rate=broadcast_sample_rate,  # Use broadcast queue rate
                     channels=channels,
                     admin_user=self.icecast_admin_user,
                     admin_password=self.icecast_admin_password,
@@ -233,13 +233,13 @@ class AutoStreamingService:
                     broadcast_adapter = BroadcastAudioAdapter(
                         broadcast_queue=broadcast_queue,
                         subscriber_id=f"icecast-{source_name}",
-                        sample_rate=sample_rate
+                        sample_rate=broadcast_sample_rate  # Use broadcast queue rate
                     )
                     self._broadcast_adapters[source_name] = broadcast_adapter
                     actual_audio_source = broadcast_adapter
                     logger.info(
                         f"Icecast stream '{source_name}' subscribed to broadcast queue "
-                        f"(no competition with EAS monitor)"
+                        f"at {broadcast_sample_rate} Hz (standardized rate for all streams)"
                     )
 
                 # Create and start streamer
