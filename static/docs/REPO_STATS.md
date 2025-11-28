@@ -1,14 +1,14 @@
 # Repository Statistics
 
-**Generated:** 2025-11-28 17:18:26 UTC
+**Generated:** 2025-11-28 20:43:01 UTC
 
 ## Overview
 
-- **Total Files:** 620
+- **Total Files:** 622
 - **Total Directories:** 74
-- **Total Lines:** 211,488
-- **Code Lines:** 120,548
-- **Comment Lines:** 59,087
+- **Total Lines:** 212,083
+- **Code Lines:** 121,000
+- **Comment Lines:** 59,094
 - **Total Routes:** 189
 
 ## Files by Type
@@ -18,8 +18,8 @@
 | Python | 321 |
 | HTML | 84 |
 | Other | 62 |
-| Markdown | 53 |
-| Shell | 28 |
+| Markdown | 54 |
+| Shell | 29 |
 | SVG | 15 |
 | JavaScript | 14 |
 | YAML | 13 |
@@ -34,10 +34,10 @@
 |----------|-------------|------------|---------------|
 | Python | 112,682 | 41,220 | 51,993 |
 | HTML | 52,695 | 47,794 | 488 |
-| Markdown | 21,225 | 16,274 | 0 |
+| Markdown | 21,687 | 16,621 | 0 |
 | CSS | 7,769 | 1,695 | 4,943 |
 | JavaScript | 5,737 | 4,246 | 727 |
-| Shell | 2,954 | 2,169 | 354 |
+| Shell | 3,087 | 2,274 | 361 |
 | Text | 2,212 | 2,068 | 0 |
 | YAML | 2,088 | 1,507 | 382 |
 | SVG | 1,755 | 1,332 | 176 |
@@ -87,7 +87,7 @@
 **HTML:** 47,794 lines  
 `██████████████████████████████████████████████████`
 
-**Markdown:** 16,274 lines  
+**Markdown:** 16,621 lines  
 `█████████████████`
 
 **CSS:** 1,695 lines  
