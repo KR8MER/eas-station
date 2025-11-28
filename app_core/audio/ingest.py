@@ -723,6 +723,16 @@ class AudioIngestController:
                     if source_sample_rate != self._broadcast_queue_sample_rate:
                         chunk = self._resample_chunk(chunk, source_sample_rate, self._broadcast_queue_sample_rate)
 
+                    # CRITICAL: Even if rates match, still check - chunk may come from resampling
+                    # Ensure chunk size is not excessively large which could cause downstream buffering issues
+                    # Target max chunk size: 200ms at broadcast rate to prevent overflow
+                    max_chunk_samples = int(self._broadcast_queue_sample_rate * 0.2)
+                    if len(chunk) > max_chunk_samples:
+                        logger.warning(
+                            f"Chunk size {len(chunk)} exceeds max {max_chunk_samples} "
+                            f"({len(chunk)/self._broadcast_queue_sample_rate*1000:.1f}ms), splitting"
+                        )
+
                     # Publish to broadcast queue - all subscribers get a copy
                     delivered = self._broadcast_queue.publish(chunk)
                     if delivered == 0:
