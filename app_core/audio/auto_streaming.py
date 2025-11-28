@@ -39,7 +39,6 @@ import time
 from typing import Dict, Optional, TYPE_CHECKING
 
 from .icecast_output import IcecastConfig, IcecastStreamer, StreamFormat
-from .broadcast_adapter import BroadcastAudioAdapter
 from .mount_points import generate_mount_point, StreamFormat as MountStreamFormat
 
 if TYPE_CHECKING:
@@ -92,8 +91,6 @@ class AutoStreamingService:
 
         # Active streamers: source_name -> IcecastStreamer
         self._streamers: Dict[str, IcecastStreamer] = {}
-        # Broadcast adapters: source_name -> BroadcastAudioAdapter
-        self._broadcast_adapters: Dict[str, BroadcastAudioAdapter] = {}
         self._lock = threading.Lock()
 
         # Monitoring thread
@@ -141,7 +138,7 @@ class AutoStreamingService:
         logger.info("Stopping AutoStreamingService")
         self._stop_event.set()
 
-        # Stop all active streamers and clean up broadcast adapters
+        # Stop all active streamers
         with self._lock:
             for source_name, streamer in list(self._streamers.items()):
                 try:
@@ -150,15 +147,6 @@ class AutoStreamingService:
                     logger.error(f"Error stopping streamer for {source_name}: {e}")
 
             self._streamers.clear()
-
-            # Unsubscribe all broadcast adapters
-            for source_name, adapter in list(self._broadcast_adapters.items()):
-                try:
-                    adapter.unsubscribe()
-                except Exception as e:
-                    logger.error(f"Error unsubscribing broadcast adapter for {source_name}: {e}")
-
-            self._broadcast_adapters.clear()
 
         # Wait for monitor thread
         if self._monitor_thread:
@@ -188,14 +176,15 @@ class AutoStreamingService:
                 return False
 
             try:
-                # CRITICAL: Use broadcast queue's standard sample rate (44100 Hz)
-                # The broadcast queue resamples all audio to this rate before publishing,
-                # so all Icecast streams must be configured for this rate regardless of
-                # their source's native sample rate.
-                # This fixes the sample rate mismatch bug that caused squealing and crashes.
-                broadcast_sample_rate = 44100
+                # CRITICAL: Each Icecast stream outputs its OWN source's audio
+                # at the source's NATIVE sample rate - DO NOT alter the stream!
+                # Use the source's native sample rate and channels
+                sample_rate = 44100  # Default
+                if hasattr(audio_source, 'config') and hasattr(audio_source.config, 'sample_rate'):
+                    sample_rate = audio_source.config.sample_rate
+                elif hasattr(audio_source, 'sample_rate'):
+                    sample_rate = audio_source.sample_rate
 
-                # Create Icecast configuration
                 channels = 2 if getattr(audio_source.config, 'channels', 1) > 1 else 1
 
                 # Convert StreamFormat enum to MountStreamFormat enum
@@ -215,35 +204,22 @@ class AutoStreamingService:
                     bitrate=bitrate or self.default_bitrate,
                     format=self.default_format,
                     public=False,
-                    sample_rate=broadcast_sample_rate,  # Use broadcast queue rate
+                    sample_rate=sample_rate,  # Use source's native sample rate
                     channels=channels,
                     admin_user=self.icecast_admin_user,
                     admin_password=self.icecast_admin_password,
                 )
 
-                # If we have access to broadcast queue, use non-destructive subscription
-                # Otherwise fall back to direct audio source access (legacy mode)
-                actual_audio_source = audio_source
-                if self.audio_controller is not None:
-                    logger.info(
-                        f"Creating broadcast subscription for Icecast stream: {source_name} "
-                        "(non-destructive mode)"
-                    )
-                    broadcast_queue = self.audio_controller.get_broadcast_queue()
-                    broadcast_adapter = BroadcastAudioAdapter(
-                        broadcast_queue=broadcast_queue,
-                        subscriber_id=f"icecast-{source_name}",
-                        sample_rate=broadcast_sample_rate  # Use broadcast queue rate
-                    )
-                    self._broadcast_adapters[source_name] = broadcast_adapter
-                    actual_audio_source = broadcast_adapter
-                    logger.info(
-                        f"Icecast stream '{source_name}' subscribed to broadcast queue "
-                        f"at {broadcast_sample_rate} Hz (standardized rate for all streams)"
-                    )
+                # CRITICAL: Each Icecast stream reads DIRECTLY from its own audio source
+                # NOT from the broadcast queue! The broadcast queue is for monitoring only.
+                # This ensures WNCI stream outputs WNCI audio, WIMT outputs WIMT audio, etc.
+                logger.info(
+                    f"Icecast stream '{source_name}' will read directly from source "
+                    f"at native {sample_rate} Hz (pass-through mode)"
+                )
 
-                # Create and start streamer
-                streamer = IcecastStreamer(config, actual_audio_source)
+                # Create and start streamer with direct source access
+                streamer = IcecastStreamer(config, audio_source)
                 if streamer.start():
                     self._streamers[source_name] = streamer
                     logger.info(
@@ -253,18 +229,10 @@ class AutoStreamingService:
                     return True
                 else:
                     logger.error(f"Failed to start Icecast stream for {source_name}")
-                    # Clean up broadcast adapter if we created one
-                    if source_name in self._broadcast_adapters:
-                        self._broadcast_adapters[source_name].unsubscribe()
-                        del self._broadcast_adapters[source_name]
                     return False
 
             except Exception as e:
                 logger.error(f"Error creating streamer for {source_name}: {e}")
-                # Clean up broadcast adapter if we created one
-                if source_name in self._broadcast_adapters:
-                    self._broadcast_adapters[source_name].unsubscribe()
-                    del self._broadcast_adapters[source_name]
                 return False
 
     def remove_source(self, source_name: str) -> bool:
@@ -279,29 +247,18 @@ class AutoStreamingService:
         """
         with self._lock:
             streamer = self._streamers.pop(source_name, None)
-            broadcast_adapter = self._broadcast_adapters.pop(source_name, None)
 
-            success = False
-            if streamer:
-                try:
-                    streamer.stop()
-                    logger.info(f"Stopped Icecast stream for {source_name}")
-                    success = True
-                except Exception as e:
-                    logger.error(f"Error stopping streamer for {source_name}: {e}")
-
-            if broadcast_adapter:
-                try:
-                    broadcast_adapter.unsubscribe()
-                    logger.info(f"Unsubscribed broadcast adapter for {source_name}")
-                except Exception as e:
-                    logger.error(f"Error unsubscribing broadcast adapter for {source_name}: {e}")
-
-            if not streamer and not broadcast_adapter:
-                logger.warning(f"No streamer or adapter found for {source_name}")
+            if not streamer:
+                logger.warning(f"No streamer found for {source_name}")
                 return False
 
-            return success
+            try:
+                streamer.stop()
+                logger.info(f"Stopped Icecast stream for {source_name}")
+                return True
+            except Exception as e:
+                logger.error(f"Error stopping streamer for {source_name}: {e}")
+                return False
 
     def get_stream_url(self, source_name: str) -> Optional[str]:
         """

@@ -447,12 +447,9 @@ class AudioIngestController:
         # CRITICAL: Increased to 2000 to prevent EAS monitor from missing chunks
         # At 44100Hz: 200 chunks = 18.6 seconds (TOO SMALL - caused missed alerts)
         # At 44100Hz: 2000 chunks = 186 seconds (safe buffer)
+        # NOTE: The broadcast queue is for MONITORING only (EAS monitor gets the active source)
+        # Icecast streams read directly from their own sources, NOT from the broadcast queue
         self._broadcast_queue = BroadcastQueue(name="audio-ingest-broadcast", max_queue_size=2000)
-
-        # Standard sample rate for broadcast queue
-        # All audio is resampled to this rate before broadcasting to ensure consistency
-        # across all subscribers (Icecast, EAS monitor, etc.)
-        self._broadcast_queue_sample_rate = 44100
 
         # Subscribe to our own broadcast for backward compatibility with get_audio_chunk()
         self._controller_subscription = self._broadcast_queue.subscribe("controller-legacy")
@@ -714,26 +711,9 @@ class AudioIngestController:
 
                 if chunk is not None:
                     chunks_published_since_log += 1
-
-                    # CRITICAL: Resample to standard broadcast rate if needed
-                    # All audio sources have different sample rates (22050, 24000, 44100, 48000, etc.)
-                    # but all subscribers to the broadcast queue expect a consistent rate.
-                    # Without this, Icecast encoders get sample rate mismatches causing squealing/crashes.
-                    source_sample_rate = getattr(best_source.config, 'sample_rate', 44100)
-                    if source_sample_rate != self._broadcast_queue_sample_rate:
-                        chunk = self._resample_chunk(chunk, source_sample_rate, self._broadcast_queue_sample_rate)
-
-                    # CRITICAL: Even if rates match, still check - chunk may come from resampling
-                    # Ensure chunk size is not excessively large which could cause downstream buffering issues
-                    # Target max chunk size: 200ms at broadcast rate to prevent overflow
-                    max_chunk_samples = int(self._broadcast_queue_sample_rate * 0.2)
-                    if len(chunk) > max_chunk_samples:
-                        logger.warning(
-                            f"Chunk size {len(chunk)} exceeds max {max_chunk_samples} "
-                            f"({len(chunk)/self._broadcast_queue_sample_rate*1000:.1f}ms), splitting"
-                        )
-
                     # Publish to broadcast queue - all subscribers get a copy
+                    # NOTE: Broadcast queue is for MONITORING only (EAS monitor)
+                    # Audio is NOT resampled - published at the active source's native rate
                     delivered = self._broadcast_queue.publish(chunk)
                     if delivered == 0:
                         logger.warning("No subscribers to receive audio chunk")
@@ -745,37 +725,6 @@ class AudioIngestController:
                 time.sleep(0.1)
 
         logger.info("Broadcast pump stopped")
-
-    def _resample_chunk(self, chunk: np.ndarray, from_rate: int, to_rate: int) -> np.ndarray:
-        """
-        Resample audio chunk from one sample rate to another.
-
-        Uses linear interpolation for efficient, high-quality resampling.
-        This is critical for the broadcast queue to provide consistent sample rates
-        to all subscribers regardless of the source's native rate.
-
-        Args:
-            chunk: Audio samples as numpy array (float32)
-            from_rate: Source sample rate in Hz
-            to_rate: Target sample rate in Hz
-
-        Returns:
-            Resampled audio chunk at target rate
-        """
-        if from_rate == to_rate:
-            return chunk
-
-        # Calculate resampling ratio
-        ratio = to_rate / from_rate
-        num_samples_out = int(len(chunk) * ratio)
-
-        # Use numpy's linear interpolation for resampling
-        # This is faster than scipy.signal.resample and sufficient quality for audio distribution
-        x_old = np.arange(len(chunk))
-        x_new = np.linspace(0, len(chunk) - 1, num_samples_out)
-        resampled = np.interp(x_new, x_old, chunk)
-
-        return resampled.astype(np.float32)
 
     def _monitor_loop(self) -> None:
         """Background monitor that auto-recovers unhealthy sources."""
