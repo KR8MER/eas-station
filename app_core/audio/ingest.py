@@ -447,7 +447,10 @@ class AudioIngestController:
         # CRITICAL: Increased to 2000 to prevent EAS monitor from missing chunks
         # At 44100Hz: 200 chunks = 18.6 seconds (TOO SMALL - caused missed alerts)
         # At 44100Hz: 2000 chunks = 186 seconds (safe buffer)
+        # NOTE: The broadcast queue is for MONITORING only (EAS monitor gets the active source)
+        # Icecast streams read directly from their own sources, NOT from the broadcast queue
         self._broadcast_queue = BroadcastQueue(name="audio-ingest-broadcast", max_queue_size=2000)
+
         # Subscribe to our own broadcast for backward compatibility with get_audio_chunk()
         self._controller_subscription = self._broadcast_queue.subscribe("controller-legacy")
 
@@ -709,6 +712,8 @@ class AudioIngestController:
                 if chunk is not None:
                     chunks_published_since_log += 1
                     # Publish to broadcast queue - all subscribers get a copy
+                    # NOTE: Broadcast queue is for MONITORING only (EAS monitor)
+                    # Audio is NOT resampled - published at the active source's native rate
                     delivered = self._broadcast_queue.publish(chunk)
                     if delivered == 0:
                         logger.warning("No subscribers to receive audio chunk")
