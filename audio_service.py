@@ -1021,8 +1021,9 @@ def main():
                     stream_channels = 1  # Mono saves 50% bandwidth
                     bits_per_sample = 16
 
-                    # Check if resampling is needed
+                    # Check if resampling is needed and pre-compute the ratio
                     needs_resample = source_sample_rate != stream_sample_rate
+                    resample_ratio = stream_sample_rate / source_sample_rate if needs_resample else 1.0
 
                     # Subscribe to BroadcastQueue for non-competitive audio access
                     # Use unique subscriber ID per connection
@@ -1081,8 +1082,7 @@ def main():
                                 # This ensures the output matches the WAV header sample rate exactly,
                                 # fixing the high-pitched squeal caused by sample rate mismatch
                                 if needs_resample and len(audio_chunk) > 0:
-                                    ratio = stream_sample_rate / source_sample_rate
-                                    new_length = max(int(len(audio_chunk) * ratio), 1)
+                                    new_length = max(int(len(audio_chunk) * resample_ratio), 1)
                                     old_indices = np.arange(len(audio_chunk))
                                     new_indices = np.linspace(0, len(audio_chunk) - 1, new_length)
                                     audio_chunk = np.interp(new_indices, old_indices, audio_chunk).astype(np.float32)
