@@ -12,18 +12,56 @@ if ! command -v perl &> /dev/null; then
     exit 1
 fi
 
+# Function to parse .env file safely without using 'source'
+# This handles .env files with special characters, quotes, and edge cases
+parse_env_file() {
+    local env_file="$1"
+    local loaded_count=0
+    
+    while IFS= read -r line || [ -n "$line" ]; do
+        # Skip empty lines and comments
+        [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+        
+        # Extract key=value, keeping the full value intact
+        if [[ "$line" =~ ^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)[[:space:]]*=(.*)$ ]]; then
+            local key="${BASH_REMATCH[1]}"
+            local value="${BASH_REMATCH[2]}"
+            
+            # Remove only leading whitespace from value (preserve trailing)
+            value="${value#"${value%%[![:space:]]*}"}"
+            
+            # Remove surrounding quotes if present (simple case only)
+            # Handles: "value" or 'value' but not escaped quotes
+            if [[ ${#value} -ge 2 ]]; then
+                local first="${value:0:1}"
+                local last="${value: -1}"
+                if [[ "$first" == '"' && "$last" == '"' ]] || [[ "$first" == "'" && "$last" == "'" ]]; then
+                    value="${value:1:${#value}-2}"
+                fi
+            fi
+            
+            # Only export Icecast-related variables (security: don't override unrelated vars)
+            if [[ "$key" == ICECAST_* ]]; then
+                export "$key=$value"
+                echo "  ✓ Loaded: $key"
+                ((loaded_count++))
+            fi
+        fi
+    done < "$env_file"
+    
+    # Return success if we loaded at least one variable
+    [[ $loaded_count -gt 0 ]]
+}
+
 # Load configuration from persistent .env file if it exists
 # This ensures Icecast uses the same passwords as the app container
 if [ -f "$ENV_FILE" ]; then
     echo "INFO: Loading Icecast configuration from persistent .env"
-    # Source the .env file to load variables with error handling
-    set -a  # automatically export all variables
-    if source "$ENV_FILE" 2>/dev/null; then
+    if parse_env_file "$ENV_FILE"; then
         echo "INFO: ✓ Configuration loaded from persistent storage"
     else
-        echo "WARNING: Failed to source .env file, using docker-compose environment variables"
+        echo "WARNING: Failed to parse .env file, using docker-compose environment variables"
     fi
-    set +a
 else
     echo "INFO: No persistent .env file found, using docker-compose environment variables (initial setup)"
 fi
