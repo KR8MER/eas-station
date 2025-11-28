@@ -5,17 +5,17 @@ echo "==========================================================================
 echo "EAS Station - Fix Audio Squeal Issue"
 echo "================================================================================"
 echo ""
-echo "This script fixes the high-pitched squeal in Icecast streams caused by"
 echo "sample rate mismatches after container separation."
 echo ""
-echo "The issue: RadioReceiver IQ sample rates were set to audio rates (~44kHz)"
-echo "instead of proper SDR IQ rates (~2.4MHz), causing the demodulator to"
-echo "interpret IQ data incorrectly."
+echo "The issue affects BOTH SDR and HTTP streams (like iHeart):"
+echo "  - SDR: IQ sample rates set to audio rates (~44kHz) instead of ~2.4MHz"
+echo "  - HTTP: Audio sample rates set to 16kHz instead of native rate (44.1/48kHz)"
 echo ""
 echo "This script will:"
-echo "  1. Check current radio receiver configurations"
-echo "  2. Fix IQ sample rates < 100kHz to proper SDR rate (2.4MHz)"
-echo "  3. Restart the audio service to apply changes"
+echo "  1. Diagnose current configurations for ALL stream types"
+echo "  2. Fix IQ sample rates for SDR receivers"
+echo "  3. Fix audio sample rates for HTTP/iHeart streams"
+echo "  4. Restart the audio service to apply changes"
 echo ""
 read -p "Continue? (y/n) " -n 1 -r
 echo ""
@@ -26,23 +26,46 @@ then
 fi
 
 echo ""
-echo "Step 1: Applying database fixes..."
+echo "Step 1: Running diagnostic..."
 echo "--------------------------------------------------------------------------------"
 
-# Run the SQL fix inside the database container
-docker-compose exec -T alerts-db psql -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-alerts}" < fix_sample_rates.sql
+# Run diagnostic first to show what's wrong
+docker-compose exec -T alerts-db psql -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-alerts}" < diagnose_all_streams.sql
+
+if [ $? -ne 0 ]; then
+    echo ""
+    echo "❌ ERROR: Failed to run diagnostic"
+    echo "   Check that the database container is running: docker-compose ps alerts-db"
+    exit 1
+fi
+
+echo ""
+read -p "Apply fixes based on diagnostic? (y/n) " -n 1 -r
+echo ""
+if [[ ! $REPLY =~ ^[Yy]$ ]]
+then
+    echo "Aborted before applying fixes."
+    exit 1
+fi
+
+echo ""
+echo "Step 2: Applying comprehensive database fixes..."
+echo "--------------------------------------------------------------------------------"
+
+# Run the comprehensive SQL fix for ALL stream types
+docker-compose exec -T alerts-db psql -U "${POSTGRES_USER:-postgres}" -d "${POSTGRES_DB:-alerts}" < fix_all_stream_sample_rates.sql
 
 if [ $? -ne 0 ]; then
     echo ""
     echo "❌ ERROR: Failed to apply database fixes"
-    echo "   Check that the database container is running: docker-compose ps alerts-db"
+    echo "   Check the error messages above for details"
     exit 1
 fi
 
 echo ""
 echo "✅ Database fixes applied successfully!"
 echo ""
-echo "Step 2: Restarting audio service..."
+echo "Step 3: Restarting audio service..."
 echo "--------------------------------------------------------------------------------"
 
 # Restart the audio service to pick up the configuration changes
