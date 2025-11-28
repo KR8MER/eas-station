@@ -65,6 +65,28 @@ fi
 echo ""
 echo "✅ Database fixes applied successfully!"
 echo ""
+echo "--------------------------------------------------------------------------------"
+echo "OPTIONAL: Auto-Detect HTTP Stream Sample Rates"
+echo "--------------------------------------------------------------------------------"
+echo ""
+echo "The basic fix sets HTTP streams to a safe default (48kHz)."
+echo "For optimal quality, you can auto-detect each stream's actual native rate."
+echo ""
+read -p "Auto-detect HTTP stream sample rates now? (y/n) " -n 1 -r
+echo ""
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    echo ""
+    if [ -f "./detect_stream_sample_rates.sh" ]; then
+        ./detect_stream_sample_rates.sh
+    else
+        echo "❌ detect_stream_sample_rates.sh not found in current directory"
+        echo "   Skipping auto-detection"
+    fi
+else
+    echo "Skipping auto-detection. You can run it later with:"
+    echo "  ./detect_stream_sample_rates.sh"
+fi
+echo ""
 echo "Step 3: Restarting audio service..."
 echo "--------------------------------------------------------------------------------"
 

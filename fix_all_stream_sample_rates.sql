@@ -54,25 +54,33 @@ WHERE
 \echo 'SDR receivers updated.'
 
 -- FIX 2: HTTP/Stream Source Audio Sample Rates
--- These should be set to the native stream rate, typically 44.1kHz or 48kHz
+-- These should be set to the native stream rate (varies by stream)
 -- NOT 16kHz (which is for EAS SAME decoding, NOT for streaming output)
 \echo ''
 \echo 'Fix 2: Correcting HTTP/stream source audio sample rates...'
+\echo ''
+\echo '⚠️  WARNING: HTTP streams have different native sample rates.'
+\echo '   This script will set a safe default of 48kHz for streams < 32kHz.'
+\echo '   For optimal quality, run: ./detect_stream_sample_rates.sh'
+\echo '   to auto-detect each stream''s actual native rate.'
+\echo ''
 
--- Update stream sources with sample rates < 32kHz to 44100 Hz
--- (Most internet radio streams are 44.1kHz or 48kHz; 44.1kHz is safest default)
+-- Update stream sources with sample rates < 32kHz to 48000 Hz
+-- 48kHz is a safe default that works for most streams
+-- For accurate rates, use detect_stream_sample_rates.sh instead
 UPDATE audio_source_configs
 SET config = jsonb_set(
     config,
     '{sample_rate}',
-    '44100'::jsonb
+    '48000'::jsonb
 )
 WHERE
     source_type = 'stream'
     AND enabled = true
     AND (config->>'sample_rate')::int < 32000;
 
-\echo 'HTTP stream sources updated.'
+\echo 'HTTP stream sources updated to safe default (48kHz).'
+\echo 'Run ./detect_stream_sample_rates.sh for precise auto-detection.'
 
 -- FIX 3: SDR Audio Source Configurations
 -- These need proper audio rates based on modulation type
