@@ -181,7 +181,7 @@ docker-compose logs -f app
 
 3. Attach debugger:
    - VS Code: Add configuration to `.vscode/launch.json`
-   - PyCharm: Create remote debug configuration
+   - [PyCharm](https://www.jetbrains.com/help/pycharm/remote-debugging-with-product.html): Create remote debug configuration
    - Port: 5678
 
 4. Access pgAdmin (optional):
