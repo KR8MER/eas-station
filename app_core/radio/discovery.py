@@ -214,16 +214,17 @@ def get_device_capabilities(driver: str, device_args: Optional[Dict[str, str]] =
 
         if 'airspy' in driver_lower:
             logger.info(f"Returning fallback Airspy capabilities (device may be in use)")
-            # Different Airspy models support different sample rates:
-            # - Airspy R2: 2.5 MSPS and 10 MSPS
-            # - Airspy Mini: 3 MSPS and 6 MSPS  
+            # IMPORTANT: Airspy R2 (the most common model) ONLY supports 2.5 MHz and 10 MHz.
+            # Other Airspy models have different rates:
+            # - Airspy Mini: 3 MSPS and 6 MSPS
             # - Airspy HF+: Various rates
-            # Include common rates for all models
+            # This fallback assumes Airspy R2. If using a different model, the hardware
+            # query should return the correct rates when the device is available.
             return {
                 "driver": driver,
-                "hardware_info": {"fallback": "true", "reason": "Device busy or unavailable"},
+                "hardware_info": {"fallback": "true", "reason": "Device busy or unavailable", "assumed_model": "Airspy R2"},
                 "num_channels": 1,
-                "sample_rates": [2500000, 3000000, 6000000, 10000000],  # Common rates across Airspy models
+                "sample_rates": [2500000, 10000000],  # Airspy R2: ONLY 2.5 MHz and 10 MHz
                 "bandwidths": [],
                 "gains": {"LNA": {"min": 0, "max": 15, "step": 1}, "MIX": {"min": 0, "max": 15, "step": 1}, "VGA": {"min": 0, "max": 15, "step": 1}},
                 "frequency_ranges": [{"min": 24000000, "max": 1800000000}],
@@ -362,32 +363,22 @@ def _validate_sample_rate_fallback(driver: str, sample_rate: int) -> tuple[bool,
     """
     driver_lower = driver.lower()
 
-    # AirSpy: Different models support different rates
-    # - Airspy R2: 2.5 MHz and 10 MHz base rates
-    # - Airspy Mini: 3 MHz and 6 MHz base rates
-    # All models support decimation down to lower rates
+    # AirSpy R2: ONLY 2.5 MHz and 10 MHz are supported
+    # These are the only valid base sample rates for Airspy R2 hardware
     if "airspy" in driver_lower:
-        # Base rates for different Airspy models
-        airspy_rates = {2500000, 3000000, 6000000, 10000000}
-        # Add decimated rates (dividing by powers of 2)
-        for base in list(airspy_rates):
-            for div in [2, 4, 8, 16, 32]:
-                decimated = base // div
-                if decimated >= 100000:  # Minimum reasonable rate
-                    airspy_rates.add(decimated)
+        # Airspy R2 ONLY supports 2.5 MHz and 10 MHz - no other rates
+        airspy_valid_rates = {2500000, 10000000}
 
-        if sample_rate in airspy_rates:
+        if sample_rate in airspy_valid_rates:
             return True, None
 
         # Also accept rates that are close to valid rates (within 1%)
         # This handles slight variations in how rates are reported
-        for valid_rate in airspy_rates:
+        for valid_rate in airspy_valid_rates:
             if abs(sample_rate - valid_rate) / valid_rate < 0.01:
                 return True, None
 
-        common_rates = sorted([2500000, 3000000, 6000000, 10000000], reverse=True)
-        rate_list = ", ".join(f"{r/1e6:.1f} MHz" for r in common_rates)
-        return False, f"Sample rate {sample_rate/1e6:.3f} MHz is not a standard AirSpy rate. Supported rates: {rate_list} (and decimated variants)"
+        return False, f"Sample rate {sample_rate/1e6:.3f} MHz is not supported by Airspy R2. ONLY 2.5 MHz and 10 MHz are valid."
 
     # RTL-SDR: Typically supports 225 kHz to 3.2 MHz
     elif "rtl" in driver_lower:

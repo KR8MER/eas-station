@@ -76,8 +76,15 @@ def diagnose_audio_sdr():
 
             # Check if IQ sample rate is too low
             if receiver.sample_rate < 100000:
-                receiver_info['issue'] = f"IQ sample rate too low: {receiver.sample_rate} Hz (should be ~2.4 MHz)"
-                receiver_info['recommended'] = 2400000
+                driver_lower = (receiver.driver or '').lower()
+                if 'airspy' in driver_lower:
+                    recommended_rate = 2500000
+                    rate_desc = "2.5 MHz for Airspy"
+                else:
+                    recommended_rate = 2400000
+                    rate_desc = "2.4 MHz for RTL-SDR"
+                receiver_info['issue'] = f"IQ sample rate too low: {receiver.sample_rate} Hz (should be {rate_desc})"
+                receiver_info['recommended'] = recommended_rate
                 receiver_info['severity'] = 'error'
                 issues.append(receiver_info)
             else:
@@ -172,7 +179,16 @@ def apply_audio_sdr_fixes():
             if receiver.sample_rate < 100000:
                 try:
                     old_rate = receiver.sample_rate
-                    receiver.sample_rate = 2400000  # 2.4 MHz for RTL-SDR
+                    # Use correct sample rate based on driver type
+                    driver_lower = (receiver.driver or '').lower()
+                    if 'airspy' in driver_lower:
+                        # Airspy R2 ONLY supports 2.5 MHz and 10 MHz
+                        new_rate = 2500000  # 2.5 MHz for Airspy
+                    else:
+                        # RTL-SDR and others typically use 2.4 MHz
+                        new_rate = 2400000  # 2.4 MHz for RTL-SDR
+                    
+                    receiver.sample_rate = new_rate
 
                     fixes_applied.append({
                         'type': 'receiver',
@@ -180,7 +196,7 @@ def apply_audio_sdr_fixes():
                         'display_name': receiver.display_name,
                         'field': 'sample_rate (IQ)',
                         'old_value': old_rate,
-                        'new_value': 2400000,
+                        'new_value': new_rate,
                         'unit': 'Hz'
                     })
                 except Exception as e:

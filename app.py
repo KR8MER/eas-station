@@ -172,6 +172,7 @@ from app_core.models import (
     PollHistory,
     RadioReceiver,
     RadioReceiverStatus,
+    SnowEmergency,
     SystemLog,
 )
 
