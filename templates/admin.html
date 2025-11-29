@@ -1761,7 +1761,7 @@
                             <p class="text-muted">For official snow emergency information, check these resources:</p>
                             <ul class="list-unstyled mb-0">
                                 <li class="mb-2">
-                                    <a href="https://www.ohioshersheriffs.org/snow-emergency-level" target="_blank" rel="noopener noreferrer">
+                                    <a href="https://www.ohiosheriffs.org/snow-emergency-level" target="_blank" rel="noopener noreferrer">
                                         <i class="fas fa-shield-alt me-2"></i>Ohio Sheriff's Association - Snow Emergency Levels
                                     </a>
                                 </li>
@@ -1769,6 +1769,7 @@
                                     <a href="https://www.dispatch.com/story/news/2025/01/06/snow-emergencies-ohio-counties-affected-what-numbers-mean/77484726007/" target="_blank" rel="noopener noreferrer">
                                         <i class="fas fa-newspaper me-2"></i>Columbus Dispatch - Snow Emergencies Guide
                                     </a>
+                                    <small class="text-muted d-block ms-4">(Reference URL from issue)</small>
                                 </li>
                             </ul>
                         </div>
@@ -6582,16 +6583,20 @@
                                         const lvlInfo = levels[level] || SNOW_LEVELS[level];
                                         const isActive = e.level === level;
                                         let btnClass = 'btn-outline-secondary';
+                                        let btnStyle = '';
                                         if (level === 0) btnClass = isActive ? 'btn-success' : 'btn-outline-success';
                                         else if (level === 1) btnClass = isActive ? 'btn-warning' : 'btn-outline-warning';
-                                        else if (level === 2) btnClass = isActive ? 'btn-orange' : 'btn-outline-orange';
+                                        else if (level === 2) {
+                                            btnClass = isActive ? 'btn-secondary' : 'btn-outline-secondary';
+                                            btnStyle = isActive ? 'background-color: #fd7e14; border-color: #fd7e14; color: white;' : 'color: #fd7e14; border-color: #fd7e14;';
+                                        }
                                         else if (level === 3) btnClass = isActive ? 'btn-danger' : 'btn-outline-danger';
                                         return `
                                             <button type="button" 
                                                 class="btn btn-sm ${btnClass} ${isActive ? 'active' : ''}"
                                                 onclick="updateSnowLevelAdmin('${e.county_fips}', ${level}, '${escapeHtmlAdmin(e.county_name)}')"
                                                 ${isActive ? 'disabled' : ''}
-                                                style="${level === 2 && isActive ? 'background-color: #fd7e14; border-color: #fd7e14; color: white;' : level === 2 ? 'color: #fd7e14; border-color: #fd7e14;' : ''}"
+                                                style="${btnStyle}"
                                                 title="${lvlInfo.name}">
                                                 ${level === 0 ? '✓' : level}
                                             </button>
