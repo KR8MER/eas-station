@@ -1012,8 +1012,9 @@ def main():
                 def generate_wav_stream(adapter, source_name):
                     """Generator that yields downsampled WAV chunks.
 
-                    Uses BroadcastQueue subscription to avoid competing with other audio consumers
-                    (Icecast, EAS monitor, etc). Each subscriber gets independent copy of all audio chunks.
+                    Uses per-source BroadcastQueue subscription to avoid competing with other audio consumers
+                    (Icecast, EAS monitor, etc). Each subscriber gets independent copy of all audio chunks
+                    from THIS SPECIFIC source (not the global broadcast which only has highest-priority source).
                     """
                     import queue as queue_module
 
@@ -1030,11 +1031,13 @@ def main():
                     needs_resample = source_sample_rate != stream_sample_rate
                     resample_ratio = stream_sample_rate / source_sample_rate if needs_resample else 1.0
 
-                    # Subscribe to BroadcastQueue for non-competitive audio access
-                    # Use unique subscriber ID per connection
+                    # Subscribe to the SOURCE's BroadcastQueue (not the controller's global queue)
+                    # This ensures we get audio from THIS SPECIFIC source, not just the highest-priority one
+                    # CRITICAL FIX: Previously used controller.get_broadcast_queue() which only outputs
+                    # the highest priority source - now each source has its own broadcast queue
                     subscriber_id = f"web-stream-{source_name}-{threading.current_thread().ident}"
-                    broadcast_queue = _audio_controller.get_broadcast_queue()
-                    subscription_queue = broadcast_queue.subscribe(subscriber_id)
+                    source_broadcast_queue = adapter.get_broadcast_queue()
+                    subscription_queue = source_broadcast_queue.subscribe(subscriber_id)
 
                     try:
                         # Send WAV header
@@ -1058,11 +1061,11 @@ def main():
                         silence_duration = 0.05
                         silence_samples = int(stream_sample_rate * stream_channels * silence_duration)
 
-                        logger.info(f"Web stream '{subscriber_id}' started, subscribed to broadcast queue")
+                        logger.info(f"Web stream '{subscriber_id}' started, subscribed to source '{source_name}' broadcast queue")
 
                         while _running:
                             try:
-                                # Read from subscription queue (non-competitive)
+                                # Read from source's subscription queue (non-competitive)
                                 audio_chunk = subscription_queue.get(timeout=0.2)
                                 if audio_chunk is None:
                                     # Yield silence to keep stream alive
@@ -1108,8 +1111,8 @@ def main():
                                 time.sleep(0.01)
                     finally:
                         # Unsubscribe when client disconnects
-                        broadcast_queue.unsubscribe(subscriber_id)
-                        logger.info(f"Web stream '{subscriber_id}' ended, unsubscribed from broadcast queue")
+                        source_broadcast_queue.unsubscribe(subscriber_id)
+                        logger.info(f"Web stream '{subscriber_id}' ended, unsubscribed from source '{source_name}'")
                 
                 try:
                     if not _audio_controller:

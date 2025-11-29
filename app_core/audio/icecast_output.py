@@ -100,11 +100,19 @@ class IcecastStreamer:
 
         Args:
             config: Icecast configuration
-            audio_source: Audio source (AudioSourceManager or similar) with read_audio() method
+            audio_source: Audio source (AudioSourceAdapter or similar) with get_broadcast_queue() method
         """
         self.config = config
         self.audio_source = audio_source
-
+        
+        # Subscribe to source's broadcast queue for non-destructive audio access
+        # This allows multiple consumers (Icecast, web streaming, EAS monitor) to
+        # receive independent copies of audio without competing for chunks.
+        # CRITICAL FIX: Previously we called audio_source.get_audio_chunk() which
+        # destructively removed from a shared queue - now we subscribe independently.
+        self._subscriber_id = f"icecast-{config.mount}"
+        self._audio_queue = None  # Will be set in start() after source is running
+        
         # Pre-sanitize stream metadata fields to avoid runtime encoding errors.
         self._stream_name = self._sanitize_metadata_value(
             getattr(self.config, 'name', None),
@@ -179,6 +187,22 @@ class IcecastStreamer:
         self._start_time = time.time()
         self._last_write_time = self._start_time
 
+        # Subscribe to source's broadcast queue for non-destructive audio access
+        # Each Icecast stream gets its own independent subscription
+        if hasattr(self.audio_source, 'get_broadcast_queue'):
+            source_broadcast = self.audio_source.get_broadcast_queue()
+            self._audio_queue = source_broadcast.subscribe(self._subscriber_id)
+            logger.info(
+                f"Icecast streamer '{self._subscriber_id}' subscribed to source broadcast queue"
+            )
+        else:
+            # Fallback for legacy sources without broadcast queue
+            logger.warning(
+                f"Audio source for mount {self.config.mount} does not support broadcast queue, "
+                "falling back to direct access (may cause audio contention)"
+            )
+            self._audio_queue = None
+
         # Start FFmpeg encoder
         if not self._start_ffmpeg():
             return False
@@ -200,6 +224,16 @@ class IcecastStreamer:
         """Stop streaming."""
         logger.info(f"Stopping Icecast streamer for mount {self.config.mount}")
         self._stop_event.set()
+
+        # Unsubscribe from broadcast queue
+        if hasattr(self.audio_source, 'get_broadcast_queue') and self._audio_queue is not None:
+            try:
+                source_broadcast = self.audio_source.get_broadcast_queue()
+                source_broadcast.unsubscribe(self._subscriber_id)
+                logger.info(f"Icecast streamer '{self._subscriber_id}' unsubscribed from source")
+            except Exception as e:
+                logger.warning(f"Error unsubscribing Icecast streamer: {e}")
+            self._audio_queue = None
 
         # Stop FFmpeg
         if self._ffmpeg_process:
@@ -384,6 +418,25 @@ class IcecastStreamer:
             logger.error(f"FFmpeg start failed: {e}")
             return False
 
+    def _get_audio_from_subscription(self, timeout: float = 1.0):
+        """
+        Get audio chunk from broadcast subscription queue.
+        
+        Uses the subscription queue if available (preferred), otherwise
+        falls back to direct source access for legacy compatibility.
+        """
+        import queue as queue_module
+        
+        if self._audio_queue is not None:
+            # Use broadcast subscription (non-destructive)
+            try:
+                return self._audio_queue.get(timeout=timeout)
+            except queue_module.Empty:
+                return None
+        else:
+            # Fallback to direct source access (legacy, may cause contention)
+            return self.audio_source.get_audio_chunk(timeout=timeout)
+
     def _prebuffer_audio(self, target_chunks=150, timeout_seconds=30.0):
         """
         Pre-buffer audio with relaxed constraints.
@@ -418,7 +471,8 @@ class IcecastStreamer:
             read_timeout = min(1.0, max(0.1, time_remaining / 10))
             
             try:
-                samples = self.audio_source.get_audio_chunk(timeout=read_timeout)
+                # Use subscription-based read (non-destructive)
+                samples = self._get_audio_from_subscription(timeout=read_timeout)
                 if samples is not None:
                     buffer.append(self._samples_to_pcm_bytes(samples))
                     
@@ -479,7 +533,8 @@ class IcecastStreamer:
         # Diagnostic: Check audio source type and status
         source_type = type(self.audio_source).__name__
         source_status = getattr(self.audio_source, 'status', 'unknown')
-        logger.info(f"Audio source for {self.config.mount}: {source_type}, Status: {source_status}")
+        subscription_mode = "broadcast subscription" if self._audio_queue is not None else "direct access (legacy)"
+        logger.info(f"Audio source for {self.config.mount}: {source_type}, Status: {source_status}, Mode: {subscription_mode}")
 
         while not self._stop_event.is_set():
             if not self._ffmpeg_process or self._ffmpeg_process.poll() is not None:
@@ -491,9 +546,9 @@ class IcecastStreamer:
 
             try:
                 wrote_chunk = False
-                # Read audio from source using adaptive timeout
+                # Read audio from subscription queue (non-destructive) using adaptive timeout
                 read_timeout = self._get_chunk_timeout()
-                samples = self.audio_source.get_audio_chunk(timeout=read_timeout)
+                samples = self._get_audio_from_subscription(timeout=read_timeout)
 
                 if samples is not None:
                     pcm_bytes = self._samples_to_pcm_bytes(samples)
