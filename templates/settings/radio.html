@@ -552,6 +552,48 @@
             .replace(/'/g, '&#039;');
     }
 
+    function formatSignalStrength(magnitude) {
+        // Convert linear magnitude (0-1 range from SDR) to RSSI in dBFS
+        // Using 20*log10(magnitude) gives relative power in dBFS (dB Full Scale)
+        if (magnitude === null || magnitude === undefined) return null;
+        
+        const numValue = typeof magnitude === 'number' ? magnitude : Number.parseFloat(magnitude);
+        if (!Number.isFinite(numValue) || numValue <= 0) return null;
+        
+        // Convert to dBFS (relative to full scale, where 1.0 = 0 dBFS)
+        const rssiDb = 20 * Math.log10(numValue);
+        
+        // Determine signal bars (like cell phone signal)
+        // Using same thresholds as radio_diagnostics.html for consistency
+        let bars = 0;
+        if (rssiDb > -50) bars = 4;       // Excellent
+        else if (rssiDb > -70) bars = 3;  // Good
+        else if (rssiDb > -85) bars = 2;  // Fair
+        else if (rssiDb > -100) bars = 1; // Poor
+        else bars = 0;                    // Very weak/no signal
+        
+        // Generate signal bars HTML (smallest to tallest, left to right)
+        const barsHtml = Array.from({length: 4}, (_, i) => {
+            const height = 6 + (i * 4); // 6, 10, 14, 18 pixels
+            const active = i < bars;
+            return `<div style="display:inline-block; width:3px; height:${height}px; margin:0 1px; background:${active ? '#28a745' : '#dee2e6'}; border-radius:1px; vertical-align:bottom;"></div>`;
+        }).join('');
+        
+        // Determine color based on signal level (matching radio_diagnostics.html)
+        let color = '#6c757d';  // gray (no signal)
+        if (rssiDb > -50) color = '#28a745';      // green (excellent)
+        else if (rssiDb > -70) color = '#28a745'; // green (good)
+        else if (rssiDb > -85) color = '#ffc107'; // yellow (fair)
+        else if (rssiDb > -100) color = '#dc3545'; // red (poor)
+        
+        return `
+            <div class="d-flex align-items-end gap-2">
+                <div style="display:flex; align-items:flex-end; gap:1px;">${barsHtml}</div>
+                <span style="color:${color}; font-weight:600;">${rssiDb.toFixed(1)} dBFS</span>
+            </div>
+        `;
+    }
+
     function setStatus(message, kind = 'info') {
         if (!statusBanner) {
             return;
@@ -677,13 +719,10 @@
         const badgeClass = locked ? 'bg-success' : 'bg-warning text-dark';
         const label = locked ? 'Locked' : 'No lock';
 
-        const strengthValue = typeof status.signal_strength === 'number'
-            ? status.signal_strength
-            : (typeof status.signal_strength === 'string'
-                ? Number.parseFloat(status.signal_strength)
-                : Number.NaN);
-        const strength = Number.isFinite(strengthValue)
-            ? `<div class="small text-muted">Signal: ${strengthValue.toFixed(1)} dBFS</div>`
+        // Use proper signal strength formatting (linear magnitude to dB with signal bars)
+        const strengthHtml = formatSignalStrength(status.signal_strength);
+        const strength = strengthHtml
+            ? `<div class="small mt-1">${strengthHtml}</div>`
             : '';
         const mode = status.capture_mode
             ? `<div class="small text-muted text-uppercase">Mode: ${escapeHtml(status.capture_mode)}</div>`
