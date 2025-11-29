@@ -1137,14 +1137,16 @@ def main():
                     return jsonify({'error': str(exc)}), 500
             
             # Start Flask server in background thread
-            server = make_server('0.0.0.0', 5001, stream_app, threaded=True)
+            # Use port 5002 to avoid conflict with hardware-service (which uses port 5001)
+            streaming_port = int(os.environ.get('AUDIO_STREAMING_PORT', '5002'))
+            server = make_server('0.0.0.0', streaming_port, stream_app, threaded=True)
             streaming_server_thread = threading.Thread(
                 target=server.serve_forever,
                 daemon=True,
                 name="StreamingHTTPServer"
             )
             streaming_server_thread.start()
-            logger.info("✅ HTTP streaming server started on port 5001")
+            logger.info(f"✅ HTTP streaming server started on port {streaming_port}")
         except Exception as e:
             logger.warning(f"Failed to start HTTP streaming server: {e}")
             logger.warning("   VU meter real-time streaming will not be available")
@@ -1156,7 +1158,7 @@ def main():
         logger.info("   - EAS monitoring: ACTIVE")
         logger.info("   - Metrics publishing: ACTIVE")
         logger.info(f"   - Command subscriber: {'ACTIVE' if command_subscriber else 'DISABLED'}")
-        logger.info(f"   - HTTP streaming: {'ACTIVE' if streaming_server_thread else 'DISABLED'} (port 5001)")
+        logger.info(f"   - HTTP streaming: {'ACTIVE' if streaming_server_thread else 'DISABLED'} (port {streaming_port if streaming_server_thread else 'N/A'})")
         logger.info("=" * 80)
 
         # Main loop: publish metrics every 5 seconds
