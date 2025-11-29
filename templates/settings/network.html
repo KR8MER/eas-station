@@ -269,7 +269,7 @@
 </div>
 {% endblock %}
 
-{% block extra_js %}
+{% block scripts %}
 <script src="{{ url_for('static', filename='js/core/api.js') }}"></script>
 <script>
 const NetworkConfig = {
@@ -289,11 +289,13 @@ const NetworkConfig = {
 
     async loadNetworkStatus() {
         try {
-            const response = await api.get('/api/network/status');
+            const response = await fetch('/api/network/status');
             const data = await response.json();
 
             if (data.success) {
                 this.displayNetworkStatus(data);
+            } else {
+                console.error('Network status API error:', data.error || 'Unknown error');
             }
         } catch (error) {
             console.error('Failed to load network status:', error);
@@ -350,11 +352,23 @@ const NetworkConfig = {
         networksList.innerHTML = '';
 
         try {
-            const response = await api.get('/api/network/wifi/scan');
+            const response = await fetch('/api/network/wifi/scan', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
             const data = await response.json();
 
             if (data.success && data.networks && data.networks.length > 0) {
                 networksList.innerHTML = data.networks.map(network => this.renderNetwork(network)).join('');
+            } else if (data.error) {
+                networksList.innerHTML = `
+                    <li class="empty-state">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <p>Error: ${data.error}</p>
+                    </li>
+                `;
             } else {
                 networksList.innerHTML = `
                     <li class="empty-state">
@@ -368,7 +382,7 @@ const NetworkConfig = {
             networksList.innerHTML = `
                 <li class="empty-state">
                     <i class="fas fa-exclamation-triangle"></i>
-                    <p>Error scanning networks</p>
+                    <p>Error scanning networks: ${error.message}</p>
                 </li>
             `;
         } finally {
@@ -428,9 +442,15 @@ const NetworkConfig = {
         errorDiv.style.display = 'none';
 
         try {
-            const response = await api.post('/api/network/wifi/connect', {
-                ssid: ssid,
-                password: password
+            const response = await fetch('/api/network/wifi/connect', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    ssid: ssid,
+                    password: password
+                })
             });
             const data = await response.json();
 
@@ -455,7 +475,13 @@ const NetworkConfig = {
         if (!confirm('Disconnect from WiFi?')) return;
 
         try {
-            const response = await api.post('/api/network/wifi/disconnect', { device: 'wlan0' });
+            const response = await fetch('/api/network/wifi/disconnect', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ device: 'wlan0' })
+            });
             const data = await response.json();
 
             if (data.success) {

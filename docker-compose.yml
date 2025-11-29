@@ -72,6 +72,8 @@ services:
     restart: unless-stopped
     networks:
       - eas-network
+    expose:
+      - "5002"  # HTTP streaming server for audio (internal only)
     command: ["python", "audio_service.py"]
     volumes:
       - app-config:/app-config
@@ -93,6 +95,9 @@ services:
 
       # SDR settings
       SDR_ARGS: ${SDR_ARGS:-driver=airspy}
+
+      # Audio streaming settings
+      AUDIO_STREAMING_PORT: ${AUDIO_STREAMING_PORT:-5002}
 
       # Icecast configuration
       ICECAST_SERVER: ${ICECAST_SERVER:-icecast}
@@ -227,14 +232,18 @@ services:
       DEFAULT_COUNTY_NAME: ${DEFAULT_COUNTY_NAME:-}
       DEFAULT_STATE_CODE: ${DEFAULT_STATE_CODE:-}
 
+      # Audio service connection (for streaming proxy to sdr-service)
+      AUDIO_SERVICE_HOST: ${AUDIO_SERVICE_HOST:-sdr-service}
+      AUDIO_SERVICE_PORT: ${AUDIO_SERVICE_PORT:-5002}
+
       # Note: Audio-related settings (SDR, Icecast) removed from app container.
-      # These are configured in the audio-service container.
-      # See docker-compose.separated.yml for audio-service configuration.
+      # These are configured in the sdr-service container.
+      # See docker-compose.separated.yml for sdr-service configuration.
     extra_hosts:
       - "host.docker.internal:host-gateway"
     # Note: Device passthrough removed - app container serves UI only.
-    # USB devices, GPIO, and other hardware access moved to audio-service container.
-    # For hardware access, see audio-service configuration in docker-compose.separated.yml
+    # USB devices, GPIO, and other hardware access moved to sdr-service container.
+    # For hardware access, see sdr-service configuration above.
     security_opt:
       - no-new-privileges:true
     depends_on:
