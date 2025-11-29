@@ -84,7 +84,6 @@ def _push_worker(app: 'Flask', socketio: 'SocketIO') -> None:
                     _read_audio_metrics_from_redis,
                     AudioSourceConfigDB,
                 )
-                from app_core.audio import get_eas_monitor_instance
 
                 source_metrics = []
                 audio_sources = []
@@ -144,6 +143,8 @@ def _push_worker(app: 'Flask', socketio: 'SocketIO') -> None:
                     eas_monitor_status = redis_metrics.get('eas_monitor')
 
                 # Fall back to local controller metrics when Redis is unavailable
+                # NOTE: In separated architecture, audio processing happens in audio-service
+                # container. The app container may have an empty local controller.
                 if not redis_metrics:
                     controller = _get_audio_controller()
 
@@ -177,9 +178,8 @@ def _push_worker(app: 'Flask', socketio: 'SocketIO') -> None:
                             'priority': adapter.config.priority,
                         })
 
-                    monitor = get_eas_monitor_instance()
-                    if monitor:
-                        eas_monitor_status = monitor.get_status()
+                    # NOTE: EAS monitor is NOT available in app container in separated architecture
+                    # It runs exclusively in audio-service container. EAS status comes from Redis.
 
                 # Broadcast all data to connected clients
                 socketio.emit('audio_monitoring_update', {
