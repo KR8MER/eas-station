@@ -441,6 +441,11 @@
                             <i class="fas fa-users-cog"></i> User Accounts
                         </button>
                     </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="snow-emergencies-tab" data-bs-toggle="tab" data-bs-target="#snow-emergencies" type="button" role="tab">
+                            <i class="fas fa-snowflake"></i> Snow Emergencies
+                        </button>
+                    </li>
                 </ul>
             </div>
             <div class="tab-content" id="adminTabContent">
@@ -1598,6 +1603,176 @@
                             </div>
                         </div>
                     </form>
+                </div>
+
+                <!-- Snow Emergencies Tab -->
+                <div class="tab-pane fade" id="snow-emergencies" role="tabpanel">
+                    <!-- Page Header -->
+                    <div class="mb-4">
+                        <h4 class="mb-2"><i class="fas fa-snowflake text-info"></i> Snow Emergency Management</h4>
+                        <p class="text-muted">Manage snow emergency levels for Putnam County and adjacent counties in northwest Ohio.</p>
+                    </div>
+
+                    <!-- Snow Emergency Level Reference -->
+                    <div class="card border-info-subtle shadow-sm mb-4">
+                        <div class="card-header bg-info-subtle">
+                            <h5 class="mb-0">
+                                <i class="fas fa-info-circle"></i> Ohio Snow Emergency Levels Explained
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted mb-3">Ohio sheriffs use a standardized three-level snow emergency system to communicate road conditions and travel advisories:</p>
+                            <div class="row g-3">
+                                <div class="col-lg-3">
+                                    <div class="card h-100 border-success">
+                                        <div class="card-body">
+                                            <h6 class="card-title d-flex align-items-center">
+                                                <span class="badge bg-success me-2">No Emergency</span>
+                                            </h6>
+                                            <p class="card-text small">Normal driving conditions. No restrictions on travel. Roads may still be slippery in winter weather.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-lg-3">
+                                    <div class="card h-100 border-warning">
+                                        <div class="card-body">
+                                            <h6 class="card-title d-flex align-items-center">
+                                                <span class="badge bg-warning text-dark me-2">Level 1</span>
+                                            </h6>
+                                            <p class="card-text small"><strong>Roadways are hazardous</strong> with blowing and drifting snow. Roads may also be icy. Motorists are urged to drive very cautiously.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-lg-3">
+                                    <div class="card h-100 border-warning" style="border-color: #fd7e14 !important;">
+                                        <div class="card-body">
+                                            <h6 class="card-title d-flex align-items-center">
+                                                <span class="badge me-2" style="background-color: #fd7e14;">Level 2</span>
+                                            </h6>
+                                            <p class="card-text small"><strong>Roadways are hazardous.</strong> Only those who feel it is necessary to drive should be out. Contact your employer to see if you should report to work.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-lg-3">
+                                    <div class="card h-100 border-danger">
+                                        <div class="card-body">
+                                            <h6 class="card-title d-flex align-items-center">
+                                                <span class="badge bg-danger me-2">Level 3</span>
+                                            </h6>
+                                            <p class="card-text small"><strong>All roadways are closed</strong> to non-emergency personnel. Those traveling on the roadways may subject themselves to arrest.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="alert alert-secondary mt-3 mb-0 small">
+                                <i class="fas fa-gavel me-1"></i>
+                                <strong>Note:</strong> During a Level 3 emergency, only emergency personnel and essential workers should be on the roads. Violators may be ticketed or arrested, and tow trucks may not respond to non-emergency calls.
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- County Map Reference -->
+                    <div class="card border-primary-subtle shadow-sm mb-4">
+                        <div class="card-header bg-primary-subtle">
+                            <h5 class="mb-0">
+                                <i class="fas fa-map"></i> Putnam County & Adjacent Counties
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row align-items-center">
+                                <div class="col-lg-6">
+                                    <p class="text-muted mb-3">This system tracks snow emergency levels for Putnam County and all seven adjacent counties in northwest Ohio:</p>
+                                    <div class="row row-cols-2 row-cols-md-4 g-2 mb-3">
+                                        <div class="col">
+                                            <div class="badge bg-primary w-100 py-2">
+                                                <i class="fas fa-star me-1"></i> Putnam
+                                            </div>
+                                        </div>
+                                        <div class="col">
+                                            <div class="badge bg-secondary w-100 py-2">Allen</div>
+                                        </div>
+                                        <div class="col">
+                                            <div class="badge bg-secondary w-100 py-2">Defiance</div>
+                                        </div>
+                                        <div class="col">
+                                            <div class="badge bg-secondary w-100 py-2">Hancock</div>
+                                        </div>
+                                        <div class="col">
+                                            <div class="badge bg-secondary w-100 py-2">Henry</div>
+                                        </div>
+                                        <div class="col">
+                                            <div class="badge bg-secondary w-100 py-2">Paulding</div>
+                                        </div>
+                                        <div class="col">
+                                            <div class="badge bg-secondary w-100 py-2">Van Wert</div>
+                                        </div>
+                                        <div class="col">
+                                            <div class="badge bg-secondary w-100 py-2">Wood</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-lg-6">
+                                    <!-- Simple ASCII-style county map -->
+                                    <div class="p-3 bg-light rounded border text-center font-monospace small" style="line-height: 1.4;">
+                                        <div class="text-muted mb-1">Northwest Ohio Counties</div>
+                                        <pre class="mb-0" style="font-size: 0.7rem;">
+┌──────────┬──────────┬──────────┐
+│ Defiance │  Henry   │   Wood   │
+├──────────┼──────────┼──────────┤
+│ Paulding │ ★PUTNAM★ │ Hancock  │
+├──────────┼──────────┼──────────┤
+│ Van Wert │  Allen   │          │
+└──────────┴──────────┴──────────┘
+                                        </pre>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Current Status and Editor -->
+                    <div class="card border-info-subtle shadow-sm mb-4">
+                        <div class="card-header bg-info-subtle d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">
+                                <i class="fas fa-edit"></i> Current Snow Emergency Levels
+                            </h5>
+                            <button class="btn btn-sm btn-outline-info" onclick="refreshSnowEmergencyAdmin()">
+                                <i class="fas fa-sync-alt"></i> Refresh
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <div id="admin-snow-emergency-editor">
+                                <div class="text-center text-muted py-4">
+                                    <i class="fas fa-spinner fa-spin fa-2x mb-2"></i>
+                                    <p>Loading snow emergency data...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- External Resources -->
+                    <div class="card border-secondary-subtle shadow-sm">
+                        <div class="card-header bg-secondary-subtle">
+                            <h5 class="mb-0">
+                                <i class="fas fa-external-link-alt"></i> External Resources
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted">For official snow emergency information, check these resources:</p>
+                            <ul class="list-unstyled mb-0">
+                                <li class="mb-2">
+                                    <a href="https://www.ohioshersheriffs.org/snow-emergency-level" target="_blank" rel="noopener noreferrer">
+                                        <i class="fas fa-shield-alt me-2"></i>Ohio Sheriff's Association - Snow Emergency Levels
+                                    </a>
+                                </li>
+                                <li class="mb-2">
+                                    <a href="https://www.dispatch.com/story/news/2025/01/06/snow-emergencies-ohio-counties-affected-what-numbers-mean/77484726007/" target="_blank" rel="noopener noreferrer">
+                                        <i class="fas fa-newspaper me-2"></i>Columbus Dispatch - Snow Emergencies Guide
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
                 </div>
             </div>
             <!-- End of tab-content -->
@@ -6345,5 +6520,145 @@
                 showStatus(`❌ Error: ${error.message}`, 'danger');
             }
         }
+
+        // ===== SNOW EMERGENCY ADMIN FUNCTIONS =====
+        const SNOW_LEVELS = {
+            0: { name: 'None', color: '#28a745', bgClass: 'bg-success' },
+            1: { name: 'Level 1', color: '#ffc107', bgClass: 'bg-warning' },
+            2: { name: 'Level 2', color: '#fd7e14', bgClass: '' },
+            3: { name: 'Level 3', color: '#dc3545', bgClass: 'bg-danger' }
+        };
+
+        async function refreshSnowEmergencyAdmin() {
+            const container = document.getElementById('admin-snow-emergency-editor');
+            if (!container) return;
+
+            container.innerHTML = `
+                <div class="text-center text-muted py-4">
+                    <i class="fas fa-spinner fa-spin fa-2x mb-2"></i>
+                    <p>Loading snow emergency data...</p>
+                </div>
+            `;
+
+            try {
+                const response = await fetch('/api/snow_emergencies/all');
+                if (!response.ok) {
+                    throw new Error('Failed to load snow emergency data');
+                }
+                const data = await response.json();
+                renderSnowEmergencyAdmin(data);
+            } catch (error) {
+                console.error('Error loading snow emergencies:', error);
+                container.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        Failed to load snow emergency data: ${error.message}
+                    </div>
+                `;
+            }
+        }
+
+        function renderSnowEmergencyAdmin(data) {
+            const container = document.getElementById('admin-snow-emergency-editor');
+            if (!container) return;
+
+            const emergencies = data.emergencies || [];
+            const levels = data.levels || SNOW_LEVELS;
+
+            let html = '<div class="row g-3">';
+            emergencies.forEach(e => {
+                const levelInfo = levels[e.level] || SNOW_LEVELS[e.level] || { name: 'Unknown', color: '#6c757d' };
+                const isPrimary = e.is_primary || false;
+                html += `
+                    <div class="col-md-6 col-lg-4 col-xl-3">
+                        <div class="card h-100 ${e.level > 0 ? 'border-' + (e.level === 1 ? 'warning' : e.level === 2 ? 'warning' : 'danger') : 'border-success'}">
+                            <div class="card-header d-flex justify-content-between align-items-center py-2" style="background-color: ${levelInfo.color}20;">
+                                <strong class="small">${escapeHtmlAdmin(e.county_name)} County</strong>
+                                ${isPrimary ? '<span class="badge bg-primary">Primary</span>' : ''}
+                            </div>
+                            <div class="card-body py-2">
+                                <div class="btn-group w-100" role="group">
+                                    ${[0, 1, 2, 3].map(level => {
+                                        const lvlInfo = levels[level] || SNOW_LEVELS[level];
+                                        const isActive = e.level === level;
+                                        let btnClass = 'btn-outline-secondary';
+                                        if (level === 0) btnClass = isActive ? 'btn-success' : 'btn-outline-success';
+                                        else if (level === 1) btnClass = isActive ? 'btn-warning' : 'btn-outline-warning';
+                                        else if (level === 2) btnClass = isActive ? 'btn-orange' : 'btn-outline-orange';
+                                        else if (level === 3) btnClass = isActive ? 'btn-danger' : 'btn-outline-danger';
+                                        return `
+                                            <button type="button" 
+                                                class="btn btn-sm ${btnClass} ${isActive ? 'active' : ''}"
+                                                onclick="updateSnowLevelAdmin('${e.county_fips}', ${level}, '${escapeHtmlAdmin(e.county_name)}')"
+                                                ${isActive ? 'disabled' : ''}
+                                                style="${level === 2 && isActive ? 'background-color: #fd7e14; border-color: #fd7e14; color: white;' : level === 2 ? 'color: #fd7e14; border-color: #fd7e14;' : ''}"
+                                                title="${lvlInfo.name}">
+                                                ${level === 0 ? '✓' : level}
+                                            </button>
+                                        `;
+                                    }).join('')}
+                                </div>
+                                <div class="text-center mt-2">
+                                    <span class="badge" style="background-color: ${levelInfo.color};">
+                                        ${escapeHtmlAdmin(levelInfo.name || e.level_name)}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+
+            // Add summary
+            const activeCount = emergencies.filter(e => e.level > 0).length;
+            html += `
+                <div class="mt-3 text-muted small">
+                    <i class="fas fa-info-circle me-1"></i>
+                    ${activeCount} of ${emergencies.length} counties have active snow emergencies.
+                </div>
+            `;
+
+            container.innerHTML = html;
+        }
+
+        async function updateSnowLevelAdmin(fips, level, countyName) {
+            try {
+                const response = await fetch(`/api/snow_emergencies/${fips}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ level: level })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to update');
+                }
+
+                const result = await response.json();
+                showStatus(`✓ ${countyName} County updated to ${result.emergency.level_name}`, 'success', 3000);
+                refreshSnowEmergencyAdmin();
+            } catch (error) {
+                console.error('Failed to update snow emergency:', error);
+                showStatus(`✗ Failed to update ${countyName} County: ${error.message}`, 'danger', 5000);
+            }
+        }
+
+        function escapeHtmlAdmin(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Initialize snow emergency editor when the tab is shown
+        document.addEventListener('DOMContentLoaded', function() {
+            const snowTab = document.getElementById('snow-emergencies-tab');
+            if (snowTab) {
+                snowTab.addEventListener('shown.bs.tab', function() {
+                    refreshSnowEmergencyAdmin();
+                });
+            }
+        });
     </script>
 {% endblock %}

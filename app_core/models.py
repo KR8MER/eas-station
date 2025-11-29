@@ -1272,15 +1272,16 @@ SNOW_EMERGENCY_LEVELS = {
 }
 
 # Counties adjoining Putnam County, Ohio with their FIPS codes
+# Putnam County borders: Defiance, Henry, Wood, Hancock, Allen, Van Wert, Paulding
 PUTNAM_REGION_COUNTIES = {
     "039137": {"name": "Putnam", "state": "OH", "is_primary": True, "order": 0},
     "039003": {"name": "Allen", "state": "OH", "is_primary": False, "order": 1},
-    "039011": {"name": "Auglaize", "state": "OH", "is_primary": False, "order": 2},
-    "039039": {"name": "Defiance", "state": "OH", "is_primary": False, "order": 3},
-    "039063": {"name": "Hancock", "state": "OH", "is_primary": False, "order": 4},
-    "039069": {"name": "Henry", "state": "OH", "is_primary": False, "order": 5},
-    "039125": {"name": "Paulding", "state": "OH", "is_primary": False, "order": 6},
-    "039161": {"name": "Van Wert", "state": "OH", "is_primary": False, "order": 7},
+    "039039": {"name": "Defiance", "state": "OH", "is_primary": False, "order": 2},
+    "039063": {"name": "Hancock", "state": "OH", "is_primary": False, "order": 3},
+    "039069": {"name": "Henry", "state": "OH", "is_primary": False, "order": 4},
+    "039125": {"name": "Paulding", "state": "OH", "is_primary": False, "order": 5},
+    "039161": {"name": "Van Wert", "state": "OH", "is_primary": False, "order": 6},
+    "039173": {"name": "Wood", "state": "OH", "is_primary": False, "order": 7},
 }
 
 
