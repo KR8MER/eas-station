@@ -2467,7 +2467,7 @@ function showSnowEmergencyModal(data) {
                             </div>
                         </div>
                         <div id="snow-edit-counties">
-                            \${(data.emergencies || []).map(e => renderCountyEditor(e, levels)).join('')}
+                            ${(data.emergencies || []).map(e => renderCountyEditor(e, levels)).join('')}
                         </div>
                     </div>
                     <div class="modal-footer">
