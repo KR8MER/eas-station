@@ -110,6 +110,11 @@ RBDS_PROGRAM_TYPES: Dict[int, str] = {
 class SDRSourceAdapter(AudioSourceAdapter):
     """Audio source adapter for SDR receivers via the radio manager."""
 
+    # Retry configuration for receiver startup
+    RECEIVER_START_MAX_RETRIES = 5
+    RECEIVER_START_INITIAL_DELAY = 1.0  # seconds
+    RECEIVER_START_MAX_DELAY = 5.0  # seconds
+
     def __init__(self, config: AudioSourceConfig):
         super().__init__(config)
         self._radio_manager: Optional[RadioManager] = None
@@ -214,8 +219,8 @@ class SDRSourceAdapter(AudioSourceAdapter):
 
         # Start IQ capture from the specified receiver
         # Retry with backoff since the receiver may still be starting up
-        max_retries = 5
-        retry_delay = 1.0
+        max_retries = self.RECEIVER_START_MAX_RETRIES
+        retry_delay = self.RECEIVER_START_INITIAL_DELAY
         last_error = None
         
         for attempt in range(max_retries):
@@ -234,13 +239,13 @@ class SDRSourceAdapter(AudioSourceAdapter):
                     if attempt < max_retries - 1:
                         logger.info(f"Waiting for receiver '{self._receiver_id}' to start (attempt {attempt + 1}/{max_retries})...")
                         time.sleep(retry_delay)
-                        retry_delay = min(retry_delay * 1.5, 5.0)
+                        retry_delay = min(retry_delay * 1.5, self.RECEIVER_START_MAX_DELAY)
             except Exception as e:
                 last_error = e
                 if attempt < max_retries - 1:
                     logger.warning(f"Failed to start audio capture (attempt {attempt + 1}/{max_retries}): {e}")
                     time.sleep(retry_delay)
-                    retry_delay = min(retry_delay * 1.5, 5.0)
+                    retry_delay = min(retry_delay * 1.5, self.RECEIVER_START_MAX_DELAY)
         else:
             # All retries exhausted
             error_msg = f"Failed to start SDR audio capture after {max_retries} attempts: {last_error}"
