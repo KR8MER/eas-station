@@ -2203,7 +2203,9 @@ def api_stream_audio(source_name: str):
         
         # Subscribe to the SOURCE's BroadcastQueue for non-destructive audio access
         # Each web stream gets its own independent subscription
-        subscriber_id = f"web-stream-{source_name}-{threading.current_thread().ident}"
+        # Use UUID for unique subscriber ID to avoid thread identity reuse issues
+        import uuid
+        subscriber_id = f"web-stream-{source_name}-{uuid.uuid4().hex[:8]}"
         source_broadcast_queue = active_adapter.get_broadcast_queue()
         subscription_queue = source_broadcast_queue.subscribe(subscriber_id)
         

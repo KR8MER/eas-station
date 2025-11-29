@@ -1035,7 +1035,9 @@ def main():
                     # This ensures we get audio from THIS SPECIFIC source, not just the highest-priority one
                     # CRITICAL FIX: Previously used controller.get_broadcast_queue() which only outputs
                     # the highest priority source - now each source has its own broadcast queue
-                    subscriber_id = f"web-stream-{source_name}-{threading.current_thread().ident}"
+                    # Use UUID for unique subscriber ID to avoid thread identity reuse issues
+                    import uuid
+                    subscriber_id = f"web-stream-{source_name}-{uuid.uuid4().hex[:8]}"
                     source_broadcast_queue = adapter.get_broadcast_queue()
                     subscription_queue = source_broadcast_queue.subscribe(subscriber_id)
 

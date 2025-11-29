@@ -110,7 +110,9 @@ class IcecastStreamer:
         # receive independent copies of audio without competing for chunks.
         # CRITICAL FIX: Previously we called audio_source.get_audio_chunk() which
         # destructively removed from a shared queue - now we subscribe independently.
-        self._subscriber_id = f"icecast-{config.mount}"
+        # Use timestamp for unique subscriber ID to avoid conflicts with same mount
+        import time as _time
+        self._subscriber_id = f"icecast-{config.mount}-{int(_time.time() * 1000)}"
         self._audio_queue = None  # Will be set in start() after source is running
         
         # Pre-sanitize stream metadata fields to avoid runtime encoding errors.
