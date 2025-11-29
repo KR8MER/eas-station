@@ -1241,6 +1241,144 @@ class RWTScheduleConfig(db.Model):
         }
 
 
+# Snow emergency levels as defined by Ohio law
+SNOW_EMERGENCY_LEVELS = {
+    0: {
+        "name": "None",
+        "color": "#28a745",  # Green
+        "description": "No snow emergency in effect. Normal driving conditions.",
+    },
+    1: {
+        "name": "Level 1",
+        "color": "#ffc107",  # Yellow
+        "description": "Roadways are hazardous with blowing and drifting snow. Roads may also be icy. "
+                       "Motorists are urged to drive very cautiously.",
+    },
+    2: {
+        "name": "Level 2",
+        "color": "#fd7e14",  # Orange
+        "description": "Roadways are hazardous with blowing and drifting snow. Only those who feel it is "
+                       "necessary to drive should be out on the roadways. Contact your employer to see if "
+                       "you should report to work.",
+    },
+    3: {
+        "name": "Level 3",
+        "color": "#dc3545",  # Red
+        "description": "All roadways are closed to non-emergency personnel. No one should be out during "
+                       "these conditions unless it is absolutely necessary to travel. Employees should "
+                       "contact their employer to see if they should report to work. Those traveling on "
+                       "the roadways may subject themselves to arrest.",
+    },
+}
+
+# Counties adjoining Putnam County, Ohio with their FIPS codes
+PUTNAM_REGION_COUNTIES = {
+    "039137": {"name": "Putnam", "state": "OH", "is_primary": True, "order": 0},
+    "039003": {"name": "Allen", "state": "OH", "is_primary": False, "order": 1},
+    "039011": {"name": "Auglaize", "state": "OH", "is_primary": False, "order": 2},
+    "039039": {"name": "Defiance", "state": "OH", "is_primary": False, "order": 3},
+    "039063": {"name": "Hancock", "state": "OH", "is_primary": False, "order": 4},
+    "039069": {"name": "Henry", "state": "OH", "is_primary": False, "order": 5},
+    "039125": {"name": "Paulding", "state": "OH", "is_primary": False, "order": 6},
+    "039161": {"name": "Van Wert", "state": "OH", "is_primary": False, "order": 7},
+}
+
+
+class SnowEmergency(db.Model):
+    """Current snow emergency status for a county.
+
+    Simple tracking of snow emergency levels for Putnam County and adjoining
+    counties in Ohio. One row per county, updated when level changes.
+    Level 0 means no emergency in effect.
+
+    History of changes is tracked in the history JSONB column.
+    """
+
+    __tablename__ = "snow_emergencies"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # County identification (unique per county)
+    county_fips = db.Column(db.String(6), nullable=False, unique=True, index=True)
+    county_name = db.Column(db.String(128), nullable=False)
+    state_code = db.Column(db.String(2), nullable=False, default="OH")
+
+    # Current snow emergency level (0 = none, 1-3 = emergency levels)
+    level = db.Column(db.Integer, nullable=False, default=0)
+
+    # When the current level was set
+    level_set_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
+
+    # Who set the current level (username)
+    level_set_by = db.Column(db.String(128))
+
+    # Audit fields
+    created_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = db.Column(db.DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+    # History tracking (JSON array of {level, set_at, set_by, previous_level})
+    history = db.Column(JSONB, default=list)
+
+    def is_active(self) -> bool:
+        """Check if a snow emergency is currently in effect (level > 0)."""
+        return self.level > 0
+
+    def get_level_info(self) -> Dict[str, Any]:
+        """Get the level information (name, color, description)."""
+        return SNOW_EMERGENCY_LEVELS.get(self.level, SNOW_EMERGENCY_LEVELS[0])
+
+    def to_dict(self, include_history: bool = False) -> Dict[str, Any]:
+        """Convert to dictionary for API responses."""
+        level_info = self.get_level_info()
+        result = {
+            "id": self.id,
+            "county_fips": self.county_fips,
+            "county_name": self.county_name,
+            "state_code": self.state_code,
+            "level": self.level,
+            "level_name": level_info["name"],
+            "level_color": level_info["color"],
+            "level_description": level_info["description"],
+            "is_active": self.is_active(),
+            "level_set_at": self.level_set_at.isoformat() if self.level_set_at else None,
+            "level_set_by": self.level_set_by,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+        if include_history:
+            result["history"] = list(self.history or [])
+
+        return result
+
+    def set_level(self, new_level: int, set_by: str) -> None:
+        """Update the snow emergency level and record in history."""
+        if new_level < 0 or new_level > 3:
+            raise ValueError(f"Invalid snow emergency level: {new_level}")
+
+        if new_level != self.level:
+            # Record the change in history
+            history_entry = {
+                "previous_level": self.level,
+                "new_level": new_level,
+                "set_at": utc_now().isoformat(),
+                "set_by": set_by,
+            }
+            if self.history is None:
+                self.history = []
+            # Keep last 100 history entries
+            self.history = (list(self.history) + [history_entry])[-100:]
+
+            self.level = new_level
+            self.level_set_at = utc_now()
+            self.level_set_by = set_by
+
+    def __repr__(self) -> str:
+        return (
+            f"<SnowEmergency county={self.county_name} "
+            f"level={self.level}>"
+        )
+
+
 __all__ = [
     "Boundary",
     "CAPAlert",
@@ -1266,4 +1404,7 @@ __all__ = [
     "VFDDisplay",
     "VFDStatus",
     "RWTScheduleConfig",
+    "SnowEmergency",
+    "SNOW_EMERGENCY_LEVELS",
+    "PUTNAM_REGION_COUNTIES",
 ]

@@ -43,105 +43,277 @@
         background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
         border-radius: var(--radius-md);
         color: #fff;
-        padding: var(--spacing-lg);
+        padding: var(--spacing-md) var(--spacing-lg);
         display: flex;
-        align-items: flex-start;
+        align-items: center;
         justify-content: space-between;
         flex-wrap: wrap;
-        gap: var(--spacing-md);
+        gap: var(--spacing-sm);
         position: relative;
         overflow: hidden;
-        box-shadow: 0 18px 40px rgba(32, 72, 133, 0.28);
+        box-shadow: 0 8px 20px rgba(32, 72, 133, 0.2);
     }
 
     .page-header::after {
         content: "";
         position: absolute;
         inset: auto -40% -70% auto;
-        width: 360px;
-        height: 360px;
-        background: radial-gradient(circle at center, rgba(255, 255, 255, 0.25), transparent 70%);
+        width: 200px;
+        height: 200px;
+        background: radial-gradient(circle at center, rgba(255, 255, 255, 0.15), transparent 70%);
         transform: rotate(-12deg);
         pointer-events: none;
     }
 
     .page-header .header-content {
-        max-width: 620px;
+        display: flex;
+        align-items: center;
+        gap: var(--spacing-md);
         position: relative;
         z-index: 1;
     }
 
-    .page-header .eyebrow {
-        font-size: 0.75rem;
-        letter-spacing: 0.18em;
-        text-transform: uppercase;
-        opacity: 0.7;
-        display: block;
-        margin-bottom: 0.35rem;
+    .page-header .header-text {
+        display: flex;
+        flex-direction: column;
     }
 
     .page-header .page-title {
-        font-size: 1.9rem;
+        font-size: 1.4rem;
         font-weight: 600;
-        margin-bottom: 0.35rem;
+        margin: 0;
         letter-spacing: 0.01em;
     }
 
     .page-header .page-subtitle {
-        font-size: 1rem;
+        font-size: 0.85rem;
         opacity: 0.82;
-        margin-bottom: 0;
+        margin: 0;
     }
 
-    /* Prominent dashboard logo - larger for visual impact
-       Note: White fill and fixed dark shadow are intentional for visibility 
-       on the gradient header background regardless of theme */
+    /* Compact dashboard logo */
     .dashboard-page-logo {
-        height: auto;
-        width: 100%;
-        max-width: 360px;
+        height: 40px;
+        width: auto;
         display: block;
-        filter: drop-shadow(0 6px 16px rgba(0, 0, 0, 0.35));
+        filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
     }
 
     .dashboard-page-logo .logo-text-primary,
     .dashboard-page-logo .logo-text-secondary {
-        fill: #ffffff; /* White for visibility on colored gradient header */
+        fill: #ffffff;
     }
 
     .dashboard-page-logo .logo-bar {
-        fill: #ffffff; /* White for visibility on colored gradient header */
+        fill: #ffffff;
     }
-    
-    /* Responsive logo sizing for dashboard */
-    @media (max-width: 767.98px) {
-        .dashboard-page-logo {
-            max-width: 280px;
-        }
+
+    /* Snow Emergency Banner */
+    .snow-emergency-banner {
+        margin-top: var(--spacing-md);
+        border-radius: var(--radius-md);
+        overflow: hidden;
+    }
+
+    .snow-emergency-banner.has-emergencies {
+        background: var(--surface-color);
+        border: 1px solid var(--border-color);
+        box-shadow: 0 4px 12px var(--shadow-color);
+    }
+
+    .snow-emergency-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: var(--spacing-sm) var(--spacing-md);
+        background: var(--bg-color);
+        border-bottom: 1px solid var(--border-color);
+    }
+
+    .snow-emergency-header h6 {
+        margin: 0;
+        font-size: 0.85rem;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .snow-emergency-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: var(--spacing-sm);
+        padding: var(--spacing-sm) var(--spacing-md);
+    }
+
+    .snow-county-card {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: var(--spacing-sm);
+        border-radius: var(--radius-sm);
+        background: var(--bg-color);
+        border: 2px solid transparent;
+        transition: all var(--transition-fast);
+    }
+
+    .snow-county-card.level-1 {
+        border-color: #ffc107;
+        background: rgba(255, 193, 7, 0.1);
+    }
+
+    .snow-county-card.level-2 {
+        border-color: #fd7e14;
+        background: rgba(253, 126, 20, 0.1);
+    }
+
+    .snow-county-card.level-3 {
+        border-color: #dc3545;
+        background: rgba(220, 53, 69, 0.15);
+        animation: pulse-danger 2s infinite;
+    }
+
+    @keyframes pulse-danger {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.4); }
+        50% { box-shadow: 0 0 0 8px rgba(220, 53, 69, 0); }
+    }
+
+    .snow-county-name {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--text-color);
+        margin-bottom: 0.25rem;
+    }
+
+    .snow-level-badge {
+        font-size: 0.7rem;
+        font-weight: 700;
+        padding: 0.15rem 0.5rem;
+        border-radius: 999px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .snow-level-badge.level-1 {
+        background: #ffc107;
+        color: #000;
+    }
+
+    .snow-level-badge.level-2 {
+        background: #fd7e14;
+        color: #fff;
+    }
+
+    .snow-level-badge.level-3 {
+        background: #dc3545;
+        color: #fff;
+    }
+
+    .snow-emergency-edit-btn {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+    }
+
+    /* Snow Emergency Edit Modal */
+    .snow-edit-county {
+        padding: var(--spacing-sm);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-sm);
+        margin-bottom: var(--spacing-sm);
+        background: var(--bg-color);
+    }
+
+    .snow-edit-county-name {
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .snow-edit-county-name .primary-badge {
+        font-size: 0.65rem;
+        background: var(--primary-color);
+        color: #fff;
+        padding: 0.1rem 0.4rem;
+        border-radius: 999px;
+    }
+
+    .snow-level-options {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+
+    .snow-level-option {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+        font-size: 0.8rem;
+        border: 2px solid var(--border-color);
+        background: var(--surface-color);
+        transition: all var(--transition-fast);
+    }
+
+    .snow-level-option:hover {
+        background: var(--bg-color);
+    }
+
+    .snow-level-option input[type="radio"] {
+        margin: 0;
+    }
+
+    .snow-level-option.selected {
+        border-color: var(--primary-color);
+        background: rgba(47, 90, 161, 0.1);
+    }
+
+    .snow-level-option[data-level="0"].selected {
+        border-color: #28a745;
+        background: rgba(40, 167, 69, 0.1);
+    }
+
+    .snow-level-option[data-level="1"].selected {
+        border-color: #ffc107;
+        background: rgba(255, 193, 7, 0.15);
+    }
+
+    .snow-level-option[data-level="2"].selected {
+        border-color: #fd7e14;
+        background: rgba(253, 126, 20, 0.15);
+    }
+
+    .snow-level-option[data-level="3"].selected {
+        border-color: #dc3545;
+        background: rgba(220, 53, 69, 0.15);
     }
 
     .page-header-actions {
         display: flex;
         flex-wrap: wrap;
-        gap: 0.75rem;
+        gap: 0.5rem;
         position: relative;
         z-index: 1;
     }
 
     .page-header-actions .btn {
         border-radius: var(--radius-sm);
-        padding: 0.6rem 1.3rem;
+        padding: 0.4rem 0.8rem;
         display: inline-flex;
         align-items: center;
-        gap: 0.5rem;
+        gap: 0.35rem;
         font-weight: 600;
-        box-shadow: 0 14px 28px rgba(12, 20, 38, 0.22);
+        font-size: 0.85rem;
+        box-shadow: 0 4px 8px rgba(12, 20, 38, 0.15);
         transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
 
     .page-header-actions .btn:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 18px 36px rgba(12, 20, 38, 0.28);
+        transform: translateY(-1px);
+        box-shadow: 0 6px 12px rgba(12, 20, 38, 0.2);
     }
 
     .summary-metrics .metric-card {
@@ -620,28 +792,38 @@
     {% set state_code = location_settings.state_code if location_settings is defined and location_settings and location_settings.state_code else '' %}
     <div class="page-header">
         <div class="header-content">
-            <div class="dashboard-logo mb-3">
-                {% with logo_classes='dashboard-page-logo', logo_style='max-width: 300px;' %}
-                    {% include 'partials/logo_wordmark.html' %}
-                {% endwith %}
+            {% with logo_classes='dashboard-page-logo', logo_style='height: 36px; width: auto;' %}
+                {% include 'partials/logo_wordmark.html' %}
+            {% endwith %}
+            <div class="header-text">
+                <h1 class="page-title">Emergency Alert Dashboard</h1>
+                <p class="page-subtitle">{{ county_name }}{% if state_code %}, {{ state_code }}{% endif %}</p>
             </div>
-            <span class="eyebrow">Operations Dashboard</span>
-            <h1 class="page-title">Interactive Emergency Alert Map</h1>
-            <p class="page-subtitle">Stay aware of CAP activity across {{ county_name }}{% if state_code %}, {{ state_code }}{% endif %}.</p>
         </div>
         <div class="page-header-actions">
-            <button class="btn btn-light text-primary d-inline-flex align-items-center" onclick="refreshData({ includeBoundaries: true, reason: 'Manual refresh' })">
+            <button class="btn btn-light text-primary" onclick="refreshData({ includeBoundaries: true, reason: 'Manual refresh' })">
                 <i class="fas fa-sync-alt" id="refresh-icon"></i>
-                <span>Refresh Map</span>
+                <span>Refresh</span>
             </button>
-            <a href="/alerts" class="btn btn-outline-light d-inline-flex align-items-center">
+            <a href="/alerts" class="btn btn-outline-light">
                 <i class="fas fa-history"></i>
-                <span>View Alerts</span>
+                <span>Alerts</span>
             </a>
         </div>
     </div>
 
-    <div class="row g-3 summary-metrics my-4">
+    <!-- Snow Emergency Banner - Only visible when emergencies exist -->
+    <div id="snow-emergency-banner" class="snow-emergency-banner" style="display: none;">
+        <div class="snow-emergency-header">
+            <h6><i class="fas fa-snowflake"></i> Snow Emergencies</h6>
+            <button class="btn btn-sm btn-outline-primary snow-emergency-edit-btn" onclick="openSnowEmergencyModal()">
+                <i class="fas fa-edit"></i> Edit
+            </button>
+        </div>
+        <div id="snow-emergency-grid" class="snow-emergency-grid"></div>
+    </div>
+
+    <div class="row g-3 summary-metrics my-3">
         <div class="col-12 col-sm-6 col-xl-3">
             <div class="metric-card">
                 <div class="metric-icon metric-alert">
@@ -2153,5 +2335,199 @@ async function updateAudioHealth() {
 updateAudioHealth();
 // REDUCED: 30 seconds instead of 5 seconds - health status doesn't change rapidly
 setInterval(updateAudioHealth, 30000);
+
+// ===== SNOW EMERGENCY FUNCTIONS =====
+
+let snowEmergencyData = { emergencies: [], levels: {} };
+
+async function loadSnowEmergencies() {
+    try {
+        const response = await fetch('/api/snow_emergencies');
+        if (!response.ok) {
+            console.warn('Snow emergencies API not available');
+            return;
+        }
+        const data = await response.json();
+        snowEmergencyData = data;
+        renderSnowEmergencyBanner(data);
+    } catch (error) {
+        console.warn('Failed to load snow emergencies:', error);
+    }
+}
+
+function renderSnowEmergencyBanner(data) {
+    const banner = document.getElementById('snow-emergency-banner');
+    const grid = document.getElementById('snow-emergency-grid');
+    
+    if (!banner || !grid) return;
+    
+    const activeEmergencies = (data.emergencies || []).filter(e => e.level > 0);
+    
+    if (activeEmergencies.length === 0) {
+        banner.style.display = 'none';
+        banner.classList.remove('has-emergencies');
+        return;
+    }
+    
+    banner.style.display = 'block';
+    banner.classList.add('has-emergencies');
+    
+    grid.innerHTML = activeEmergencies.map(e => `
+        <div class="snow-county-card level-${e.level}">
+            <span class="snow-county-name">${escapeHtml(e.county_name)}</span>
+            <span class="snow-level-badge level-${e.level}">${escapeHtml(e.level_name)}</span>
+        </div>
+    `).join('');
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+async function openSnowEmergencyModal() {
+    // Load all counties for editing
+    try {
+        const response = await fetch('/api/snow_emergencies/all');
+        if (!response.ok) {
+            showToast('Failed to load snow emergency data', 'error');
+            return;
+        }
+        const data = await response.json();
+        showSnowEmergencyModal(data);
+    } catch (error) {
+        console.error('Failed to load snow emergencies for editing:', error);
+        showToast('Failed to load snow emergency data', 'error');
+    }
+}
+
+function showSnowEmergencyModal(data) {
+    // Remove existing modal if present
+    const existingModal = document.getElementById('snowEmergencyModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    const levels = data.levels || {
+        0: { name: 'None', color: '#28a745' },
+        1: { name: 'Level 1', color: '#ffc107' },
+        2: { name: 'Level 2', color: '#fd7e14' },
+        3: { name: 'Level 3', color: '#dc3545' }
+    };
+    
+    const modalHtml = `
+        <div class="modal fade" id="snowEmergencyModal" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            <i class="fas fa-snowflake text-info me-2"></i>
+                            Snow Emergency Levels
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="alert alert-info py-2 mb-3">
+                            <small><strong>Ohio Snow Emergency Levels:</strong> Level 1 = Caution, Level 2 = Emergency, Level 3 = Roads Closed</small>
+                        </div>
+                        <div id="snow-edit-counties">
+                            ${(data.emergencies || []).map(e => renderCountyEditor(e, levels)).join('')}
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    
+    const modal = new bootstrap.Modal(document.getElementById('snowEmergencyModal'));
+    modal.show();
+    
+    // Add event listeners for radio buttons
+    document.querySelectorAll('.snow-level-option input[type="radio"]').forEach(radio => {
+        radio.addEventListener('change', handleSnowLevelChange);
+    });
+}
+
+function renderCountyEditor(emergency, levels) {
+    const currentLevel = emergency.level || 0;
+    const isPrimary = emergency.is_primary || false;
+    
+    return `
+        <div class="snow-edit-county" data-fips="${escapeHtml(emergency.county_fips)}">
+            <div class="snow-edit-county-name">
+                ${escapeHtml(emergency.county_name)} County
+                ${isPrimary ? '<span class="primary-badge">Primary</span>' : ''}
+            </div>
+            <div class="snow-level-options">
+                ${[0, 1, 2, 3].map(level => {
+                    const levelInfo = levels[level] || { name: `Level ${level}` };
+                    const isSelected = currentLevel === level;
+                    return `
+                        <label class="snow-level-option ${isSelected ? 'selected' : ''}" data-level="${level}">
+                            <input type="radio" name="snow-level-${emergency.county_fips}" 
+                                   value="${level}" ${isSelected ? 'checked' : ''}
+                                   data-fips="${escapeHtml(emergency.county_fips)}">
+                            ${escapeHtml(levelInfo.name)}
+                        </label>
+                    `;
+                }).join('')}
+            </div>
+        </div>
+    `;
+}
+
+async function handleSnowLevelChange(event) {
+    const radio = event.target;
+    const fips = radio.dataset.fips;
+    const newLevel = parseInt(radio.value, 10);
+    
+    // Update visual selection
+    const container = radio.closest('.snow-edit-county');
+    container.querySelectorAll('.snow-level-option').forEach(opt => {
+        opt.classList.remove('selected');
+    });
+    radio.closest('.snow-level-option').classList.add('selected');
+    
+    try {
+        const response = await fetch(`/api/snow_emergencies/${fips}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ level: newLevel }),
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to update');
+        }
+        
+        const result = await response.json();
+        console.log('Snow emergency updated:', result);
+        
+        // Refresh the banner
+        loadSnowEmergencies();
+        
+        showToast(`${result.emergency.county_name} County updated to ${result.emergency.level_name}`, 'success');
+        
+    } catch (error) {
+        console.error('Failed to update snow emergency:', error);
+        showToast('Failed to update snow emergency: ' + error.message, 'error');
+        
+        // Revert the radio button
+        loadSnowEmergencies();
+    }
+}
+
+// Load snow emergencies on page load and periodically
+loadSnowEmergencies();
+setInterval(loadSnowEmergencies, 60000); // Refresh every minute
 </script>
 {% endblock %}
