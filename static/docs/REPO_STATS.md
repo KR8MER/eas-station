@@ -1,21 +1,21 @@
 # Repository Statistics
 
-**Generated:** 2025-11-29 19:40:51 UTC
+**Generated:** 2025-11-29 20:51:23 UTC
 
 ## Overview
 
-- **Total Files:** 628
+- **Total Files:** 630
 - **Total Directories:** 74
-- **Total Lines:** 214,171
-- **Code Lines:** 122,578
-- **Comment Lines:** 59,237
-- **Total Routes:** 189
+- **Total Lines:** 215,157
+- **Code Lines:** 123,118
+- **Comment Lines:** 59,518
+- **Total Routes:** 193
 
 ## Files by Type
 
 | File Type | Count |
 |-----------|-------|
-| Python | 322 |
+| Python | 324 |
 | HTML | 85 |
 | Other | 62 |
 | Markdown | 56 |
@@ -32,8 +32,8 @@
 
 | Language | Total Lines | Code Lines | Comment Lines |
 |----------|-------------|------------|---------------|
-| Python | 113,115 | 41,458 | 52,113 |
-| HTML | 53,255 | 48,273 | 494 |
+| Python | 113,719 | 41,674 | 52,393 |
+| HTML | 53,637 | 48,597 | 495 |
 | Markdown | 22,562 | 17,314 | 0 |
 | CSS | 7,769 | 1,695 | 4,943 |
 | JavaScript | 5,737 | 4,246 | 727 |
@@ -64,6 +64,7 @@
 | webapp/routes/alert_verification.py | 6 |
 | webapp/documentation.py | 5 |
 | webapp/routes_debug.py | 5 |
+| webapp/routes_snow_emergencies.py | 4 |
 | webapp/routes_audio_tests.py | 4 |
 | webapp/routes_exports.py | 4 |
 | webapp/routes_rwt_schedule.py | 4 |
@@ -81,10 +82,10 @@
 
 ### Top Languages by Lines of Code
 
-**Python:** 41,458 lines  
+**Python:** 41,674 lines  
 `██████████████████████████████████████████`
 
-**HTML:** 48,273 lines  
+**HTML:** 48,597 lines  
 `██████████████████████████████████████████████████`
 
 **Markdown:** 17,314 lines  
