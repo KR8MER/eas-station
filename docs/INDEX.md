@@ -71,6 +71,12 @@ If you're new to EAS Station, start here:
 | [Terms of Use](policies/TERMS_OF_USE) | Usage terms |
 | [Privacy Policy](policies/PRIVACY_POLICY) | Privacy information |
 
+## 🛡️ Reliability & Compliance
+
+| Document | Description |
+|----------|-------------|
+| [Certification-Grade Reliability Plan](process/certification_reliability_plan) | Timing, failover, and audit controls for certification readiness |
+
 ## 📈 Project Information
 
 | Document | Description |
@@ -96,7 +102,7 @@ docs/
 ├── reference/       # 3 reference materials
 ├── roadmap/         # 1 roadmap document
 ├── policies/        # 2 legal documents
-└── process/         # 1 contributing guide
+└── process/         # 2 process and reliability guides
 ```
 
 ## 🔍 Finding Information
@@ -117,7 +123,7 @@ docs/
 
 | Metric | Value |
 |--------|-------|
-| Total Documentation Files | 31 |
+| Total Documentation Files | 32 |
 | Essential User Guides | 5 |
 | Technical Documents | 8 |
 | Legal/Policy Documents | 4 |
