@@ -230,9 +230,9 @@ class SDRSourceAdapter(AudioSourceAdapter):
                     )
                     break
                 else:
-                    last_error = RuntimeError(f"Receiver '{receiver_id}' not running yet")
+                    last_error = RuntimeError(f"Receiver '{self._receiver_id}' not running yet")
                     if attempt < max_retries - 1:
-                        logger.info(f"Waiting for receiver '{receiver_id}' to start (attempt {attempt + 1}/{max_retries})...")
+                        logger.info(f"Waiting for receiver '{self._receiver_id}' to start (attempt {attempt + 1}/{max_retries})...")
                         time.sleep(retry_delay)
                         retry_delay = min(retry_delay * 1.5, 5.0)
             except Exception as e:
@@ -250,7 +250,7 @@ class SDRSourceAdapter(AudioSourceAdapter):
             raise RuntimeError(error_msg)
 
         self.status = AudioSourceStatus.RUNNING
-        logger.info(f"Started SDR audio capture from receiver: {receiver_id}")
+        logger.info(f"Started SDR audio capture from receiver: {self._receiver_id}")
 
     def _stop_capture(self) -> None:
         """Stop SDR audio capture."""

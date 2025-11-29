@@ -253,9 +253,9 @@ sudo systemctl restart eas-station</code></pre>
     function formatSignalStrength(magnitude) {
         if (magnitude === null || magnitude === undefined) return '—';
 
-        // Convert linear magnitude to RSSI in dBm
+        // Convert linear magnitude to dBFS (dB Full Scale)
         // Using 20*log10(magnitude) gives relative power in dB
-        // Full scale (magnitude=1.0) is referenced as 0 dBm
+        // Full scale (magnitude=1.0) is referenced as 0 dBFS
         const rssi = magnitude > 0 ? 20 * Math.log10(magnitude) : -120;
 
         // Determine signal bars (like cell phone signal)
@@ -285,7 +285,7 @@ sudo systemctl restart eas-station</code></pre>
         return `
             <div style="display:flex; align-items:flex-end; gap:0.5rem;">
                 <div style="display:flex; align-items:flex-end; gap:1px;">${barsHtml}</div>
-                <span style="color:${color}; font-weight:600;">${rssi.toFixed(1)} dBm</span>
+                <span style="color:${color}; font-weight:600;">${rssi.toFixed(1)} dBFS</span>
             </div>
         `;
     }
