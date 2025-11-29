@@ -2167,9 +2167,15 @@ def api_get_spectrogram(source_name: str):
 
 @audio_ingest_bp.route('/api/audio/stream/<source_name>')
 def api_stream_audio(source_name: str):
-    """Stream live audio from a specific source as WAV."""
+    """Stream live audio from a specific source as WAV.
+    
+    Uses per-source BroadcastQueue subscription to avoid competing with other audio consumers
+    (Icecast, EAS monitor, etc). Each subscriber gets independent copy of all audio chunks.
+    """
     import struct
     import io
+    import queue as queue_module
+    import threading
     from flask import Response, stream_with_context
 
     def generate_wav_stream(active_adapter: Any):
@@ -2178,6 +2184,9 @@ def api_stream_audio(source_name: str):
         This generator is designed to NEVER fail - it will stream silence if needed to keep
         the connection alive, allowing clients to maintain continuous audio monitoring even
         through source failures or transient errors.
+        
+        CRITICAL FIX: Uses per-source BroadcastQueue subscription instead of destructive
+        get_audio_chunk() calls. This prevents competing with Icecast streams and EAS monitor.
         """
         import numpy as np
 
@@ -2191,6 +2200,18 @@ def api_stream_audio(source_name: str):
         MAX_CONSECUTIVE_ERRORS = 50
         MAX_REALTIME_BLOCK_SECONDS = 0.25  # Cap live bursts to ~250ms to avoid chunky playback
         max_realtime_samples = int(sample_rate * channels * MAX_REALTIME_BLOCK_SECONDS)
+        
+        # Subscribe to the SOURCE's BroadcastQueue for non-destructive audio access
+        # Each web stream gets its own independent subscription
+        # Use UUID for unique subscriber ID to avoid thread identity reuse issues
+        import uuid
+        subscriber_id = f"web-stream-{source_name}-{uuid.uuid4().hex[:8]}"
+        source_broadcast_queue = active_adapter.get_broadcast_queue()
+        subscription_queue = source_broadcast_queue.subscribe(subscriber_id)
+        
+        logger.info(
+            f"Web stream '{subscriber_id}' subscribed to source '{source_name}' broadcast queue"
+        )
         
         if active_adapter.status != AudioSourceStatus.RUNNING:
             logger.warning(
@@ -2251,7 +2272,8 @@ def api_stream_audio(source_name: str):
                     # Continue anyway - will stream raw PCM which some players can handle
 
         # Pre-buffer audio for smooth playback - continue even if we can't fill buffer
-        logger.info(f'Pre-buffering audio for {source_name}')
+        # CRITICAL FIX: Use subscription queue instead of destructive get_audio_chunk()
+        logger.info(f'Pre-buffering audio for {source_name} from broadcast subscription')
         prebuffer = []
         prebuffer_target = int(sample_rate * 5)  # 5 seconds of audio for smooth playback on Pi
         prebuffer_samples = 0
@@ -2267,13 +2289,19 @@ def api_stream_audio(source_name: str):
                 break
 
             try:
-                audio_chunk = active_adapter.get_audio_chunk(timeout=0.5)  # Increased from 0.2s to 0.5s
+                # Read from subscription queue (non-destructive) instead of get_audio_chunk()
+                audio_chunk = subscription_queue.get(timeout=0.5)
                 if audio_chunk is not None:
                     if not isinstance(audio_chunk, np.ndarray):
                         audio_chunk = np.array(audio_chunk, dtype=np.float32)
 
                     prebuffer.append(audio_chunk)
                     prebuffer_samples += len(audio_chunk)
+            except queue_module.Empty:
+                prebuffer_errors += 1
+                if prebuffer_errors > 10:
+                    logger.warning(f'Multiple prebuffer timeouts for {source_name}, continuing anyway')
+                    break
             except Exception as e:
                 prebuffer_errors += 1
                 logger.warning(f'Error reading chunk during prebuffer for {source_name} (error {prebuffer_errors}): {e}')
@@ -2306,9 +2334,13 @@ def api_stream_audio(source_name: str):
                 audio_chunk = None
                 
                 # Wrap chunk read in try/except to prevent read errors from terminating stream
+                # CRITICAL FIX: Read from subscription queue (non-destructive) instead of get_audio_chunk()
                 try:
-                    # Get audio chunk from adapter (increased timeout to prevent underruns)
-                    audio_chunk = active_adapter.get_audio_chunk(timeout=0.2)  # Optimal for Raspberry Pi stability
+                    # Get audio chunk from subscription queue (non-competitive)
+                    audio_chunk = subscription_queue.get(timeout=0.2)  # Optimal for Raspberry Pi stability
+                except queue_module.Empty:
+                    # No audio available right now - this is normal
+                    audio_chunk = None
                 except Exception as e:
                     current_time = time.time()
                     if current_time - last_error_log_time > error_log_interval:
@@ -2393,6 +2425,13 @@ def api_stream_audio(source_name: str):
             logger.info(f'Client disconnected from audio stream: {source_name} (streamed {chunk_count} chunks)')
         except Exception as exc:
             logger.error(f'Unexpected error in audio stream generator for {source_name}: {exc}', exc_info=True)
+        finally:
+            # CRITICAL: Unsubscribe from broadcast queue when stream ends
+            try:
+                source_broadcast_queue.unsubscribe(subscriber_id)
+                logger.info(f"Web stream '{subscriber_id}' unsubscribed from source '{source_name}'")
+            except Exception as unsub_error:
+                logger.warning(f"Error unsubscribing web stream '{subscriber_id}': {unsub_error}")
 
     def _build_stream_headers(extra_headers: Optional[Dict[str, str]] = None) -> Dict[str, str]:
         headers = {

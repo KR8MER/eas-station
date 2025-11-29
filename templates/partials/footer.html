@@ -52,23 +52,24 @@
         {% set commit_badge_text = commit_label | upper %}
         {% set commit_badge_encoded = commit_badge_text | shields_escape | urlencode %}
         <div class="tech-stack-badges d-flex flex-wrap justify-content-center align-items-center gap-2 my-3">
-            <img src="https://img.shields.io/badge/Git%20Commit-{{ commit_badge_encoded }}-181717?style=flat-square&logo=github&logoColor=white" alt="Git commit {{ commit_badge_text }}" height="20">
-            <img src="https://img.shields.io/badge/Python-3.11.14-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.11.14" height="20">
-            <img src="https://img.shields.io/badge/Flask-3.0.3-000000?style=flat-square&logo=flask&logoColor=white" alt="Flask 3.0.3" height="20">
-            <img src="https://img.shields.io/badge/SQLAlchemy-2.0.44-CA2C39?style=flat-square&logo=sqlalchemy&logoColor=white" alt="SQLAlchemy 2.0.44" height="20">
-            <img src="https://img.shields.io/badge/PostgreSQL%20%2B%20PostGIS-17%20%2F%203.4-0093D0?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL 17 with PostGIS 3.4" height="20">
-            <img src="https://img.shields.io/badge/Redis-7.0%20Alpine-DC382D?style=flat-square&logo=redis&logoColor=white" alt="Redis 7.0 Alpine" height="20">
-            <img src="https://img.shields.io/badge/Gunicorn-23.0.0-499848?style=flat-square&logo=gunicorn&logoColor=white" alt="Gunicorn 23.0.0" height="20">
-            <img src="https://img.shields.io/badge/gevent-24.2.1-1F8B4C?style=flat-square" alt="gevent 24.2.1" height="20">
-            <img src="https://img.shields.io/badge/Nginx-Alpine-009639?style=flat-square&logo=nginx&logoColor=white" alt="Nginx (Alpine)" height="20">
-            <img src="https://img.shields.io/badge/Icecast-2.4.4-1F3B73?style=flat-square{% if icecast_logo %}&logo={{ icecast_logo | urlencode }}{% endif %}" alt="Icecast 2.4.4" height="20">
-            <img src="https://img.shields.io/badge/Docker%20Compose-v2-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker Compose v2" height="20">
-            <img src="https://img.shields.io/badge/Bootstrap-5.3.0-7952B3?style=flat-square&logo=bootstrap&logoColor=white" alt="Bootstrap 5.3.0" height="20">
-            <img src="https://img.shields.io/badge/Font%20Awesome-6.4.0-528DD7?style=flat-square&logo=fontawesome&logoColor=white" alt="Font Awesome 6.4.0" height="20">
-            <img src="https://img.shields.io/badge/Leaflet-1.9.4-199900?style=flat-square&logo=leaflet&logoColor=white" alt="Leaflet 1.9.4" height="20">
-            <img src="https://img.shields.io/badge/SoapySDR-enabled-FF6600?style=flat-square{% if soapysdr_logo %}&logo={{ soapysdr_logo | urlencode }}{% endif %}" alt="SoapySDR enabled" height="20">
-            <img src="https://img.shields.io/badge/License-AGPL%20v3-blue?style=flat-square&logo=gnu&logoColor=white" alt="License AGPL v3" height="20">
-            <img src="https://img.shields.io/badge/License-Commercial-green?style=flat-square&logoColor=white" alt="Commercial License Available" height="20">
+            <a href="https://github.com/KR8MER/eas-station" target="_blank" rel="noopener" title="View source on GitHub"><img src="https://img.shields.io/badge/Git%20Commit-{{ commit_badge_encoded }}-181717?style=flat-square&logo=github&logoColor=white" alt="Git commit {{ commit_badge_text }}" height="20"></a>
+            <a href="https://www.python.org/" target="_blank" rel="noopener" title="Python"><img src="https://img.shields.io/badge/Python-3.11.14-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.11.14" height="20"></a>
+            <a href="https://flask.palletsprojects.com/" target="_blank" rel="noopener" title="Flask"><img src="https://img.shields.io/badge/Flask-3.0.3-000000?style=flat-square&logo=flask&logoColor=white" alt="Flask 3.0.3" height="20"></a>
+            <a href="https://www.sqlalchemy.org/" target="_blank" rel="noopener" title="SQLAlchemy"><img src="https://img.shields.io/badge/SQLAlchemy-2.0.44-CA2C39?style=flat-square&logo=sqlalchemy&logoColor=white" alt="SQLAlchemy 2.0.44" height="20"></a>
+            <a href="https://www.postgresql.org/" target="_blank" rel="noopener" title="PostgreSQL with PostGIS"><img src="https://img.shields.io/badge/PostgreSQL%20%2B%20PostGIS-17%20%2F%203.4-0093D0?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL 17 with PostGIS 3.4" height="20"></a>
+            <a href="https://redis.io/" target="_blank" rel="noopener" title="Redis"><img src="https://img.shields.io/badge/Redis-7.0%20Alpine-DC382D?style=flat-square&logo=redis&logoColor=white" alt="Redis 7.0 Alpine" height="20"></a>
+            <a href="https://gunicorn.org/" target="_blank" rel="noopener" title="Gunicorn"><img src="https://img.shields.io/badge/Gunicorn-23.0.0-499848?style=flat-square&logo=gunicorn&logoColor=white" alt="Gunicorn 23.0.0" height="20"></a>
+            <a href="https://www.gevent.org/" target="_blank" rel="noopener" title="gevent"><img src="https://img.shields.io/badge/gevent-24.2.1-1F8B4C?style=flat-square" alt="gevent 24.2.1" height="20"></a>
+            <a href="https://nginx.org/" target="_blank" rel="noopener" title="Nginx"><img src="https://img.shields.io/badge/Nginx-Alpine-009639?style=flat-square&logo=nginx&logoColor=white" alt="Nginx (Alpine)" height="20"></a>
+            <a href="https://icecast.org/" target="_blank" rel="noopener" title="Icecast"><img src="https://img.shields.io/badge/Icecast-2.4.4-1F3B73?style=flat-square{% if icecast_logo %}&logo={{ icecast_logo | urlencode }}{% endif %}" alt="Icecast 2.4.4" height="20"></a>
+            <a href="https://docs.docker.com/compose/" target="_blank" rel="noopener" title="Docker Compose"><img src="https://img.shields.io/badge/Docker%20Compose-v2-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Docker Compose v2" height="20"></a>
+            <a href="https://getbootstrap.com/" target="_blank" rel="noopener" title="Bootstrap"><img src="https://img.shields.io/badge/Bootstrap-5.3.0-7952B3?style=flat-square&logo=bootstrap&logoColor=white" alt="Bootstrap 5.3.0" height="20"></a>
+            <a href="https://fontawesome.com/" target="_blank" rel="noopener" title="Font Awesome"><img src="https://img.shields.io/badge/Font%20Awesome-6.4.0-528DD7?style=flat-square&logo=fontawesome&logoColor=white" alt="Font Awesome 6.4.0" height="20"></a>
+            <a href="https://leafletjs.com/" target="_blank" rel="noopener" title="Leaflet"><img src="https://img.shields.io/badge/Leaflet-1.9.4-199900?style=flat-square&logo=leaflet&logoColor=white" alt="Leaflet 1.9.4" height="20"></a>
+            <a href="https://github.com/pothosware/SoapySDR" target="_blank" rel="noopener" title="SoapySDR"><img src="https://img.shields.io/badge/SoapySDR-enabled-FF6600?style=flat-square{% if soapysdr_logo %}&logo={{ soapysdr_logo | urlencode }}{% endif %}" alt="SoapySDR enabled" height="20"></a>
+            <a href="https://www.jetbrains.com/pycharm/" target="_blank" rel="noopener" title="Built with PyCharm"><img src="https://img.shields.io/badge/PyCharm-2024.3-000000?style=flat-square&logo=pycharm&logoColor=white" alt="PyCharm 2024.3" height="20"></a>
+            <a href="https://www.gnu.org/licenses/agpl-3.0" target="_blank" rel="noopener" title="AGPL v3 License"><img src="https://img.shields.io/badge/License-AGPL%20v3-blue?style=flat-square&logo=gnu&logoColor=white" alt="License AGPL v3" height="20"></a>
+            <a href="https://github.com/KR8MER/eas-station/blob/main/LICENSE-COMMERCIAL" target="_blank" rel="noopener" title="Commercial License Available"><img src="https://img.shields.io/badge/License-Commercial-green?style=flat-square&logoColor=white" alt="Commercial License Available" height="20"></a>
         </div>
 
         <!-- License Attribution (Required) -->
