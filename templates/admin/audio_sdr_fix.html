@@ -1,0 +1,358 @@
+{% extends "base.html" %}
+
+{% block title %}Audio/SDR Configuration Fix{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <h1 class="mb-4">
+                <i class="fas fa-tools"></i> Audio/SDR Configuration Fix
+            </h1>
+
+            <div class="alert alert-info">
+                <h5><i class="fas fa-info-circle"></i> About This Tool</h5>
+                <p>This page helps diagnose and fix three common audio/SDR issues:</p>
+                <ol>
+                    <li><strong>MP3 streams not appearing as Icecast mount points</strong></li>
+                    <li><strong>Waterfall display showing wrong frequency scale</strong> (kHz instead of MHz)</li>
+                    <li><strong>High-pitched squeal/tone from SDR audio</strong></li>
+                </ol>
+                <p class="mb-0"><strong>Root Cause:</strong> Sample rates misconfigured (audio rate used for IQ samples)</p>
+            </div>
+
+            <!-- Diagnostic Section -->
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-stethoscope"></i> Step 1: Diagnose Configuration</h5>
+                </div>
+                <div class="card-body">
+                    <p>Click the button below to scan your configuration for issues.</p>
+                    <button id="diagnoseBtn" class="btn btn-primary" onclick="runDiagnosis()">
+                        <i class="fas fa-play"></i> Run Diagnosis
+                    </button>
+
+                    <div id="diagnosticResults" class="mt-4" style="display: none;">
+                        <!-- Results will be populated here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Fix Section -->
+            <div id="fixSection" class="card mb-4" style="display: none;">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="fas fa-wrench"></i> Step 2: Apply Fixes</h5>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-warning">
+                        <strong><i class="fas fa-exclamation-triangle"></i> Important:</strong>
+                        This will update your database configuration. Make sure you understand the changes before proceeding.
+                    </div>
+
+                    <h6>Fixes to be applied:</h6>
+                    <ul id="fixesList" class="mb-3">
+                        <!-- Will be populated dynamically -->
+                    </ul>
+
+                    <button id="applyFixBtn" class="btn btn-success" onclick="applyFixes()">
+                        <i class="fas fa-check"></i> Apply Fixes
+                    </button>
+
+                    <div id="fixResults" class="mt-3" style="display: none;">
+                        <!-- Results will be populated here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Restart Section -->
+            <div id="restartSection" class="card mb-4" style="display: none;">
+                <div class="card-header bg-warning">
+                    <h5 class="mb-0"><i class="fas fa-sync-alt"></i> Step 3: Restart Services</h5>
+                </div>
+                <div class="card-body">
+                    <p>Configuration has been updated! Now restart the SDR service to apply the changes.</p>
+                    <p><strong>Run this command on your Raspberry Pi:</strong></p>
+                    <div class="alert alert-dark">
+                        <code id="restartCommand">sudo docker compose -f docker-compose.yml -f docker-compose.pi.yml restart sdr-service</code>
+                        <button class="btn btn-sm btn-outline-secondary ml-2" onclick="copyToClipboard()">
+                            <i class="fas fa-copy"></i> Copy
+                        </button>
+                    </div>
+                    <p class="text-muted mb-0">After restarting, check:</p>
+                    <ul class="text-muted">
+                        <li>Icecast mount points: <a href="http://localhost:8001/" target="_blank">http://localhost:8001/</a></li>
+                        <li>Waterfall display: <a href="/settings/radio" target="_blank">/settings/radio</a></li>
+                        <li>Listen to streams - should be clear audio, no squeal</li>
+                    </ul>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<style>
+.config-item {
+    padding: 10px;
+    margin-bottom: 10px;
+    border-radius: 4px;
+    border-left: 4px solid;
+}
+.config-item.error {
+    background-color: #f8d7da;
+    border-left-color: #dc3545;
+}
+.config-item.success {
+    background-color: #d4edda;
+    border-left-color: #28a745;
+}
+.config-item.warning {
+    background-color: #fff3cd;
+    border-left-color: #ffc107;
+}
+.config-detail {
+    font-size: 0.9em;
+    margin-top: 5px;
+}
+.badge-large {
+    font-size: 1em;
+    padding: 0.5em 0.8em;
+}
+</style>
+
+<script>
+let diagnosticData = null;
+
+async function runDiagnosis() {
+    const btn = document.getElementById('diagnoseBtn');
+    const resultsDiv = document.getElementById('diagnosticResults');
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Diagnosing...';
+    resultsDiv.style.display = 'none';
+
+    try {
+        const response = await fetch('/api/admin/audio-sdr-fix/diagnose');
+        const data = await response.json();
+
+        if (data.success) {
+            diagnosticData = data;
+            displayDiagnosticResults(data);
+
+            if (data.issues.length > 0) {
+                document.getElementById('fixSection').style.display = 'block';
+                populateFixesList(data.issues);
+            }
+        } else {
+            alert('Error: ' + data.error);
+        }
+    } catch (error) {
+        alert('Failed to run diagnosis: ' + error.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-play"></i> Run Diagnosis';
+    }
+}
+
+function displayDiagnosticResults(data) {
+    const resultsDiv = document.getElementById('diagnosticResults');
+    const summary = data.summary;
+
+    let html = '<h5>Diagnostic Results</h5>';
+
+    // Summary
+    html += '<div class="row mb-3">';
+    html += `<div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h3>${summary.total_receivers}</h3>
+                <small>SDR Receivers</small>
+            </div>
+        </div>
+    </div>`;
+    html += `<div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h3>${summary.total_audio_sources}</h3>
+                <small>Audio Sources</small>
+            </div>
+        </div>
+    </div>`;
+    html += `<div class="col-md-3">
+        <div class="card text-center bg-danger text-white">
+            <div class="card-body">
+                <h3>${summary.total_issues}</h3>
+                <small>Issues Found</small>
+            </div>
+        </div>
+    </div>`;
+    html += `<div class="col-md-3">
+        <div class="card text-center bg-warning">
+            <div class="card-body">
+                <h3>${summary.total_warnings}</h3>
+                <small>Warnings</small>
+            </div>
+        </div>
+    </div>`;
+    html += '</div>';
+
+    // Detailed results
+    if (data.all_configs.length > 0) {
+        html += '<h6>Configuration Details:</h6>';
+
+        data.all_configs.forEach(item => {
+            const severity = item.severity || 'success';
+            const icon = severity === 'error' ? 'fa-times-circle' :
+                        severity === 'warning' ? 'fa-exclamation-triangle' :
+                        'fa-check-circle';
+
+            html += `<div class="config-item ${severity}">`;
+            html += `<div class="d-flex justify-content-between align-items-center">`;
+            html += `<div>`;
+            html += `<strong><i class="fas ${icon}"></i> `;
+
+            if (item.type === 'receiver') {
+                html += `${item.display_name || item.identifier} (${item.driver})`;
+            } else {
+                html += `${item.name} (${item.source_type})`;
+            }
+
+            html += `</strong>`;
+            html += `</div>`;
+            html += `<div>`;
+
+            if (item.type === 'receiver') {
+                html += `<span class="badge badge-large badge-info">${formatRate(item.sample_rate)} IQ Rate</span>`;
+            } else {
+                html += `<span class="badge badge-large badge-info">${formatRate(item.audio_sample_rate)} Audio Rate</span>`;
+            }
+
+            html += `</div>`;
+            html += `</div>`;
+
+            if (item.issue) {
+                html += `<div class="config-detail text-danger">`;
+                html += `<i class="fas fa-exclamation-circle"></i> ${item.issue}`;
+                html += `<br><strong>Recommended:</strong> ${formatRate(item.recommended)}`;
+                html += `</div>`;
+            } else if (item.status === 'ok') {
+                html += `<div class="config-detail text-success">`;
+                html += `<i class="fas fa-check"></i> Configuration looks good`;
+                html += `</div>`;
+            }
+
+            // Additional details
+            if (item.type === 'receiver' && item.frequency_mhz) {
+                html += `<div class="config-detail text-muted">`;
+                html += `Frequency: ${item.frequency_mhz} MHz, Modulation: ${item.modulation_type}`;
+                html += `</div>`;
+            }
+
+            html += `</div>`;
+        });
+    } else {
+        html += '<p class="text-muted">No configurations found.</p>';
+    }
+
+    resultsDiv.innerHTML = html;
+    resultsDiv.style.display = 'block';
+}
+
+function populateFixesList(issues) {
+    const list = document.getElementById('fixesList');
+    let html = '';
+
+    issues.forEach(issue => {
+        if (issue.type === 'receiver') {
+            html += `<li><strong>${issue.display_name || issue.identifier}:</strong> `;
+            html += `Set IQ sample rate from ${formatRate(issue.sample_rate)} → ${formatRate(issue.recommended)}</li>`;
+        } else {
+            html += `<li><strong>${issue.name}:</strong> `;
+            html += `Set audio sample rate from ${formatRate(issue.audio_sample_rate)} → ${formatRate(issue.recommended)}</li>`;
+        }
+    });
+
+    list.innerHTML = html;
+}
+
+async function applyFixes() {
+    const btn = document.getElementById('applyFixBtn');
+    const resultsDiv = document.getElementById('fixResults');
+
+    if (!confirm('Are you sure you want to apply these fixes? This will update your database configuration.')) {
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Applying fixes...';
+    resultsDiv.style.display = 'none';
+
+    try {
+        const response = await fetch('/api/admin/audio-sdr-fix/apply', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                auto_fix: true
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            let html = '<div class="alert alert-success">';
+            html += `<strong><i class="fas fa-check-circle"></i> Success!</strong> ${data.message}`;
+            html += '</div>';
+
+            if (data.fixes_applied.length > 0) {
+                html += '<h6>Changes applied:</h6><ul>';
+                data.fixes_applied.forEach(fix => {
+                    html += '<li>';
+                    if (fix.identifier) {
+                        html += `<strong>${fix.display_name || fix.identifier}:</strong> `;
+                    }
+                    html += `${fix.field} updated from ${formatRate(fix.old_value)} → ${formatRate(fix.new_value)}`;
+                    html += '</li>';
+                });
+                html += '</ul>';
+            }
+
+            resultsDiv.innerHTML = html;
+            resultsDiv.style.display = 'block';
+
+            // Show restart section
+            document.getElementById('restartSection').style.display = 'block';
+
+            // Re-run diagnosis to show new state
+            setTimeout(() => runDiagnosis(), 1000);
+
+        } else {
+            alert('Error applying fixes: ' + data.error);
+        }
+    } catch (error) {
+        alert('Failed to apply fixes: ' + error.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-check"></i> Apply Fixes';
+    }
+}
+
+function formatRate(hz) {
+    if (hz >= 1000000) {
+        return (hz / 1000000).toFixed(2) + ' MHz';
+    } else if (hz >= 1000) {
+        return (hz / 1000).toFixed(1) + ' kHz';
+    } else {
+        return hz + ' Hz';
+    }
+}
+
+function copyToClipboard() {
+    const command = document.getElementById('restartCommand').textContent;
+    navigator.clipboard.writeText(command).then(() => {
+        alert('Command copied to clipboard!');
+    });
+}
+</script>
+{% endblock %}
