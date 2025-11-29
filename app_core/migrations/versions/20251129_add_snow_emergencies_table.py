@@ -102,17 +102,35 @@ def upgrade() -> None:
     )
 
     # Initialize with all counties at level 0
+    # Using SQLAlchemy table construct to avoid any SQL injection concerns
+    snow_table = sa.table(
+        SNOW_EMERGENCIES_TABLE,
+        sa.column("county_fips", sa.String),
+        sa.column("county_name", sa.String),
+        sa.column("state_code", sa.String),
+        sa.column("level", sa.Integer),
+        sa.column("level_set_by", sa.String),
+    )
+    
     conn = op.get_bind()
     for county_fips, county_name, state_code in INITIAL_COUNTIES:
-        conn.execute(
-            sa.text(
-                f"INSERT INTO {SNOW_EMERGENCIES_TABLE} "
-                "(county_fips, county_name, state_code, level, level_set_by) "
-                "VALUES (:fips, :name, :state, 0, 'System') "
-                "ON CONFLICT (county_fips) DO NOTHING"
-            ),
-            {"fips": county_fips, "name": county_name, "state": state_code},
-        )
+        # Check if already exists before inserting
+        result = conn.execute(
+            sa.select(snow_table.c.county_fips).where(
+                snow_table.c.county_fips == county_fips
+            )
+        ).fetchone()
+        
+        if not result:
+            conn.execute(
+                snow_table.insert().values(
+                    county_fips=county_fips,
+                    county_name=county_name,
+                    state_code=state_code,
+                    level=0,
+                    level_set_by="System",
+                )
+            )
 
 
 def downgrade() -> None:

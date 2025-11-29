@@ -73,11 +73,13 @@ def _initialize_counties() -> None:
 
 def _get_current_username() -> str:
     """Get the current user's username from session/auth."""
-    # Try to get from Flask-Login current_user
+    # Try to get from Flask-Login current_user (imported at module level if available)
     try:
         from flask_login import current_user
-        if current_user and current_user.is_authenticated:
-            return current_user.username or current_user.email or "Unknown"
+        if hasattr(current_user, 'is_authenticated') and current_user.is_authenticated:
+            return getattr(current_user, 'username', None) or getattr(current_user, 'email', None) or "Unknown"
+    except ImportError:
+        pass
     except Exception:
         pass
 
@@ -198,7 +200,7 @@ def register(app: Flask, logger) -> None:
             route_logger.error("Error fetching all snow emergencies: %s", exc)
             return jsonify({"error": str(exc)}), 500
 
-    @app.route("/api/snow_emergencies/<county_fips>", methods=["PUT", "PATCH"])
+    @app.route("/api/snow_emergencies/<county_fips>", methods=["PUT"])
     def update_snow_emergency(county_fips: str):
         """Update snow emergency level for a specific county.
 
