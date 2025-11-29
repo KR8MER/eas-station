@@ -979,6 +979,7 @@ def main():
         # Start HTTP streaming server for VU meter support
         logger.info("Starting HTTP streaming server...")
         streaming_server_thread = None
+        streaming_port = 5002  # Default port, will be overwritten if server starts
         try:
             from flask import Flask, Response, stream_with_context, jsonify
             import threading
@@ -1138,7 +1139,15 @@ def main():
             
             # Start Flask server in background thread
             # Use port 5002 to avoid conflict with hardware-service (which uses port 5001)
-            streaming_port = int(os.environ.get('AUDIO_STREAMING_PORT', '5002'))
+            streaming_port_str = os.environ.get('AUDIO_STREAMING_PORT', '5002')
+            try:
+                streaming_port = int(streaming_port_str)
+                if streaming_port < 1 or streaming_port > 65535:
+                    raise ValueError(f"Port {streaming_port} out of valid range (1-65535)")
+            except ValueError as ve:
+                logger.error(f"Invalid AUDIO_STREAMING_PORT '{streaming_port_str}': {ve}. Using default 5002.")
+                streaming_port = 5002
+            
             server = make_server('0.0.0.0', streaming_port, stream_app, threaded=True)
             streaming_server_thread = threading.Thread(
                 target=server.serve_forever,
