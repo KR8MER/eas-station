@@ -15,11 +15,11 @@ IMPORTANT: This software cannot be rebranded or have attribution removed.
 See NOTICE file for complete terms.
 
 Repository: https://github.com/KR8MER/eas-station
+
+Routes for managing local snow emergencies.
 """
 
 from __future__ import annotations
-
-"""Routes for managing local snow emergencies."""
 
 import logging
 from typing import Any, Dict, List

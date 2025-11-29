@@ -214,16 +214,17 @@ def get_device_capabilities(driver: str, device_args: Optional[Dict[str, str]] =
 
         if 'airspy' in driver_lower:
             logger.info(f"Returning fallback Airspy capabilities (device may be in use)")
-            # Different Airspy models support different sample rates:
-            # - Airspy R2: 2.5 MSPS and 10 MSPS ONLY
-            # - Airspy Mini: 3 MSPS and 6 MSPS (different hardware)
-            # - Airspy HF+: Various rates (different hardware)
-            # For Airspy R2 (most common): Only 2.5 MHz and 10 MHz are valid
+            # IMPORTANT: Airspy R2 (the most common model) ONLY supports 2.5 MHz and 10 MHz.
+            # Other Airspy models have different rates:
+            # - Airspy Mini: 3 MSPS and 6 MSPS
+            # - Airspy HF+: Various rates
+            # This fallback assumes Airspy R2. If using a different model, the hardware
+            # query should return the correct rates when the device is available.
             return {
                 "driver": driver,
-                "hardware_info": {"fallback": "true", "reason": "Device busy or unavailable"},
+                "hardware_info": {"fallback": "true", "reason": "Device busy or unavailable", "assumed_model": "Airspy R2"},
                 "num_channels": 1,
-                "sample_rates": [2500000, 10000000],  # Airspy R2: ONLY 2.5 MHz and 10 MHz supported
+                "sample_rates": [2500000, 10000000],  # Airspy R2: ONLY 2.5 MHz and 10 MHz
                 "bandwidths": [],
                 "gains": {"LNA": {"min": 0, "max": 15, "step": 1}, "MIX": {"min": 0, "max": 15, "step": 1}, "VGA": {"min": 0, "max": 15, "step": 1}},
                 "frequency_ranges": [{"min": 24000000, "max": 1800000000}],

@@ -809,10 +809,14 @@
                 <i class="fas fa-history"></i>
                 <span>Alerts</span>
             </a>
+            <button class="btn btn-outline-light" onclick="openSnowEmergencyModal()" title="Manage Snow Emergencies">
+                <i class="fas fa-snowflake"></i>
+                <span>Snow</span>
+            </button>
         </div>
     </div>
 
-    <!-- Snow Emergency Banner - Only visible when emergencies exist -->
+    <!-- Snow Emergency Banner - Shows active emergencies, hidden when none -->
     <div id="snow-emergency-banner" class="snow-emergency-banner" style="display: none;">
         <div class="snow-emergency-header">
             <h6><i class="fas fa-snowflake"></i> Snow Emergencies</h6>
