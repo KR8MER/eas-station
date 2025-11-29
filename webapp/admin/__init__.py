@@ -25,6 +25,7 @@ from app_utils.eas import load_eas_config
 
 from .audio import register_audio_routes
 from .audio_ingest import register_audio_ingest_routes
+from .audio_sdr_fix import register_audio_sdr_fix_routes
 from .api import register_api_routes
 from .auth import register_auth_routes
 from .boundaries import register_boundary_routes
@@ -45,6 +46,7 @@ def register(app, logger):
 
     register_audio_routes(app, logger, eas_config)
     register_audio_ingest_routes(app, logger)
+    register_audio_sdr_fix_routes(app)  # Audio/SDR configuration fix utility
     register_api_routes(app, logger)
     register_environment_routes(app, logger)
     register_maintenance_routes(app, logger)
