@@ -181,23 +181,37 @@ def register_eas_monitor_routes(app: Flask, logger_instance) -> None:
         """Get buffer utilization history for graphing.
 
         Returns last 60 data points (typically 5 minutes at 5s intervals).
+
+        In separated architecture, buffer history is published by audio-service
+        to Redis. The app container reads it from there.
         """
         try:
-            from app_core.audio import get_eas_monitor_instance
+            # Separated architecture: Read buffer history from Redis
+            from app_core.audio.worker_coordinator import read_shared_metrics
 
-            monitor = get_eas_monitor_instance()
+            shared_metrics = read_shared_metrics()
 
-            if monitor is None:
+            if shared_metrics is None or "eas_monitor" not in shared_metrics:
                 return jsonify({
                     "history": [],
-                    "error": "EAS monitor not initialized"
+                    "error": "EAS monitor metrics not available from audio-service"
                 })
 
-            history = monitor.get_buffer_history()
+            eas_status = shared_metrics.get("eas_monitor", {})
+            if eas_status is None:
+                return jsonify({
+                    "history": [],
+                    "error": "EAS monitor not running in audio-service"
+                })
+
+            # Buffer history may not be published to Redis to avoid large payloads
+            # Return buffer fill percentage history if available
+            buffer_history = eas_status.get("buffer_history", [])
+            sample_rate = eas_status.get("sample_rate", 16000)
 
             return jsonify({
-                "history": history,
-                "sample_rate": monitor.sample_rate,
+                "history": buffer_history,
+                "sample_rate": sample_rate,
                 "mode": "streaming"
             })
 
@@ -213,10 +227,11 @@ def register_eas_monitor_routes(app: Flask, logger_instance) -> None:
         """Start or stop the EAS monitor.
 
         POST body: {"action": "start" or "stop"}
+
+        In separated architecture, this sends a command to audio-service via Redis
+        Pub/Sub to control the EAS monitor running there.
         """
         try:
-            from app_core.audio import get_eas_monitor_instance, start_eas_monitor, stop_eas_monitor
-
             payload = request.get_json() or {}
             action = payload.get("action", "").lower()
 
@@ -226,20 +241,50 @@ def register_eas_monitor_routes(app: Flask, logger_instance) -> None:
                     "error": "Invalid action. Must be 'start' or 'stop'"
                 }), 400
 
-            if action == "start":
-                result = start_eas_monitor()
+            # Send command to audio-service via Redis Pub/Sub
+            from app_core.audio.redis_commands import get_audio_command_publisher
+
+            try:
+                publisher = get_audio_command_publisher()
+
+                if action == "start":
+                    result = publisher.start_eas_monitor()
+                    if result.get('success'):
+                        return jsonify({
+                            "success": True,
+                            "action": "start",
+                            "message": "EAS monitor start command sent to audio-service",
+                            "command_id": result.get('command_id')
+                        })
+                    else:
+                        return jsonify({
+                            "success": False,
+                            "action": "start",
+                            "message": result.get('message', 'Failed to send start command')
+                        }), 500
+                else:  # stop
+                    result = publisher.stop_eas_monitor()
+                    if result.get('success'):
+                        return jsonify({
+                            "success": True,
+                            "action": "stop",
+                            "message": "EAS monitor stop command sent to audio-service",
+                            "command_id": result.get('command_id')
+                        })
+                    else:
+                        return jsonify({
+                            "success": False,
+                            "action": "stop",
+                            "message": result.get('message', 'Failed to send stop command')
+                        }), 500
+
+            except Exception as redis_error:
+                logger.error(f"Redis communication failed: {redis_error}")
                 return jsonify({
-                    "success": result,
-                    "action": "start",
-                    "message": "EAS monitor started" if result else "EAS monitor already running or failed to start"
-                })
-            else:  # stop
-                result = stop_eas_monitor()
-                return jsonify({
-                    "success": result,
-                    "action": "stop",
-                    "message": "EAS monitor stopped" if result else "EAS monitor was not running"
-                })
+                    "success": False,
+                    "error": f"Cannot communicate with audio-service: {str(redis_error)}",
+                    "hint": "Check that Redis and audio-service containers are running"
+                }), 503
 
         except Exception as e:
             logger.error(f"Error controlling EAS monitor: {e}", exc_info=True)

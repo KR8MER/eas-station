@@ -34,6 +34,8 @@ Commands:
     - source_delete: Delete an audio source
     - streaming_start: Start auto-streaming service
     - streaming_stop: Stop auto-streaming service
+    - eas_monitor_start: Start EAS monitor
+    - eas_monitor_stop: Stop EAS monitor
 """
 
 import json
@@ -155,6 +157,14 @@ class AudioCommandPublisher:
         """Stop auto-streaming service."""
         return self._publish_command('streaming_stop', {})
 
+    def start_eas_monitor(self) -> Dict[str, Any]:
+        """Start EAS monitor in audio-service."""
+        return self._publish_command('eas_monitor_start', {})
+
+    def stop_eas_monitor(self) -> Dict[str, Any]:
+        """Stop EAS monitor in audio-service."""
+        return self._publish_command('eas_monitor_stop', {})
+
 
 class AudioCommandSubscriber:
     """
@@ -163,16 +173,18 @@ class AudioCommandSubscriber:
     Used by audio-service container to receive and execute commands from app.
     """
 
-    def __init__(self, audio_controller, auto_streaming_service=None):
+    def __init__(self, audio_controller, auto_streaming_service=None, eas_monitor=None):
         """
         Initialize Redis subscriber with retry logic.
 
         Args:
             audio_controller: AudioIngestController instance to execute commands on
             auto_streaming_service: Optional AutoStreamingService for Icecast streaming
+            eas_monitor: Optional ContinuousEASMonitor for EAS monitoring control
         """
         self.audio_controller = audio_controller
         self.auto_streaming_service = auto_streaming_service
+        self.eas_monitor = eas_monitor
         try:
             self.redis_client = get_redis_client(max_retries=5)
             self.pubsub = self.redis_client.pubsub()
@@ -327,6 +339,21 @@ class AudioCommandSubscriber:
                     self.auto_streaming_service.stop()
                     return {'success': True, 'message': 'Streaming service stopped'}
                 return {'success': False, 'message': 'Streaming service not available'}
+
+            elif command == 'eas_monitor_start':
+                if self.eas_monitor:
+                    result = self.eas_monitor.start()
+                    if result:
+                        return {'success': True, 'message': 'EAS monitor started'}
+                    else:
+                        return {'success': False, 'message': 'EAS monitor failed to start or already running'}
+                return {'success': False, 'message': 'EAS monitor not available'}
+
+            elif command == 'eas_monitor_stop':
+                if self.eas_monitor:
+                    self.eas_monitor.stop()
+                    return {'success': True, 'message': 'EAS monitor stopped'}
+                return {'success': False, 'message': 'EAS monitor not available'}
 
             else:
                 return {'success': False, 'message': f'Unknown command: {command}'}

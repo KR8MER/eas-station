@@ -2843,20 +2843,23 @@
 
     function createWaveformCanvas(receiver) {
         const canvasId = `waveform-${receiver.id}`;
+        const spectrumCanvasId = `spectrum-${receiver.id}`;
 
         const col = document.createElement('div');
         col.className = 'col-md-6';
         col.id = `waveform-container-${receiver.id}`;
 
+        // SDRtrunk-style layout: spectrum graph on top, waterfall below
         col.innerHTML = `
-            <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
+            <div class="card bg-dark text-white border-secondary">
+                <div class="card-header d-flex justify-content-between align-items-center py-2 border-secondary">
                     <strong>${escapeHtml(receiver.display_name)}</strong>
                     <span class="badge bg-secondary">${escapeHtml(receiver.identifier)}</span>
                 </div>
-                <div class="card-body p-2">
-                    <canvas id="${canvasId}" width="800" height="300" style="width: 100%; height: auto;"></canvas>
-                    <div class="small text-muted text-center mt-2">
+                <div class="card-body p-0">
+                    <canvas id="${spectrumCanvasId}" width="800" height="80" style="width: 100%; display: block;"></canvas>
+                    <canvas id="${canvasId}" width="800" height="200" style="width: 100%; display: block;"></canvas>
+                    <div class="small text-muted text-center py-1 bg-dark" style="font-family: monospace;">
                         <span id="waveform-info-${receiver.id}">Initializing...</span>
                     </div>
                 </div>
@@ -2869,29 +2872,173 @@
         return col;
     }
 
-    function drawWaterfall(canvas, history, spectrumData) {
+    // SDRtrunk-style color gradient for waterfall
+    function getWaterfallColor(intensity) {
+        // Color mapping similar to SDRtrunk: dark navy -> blue -> cyan -> yellow -> red/white
+        let r, g, b;
+        
+        if (intensity < 0.15) {
+            // Very dark navy (noise floor)
+            r = 0;
+            g = 0;
+            b = Math.floor(40 + intensity * 6.67 * 80);  // 40-80
+        } else if (intensity < 0.35) {
+            // Navy to blue
+            const t = (intensity - 0.15) / 0.20;
+            r = 0;
+            g = Math.floor(t * 50);
+            b = Math.floor(80 + t * 175);  // 80-255
+        } else if (intensity < 0.50) {
+            // Blue to cyan
+            const t = (intensity - 0.35) / 0.15;
+            r = 0;
+            g = Math.floor(50 + t * 205);  // 50-255
+            b = 255;
+        } else if (intensity < 0.65) {
+            // Cyan to green
+            const t = (intensity - 0.50) / 0.15;
+            r = 0;
+            g = 255;
+            b = Math.floor(255 - t * 255);  // 255-0
+        } else if (intensity < 0.80) {
+            // Green to yellow
+            const t = (intensity - 0.65) / 0.15;
+            r = Math.floor(t * 255);
+            g = 255;
+            b = 0;
+        } else if (intensity < 0.92) {
+            // Yellow to red
+            const t = (intensity - 0.80) / 0.12;
+            r = 255;
+            g = Math.floor(255 - t * 255);  // 255-0
+            b = 0;
+        } else {
+            // Red to white (peak signals)
+            const t = (intensity - 0.92) / 0.08;
+            r = 255;
+            g = Math.floor(t * 255);
+            b = Math.floor(t * 255);
+        }
+        
+        return `rgb(${r}, ${g}, ${b})`;
+    }
+
+    // Draw spectrum graph (top panel, like SDRtrunk)
+    function drawSpectrumGraph(canvas, spectrumData, freqMin, freqMax) {
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+
+        // Dark background
+        ctx.fillStyle = '#0a0a12';
+        ctx.fillRect(0, 0, width, height);
+
+        if (!spectrumData || spectrumData.length === 0) {
+            return;
+        }
+
+        // Draw grid lines
+        ctx.strokeStyle = '#1a2a4a';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        
+        // Horizontal grid lines (dB levels)
+        for (let i = 1; i < 4; i++) {
+            const y = (i / 4) * height;
+            ctx.moveTo(0, y);
+            ctx.lineTo(width, y);
+        }
+        
+        // Vertical grid lines (frequency)
+        for (let i = 1; i < 8; i++) {
+            const x = (i / 8) * width;
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, height);
+        }
+        ctx.stroke();
+
+        // Draw spectrum line with gradient fill
+        ctx.beginPath();
+        ctx.moveTo(0, height);
+
+        const binWidth = width / spectrumData.length;
+        
+        for (let i = 0; i < spectrumData.length; i++) {
+            const x = i * binWidth;
+            const y = height - (spectrumData[i] * height * 0.95);  // Leave some margin
+            if (i === 0) {
+                ctx.lineTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        }
+        
+        ctx.lineTo(width, height);
+        ctx.closePath();
+
+        // Create gradient fill (cyan at bottom, fading up)
+        const gradient = ctx.createLinearGradient(0, height, 0, 0);
+        gradient.addColorStop(0, 'rgba(0, 255, 255, 0.5)');
+        gradient.addColorStop(0.5, 'rgba(0, 128, 255, 0.2)');
+        gradient.addColorStop(1, 'rgba(0, 64, 128, 0.05)');
+        ctx.fillStyle = gradient;
+        ctx.fill();
+
+        // Draw spectrum line on top
+        ctx.beginPath();
+        ctx.strokeStyle = '#00ffff';
+        ctx.lineWidth = 1.5;
+        
+        for (let i = 0; i < spectrumData.length; i++) {
+            const x = i * binWidth;
+            const y = height - (spectrumData[i] * height * 0.95);
+            if (i === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        }
+        ctx.stroke();
+
+        // Draw frequency labels
+        ctx.fillStyle = '#6080a0';
+        ctx.font = '9px monospace';
+        ctx.textAlign = 'center';
+        
+        if (freqMin && freqMax) {
+            const freqRange = freqMax - freqMin;
+            for (let i = 0; i <= 4; i++) {
+                const x = (i / 4) * width;
+                const freq = freqMin + (i / 4) * freqRange;
+                const freqMHz = (freq / 1e6).toFixed(2);
+                ctx.fillText(`${freqMHz}`, x, height - 2);
+            }
+        }
+    }
+
+    function drawWaterfall(canvas, history, spectrumData, freqMin, freqMax) {
         const ctx = canvas.getContext('2d');
         const width = canvas.width;
         const height = canvas.height;
 
         if (!spectrumData || spectrumData.length === 0) {
             // Clear canvas if no data
-            ctx.fillStyle = '#1a1a1a';
+            ctx.fillStyle = '#0a0a12';
             ctx.fillRect(0, 0, width, height);
             return;
         }
 
         // Add new spectrum to history
-        history.push(spectrumData);
+        history.push([...spectrumData]);  // Clone to prevent mutation
         if (history.length > WATERFALL_HISTORY_SIZE) {
             history.shift(); // Remove oldest
         }
 
-        // Clear canvas
-        ctx.fillStyle = '#000';
+        // Clear canvas with dark background
+        ctx.fillStyle = '#0a0a12';
         ctx.fillRect(0, 0, width, height);
 
-        // Draw waterfall (newest at bottom)
+        // Draw waterfall (newest at bottom, SDRtrunk style)
         const lineHeight = height / WATERFALL_HISTORY_SIZE;
         const binWidth = width / spectrumData.length;
 
@@ -2900,39 +3047,10 @@
             const y = height - (history.length - row) * lineHeight;
 
             for (let bin = 0; bin < spectrum.length; bin++) {
-                const intensity = spectrum[bin]; // 0 to 1
+                const intensity = Math.min(1, Math.max(0, spectrum[bin])); // Clamp to 0-1
                 const x = bin * binWidth;
-
-                // Color mapping: blue (weak) -> cyan -> green -> yellow -> red (strong)
-                let r, g, b;
-                if (intensity < 0.2) {
-                    // Dark blue to blue
-                    r = 0;
-                    g = 0;
-                    b = Math.floor(intensity * 5 * 255);
-                } else if (intensity < 0.4) {
-                    // Blue to cyan
-                    r = 0;
-                    g = Math.floor((intensity - 0.2) * 5 * 255);
-                    b = 255;
-                } else if (intensity < 0.6) {
-                    // Cyan to green
-                    r = 0;
-                    g = 255;
-                    b = 255 - Math.floor((intensity - 0.4) * 5 * 255);
-                } else if (intensity < 0.8) {
-                    // Green to yellow
-                    r = Math.floor((intensity - 0.6) * 5 * 255);
-                    g = 255;
-                    b = 0;
-                } else {
-                    // Yellow to red
-                    r = 255;
-                    g = 255 - Math.floor((intensity - 0.8) * 5 * 255);
-                    b = 0;
-                }
-
-                ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+                
+                ctx.fillStyle = getWaterfallColor(intensity);
                 ctx.fillRect(x, y, Math.ceil(binWidth), Math.ceil(lineHeight) + 1);
             }
         }
@@ -2964,8 +3082,16 @@
                 history = waterfallHistory.get(receiver.id);
             }
 
-            // Draw waterfall
-            drawWaterfall(canvas, history, data.spectrum);
+            // Get spectrum canvas for the live graph
+            const spectrumCanvas = document.getElementById(`spectrum-${receiver.id}`);
+
+            // Draw spectrum graph (top panel)
+            if (spectrumCanvas) {
+                drawSpectrumGraph(spectrumCanvas, data.spectrum, data.freq_min, data.freq_max);
+            }
+
+            // Draw waterfall (bottom panel)
+            drawWaterfall(canvas, history, data.spectrum, data.freq_min, data.freq_max);
 
             // Update info
             const infoElement = document.getElementById(`waveform-info-${receiver.id}`);
@@ -2973,7 +3099,17 @@
                 const centerFreq = data.center_frequency ? (data.center_frequency / 1000000).toFixed(3) : '?';
                 const freqMin = data.freq_min ? (data.freq_min / 1000000).toFixed(3) : '?';
                 const freqMax = data.freq_max ? (data.freq_max / 1000000).toFixed(3) : '?';
-                infoElement.textContent = `Center: ${centerFreq} MHz | Range: ${freqMin} - ${freqMax} MHz`;
+                const status = data.status || 'available';
+                
+                if (status === 'available' && data.spectrum && data.spectrum.length > 0) {
+                    infoElement.innerHTML = `<span class="text-success">●</span> ${centerFreq} MHz | ${freqMin} - ${freqMax} MHz`;
+                } else if (status === 'stopped') {
+                    infoElement.innerHTML = `<span class="text-danger">●</span> Receiver stopped`;
+                } else if (status === 'no_samples') {
+                    infoElement.innerHTML = `<span class="text-warning">●</span> ${data.error || 'Waiting for signal...'}`;
+                } else {
+                    infoElement.innerHTML = `<span class="text-muted">●</span> ${centerFreq} MHz (no data)`;
+                }
             }
 
         } catch (error) {
