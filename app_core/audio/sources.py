@@ -213,12 +213,41 @@ class SDRSourceAdapter(AudioSourceAdapter):
                 logger.info(f"Created {self._receiver_config.modulation_type} demodulator for receiver: {receiver_id}")
 
         # Start IQ capture from the specified receiver
-        self._capture_handle = self._radio_manager.start_audio_capture(
-            receiver_id=self._receiver_id,
-            sample_rate=self.config.sample_rate,
-            channels=self.config.channels,
-            format='iq' if self._demodulator else 'pcm'
-        )
+        # Retry with backoff since the receiver may still be starting up
+        max_retries = 5
+        retry_delay = 1.0
+        last_error = None
+        
+        for attempt in range(max_retries):
+            try:
+                receiver = self._radio_manager.get_receiver(self._receiver_id)
+                if receiver and receiver.is_running():
+                    self._capture_handle = self._radio_manager.start_audio_capture(
+                        receiver_id=self._receiver_id,
+                        sample_rate=self.config.sample_rate,
+                        channels=self.config.channels,
+                        format='iq' if self._demodulator else 'pcm'
+                    )
+                    break
+                else:
+                    last_error = RuntimeError(f"Receiver '{receiver_id}' not running yet")
+                    if attempt < max_retries - 1:
+                        logger.info(f"Waiting for receiver '{receiver_id}' to start (attempt {attempt + 1}/{max_retries})...")
+                        time.sleep(retry_delay)
+                        retry_delay = min(retry_delay * 1.5, 5.0)
+            except Exception as e:
+                last_error = e
+                if attempt < max_retries - 1:
+                    logger.warning(f"Failed to start audio capture (attempt {attempt + 1}/{max_retries}): {e}")
+                    time.sleep(retry_delay)
+                    retry_delay = min(retry_delay * 1.5, 5.0)
+        else:
+            # All retries exhausted
+            error_msg = f"Failed to start SDR audio capture after {max_retries} attempts: {last_error}"
+            logger.error(error_msg)
+            self.status = AudioSourceStatus.ERROR
+            self.error_message = error_msg
+            raise RuntimeError(error_msg)
 
         self.status = AudioSourceStatus.RUNNING
         logger.info(f"Started SDR audio capture from receiver: {receiver_id}")
