@@ -830,7 +830,12 @@ def publish_metrics_to_redis(metrics):
                                 else:
                                     # Receiver is running but no samples available - publish status
                                     config = receiver_instance.config if hasattr(receiver_instance, 'config') else None
-                                    sample_rate = config.sample_rate if config else 2400000
+                                    # Use correct default based on driver type
+                                    if config and config.sample_rate:
+                                        sample_rate = config.sample_rate
+                                    else:
+                                        driver_hint = getattr(config, 'driver_hint', '') if config else ''
+                                        sample_rate = 2500000 if 'airspy' in driver_hint.lower() else 2400000
                                     center_freq = config.frequency_hz if config else 0
 
                                     error_msg = "Starting up" if status and status.locked else "Waiting for signal lock"

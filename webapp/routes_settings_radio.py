@@ -1164,7 +1164,12 @@ def register(app: Flask, logger) -> None:
             except (ValueError, TypeError):
                 num_samples = 512  # Default
 
-            sample_rate = receiver.sample_rate if receiver.sample_rate else 2400000
+            # Use correct default based on driver type
+            if receiver.sample_rate:
+                sample_rate = receiver.sample_rate
+            else:
+                driver_lower = (receiver.driver or '').lower()
+                sample_rate = 2500000 if 'airspy' in driver_lower else 2400000
 
             # Generate simulated waveform (in production, this would be real audio data)
             waveform = np.random.randn(num_samples) * 0.1  # Small random noise
@@ -1383,8 +1388,12 @@ def register(app: Flask, logger) -> None:
                 # Convert to list for JSON
                 spectrum_data = normalized.tolist()
 
-                # Calculate frequency bins
-                sample_rate = receiver.sample_rate if receiver.sample_rate else 2400000
+                # Calculate frequency bins - use correct default based on driver
+                if receiver.sample_rate:
+                    sample_rate = receiver.sample_rate
+                else:
+                    driver_lower = (receiver.driver or '').lower()
+                    sample_rate = 2500000 if 'airspy' in driver_lower else 2400000
                 freq_min = receiver.frequency_hz - (sample_rate / 2)
                 freq_max = receiver.frequency_hz + (sample_rate / 2)
 
