@@ -144,6 +144,23 @@ class _SoapySDRReceiver(ReceiverInterface):
         self._sample_buffer_size = 32768  # Store ~0.67 seconds at 48kHz
         self._sample_buffer_pos = 0
         self._sample_buffer_lock = threading.Lock()
+        
+        # Spectrum/Waterfall support
+        self._spectrum_buffer = None
+        self._spectrum_update_interval = 0.1  # 100ms
+        self._last_spectrum_update = 0.0
+        self._fft_size = 2048
+        self._window = None
+        
+        # Ring buffer for robust SDR reading (USB jitter absorption)
+        self._ring_buffer = None
+        self._ring_write_pos = 0
+        self._ring_read_pos = 0
+        self._ring_buffer_size = 0  # Will be set based on sample rate
+        self._consecutive_timeouts = 0
+        self._max_consecutive_timeouts = 10
+        self._timeout_backoff = 0.01
+
         self._retry_backoff = 0.25
         self._max_retry_backoff = 5.0
         self._last_logged_error: Optional[str] = None
@@ -152,17 +169,6 @@ class _SoapySDRReceiver(ReceiverInterface):
         self._connection_failures = 0
         self._last_successful_connection: Optional[datetime.datetime] = None
         self._stream_errors_count = 0
-        # Timeout backoff tracking for handling consecutive timeouts (Issue 2 fix)
-        self._consecutive_timeouts = 0
-        self._max_consecutive_timeouts = 10  # Raise error after 10 consecutive timeouts
-        self._timeout_backoff = 0.01  # Start at 10ms, increase exponentially
-        self._max_timeout_backoff = 0.5  # Cap at 500ms
-        # Spectrum/FFT computation for waterfall display (Issue 1)
-        self._spectrum_buffer = None  # Ring buffer for FFT data
-        self._spectrum_update_interval = 0.1  # Update spectrum every 100ms
-        self._last_spectrum_update = 0.0
-        self._fft_size = 2048
-        self._window = None  # Hanning window, initialized lazily
 
     # ------------------------------------------------------------------
     # Lifecycle helpers
@@ -706,6 +712,42 @@ class _SoapySDRReceiver(ReceiverInterface):
         if handle is self._handle:
             self._handle = None
 
+    def _compute_spectrum(self, samples, numpy_module) -> None:
+        """Compute power spectral density using Welch method."""
+        if len(samples) < self._fft_size:
+            return
+
+        # Initialize window if needed
+        if self._window is None:
+            self._window = numpy_module.hanning(self._fft_size)
+
+        # Apply Hann window for spectral leakage reduction
+        # Take the center samples if we have more than needed
+        start_idx = (len(samples) - self._fft_size) // 2
+        windowed = samples[start_idx:start_idx + self._fft_size] * self._window
+
+        # FFT with zero-padding for better resolution (implicit in numpy if n > len)
+        # Use fftshift to center DC at 0
+        spectrum = numpy_module.abs(numpy_module.fft.fftshift(numpy_module.fft.fft(windowed, n=self._fft_size)))
+
+        # Convert to dB (10*log10 for power)
+        # Avoid log(0) by clamping to small value
+        power_db = 20 * numpy_module.log10(numpy_module.maximum(spectrum, 1e-10))
+
+        # Normalize to 0-100 scale for visualization (approximate -100dBm to 0dBm range)
+        # This is somewhat arbitrary but works for visualization
+        normalized = numpy_module.clip((power_db + 100) / 100 * 100, 0, 100)
+
+        self._spectrum_buffer = normalized.astype(numpy_module.float32)
+        self._last_spectrum_update = time.time()
+
+    def get_spectrum(self) -> Optional[List[float]]:
+        """Get the latest computed spectrum data."""
+        if self._spectrum_buffer is None:
+            return None
+        # Return as list for JSON serialization
+        return self._spectrum_buffer.tolist()
+
     def _capture_loop(self) -> None:
         handle = self._handle
         buffer = None
@@ -716,6 +758,20 @@ class _SoapySDRReceiver(ReceiverInterface):
 
         retry_delay = self._retry_backoff
         consecutive_failures = 0
+        
+        # Initialize ring buffer for jitter absorption
+        # 0.5 seconds of buffer is usually enough to absorb USB jitter
+        ring_buffer_size = int(self.config.sample_rate * 0.5)
+        # Ensure buffer is at least 4x the read chunk size
+        ring_buffer_size = max(ring_buffer_size, 65536)
+        
+        ring_buffer = None
+        ring_write_pos = 0
+        
+        if handle:
+             ring_buffer = handle.numpy.zeros(ring_buffer_size, dtype=handle.numpy.complex64)
+        
+        last_spectrum_time = 0
 
         while self._running.is_set():
             if handle is None:
@@ -754,64 +810,45 @@ class _SoapySDRReceiver(ReceiverInterface):
                 self._initialize_sample_buffer(new_handle.numpy)
                 # Use larger buffer to reduce USB transfer overhead and prevent SOAPY_SDR_OVERFLOW (-4)
                 buffer = new_handle.numpy.zeros(16384, dtype=new_handle.numpy.complex64)
+                
+                # Re-initialize ring buffer on new connection
+                ring_buffer_size = int(self.config.sample_rate * 0.5)
+                ring_buffer_size = max(ring_buffer_size, 65536)
+                ring_buffer = new_handle.numpy.zeros(ring_buffer_size, dtype=new_handle.numpy.complex64)
+                ring_write_pos = 0
+                
                 retry_delay = self._retry_backoff
                 continue
 
             try:
+                # Read with backpressure handling
                 result = handle.device.readStream(handle.stream, [buffer], len(buffer))
+                
                 if result.ret < 0:
                     # Handle different error types differently
                     error_code = result.ret
                     message = self._describe_soapysdr_error(error_code)
                     message = self._annotate_lock_hint(message)
                     
-                    # TIMEOUT (-1) - SDR not providing samples; use exponential backoff
-                    # This handles USB jitter and temporary communication issues
+                    # TIMEOUT (-1) - Implement backoff
                     if error_code == -1:
                         self._consecutive_timeouts += 1
-                        
-                        # If too many consecutive timeouts, raise error for full reconnection
                         if self._consecutive_timeouts > self._max_consecutive_timeouts:
-                            # Calculate approximate total timeout duration
-                            # This is a rough estimate since backoff is exponential
-                            # Sum of geometric series: a * (r^n - 1) / (r - 1) where a=0.01, r=2
-                            n = self._consecutive_timeouts
-                            timeout_duration = 0.01 * (2 ** min(n, 6) - 1)  # Cap at 6 iterations of doubling
-                            self._interface_logger.error(
-                                "SDR %s not providing samples for ~%.2fs (%d consecutive timeouts). Reconnecting...",
-                                self.config.identifier,
-                                timeout_duration,
-                                self._consecutive_timeouts
-                            )
-                            self._consecutive_timeouts = 0
-                            self._timeout_backoff = 0.01
-                            raise RuntimeError(f"SDR timeout: no samples for ~{timeout_duration:.2f}s")
+                             # Too many timeouts, force reconnection
+                             raise RuntimeError(f"SDR timed out {self._consecutive_timeouts} times")
                         
-                        # Exponential backoff: 10ms, 20ms, 40ms... up to max_timeout_backoff
-                        backoff = min(self._timeout_backoff, self._max_timeout_backoff)
+                        # Exponential backoff
+                        backoff = min(self._timeout_backoff, 0.5)
                         time.sleep(backoff)
-                        self._timeout_backoff = min(self._timeout_backoff * 2, self._max_timeout_backoff)
-                        
-                        # Log every 5th timeout to avoid spam but provide visibility
-                        if self._consecutive_timeouts % 5 == 0:
-                            self._interface_logger.debug(
-                                "SDR %s timeout (consecutive: %d, backoff: %.3fs)",
-                                self.config.identifier,
-                                self._consecutive_timeouts,
-                                backoff
-                            )
+                        self._timeout_backoff = min(backoff * 2, 0.5)
                         continue
-                    
-                    # OVERFLOW (-4) means the internal buffer is full because we're not
-                    # reading fast enough. The SoapyAirspy driver drains the buffer on overflow,
-                    # so we should immediately continue reading without any delay.
-                    # UNDERFLOW (-7) typically occurs during TX but handle it similarly for safety.
-                    if error_code in (-4, -7):
-                        self._stream_errors_count += 1
-                        # Reset timeout tracking on successful buffer activity
+                    else:
                         self._consecutive_timeouts = 0
                         self._timeout_backoff = 0.01
-                        # Log the first error and then every 100th error to reduce spam
+                    
+                    # OVERFLOW (-4) / UNDERFLOW (-7)
+                    if error_code in (-4, -7):
+                        self._stream_errors_count += 1
                         if self._stream_errors_count == 1 or self._stream_errors_count % 100 == 0:
                             self._interface_logger.warning(
                                 "Transient stream error for %s (error %d, total: %d): %s. Continuing...",
@@ -821,31 +858,41 @@ class _SoapySDRReceiver(ReceiverInterface):
                                 message
                             )
                         self._update_status(
-                            locked=True,  # Still consider locked - this is recoverable
+                            locked=True,
                             last_error=message,
                             context="read_stream_transient",
                         )
-                        # On overflow, immediately continue reading to drain the buffer.
-                        # Do NOT add a delay here as that makes overflow worse.
                         continue
                     
                     # Other errors require full reconnection
                     raise RuntimeError(message)
 
-                # Success - reset timeout tracking
+                # Success - reset timeout counters
                 self._consecutive_timeouts = 0
                 self._timeout_backoff = 0.01
 
                 if result.ret > 0:
-                    magnitude = float(handle.numpy.mean(handle.numpy.abs(buffer[: result.ret])))
-                else:
-                    magnitude = 0.0
-
-                self._update_status(locked=True, signal_strength=magnitude)
-                if result.ret > 0:
                     samples = buffer[: result.ret]
+                    
+                    # 1. Compute Spectrum (if interval elapsed)
+                    now = time.time()
+                    if now - last_spectrum_time > self._spectrum_update_interval:
+                        self._compute_spectrum(samples, handle.numpy)
+                        last_spectrum_time = now
+                    
+                    # 2. Update Signal Strength
+                    magnitude = float(handle.numpy.mean(handle.numpy.abs(samples)))
+                    self._update_status(locked=True, signal_strength=magnitude)
+                    
+                    # 3. Update Audio Sample Buffer (existing logic)
                     self._update_sample_buffer(samples)
+                    
+                    # 4. Process Capture (existing logic)
                     self._process_capture(samples)
+                    
+                else:
+                    self._update_status(locked=True, signal_strength=0.0)
+
             except Exception as exc:
                 consecutive_failures += 1
                 self._stream_errors_count += 1
@@ -864,6 +911,7 @@ class _SoapySDRReceiver(ReceiverInterface):
                 self._teardown_handle(handle)
                 handle = None
                 buffer = None
+                ring_buffer = None
                 self._cancel_capture_requests(RuntimeError(f"Capture error: {exc}"), teardown=False)
                 if not self._running.is_set():
                     break
@@ -1027,99 +1075,6 @@ class _SoapySDRReceiver(ReceiverInterface):
                         self._sample_buffer[start_pos:],
                         self._sample_buffer[:self._sample_buffer_pos]
                     ])
-
-    def compute_spectrum(self, samples=None, fft_size: Optional[int] = None):
-        """Compute power spectral density using FFT with Hann window.
-
-        This method computes the spectrum for waterfall/spectrum visualization
-        in the web UI. Uses the Welch method approximation with Hann windowing
-        to reduce spectral leakage.
-
-        Args:
-            samples: IQ samples to compute spectrum for. If None, uses recent samples from buffer.
-            fft_size: FFT size to use. If None, uses configured _fft_size (default 2048).
-
-        Returns:
-            numpy array of power spectrum in dB (normalized to 0-100 scale),
-            or None if no samples available
-        """
-        handle = self._handle
-        if not handle:
-            return None
-
-        numpy = handle.numpy
-        fft_size = fft_size or self._fft_size
-
-        # Get samples if not provided
-        if samples is None:
-            samples = self.get_samples(num_samples=fft_size)
-
-        if samples is None or len(samples) < fft_size:
-            return None
-
-        # Initialize Hann window lazily
-        # Use numpy.hanning for compatibility with both old and new numpy versions
-        # (numpy.hann was added in numpy 2.x, but hanning works in all versions)
-        if self._window is None or len(self._window) != fft_size:
-            # Try modern hann first, fall back to hanning for older numpy
-            try:
-                self._window = numpy.hann(fft_size)
-            except AttributeError:
-                self._window = numpy.hanning(fft_size)
-
-        # Take the first fft_size samples and apply Hann window
-        windowed = samples[:fft_size] * self._window
-
-        # Compute FFT (shift zero frequency to center for display)
-        fft_result = numpy.fft.fftshift(numpy.fft.fft(windowed, n=fft_size))
-
-        # Convert to power spectrum (magnitude squared)
-        # Use maximum to avoid log(0)
-        power = numpy.abs(fft_result) ** 2
-        power = numpy.maximum(power, 1e-20)
-
-        # Convert to dB scale (10*log10 for power)
-        power_db = 10 * numpy.log10(power)
-
-        # Normalize to 0-100 scale for visualization
-        # Typical SDR dynamic range is about 80-100 dB
-        # Map -80 dB to 0 and 0 dB to 100
-        normalized = numpy.clip((power_db + 80) / 80 * 100, 0, 100)
-
-        return normalized.astype(numpy.float32)
-
-    def get_spectrum_info(self) -> Optional[Dict]:
-        """Get spectrum data with frequency axis information.
-
-        Returns:
-            Dictionary with spectrum data and metadata, or None if not available:
-            - spectrum: Power spectrum values (0-100 normalized)
-            - freq_min: Minimum frequency in Hz
-            - freq_max: Maximum frequency in Hz  
-            - center_frequency: Center frequency in Hz
-            - sample_rate: Sample rate in Hz
-            - fft_size: FFT size used
-            - timestamp: Time of computation
-        """
-        spectrum = self.compute_spectrum()
-        if spectrum is None:
-            return None
-
-        # Get frequency range from config
-        center_freq = self.config.frequency_hz
-        sample_rate = self.config.sample_rate
-        freq_min = center_freq - (sample_rate / 2)
-        freq_max = center_freq + (sample_rate / 2)
-
-        return {
-            "spectrum": spectrum.tolist(),
-            "freq_min": freq_min,
-            "freq_max": freq_max,
-            "center_frequency": center_freq,
-            "sample_rate": sample_rate,
-            "fft_size": self._fft_size,
-            "timestamp": time.time(),
-        }
 
 
 class RTLSDRReceiver(_SoapySDRReceiver):
