@@ -33,6 +33,7 @@ from app_core.models import (
     SNOW_EMERGENCY_LEVELS,
     PUTNAM_REGION_COUNTIES,
 )
+from app_core.auth.decorators import require_role
 from app_utils import utc_now
 
 route_logger = logging.getLogger(__name__)
@@ -63,6 +64,7 @@ def _initialize_counties() -> None:
                     state_code=info["state"],
                     level=0,
                     level_set_by="System",
+                    issues_emergencies=True,
                 )
                 db.session.add(emergency)
         db.session.commit()
@@ -117,7 +119,9 @@ def register(app: Flask, logger) -> None:
             if show_all:
                 emergencies = SnowEmergency.query.all()
             else:
-                emergencies = SnowEmergency.query.filter(SnowEmergency.level > 0).all()
+                emergencies = SnowEmergency.query.filter(
+                    SnowEmergency.level > 0, SnowEmergency.issues_emergencies.is_(True)
+                ).all()
 
             # Sort by county order defined in PUTNAM_REGION_COUNTIES
             def get_order(e):
@@ -136,6 +140,7 @@ def register(app: Flask, logger) -> None:
             return jsonify({"error": str(exc)}), 500
 
     @app.route("/api/snow_emergencies/all", methods=["GET"])
+    @require_role("Admin", "Operator")
     def get_all_snow_emergencies():
         """Get snow emergency status for ALL tracked counties (for management UI)."""
         if not _ensure_snow_emergencies_table():
@@ -201,14 +206,14 @@ def register(app: Flask, logger) -> None:
             return jsonify({"error": str(exc)}), 500
 
     @app.route("/api/snow_emergencies/<county_fips>", methods=["PUT"])
+    @require_role("Admin", "Operator")
     def update_snow_emergency(county_fips: str):
         """Update snow emergency level for a specific county.
 
-        Accessible by Admin, Operator, and User roles.
-
         Request body:
         {
-            "level": 0-3
+            "level": 0-3,
+            "issues_emergencies": bool (optional)
         }
         """
         if not _ensure_snow_emergencies_table():
@@ -223,17 +228,22 @@ def register(app: Flask, logger) -> None:
         try:
             data = request.get_json() or {}
             new_level = data.get("level")
+            issues_emergencies = data.get("issues_emergencies")
 
-            if new_level is None:
-                return jsonify({"error": "Missing 'level' in request body"}), 400
+            if new_level is None and issues_emergencies is None:
+                return jsonify({"error": "Request must include 'level' or 'issues_emergencies'"}), 400
 
-            try:
-                new_level = int(new_level)
-            except (ValueError, TypeError):
-                return jsonify({"error": "Level must be an integer 0-3"}), 400
+            if new_level is not None:
+                try:
+                    new_level = int(new_level)
+                except (ValueError, TypeError):
+                    return jsonify({"error": "Level must be an integer 0-3"}), 400
 
-            if new_level < 0 or new_level > 3:
-                return jsonify({"error": "Level must be between 0 and 3"}), 400
+                if new_level < 0 or new_level > 3:
+                    return jsonify({"error": "Level must be between 0 and 3"}), 400
+
+            if issues_emergencies is not None:
+                issues_emergencies = bool(issues_emergencies)
 
             # Get or create the emergency record
             emergency = SnowEmergency.query.filter_by(county_fips=county_fips).first()
@@ -244,11 +254,24 @@ def register(app: Flask, logger) -> None:
                     county_name=county_info["name"],
                     state_code=county_info["state"],
                     level=0,
+                    issues_emergencies=True,
                 )
                 db.session.add(emergency)
 
             # Get current user
             username = _get_current_username()
+
+            if issues_emergencies is not None:
+                emergency.issues_emergencies = issues_emergencies
+                if not issues_emergencies and emergency.level != 0:
+                    emergency.set_level(0, username)
+
+            if new_level is None:
+                db.session.commit()
+                return jsonify({
+                    "success": True,
+                    "emergency": emergency.to_dict(include_history=True),
+                })
 
             # Update level (this also records history)
             emergency.set_level(new_level, username)
@@ -273,6 +296,7 @@ def register(app: Flask, logger) -> None:
             return jsonify({"error": str(exc)}), 500
 
     @app.route("/api/snow_emergencies/<county_fips>/history", methods=["GET"])
+    @require_role("Admin", "Operator")
     def get_snow_emergency_history(county_fips: str):
         """Get change history for a specific county's snow emergency."""
         if not _ensure_snow_emergencies_table():
