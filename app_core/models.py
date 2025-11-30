@@ -1307,6 +1307,9 @@ class SnowEmergency(db.Model):
     # Current snow emergency level (0 = none, 1-3 = emergency levels)
     level = db.Column(db.Integer, nullable=False, default=0)
 
+    # Whether this county issues snow emergencies (some sheriffs may opt out)
+    issues_emergencies = db.Column(db.Boolean, nullable=False, default=True)
+
     # When the current level was set
     level_set_at = db.Column(db.DateTime(timezone=True), default=utc_now, nullable=False)
 
@@ -1322,7 +1325,7 @@ class SnowEmergency(db.Model):
 
     def is_active(self) -> bool:
         """Check if a snow emergency is currently in effect (level > 0)."""
-        return self.level > 0
+        return self.issues_emergencies and self.level > 0
 
     def get_level_info(self) -> Dict[str, Any]:
         """Get the level information (name, color, description)."""
@@ -1341,6 +1344,7 @@ class SnowEmergency(db.Model):
             "level_color": level_info["color"],
             "level_description": level_info["description"],
             "is_active": self.is_active(),
+            "issues_emergencies": self.issues_emergencies,
             "level_set_at": self.level_set_at.isoformat() if self.level_set_at else None,
             "level_set_by": self.level_set_by,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
@@ -1355,6 +1359,9 @@ class SnowEmergency(db.Model):
         """Update the snow emergency level and record in history."""
         if new_level < 0 or new_level > 3:
             raise ValueError(f"Invalid snow emergency level: {new_level}")
+
+        if not self.issues_emergencies and new_level > 0:
+            raise ValueError("This county does not issue snow emergencies")
 
         if new_level != self.level:
             # Record the change in history
