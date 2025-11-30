@@ -261,7 +261,11 @@
         }
 
         .mermaid-snow-map {
-            min-height: 220px;
+            min-height: 240px;
+            background: var(--bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 0.75rem;
         }
 
         .snow-history {
@@ -1693,74 +1697,50 @@
 
                     <!-- County Map Reference -->
                     <div class="card border-primary-subtle shadow-sm mb-4">
-                        <div class="card-header bg-primary-subtle">
-                            <h5 class="mb-0">
-                                <i class="fas fa-map"></i> Putnam County & Adjacent Counties
-                            </h5>
+                        <div class="card-header bg-primary-subtle d-flex justify-content-between align-items-center">
+                            <div>
+                                <h5 class="mb-0">
+                                    <i class="fas fa-map"></i> Putnam County & Adjacent Counties
+                                </h5>
+                                <div class="text-muted small">Quick reference for the eight covered counties</div>
+                            </div>
+                            <span class="badge bg-info-subtle text-info-emphasis"><i class="fas fa-map-marked-alt me-1"></i>Mermaid map</span>
                         </div>
                         <div class="card-body">
-                            <div class="row align-items-center">
-                                <div class="col-lg-6">
-                                    <p class="text-muted mb-3">This system tracks snow emergency levels for Putnam County and all seven adjacent counties in northwest Ohio:</p>
-                                    <div class="row row-cols-2 row-cols-md-4 g-2 mb-3">
+                            <div class="row g-3 align-items-center">
+                                <div class="col-lg-5">
+                                    <div class="mb-2 fw-semibold text-muted">Which counties are included?</div>
+                                    <p class="text-muted mb-3">Putnam plus its seven neighboring counties in northwest Ohio:</p>
+                                    <div class="row row-cols-2 row-cols-md-3 g-2 mb-3">
                                         <div class="col">
                                             <div class="badge bg-primary w-100 py-2">
                                                 <i class="fas fa-star me-1"></i> Putnam
                                             </div>
                                         </div>
-                                        <div class="col">
-                                            <div class="badge bg-secondary w-100 py-2">Allen</div>
-                                        </div>
-                                        <div class="col">
-                                            <div class="badge bg-secondary w-100 py-2">Defiance</div>
-                                        </div>
-                                        <div class="col">
-                                            <div class="badge bg-secondary w-100 py-2">Hancock</div>
-                                        </div>
-                                        <div class="col">
-                                            <div class="badge bg-secondary w-100 py-2">Henry</div>
-                                        </div>
-                                        <div class="col">
-                                            <div class="badge bg-secondary w-100 py-2">Paulding</div>
-                                        </div>
-                                        <div class="col">
-                                            <div class="badge bg-secondary w-100 py-2">Van Wert</div>
-                                        </div>
-                                        <div class="col">
-                                            <div class="badge bg-secondary w-100 py-2">Wood</div>
-                                        </div>
+                                        <div class="col"><div class="badge bg-secondary w-100 py-2">Allen</div></div>
+                                        <div class="col"><div class="badge bg-secondary w-100 py-2">Defiance</div></div>
+                                        <div class="col"><div class="badge bg-secondary w-100 py-2">Hancock</div></div>
+                                        <div class="col"><div class="badge bg-secondary w-100 py-2">Henry</div></div>
+                                        <div class="col"><div class="badge bg-secondary w-100 py-2">Paulding</div></div>
+                                        <div class="col"><div class="badge bg-secondary w-100 py-2">Van Wert</div></div>
+                                        <div class="col"><div class="badge bg-secondary w-100 py-2">Wood</div></div>
+                                    </div>
+                                    <div class="d-flex align-items-start gap-2 small text-muted">
+                                        <i class="fas fa-info-circle mt-1 text-info"></i>
+                                        <span>The diagram highlights relative adjacency. Use the controls below to set levels and policies.</span>
                                     </div>
                                 </div>
-                                <div class="col-lg-6">
-                                    <div class="p-3 bg-light rounded border">
-                                        <div class="d-flex justify-content-between align-items-start mb-2">
-                                            <div>
-                                                <div class="text-muted small">Northwest Ohio counties</div>
-                                                <div class="text-muted small">Mermaid layout shows rough adjacency.</div>
+                                <div class="col-lg-7">
+                                    <div class="p-3 bg-light rounded border h-100">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <div class="small text-muted">County adjacency (schematic)</div>
+                                            <div class="d-flex gap-2 align-items-center small">
+                                                <span class="badge bg-primary-subtle text-primary-emphasis">Home</span>
+                                                <span class="badge bg-secondary-subtle text-secondary-emphasis">Neighbor</span>
                                             </div>
-                                            <span class="badge bg-info-subtle text-info-emphasis"><i class="fas fa-map-marked-alt me-1"></i>Visual map</span>
                                         </div>
-                                        <div class="mermaid mermaid-snow-map small text-start">
-flowchart TB
-    classDef county fill:#e3f2fd,stroke:#0d6efd,color:#0d6efd,stroke-width:2px;
-    classDef neighbor fill:#f8f9fa,stroke:#6c757d,color:#212529,stroke-width:1.5px;
-
-    PU([★ Putnam ★]):::county
-    DF([Defiance]):::neighbor
-    HE([Henry]):::neighbor
-    WO([Wood]):::neighbor
-    HA([Hancock]):::neighbor
-    PA([Paulding]):::neighbor
-    VW([Van Wert]):::neighbor
-    AL([Allen]):::neighbor
-
-    DF --- HE --- WO
-    PA --- PU --- HA
-    VW --- AL
-    PA --- DF
-    HE --- HA
-    AL --- HA
-                                        </div>
+                                        <div class="mermaid mermaid-snow-map small text-start" id="snow-map-mermaid"></div>
+                                        <div class="small text-muted mt-2">If the graphic fails to load, it will retry automatically when you open this tab.</div>
                                     </div>
                                 </div>
                             </div>
@@ -6568,6 +6548,28 @@ flowchart TB
             3: { name: 'Level 3', color: '#dc3545', bgClass: 'bg-danger' }
         };
 
+        function buildSnowMapGraph() {
+            return `flowchart TB
+    classDef county fill:#e3f2fd,stroke:#0d6efd,color:#0d6efd,stroke-width:2px;
+    classDef neighbor fill:#f8f9fa,stroke:#6c757d,color:#212529,stroke-width:1.5px;
+
+    PU([★ Putnam ★]):::county
+    DF([Defiance]):::neighbor
+    HE([Henry]):::neighbor
+    WO([Wood]):::neighbor
+    HA([Hancock]):::neighbor
+    PA([Paulding]):::neighbor
+    VW([Van Wert]):::neighbor
+    AL([Allen]):::neighbor
+
+    DF --- HE --- WO
+    PA --- PU --- HA
+    VW --- AL
+    PA --- DF
+    HE --- HA
+    AL --- HA`;
+        }
+
         function initializeSnowMermaid() {
             const map = document.querySelector('.mermaid-snow-map');
             if (!map) return;
@@ -6575,8 +6577,12 @@ flowchart TB
             const renderMermaid = () => {
                 try {
                     if (!window.mermaid) return;
+
+                    map.removeAttribute('data-processed');
+                    map.textContent = buildSnowMapGraph();
+
                     mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'loose' });
-                    mermaid.run({ querySelector: '.mermaid-snow-map' });
+                    mermaid.run({ nodes: [map] });
                 } catch (err) {
                     console.warn('Failed to render mermaid map', err);
                 }
@@ -6590,7 +6596,7 @@ flowchart TB
             const mermaidScript = document.getElementById('mermaid-lib');
             if (mermaidScript) {
                 mermaidScript.addEventListener('load', renderMermaid, { once: true });
-                mermaidScript.addEventListener('error', () => console.warn('Mermaid library failed to load')); 
+                mermaidScript.addEventListener('error', () => console.warn('Mermaid library failed to load'));
             }
         }
 
