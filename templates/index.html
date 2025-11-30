@@ -381,59 +381,6 @@
         box-shadow: 0 6px 12px rgba(12, 20, 38, 0.2);
     }
 
-    .summary-metrics .metric-card {
-        background: var(--surface-color);
-        border: 1px solid var(--border-color);
-        border-radius: var(--radius-md);
-        padding: var(--spacing-md);
-        display: flex;
-        align-items: center;
-        gap: var(--spacing-sm);
-        box-shadow: 0 12px 26px var(--shadow-color);
-        min-height: 100%;
-    }
-
-    .metric-icon {
-        width: 48px;
-        height: 48px;
-        border-radius: 14px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.35rem;
-        color: var(--color-text-inverse);
-    }
-
-    /* Using CSS variables for metric icons - all colors from theme variables */
-    .metric-icon.metric-alert { background: var(--danger-color); }
-    .metric-icon.metric-boundary { background: var(--success-color); }
-    .metric-icon.metric-clock { background: var(--warning-color); color: var(--text-color); }
-    .metric-icon.metric-map { background: var(--info-color); }
-
-    .metric-label {
-        font-size: 0.78rem;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.14em;
-        color: var(--text-muted);
-        margin-bottom: 0.35rem;
-    }
-
-    .metric-value {
-        font-size: 1.6rem;
-        font-weight: 600;
-        color: var(--text-color);
-        line-height: 1.1;
-    }
-
-    .metric-value small {
-        font-size: 0.85rem;
-        font-weight: 500;
-        color: var(--text-muted);
-        display: block;
-        margin-top: 0.35rem;
-    }
-
     .sticky-card {
         position: sticky;
         top: 96px;
@@ -815,14 +762,6 @@
             height: 420px;
         }
 
-        .summary-metrics .metric-card {
-            padding: var(--spacing-sm);
-        }
-
-        .metric-value {
-            font-size: 1.35rem;
-        }
-
         .map-refresh-meta {
             align-items: flex-start;
             width: 100%;
@@ -903,67 +842,6 @@
             </div>
             <div class="snow-level-description-grid mt-3" id="snow-emergency-levels-list"></div>
             <div class="text-muted small mt-3" id="snow-emergency-policy-note"></div>
-        </div>
-    </div>
-
-    <div class="row g-3 summary-metrics my-3">
-        <div class="col-12 col-sm-6 col-xl-3">
-            <div class="metric-card">
-                <div class="metric-icon metric-alert">
-                    <i class="fas fa-exclamation-triangle"></i>
-                </div>
-                <div>
-                    <span class="metric-label">Active Alerts</span>
-                    <div class="metric-value" id="active-alert-count">Loading...</div>
-                </div>
-            </div>
-        </div>
-        <div class="col-12 col-sm-6 col-xl-3">
-            <div class="metric-card">
-                <div class="metric-icon metric-boundary">
-                    <i class="fas fa-draw-polygon"></i>
-                </div>
-                <div>
-                    <span class="metric-label">Boundary Layers</span>
-                    <div class="metric-value" id="boundary-count">Loading...</div>
-                </div>
-            </div>
-        </div>
-        <div class="col-12 col-sm-6 col-xl-3">
-            <div class="metric-card">
-                <div class="metric-icon metric-clock">
-                    <i class="fas fa-clock"></i>
-                </div>
-                <div>
-                    <span class="metric-label">Last Update</span>
-                    <div class="metric-value" id="last-update">--</div>
-                    <small>Local time</small>
-                </div>
-            </div>
-        </div>
-        <div class="col-12 col-sm-6 col-xl-3">
-            <div class="metric-card">
-                <div class="metric-icon metric-map">
-                    <i class="fas fa-map"></i>
-                </div>
-                <div>
-                    <span class="metric-label">Map Status</span>
-                    <div class="metric-value" id="map-status">Initializing...</div>
-                    <small>Leaflet renderer</small>
-                </div>
-            </div>
-        </div>
-        <div class="col-12 col-sm-6 col-xl-3">
-            <div class="metric-card">
-                <div class="metric-icon" style="background: #7c3aed;">
-                    <i class="fas fa-waveform"></i>
-                </div>
-                <div>
-                    <span class="metric-label">Audio System</span>
-                    <div class="metric-value" id="audio-health">--<span style="font-size: 0.9rem; font-weight: normal; color: var(--text-muted);">%</span></div>
-                    <small id="audio-sources-status">Loading...</small>
-                </div>
-            </div>
         </div>
     </div>
 
@@ -1213,13 +1091,8 @@ function updateLastUpdateDisplays() {
     }
 
     const formattedTime = lastRefreshTimestamp.toLocaleTimeString();
-    const metricElement = document.getElementById('last-update');
     const headerElement = document.getElementById('map-data-last-updated');
     const sourceElement = document.getElementById('map-refresh-source');
-
-    if (metricElement) {
-        metricElement.textContent = formattedTime;
-    }
 
     if (headerElement) {
         headerElement.textContent = formattedTime;
@@ -1416,7 +1289,6 @@ async function loadAlerts() {
         if (response.ok && data.features) {
             alertData.active = data.features;
             displayAlerts(data.features);
-            updateAlertCount(data.features.length);
             updateAlertSummary(data.features);
             console.log(`✅ Loaded ${data.features.length} alerts`);
 
@@ -1426,12 +1298,10 @@ async function loadAlerts() {
             }
         } else {
             console.warn('⚠️ No alert features in API response:', data);
-            updateAlertCount(0);
         }
     } catch (error) {
         console.error('❌ Error loading alerts:', error);
         showToast('Failed to load alerts: ' + error.message, 'error');
-        updateAlertCount(0);
     }
 }
 
@@ -1621,11 +1491,9 @@ async function loadBoundaries() {
 
         renderBoundaryControls();
         renderBoundaryLegend();
-        updateBoundaryCount(totalLoaded);
     } catch (error) {
         console.error('❌ Error loading boundaries:', error);
         showToast('Failed to load boundaries: ' + error.message, 'error');
-        updateBoundaryCount(0);
         boundaryTypeMetadata.clear();
         renderBoundaryControls();
         renderBoundaryLegend();
@@ -1833,30 +1701,12 @@ function isAlertExpired(expiresDate) {
 // Update UI functions
 function updateMapStatus(status, type) {
     const badge = document.getElementById('map-status-badge');
-    const statusElement = document.getElementById('map-status');
 
     if (badge) {
         badge.textContent = status;
         badge.className = `badge bg-${type} ms-2`;
     }
 
-    if (statusElement) {
-        statusElement.textContent = status;
-    }
-}
-
-function updateAlertCount(count) {
-    const element = document.getElementById('active-alert-count');
-    if (element) {
-        element.textContent = count;
-    }
-}
-
-function updateBoundaryCount(count) {
-    const element = document.getElementById('boundary-count');
-    if (element) {
-        element.textContent = count;
-    }
 }
 
 function updateAlertSummary(alerts) {
@@ -2369,55 +2219,6 @@ console.log('  • window.mapDebug.testAPIs() - Test all API endpoints');
 console.log('  • window.mapDebug.refreshAll() - Refresh all map data');
 console.log('  • window.mapDebug.inspectMap() - Inspect map objects');
 console.log('  • window.mapDebug.analyzeBoundaries() - Analyze boundary types');
-
-// Audio Health Widget
-async function updateAudioHealth() {
-    try {
-        const response = await fetch('/api/audio/health');
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-        }
-        const health = await response.json();
-
-        const healthElement = document.getElementById('audio-health');
-        const statusElement = document.getElementById('audio-sources-status');
-
-        if (healthElement) {
-            healthElement.innerHTML = `${health.health_score}<span style="font-size: 0.9rem; font-weight: normal; color: var(--text-muted);">%</span>`;
-
-            // Color code based on health score
-            if (health.health_score >= 80) {
-                healthElement.style.color = '#2eb08d';
-            } else if (health.health_score >= 50) {
-                healthElement.style.color = '#f6b968';
-            } else {
-                healthElement.style.color = '#e05263';
-            }
-        }
-
-        if (statusElement) {
-            const activeText = health.active_sources === 1 ? 'source' : 'sources';
-            statusElement.textContent = `${health.active_sources} ${activeText} active`;
-        }
-    } catch (error) {
-        console.error('Failed to update audio health:', error);
-        const healthElement = document.getElementById('audio-health');
-        const statusElement = document.getElementById('audio-sources-status');
-
-        if (healthElement) {
-            healthElement.textContent = '—';
-            healthElement.style.color = 'var(--text-muted)';
-        }
-        if (statusElement) {
-            statusElement.textContent = 'Unavailable';
-        }
-    }
-}
-
-// Update audio health periodically (every 2 seconds for real-time monitoring)
-updateAudioHealth();
-// REDUCED: 30 seconds instead of 5 seconds - health status doesn't change rapidly
-setInterval(updateAudioHealth, 30000);
 
 // ===== SNOW EMERGENCY FUNCTIONS =====
 

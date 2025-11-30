@@ -2015,7 +2015,7 @@ flowchart TB
 {% endblock %}
 
 {% block scripts %}
-    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js" id="mermaid-lib" defer></script>
     <script>
         const BOUNDARY_TYPE_CONFIG = window.BOUNDARY_TYPE_CONFIG || {};
         const DEFAULT_BOUNDARY_TYPES = new Set(Object.keys(BOUNDARY_TYPE_CONFIG));
@@ -6570,13 +6570,27 @@ flowchart TB
 
         function initializeSnowMermaid() {
             const map = document.querySelector('.mermaid-snow-map');
-            if (!map || !window.mermaid) return;
+            if (!map) return;
 
-            try {
-                mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'loose' });
-                mermaid.run({ querySelector: '.mermaid-snow-map' });
-            } catch (err) {
-                console.warn('Failed to render mermaid map', err);
+            const renderMermaid = () => {
+                try {
+                    if (!window.mermaid) return;
+                    mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'loose' });
+                    mermaid.run({ querySelector: '.mermaid-snow-map' });
+                } catch (err) {
+                    console.warn('Failed to render mermaid map', err);
+                }
+            };
+
+            if (window.mermaid) {
+                renderMermaid();
+                return;
+            }
+
+            const mermaidScript = document.getElementById('mermaid-lib');
+            if (mermaidScript) {
+                mermaidScript.addEventListener('load', renderMermaid, { once: true });
+                mermaidScript.addEventListener('error', () => console.warn('Mermaid library failed to load')); 
             }
         }
 
@@ -6777,6 +6791,7 @@ flowchart TB
             const snowTab = document.getElementById('snow-emergencies-tab');
             if (snowTab) {
                 snowTab.addEventListener('shown.bs.tab', function() {
+                    initializeSnowMermaid();
                     refreshSnowEmergencyAdmin();
                 });
             }
