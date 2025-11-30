@@ -187,6 +187,7 @@ def register(app: Flask, logger) -> None:
                     }
                 )
             except Exception as exc:
+                db.session.rollback()
                 route_logger.error("Error getting basic counts: %s", exc)
                 stats_data.update(
                     {
@@ -210,6 +211,7 @@ def register(app: Flask, logger) -> None:
                     for boundary_type, count in boundary_stats
                 ]
             except Exception as exc:
+                db.session.rollback()
                 route_logger.error("Error getting boundary stats: %s", exc)
                 stats_data["boundary_stats"] = []
 
@@ -253,6 +255,7 @@ def register(app: Flask, logger) -> None:
                     for event, count in alert_by_event
                 ]
             except Exception as exc:
+                db.session.rollback()
                 route_logger.error("Error getting alert category stats: %s", exc)
                 stats_data.update(
                     {
@@ -323,6 +326,7 @@ def register(app: Flask, logger) -> None:
                     if year
                 ]
             except Exception as exc:
+                db.session.rollback()
                 route_logger.error("Error getting time-based stats: %s", exc)
                 stats_data.update(
                     {
@@ -351,6 +355,7 @@ def register(app: Flask, logger) -> None:
                     for name, b_type, count in most_affected
                 ]
             except Exception as exc:
+                db.session.rollback()
                 route_logger.error("Error getting affected boundaries: %s", exc)
                 stats_data["most_affected_boundaries"] = []
 
@@ -388,6 +393,7 @@ def register(app: Flask, logger) -> None:
                     )
                 ]
             except Exception as exc:
+                db.session.rollback()
                 route_logger.error("Error calculating duration stats: %s", exc)
                 stats_data["duration_stats"] = []
 
@@ -467,6 +473,7 @@ def register(app: Flask, logger) -> None:
                 stats_data["recent_by_day"] = daily_alerts[-30:]
                 stats_data["dow_hour_matrix"] = hourly_matrix
             except Exception as exc:
+                db.session.rollback()
                 route_logger.error("Error preparing alert events for stats: %s", exc)
                 stats_data["alert_events"] = []
                 stats_data["filter_options"] = {
@@ -547,6 +554,7 @@ def register(app: Flask, logger) -> None:
                         "recent_runs": [],
                     }
             except Exception as exc:
+                db.session.rollback()
                 route_logger.error("Error calculating polling metrics: %s", exc)
                 stats_data["polling"] = {
                     "success_rate": 0,
@@ -579,6 +587,7 @@ def register(app: Flask, logger) -> None:
 
             return render_template("stats.html", **stats_data)
         except Exception as exc:  # pragma: no cover - fallback content
+            db.session.rollback()
             route_logger.error("Error loading statistics: %s", exc)
             return (
                 "<h1>Error loading statistics</h1>"
@@ -781,6 +790,7 @@ def register(app: Flask, logger) -> None:
                                 }
                             )
                     except Exception as exc:
+                        db.session.rollback()
                         route_logger.warning("Error loading EAS messages for alerts: %s", exc)
 
             manual_messages: List[ManualEASActivation] = []
@@ -792,6 +802,7 @@ def register(app: Flask, logger) -> None:
                     .all()
                 )
             except Exception as exc:
+                db.session.rollback()
                 route_logger.warning("Error loading manual activations: %s", exc)
 
             current_filters = {
@@ -813,6 +824,7 @@ def register(app: Flask, logger) -> None:
                 current_filters=current_filters,
             )
         except Exception as exc:  # pragma: no cover - fallback content
+            db.session.rollback()
             route_logger.error("Error loading alerts: %s", exc)
             return (
                 "<h1>Error loading alerts</h1>"
@@ -1029,6 +1041,7 @@ def register(app: Flask, logger) -> None:
             # ============================================================
             # Error handling: Log and return user-friendly error page
             # ============================================================
+            db.session.rollback()
             route_logger.error("Error generating alerts PDF: %s", exc)
             return (
                 "<h1>Error generating PDF</h1>"
@@ -1475,6 +1488,7 @@ def register(app: Flask, logger) -> None:
             )
 
         except Exception as exc:  # pragma: no cover - fallback content
+            db.session.rollback()
             route_logger.error("Error loading logs: %s", exc)
             return (
                 "<h1>Error loading logs</h1>"
@@ -1524,6 +1538,7 @@ def register(app: Flask, logger) -> None:
             return response
 
         except Exception as exc:
+            db.session.rollback()
             route_logger.error('Error generating logs CSV: %s', exc)
             return (
                 "<h1>Error generating CSV</h1>"
@@ -1578,6 +1593,7 @@ def register(app: Flask, logger) -> None:
             return response
 
         except Exception as exc:
+            db.session.rollback()
             route_logger.error('Error generating logs PDF: %s', exc)
             return (
                 "<h1>Error generating PDF</h1>"
