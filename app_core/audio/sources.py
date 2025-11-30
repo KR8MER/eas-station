@@ -133,6 +133,7 @@ class SDRSourceAdapter(AudioSourceAdapter):
         self._squelch_open_timer: Optional[float] = None
         self._squelch_close_timer: Optional[float] = None
         self._last_rms_db = float("-inf")
+        self._last_no_demod_warning: float = 0.0  # Throttle "no demodulator" warnings
 
     def _start_capture(self) -> None:
         """Start SDR audio capture via radio manager."""
@@ -453,7 +454,7 @@ class SDRSourceAdapter(AudioSourceAdapter):
                     
                     # Only log warning once per second to avoid log spam
                     current_time = time.time()
-                    if not hasattr(self, '_last_no_demod_warning') or current_time - self._last_no_demod_warning > 1.0:
+                    if current_time - self._last_no_demod_warning > 1.0:
                         self._last_no_demod_warning = current_time
                         logger.warning(
                             f"SDR source '{self.config.name}' has no demodulator configured. "
