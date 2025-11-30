@@ -217,14 +217,56 @@ def _start_audio_sources_background(app: Flask) -> None:
     SEPARATED ARCHITECTURE: This function should NOT run in the app container.
     Audio processing is handled entirely by the dedicated audio-service container.
     The app container only serves the UI and reads metrics from Redis.
+    
+    INTEGRATED MODE: Set AUDIO_INTEGRATED_MODE=true to run audio processing in
+    the webapp process (useful for development or single-process deployments).
     """
     global _audio_controller, _streaming_lock_file, _audio_initialization_lock_file
 
-    # Separated architecture: Audio processing handled by dedicated audio-service container
-    # Skip ALL audio initialization in app container
-    logger.info("🌐 App container in separated architecture - skipping audio source startup")
-    logger.info("   Audio processing handled by dedicated audio-service container")
-    return
+    # Check for integrated mode (for development or single-process deployment)
+    integrated_mode = os.environ.get('AUDIO_INTEGRATED_MODE', '').lower() in ('true', '1', 'yes')
+    
+    if not integrated_mode:
+        # Separated architecture: Audio processing handled by dedicated audio-service container
+        # Skip ALL audio initialization in app container
+        logger.info("🌐 App container in separated architecture - skipping audio source startup")
+        logger.info("   Audio processing handled by dedicated audio-service container")
+        logger.info("   Set AUDIO_INTEGRATED_MODE=true to enable integrated audio processing")
+        return
+    
+    logger.info("🔧 Running in INTEGRATED MODE - audio processing in webapp process")
+    
+    # Give the app time to fully start before initializing audio
+    import time
+    time.sleep(2.0)
+    
+    with app.app_context():
+        try:
+            controller = _get_audio_controller()
+            if controller is None:
+                logger.warning("Audio controller not available for integrated mode")
+                return
+            
+            # Start sources that are configured as auto-start in the database
+            from app_core.models import AudioSourceConfigDB
+            db_configs = AudioSourceConfigDB.query.filter_by(auto_start=True, enabled=True).all()
+            
+            for db_config in db_configs:
+                try:
+                    source_name = db_config.name
+                    if source_name in controller._sources:
+                        adapter = controller._sources[source_name]
+                        if adapter.status != AudioSourceStatus.RUNNING:
+                            logger.info(f"Auto-starting audio source: {source_name}")
+                            controller.start_source(source_name)
+                except Exception as e:
+                    logger.error(f"Failed to auto-start source {db_config.name}: {e}")
+            
+            logger.info("✅ Integrated mode audio initialization complete")
+            
+        except Exception as e:
+            logger.error(f"Error in integrated mode audio initialization: {e}", exc_info=True)
+
 
 
 def _get_auto_streaming_service():
@@ -2544,56 +2586,59 @@ def api_stream_audio(source_name: str):
         # Try to proxy to sdr-service container
         audio_service_host = os.environ.get('AUDIO_SERVICE_HOST', 'sdr-service')
         audio_service_port = os.environ.get('AUDIO_SERVICE_PORT', '5002')
-        audio_service_url = f'http://{audio_service_host}:{audio_service_port}/api/audio/stream/{source_name}'
         
-        try:
-            # Stream from audio-service with timeout
-            logger.info(f'Proxying audio stream request for {source_name} to {audio_service_url}')
-            resp = requests.get(audio_service_url, stream=True, timeout=5)
+        # Build list of hosts to try (primary host, then localhost fallback for development)
+        hosts_to_try = [audio_service_host]
+        if audio_service_host != 'localhost' and audio_service_host != '127.0.0.1':
+            hosts_to_try.append('localhost')  # Fallback for local development
+        
+        for try_host in hosts_to_try:
+            audio_service_url = f'http://{try_host}:{audio_service_port}/api/audio/stream/{source_name}'
             
-            if resp.status_code == 200:
-                # Successful streaming - proxy the response
-                def generate_proxy():
-                    try:
-                        for chunk in resp.iter_content(chunk_size=8192):
-                            if chunk:
-                                yield chunk
-                    except Exception as e:
-                        logger.error(f'Error proxying stream for {source_name}: {e}')
+            try:
+                # Stream from audio-service with timeout
+                logger.info(f'Proxying audio stream request for {source_name} to {audio_service_url}')
+                resp = requests.get(audio_service_url, stream=True, timeout=5)
+                
+                if resp.status_code == 200:
+                    # Successful streaming - proxy the response
+                    def generate_proxy():
+                        try:
+                            for chunk in resp.iter_content(chunk_size=8192):
+                                if chunk:
+                                    yield chunk
+                        except Exception as e:
+                            logger.error(f'Error proxying stream for {source_name}: {e}')
 
-                return Response(
-                    stream_with_context(generate_proxy()),
-                    mimetype='audio/wav',
-                    headers=_build_stream_headers({'X-Stream-Source': 'audio-service'})
-                )
-            else:
-                logger.error(
-                    'Audio service returned non-200 for %s: %s',
-                    source_name,
-                    resp.status_code,
-                )
-                icecast_response = _proxy_icecast_stream()
-                if icecast_response:
-                    return icecast_response
+                    return Response(
+                        stream_with_context(generate_proxy()),
+                        mimetype='audio/wav',
+                        headers=_build_stream_headers({'X-Stream-Source': f'audio-service-{try_host}'})
+                    )
+                else:
+                    logger.warning(
+                        'Audio service at %s returned non-200 for %s: %s',
+                        try_host,
+                        source_name,
+                        resp.status_code,
+                    )
+                    continue  # Try next host
+                    
+            except requests.exceptions.Timeout:
+                logger.warning(f'Timeout connecting to audio-service at {try_host} for {source_name}')
+                continue  # Try next host
+                
+            except requests.exceptions.ConnectionError:
+                logger.warning(f'Connection error to audio-service at {try_host} for {source_name}')
+                continue  # Try next host
+        
+        # All hosts failed - try Icecast or stream silence
+        logger.error(f'All audio-service hosts failed for {source_name}')
+        icecast_response = _proxy_icecast_stream()
+        if icecast_response:
+            return icecast_response
 
-                return _stream_silence_response()
-
-        except requests.exceptions.Timeout:
-            logger.error(f'Timeout connecting to audio-service for {source_name}')
-            icecast_response = _proxy_icecast_stream()
-            if icecast_response:
-                return icecast_response
-
-            return _stream_silence_response()
-
-        except requests.exceptions.ConnectionError:
-            logger.error(f'Connection error to audio-service for {source_name}')
-
-            icecast_response = _proxy_icecast_stream()
-            if icecast_response:
-                return icecast_response
-
-            return _stream_silence_response()
+        return _stream_silence_response()
 
     except Exception as exc:
         logger.error('Error proxying audio stream for %s: %s', source_name, exc, exc_info=True)

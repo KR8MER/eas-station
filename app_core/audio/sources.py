@@ -133,6 +133,7 @@ class SDRSourceAdapter(AudioSourceAdapter):
         self._squelch_open_timer: Optional[float] = None
         self._squelch_close_timer: Optional[float] = None
         self._last_rms_db = float("-inf")
+        self._last_no_demod_warning: float = 0.0  # Throttle "no demodulator" warnings
 
     def _start_capture(self) -> None:
         """Start SDR audio capture via radio manager."""
@@ -439,32 +440,49 @@ class SDRSourceAdapter(AudioSourceAdapter):
                     return self._apply_squelch(audio_array)
 
                 else:
-                    # No demodulation - handle raw IQ samples
-                    # When no demodulator is configured, we still get IQ samples from the SDR
-                    # Convert them to mono audio by taking the magnitude (envelope detection)
+                    # No demodulator configured - raw IQ samples cannot be played as audio
+                    # 
+                    # IMPORTANT: Without proper FM/AM demodulation, raw IQ samples produce
+                    # a loud tone or noise when played back. This is NOT usable audio.
+                    #
+                    # To fix this, configure the radio receiver with:
+                    #   - audio_output = True
+                    #   - modulation_type = 'FM', 'WBFM', 'NFM', or 'AM' (not 'IQ')
+                    #
+                    # For now, return silence to prevent the loud tone issue.
+                    # Log a warning to help users diagnose the configuration problem.
+                    
+                    # Only log warning once per second to avoid log spam
+                    current_time = time.time()
+                    if current_time - self._last_no_demod_warning > 1.0:
+                        self._last_no_demod_warning = current_time
+                        logger.warning(
+                            f"SDR source '{self.config.name}' has no demodulator configured. "
+                            f"Raw IQ data cannot be played as audio. "
+                            f"Enable 'audio_output' and set 'modulation_type' to FM/AM in receiver settings."
+                        )
+                    
+                    # Return silence (zeros) instead of the noisy envelope-detected signal
+                    # This prevents the loud tone that users were experiencing
                     if isinstance(audio_data, bytes):
-                        # Assume interleaved I/Q as float32 or int16
+                        # Calculate expected output size
                         try:
                             iq_array = np.frombuffer(audio_data, dtype=np.float32)
                         except (ValueError, TypeError):
                             try:
                                 raw = np.frombuffer(audio_data, dtype=np.int16)
                                 iq_array = raw.astype(np.float32) / 32768.0
-                            except (ValueError, TypeError) as exc:
-                                logger.error(f"Failed to convert IQ data: {exc}")
+                            except (ValueError, TypeError):
                                 return None
-                        
-                        # Convert interleaved I/Q to complex
-                        iq_complex = iq_array[0::2] + 1j * iq_array[1::2]
-                        # Simple envelope detection for raw IQ
-                        audio_array = np.abs(iq_complex).astype(np.float32)
+                        # IQ has 2 values per sample (I and Q), so output is half the length
+                        output_length = len(iq_array) // 2
                     else:
-                        # Numpy array (complex64)
                         iq_complex = np.array(audio_data, dtype=np.complex64)
-                        # Simple envelope detection for raw IQ
-                        audio_array = np.abs(iq_complex).astype(np.float32)
-
-                    return self._apply_squelch(audio_array)
+                        output_length = len(iq_complex)
+                    
+                    # Return silence of the appropriate length to keep timing correct
+                    audio_array = np.zeros(output_length, dtype=np.float32)
+                    return audio_array
 
         except Exception as e:
             logger.error(f"Error reading SDR audio: {e}", exc_info=True)

@@ -57,7 +57,9 @@ class _FailingDevice:
         pass
 
     def readStream(self, *args, **kwargs):  # noqa: N802 - mimic Soapy API
-        return _Result(-4)
+        # Return -2 (STREAM_ERROR) which triggers reconnection,
+        # unlike -4 (OVERFLOW) which is treated as transient
+        return _Result(-2)
 
     def deactivateStream(self, *args, **kwargs):  # noqa: N802 - mimic Soapy API
         pass

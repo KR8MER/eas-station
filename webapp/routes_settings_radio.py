@@ -1518,12 +1518,13 @@ def register(app: Flask, logger) -> None:
                 ]
             },
             -7: {
-                "name": "SOAPY_SDR_UNDERFLOW",
-                "explanation": "Buffer underflow - not enough data provided",
+                "name": "SOAPY_SDR_NOT_LOCKED",
+                "explanation": "PLL not locked - receiver tuner or reference clock not synchronized",
                 "solutions": [
-                    "Increase buffer size",
-                    "Check application performance",
-                    "Reduce sample rate"
+                    "Check antenna connection",
+                    "Verify tuner frequency is supported",
+                    "Check reference clock (if external)",
+                    "Try a different frequency"
                 ]
             }
         }
