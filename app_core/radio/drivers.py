@@ -122,7 +122,7 @@ class _SoapySDRReceiver(ReceiverInterface):
         -4: "Buffer overflow - system cannot keep up with data rate (SOAPY_SDR_OVERFLOW)",
         -5: "Operation not supported by device (SOAPY_SDR_NOT_SUPPORTED)",
         -6: "Timing error in stream (SOAPY_SDR_TIME_ERROR)",
-        -7: "Buffer underflow - not enough data provided (SOAPY_SDR_UNDERFLOW)",
+        -7: "PLL not locked - receiver tuner or reference clock issue (SOAPY_SDR_NOT_LOCKED)",
     }
 
     def __init__(
@@ -846,7 +846,8 @@ class _SoapySDRReceiver(ReceiverInterface):
                         self._consecutive_timeouts = 0
                         self._timeout_backoff = 0.01
                     
-                    # OVERFLOW (-4) / UNDERFLOW (-7)
+                    # OVERFLOW (-4) / NOT_LOCKED (-7) - These are transient conditions
+                    # that can recover without reconnecting the device.
                     if error_code in (-4, -7):
                         self._stream_errors_count += 1
                         if self._stream_errors_count == 1 or self._stream_errors_count % 100 == 0:
