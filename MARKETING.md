@@ -2,7 +2,7 @@
 
 ## Marketing Brochure
 
-This directory contains professional marketing materials for the EAS Station project.
+This document describes professional marketing materials for the EAS Station project.
 
 ### Files
 
@@ -71,8 +71,15 @@ To make changes to the brochure:
 3. Convert to PDF using Chrome/Chromium:
 
 ```bash
+# Overwrites existing PDF
 google-chrome --headless --disable-gpu \
   --print-to-pdf=EAS-Station-Brochure.pdf \
+  --print-to-pdf-no-header \
+  EAS-Station-Brochure.html
+
+# Or create a versioned copy
+google-chrome --headless --disable-gpu \
+  --print-to-pdf=EAS-Station-Brochure-$(date +%Y%m%d).pdf \
   --print-to-pdf-no-header \
   EAS-Station-Brochure.html
 ```
