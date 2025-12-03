@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EAS Station - Professional Emergency Alert System</title>
+    <style>
+        @page {
+            size: 8.5in 11in;
+            margin: 0;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #333;
+            line-height: 1.6;
+        }
+        
+        .page {
+            width: 8.5in;
+            height: 11in;
+            page-break-after: always;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .page:last-child {
+            page-break-after: avoid;
+        }
+        
+        /* Page 1 - Cover */
+        .cover {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 60px;
+        }
+        
+        .cover-logo {
+            width: 150px;
+            height: 150px;
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 40px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        }
+        
+        .cover h1 {
+            font-size: 56px;
+            font-weight: 700;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+            letter-spacing: -1px;
+        }
+        
+        .cover .tagline {
+            font-size: 24px;
+            margin-bottom: 40px;
+            font-weight: 300;
+            max-width: 600px;
+        }
+        
+        .cover .hero-box {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 40px;
+            margin-top: 30px;
+            max-width: 700px;
+        }
+        
+        .cover .hero-box h2 {
+            font-size: 28px;
+            margin-bottom: 20px;
+        }
+        
+        .cover .hero-box p {
+            font-size: 18px;
+            line-height: 1.8;
+        }
+        
+        /* Page 2 - Features */
+        .features {
+            padding: 60px 80px;
+            background: white;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 50px;
+            padding-bottom: 30px;
+            border-bottom: 3px solid #667eea;
+        }
+        
+        .header h1 {
+            font-size: 42px;
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+        
+        .header p {
+            font-size: 18px;
+            color: #666;
+        }
+        
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+        
+        .feature-card {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            transition: transform 0.3s;
+        }
+        
+        .feature-card h3 {
+            font-size: 22px;
+            color: #667eea;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .feature-icon {
+            font-size: 32px;
+            margin-right: 12px;
+        }
+        
+        .feature-card p {
+            font-size: 15px;
+            color: #555;
+            line-height: 1.6;
+        }
+        
+        .architecture-section {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 30px;
+            margin-top: 30px;
+        }
+        
+        .architecture-section h2 {
+            font-size: 32px;
+            color: #667eea;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .arch-diagram {
+            background: white;
+            border-radius: 8px;
+            padding: 25px;
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        .arch-flow {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            margin: 20px 0;
+        }
+        
+        .arch-box {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            font-weight: 600;
+            min-width: 140px;
+            text-align: center;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        }
+        
+        .arch-arrow {
+            font-size: 32px;
+            color: #667eea;
+            font-weight: bold;
+        }
+        
+        /* Page 3 - Benefits and Contact */
+        .benefits {
+            padding: 60px 80px;
+            background: white;
+        }
+        
+        .benefits-header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        
+        .benefits-header h1 {
+            font-size: 42px;
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+        
+        .use-cases {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 25px;
+            margin-bottom: 40px;
+        }
+        
+        .use-case {
+            background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        
+        .use-case h3 {
+            font-size: 22px;
+            color: #d63031;
+            margin-bottom: 12px;
+        }
+        
+        .use-case ul {
+            list-style: none;
+            padding-left: 0;
+        }
+        
+        .use-case li {
+            padding: 6px 0;
+            padding-left: 24px;
+            position: relative;
+            font-size: 14px;
+        }
+        
+        .use-case li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #d63031;
+            font-weight: bold;
+        }
+        
+        .specs-section {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 30px;
+        }
+        
+        .specs-section h2 {
+            font-size: 28px;
+            color: #667eea;
+            margin-bottom: 20px;
+        }
+        
+        .specs-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+        }
+        
+        .spec-item {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            background: white;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        
+        .spec-label {
+            font-weight: 600;
+            color: #667eea;
+            min-width: 120px;
+        }
+        
+        .contact-section {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 12px;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .contact-section h2 {
+            font-size: 32px;
+            margin-bottom: 20px;
+        }
+        
+        .contact-info {
+            font-size: 18px;
+            margin: 10px 0;
+        }
+        
+        .license-note {
+            background: rgba(255,255,255,0.1);
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+            font-size: 14px;
+            line-height: 1.8;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+            font-size: 12px;
+            position: absolute;
+            bottom: 20px;
+            left: 0;
+            right: 0;
+        }
+    </style>
+</head>
+<body>
+    <!-- Page 1: Cover -->
+    <div class="page cover">
+        <div class="cover-logo">
+            <svg viewBox="0 0 200 200" style="width: 100%; height: 100%;">
+                <circle cx="100" cy="100" r="80" fill="#667eea"/>
+                <path d="M 60 80 L 140 80 L 140 120 L 60 120 Z" fill="white"/>
+                <circle cx="100" cy="100" r="15" fill="#764ba2"/>
+            </svg>
+        </div>
+        
+        <h1>EAS Station</h1>
+        <div class="tagline">
+            Professional Emergency Alert System Platform<br/>
+            Software-Defined Drop-In Replacement for Commercial EAS Hardware
+        </div>
+        
+        <div class="hero-box">
+            <h2>Transform Emergency Alerting</h2>
+            <p>
+                EAS Station is a cutting-edge, software-defined Emergency Alert System that replaces 
+                $5,000-$7,000 commercial hardware with powerful, flexible software running on commodity 
+                hardware like Raspberry Pi. Monitor, broadcast, and verify NOAA and IPAWS alerts with 
+                FCC-compliant SAME encoding, multi-source aggregation, and spatial intelligence.
+            </p>
+        </div>
+        
+        <div style="margin-top: 60px; font-size: 16px; opacity: 0.9;">
+            <strong>Made for Broadcasters • Amateur Radio • Emergency Management</strong>
+        </div>
+    </div>
+
+    <!-- Page 2: Features & Architecture -->
+    <div class="page features">
+        <div class="header">
+            <h1>Powerful Features for Professional Alerting</h1>
+            <p>Everything you need for reliable, compliant emergency alert processing</p>
+        </div>
+        
+        <div class="feature-grid">
+            <div class="feature-card">
+                <h3><span class="feature-icon">🌐</span> Multi-Source Ingestion</h3>
+                <p>Automatically aggregate alerts from NOAA Weather Service, FEMA IPAWS, and custom CAP feeds. Never miss a critical alert.</p>
+            </div>
+            
+            <div class="feature-card">
+                <h3><span class="feature-icon">📻</span> FCC-Compliant SAME</h3>
+                <p>Generate valid Specific Area Message Encoding (SAME) headers per FCC Part 11 regulations. Full EAS protocol support.</p>
+            </div>
+            
+            <div class="feature-card">
+                <h3><span class="feature-icon">🗺️</span> Geographic Intelligence</h3>
+                <p>PostGIS-powered spatial filtering with county, state, and custom polygon support. Target alerts to specific areas.</p>
+            </div>
+            
+            <div class="feature-card">
+                <h3><span class="feature-icon">📡</span> SDR Verification</h3>
+                <p>Automated broadcast verification using RTL-SDR or Airspy receivers. Confirm your alerts are transmitting correctly.</p>
+            </div>
+            
+            <div class="feature-card">
+                <h3><span class="feature-icon">🔒</span> Built-in HTTPS</h3>
+                <p>Automatic SSL/TLS with Let's Encrypt integration. Secure nginx reverse proxy included for production deployment.</p>
+            </div>
+            
+            <div class="feature-card">
+                <h3><span class="feature-icon">🎨</span> Modern Web UI</h3>
+                <p>Responsive Bootstrap 5 interface with real-time updates. Manage your entire system from any device.</p>
+            </div>
+            
+            <div class="feature-card">
+                <h3><span class="feature-icon">⚡</span> Hardware Integration</h3>
+                <p>GPIO relay control, LED signage, OLED displays, and multiple audio outputs. Complete station automation.</p>
+            </div>
+            
+            <div class="feature-card">
+                <h3><span class="feature-icon">📊</span> Comprehensive API</h3>
+                <p>RESTful API for automation and integrations. Control GPIO, audio devices, and alert processing programmatically.</p>
+            </div>
+        </div>
+        
+        <div class="architecture-section">
+            <h2>Modern Separated Service Architecture</h2>
+            <div class="arch-diagram">
+                <div class="arch-flow">
+                    <div class="arch-box">Alert Sources<br/><small>NOAA/IPAWS</small></div>
+                    <div class="arch-arrow">→</div>
+                    <div class="arch-box">Poller<br/><small>Service</small></div>
+                    <div class="arch-arrow">→</div>
+                    <div class="arch-box">PostgreSQL<br/><small>+ PostGIS</small></div>
+                </div>
+                <div class="arch-flow">
+                    <div class="arch-box">Web Service<br/><small>Flask UI</small></div>
+                    <div class="arch-arrow">←</div>
+                    <div class="arch-box">Database</div>
+                    <div class="arch-arrow">→</div>
+                    <div class="arch-box">Audio Service<br/><small>SAME Encoder</small></div>
+                </div>
+                <p style="margin-top: 20px; color: #666; font-size: 14px;">
+                    ✓ Reliable - Services isolated (web crashes don't affect audio)<br/>
+                    ✓ Simple - No complex worker coordination<br/>
+                    ✓ Fast - Dedicated resources per service<br/>
+                    ✓ Debuggable - Separate logs, independent restart
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Page 3: Benefits & Contact -->
+    <div class="page benefits">
+        <div class="benefits-header">
+            <h1>Built for Real-World Use Cases</h1>
+        </div>
+        
+        <div class="use-cases">
+            <div class="use-case">
+                <h3>🎙️ Broadcasters</h3>
+                <ul>
+                    <li>Replace $5,000-$7,000 commercial encoders</li>
+                    <li>Multi-station coordination</li>
+                    <li>Automated compliance logging</li>
+                    <li>Integration with existing broadcast chains</li>
+                </ul>
+            </div>
+            
+            <div class="use-case">
+                <h3>📡 Amateur Radio</h3>
+                <ul>
+                    <li>Emergency communications testing</li>
+                    <li>Alert relay networks</li>
+                    <li>Training and education</li>
+                    <li>Field deployment exercises</li>
+                </ul>
+            </div>
+            
+            <div class="use-case">
+                <h3>🚨 Alert Distribution</h3>
+                <ul>
+                    <li>Custom alert distribution systems</li>
+                    <li>Geographic targeting and filtering</li>
+                    <li>Integration with existing infrastructure</li>
+                    <li>Multi-format alert delivery</li>
+                </ul>
+            </div>
+            
+            <div class="use-case">
+                <h3>💻 Developers</h3>
+                <ul>
+                    <li>CAP protocol experimentation</li>
+                    <li>Alert system research</li>
+                    <li>Custom integrations and plugins</li>
+                    <li>Open-source contribution</li>
+                </ul>
+            </div>
+        </div>
+        
+        <div class="specs-section">
+            <h2>System Requirements</h2>
+            <div class="specs-grid">
+                <div class="spec-item">
+                    <span class="spec-label">Compute:</span>
+                    <span>Raspberry Pi 5 (8GB) or x86</span>
+                </div>
+                <div class="spec-item">
+                    <span class="spec-label">Software:</span>
+                    <span>Docker 24+, Python 3.11+</span>
+                </div>
+                <div class="spec-item">
+                    <span class="spec-label">Database:</span>
+                    <span>PostgreSQL 14+ with PostGIS 3+</span>
+                </div>
+                <div class="spec-item">
+                    <span class="spec-label">Memory:</span>
+                    <span>4GB RAM (8GB recommended)</span>
+                </div>
+                <div class="spec-item">
+                    <span class="spec-label">Audio:</span>
+                    <span>USB sound card or Pi HAT</span>
+                </div>
+                <div class="spec-item">
+                    <span class="spec-label">SDR (Optional):</span>
+                    <span>RTL-SDR v3 or Airspy</span>
+                </div>
+                <div class="spec-item">
+                    <span class="spec-label">Storage:</span>
+                    <span>External SSD (50GB+)</span>
+                </div>
+                <div class="spec-item">
+                    <span class="spec-label">Network:</span>
+                    <span>Internet for alert polling</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="contact-section">
+            <h2>Get Started Today</h2>
+            <div class="contact-info">
+                <strong>GitHub Repository:</strong> https://github.com/KR8MER/eas-station
+            </div>
+            <div class="contact-info">
+                <strong>Documentation:</strong> Complete setup guides, API reference, and tutorials included
+            </div>
+            <div class="contact-info">
+                <strong>One-Command Install:</strong> Get running in minutes with Docker Compose
+            </div>
+            
+            <div class="license-note">
+                <strong>Dual Licensing Available</strong><br/>
+                Open Source (AGPL v3) for non-commercial use and open-source projects<br/>
+                Commercial licenses available for proprietary/closed-source applications<br/><br/>
+                <strong>⚠️ Important:</strong> Laboratory use only. Not FCC-certified for production emergency alerting.
+            </div>
+        </div>
+        
+        <div class="footer">
+            Copyright © 2025 Timothy Kramer (KR8MER) • EAS Station • Made with ☕ and 📻 for Amateur Radio Emergency Communications • 73 de KR8MER 📡
+        </div>
+    </div>
+</body>
+</html>
