@@ -452,17 +452,22 @@ def register(app: Flask, logger) -> None:
         # Simple parsing of the output
         for line in stdout.split("\n"):
             if "✓ PASS:" in line:
-                check_name = line.split(":", 1)[1].split("-")[0].strip()
-                validation_results["passed"].append(check_name)
-                validation_results["total"] += 1
+                colon_parts = line.split(":", 1)
+                if len(colon_parts) > 1:
+                    check_name = colon_parts[1].split("-")[0].strip()
+                    validation_results["passed"].append(check_name)
+                    validation_results["total"] += 1
             elif "✗ FAIL:" in line:
-                check_name = line.split(":", 1)[1].split("-")[0].strip()
-                message = line.split("-", 1)[1].strip() if "-" in line.split(":", 1)[1] else "Failed"
-                validation_results["failed"].append({
-                    "check": check_name,
-                    "message": message
-                })
-                validation_results["total"] += 1
+                colon_parts = line.split(":", 1)
+                if len(colon_parts) > 1:
+                    check_name = colon_parts[1].split("-")[0].strip()
+                    dash_parts = colon_parts[1].split("-", 1)
+                    message = dash_parts[1].strip() if len(dash_parts) > 1 else "Failed"
+                    validation_results["failed"].append({
+                        "check": check_name,
+                        "message": message
+                    })
+                    validation_results["total"] += 1
         
         if success:
             route_logger.info(f"System validation passed: {len(validation_results['passed'])}/{validation_results['total']} checks")

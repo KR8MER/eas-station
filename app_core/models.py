@@ -370,7 +370,7 @@ class ReceivedEASAlert(db.Model):
     matched_fips_codes = db.Column(db.JSON, default=list)  # Which configured FIPS codes matched
 
     # Link to generated broadcast (if forwarded)
-    generated_message_id = db.Column(db.Integer, db.ForeignKey('eas_messages.id'), nullable=True)
+    generated_message_id = db.Column(db.Integer, db.ForeignKey('eas_messages.id'), nullable=True, index=True)
     generated_message = db.relationship('EASMessage', foreign_keys=[generated_message_id], backref='source_alerts')
     forwarded_at = db.Column(db.DateTime(timezone=True))
 
@@ -839,7 +839,7 @@ class LEDMessage(db.Model):
     scheduled_time = db.Column(db.DateTime(timezone=True))
     sent_at = db.Column(db.DateTime(timezone=True))
     is_active = db.Column(db.Boolean, default=True)
-    alert_id = db.Column(db.Integer, db.ForeignKey("cap_alerts.id"))
+    alert_id = db.Column(db.Integer, db.ForeignKey("cap_alerts.id", ondelete="SET NULL"))
     repeat_interval = db.Column(db.Integer)
     created_at = db.Column(db.DateTime(timezone=True), default=utc_now)
 
@@ -873,7 +873,7 @@ class VFDDisplay(db.Model):
     scheduled_time = db.Column(db.DateTime(timezone=True))
     displayed_at = db.Column(db.DateTime(timezone=True))
     is_active = db.Column(db.Boolean, default=True)
-    alert_id = db.Column(db.Integer, db.ForeignKey("cap_alerts.id"))
+    alert_id = db.Column(db.Integer, db.ForeignKey("cap_alerts.id", ondelete="SET NULL"))
     created_at = db.Column(db.DateTime(timezone=True), default=utc_now)
 
 

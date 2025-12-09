@@ -1283,10 +1283,14 @@ def collect_compliance_log_entries(
 
     entries: List[Dict[str, Any]] = []
 
+    # Define a reasonable limit for compliance log entries to prevent memory exhaustion
+    MAX_ENTRIES_PER_CATEGORY = 10000
+
     try:
         alert_query = (
             CAPAlert.query.filter(CAPAlert.sent >= window_start)
             .order_by(CAPAlert.sent.desc())
+            .limit(MAX_ENTRIES_PER_CATEGORY)
         )
 
         for alert in alert_query:

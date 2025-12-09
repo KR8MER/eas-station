@@ -310,6 +310,8 @@ def calculate_alert_intersections(alert: CAPAlert) -> int:
             cap_alert_id=alert.id
         ).delete(synchronize_session=False)
         db.session.bulk_save_objects(new_intersections)
+        # Flush to ensure objects are persisted before function returns
+        db.session.flush()
     except Exception as exc:  # pragma: no cover - defensive
         db.session.rollback()
         _logger().error(

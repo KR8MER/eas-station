@@ -47,6 +47,7 @@ import sys
 import time
 import signal
 import logging
+import threading
 import redis
 import json
 from typing import Optional, Any, Dict
@@ -80,7 +81,8 @@ if _config_path:
 else:
     load_dotenv(override=True)  # Use default .env location
 
-# Global state
+# Global state with thread-safe access
+_state_lock = threading.Lock()
 _running = True
 _redis_client: Optional[redis.Redis] = None
 _audio_controller = None

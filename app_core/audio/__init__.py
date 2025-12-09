@@ -40,6 +40,7 @@ from .monitor_manager import (
     stop_eas_monitor,
     shutdown_eas_monitor,
 )
+from .alert_forwarding import forward_alert_to_api, ALERT_CHANNEL
 
 __all__ = [
     'AudioIngestController',
@@ -60,4 +61,6 @@ __all__ = [
     'start_eas_monitor',
     'stop_eas_monitor',
     'shutdown_eas_monitor',
+    'forward_alert_to_api',
+    'ALERT_CHANNEL',
 ]

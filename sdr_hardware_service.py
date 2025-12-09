@@ -127,7 +127,7 @@ SPECTRUM_DB_MAX = 0.0
 
 @dataclass
 class SDRServiceState:
-    """Global state for the SDR service."""
+    """Global state for the SDR service with thread-safe access via lock."""
     running: bool = True
     redis_client: Optional[Any] = None
     radio_manager: Optional[Any] = None
@@ -135,6 +135,7 @@ class SDRServiceState:
     flask_app: Optional[Any] = None  # Store Flask app for database access
     last_metrics_time: float = 0.0
     metrics_interval: float = 1.0  # Publish metrics every second
+    lock: threading.Lock = field(default_factory=threading.Lock)
 
 
 _state = SDRServiceState()

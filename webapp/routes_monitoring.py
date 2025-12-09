@@ -113,10 +113,14 @@ def register(app: Flask, logger) -> None:
         try:
             db.session.execute(text("SELECT 1")).fetchone()
             db_version = db.session.execute(text("SELECT version()")).fetchone()
+            version_str = "unknown"
+            if db_version and db_version[0]:
+                parts = db_version[0].split(" ")
+                version_str = parts[1] if len(parts) > 1 else parts[0] if parts else "unknown"
             dependencies["postgresql"] = {
                 "status": "healthy",
                 "message": "Database connected",
-                "version": db_version[0].split(" ")[1] if db_version else "unknown",
+                "version": version_str,
             }
         except Exception as exc:
             dependencies["postgresql"] = {

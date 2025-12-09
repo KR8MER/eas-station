@@ -22,7 +22,7 @@ def main():
     print()
 
     # Import Flask app and database
-    from webapp.app import create_app
+    from app import create_app
     from app_core.extensions import db
     from app_core.models import RadioReceiver, AudioSourceConfigDB
 

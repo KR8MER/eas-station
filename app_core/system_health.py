@@ -32,7 +32,7 @@ from flask import current_app
 from sqlalchemy import func
 
 from app_core.extensions import db
-from app_core.models import EASMessage, ManualEASActivation, RadioReceiver
+from app_core.models import EASMessage, ManualEASActivation, RadioReceiver, RadioReceiverStatus
 from app_utils import build_system_health_snapshot, utc_now
 from app_utils.time import UTC_TZ
 
@@ -78,6 +78,33 @@ def collect_receiver_health_snapshot(logger=None) -> Dict[str, Any]:
 
     try:
         receivers = RadioReceiver.query.order_by(RadioReceiver.display_name.asc()).all()
+
+        # Batch-load latest status for all receivers in a single query to avoid N+1
+        # Use a subquery to get the max reported_at per receiver
+        latest_subquery = (
+            db.session.query(
+                RadioReceiverStatus.receiver_id,
+                func.max(RadioReceiverStatus.reported_at).label('max_reported_at')
+            )
+            .group_by(RadioReceiverStatus.receiver_id)
+            .subquery()
+        )
+
+        latest_statuses_query = (
+            db.session.query(RadioReceiverStatus)
+            .join(
+                latest_subquery,
+                db.and_(
+                    RadioReceiverStatus.receiver_id == latest_subquery.c.receiver_id,
+                    RadioReceiverStatus.reported_at == latest_subquery.c.max_reported_at
+                )
+            )
+        )
+
+        # Build a map of receiver_id -> latest status
+        latest_status_map: Dict[int, RadioReceiverStatus] = {
+            status.receiver_id: status for status in latest_statuses_query.all()
+        }
     except Exception as exc:  # pragma: no cover - defensive logging
         effective_logger.error("Failed to load receiver statuses: %s", exc)
         try:
@@ -93,7 +120,7 @@ def collect_receiver_health_snapshot(logger=None) -> Dict[str, Any]:
         }
 
     for receiver in receivers:
-        latest = receiver.latest_status()
+        latest = latest_status_map.get(receiver.id)
         status_issue = None
         status_age_minutes: Optional[float] = None
 

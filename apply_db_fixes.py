@@ -42,7 +42,8 @@ def apply_fixes():
         
         # Check time
         cur.execute("SELECT NOW();")
-        db_time = cur.fetchone()[0]
+        result = cur.fetchone()
+        db_time = result[0] if result else None
         print(f"Database Server Time: {db_time}")
         
         # Check if tables exist
