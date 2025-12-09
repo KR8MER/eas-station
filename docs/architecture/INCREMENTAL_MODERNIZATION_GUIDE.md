@@ -478,7 +478,11 @@ def create_alert(**kwargs):
     This endpoint validates and creates a new emergency alert in the system.
     The alert will be processed for SAME encoding and broadcast if configured.
     """
-    alert_data = AlertCreate(**kwargs)
+    # Use consistent validation pattern
+    try:
+        alert_data = validate_request(AlertCreate, kwargs)
+    except ValidationError as e:
+        return jsonify({'errors': e.errors}), 400
     
     alert = CAPAlert(
         title=alert_data.title,

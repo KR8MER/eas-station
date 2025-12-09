@@ -224,7 +224,7 @@ def create_alert():
     """Create new alert with automatic validation"""
     try:
         # Pydantic validates incoming JSON automatically
-        alert_data = AlertCreate(**request.json)
+        alert_data = AlertCreate(**(request.json or {}))
     except ValidationError as e:
         return jsonify({'errors': e.errors()}), 400
     
