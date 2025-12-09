@@ -1063,6 +1063,7 @@ small,
     min-height: 100vh;
     padding: var(--layout-padding-top) 0 var(--layout-padding-bottom);
     position: relative;
+    overflow-x: hidden; /* Contain decorative orbs */
 }
 
 /* Standard Page Header - Modern Elevated Design */
@@ -4683,34 +4684,34 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 .orb {
     position: absolute;
     border-radius: 50%;
-    filter: blur(80px);
-    opacity: 0.4;
+    filter: blur(60px);
+    opacity: 0.15;
     pointer-events: none;
     z-index: 0;
     animation: orbFloat 20s ease-in-out infinite;
 }
 
 .orb-1 {
-    width: 400px;
-    height: 400px;
+    width: 200px;
+    height: 200px;
     background: linear-gradient(135deg, var(--vibrant-blue), var(--vibrant-purple));
-    top: -100px;
-    right: -100px;
+    top: -50px;
+    right: -50px;
     animation-delay: 0s;
 }
 
 .orb-2 {
-    width: 350px;
-    height: 350px;
+    width: 180px;
+    height: 180px;
     background: linear-gradient(135deg, var(--vibrant-pink), var(--vibrant-orange));
     bottom: 10%;
-    left: -80px;
+    left: -40px;
     animation-delay: -7s;
 }
 
 .orb-3 {
-    width: 250px;
-    height: 250px;
+    width: 150px;
+    height: 150px;
     background: linear-gradient(135deg, var(--vibrant-teal), var(--vibrant-green));
     top: 40%;
     right: 5%;
