@@ -200,7 +200,7 @@
 
 ```python
 # Pydantic works perfectly with Flask!
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, field_validator
 from typing import Literal
 from datetime import datetime
 
@@ -212,9 +212,10 @@ class AlertCreate(BaseModel):
     effective: datetime
     expires: datetime
     
-    @validator('expires')
-    def expires_after_effective(cls, v, values):
-        if 'effective' in values and v <= values['effective']:
+    @field_validator('expires')
+    @classmethod
+    def expires_after_effective(cls, v, info):
+        if 'effective' in info.data and v <= info.data['effective']:
             raise ValueError('expires must be after effective')
         return v
 
