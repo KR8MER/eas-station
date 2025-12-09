@@ -93,9 +93,11 @@ def validate_request(model_class: type[BaseModel], data: dict) -> BaseModel:
                 return jsonify({'errors': e.errors}), 400
             # Use validated alert_data...
     """
+    from pydantic import ValidationError as PydanticValidationError
+    
     try:
         return model_class(**data)
-    except Exception as e:
+    except PydanticValidationError as e:
         raise ValidationError(e.errors())
 
 
