@@ -1285,12 +1285,80 @@ For quick navigation and understanding of the codebase structure, refer to the c
 
 ---
 
+## 🚀 FastAPI Migration Reference
+
+**Status**: Planning phase complete (5% overall progress)
+
+When working on the Flask to FastAPI migration:
+
+- **[FastAPI Migration Roadmap](FASTAPI_MIGRATION_ROADMAP.md)** – Complete 16-week migration plan with phase-by-phase breakdown
+- **[FastAPI Quick Start Guide](FASTAPI_QUICKSTART.md)** – Practical developer guide with code patterns and examples
+- **[Migration Overview](../../MIGRATION.md)** – High-level status and running instructions
+- **[Migration Summary](../../FASTAPI_MIGRATION_SUMMARY.md)** – Executive summary with stats and timeline
+
+### Key Migration Points
+
+1. **Current State**: Flask app (`app.py`) is production, FastAPI minimal app (`fastapi_app_minimal.py`) is working
+2. **51 Route Modules** need migration from `webapp/` to `webapp/fastapi/`
+3. **Major Challenges**: Authentication, WebSocket, templates, background workers
+4. **Timeline**: 16 weeks realistic estimate (10 optimistic, 24 pessimistic)
+5. **Code Patterns**: See FASTAPI_QUICKSTART.md for before/after examples
+
+### Migration Workflow
+
+When migrating a Flask route to FastAPI:
+
+1. **Read the guides** – Start with FASTAPI_QUICKSTART.md for patterns
+2. **Create new structure** – Place FastAPI routes in `webapp/fastapi/`
+3. **Follow patterns** – Use the migration patterns provided (Blueprints → Routers, etc.)
+4. **Test thoroughly** – Use `/docs` endpoint for interactive testing
+5. **Update checklist** – Mark progress in FASTAPI_MIGRATION_ROADMAP.md
+6. **Keep Flask working** – Never break the production Flask app
+
+### FastAPI Code Style
+
+```python
+# Use FastAPI routers, not Flask blueprints
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import HTMLResponse
+
+router = APIRouter(prefix="/example", tags=["example"])
+
+# Use Pydantic models for validation
+from pydantic import BaseModel
+
+class ExampleRequest(BaseModel):
+    name: str
+    value: int
+
+# Use dependency injection for auth and database
+from app_core.fastapi_auth import get_current_user
+from app_core.fastapi_extensions import get_db
+
+@router.post("/create")
+async def create(
+    data: ExampleRequest,
+    user = Depends(get_current_user),
+    db = Depends(get_db)
+):
+    # Type hints enable auto-validation and documentation
+    return {"success": True}
+```
+
+---
+
 ## 🎓 Learning Resources
 
 ### Python & Flask
 - [Flask Documentation](https://flask.palletsprojects.com/)
 - [SQLAlchemy ORM Tutorial](https://docs.sqlalchemy.org/en/20/orm/)
 - [PEP 8 Style Guide](https://pep8.org/)
+
+### Python & FastAPI (NEW)
+- [FastAPI Documentation](https://fastapi.tiangolo.com/)
+- [Pydantic Documentation](https://docs.pydantic.dev/)
+- [Uvicorn Documentation](https://www.uvicorn.org/)
+- [Starlette Documentation](https://www.starlette.io/)
 
 ### PostGIS & Spatial
 - [PostGIS Documentation](https://postgis.net/documentation/)
