@@ -6,6 +6,14 @@ tracks releases under the 2.x series.
 
 ## [Unreleased]
 
+### Added
+- **FastAPI Migration Roadmap**: Comprehensive 16-week plan for migrating from Flask to FastAPI
+  - Created `docs/development/FASTAPI_MIGRATION_ROADMAP.md` with detailed phase-by-phase migration strategy
+  - Documents 51 route modules requiring migration across 10 phases
+  - Includes technical architecture changes, code migration patterns, and risk mitigation strategies
+  - Provides rollback procedures and success metrics
+  - Estimates 16-week timeline with 10 distinct phases from foundation to production deployment
+
 ## [2.17.2] - 2025-12-09
 ### Fixed
 - **EAS Monitor Display Issues**: Fixed decoding rates showing >100% and display bouncing between states
