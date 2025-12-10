@@ -7,6 +7,26 @@ tracks releases under the 2.x series.
 ## [Unreleased]
 
 ### Added
+- **FastAPI Core Infrastructure (Phase 1 - 20% Complete)**: Implemented foundational authentication and template systems
+  - Created `app_core/fastapi_auth.py` - Complete authentication system with dependency injection
+    - Session-based auth with `get_current_user()` and `get_current_active_user()` dependencies
+    - MFA verification support with `check_mfa_verified()` and `set_mfa_verified()`
+    - Role-based access control with `require_role()`, `require_any_role()`, and `require_permission()` factories
+    - Helper functions: `login_user()`, `logout_user()`, `is_mfa_verified()`
+  - Created `app_core/fastapi_templates.py` - Jinja2 template utilities for FastAPI
+    - Flask-compatible template helpers: `url_for()`, `flash()`, `get_flashed_messages()`
+    - Template context creation with standard variables (user, session, config)
+    - Custom filter and global registration with `@template_filter` and `@template_global` decorators
+    - Auto-initialization of Jinja2Templates with custom filters from existing template_helpers
+  - Created `app_core/fastapi_csrf.py` - CSRF protection middleware
+    - Double-submit cookie pattern implementation
+    - CSRFProtectionMiddleware with configurable exempt paths and protected methods
+    - `get_csrf_token()` helper for templates
+    - Constant-time token comparison to prevent timing attacks
+    - Support for both header and form-based token submission
+  - Updated migration checklist: 3 of 15 Phase 1 tasks complete (8% overall progress)
+
+### Previous
 - **FastAPI Migration Roadmap**: Comprehensive 16-week plan for migrating from Flask to FastAPI
   - Created `docs/development/FASTAPI_MIGRATION_ROADMAP.md` with detailed phase-by-phase migration strategy
   - Documents 51 route modules requiring migration across 10 phases
