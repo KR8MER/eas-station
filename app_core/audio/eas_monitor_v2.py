@@ -111,6 +111,13 @@ class EASMonitorV2:
         self._max_empty_reads = 50  # Max consecutive empty reads before warning
         self._max_errors = 100  # Max consecutive errors before stopping
         self._min_samples_for_flow = self.sample_rate * 2  # Require 2s of audio before declaring "flowing"
+        
+        # Adaptive backoff configuration (reduces CPU during sustained audio gaps)
+        self._backoff_fast_threshold = 10  # First 10 empty reads: fast recovery (50ms)
+        self._backoff_moderate_threshold = 50  # 11-50 empty reads: moderate backoff (100ms)
+        self._backoff_fast_ms = 50  # Fast backoff duration
+        self._backoff_moderate_ms = 100  # Moderate backoff duration
+        self._backoff_aggressive_ms = 200  # Aggressive backoff for sustained gaps
 
         logger.info(
             f"EASMonitorV2 initialized for '{source_name}': "
@@ -375,15 +382,12 @@ class EASMonitorV2:
                         )
                     
                     # Adaptive backoff to avoid busy-waiting and reduce CPU load
-                    # First 10 empty reads: 50ms (fast recovery)
-                    # 11-50 empty reads: 100ms (moderate backoff)
-                    # 51+ empty reads: 200ms (aggressive backoff for sustained gaps)
-                    if empty_reads <= 10:
-                        time.sleep(0.05)
-                    elif empty_reads <= 50:
-                        time.sleep(0.1)
+                    if empty_reads <= self._backoff_fast_threshold:
+                        time.sleep(self._backoff_fast_ms / 1000.0)
+                    elif empty_reads <= self._backoff_moderate_threshold:
+                        time.sleep(self._backoff_moderate_ms / 1000.0)
                     else:
-                        time.sleep(0.2)
+                        time.sleep(self._backoff_aggressive_ms / 1000.0)
                     continue
 
                 # Got audio!

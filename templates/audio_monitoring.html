@@ -358,6 +358,7 @@ const EAS_WARMUP_DURATION_SECONDS = 10; // Show "warming up" only during first 1
 // At 100ms WebSocket intervals, this is 500ms of consistent state before updating display
 // Hysteresis threshold for audio flowing state changes
 // Requires this many consecutive polls showing a DIFFERENT state before accepting the change
+// Note: EAS monitor status is polled every 5 seconds (see easMonitorIntervalHandle setInterval below)
 // At 5s polling interval, threshold of 10 = 50 seconds of stable state required
 // This prevents rapid flickering between "flowing" and "starving" states
 const AUDIO_FLOWING_STABILITY_THRESHOLD = 10;
