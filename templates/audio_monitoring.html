@@ -356,7 +356,11 @@ const EAS_WARMUP_DURATION_SECONDS = 10; // Show "warming up" only during first 1
 // Stability threshold increased to prevent flickering during transient fluctuations
 // Requires 5 consecutive readings of a different state before accepting the change
 // At 100ms WebSocket intervals, this is 500ms of consistent state before updating display
-const AUDIO_FLOWING_STABILITY_THRESHOLD = 5;
+// Hysteresis threshold for audio flowing state changes
+// Requires this many consecutive polls showing a DIFFERENT state before accepting the change
+// At 5s polling interval, threshold of 10 = 50 seconds of stable state required
+// This prevents rapid flickering between "flowing" and "starving" states
+const AUDIO_FLOWING_STABILITY_THRESHOLD = 10;
 
 // VU meter state tracking for smoothing and peak hold
 const vuMeterState = new Map(); // sourceId -> { lastPeak, lastRms, peakHold, peakHoldTime }

@@ -6,6 +6,27 @@ tracks releases under the 2.x series.
 
 ## [Unreleased]
 
+## [2.17.3] - 2025-12-10
+### Fixed
+- **EAS Monitor State Switching Issue**: Fixed continuous monitor switching between "audio flowing" and "starving" states
+  - Root cause 1: BroadcastAudioAdapter timeout (0.5s) was too aggressive, causing false underruns during system jitter
+  - Root cause 2: EASMonitorV2 audio timeout (5s) was too short for declaring audio dead during temporary gaps
+  - Root cause 3: Monitor declared "audio flowing" immediately without requiring stable flow first
+  - Root cause 4: UI hysteresis threshold (5 polls = 25s) was insufficient for sustained state changes
+  - Fix 1: Increased BroadcastAudioAdapter default timeout from 0.5s to 1.0s for better resilience
+  - Fix 2: Increased EASMonitorV2 audio timeout from 5s to 10s to handle temporary audio gaps
+  - Fix 3: Added minimum sample requirement (2 seconds of audio) before declaring "flowing" state
+  - Fix 4: Increased UI hysteresis threshold from 5 to 10 polls (50 seconds stability required)
+  - Fix 5: Added adaptive backoff in monitor loop (50ms->100ms->200ms) to reduce CPU during gaps
+  - Fix 6: Added state transition logging to track when and why audio flow state changes
+  - Result: Monitor maintains stable state, only transitions after sustained changes, no rapid flickering
+
+### Changed
+- **Audio Processing Resilience**: Improved tolerance for transient network/system delays
+  - Queue read timeouts now better handle momentary system load spikes
+  - Monitor waits longer before declaring audio dead, reducing false alarms
+  - Adaptive backoff reduces CPU usage during sustained audio gaps
+
 ## [2.17.2] - 2025-12-09
 ### Fixed
 - **EAS Monitor Display Issues**: Fixed decoding rates showing >100% and display bouncing between states

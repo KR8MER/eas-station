@@ -107,9 +107,10 @@ class EASMonitorV2:
         # Configuration
         self._chunk_duration_ms = 100  # 100ms chunks
         self._chunk_size = int(self.sample_rate * self._chunk_duration_ms / 1000)
-        self._audio_timeout_seconds = 5.0  # Declare audio dead after 5s no data
+        self._audio_timeout_seconds = 10.0  # Declare audio dead after 10s no data (increased from 5s)
         self._max_empty_reads = 50  # Max consecutive empty reads before warning
         self._max_errors = 100  # Max consecutive errors before stopping
+        self._min_samples_for_flow = self.sample_rate * 2  # Require 2s of audio before declaring "flowing"
 
         logger.info(
             f"EASMonitorV2 initialized for '{source_name}': "
@@ -190,13 +191,14 @@ class EASMonitorV2:
             samples_per_second = 0
             health_percentage = 0.0
 
-        # Determine if audio is actually flowing
-        # Audio is flowing if we've received data recently
+        # Determine if audio is actually flowing with improved logic
+        # Require minimum samples before declaring "flowing" to prevent false positives during startup
+        # Also check if we've received data recently (within timeout window)
         time_since_audio = time.time() - health.last_audio_time if health.last_audio_time > 0 else 999999
         audio_flowing = (
             self._running and
-            self._samples_processed > 0 and
-            time_since_audio < self._audio_timeout_seconds
+            self._samples_processed >= self._min_samples_for_flow and  # Require minimum samples (2s)
+            time_since_audio < self._audio_timeout_seconds  # Recent data (within 10s)
         )
 
         # Get audio adapter stats if available
@@ -300,6 +302,8 @@ class EASMonitorV2:
     def _update_health(self, got_audio: bool, error: bool = False) -> None:
         """Update health tracking."""
         with self._health_lock:
+            prev_flowing = self._health.audio_flowing
+            
             if error:
                 self._health.consecutive_errors += 1
                 self._health.total_errors += 1
@@ -318,7 +322,21 @@ class EASMonitorV2:
                 # If no audio for too long, mark as not flowing
                 time_since_audio = time.time() - self._health.last_audio_time if self._health.last_audio_time > 0 else 999999
                 if time_since_audio > self._audio_timeout_seconds:
+                    if self._health.audio_flowing:
+                        # State transition: flowing -> not flowing
+                        logger.warning(
+                            f"'{self.source_name}': Audio flow stopped - "
+                            f"no data for {time_since_audio:.1f}s (timeout: {self._audio_timeout_seconds}s)"
+                        )
                     self._health.audio_flowing = False
+            
+            # Log state transitions for debugging
+            if prev_flowing != self._health.audio_flowing:
+                if self._health.audio_flowing:
+                    logger.info(
+                        f"'{self.source_name}': Audio flow started - "
+                        f"processed {self._samples_processed:,} samples so far"
+                    )
 
             # Calculate health score
             health_factors = [
@@ -356,8 +374,16 @@ class EASMonitorV2:
                             f"({empty_reads * self._chunk_duration_ms / 1000:.1f}s)"
                         )
                     
-                    # Back off to avoid busy-waiting
-                    time.sleep(0.05)
+                    # Adaptive backoff to avoid busy-waiting and reduce CPU load
+                    # First 10 empty reads: 50ms (fast recovery)
+                    # 11-50 empty reads: 100ms (moderate backoff)
+                    # 51+ empty reads: 200ms (aggressive backoff for sustained gaps)
+                    if empty_reads <= 10:
+                        time.sleep(0.05)
+                    elif empty_reads <= 50:
+                        time.sleep(0.1)
+                    else:
+                        time.sleep(0.2)
                     continue
 
                 # Got audio!

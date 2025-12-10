@@ -52,7 +52,7 @@ class BroadcastAudioAdapter:
         broadcast_queue: BroadcastQueue,
         subscriber_id: str,
         sample_rate: int = 44100,  # Native sample rate from audio sources
-        read_timeout: float = 0.5  # Timeout for queue reads in seconds
+        read_timeout: float = 1.0  # Timeout for queue reads in seconds (increased from 0.5s)
     ):
         """
         Initialize broadcast adapter.
@@ -61,9 +61,10 @@ class BroadcastAudioAdapter:
             broadcast_queue: BroadcastQueue instance to subscribe to
             subscriber_id: Unique ID for this subscription (e.g., "eas-monitor")
             sample_rate: Expected sample rate from audio sources (native stream rate)
-            read_timeout: Timeout for queue reads in seconds (default 0.5s).
+            read_timeout: Timeout for queue reads in seconds (default 1.0s).
                          Lower values = more responsive but may cause underruns.
                          Higher values = more resilient to network/system jitter.
+                         Increased from 0.5s to 1.0s to handle transient delays better.
         """
         self.broadcast_queue = broadcast_queue
         self.subscriber_id = subscriber_id
