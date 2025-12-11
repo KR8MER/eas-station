@@ -76,7 +76,7 @@ Traditional development workflows have limitations:
 ┌─────────────────────────────────────────────────────────┐
 │  Linux Server / Raspberry Pi                            │
 │  ┌──────────────────────────────────────────────────┐  │
-│  │  /home/eas-station/                              │  │
+│  │  /opt/eas-station/                               │  │
 │  │  • Code runs HERE                                │  │
 │  │  • zencoder.ai executes commands HERE            │  │
 │  │  • Debugger attaches HERE                        │  │
@@ -195,7 +195,7 @@ While waiting for approval, use the [30-day free trial](https://www.jetbrains.co
 #### Open the EAS Station Directory
 
 1. Once connected, click **File** → **Open Folder**
-2. Type or navigate to: `/home/eas-station` (or `/opt/eas-station` for older installations)
+2. Type or navigate to: `/opt/eas-station`
 3. Click **OK**
 4. Enter your password again if prompted
 
@@ -203,10 +203,8 @@ While waiting for approval, use the [30-day free trial](https://www.jetbrains.co
 
 1. **Press `Ctrl+Shift+P` / `Cmd+Shift+P`** to open command palette
 2. Type: `Python: Select Interpreter`
-3. Choose the Python interpreter used by your installation:
-   - For standard installations: `/usr/bin/python3` (system Python)
-   - For installations with venv: `/home/eas-station/venv/bin/python` or `/opt/eas-station/venv/bin/python`
-   - If you don't see the correct interpreter, click **Enter interpreter path** and type it manually
+3. Choose: `/opt/eas-station/venv/bin/python` (the virtual environment Python)
+   - If you don't see it, click **Enter interpreter path** and type it manually
 
 **✅ VS Code is now configured!** Skip to [Part 2](#part-2-enabling-zenco derai-to-run-code).
 
@@ -233,7 +231,7 @@ While waiting for approval, use the [30-day free trial](https://www.jetbrains.co
    - Click **Test Connection** - you should see "Successfully connected"
 7. Configure the **Mappings** tab:
    - **Local path**: Your local project folder (can be empty for now)
-   - **Deployment path**: `/home/eas-station` (or `/opt/eas-station` for older installations)
+   - **Deployment path**: `/opt/eas-station`
    - **Web path**: (leave empty)
 8. Click **OK**
 
@@ -244,13 +242,10 @@ While waiting for approval, use the [30-day free trial](https://www.jetbrains.co
 3. Select **SSH Interpreter**
 4. Choose **Existing server configuration** and select the server you just created
 5. Click **Next**
-6. Set the interpreter path to match your installation:
-   - For standard installations: `/usr/bin/python3` (system Python)
-   - For installations with venv: `/home/eas-station/venv/bin/python` or `/opt/eas-station/venv/bin/python`
-   - If unsure, connect to your server via SSH and run: `which python3`
+6. Set the interpreter path: `/opt/eas-station/venv/bin/python`
 7. Configure sync folders:
    - **Local**: Your project folder
-   - **Remote**: `/home/eas-station` (or `/opt/eas-station` for older installations)
+   - **Remote**: `/opt/eas-station`
 8. Click **Finish**
 9. Wait for PyCharm to sync files and index the project (this can take 2-5 minutes)
 
@@ -283,18 +278,9 @@ The first IP address (e.g., `192.168.1.100`) is your server's local network IP.
 **On the Linux Server (Raspberry Pi or Debian/Ubuntu):**
 - EAS Station installed via bare metal installation (`install.sh`)
 - SSH server enabled
-- Installation directory: `/home/eas-station` (default) or `/opt/eas-station` (older installations)
+- Installation directory: `/opt/eas-station`
 - Services running via systemd
 - Network connection (same network as your computer, or internet-accessible)
-
-**To find your installation directory**, connect to your server and run:
-```bash
-# Check where the eas-station user's home directory is
-getent passwd eas-station | cut -d: -f6
-
-# Or check where the systemd services point to
-grep WorkingDirectory /etc/systemd/system/eas-station-web.service
-```
 
 **On Your Development Computer (Windows/Mac/Linux):**
 - PyCharm Professional OR VS Code (we'll help you choose)
@@ -342,11 +328,11 @@ When you installed VS Code or PyCharm and connected it to your server via SSH:
 - When zencoder.ai suggests code changes, those changes happen **on the server**
 
 Think of it like this:
-```bash
+```
 Your Computer                    The Server (Raspberry Pi)
 ┌─────────────┐                 ┌──────────────────────┐
 │   Your IDE  │  SSH Connection │  EAS Station Files   │
-│  (VSCode or │────────────────>│  /home/eas-station/  │
+│  (VSCode or │────────────────>│  /opt/eas-station/   │
 │  PyCharm)   │    (encrypted)  │                      │
 │             │                 │  Python runs HERE    │
 │ zencoder.ai │────────────────>│  Database is HERE    │
@@ -478,11 +464,10 @@ eas-station ALL=(ALL) NOPASSWD: /usr/bin/redis-cli
 
 # -------------------- File Management --------------------
 # Fix file ownership and permissions if needed
-# Note: Replace /home/eas-station with your actual installation path (e.g., /opt/eas-station for older installations)
-eas-station ALL=(ALL) NOPASSWD: /bin/chown -R eas-station\:eas-station /home/eas-station/*
-eas-station ALL=(ALL) NOPASSWD: /bin/chmod * /home/eas-station/*
-eas-station ALL=(ALL) NOPASSWD: /bin/ls -la /home/eas-station/*
-eas-station ALL=(ALL) NOPASSWD: /usr/bin/find /home/eas-station/*
+eas-station ALL=(ALL) NOPASSWD: /bin/chown -R eas-station\:eas-station /opt/eas-station/*
+eas-station ALL=(ALL) NOPASSWD: /bin/chmod * /opt/eas-station/*
+eas-station ALL=(ALL) NOPASSWD: /bin/ls -la /opt/eas-station/*
+eas-station ALL=(ALL) NOPASSWD: /usr/bin/find /opt/eas-station/*
 
 # -------------------- Network Testing --------------------
 # Test network connectivity
