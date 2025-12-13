@@ -142,6 +142,25 @@ else:
 print(f"[CAP_POLLER] Loading fallback .env file (if exists)")
 load_dotenv(override=False)
 print(f"[CAP_POLLER] Environment loading complete")
+
+# Debug: Check if DATABASE_URL is in environment
+_db_url_check = os.getenv("DATABASE_URL")
+if _db_url_check:
+    # Mask password in URL for security
+    _masked_url = _db_url_check
+    if "://" in _masked_url and "@" in _masked_url:
+        _parts = _masked_url.split("://", 1)
+        if len(_parts) == 2:
+            _scheme = _parts[0]
+            _rest = _parts[1]
+            if "@" in _rest:
+                _auth, _host = _rest.split("@", 1)
+                if ":" in _auth:
+                    _user, _pass = _auth.split(":", 1)
+                    _masked_url = f"{_scheme}://{_user}:***@{_host}"
+    print(f"[CAP_POLLER] DATABASE_URL found in environment: {_masked_url}")
+else:
+    print(f"[CAP_POLLER] WARNING: DATABASE_URL not found in environment - will use defaults")
 print(f"[CAP_POLLER] Importing SQLAlchemy and app modules...")
 from sqlalchemy import create_engine, text, func, or_
 from sqlalchemy.orm import sessionmaker

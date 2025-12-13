@@ -228,6 +228,25 @@ if _config_path:
 else:
     load_dotenv(override=True)
 
+# Debug: Check if DATABASE_URL was loaded
+_db_url_check = os.getenv('DATABASE_URL')
+if _db_url_check:
+    # Mask password in URL for security
+    _masked_url = _db_url_check
+    if '://' in _masked_url and '@' in _masked_url:
+        _parts = _masked_url.split('://', 1)
+        if len(_parts) == 2:
+            _scheme = _parts[0]
+            _rest = _parts[1]
+            if '@' in _rest:
+                _auth, _host = _rest.split('@', 1)
+                if ':' in _auth:
+                    _user, _pass = _auth.split(':', 1)
+                    _masked_url = f'{_scheme}://{_user}:***@{_host}'
+    logger.info(f'DATABASE_URL found in environment: {_masked_url}')
+else:
+    logger.warning('DATABASE_URL not found in environment - will attempt to build from defaults')
+
 # Restore Icecast auto-config from environment if auto-streaming is enabled
 # This prevents persistent .env from breaking auto-streaming with mismatched passwords
 if _env_icecast_enabled and _env_icecast_enabled.lower() in ('true', '1', 'yes', 'enabled'):
