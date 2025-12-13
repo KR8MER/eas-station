@@ -2809,9 +2809,7 @@ def main():
     print("[CAP_POLLER] ========================================")
     parser = argparse.ArgumentParser(description='Emergency CAP Alert Poller (configurable feeds)')
     print("[CAP_POLLER] Reading database URL from environment...")
-    database_url = os.getenv('DATABASE_URL')
-    if not database_url:
-        raise ValueError("DATABASE_URL environment variable is required")
+    database_url = build_database_url_from_env()
     parser.add_argument('--database-url',
                         default=database_url,
                         help='SQLAlchemy DB URL (from DATABASE_URL env var)')
