@@ -48,8 +48,15 @@ def mask_database_url(url: str) -> str:
             netloc = f"{parsed.username}:***@{parsed.hostname}"
             if parsed.port:
                 netloc += f":{parsed.port}"
-            masked = parsed._replace(netloc=netloc)
-            return urlunparse(masked)
+            # Use urlunparse with explicit tuple to avoid using private _replace
+            return urlunparse((
+                parsed.scheme,
+                netloc,
+                parsed.path,
+                parsed.params,
+                parsed.query,
+                parsed.fragment
+            ))
         return url
     except Exception:
         # If parsing fails, return as-is to avoid breaking logging
