@@ -20,8 +20,40 @@ Repository: https://github.com/KR8MER/eas-station
 """Formatting helpers for user-facing values."""
 
 from typing import Union
+from urllib.parse import urlparse, urlunparse
 
 Number = Union[int, float]
+
+
+def mask_database_url(url: str) -> str:
+    """
+    Mask password in a database URL for safe logging.
+    
+    Args:
+        url: Database connection URL (e.g., postgresql://user:pass@host:port/db)
+        
+    Returns:
+        URL with password replaced by '***' (e.g., postgresql://user:***@host:port/db)
+        
+    Examples:
+        >>> mask_database_url('postgresql://user:secret@localhost:5432/db')
+        'postgresql://user:***@localhost:5432/db'
+        >>> mask_database_url('postgresql://user@localhost:5432/db')
+        'postgresql://user@localhost:5432/db'
+    """
+    try:
+        parsed = urlparse(url)
+        if parsed.password:
+            # Reconstruct URL with masked password
+            netloc = f"{parsed.username}:***@{parsed.hostname}"
+            if parsed.port:
+                netloc += f":{parsed.port}"
+            masked = parsed._replace(netloc=netloc)
+            return urlunparse(masked)
+        return url
+    except Exception:
+        # If parsing fails, return as-is to avoid breaking logging
+        return url
 
 
 def format_bytes(bytes_value: Number) -> str:

@@ -142,25 +142,6 @@ else:
 print(f"[CAP_POLLER] Loading fallback .env file (if exists)")
 load_dotenv(override=False)
 print(f"[CAP_POLLER] Environment loading complete")
-
-# Debug: Check if DATABASE_URL is in environment
-_db_url_check = os.getenv("DATABASE_URL")
-if _db_url_check:
-    # Mask password in URL for security
-    _masked_url = _db_url_check
-    if "://" in _masked_url and "@" in _masked_url:
-        _parts = _masked_url.split("://", 1)
-        if len(_parts) == 2:
-            _scheme = _parts[0]
-            _rest = _parts[1]
-            if "@" in _rest:
-                _auth, _host = _rest.split("@", 1)
-                if ":" in _auth:
-                    _user, _pass = _auth.split(":", 1)
-                    _masked_url = f"{_scheme}://{_user}:***@{_host}"
-    print(f"[CAP_POLLER] DATABASE_URL found in environment: {_masked_url}")
-else:
-    print(f"[CAP_POLLER] WARNING: DATABASE_URL not found in environment - will use defaults")
 print(f"[CAP_POLLER] Importing SQLAlchemy and app modules...")
 from sqlalchemy import create_engine, text, func, or_
 from sqlalchemy.orm import sessionmaker
@@ -196,7 +177,15 @@ from app_utils.location_settings import (
 )
 print(f"[CAP_POLLER] Importing app_utils.optimized_parsing...")
 from app_utils.optimized_parsing import json_loads, json_dumps, parse_xml_string, get_element_tree_module
+from app_utils.formatting import mask_database_url
 print(f"[CAP_POLLER] All app module imports complete!")
+
+# Debug: Check if DATABASE_URL is in environment (after imports so we can use mask_database_url)
+_db_url_check = os.getenv("DATABASE_URL")
+if _db_url_check:
+    print(f"[CAP_POLLER] DATABASE_URL found in environment: {mask_database_url(_db_url_check)}")
+else:
+    print(f"[CAP_POLLER] WARNING: DATABASE_URL not found in environment - will use defaults")
 
 # Use optimized XML parser (lxml if available, else xml.etree.ElementTree)
 ET = get_element_tree_module()
