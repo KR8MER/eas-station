@@ -7,6 +7,12 @@ tracks releases under the 2.x series.
 ## [Unreleased]
 
 ### Fixed
+- **Development Environment .env Loading** - Fixed PermissionError when running in PyCharm or other development environments
+  - Added error handling for `load_dotenv()` calls to gracefully handle missing or inaccessible .env files
+  - Updated app.py, eas_service.py, hardware_service.py, sdr_hardware_service.py, eas_monitoring_service.py, fastapi_app.py, fastapi_app_minimal.py, and poller/cap_poller.py
+  - Services now log warnings instead of crashing when .env file is missing or has permission issues
+  - Allows development in PyCharm and other IDEs without requiring .env file to exist
+  - VERSION bumped to 2.23.8 (bug fix)
 - **Systemd Target Cycling Issue** - Fixed eas-station.target repeatedly stopping and starting
   - Changed `Requires=` to `Wants=` for postgresql, redis, nginx dependencies in eas-station.target
   - Hard `Requires=` dependencies were causing cascading restarts whenever PostgreSQL, Redis, or Nginx restarted

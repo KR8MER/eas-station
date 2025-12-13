@@ -24,7 +24,10 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Load environment variables
-load_dotenv(override=True)
+try:
+    load_dotenv(override=True)
+except (PermissionError, FileNotFoundError, OSError) as e:
+    logger.warning(f"Could not load .env file: {e}. Using environment variables only.")
 
 # Configuration
 SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')

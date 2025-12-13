@@ -224,9 +224,15 @@ _env_icecast_enabled = os.environ.get('ICECAST_ENABLED')
 _config_path = os.environ.get('CONFIG_PATH')
 if _config_path:
     logger.info(f"Loading environment from persistent config: {_config_path}")
-    load_dotenv(_config_path, override=True)
+    try:
+        load_dotenv(_config_path, override=True)
+    except (PermissionError, FileNotFoundError, OSError) as e:
+        logger.warning(f"Could not load .env from {_config_path}: {e}. Using environment variables only.")
 else:
-    load_dotenv(override=True)
+    try:
+        load_dotenv(override=True)
+    except (PermissionError, FileNotFoundError, OSError) as e:
+        logger.warning(f"Could not load .env file: {e}. Using environment variables only.")
 
 # Restore Icecast auto-config from environment if auto-streaming is enabled
 # This prevents persistent .env from breaking auto-streaming with mismatched passwords

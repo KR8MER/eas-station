@@ -73,13 +73,22 @@ MIN_AUDIO_SAMPLE_RATE = 8000  # Minimum valid audio sample rate (Hz)
 _config_path = os.environ.get('CONFIG_PATH')
 if _config_path:
     if os.path.exists(_config_path):
-        load_dotenv(_config_path, override=True)
-        logger.info(f"✅ Loaded environment from: {_config_path}")
+        try:
+            load_dotenv(_config_path, override=True)
+            logger.info(f"✅ Loaded environment from: {_config_path}")
+        except (PermissionError, OSError) as e:
+            logger.warning(f"⚠️  Could not load .env from {_config_path}: {e}. Using environment variables only.")
     else:
         logger.warning(f"⚠️  CONFIG_PATH set but file not found: {_config_path}")
-        load_dotenv(override=True)  # Fall back to default .env
+        try:
+            load_dotenv(override=True)  # Fall back to default .env
+        except (PermissionError, FileNotFoundError, OSError) as e:
+            logger.warning(f"Could not load .env file: {e}. Using environment variables only.")
 else:
-    load_dotenv(override=True)  # Use default .env location
+    try:
+        load_dotenv(override=True)  # Use default .env location
+    except (PermissionError, FileNotFoundError, OSError) as e:
+        logger.warning(f"Could not load .env file: {e}. Using environment variables only.")
 
 # Global state with thread-safe access
 _state_lock = threading.Lock()

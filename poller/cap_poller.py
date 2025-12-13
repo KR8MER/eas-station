@@ -128,14 +128,20 @@ print(f"[CAP_POLLER] Master config path: {_config_path}")
 print(f"[CAP_POLLER] Config file exists: {_config_path.exists() if _config_path else False}")
 if _config_path and _config_path.exists():
     print(f"[CAP_POLLER] Loading master config from: {_config_path}")
-    load_dotenv(_config_path, override=True)
-    print(f"[CAP_POLLER] Master config loaded successfully")
+    try:
+        load_dotenv(_config_path, override=True)
+        print(f"[CAP_POLLER] Master config loaded successfully")
+    except (PermissionError, OSError) as e:
+        print(f"[CAP_POLLER] Warning: Could not load .env from {_config_path}: {e}. Using environment variables only.")
 else:
     print(f"[CAP_POLLER] Master config not found, using environment variables only")
 
 # Always load a local .env file last so it only fills in missing values
 print(f"[CAP_POLLER] Loading fallback .env file (if exists)")
-load_dotenv(override=True)
+try:
+    load_dotenv(override=True)
+except (PermissionError, FileNotFoundError, OSError) as e:
+    print(f"[CAP_POLLER] Warning: Could not load .env file: {e}. Using environment variables only.")
 print(f"[CAP_POLLER] Environment loading complete")
 print(f"[CAP_POLLER] Importing SQLAlchemy and app modules...")
 from sqlalchemy import create_engine, text, func, or_
