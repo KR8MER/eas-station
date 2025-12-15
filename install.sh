@@ -247,12 +247,24 @@ if ! command -v whiptail &> /dev/null; then
     echo_error "whiptail is required for interactive installation"
     echo_info "whiptail provides the blue/gray dialog boxes for interactive configuration"
     echo_info "Installing whiptail package..."
-    apt-get update > /dev/null 2>&1
-    apt-get install -y whiptail > /dev/null 2>&1
     
-    if ! command -v whiptail &> /dev/null; then
+    # Set DEBIAN_FRONTEND to avoid interactive prompts
+    export DEBIAN_FRONTEND=noninteractive
+    
+    if ! apt-get update; then
+        echo_error "Failed to update package lists for whiptail installation"
+        exit 1
+    fi
+    
+    if ! apt-get install -y whiptail; then
         echo_error "Failed to install whiptail. Please install manually:"
         echo_error "  sudo apt-get install whiptail"
+        exit 1
+    fi
+    
+    if ! command -v whiptail &> /dev/null; then
+        echo_error "whiptail installation succeeded but command not found"
+        echo_error "Please install manually: sudo apt-get install whiptail"
         exit 1
     fi
     echo_success "whiptail installed successfully"
@@ -1073,7 +1085,12 @@ echo_success "✓ Configuration complete! Starting installation..."
 echo_step "Update Package Lists"
 
 echo_progress "Updating package lists..."
-apt-get update > /dev/null 2>&1
+if ! apt-get update; then
+    echo_error "Failed to update package lists"
+    echo_info "This may be due to network issues or repository problems"
+    echo_info "Please check your internet connection and try again"
+    exit 1
+fi
 echo_success "Package lists updated"
 
 echo_step "Install System Dependencies"
@@ -1090,8 +1107,13 @@ echo -e "  ${DIM}• SDR libraries (RTL-SDR, Airspy, SoapySDR)${NC}"
 echo -e "  ${DIM}• SSL certificate tools (Certbot)${NC}"
 echo ""
 echo_progress "Downloading and installing packages (please wait)..."
+echo_info "Output will be shown below so you can track progress and see any errors:"
+echo ""
 
-apt-get install -y \
+# Set DEBIAN_FRONTEND to avoid interactive prompts
+export DEBIAN_FRONTEND=noninteractive
+
+if ! apt-get install -y \
     python3 \
     python3-pip \
     python3-venv \
@@ -1139,7 +1161,18 @@ apt-get install -y \
     python3-lgpio \
     git \
     curl \
-    wget > /dev/null 2>&1
+    wget; then
+    echo ""
+    echo_error "Failed to install system dependencies"
+    echo_info "This may be due to:"
+    echo_info "  • Network connectivity issues"
+    echo_info "  • Repository availability problems"
+    echo_info "  • Package conflicts"
+    echo_info "  • Insufficient disk space"
+    echo ""
+    echo_info "Please check the error messages above and try again"
+    exit 1
+fi
 
 echo ""
 echo_success "✓ System dependencies installed successfully"
