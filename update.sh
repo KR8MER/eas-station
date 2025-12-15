@@ -212,11 +212,21 @@ echo_success "Installation directory found: $INSTALL_DIR"
 # Check if whiptail is available (for TUI dialogs)
 if ! command -v whiptail &> /dev/null; then
     echo_warning "whiptail not found - installing for interactive dialogs..."
-    apt-get update > /dev/null 2>&1
-    apt-get install -y whiptail > /dev/null 2>&1
     
-    if ! command -v whiptail &> /dev/null; then
-        echo_error "Failed to install whiptail. Continuing without TUI..."
+    # Set DEBIAN_FRONTEND to avoid interactive prompts
+    export DEBIAN_FRONTEND=noninteractive
+    
+    if ! apt-get update; then
+        echo_warning "Failed to update package lists for whiptail installation"
+        echo_info "Continuing without TUI..."
+        USE_WHIPTAIL=false
+    elif ! apt-get install -y whiptail; then
+        echo_warning "Failed to install whiptail"
+        echo_info "Continuing without TUI..."
+        USE_WHIPTAIL=false
+    elif ! command -v whiptail &> /dev/null; then
+        echo_warning "whiptail installation succeeded but command not found"
+        echo_info "Continuing without TUI..."
         USE_WHIPTAIL=false
     else
         echo_success "whiptail installed successfully"
@@ -570,12 +580,21 @@ fi
 # Update system dependencies (after code pull so new deps are included)
 echo_step "Updating System Dependencies"
 echo_progress "Installing any new system packages..."
+echo_info "Output will be shown below so you can track progress and see any errors:"
+echo ""
 
-apt-get update > /dev/null 2>&1
+# Set DEBIAN_FRONTEND to avoid interactive prompts
+export DEBIAN_FRONTEND=noninteractive
+
+if ! apt-get update; then
+    echo_warning "Failed to update package lists"
+    echo_info "This may be due to network issues or repository problems"
+    echo_info "Continuing with update, but some packages may not be updated"
+fi
 
 # Install all required system dependencies (matches install.sh)
 # This ensures new dependencies added in updates are installed
-apt-get install -y \
+if ! apt-get install -y \
     python3-dev \
     build-essential \
     libpq-dev \
@@ -603,7 +622,13 @@ apt-get install -y \
     libairspy0 \
     i2c-tools \
     python3-smbus \
-    python3-lgpio > /dev/null 2>&1
+    python3-lgpio; then
+    echo ""
+    echo_warning "Some system dependencies failed to install"
+    echo_info "This may not affect the update, but check the errors above"
+    echo_info "You can manually install missing packages later if needed"
+    echo ""
+fi
 
 echo_success "System dependencies up to date"
 
