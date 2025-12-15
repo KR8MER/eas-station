@@ -592,6 +592,10 @@ if ! apt-get update; then
     echo_info "Continuing with update, but some packages may not be updated"
 fi
 
+echo_progress "Installing any new system packages..."
+echo_info "This may take a few minutes. Output shown below:"
+echo ""
+
 # Install all required system dependencies (matches install.sh)
 # This ensures new dependencies added in updates are installed
 if ! apt-get install -y \
@@ -630,6 +634,7 @@ if ! apt-get install -y \
     echo ""
 fi
 
+echo ""
 echo_success "System dependencies up to date"
 
 # Update Python dependencies

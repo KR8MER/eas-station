@@ -6,6 +6,31 @@ tracks releases under the 2.x series.
 
 ## [Unreleased]
 
+### Fixed
+- **Update Script Freezing** - Fixed update.sh hanging at "Updating System Dependencies" step
+  - Removed `-qq` flag from apt-get install to show actual progress output (was suppressing all output making it appear frozen)
+  - Kept `DEBIAN_FRONTEND=noninteractive` to prevent interactive prompts from package configuration
+  - Now shows full apt-get output so users can see installation progress and diagnose any issues
+  - Matches install.sh behavior for consistency
+  - VERSION bumped to 2.27.21 (bug fix)
+- **Alembic Migration Idempotency** - Fixed migrations hanging when tables already exist
+  - Added table existence checks to hardware_settings and icecast_settings migrations
+  - Migrations now skip table creation if table already exists (idempotent)
+  - Prevents "table already exists" errors that cause update.sh to hang
+  - Fixes issue where update would stop after "Context impl PostgresqlImpl" message
+  - VERSION bumped to 2.27.19 (bug fix)
+
+### Removed
+- **Internal Documentation Cleanup** - Removed internal planning and working memory documents (16 total files)
+  - **Architecture planning docs**: Deleted REWRITE_PLAN_SUMMARY.md, REWRITE_ARCHITECTURE.md, REWRITE_ROADMAP.md, CODEBASE_INVENTORY.md, CODE_MODERNIZATION_RECOMMENDATIONS.md, APP_PY_REFACTORING_PLAN.md, LIBRARY_REPLACEMENT_AUDIT.md, LIBRARY_REPLACEMENT_IMPLEMENTATION_PLAN.md, SDR_ARCHITECTURE_REFACTORING.md, MIGRATION_GUIDE.md (planning for theoretical rewrite, not current system)
+  - **Internal working memory**: Deleted CLAUDE_MEMORY.md, SDR_WORKING_MEMORY.md (AI agent internal context, not user documentation)
+  - **Dated status reports**: Deleted CRITICAL_ISSUES_STATUS.md, VALIDATION_REPORT.md, ARCHITECTURE_REVIEW_BUGS.md (issues already fixed or addressed)
+  - **Auto-generated stats**: Deleted static/docs/REPO_STATS.md (auto-generated, outdated: 2025-11-29)
+  - **Old templates**: Deleted templates/settings/network_old.html (unreferenced old template file)
+  - These documents were internal/temporary and not user-facing documentation
+  - Active architecture docs remain in docs/architecture/ (SYSTEM_ARCHITECTURE.md, THEORY_OF_OPERATION.md, etc.)
+  - VERSION bumped to 2.27.18 (documentation cleanup)
+
 ### Changed
 - **Documentation Organization** - Cleaned up and reorganized all documentation
   - Moved `docs/TROUBLESHOOTING_504_TIMEOUT.md` to `docs/troubleshooting/` subdirectory

@@ -35,6 +35,14 @@ def _parse_int(value, default=0):
 
 
 def upgrade():
+    # Check if table already exists (idempotent migration)
+    connection = op.get_bind()
+    inspector = sa.inspect(connection)
+    
+    if 'icecast_settings' in inspector.get_table_names():
+        print("icecast_settings table already exists, skipping creation")
+        return
+    
     # Create icecast_settings table
     op.create_table(
         'icecast_settings',

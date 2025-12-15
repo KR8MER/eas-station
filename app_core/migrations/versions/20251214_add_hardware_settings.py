@@ -60,6 +60,14 @@ def _parse_json(value, default=None):
 
 
 def upgrade():
+    # Check if table already exists (idempotent migration)
+    connection = op.get_bind()
+    inspector = sa.inspect(connection)
+    
+    if 'hardware_settings' in inspector.get_table_names():
+        print("hardware_settings table already exists, skipping creation")
+        return
+    
     # Create hardware_settings table
     op.create_table(
         'hardware_settings',
