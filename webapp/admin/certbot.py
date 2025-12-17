@@ -51,6 +51,14 @@ CERTBOT_CONFIG_DIR = CERTBOT_BASE_DIR / 'config'
 CERTBOT_WORK_DIR = CERTBOT_BASE_DIR / 'work'
 CERTBOT_LOGS_DIR = CERTBOT_BASE_DIR / 'logs'
 
+# Nginx log files that need to exist for certbot nginx plugin
+NGINX_LOG_FILES = [
+    '/var/log/nginx/error.log',
+    '/var/log/nginx/access.log',
+    '/var/log/nginx/eas-station-error.log',
+    '/var/log/nginx/eas-station-access.log'
+]
+
 
 def _ensure_certbot_directories():
     """Ensure certbot directories exist with proper permissions.
@@ -99,8 +107,7 @@ def _ensure_certbot_directories():
         )
         
         # Create log files if they don't exist
-        for log_file in ['/var/log/nginx/error.log', '/var/log/nginx/access.log',
-                        '/var/log/nginx/eas-station-error.log', '/var/log/nginx/eas-station-access.log']:
+        for log_file in NGINX_LOG_FILES:
             subprocess.run(
                 ['sudo', 'touch', log_file],
                 capture_output=True,

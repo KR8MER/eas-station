@@ -19,7 +19,6 @@ tracks releases under the 2.x series.
   - Fixes: "Permission denied" when certbot standalone mode tries to bind to port 80
   - Related errors: `/var/log/nginx/error.log` access denied, port 80 binding failure
 
-### Fixed
 - **Certbot Port 80 Permission Error** - Fixed certbot standalone mode failing to bind to port 80
   - Changed default certificate acquisition method from `standalone` to `nginx` plugin
   - Nginx plugin doesn't require stopping nginx or binding to privileged ports
