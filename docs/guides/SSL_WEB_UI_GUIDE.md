@@ -181,6 +181,53 @@ This tab provides four main sections:
 - SSL certificate operations require `system.configure` permission
 - Only users with this permission can access the SSL Certificates page
 - All operations are logged for audit purposes
+- **System Requirements**: Certbot operations require proper sudo configuration
+
+#### Sudo Configuration
+
+The application requires sudo permissions for certbot operations. These are configured in `/etc/sudoers.d/eas-station`:
+
+```bash
+# Install sudoers configuration (done automatically during installation)
+sudo cp config/sudoers-eas-station /etc/sudoers.d/eas-station
+sudo chmod 440 /etc/sudoers.d/eas-station
+```
+
+**Required permissions include:**
+- Running certbot commands (requires root for port 80 binding and system file modifications)
+- Managing nginx service (start, stop, restart, reload)
+- Creating and managing certbot data directories
+- Creating and managing nginx log directories (required for nginx plugin)
+- Managing certbot.timer systemd service
+
+#### Certbot Service Configuration
+
+The certbot systemd service (`/etc/systemd/system/certbot.service`) must run as root because:
+1. Certbot needs to bind to port 80 (privileged port, requires root or CAP_NET_BIND_SERVICE)
+2. Certbot needs to write to system directories like `/etc/letsencrypt`
+3. Certbot needs to reload nginx after certificate renewal
+
+The service is configured with:
+- `User=root` - Required for privileged operations
+- Custom directories in `/opt/eas-station/certbot_data/` for config, work, and logs
+- `PrivateTmp=yes` - Isolates /tmp from other processes for security
+
+#### Nginx Log Directory Permissions
+
+The nginx plugin requires nginx to run configuration tests, which involves writing to log files. The application automatically:
+1. Creates `/var/log/nginx` directory if it doesn't exist
+2. Sets permissions to 755 (readable by all, writable by owner)
+3. Sets ownership to `www-data:www-data` (nginx user)
+4. Creates necessary log files with proper permissions
+
+If you encounter "Permission denied" errors related to nginx logs, the system will attempt to fix these automatically. If issues persist, manually verify:
+```bash
+sudo mkdir -p /var/log/nginx
+sudo chmod 755 /var/log/nginx
+sudo chown www-data:www-data /var/log/nginx
+sudo touch /var/log/nginx/error.log /var/log/nginx/access.log
+sudo chown www-data:www-data /var/log/nginx/*.log
+```
 
 ### Safe Operations
 
@@ -221,6 +268,63 @@ Best practices:
 ```bash
 sudo apt-get update
 sudo apt-get install certbot python3-certbot-nginx
+```
+
+### "Permission denied" errors
+
+**Symptom:** Errors like:
+- `PermissionError: [Errno 13] Permission denied` when binding to port 80
+- `open() "/var/log/nginx/error.log" failed (13: Permission denied)`
+- `Could not bind TCP port 80 because you don't have the appropriate permissions`
+
+**Possible causes:**
+1. Sudoers configuration not properly installed
+2. Nginx log directory doesn't exist or has wrong permissions
+3. Certbot service not configured to run as root
+
+**Solutions:**
+
+1. **Check and reinstall sudoers configuration:**
+   ```bash
+   sudo cp config/sudoers-eas-station /etc/sudoers.d/eas-station
+   sudo chmod 440 /etc/sudoers.d/eas-station
+   sudo visudo -c  # Verify syntax
+   ```
+
+2. **Fix nginx log directory permissions:**
+   ```bash
+   sudo mkdir -p /var/log/nginx
+   sudo chmod 755 /var/log/nginx
+   sudo chown www-data:www-data /var/log/nginx
+   sudo touch /var/log/nginx/error.log /var/log/nginx/access.log
+   sudo chown www-data:www-data /var/log/nginx/*.log
+   ```
+
+3. **Verify certbot service configuration:**
+   ```bash
+   sudo systemctl cat certbot.service | grep User
+   # Should show: User=root
+   
+   # If not, reinstall the service file:
+   sudo cp systemd/certbot.service /etc/systemd/system/
+   sudo systemctl daemon-reload
+   ```
+
+4. **Use nginx plugin instead of standalone:**
+   - The nginx plugin doesn't require stopping nginx or binding to port 80
+   - It requires nginx to be running and properly configured
+   - Select "Nginx Plugin (Recommended - No Downtime)" in the web UI
+
+5. **Verify certbot data directory permissions:**
+   ```bash
+   sudo mkdir -p /opt/eas-station/certbot_data/{config,work,logs}
+   sudo chmod -R 777 /opt/eas-station/certbot_data
+   ```
+
+**Prevention:** The application automatically attempts to fix these permissions when you obtain or renew certificates. If issues persist after trying these solutions, check system logs:
+```bash
+sudo journalctl -u certbot.service -n 50
+sudo journalctl -u nginx -n 50
 ```
 
 ### "Failed to stop nginx"

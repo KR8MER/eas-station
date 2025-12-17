@@ -58,6 +58,9 @@ def _ensure_certbot_directories():
     Creates directories if they don't exist and sets permissions to allow
     both the web app user and root (via sudo) to write to them.
     Also removes stale lock files that can cause permission errors.
+    
+    Additionally ensures nginx log directory exists with proper permissions,
+    which is required for certbot nginx plugin to run config tests.
 
     Uses sudo for all operations since certbot runs as root and creates
     root-owned files that the web app user cannot modify.
@@ -87,7 +90,38 @@ def _ensure_certbot_directories():
             timeout=10
         )
 
-        logger.info(f"Certbot directories configured: {CERTBOT_BASE_DIR}")
+        # Ensure nginx log directory exists with proper permissions
+        # This is required for certbot nginx plugin which runs nginx config tests
+        subprocess.run(
+            ['sudo', 'mkdir', '-p', '/var/log/nginx'],
+            capture_output=True,
+            timeout=5
+        )
+        
+        # Create log files if they don't exist
+        for log_file in ['/var/log/nginx/error.log', '/var/log/nginx/access.log',
+                        '/var/log/nginx/eas-station-error.log', '/var/log/nginx/eas-station-access.log']:
+            subprocess.run(
+                ['sudo', 'touch', log_file],
+                capture_output=True,
+                timeout=5
+            )
+        
+        # Set proper permissions on nginx log directory
+        subprocess.run(
+            ['sudo', 'chmod', '-R', '755', '/var/log/nginx'],
+            capture_output=True,
+            timeout=5
+        )
+        
+        # Set ownership to www-data (nginx user)
+        subprocess.run(
+            ['sudo', 'chown', '-R', 'www-data:www-data', '/var/log/nginx'],
+            capture_output=True,
+            timeout=5
+        )
+
+        logger.info(f"Certbot and nginx directories configured: {CERTBOT_BASE_DIR}, /var/log/nginx")
     except subprocess.TimeoutExpired:
         logger.warning("Timeout while configuring certbot directories")
     except Exception as e:
@@ -821,21 +855,31 @@ def obtain_certificate_execute():
                     # Check for common permission errors and provide helpful messages
                     if "Permission denied" in error_msg or "Errno 13" in error_msg:
                         error_msg = (
-                            "Permission error: Certbot standalone mode requires root privileges to bind to port 80. "
-                            "Try using the 'nginx' plugin method instead, which doesn't require stopping nginx or "
-                            "binding to privileged ports. Original error: " + error_msg
+                            "Permission error: Certbot requires root privileges. "
+                            "This error may occur if: (1) sudo is not configured properly in /etc/sudoers.d/eas-station, "
+                            "(2) port 80 is already in use by another process, or "
+                            "(3) nginx log files have incorrect permissions. "
+                            "Try using the 'nginx' plugin method instead, or ensure sudo is properly configured. "
+                            "Original error: " + error_msg
                         )
                     elif "port 80" in error_msg.lower() or "address already in use" in error_msg.lower():
                         error_msg = (
-                            "Port 80 is already in use. Another process may be using it. "
-                            "Try using the 'nginx' plugin method instead. Original error: " + error_msg
+                            "Port 80 is already in use. Another process may be using it, or nginx may not have stopped completely. "
+                            "Try using the 'nginx' plugin method instead, which doesn't require stopping nginx. "
+                            "Original error: " + error_msg
+                        )
+                    elif "nginx" in error_msg.lower() and "test failed" in error_msg.lower():
+                        error_msg = (
+                            "Nginx configuration test failed. This may be due to log file permission issues. "
+                            "Ensure /var/log/nginx directory exists and nginx user can write to it. "
+                            "Original error: " + error_msg
                         )
                     
                     return jsonify({
                         "success": False,
                         "error": f"Certbot failed: {error_msg}",
                         "output": certbot_result.stdout,
-                        "suggestion": "Consider using the 'nginx' plugin method which doesn't require stopping nginx or binding to port 80."
+                        "suggestion": "Consider using the 'nginx' plugin method which doesn't require stopping nginx, or check system logs for more details."
                     }), 500
                 
                 logger.info(f"Successfully obtained certificate for {domain}")
@@ -890,9 +934,26 @@ def obtain_certificate_execute():
                 )
                 
                 if result.returncode != 0:
+                    error_msg = result.stderr
+                    
+                    # Check for common nginx plugin errors
+                    if "Permission denied" in error_msg or "Errno 13" in error_msg:
+                        error_msg = (
+                            "Permission error: The nginx plugin requires proper permissions to test nginx configuration and write to log files. "
+                            "Ensure /var/log/nginx directory exists with proper permissions (755) and is owned by www-data. "
+                            "Original error: " + error_msg
+                        )
+                    elif "nginx" in error_msg.lower() and "test failed" in error_msg.lower():
+                        error_msg = (
+                            "Nginx configuration test failed. This is usually caused by log file permission issues. "
+                            "The system has attempted to fix log permissions automatically. If this persists, check that "
+                            "/var/log/nginx directory exists and nginx can write to it. "
+                            "Original error: " + error_msg
+                        )
+                    
                     return jsonify({
                         "success": False,
-                        "error": f"Certbot failed: {result.stderr}",
+                        "error": f"Certbot failed: {error_msg}",
                         "output": result.stdout
                     }), 500
                 

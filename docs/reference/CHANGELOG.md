@@ -7,6 +7,19 @@ tracks releases under the 2.x series.
 ## [Unreleased]
 
 ### Fixed
+- **Certbot Permission Errors** - Fixed permission denied errors when running certbot
+  - Added nginx log directory creation and permission setup in `_ensure_certbot_directories()`
+  - Updated sudoers configuration to allow nginx log file management commands
+  - Added `/var/log/nginx` directory creation with proper permissions (755, owned by www-data)
+  - Fixed certbot.service to run as root (required for binding to port 80 and managing system files)
+  - Removed `NoNewPrivileges=yes` from certbot.service to allow proper privilege escalation
+  - Updated certbot.service to use correct paths (/opt/eas-station instead of /home/user)
+  - Improved error messages for permission errors to provide better diagnostics
+  - Fixes: "Permission denied" when nginx plugin tries to test configuration
+  - Fixes: "Permission denied" when certbot standalone mode tries to bind to port 80
+  - Related errors: `/var/log/nginx/error.log` access denied, port 80 binding failure
+
+### Fixed
 - **Certbot Port 80 Permission Error** - Fixed certbot standalone mode failing to bind to port 80
   - Changed default certificate acquisition method from `standalone` to `nginx` plugin
   - Nginx plugin doesn't require stopping nginx or binding to privileged ports
