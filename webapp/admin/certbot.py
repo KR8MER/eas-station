@@ -857,30 +857,32 @@ def obtain_certificate_execute():
                     logger.error(f"Failed to restart nginx: {start_result.stderr}")
                 
                 if certbot_result.returncode != 0:
-                    error_msg = certbot_result.stderr
+                    original_error = certbot_result.stderr
                     
                     # Check for common permission errors and provide helpful messages
-                    if "Permission denied" in error_msg or "Errno 13" in error_msg:
+                    if "Permission denied" in original_error or "Errno 13" in original_error:
                         error_msg = (
                             "Permission error: Certbot requires root privileges. "
                             "This error may occur if: (1) sudo is not configured properly in /etc/sudoers.d/eas-station, "
                             "(2) port 80 is already in use by another process, or "
                             "(3) nginx log files have incorrect permissions. "
                             "Try using the 'nginx' plugin method instead, or ensure sudo is properly configured. "
-                            "Original error: " + error_msg
+                            f"Original error: {original_error}"
                         )
-                    elif "port 80" in error_msg.lower() or "address already in use" in error_msg.lower():
+                    elif "port 80" in original_error.lower() or "address already in use" in original_error.lower():
                         error_msg = (
                             "Port 80 is already in use. Another process may be using it, or nginx may not have stopped completely. "
                             "Try using the 'nginx' plugin method instead, which doesn't require stopping nginx. "
-                            "Original error: " + error_msg
+                            f"Original error: {original_error}"
                         )
-                    elif "nginx" in error_msg.lower() and "test failed" in error_msg.lower():
+                    elif "nginx" in original_error.lower() and "test failed" in original_error.lower():
                         error_msg = (
                             "Nginx configuration test failed. This may be due to log file permission issues. "
                             "Ensure /var/log/nginx directory exists and nginx user can write to it. "
-                            "Original error: " + error_msg
+                            f"Original error: {original_error}"
                         )
+                    else:
+                        error_msg = original_error
                     
                     return jsonify({
                         "success": False,
@@ -941,22 +943,24 @@ def obtain_certificate_execute():
                 )
                 
                 if result.returncode != 0:
-                    error_msg = result.stderr
+                    original_error = result.stderr
                     
                     # Check for common nginx plugin errors
-                    if "Permission denied" in error_msg or "Errno 13" in error_msg:
+                    if "Permission denied" in original_error or "Errno 13" in original_error:
                         error_msg = (
                             "Permission error: The nginx plugin requires proper permissions to test nginx configuration and write to log files. "
                             "Ensure /var/log/nginx directory exists with proper permissions (755) and is owned by www-data. "
-                            "Original error: " + error_msg
+                            f"Original error: {original_error}"
                         )
-                    elif "nginx" in error_msg.lower() and "test failed" in error_msg.lower():
+                    elif "nginx" in original_error.lower() and "test failed" in original_error.lower():
                         error_msg = (
                             "Nginx configuration test failed. This is usually caused by log file permission issues. "
                             "The system has attempted to fix log permissions automatically. If this persists, check that "
                             "/var/log/nginx directory exists and nginx can write to it. "
-                            "Original error: " + error_msg
+                            f"Original error: {original_error}"
                         )
+                    else:
+                        error_msg = original_error
                     
                     return jsonify({
                         "success": False,
