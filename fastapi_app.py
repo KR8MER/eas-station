@@ -475,15 +475,48 @@ async def request_processing_middleware(request: Request, call_next):
         # Load current user from session
         user_id = request.session.get('user_id')
         if user_id is not None:
-            # TODO: Load user from database
-            # This will need to be implemented with proper async database access
-            pass
+            try:
+                # Load user from database using synchronous session
+                # Note: This uses a new database session for each request
+                # In the future, this should be optimized with async database access
+                from sqlalchemy import select, text
+                from app_core.models import AdminUser
+                
+                SessionLocal = get_session_local()
+                db_session = SessionLocal()
+                try:
+                    user = db_session.execute(
+                        select(AdminUser).where(AdminUser.id == user_id)
+                    ).scalar_one_or_none()
+                    
+                    if user and user.is_active:
+                        request.state.current_user = user.to_safe_dict()
+                    else:
+                        # User not found or inactive, clear session
+                        request.session.pop('user_id', None)
+                        request.state.current_user = None
+                finally:
+                    db_session.close()
+            except Exception as e:
+                logger.warning(f"Error loading user from database: {e}")
+                request.state.current_user = None
 
         # Check if this is admin setup mode (no users exist)
         try:
-            # TODO: Check user count
-            request.state.admin_setup_mode = False
-        except Exception:
+            from sqlalchemy import select, func
+            from app_core.models import AdminUser
+            
+            SessionLocal = get_session_local()
+            db_session = SessionLocal()
+            try:
+                user_count = db_session.execute(
+                    select(func.count(AdminUser.id))
+                ).scalar()
+                request.state.admin_setup_mode = (user_count == 0)
+            finally:
+                db_session.close()
+        except Exception as e:
+            logger.warning(f"Error checking user count: {e}")
             request.state.admin_setup_mode = False
 
     # CSRF validation for protected methods
@@ -657,8 +690,10 @@ if os.path.exists("static"):
 # ROUTE REGISTRATION
 # =============================================================================
 
-# TODO: Import and register all route modules from webapp/
-# This will be done in subsequent steps of the migration
+# NOTE: Route registration for FastAPI migration is in progress
+# The Flask version (app.py) currently handles all routes via webapp/ modules
+# This FastAPI version will gradually import and register routes as they are converted
+# For now, this app serves as a parallel API alongside the Flask app
 
 logger.info(f"FastAPI app initialized - Version {get_current_version()}")
 if app.state.SETUP_MODE:

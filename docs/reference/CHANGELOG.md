@@ -6,6 +6,19 @@ tracks releases under the 2.x series.
 
 ## [Unreleased]
 
+### Fixed
+- **Code Quality: Improved Exception Handling** - Replaced bare `except:` statements with specific exception types
+  - Fixed 6 instances in `eas_monitoring_service.py` FFmpeg process cleanup code
+  - Now catches specific exceptions: `OSError`, `IOError`, `BrokenPipeError`, `subprocess.TimeoutExpired`, `ProcessLookupError`
+  - Added debug logging for process cleanup errors to aid troubleshooting
+  - Follows Python best practices and improves error visibility
+
+- **FastAPI Migration: Implemented User Authentication** - Completed TODO items in `fastapi_app.py`
+  - Implemented user loading from database in session middleware
+  - Added admin setup mode detection (checks if any users exist)
+  - Uses synchronous database queries until async migration is complete
+  - Properly handles user session lifecycle and inactive users
+
 ### Added
 - **24/7/365 Audio Subsystem Reliability** - Major improvements for continuous operation
   - Enhanced FFmpeg reconnection with 30-second timeout and HTTP error retry (4xx, 5xx)

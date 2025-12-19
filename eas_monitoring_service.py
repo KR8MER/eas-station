@@ -1000,16 +1000,17 @@ def main():
                             if ffmpeg_process.stdin:
                                 try:
                                     ffmpeg_process.stdin.close()
-                                except:
-                                    pass
+                                except (OSError, IOError, BrokenPipeError) as e:
+                                    logger.debug(f"Error closing ffmpeg stdin: {e}")
                             try:
                                 ffmpeg_process.terminate()
                                 ffmpeg_process.wait(timeout=2)
-                            except:
+                            except (OSError, subprocess.TimeoutExpired) as e:
+                                logger.debug(f"Error terminating ffmpeg, forcing kill: {e}")
                                 try:
                                     ffmpeg_process.kill()
-                                except:
-                                    pass
+                                except (OSError, ProcessLookupError) as kill_error:
+                                    logger.debug(f"Error killing ffmpeg process: {kill_error}")
                         logger.debug(f"MP3 stream '{subscriber_id}' ended")
                 
                     """Generator that yields WAV chunks at native sample rate.
@@ -1306,16 +1307,17 @@ def main():
                             if ffmpeg_process.stdin:
                                 try:
                                     ffmpeg_process.stdin.close()
-                                except:
-                                    pass
+                                except (OSError, IOError, BrokenPipeError) as e:
+                                    logger.debug(f"Error closing ffmpeg stdin: {e}")
                             try:
                                 ffmpeg_process.terminate()
                                 ffmpeg_process.wait(timeout=2)
-                            except:
+                            except (OSError, subprocess.TimeoutExpired) as e:
+                                logger.debug(f"Error terminating ffmpeg, forcing kill: {e}")
                                 try:
                                     ffmpeg_process.kill()
-                                except:
-                                    pass
+                                except (OSError, ProcessLookupError) as kill_error:
+                                    logger.debug(f"Error killing ffmpeg process: {kill_error}")
                         logger.info("EAS decoder stream ended")
                 
                 return Response(
