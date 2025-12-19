@@ -49,6 +49,7 @@ If you're new to EAS Station, start here:
 | Document | Description |
 |----------|-------------|
 | [Developer Guidelines](development/AGENTS) | Code standards and architecture |
+| [Code Quality Analysis](development/CODE_QUALITY_ANALYSIS) | Comprehensive codebase review and recommendations |
 | [Contributing Guide](process/CONTRIBUTING) | How to contribute |
 | [System Architecture](architecture/SYSTEM_ARCHITECTURE) | Overall system design |
 | [Theory of Operation](architecture/THEORY_OF_OPERATION) | How the system works |
