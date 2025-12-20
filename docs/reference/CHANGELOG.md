@@ -7,6 +7,15 @@ tracks releases under the 2.x series.
 ## [Unreleased]
 
 ### Fixed
+- **RBDS Decoder Timing Issue** - Fixed garbage PS names like "0io" being reported before all segments received
+  - Root cause: PS name has 4 segments (2 chars each = 8 total) transmitted in Group Type 0
+  - Segments can arrive in any order (0, 1, 2, 3) over time
+  - Decoder was reporting PS name as soon as ANY segment arrived, showing partial/garbage data
+  - Solution: Track which segments have been received in `_ps_segments_received` set
+  - Only report PS name as changed when all 4 segments have been received at least once
+  - Prevents partial names like "0io" from being published to Redis/UI
+  - File: `app_core/radio/demodulation.py` (RBDSDecoder class)
+
 - **CRITICAL: SDR Audio Source Startup Failure** - Fixed `ModuleNotFoundError: No module named 'app_core.radio.rbds'`
   - Root cause: `FMDemodulator._init_rbds_state()` was trying to import `RBDSDecoder` from non-existent `.rbds` module
   - `RBDSDecoder` class is defined in the same file (`app_core/radio/demodulation.py` line 1662)

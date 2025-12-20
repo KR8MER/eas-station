@@ -2055,6 +2055,8 @@ class RBDSDecoder:
         self.ta = None
         self.ms = None
         self._radio_text_ab = 0
+        # Track which PS segments (0-3) have been received to avoid reporting partial data
+        self._ps_segments_received = set()
 
     def process_group(self, group_data: Tuple[int, int, int, int]) -> Optional[bool]:
         """
@@ -2168,6 +2170,19 @@ class RBDSDecoder:
                 )
                 self.ps_name[pos] = char
                 updated = True
+        
+        # Track that this segment was received
+        self._ps_segments_received.add(address)
+        
+        # Only report as updated if all 4 segments (0-3) have been received at least once
+        # This prevents reporting partial/garbage PS names like "0io" before full name arrives
+        if len(self._ps_segments_received) < 4:
+            logger.debug(
+                "RBDS PS: segment %d received, waiting for all 4 segments (have %d/4)",
+                address, len(self._ps_segments_received)
+            )
+            return False  # Don't report as changed until all segments received
+        
         return updated
 
     def _update_radio_text(self, index: int, code: int) -> bool:
