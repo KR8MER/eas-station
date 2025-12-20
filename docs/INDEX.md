@@ -49,6 +49,8 @@ If you're new to EAS Station, start here:
 | Document | Description |
 |----------|-------------|
 | [Developer Guidelines](development/AGENTS) | Code standards and architecture |
+| [Performance Optimization Guide](development/PERFORMANCE_OPTIMIZATION_GUIDE) | Quick reference for performance analysis and optimization strategies |
+| [Python to C Analysis](development/PYTHON_TO_C_ANALYSIS) | Comprehensive analysis of C conversion opportunities |
 | [Contributing Guide](process/CONTRIBUTING) | How to contribute |
 | [System Architecture](architecture/SYSTEM_ARCHITECTURE) | Overall system design |
 | [Theory of Operation](architecture/THEORY_OF_OPERATION) | How the system works |
@@ -164,7 +166,7 @@ docs/
 
 | Metric | Value |
 |--------|-------|
-| Total Documentation Files | 92 |
+| Total Documentation Files | 94 |
 | Essential User Guides | 12 |
 | Architecture Documents | 18 |
 | Troubleshooting Guides | 19 |
@@ -174,6 +176,6 @@ docs/
 
 ---
 
-**Last Updated**: 2025-12-16
-**Version**: 4.4 (Updated documentation statistics, enhanced accuracy)
+**Last Updated**: 2025-12-20
+**Version**: 4.5 (Added performance optimization and Python to C analysis documentation)
 **For questions or contributions, see the [Contributing Guide](process/CONTRIBUTING)**
