@@ -580,6 +580,21 @@ By contributing to EAS Station, you agree that your contributions will be licens
 
 See [LICENSE](LICENSE) and [LICENSE-COMMERCIAL](LICENSE-COMMERCIAL) for details.
 
+### Developer Certificate of Origin (DCO)
+
+This project uses a Developer Certificate of Origin workflow. Each commit must contain a `Signed-off-by` line, which you can add automatically with `git commit -s`.
+
+**Example commit message:**
+```
+Add new alert visualization panel
+
+Improve the admin dashboard by adding visualization.
+
+Signed-off-by: Your Name <you@example.com>
+```
+
+The signature certifies that you wrote the code or have the rights to pass it on under the project license. See [developercertificate.org](https://developercertificate.org/) for details.
+
 ---
 
 ## 🙏 Thank You!

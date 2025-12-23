@@ -197,6 +197,8 @@ redis-cli ping
 
 ### Step 9: Run the Application
 
+> 💡 **Need help connecting to Flask?** See the detailed guide: **[Connecting to Flask](CONNECTING_TO_FLASK.md)**
+
 **Option A: Using VS Code Debugger (Recommended)**
 1. Press `F5`
 2. Select: **"Flask Web App (Development)"**
@@ -216,6 +218,18 @@ FLASK_ENV=development FLASK_DEBUG=true python app.py
 1. Press `Ctrl+Shift+P`
 2. Type: **"Tasks: Run Task"**
 3. Select: **"Flask: Run Development Server"**
+
+**Verify Connection:**
+```bash
+# Test Flask is responding
+curl http://localhost:5000
+# Should return HTML content
+
+# Or open in browser
+# http://localhost:5000
+```
+
+📖 **Full Flask Connection Guide:** [docs/guides/CONNECTING_TO_FLASK.md](CONNECTING_TO_FLASK.md)
 
 ---
 

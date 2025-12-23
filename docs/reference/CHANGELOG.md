@@ -9,8 +9,10 @@ tracks releases under the 2.x series.
 ### Added
 - **VS Code Development Guide and Configuration** - Comprehensive VS Code setup for local and remote development
   - Created `docs/guides/VSCODE_LOCAL_SETUP.md` - Complete guide for local development setup
+  - Created `docs/guides/CONNECTING_TO_FLASK.md` - Detailed guide for connecting to Flask application
   - Created `eas-station.code-workspace` - Pre-configured VS Code workspace file with all settings
   - Created `.vscode/eas-station.code-snippets` - Code snippets for common EAS Station patterns
+  - Created `.vscode/VSCODE_QUICK_START.md` - Quick reference for VS Code setup
   - Created `CONTRIBUTING.md` - Comprehensive contributing guide with VS Code workflow
   - Updated `README.md` with links to VS Code setup guides
   - Workspace includes:
@@ -34,6 +36,7 @@ tracks releases under the 2.x series.
     - Database management
     - Testing procedures
     - Git workflow
+    - Flask connection methods and troubleshooting
     - Troubleshooting common issues
 
 ### Fixed
