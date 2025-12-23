@@ -280,8 +280,9 @@ graph TD
 | **Radio Configuration** | [SDR Setup Guide](docs/hardware/SDR_SETUP) |
 | **Daily Operations** | [User Guide](docs/guides/HELP) |
 | **Deployment** | [Installation Guide](docs/installation/README.md) |
-| **Development** | [Developer Guide](docs/development/AGENTS) |
-| **Remote Development (VSCode)** | [VSCode Setup Guide](.vscode/VSCODE_SETUP.md) - **5-minute setup!** |
+| **Development** | [Developer Guide](docs/development/AGENTS) → [Contributing Guide](CONTRIBUTING.md) |
+| **VS Code Setup (Local)** | [VS Code Local Development Guide](docs/guides/VSCODE_LOCAL_SETUP.md) - **Complete setup guide** |
+| **VS Code Setup (Remote)** | [VS Code Remote SSH Setup](.vscode/VSCODE_SETUP.md) - **5-minute setup!** |
 | **Debugging on Pi** | [PyCharm Remote Debugging Guide](docs/guides/PYCHARM_DEBUGGING) |
 
 **📖 [Complete Documentation Index](docs/INDEX)** - Searchable topics and detailed guides

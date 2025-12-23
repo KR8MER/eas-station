@@ -1,0 +1,366 @@
+{
+  "Flask Route with Database Query": {
+    "prefix": "eas-route",
+    "body": [
+      "@bp.route('/${1:endpoint}')",
+      "def ${2:function_name}():",
+      "    \"\"\"${3:Route description}\"\"\"",
+      "    try:",
+      "        ${4:# Query database}",
+      "        results = ${5:Model}.query.${6:filter_by}(${7:field}=${8:value}).${9:all}()",
+      "        return jsonify({'success': True, 'data': [r.to_dict() for r in results]}), 200",
+      "    except Exception as e:",
+      "        logger.error(f'Error in ${2:function_name}: {str(e)}')",
+      "        return jsonify({'error': str(e)}), 500"
+    ],
+    "description": "Create a Flask route with database query and error handling"
+  },
+  "Flask Route with Form": {
+    "prefix": "eas-route-form",
+    "body": [
+      "@bp.route('/${1:endpoint}', methods=['GET', 'POST'])",
+      "def ${2:function_name}():",
+      "    \"\"\"${3:Route description}\"\"\"",
+      "    if request.method == 'POST':",
+      "        try:",
+      "            ${4:# Process form data}",
+      "            data = request.form.get('${5:field_name}')",
+      "            ",
+      "            ${6:# Save to database}",
+      "            db.session.commit()",
+      "            ",
+      "            flash('${7:Success message}', 'success')",
+      "            return redirect(url_for('${8:blueprint}.${9:endpoint}'))",
+      "        except Exception as e:",
+      "            db.session.rollback()",
+      "            logger.error(f'Error in ${2:function_name}: {str(e)}')",
+      "            flash('${10:Error message}', 'danger')",
+      "    ",
+      "    return render_template('${11:template}.html')"
+    ],
+    "description": "Create a Flask route with form handling"
+  },
+  "Database Model": {
+    "prefix": "eas-model",
+    "body": [
+      "class ${1:ModelName}(db.Model):",
+      "    \"\"\"${2:Model description}\"\"\"",
+      "    __tablename__ = '${3:table_name}'",
+      "    ",
+      "    id = db.Column(db.Integer, primary_key=True)",
+      "    ${4:field_name} = db.Column(db.${5:String}(${6:255}), nullable=${7:False})",
+      "    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)",
+      "    updated_at = db.Column(db.DateTime, nullable=True, default=datetime.utcnow, onupdate=datetime.utcnow)",
+      "    ",
+      "    def to_dict(self):",
+      "        \"\"\"Convert model to dictionary.\"\"\"",
+      "        return {",
+      "            'id': self.id,",
+      "            '${4:field_name}': self.${4:field_name},",
+      "            'created_at': self.created_at.isoformat() if self.created_at else None,",
+      "            'updated_at': self.updated_at.isoformat() if self.updated_at else None",
+      "        }",
+      "    ",
+      "    def __repr__(self):",
+      "        return f'<${1:ModelName} id={self.id}>'"
+    ],
+    "description": "Create a SQLAlchemy database model"
+  },
+  "Settings Model": {
+    "prefix": "eas-settings-model",
+    "body": [
+      "class ${1:Feature}Settings(db.Model):",
+      "    \"\"\"Database-backed configuration for ${2:feature description}.\"\"\"",
+      "    __tablename__ = '${3:table_name}_settings'",
+      "    ",
+      "    id = db.Column(db.Integer, primary_key=True)",
+      "    enabled = db.Column(db.Boolean, nullable=False, default=False)",
+      "    ${4:field_name} = db.Column(db.${5:String}(${6:255}), nullable=${7:True})",
+      "    updated_at = db.Column(db.DateTime, nullable=True, default=datetime.utcnow, onupdate=datetime.utcnow)",
+      "    ",
+      "    def to_dict(self):",
+      "        \"\"\"Convert settings to dictionary.\"\"\"",
+      "        return {",
+      "            'enabled': self.enabled,",
+      "            '${4:field_name}': self.${4:field_name},",
+      "            'updated_at': self.updated_at.isoformat() if self.updated_at else None",
+      "        }",
+      "    ",
+      "    def __repr__(self):",
+      "        return f'<${1:Feature}Settings enabled={self.enabled}>'"
+    ],
+    "description": "Create a settings model for database-backed configuration"
+  },
+  "Try-Except with Database Rollback": {
+    "prefix": "eas-try-db",
+    "body": [
+      "try:",
+      "    ${1:# Database operations}",
+      "    db.session.commit()",
+      "    logger.info('${2:Success message}')",
+      "    return jsonify({'success': True}), 200",
+      "except SQLAlchemyError as e:",
+      "    db.session.rollback()",
+      "    logger.error(f'Database error: {str(e)}')",
+      "    return jsonify({'error': 'Database operation failed'}), 500",
+      "except Exception as e:",
+      "    logger.error(f'Unexpected error: {str(e)}')",
+      "    return jsonify({'error': str(e)}), 500"
+    ],
+    "description": "Try-except block with database rollback"
+  },
+  "Redis Get/Set": {
+    "prefix": "eas-redis",
+    "body": [
+      "# Get value from Redis",
+      "${1:value} = redis_client.get('${2:key}')",
+      "if ${1:value}:",
+      "    ${1:value} = ${1:value}.decode('utf-8')",
+      "    ${3:# Process value}",
+      "else:",
+      "    ${4:# Handle missing key}",
+      "    ",
+      "# Set value in Redis",
+      "redis_client.set('${2:key}', ${5:value}, ex=${6:3600})  # Expires in ${6:3600} seconds"
+    ],
+    "description": "Get and set values in Redis"
+  },
+  "Admin Form Template": {
+    "prefix": "eas-admin-form",
+    "body": [
+      "{% extends 'base.html' %}",
+      "",
+      "{% block title %}${1:Page Title}{% endblock %}",
+      "",
+      "{% block content %}",
+      "<div class=\"container-fluid\">",
+      "    <div class=\"row\">",
+      "        <div class=\"col-12\">",
+      "            <div class=\"card\">",
+      "                <div class=\"card-header\">",
+      "                    <h2 class=\"mb-0\">${2:Section Title}</h2>",
+      "                </div>",
+      "                <div class=\"card-body\">",
+      "                    <form method=\"POST\" action=\"{{ url_for('${3:blueprint}.${4:endpoint}') }}\">",
+      "                        <div class=\"mb-3\">",
+      "                            <label for=\"${5:field_id}\" class=\"form-label\">${6:Field Label}</label>",
+      "                            <select class=\"form-select\" id=\"${5:field_id}\" name=\"${7:field_name}\" required>",
+      "                                <option value=\"true\" {% if ${8:settings}.${7:field_name} %}selected{% endif %}>Enabled</option>",
+      "                                <option value=\"false\" {% if not ${8:settings}.${7:field_name} %}selected{% endif %}>Disabled</option>",
+      "                            </select>",
+      "                            <div class=\"form-text\">${9:Help text}</div>",
+      "                        </div>",
+      "                        ",
+      "                        <div class=\"d-flex gap-2\">",
+      "                            <button type=\"submit\" class=\"btn btn-primary\">",
+      "                                <i class=\"fas fa-save\"></i> Save Settings",
+      "                            </button>",
+      "                            <a href=\"{{ url_for('${10:return_blueprint}.${11:return_endpoint}') }}\" class=\"btn btn-secondary\">",
+      "                                <i class=\"fas fa-times\"></i> Cancel",
+      "                            </a>",
+      "                        </div>",
+      "                    </form>",
+      "                </div>",
+      "            </div>",
+      "        </div>",
+      "    </div>",
+      "</div>",
+      "{% endblock %}"
+    ],
+    "description": "Create an admin settings form template"
+  },
+  "Logger Configuration": {
+    "prefix": "eas-logger",
+    "body": [
+      "# Get existing logger (DO NOT create new logger)",
+      "logger = logging.getLogger('eas_station')",
+      "",
+      "# Log messages",
+      "logger.debug('${1:Debug message}')",
+      "logger.info('${2:Info message}')",
+      "logger.warning('${3:Warning message}')",
+      "logger.error('${4:Error message}')",
+      "logger.critical('${5:Critical message}')"
+    ],
+    "description": "Get the EAS Station logger and log messages"
+  },
+  "API Endpoint Documentation": {
+    "prefix": "eas-api-doc",
+    "body": [
+      "\"\"\"",
+      "${1:Endpoint description}",
+      "",
+      "**Endpoint**: `${2:GET/POST} /api/${3:path}`",
+      "",
+      "**Parameters**:",
+      "- `${4:param_name}` (${5:type}): ${6:Parameter description}",
+      "",
+      "**Returns**:",
+      "- `200 OK`: Success response",
+      "  ```json",
+      "  {",
+      "    \"success\": true,",
+      "    \"data\": ${7:response_data}",
+      "  }",
+      "  ```",
+      "- `500 Internal Server Error`: Error response",
+      "  ```json",
+      "  {",
+      "    \"error\": \"Error message\"",
+      "  }",
+      "  ```",
+      "",
+      "**Example**:",
+      "```bash",
+      "curl -X ${2:GET} http://localhost:5000/api/${3:path}",
+      "```",
+      "\"\"\""
+    ],
+    "description": "Create API endpoint documentation"
+  },
+  "Alembic Migration": {
+    "prefix": "eas-migration",
+    "body": [
+      "\"\"\"${1:Migration description}",
+      "",
+      "Revision ID: ${2:revision_id}",
+      "Revises: ${3:previous_revision}",
+      "Create Date: ${4:CURRENT_DATETIME}",
+      "\"\"\"",
+      "from alembic import op",
+      "import sqlalchemy as sa",
+      "",
+      "# revision identifiers, used by Alembic",
+      "revision = '${2:revision_id}'",
+      "down_revision = '${3:previous_revision}'",
+      "branch_labels = None",
+      "depends_on = None",
+      "",
+      "def upgrade():",
+      "    # ### commands auto generated by Alembic ###",
+      "    ${5:# Add upgrade commands here}",
+      "    op.create_table(",
+      "        '${6:table_name}',",
+      "        sa.Column('id', sa.Integer(), nullable=False),",
+      "        sa.Column('${7:field_name}', sa.${8:String}(${9:255}), nullable=${10:False}),",
+      "        sa.PrimaryKeyConstraint('id')",
+      "    )",
+      "    # ### end Alembic commands ###",
+      "",
+      "def downgrade():",
+      "    # ### commands auto generated by Alembic ###",
+      "    ${11:# Add downgrade commands here}",
+      "    op.drop_table('${6:table_name}')",
+      "    # ### end Alembic commands ###"
+    ],
+    "description": "Create an Alembic migration"
+  },
+  "Test Function": {
+    "prefix": "eas-test",
+    "body": [
+      "def test_${1:function_name}(${2:fixtures}):",
+      "    \"\"\"${3:Test description}.\"\"\"",
+      "    # Arrange",
+      "    ${4:# Set up test data}",
+      "    ",
+      "    # Act",
+      "    ${5:# Execute the code being tested}",
+      "    ",
+      "    # Assert",
+      "    ${6:# Verify the results}",
+      "    assert ${7:condition}, '${8:Assertion message}'"
+    ],
+    "description": "Create a pytest test function"
+  },
+  "Flask Blueprint": {
+    "prefix": "eas-blueprint",
+    "body": [
+      "\"\"\"${1:Blueprint description}.\"\"\"",
+      "from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for",
+      "from app_core import db",
+      "from app_core.models import ${2:Model}",
+      "import logging",
+      "",
+      "# Get existing logger",
+      "logger = logging.getLogger('eas_station')",
+      "",
+      "# Create Blueprint",
+      "bp = Blueprint('${3:blueprint_name}', __name__, url_prefix='/${4:prefix}')",
+      "",
+      "@bp.route('/')",
+      "def index():",
+      "    \"\"\"${5:Index route description}.\"\"\"",
+      "    return render_template('${6:template}.html')",
+      "",
+      "@bp.route('/api/${7:endpoint}', methods=['GET', 'POST'])",
+      "def ${8:api_function}():",
+      "    \"\"\"${9:API endpoint description}.\"\"\"",
+      "    try:",
+      "        ${10:# API logic here}",
+      "        return jsonify({'success': True}), 200",
+      "    except Exception as e:",
+      "        logger.error(f'Error in ${8:api_function}: {str(e)}')",
+      "        return jsonify({'error': str(e)}), 500"
+    ],
+    "description": "Create a Flask Blueprint"
+  },
+  "Environment Variable": {
+    "prefix": "eas-env",
+    "body": [
+      "${1:VARIABLE_NAME} = os.getenv('${1:VARIABLE_NAME}', '${2:default_value}')"
+    ],
+    "description": "Get environment variable with default"
+  },
+  "Jinja2 Block": {
+    "prefix": "eas-jinja-block",
+    "body": [
+      "{% block ${1:block_name} %}",
+      "    ${2:content}",
+      "{% endblock %}"
+    ],
+    "description": "Create a Jinja2 template block"
+  },
+  "Jinja2 For Loop": {
+    "prefix": "eas-jinja-for",
+    "body": [
+      "{% for ${1:item} in ${2:items} %}",
+      "    ${3:content}",
+      "{% endfor %}"
+    ],
+    "description": "Create a Jinja2 for loop"
+  },
+  "Jinja2 If Statement": {
+    "prefix": "eas-jinja-if",
+    "body": [
+      "{% if ${1:condition} %}",
+      "    ${2:content}",
+      "{% endif %}"
+    ],
+    "description": "Create a Jinja2 if statement"
+  },
+  "Bootstrap Card": {
+    "prefix": "eas-card",
+    "body": [
+      "<div class=\"card\">",
+      "    <div class=\"card-header\">",
+      "        <h3 class=\"mb-0\">${1:Card Title}</h3>",
+      "    </div>",
+      "    <div class=\"card-body\">",
+      "        ${2:Card content}",
+      "    </div>",
+      "</div>"
+    ],
+    "description": "Create a Bootstrap card"
+  },
+  "Bootstrap Alert": {
+    "prefix": "eas-alert",
+    "body": [
+      "<div class=\"alert alert-${1:primary} alert-dismissible fade show\" role=\"alert\">",
+      "    <i class=\"fas fa-${2:info-circle}\"></i>",
+      "    ${3:Alert message}",
+      "    <button type=\"button\" class=\"btn-close\" data-bs-dismiss=\"alert\" aria-label=\"Close\"></button>",
+      "</div>"
+    ],
+    "description": "Create a Bootstrap alert"
+  }
+}

@@ -6,6 +6,36 @@ tracks releases under the 2.x series.
 
 ## [Unreleased]
 
+### Added
+- **VS Code Development Guide and Configuration** - Comprehensive VS Code setup for local and remote development
+  - Created `docs/guides/VSCODE_LOCAL_SETUP.md` - Complete guide for local development setup
+  - Created `eas-station.code-workspace` - Pre-configured VS Code workspace file with all settings
+  - Created `.vscode/eas-station.code-snippets` - Code snippets for common EAS Station patterns
+  - Created `CONTRIBUTING.md` - Comprehensive contributing guide with VS Code workflow
+  - Updated `README.md` with links to VS Code setup guides
+  - Workspace includes:
+    - Python interpreter configuration
+    - Debug configurations for all services
+    - Tasks for common operations (Flask dev server, tests, database queries, Redis monitoring)
+    - Database connection settings (SQLTools)
+    - Linting and formatting configuration
+    - Extension recommendations
+  - Code snippets include:
+    - Flask routes with database queries
+    - Database models (including settings models)
+    - API endpoint templates
+    - Test functions
+    - Jinja2 templates
+    - Bootstrap components
+  - Documentation covers:
+    - Local development setup (PostgreSQL, Redis, Python)
+    - VS Code features and shortcuts
+    - Debugging workflows
+    - Database management
+    - Testing procedures
+    - Git workflow
+    - Troubleshooting common issues
+
 ### Fixed
 - **CRITICAL: RBDS Buffer Management Fixed** - Changed from buffer-draining to index-based bit processing
   - Root cause: `_decode_rbds_groups()` was using `pop(0)` in a `while` loop, consuming ALL bits even during failed presync
