@@ -298,6 +298,7 @@ class RBDSDiagnostic:
         print("4. Checking Register Reset After Block Processing...")
         
         found_bad_resets = []
+        INIT_LOOKBACK_LINES = 20  # How far back to check for initialization context
         
         for i, line in enumerate(self.code_lines):
             # Look for incorrect register resets in processing code
@@ -305,7 +306,7 @@ class RBDSDiagnostic:
                 # Check if this is initialization (OK) or processing (BAD)
                 # Initialization is typically in __init__ or setup code
                 is_init = False
-                for j in range(max(0, i-20), i):
+                for j in range(max(0, i - INIT_LOOKBACK_LINES), i):
                     if "def __init__" in self.code_lines[j] or "Initialize state" in self.code_lines[j]:
                         is_init = True
                         break
@@ -444,7 +445,9 @@ class RBDSDiagnostic:
             if "spacing" in line.lower() and "mismatch" in line.lower():
                 # Check next 10 lines for correct handling
                 for j in range(i, min(len(self.code_lines), i + 10)):
-                    if "_rbds_lastseen_offset = j" in self.code_lines[j] or "self._rbds_lastseen_offset = j" in self.code_lines[j]:
+                    line_content = self.code_lines[j]
+                    # Check for lastseen_offset assignment (with or without self. prefix)
+                    if "_rbds_lastseen_offset = j" in line_content or "self._rbds_lastseen_offset = j" in line_content:
                         handles_spacing_correctly = True
                         self.findings.append(Finding(
                             category="Presync Spacing",
