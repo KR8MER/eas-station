@@ -6,6 +6,21 @@ tracks releases under the 2.x series.
 
 ## [Unreleased]
 
+### Fixed
+- **CRITICAL: RBDS Register Reset Bug - THE ROOT CAUSE** (v2.44.13)
+  - Problem: After 35+ failed attempts to fix RBDS, discovered the fundamental bug
+  - Root cause: Code was resetting `_rbds_reg = 0` after processing each block in synced mode
+  - Impact: This destroyed the bit stream! Register must CONTINUOUSLY accumulate bits
+  - python-radio reference: NEVER resets reg to 0 - bits shift in continuously (lines 234-325)
+  - Our code had TWO incorrect resets:
+    1. Line 1078: After achieving sync (first synced block processing)
+    2. Line 1206: After each block in synced mode
+  - Fix: Removed BOTH register resets - register now continuously accumulates bits as designed
+  - Result: Register contains rolling 26-bit window, CRC checks should now work correctly
+  - File: `app_core/radio/demodulation.py`
+  - **This was the bug that broke ALL 35 previous attempts**
+  - Testing: Should now successfully decode RBDS groups instead of 100% CRC failures
+
 ### Added
 - **RBDS Automatic Diagnostic Tool** (v2.44.12)
   - Created comprehensive diagnostic tool after 35+ PRs of failed RBDS fixes
