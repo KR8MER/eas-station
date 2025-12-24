@@ -288,46 +288,47 @@ class RBDSDiagnostic:
         print()
     
     def check_register_reset(self):
-        """Check that register is reset after processing blocks in synced mode.
+        """Check that register is NOT reset after processing blocks in synced mode.
         
-        Issue: v2.44.7 and earlier didn't reset register, causing bits from previous
-               block to contaminate next block → 100% CRC failures.
-        Fix: v2.44.8 added _rbds_reg = 0 after processing each block.
+        CRITICAL: The register must NEVER be reset to 0 during processing!
+        Issue: v2.44.8 INCORRECTLY added _rbds_reg = 0, causing 100% CRC failures.
+        Fix: v2.44.13 removed register resets - register must continuously accumulate bits.
+        Reference: python-radio NEVER resets reg (decoder.py lines 234-325)
         """
         print("4. Checking Register Reset After Block Processing...")
         
-        found_resets = []
-        in_synced_block = False
+        found_bad_resets = []
         
         for i, line in enumerate(self.code_lines):
-            # Track if we're in synced block processing
-            if "SYNCED:" in line or "synced mode" in line.lower():
-                in_synced_block = True
-            
-            if in_synced_block:
-                # Look for block processing completion
-                if "store" in line.lower() or "group_data" in line:
-                    # Check next 10 lines for register reset
-                    for j in range(i, min(len(self.code_lines), i + 10)):
-                        if "_rbds_reg = 0" in self.code_lines[j]:
-                            found_resets.append(j + 1)
-                            break
+            # Look for incorrect register resets in processing code
+            if "_rbds_reg = 0" in line:
+                # Check if this is initialization (OK) or processing (BAD)
+                # Initialization is typically in __init__ or setup code
+                is_init = False
+                for j in range(max(0, i-20), i):
+                    if "def __init__" in self.code_lines[j] or "Initialize state" in self.code_lines[j]:
+                        is_init = True
+                        break
+                
+                if not is_init:
+                    # This is a reset during processing - BAD!
+                    found_bad_resets.append(i + 1)
         
-        if found_resets:
+        if not found_bad_resets:
             self.findings.append(Finding(
                 category="Register Reset",
                 severity=Severity.PASS,
-                issue=f"Register reset found at {len(found_resets)} location(s)",
-                line_num=found_resets[0],
-                reference="v2.44.8 fix for 100% CRC failures"
+                issue="Register correctly never reset during processing",
+                reference="python-radio: reg continuously accumulates bits"
             ))
         else:
             self.findings.append(Finding(
                 category="Register Reset",
                 severity=Severity.CRITICAL,
-                issue="No register reset after block processing",
-                fix="Add _rbds_reg = 0 after storing each block in synced mode",
-                reference="v2.44.8 fix - prevents bit contamination between blocks"
+                issue=f"Found {len(found_bad_resets)} incorrect register reset(s)",
+                line_num=found_bad_resets[0],
+                fix="REMOVE _rbds_reg = 0 - register must continuously accumulate bits!",
+                reference="python-radio NEVER resets reg during processing"
             ))
         
         print(f"   Found {len([f for f in self.findings if f.category == 'Register Reset'])} issues")
