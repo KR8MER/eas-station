@@ -443,7 +443,7 @@ class RBDSDiagnostic:
             if "spacing" in line.lower() and "mismatch" in line.lower():
                 # Check next 10 lines for correct handling
                 for j in range(i, min(len(self.code_lines), i + 10)):
-                    if "_rbds_lastseen_offset = j" in self.code_lines[j]:
+                    if "_rbds_lastseen_offset = j" in self.code_lines[j] or "self._rbds_lastseen_offset = j" in self.code_lines[j]:
                         handles_spacing_correctly = True
                         self.findings.append(Finding(
                             category="Presync Spacing",
