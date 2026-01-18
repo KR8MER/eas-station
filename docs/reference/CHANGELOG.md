@@ -7,6 +7,33 @@ tracks releases under the 2.x series.
 ## [Unreleased]
 
 ### Fixed
+- **CRITICAL: Fix Missing Register Reset After Block Processing (RBDS Regression)** (v2.46.4)
+  - **ROOT CAUSE**: Missing `self._rbds_reg = 0` after processing each block in synced mode
+  - The bug: After extracting a 26-bit block and checking CRC, the register was not cleared
+    - Old 26 bits remained in register
+    - New bits for next block mixed with old data
+    - Result: **100% CRC failure rate** (occasionally 2-4% random passes from noise)
+  - **This is the EXACT bug documented as fixed in v2.44.8** according to historical docs
+    - This was a **regression** - the fix was lost at some point
+  - **Impact**: RBDS achieves sync but ALL blocks fail CRC checks
+    - Decoder synchronizes (finds correct bit alignment)
+    - But every block CRC fails due to contaminated data
+    - No station names, PI codes, or radio text decoded
+  - Solution: Added register reset after block counter increment (line 1100)
+    ```python
+    self._rbds_block_bit_counter = 0
+    self._rbds_block_number = (self._rbds_block_number + 1) % 4
+    self._rbds_blocks_counter += 1
+    # CRITICAL FIX: Reset register to prevent bit contamination
+    self._rbds_reg = 0
+    ```
+  - File: `app_core/radio/demodulation.py:1100`
+  - Diagnostic: Automated RBDS diagnostic tool identified this as CRITICAL issue
+  - Expected: Blocks should now pass CRC and decode RBDS groups successfully!
+  - Reference: `docs/archive/rbds-fixes/DEPLOYMENT_INSTRUCTIONS_v2.44.6.md`
+  - See: `RBDS_DIAGNOSTIC_REPORT.md` for comprehensive diagnostic results
+
+### Fixed
 - **CRITICAL: Fix M&M Symbol Rate Bug - Wrong SPS in Interpolated Space** (v2.44.22)
   - **ROOT CAUSE FOUND**: M&M was ALWAYS running at 15.625 sps regardless of loop gain!
   - The bug: `sps = 16` but after 16x upsampling, should be `sps = 16 * 16 = 256`

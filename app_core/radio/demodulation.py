@@ -1094,6 +1094,11 @@ class RBDSWorker:
                     self._rbds_block_number = (self._rbds_block_number + 1) % 4
                     self._rbds_blocks_counter += 1
                     
+                    # CRITICAL FIX: Reset register to prevent bit contamination between blocks
+                    # Without this, bits from the previous block leak into the next block,
+                    # causing 100% CRC failures in synced mode (v2.44.8 regression fix)
+                    self._rbds_reg = 0
+                    
                     # Check sync quality every 50 blocks
                     if self._rbds_blocks_counter == 50:
                         if self._rbds_wrong_blocks_counter > 35:
