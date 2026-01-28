@@ -650,6 +650,42 @@ sudo apt-get autoremove postgresql redis-server nginx
 - **Issues:** https://github.com/KR8MER/eas-station/issues
 - **Discussions:** https://github.com/KR8MER/eas-station/discussions
 
+## Frequently Asked Questions
+
+### Python 3.13 and audioop Module
+
+**Q: I'm getting "ModuleNotFoundError: No module named 'audioop'" - what do I do?**
+
+**A:** The `audioop` module was **deprecated in Python 3.11 and completely removed in Python 3.13**. This is a Python core change, not an EAS Station issue.
+
+✅ **Solution:** EAS Station already handles this! The `requirements.txt` includes `audioop-lts==0.2.2` as a drop-in replacement, and the code automatically uses it:
+
+```python
+# From app_utils/eas_tts.py
+try:
+    import audioop
+except ModuleNotFoundError:
+    import audioop_lts as audioop  # Use replacement for Python 3.13+
+```
+
+If you're still seeing this error:
+1. Make sure you ran the **full install.sh** script (not manual pip install)
+2. Check that audioop-lts is installed: `/opt/eas-station/venv/bin/pip list | grep audioop`
+3. If missing, install it: `sudo -u eas-station /opt/eas-station/venv/bin/pip install audioop-lts`
+
+**Bottom line:** Python 3.13 is fully supported! Just use the installer and it handles everything.
+
+### Installation Issues on Ubuntu 24.04 / Raspberry Pi
+
+**Q: Installation fails with SQL or audioop errors - what's the recommended OS?**
+
+**A:** See the comprehensive troubleshooting guide: [RASPBERRY_PI_UBUNTU_TROUBLESHOOTING.md](RASPBERRY_PI_UBUNTU_TROUBLESHOOTING.md)
+
+**Recommended configurations:**
+- **Raspberry Pi 4/5:** Raspberry Pi OS 64-bit (Bookworm or Trixie)
+- **x86_64 PC:** Debian 12/14 or Ubuntu 24.04 LTS
+- All include Python 3.11+ with full audioop-lts support
+
 ## License
 
 Copyright (c) 2025 Timothy Kramer (KR8MER)

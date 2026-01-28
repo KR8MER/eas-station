@@ -243,7 +243,7 @@ sudo bash scripts/build-iso.sh
 
 **Debian 13 (Trixie)** is the current testing distribution and is fully supported:
 
-- **Python 3.13**: All dependencies updated to support Python 3.13 (gevent 25.9.1+, pytest 9.0+, etc.)
+- **Python 3.13**: All dependencies updated to support Python 3.13 (gevent 25.9.1+, pytest 9.0+, audioop-lts for removed audioop module, etc.)
 - **PostgreSQL**: Works with PostgreSQL 15, 16, or 17 with PostGIS 3.3 or 3.4
 - **Package availability**: All required packages are available in Trixie repositories
 - **Testing status**: While Trixie is "testing", it's stable enough for development and lab use
