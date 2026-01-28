@@ -238,6 +238,38 @@ fi
 
 echo_success "System detection complete"
 
+# Detect Python version and show compatibility info
+echo ""
+echo_progress "Checking Python version..."
+if command -v python3 &> /dev/null; then
+    PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}')")
+    PYTHON_MAJOR=$(python3 -c "import sys; print(sys.version_info.major)")
+    PYTHON_MINOR=$(python3 -c "import sys; print(sys.version_info.minor)")
+    
+    echo_info "Python version: ${BOLD}$PYTHON_VERSION${NC}"
+    
+    # Python 3.13+ compatibility check
+    if [ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -ge 13 ]; then
+        echo_info "✅ Python 3.13+ detected - fully supported!"
+        echo_info "   Note: EAS Station uses audioop-lts for Python 3.13+ compatibility"
+        echo_info "   (The built-in 'audioop' module was removed in Python 3.13)"
+    elif [ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -ge 11 ]; then
+        echo_info "✅ Python $PYTHON_MAJOR.$PYTHON_MINOR detected - fully supported!"
+    elif [ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -ge 10 ]; then
+        echo_warning "⚠️  Python $PYTHON_MAJOR.$PYTHON_MINOR detected - minimum supported version"
+        echo_info "   Consider upgrading to Python 3.11+ for best compatibility"
+    else
+        echo_error "❌ Python $PYTHON_MAJOR.$PYTHON_MINOR detected - not supported!"
+        echo_error "   EAS Station requires Python 3.10 or newer"
+        echo_info "   Please upgrade your system or install a newer Python version"
+        exit 1
+    fi
+else
+    echo_error "Python 3 is not installed!"
+    echo_info "Install with: sudo apt-get install python3 python3-pip python3-venv"
+    exit 1
+fi
+
 # Detect GPIO hardware presence (Raspberry Pi or other SBCs with GPIO)
 # This must be done early since it's used in both package installation and hardware setup
 HAS_GPIO=false
@@ -1453,6 +1485,44 @@ if ! sudo -u "$SERVICE_USER" "$VENV_DIR/bin/pip" install -r "$INSTALL_DIR/requir
 fi
 echo ""
 echo_success "✓ Python dependencies installed successfully"
+
+# Verify critical Python 3.13+ compatibility packages
+echo_progress "Verifying Python 3.13+ compatibility packages..."
+PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+
+# Check for audioop-lts (required for Python 3.13+ where audioop was removed)
+if "$VENV_DIR/bin/python" -c "import sys; sys.exit(0 if sys.version_info >= (3, 13) else 1)" 2>/dev/null; then
+    # Python 3.13+ detected - verify audioop-lts is installed
+    if "$VENV_DIR/bin/python" -c "import audioop_lts" 2>/dev/null; then
+        echo_success "✓ audioop-lts installed (Python 3.13+ compatibility)"
+    else
+        echo_error "❌ audioop-lts NOT found - required for Python 3.13+"
+        echo_info "The 'audioop' module was removed in Python 3.13"
+        echo_info "Installing audioop-lts manually..."
+        if sudo -u "$SERVICE_USER" "$VENV_DIR/bin/pip" install audioop-lts; then
+            echo_success "✓ audioop-lts installed successfully"
+        else
+            echo_error "Failed to install audioop-lts"
+            echo_error "EAS Station requires this package for audio processing"
+            exit 1
+        fi
+    fi
+elif "$VENV_DIR/bin/python" -c "import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)" 2>/dev/null; then
+    # Python 3.11-3.12 - audioop deprecated but still present, check if audioop-lts is available
+    if "$VENV_DIR/bin/python" -c "import audioop_lts" 2>/dev/null; then
+        echo_success "✓ audioop-lts installed (future-proof for Python 3.13+)"
+    else
+        echo_warning "⚠️  audioop-lts not found, but built-in audioop still works on Python $PYTHON_VERSION"
+        echo_info "Note: audioop is deprecated and will be removed in Python 3.13"
+    fi
+else
+    # Python 3.10 or older - just check if we have audioop (should be built-in)
+    if "$VENV_DIR/bin/python" -c "import audioop" 2>/dev/null; then
+        echo_info "Using built-in audioop module (Python $PYTHON_VERSION)"
+    else
+        echo_warning "⚠️  audioop module not available"
+    fi
+fi
 
 # Create separate venv for SDR service with system site-packages
 # This allows the SDR service to access python3-soapysdr from apt without PYTHONPATH hacks
