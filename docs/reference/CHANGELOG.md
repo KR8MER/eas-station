@@ -6,6 +6,14 @@ tracks releases under the 2.x series.
 
 ## [Unreleased]
 
+### Added
+- **Hardware Setup Guide** (v2.46.5)
+  - Comprehensive documentation for enabling and configuring all hardware features
+  - Step-by-step instructions for GPIO, OLED, LED, VFD, and Zigbee
+  - Troubleshooting section for common hardware issues
+  - Service management commands and best practices
+  - File: `docs/hardware/HARDWARE_SETUP.md`
+
 ### Fixed
 - **Hardware Initialization Robustness** (v2.46.4)
   - Improved error messages for all hardware features (GPIO, OLED, LED, VFD, Zigbee)
