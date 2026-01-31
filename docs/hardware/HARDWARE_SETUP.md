@@ -62,8 +62,13 @@ GPIO (General Purpose Input/Output) pins allow EAS Station to control external h
 
 ### Pin Numbering
 - Use **BCM (Broadcom)** pin numbers (not physical pin numbers)
-- Valid range: GPIO 2-27
-- Reserved pins (when OLED enabled): GPIO 2, 3, 4, 14
+- Valid range: GPIO 2-27 (BCM numbering)
+- **Reserved pins (when OLED enabled)**: GPIO 2, 3, 4, 14
+  - These pins are in the valid range but **unavailable when OLED is enabled**
+  - GPIO 2 (SDA) and 3 (SCL): I2C communication
+  - GPIO 4: OLED button input
+  - GPIO 14: OLED power/control
+  - If OLED is disabled, these pins become available for general GPIO use
 
 ### Troubleshooting GPIO
 
@@ -157,10 +162,11 @@ LED signs (BetaBrite, Alpha, and compatible models) display scrolling alert mess
    - For **Network**:
      - **IP Address**: Sign's IP (e.g., 192.168.1.100)
      - **Port**: Usually 10001
-   - For **Serial** (partial support):
+   - For **Serial** (⚠️ partial support - basic text only, no advanced features):
      - **Serial Port**: e.g., /dev/ttyUSB1
      - **Baudrate**: Usually 9600
      - **Mode**: RS232 or RS485
+     - **Limitations**: Serial mode supports basic text display but not all LED sign features (colors, effects, memory files) are available yet
 4. Click **"Save Settings"**
 
 ### Troubleshooting LED Sign

@@ -296,7 +296,7 @@ def initialize_gpio_controller(db_session=None):
             oled_enabled = oled_settings.get('enabled', False)
         except Exception as e:
             # Fallback if database not available
-            logger.warning(f"Could not load hardware settings from database: {e}")
+            logger.warning(f"Could not load hardware settings from database: {e}", exc_info=True)
             gpio_enabled = False
             oled_enabled = False
 
@@ -345,6 +345,7 @@ def initialize_gpio_controller(db_session=None):
         if pins_added == 0:
             logger.error("❌ No GPIO pins could be initialized")
             _gpio_controller = None
+            return  # Critical: return early to avoid using None controller below
             return
 
         # Load and configure GPIO behavior matrix
