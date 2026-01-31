@@ -1092,7 +1092,8 @@ def initialise_oled_display(log: Optional[logging.Logger] = None) -> Optional[Ar
             logger_ref.warning("Failed to load OLED settings from database: %s; using defaults", exc)
 
     if not oled_enabled:
-        logger_ref.debug("OLED display disabled via configuration (enable in Admin > Hardware Settings)")
+        logger_ref.warning("⚠️  OLED display DISABLED - Enable in Admin > Hardware Settings > OLED tab")
+        logger_ref.info("📍 To enable OLED: Open web UI → Admin → Hardware Settings → OLED tab → Check 'Enable OLED Display'")
         OLED_AVAILABLE = False
         oled_controller = None
         return None

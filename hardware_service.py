@@ -144,7 +144,7 @@ def initialize_database():
 
 
 def initialize_led_controller():
-    """Initialize LED sign controller."""
+    """Initialize LED sign controller with robust error handling."""
     try:
         from app_core.led import initialise_led_controller, ensure_led_tables, LED_AVAILABLE
 
@@ -155,20 +155,25 @@ def initialize_led_controller():
                 # Ensure database tables exist
                 try:
                     ensure_led_tables()
+                    logger.debug("LED database tables verified")
                 except Exception as e:
                     logger.warning(f"⚠️  Failed to ensure LED tables: {e}")
+                    logger.info("LED functionality may be limited without database tables")
             else:
                 logger.info("LED controller disabled or unavailable")
         else:
-            logger.info("LED hardware not available")
+            logger.info("LED hardware not available (module not imported)")
 
+    except ImportError as e:
+        logger.info(f"LED controller module not available: {e}")
+        logger.info("Install LED dependencies if you want to use LED signs")
     except Exception as e:
-        logger.warning(f"⚠️  LED controller not available: {e}")
+        logger.error(f"❌ Unexpected error initializing LED controller: {e}", exc_info=True)
         logger.info("Continuing without LED support")
 
 
 def initialize_vfd_controller():
-    """Initialize VFD display controller."""
+    """Initialize VFD display controller with robust error handling."""
     try:
         from app_core.vfd import initialise_vfd_controller, ensure_vfd_tables, VFD_AVAILABLE
 
@@ -179,20 +184,25 @@ def initialize_vfd_controller():
                 # Ensure database tables exist
                 try:
                     ensure_vfd_tables()
+                    logger.debug("VFD database tables verified")
                 except Exception as e:
                     logger.warning(f"⚠️  Failed to ensure VFD tables: {e}")
+                    logger.info("VFD functionality may be limited without database tables")
             else:
                 logger.info("VFD controller disabled or unavailable")
         else:
-            logger.info("VFD hardware not available")
+            logger.info("VFD hardware not available (module not imported)")
 
+    except ImportError as e:
+        logger.info(f"VFD controller module not available: {e}")
+        logger.info("Install VFD dependencies if you want to use VFD displays")
     except Exception as e:
-        logger.warning(f"⚠️  VFD controller not available: {e}")
+        logger.error(f"❌ Unexpected error initializing VFD controller: {e}", exc_info=True)
         logger.info("Continuing without VFD support")
 
 
 def initialize_oled_display():
-    """Initialize OLED display."""
+    """Initialize OLED display with robust error handling."""
     try:
         from app_core.oled import initialise_oled_display, ensure_oled_button, OLED_AVAILABLE
 
@@ -202,23 +212,30 @@ def initialize_oled_display():
                 logger.info("✅ OLED display initialized")
 
                 # Initialize OLED button (GPIO pin 4)
-                button = ensure_oled_button(logger)
-                if button:
-                    logger.info("✅ OLED button initialized on GPIO 4")
-                else:
-                    logger.info("OLED button disabled or unavailable")
+                try:
+                    button = ensure_oled_button(logger)
+                    if button:
+                        logger.info("✅ OLED button initialized on GPIO 4")
+                    else:
+                        logger.info("OLED button disabled or unavailable")
+                except Exception as e:
+                    logger.warning(f"⚠️  Failed to initialize OLED button: {e}")
+                    logger.info("OLED will work without button control")
             else:
                 logger.info("OLED display disabled or unavailable")
         else:
-            logger.info("OLED hardware not available")
+            logger.info("OLED hardware not available (module not imported)")
 
+    except ImportError as e:
+        logger.info(f"OLED display module not available: {e}")
+        logger.info("Install OLED dependencies (luma.oled, PIL) if you want to use OLED displays")
     except Exception as e:
-        logger.warning(f"⚠️  OLED display not available: {e}")
+        logger.error(f"❌ Unexpected error initializing OLED display: {e}", exc_info=True)
         logger.info("Continuing without OLED support")
 
 
 def initialize_screen_manager(app):
-    """Initialize screen manager for OLED/LED/VFD displays."""
+    """Initialize screen manager for OLED/LED/VFD displays with robust error handling."""
     global _screen_manager
 
     try:
@@ -227,21 +244,37 @@ def initialize_screen_manager(app):
         with app.app_context():
             screen_manager.init_app(app)
 
-            # Start screen rotation if enabled
-            auto_start = os.getenv("SCREENS_AUTO_START", "true").lower() in ("true", "1", "yes")
+            # Check if auto-start is enabled in database settings
+            try:
+                from app_core.hardware_settings import get_hardware_settings
+                settings = get_hardware_settings()
+                auto_start = settings.screens_auto_start
+            except Exception:
+                # Fallback to environment variable or default True
+                auto_start = os.getenv("SCREENS_AUTO_START", "true").lower() in ("true", "1", "yes")
+            
             if auto_start:
-                screen_manager.start()
-                logger.info("✅ Screen manager started with automatic rotation")
+                try:
+                    screen_manager.start()
+                    logger.info("✅ Screen manager started with automatic rotation")
+                except Exception as e:
+                    logger.error(f"❌ Failed to start screen manager rotation: {e}")
+                    logger.info("Screen manager initialized but rotation not started")
             else:
-                logger.info("Screen manager initialized (auto-start disabled)")
+                logger.info("Screen manager initialized (auto-start disabled in settings)")
 
+        _screen_manager = screen_manager
+
+    except ImportError as e:
+        logger.info(f"Screen manager module not available: {e}")
+        logger.info("Display rotation features will not be available")
     except Exception as e:
-        logger.warning(f"⚠️  Screen manager not available: {e}")
-        logger.info("Continuing without display support")
+        logger.error(f"❌ Unexpected error initializing screen manager: {e}", exc_info=True)
+        logger.info("Continuing without display rotation support")
 
 
 def initialize_gpio_controller(db_session=None):
-    """Initialize GPIO controller for relay/transmitter control."""
+    """Initialize GPIO controller for relay/transmitter control with robust error handling."""
     global _gpio_controller
 
     try:
@@ -261,52 +294,109 @@ def initialize_gpio_controller(db_session=None):
             # Check if OLED is enabled to avoid pin conflicts
             oled_settings = get_oled_settings()
             oled_enabled = oled_settings.get('enabled', False)
-        except Exception:
+        except Exception as e:
             # Fallback if database not available
+            logger.warning(f"Could not load hardware settings from database: {e}")
             gpio_enabled = False
             oled_enabled = False
 
         if not gpio_enabled:
-            logger.info("GPIO controller disabled (enable in Admin > Hardware Settings)")
+            logger.warning("⚠️  GPIO controller DISABLED - Enable in Admin > Hardware Settings > GPIO tab")
+            logger.info("📍 To enable GPIO: Open web UI → Admin → Hardware Settings → GPIO tab → Check 'Enable GPIO'")
             return
 
         # Load GPIO pin configurations (from database with env fallback)
         # Pass oled_enabled to ensure reserved pins are only blocked when OLED is actually enabled
-        gpio_configs = load_gpio_pin_configs_from_env(logger, oled_enabled=oled_enabled)
+        try:
+            gpio_configs = load_gpio_pin_configs_from_env(logger, oled_enabled=oled_enabled)
+        except Exception as e:
+            logger.error(f"❌ Failed to load GPIO pin configurations: {e}")
+            logger.info("Check Admin > Hardware Settings > GPIO tab for configuration")
+            return
+            
         if not gpio_configs:
-            logger.info("No GPIO pins configured (configure in Admin > Hardware Settings)")
+            logger.warning("⚠️  No GPIO pins configured")
+            logger.info("📍 Configure GPIO pins: Admin → Hardware Settings → GPIO tab → Add pin mappings")
             return
 
         # Create GPIO controller with database session for audit logging
-        _gpio_controller = GPIOController(
-            db_session=db_session,
-            logger=logger,
-        )
+        try:
+            _gpio_controller = GPIOController(
+                db_session=db_session,
+                logger=logger,
+            )
+        except Exception as e:
+            logger.error(f"❌ Failed to create GPIO controller: {e}")
+            logger.error("   Common causes:")
+            logger.error("   - GPIO libraries not installed (gpiozero, lgpio)")
+            logger.error("   - Not running on Raspberry Pi hardware")
+            logger.error("   - Insufficient permissions (add user to gpio group)")
+            return
 
         # Add each configured pin to the controller
+        pins_added = 0
         for config in gpio_configs:
             try:
                 _gpio_controller.add_pin(config)
+                pins_added += 1
             except Exception as e:
-                logger.error(f"Failed to add GPIO pin {config.pin}: {e}")
+                logger.error(f"❌ Failed to add GPIO pin {config.pin}: {e}")
+
+        if pins_added == 0:
+            logger.error("❌ No GPIO pins could be initialized")
+            _gpio_controller = None
+            return
 
         # Load and configure GPIO behavior matrix
-        behavior_matrix = load_gpio_behavior_matrix_from_env(logger, oled_enabled=oled_enabled)
-        if behavior_matrix:
-            gpio_behavior_manager = GPIOBehaviorManager(
-                controller=_gpio_controller,
-                pin_configs=gpio_configs,
-                behavior_matrix=behavior_matrix,
-                logger=logger,
-            )
-            _gpio_controller.behavior_manager = gpio_behavior_manager
-            logger.info(f"✅ GPIO controller initialized with {len(gpio_configs)} pin(s) and behavior matrix")
-        else:
-            logger.info(f"✅ GPIO controller initialized with {len(gpio_configs)} pin(s)")
+        try:
+            behavior_matrix = load_gpio_behavior_matrix_from_env(logger, oled_enabled=oled_enabled)
+            if behavior_matrix:
+                gpio_behavior_manager = GPIOBehaviorManager(
+                    controller=_gpio_controller,
+                    pin_configs=gpio_configs,
+                    behavior_matrix=behavior_matrix,
+                    logger=logger,
+                )
+                _gpio_controller.behavior_manager = gpio_behavior_manager
+                logger.info(f"✅ GPIO controller initialized with {pins_added} pin(s) and behavior matrix")
+            else:
+                logger.info(f"✅ GPIO controller initialized with {pins_added} pin(s)")
+        except Exception as e:
+            logger.warning(f"⚠️  Failed to load GPIO behavior matrix: {e}")
+            logger.info(f"✅ GPIO controller initialized with {pins_added} pin(s) (no behavior matrix)")
 
+    except ImportError as e:
+        logger.info(f"GPIO module not available: {e}")
+        logger.info("Install GPIO dependencies (gpiozero, lgpio) if you want to use GPIO features")
     except Exception as e:
-        logger.warning(f"⚠️  GPIO controller not available: {e}")
+        logger.error(f"❌ Unexpected error initializing GPIO controller: {e}", exc_info=True)
         logger.info("Continuing without GPIO support")
+
+
+def initialize_zigbee_coordinator():
+    """Initialize Zigbee coordinator (currently not implemented)."""
+    try:
+        from app_core.hardware_settings import get_zigbee_settings
+        
+        zigbee_settings = get_zigbee_settings()
+        zigbee_enabled = zigbee_settings.get('enabled', False)
+        
+        if not zigbee_enabled:
+            logger.warning("⚠️  Zigbee coordinator DISABLED - Enable in Admin > Hardware Settings > Zigbee tab")
+            logger.info("📍 To enable Zigbee: Open web UI → Admin → Hardware Settings → Zigbee tab → Check 'Enable Zigbee Coordinator'")
+            return
+        
+        # TODO: Implement actual Zigbee coordinator initialization
+        # This would typically use zigpy library to communicate with the coordinator
+        # and publish device status to Redis for the web UI
+        logger.error("❌ Zigbee coordinator implementation is incomplete")
+        logger.error("   The Zigbee web UI and database settings exist, but the actual")
+        logger.error("   coordinator code has not been implemented yet.")
+        logger.error("   Please disable Zigbee in Admin > Hardware Settings until implementation is complete.")
+        
+    except Exception as e:
+        logger.warning(f"⚠️  Zigbee coordinator not available: {e}")
+        logger.info("Continuing without Zigbee support")
 
 
 def publish_hardware_metrics():
@@ -1620,6 +1710,11 @@ def main():
         logger.info("Initializing GPIO controller...")
         with app.app_context():
             initialize_gpio_controller(db_session=db.session)
+
+        # Initialize Zigbee coordinator
+        logger.info("Initializing Zigbee coordinator...")
+        with app.app_context():
+            initialize_zigbee_coordinator()
 
         # Start Flask API server in background thread
         logger.info("Starting hardware proxy API server on port 5001...")

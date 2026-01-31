@@ -7,6 +7,17 @@ tracks releases under the 2.x series.
 ## [Unreleased]
 
 ### Fixed
+- **Hardware Initialization Robustness** (v2.46.4)
+  - Improved error messages for all hardware features (GPIO, OLED, LED, VFD, Zigbee)
+  - Changed disabled hardware logging from DEBUG to WARNING level for better visibility
+  - Added clear instructions on how to enable each hardware feature
+  - Added comprehensive error handling with detailed diagnostic messages
+  - LED and VFD now allow connection retry instead of permanent disable on first failure
+  - GPIO initialization provides specific troubleshooting for common issues
+  - All display controllers now catch ImportError separately for clearer dependency messages
+  - Added Zigbee coordinator initialization stub (implementation incomplete)
+  - Files: `hardware_service.py`, `app_core/led.py`, `app_core/vfd.py`, `app_core/oled.py`
+
 - **CRITICAL: Fix M&M Symbol Rate Bug - Wrong SPS in Interpolated Space** (v2.44.22)
   - **ROOT CAUSE FOUND**: M&M was ALWAYS running at 15.625 sps regardless of loop gain!
   - The bug: `sps = 16` but after 16x upsampling, should be `sps = 16 * 16 = 256`

@@ -109,7 +109,8 @@ else:
 
         # Check if VFD is enabled in settings
         if not vfd_settings.get('enabled', False):
-            logger.debug("VFD display disabled via configuration (enable in Admin > Hardware Settings)")
+            logger.warning("⚠️  VFD display DISABLED - Enable in Admin > Hardware Settings > VFD Display tab")
+            logger.info("📍 To enable VFD: Open web UI → Admin → Hardware Settings → VFD Display tab → Check 'Enable VFD Display'")
             VFD_AVAILABLE = False
             vfd_controller = None
             return None
@@ -126,17 +127,24 @@ else:
 
             # Try to connect
             if not vfd_controller.connect():
-                logger.info(
-                    "VFD controller is unavailable (no active connection on %s). "
-                    "VFD integration will remain disabled until the display is connected.",
-                    vfd_port
-                )
-                VFD_AVAILABLE = False
-                vfd_controller = None
-                return None
+                logger.warning("⚠️  VFD display not connected (may be offline or unplugged)")
+                logger.info(f"   - Configured port: {vfd_port}")
+                logger.info(f"   - Baudrate: {vfd_baudrate}")
+                logger.info("   - VFD will automatically reconnect when display becomes available")
+                logger.info("   - Check Admin > Hardware Settings > VFD Display to verify configuration")
+                # Don't fail completely - allow VFD to reconnect later
+                VFD_AVAILABLE = True  # Keep available for retry
+                logger.info("✅ VFD controller initialized (waiting for connection)")
+                return vfd_controller
 
         except Exception as controller_error:  # pragma: no cover - defensive
-            logger.error("Failed to initialize VFD controller: %s", controller_error)
+            logger.error("❌ Failed to initialize VFD controller: %s", controller_error)
+            logger.error("   Check VFD display connection and settings:")
+            logger.error(f"   - Serial port: {vfd_port}")
+            logger.error(f"   - Baudrate: {vfd_baudrate}")
+            logger.error("   - Verify VFD display is connected via USB/serial cable")
+            logger.error("   - Check serial port permissions: sudo usermod -a -G dialout $USER")
+            logger.error("   - Verify correct port: ls -l /dev/ttyUSB* /dev/ttyACM*")
             VFD_AVAILABLE = False
             vfd_controller = None
             return None

@@ -107,7 +107,8 @@ else:
 
         # Check if LED is enabled in settings
         if not led_settings.get('enabled', False):
-            logger.debug("LED sign disabled via configuration (enable in Admin > Hardware Settings)")
+            logger.warning("⚠️  LED sign DISABLED - Enable in Admin > Hardware Settings > LED Sign tab")
+            logger.info("📍 To enable LED: Open web UI → Admin → Hardware Settings → LED Sign tab → Check 'Enable LED Sign'")
             LED_AVAILABLE = False
             led_controller = None
             return None
@@ -133,19 +134,25 @@ else:
                 location_settings=settings,
             )
         except Exception as controller_error:  # pragma: no cover - defensive
-            logger.error("Failed to initialize LED controller: %s", controller_error)
+            logger.error("❌ Failed to initialize LED controller: %s", controller_error)
+            logger.error("   Check LED sign connection and network settings:")
+            logger.error(f"   - IP Address: {ip_address}")
+            logger.error(f"   - Port: {port}")
+            logger.error("   - Verify LED sign is powered on and connected to network")
+            logger.error("   - Check firewall rules allow connection to LED sign")
             LED_AVAILABLE = False
             led_controller = None
             return None
 
         if not getattr(led_controller, "connected", False):
-            logger.info(
-                "LED controller is unavailable after initialization (no active connection). "
-                "LED integration will remain disabled until the sign is reachable."
-            )
-            LED_AVAILABLE = False
-            led_controller = None
-            return None
+            logger.warning("⚠️  LED sign not connected (may be offline or unreachable)")
+            logger.info(f"   - Configured address: {ip_address}:{port}")
+            logger.info("   - LED will automatically reconnect when sign becomes available")
+            logger.info("   - Check Admin > Hardware Settings > LED Sign to verify configuration")
+            # Don't fail completely - allow LED to reconnect later
+            LED_AVAILABLE = True  # Keep available for retry
+            logger.info("✅ LED controller initialized (waiting for connection)")
+            return led_controller
 
         LED_AVAILABLE = True
         logger.info(
