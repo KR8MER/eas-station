@@ -36,6 +36,11 @@ echo_prompt() {
     echo -e "${CYAN}❯${NC} $1"
 }
 
+# Add branding footer for whiptail dialogs
+whiptail_footer() {
+    echo "Copyright (c) 2025-2026 Timothy Kramer (KR8MER) | AGPL v3 / Commercial License"
+}
+
 # Display uninstallation banner
 clear
 echo -e "${BOLD}${RED}"
@@ -67,36 +72,57 @@ SERVICE_GROUP="eas-station"
 LOG_DIR="/var/log/eas-station"
 SYSTEMD_DIR="/etc/systemd/system"
 
-# Warning and confirmation
-echo -e "${RED}${BOLD}⚠️  WARNING: THIS WILL COMPLETELY REMOVE EAS STATION ⚠️${NC}"
-echo ""
-echo -e "${WHITE}This will remove:${NC}"
-echo -e "  • All EAS Station services and systemd units"
-echo -e "  • Application files in ${INSTALL_DIR}"
-echo -e "  • Log files in ${LOG_DIR}"
-echo -e "  • Nginx configuration"
-echo -e "  • User account: ${SERVICE_USER}"
-echo ""
-echo -e "${YELLOW}This will ${BOLD}NOT${NC}${YELLOW} remove:${NC}"
-echo -e "  • PostgreSQL database (${BOLD}alerts${NC} database)"
-echo -e "  • PostgreSQL server"
-echo -e "  • Redis server"
-echo -e "  • Python packages"
-echo -e "  • Nginx server (only EAS Station config removed)"
-echo ""
-echo -e "${CYAN}You can optionally remove these at the end.${NC}"
-echo ""
-
-read -p "$(echo -e ${RED}${BOLD}Are you sure you want to uninstall EAS Station? [y/N]:${NC} )" -n 1 -r
-echo
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    echo_info "Uninstallation cancelled"
-    exit 0
+# Check if whiptail is available
+if command -v whiptail &> /dev/null; then
+    USE_WHIPTAIL=true
+else
+    USE_WHIPTAIL=false
+    echo_info "whiptail not available - using text prompts"
 fi
 
-echo ""
-echo -e "${BOLD}${CYAN}Starting uninstallation...${NC}"
-echo ""
+# Warning and confirmation
+if [ "$USE_WHIPTAIL" = true ]; then
+    # Use whiptail for confirmation
+    if ! whiptail --title "⚠️  WARNING: UNINSTALL EAS STATION" --backtitle "$(whiptail_footer)" --yesno "THIS WILL COMPLETELY REMOVE EAS STATION\n\nThis will remove:\n• All EAS Station services and systemd units\n• Application files in $INSTALL_DIR\n• Log files in $LOG_DIR\n• Nginx configuration\n• User account: $SERVICE_USER\n\nThis will NOT remove:\n• PostgreSQL database (alerts database)\n• PostgreSQL server\n• Redis server\n• Python packages\n• Nginx server (only EAS Station config removed)\n\nYou can optionally remove these at the end.\n\nAre you sure you want to uninstall EAS Station?" 24 75 --defaultno; then
+        echo ""
+        echo -e "${BOLD}${CYAN}Starting uninstallation...${NC}"
+        echo ""
+    else
+        echo_info "Uninstallation cancelled"
+        exit 0
+    fi
+else
+    # Fallback to text-based confirmation
+    echo -e "${RED}${BOLD}⚠️  WARNING: THIS WILL COMPLETELY REMOVE EAS STATION ⚠️${NC}"
+    echo ""
+    echo -e "${WHITE}This will remove:${NC}"
+    echo -e "  • All EAS Station services and systemd units"
+    echo -e "  • Application files in ${INSTALL_DIR}"
+    echo -e "  • Log files in ${LOG_DIR}"
+    echo -e "  • Nginx configuration"
+    echo -e "  • User account: ${SERVICE_USER}"
+    echo ""
+    echo -e "${YELLOW}This will ${BOLD}NOT${NC}${YELLOW} remove:${NC}"
+    echo -e "  • PostgreSQL database (${BOLD}alerts${NC} database)"
+    echo -e "  • PostgreSQL server"
+    echo -e "  • Redis server"
+    echo -e "  • Python packages"
+    echo -e "  • Nginx server (only EAS Station config removed)"
+    echo ""
+    echo -e "${CYAN}You can optionally remove these at the end.${NC}"
+    echo ""
+
+    read -p "$(echo -e ${RED}${BOLD}Are you sure you want to uninstall EAS Station? [y/N]:${NC} )" -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo_info "Uninstallation cancelled"
+        exit 0
+    fi
+
+    echo ""
+    echo -e "${BOLD}${CYAN}Starting uninstallation...${NC}"
+    echo ""
+fi
 
 # Stop all EAS Station services
 echo_info "Stopping EAS Station services..."
@@ -188,70 +214,124 @@ echo -e "${BOLD}${CYAN}═══════════════════
 echo ""
 
 # PostgreSQL database removal
-echo_prompt "Do you want to remove the PostgreSQL database (${BOLD}alerts${NC})? [y/N]:"
-read -n 1 -r REMOVE_DB
-echo
-if [[ $REMOVE_DB =~ ^[Yy]$ ]]; then
-    echo_info "Removing PostgreSQL database..."
-    sudo -u postgres psql -c "DROP DATABASE IF EXISTS alerts;" 2>/dev/null || echo_warning "Database removal failed"
-    sudo -u postgres psql -c "DROP USER IF EXISTS \"eas-station\";" 2>/dev/null || echo_warning "Database user removal failed"
-    echo_success "Database removed"
+if [ "$USE_WHIPTAIL" = true ]; then
+    if whiptail --title "Remove PostgreSQL Database?" --backtitle "$(whiptail_footer)" --yesno "Do you want to remove the PostgreSQL database?\n\nThis will permanently delete:\n• The 'alerts' database\n• The 'eas-station' database user\n• All historical alert data\n\nThis action cannot be undone!\n\nRemove database?" 16 65 --defaultno; then
+        echo_info "Removing PostgreSQL database..."
+        sudo -u postgres psql -c "DROP DATABASE IF EXISTS alerts;" 2>/dev/null || echo_warning "Database removal failed"
+        sudo -u postgres psql -c "DROP USER IF EXISTS \"eas-station\";" 2>/dev/null || echo_warning "Database user removal failed"
+        echo_success "Database removed"
+    fi
+else
+    echo_prompt "Do you want to remove the PostgreSQL database (${BOLD}alerts${NC})? [y/N]:"
+    read -n 1 -r REMOVE_DB
+    echo
+    if [[ $REMOVE_DB =~ ^[Yy]$ ]]; then
+        echo_info "Removing PostgreSQL database..."
+        sudo -u postgres psql -c "DROP DATABASE IF EXISTS alerts;" 2>/dev/null || echo_warning "Database removal failed"
+        sudo -u postgres psql -c "DROP USER IF EXISTS \"eas-station\";" 2>/dev/null || echo_warning "Database user removal failed"
+        echo_success "Database removed"
+    fi
 fi
 echo ""
 
 # PostgreSQL server removal
-echo_prompt "Do you want to remove PostgreSQL server entirely? [y/N]:"
-read -n 1 -r REMOVE_PG
-echo
-if [[ $REMOVE_PG =~ ^[Yy]$ ]]; then
-    echo_info "Removing PostgreSQL..."
-    systemctl stop postgresql 2>/dev/null || true
-    apt-get remove --purge -y postgresql postgresql-* 2>/dev/null || echo_warning "PostgreSQL removal failed"
-    rm -rf /etc/postgresql 2>/dev/null || true
-    rm -rf /var/lib/postgresql 2>/dev/null || true
-    echo_success "PostgreSQL removed"
+if [ "$USE_WHIPTAIL" = true ]; then
+    if whiptail --title "Remove PostgreSQL Server?" --backtitle "$(whiptail_footer)" --yesno "Do you want to remove PostgreSQL server entirely?\n\nThis will:\n• Stop the PostgreSQL service\n• Uninstall all PostgreSQL packages\n• Remove PostgreSQL configuration files\n• Remove all PostgreSQL data directories\n\nWARNING: This will affect ALL databases on this system,\nnot just EAS Station!\n\nRemove PostgreSQL server?" 18 65 --defaultno; then
+        echo_info "Removing PostgreSQL..."
+        systemctl stop postgresql 2>/dev/null || true
+        apt-get remove --purge -y postgresql postgresql-* 2>/dev/null || echo_warning "PostgreSQL removal failed"
+        rm -rf /etc/postgresql 2>/dev/null || true
+        rm -rf /var/lib/postgresql 2>/dev/null || true
+        echo_success "PostgreSQL removed"
+    fi
+else
+    echo_prompt "Do you want to remove PostgreSQL server entirely? [y/N]:"
+    read -n 1 -r REMOVE_PG
+    echo
+    if [[ $REMOVE_PG =~ ^[Yy]$ ]]; then
+        echo_info "Removing PostgreSQL..."
+        systemctl stop postgresql 2>/dev/null || true
+        apt-get remove --purge -y postgresql postgresql-* 2>/dev/null || echo_warning "PostgreSQL removal failed"
+        rm -rf /etc/postgresql 2>/dev/null || true
+        rm -rf /var/lib/postgresql 2>/dev/null || true
+        echo_success "PostgreSQL removed"
+    fi
 fi
 echo ""
 
 # Redis removal
-echo_prompt "Do you want to remove Redis server? [y/N]:"
-read -n 1 -r REMOVE_REDIS
-echo
-if [[ $REMOVE_REDIS =~ ^[Yy]$ ]]; then
-    echo_info "Removing Redis..."
-    systemctl stop redis-server 2>/dev/null || true
-    apt-get remove --purge -y redis-server redis-tools 2>/dev/null || echo_warning "Redis removal failed"
-    rm -rf /etc/redis 2>/dev/null || true
-    rm -rf /var/lib/redis 2>/dev/null || true
-    echo_success "Redis removed"
+if [ "$USE_WHIPTAIL" = true ]; then
+    if whiptail --title "Remove Redis Server?" --backtitle "$(whiptail_footer)" --yesno "Do you want to remove Redis server?\n\nThis will:\n• Stop the Redis service\n• Uninstall Redis packages\n• Remove Redis configuration files\n• Remove Redis data directories\n\nWARNING: This will affect any applications using Redis,\nnot just EAS Station!\n\nRemove Redis server?" 16 65 --defaultno; then
+        echo_info "Removing Redis..."
+        systemctl stop redis-server 2>/dev/null || true
+        apt-get remove --purge -y redis-server redis-tools 2>/dev/null || echo_warning "Redis removal failed"
+        rm -rf /etc/redis 2>/dev/null || true
+        rm -rf /var/lib/redis 2>/dev/null || true
+        echo_success "Redis removed"
+    fi
+else
+    echo_prompt "Do you want to remove Redis server? [y/N]:"
+    read -n 1 -r REMOVE_REDIS
+    echo
+    if [[ $REMOVE_REDIS =~ ^[Yy]$ ]]; then
+        echo_info "Removing Redis..."
+        systemctl stop redis-server 2>/dev/null || true
+        apt-get remove --purge -y redis-server redis-tools 2>/dev/null || echo_warning "Redis removal failed"
+        rm -rf /etc/redis 2>/dev/null || true
+        rm -rf /var/lib/redis 2>/dev/null || true
+        echo_success "Redis removed"
+    fi
 fi
 echo ""
 
 # Nginx removal
-echo_prompt "Do you want to remove Nginx web server? [y/N]:"
-read -n 1 -r REMOVE_NGINX
-echo
-if [[ $REMOVE_NGINX =~ ^[Yy]$ ]]; then
-    echo_info "Removing Nginx..."
-    systemctl stop nginx 2>/dev/null || true
-    apt-get remove --purge -y nginx nginx-common 2>/dev/null || echo_warning "Nginx removal failed"
-    rm -rf /etc/nginx 2>/dev/null || true
-    echo_success "Nginx removed"
+if [ "$USE_WHIPTAIL" = true ]; then
+    if whiptail --title "Remove Nginx Web Server?" --backtitle "$(whiptail_footer)" --yesno "Do you want to remove Nginx web server?\n\nThis will:\n• Stop the Nginx service\n• Uninstall all Nginx packages\n• Remove Nginx configuration files\n\nWARNING: This will affect any websites or applications\nusing Nginx, not just EAS Station!\n\nRemove Nginx?" 16 65 --defaultno; then
+        echo_info "Removing Nginx..."
+        systemctl stop nginx 2>/dev/null || true
+        apt-get remove --purge -y nginx nginx-common 2>/dev/null || echo_warning "Nginx removal failed"
+        rm -rf /etc/nginx 2>/dev/null || true
+        echo_success "Nginx removed"
+    fi
+else
+    echo_prompt "Do you want to remove Nginx web server? [y/N]:"
+    read -n 1 -r REMOVE_NGINX
+    echo
+    if [[ $REMOVE_NGINX =~ ^[Yy]$ ]]; then
+        echo_info "Removing Nginx..."
+        systemctl stop nginx 2>/dev/null || true
+        apt-get remove --purge -y nginx nginx-common 2>/dev/null || echo_warning "Nginx removal failed"
+        rm -rf /etc/nginx 2>/dev/null || true
+        echo_success "Nginx removed"
+    fi
 fi
 echo ""
 
 # Python packages removal
-echo_prompt "Do you want to remove Python packages installed by EAS Station? [y/N]:"
-read -n 1 -r REMOVE_PYTHON
-echo
-if [[ $REMOVE_PYTHON =~ ^[Yy]$ ]]; then
-    echo_info "Removing Python packages..."
-    if [ -f "$INSTALL_DIR/requirements.txt" ]; then
-        pip3 uninstall -y -r "$INSTALL_DIR/requirements.txt" 2>/dev/null || echo_warning "Some packages may not have been removed"
-        echo_success "Python packages removed (system packages were left intact)"
-    else
-        echo_warning "Requirements file not found - skipping Python package removal"
-        echo_info "You can manually remove packages with: pip3 list | grep -E '(flask|sqlalchemy|redis|psutil)' | awk '{print \$1}' | xargs pip3 uninstall -y"
+if [ "$USE_WHIPTAIL" = true ]; then
+    if whiptail --title "Remove Python Packages?" --backtitle "$(whiptail_footer)" --yesno "Do you want to remove Python packages installed by EAS Station?\n\nThis will attempt to uninstall Python packages listed\nin requirements.txt.\n\nNote: System-wide Python packages will be left intact.\nOnly EAS Station dependencies will be removed.\n\nRemove Python packages?" 15 65 --defaultno; then
+        echo_info "Removing Python packages..."
+        if [ -f "$INSTALL_DIR/requirements.txt" ]; then
+            pip3 uninstall -y -r "$INSTALL_DIR/requirements.txt" 2>/dev/null || echo_warning "Some packages may not have been removed"
+            echo_success "Python packages removed (system packages were left intact)"
+        else
+            echo_warning "Requirements file not found - skipping Python package removal"
+            echo_info "You can manually remove packages with: pip3 list | grep -E '(flask|sqlalchemy|redis|psutil)' | awk '{print \$1}' | xargs pip3 uninstall -y"
+        fi
+    fi
+else
+    echo_prompt "Do you want to remove Python packages installed by EAS Station? [y/N]:"
+    read -n 1 -r REMOVE_PYTHON
+    echo
+    if [[ $REMOVE_PYTHON =~ ^[Yy]$ ]]; then
+        echo_info "Removing Python packages..."
+        if [ -f "$INSTALL_DIR/requirements.txt" ]; then
+            pip3 uninstall -y -r "$INSTALL_DIR/requirements.txt" 2>/dev/null || echo_warning "Some packages may not have been removed"
+            echo_success "Python packages removed (system packages were left intact)"
+        else
+            echo_warning "Requirements file not found - skipping Python package removal"
+            echo_info "You can manually remove packages with: pip3 list | grep -E '(flask|sqlalchemy|redis|psutil)' | awk '{print \$1}' | xargs pip3 uninstall -y"
+        fi
     fi
 fi
 echo ""

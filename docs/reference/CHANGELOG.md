@@ -6,6 +6,19 @@ tracks releases under the 2.x series.
 
 ## [Unreleased]
 
+### Enhanced
+- **Enhanced uninstall.sh with whiptail dialogs** (v2.52.0)
+  - Added whiptail support for all interactive prompts in uninstall.sh
+  - Replaced 5 plain text prompts with professional whiptail dialogs
+  - Main uninstall confirmation now uses whiptail with detailed warnings
+  - Optional dependency removal prompts now use whiptail with clear descriptions
+  - Added detailed explanations for each removal option (PostgreSQL, Redis, Nginx, Python packages)
+  - Warnings clearly indicate when removals affect other applications
+  - Maintains fallback to text prompts when whiptail unavailable
+  - Consistent user experience across install.sh, update.sh, and uninstall.sh
+  - Professional appearance with --defaultno for destructive operations
+  - File: `uninstall.sh`
+
 ### Added
 - **Installation Script Technology Analysis** (v2.51.4)
   - Comprehensive analysis comparing Bash vs Python for install.sh and update.sh
