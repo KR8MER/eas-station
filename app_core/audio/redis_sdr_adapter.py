@@ -304,7 +304,8 @@ class RedisSDRSourceAdapter(AudioSourceAdapter):
                                 # Original 0.1s timeout was too aggressive and caused cutouts
                                 try:
                                     self._audio_chunk_queue.put(audio_samples, timeout=1.0)
-                                    logger.warning(f"Audio chunk queue was full for {self._receiver_id}, used blocking put")
+                                    # Only log at debug level to avoid log spam during sustained load
+                                    logger.debug(f"Audio chunk queue was full for {self._receiver_id}, used blocking put")
                                 except queue.Full:
                                     logger.error(f"Audio chunk queue still full after 1s timeout for {self._receiver_id}, dropping samples")
                                     continue  # Skip updating counters if we dropped samples
