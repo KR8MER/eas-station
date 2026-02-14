@@ -3,7 +3,7 @@
 **Document Purpose**: Evaluate whether install.sh and update.sh should be converted from Bash to Python
 
 **Date**: 2026-02-14  
-**Version**: 2.51.3  
+**Version**: 2.51.4  
 **Status**: Analysis Complete - Recommendation Provided
 
 ---

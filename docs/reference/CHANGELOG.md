@@ -6,6 +6,16 @@ tracks releases under the 2.x series.
 
 ## [Unreleased]
 
+### Added
+- **Installation Script Technology Analysis** (v2.51.4)
+  - Comprehensive analysis comparing Bash vs Python for install.sh and update.sh
+  - Evaluated current implementation (4,012 lines of Bash)
+  - Documented advantages of Bash for system administration tasks
+  - Analyzed risks of converting to Python
+  - Recommended keeping current Bash implementation with hybrid approach
+  - Industry benchmarking against Docker, Kubernetes, and other projects
+  - File: `docs/development/INSTALL_SCRIPT_ANALYSIS.md`
+
 ### Enhanced
 - **Enhanced visual appearance of install and update scripts** (v2.51.3)
   - Added animated celebration with sparkles on successful completion
