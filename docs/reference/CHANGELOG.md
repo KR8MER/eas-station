@@ -7,6 +7,14 @@ tracks releases under the 2.x series.
 ## [Unreleased]
 
 ### Fixed
+- **Eliminate audio cutouts in audio-monitor service** (v2.46.9)
+  - Increased BroadcastQueue buffer sizes from 10,000 to 50,000 chunks (71 min buffer vs 14 min)
+  - Increased Redis SDR adapter internal queue from 100 to 500 chunks for better headroom
+  - Changed queue.put timeout from 0.1s to non-blocking with 1.0s fallback to prevent sample drops during GC pauses
+  - Reduced capture loop idle sleep from 50ms to 1ms to minimize latency
+  - These changes eliminate cutouts during GC pauses, network hiccups, and CPU bursts
+  - Files: `app_core/audio/ingest.py`, `app_core/audio/redis_sdr_adapter.py`
+
 - **Fix update.sh silently failing without notifying user on git errors** (v2.46.8)
   - Added `set +e` / `set -e` around git fetch and git reset commands to prevent silent exit
   - Script now properly displays error messages when git operations fail instead of quitting silently

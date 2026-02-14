@@ -121,20 +121,20 @@ class AudioSourceAdapter(ABC):
         # 24/7/365 RELIABILITY: Increased buffer to handle network hiccups and temporary slowdowns
         self._source_broadcast = BroadcastQueue(
             name=f"source-{config.name}",
-            max_queue_size=10000  # ~853s buffer (14.2 min) at any sample rate
-                                  # At 48kHz: 10000 chunks × 4096 samples = 40.96M samples / 48kHz = 853s
-                                  # Handles temporary network issues, consumer slowdowns, GC pauses
+            max_queue_size=50000  # ~4266s buffer (71 min) at any sample rate
+                                  # At 48kHz: 50000 chunks × 4096 samples = 204.8M samples / 48kHz = 4266s
+                                  # 5x larger buffer eliminates cutouts during GC pauses, network hiccups, CPU bursts
         )
         
         # Separate 16kHz broadcast queue for EAS monitor
         # ARCHITECTURAL FIX: Resample BEFORE queueing to reduce memory and eliminate conversion bottleneck
-        # At 16kHz: same 10000 chunk buffer = ~853s (14.2 min) - resampling preserves duration
+        # At 16kHz: same 50000 chunk buffer = ~4266s (71 min) - resampling preserves duration
         # 24/7/365 RELIABILITY: This buffer must NEVER drop packets for EAS monitoring
         self._eas_broadcast = BroadcastQueue(
             name=f"eas-{config.name}",
-            max_queue_size=10000  # ~853s buffer (14.2 min) at 16kHz
-                                  # 10000 chunks × 1365 samples (resampled) = 13.65M / 16kHz = 853s
-                                  # Ensures EAS monitor never starves even during system load spikes
+            max_queue_size=50000  # ~4266s buffer (71 min) at 16kHz
+                                  # 50000 chunks × 1365 samples (resampled) = 68.25M / 16kHz = 4266s
+                                  # 5x larger buffer ensures EAS monitor never starves even during system load spikes
         )
         
         self._last_metrics_update = 0.0
@@ -288,7 +288,7 @@ class AudioSourceAdapter(ABC):
                     # Only sleep if source had no data activity (prevents busy loops on truly idle sources)
                     # Stream sources may read HTTP data but not have enough to decode yet - don't sleep in that case
                     if not self._had_data_activity:
-                        time.sleep(0.05)  # 50ms sleep to prevent CPU spinning on idle sources
+                        time.sleep(0.001)  # 1ms sleep to prevent CPU spinning on idle sources (reduced from 50ms to minimize latency)
 
             except Exception as e:
                 consecutive_errors += 1

@@ -69,7 +69,8 @@ class RedisSDRSourceAdapter(AudioSourceAdapter):
         self._iq_sample_rate: int = 2500000  # Will be updated from Redis messages
         self._center_frequency: int = 0  # Will be updated from Redis messages
         # Queue for audio chunks from Redis subscriber thread
-        self._audio_chunk_queue: queue.Queue = queue.Queue(maxsize=100)
+        # Increased from 100 to 500 to provide more headroom between demodulation and capture threads
+        self._audio_chunk_queue: queue.Queue = queue.Queue(maxsize=500)
 
     def _create_demodulator(self) -> None:
         """Create or recreate demodulator with current settings."""
@@ -296,7 +297,8 @@ class RedisSDRSourceAdapter(AudioSourceAdapter):
                             # Put audio in queue for _read_audio_chunk() to consume
                             # The base class capture loop will handle metrics updates and broadcasting
                             try:
-                                self._audio_chunk_queue.put(audio_samples, timeout=0.1)
+                                # Try non-blocking put first for minimum latency
+                                self._audio_chunk_queue.put_nowait(audio_samples)
                                 self._samples_received += len(audio_samples)
                                 self._last_sample_time = time.time()
                                 
@@ -307,7 +309,15 @@ class RedisSDRSourceAdapter(AudioSourceAdapter):
                                         f"{len(audio_samples)} samples"
                                     )
                             except queue.Full:
-                                logger.warning(f"Audio chunk queue full for {self._receiver_id}, dropping samples")
+                                # Queue full - use longer timeout to prevent sample loss during GC pauses or CPU bursts
+                                # Original 0.1s timeout was too aggressive and caused cutouts
+                                try:
+                                    self._audio_chunk_queue.put(audio_samples, timeout=1.0)
+                                    self._samples_received += len(audio_samples)
+                                    self._last_sample_time = time.time()
+                                    logger.warning(f"Audio chunk queue was full for {self._receiver_id}, used blocking put")
+                                except queue.Full:
+                                    logger.error(f"Audio chunk queue still full after 1s timeout for {self._receiver_id}, dropping samples")
                     else:
                         logger.error(f"No demodulator available for {self._receiver_id} - cannot process IQ samples")
 
