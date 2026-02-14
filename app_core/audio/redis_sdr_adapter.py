@@ -299,25 +299,26 @@ class RedisSDRSourceAdapter(AudioSourceAdapter):
                             try:
                                 # Try non-blocking put first for minimum latency
                                 self._audio_chunk_queue.put_nowait(audio_samples)
-                                self._samples_received += len(audio_samples)
-                                self._last_sample_time = time.time()
-                                
-                                # Log first successful sample
-                                if messages_received == 1:
-                                    logger.info(
-                                        f"✅ First audio chunk decoded for {self._receiver_id}: "
-                                        f"{len(audio_samples)} samples"
-                                    )
                             except queue.Full:
                                 # Queue full - use longer timeout to prevent sample loss during GC pauses or CPU bursts
                                 # Original 0.1s timeout was too aggressive and caused cutouts
                                 try:
                                     self._audio_chunk_queue.put(audio_samples, timeout=1.0)
-                                    self._samples_received += len(audio_samples)
-                                    self._last_sample_time = time.time()
                                     logger.warning(f"Audio chunk queue was full for {self._receiver_id}, used blocking put")
                                 except queue.Full:
                                     logger.error(f"Audio chunk queue still full after 1s timeout for {self._receiver_id}, dropping samples")
+                                    continue  # Skip updating counters if we dropped samples
+                            
+                            # Update counters after successful enqueue (either non-blocking or blocking)
+                            self._samples_received += len(audio_samples)
+                            self._last_sample_time = time.time()
+                            
+                            # Log first successful sample
+                            if messages_received == 1:
+                                logger.info(
+                                    f"✅ First audio chunk decoded for {self._receiver_id}: "
+                                    f"{len(audio_samples)} samples"
+                                )
                     else:
                         logger.error(f"No demodulator available for {self._receiver_id} - cannot process IQ samples")
 
