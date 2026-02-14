@@ -83,7 +83,7 @@ fi
 # Warning and confirmation
 if [ "$USE_WHIPTAIL" = true ]; then
     # Use whiptail for confirmation
-    if ! whiptail --title "⚠️  WARNING: UNINSTALL EAS STATION" --backtitle "$(whiptail_footer)" --yesno "THIS WILL COMPLETELY REMOVE EAS STATION\n\nThis will remove:\n• All EAS Station services and systemd units\n• Application files in $INSTALL_DIR\n• Log files in $LOG_DIR\n• Nginx configuration\n• User account: $SERVICE_USER\n\nThis will NOT remove:\n• PostgreSQL database (alerts database)\n• PostgreSQL server\n• Redis server\n• Python packages\n• Nginx server (only EAS Station config removed)\n\nYou can optionally remove these at the end.\n\nAre you sure you want to uninstall EAS Station?" 24 75 --defaultno; then
+    if whiptail --title "⚠️  WARNING: UNINSTALL EAS STATION" --backtitle "$(whiptail_footer)" --yesno "THIS WILL COMPLETELY REMOVE EAS STATION\n\nThis will remove:\n• All EAS Station services and systemd units\n• Application files in $INSTALL_DIR\n• Log files in $LOG_DIR\n• Nginx configuration\n• User account: $SERVICE_USER\n\nThis will NOT remove:\n• PostgreSQL database (alerts database)\n• PostgreSQL server\n• Redis server\n• Python packages\n• Nginx server (only EAS Station config removed)\n\nYou can optionally remove these at the end.\n\nAre you sure you want to uninstall EAS Station?" 24 75 --defaultno; then
         echo ""
         echo -e "${BOLD}${CYAN}Starting uninstallation...${NC}"
         echo ""

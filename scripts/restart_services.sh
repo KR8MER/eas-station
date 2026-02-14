@@ -63,14 +63,6 @@ else
     echo_info "whiptail not available - using automatic mode"
     echo ""
 fi
-# Check if whiptail is available
-if command -v whiptail &> /dev/null; then
-    USE_WHIPTAIL=true
-else
-    USE_WHIPTAIL=false
-    echo_info "whiptail not available - using automatic mode"
-    echo ""
-fi
 
 # Service management functions
 

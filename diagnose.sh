@@ -63,7 +63,6 @@ else
 fi
 
 # Diagnostic functions
-# Diagnostic functions
 
 check_services() {
     echo ""
