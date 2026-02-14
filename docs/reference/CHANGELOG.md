@@ -7,6 +7,18 @@ tracks releases under the 2.x series.
 ## [Unreleased]
 
 ### Enhanced
+- **Enhanced diagnose.sh with interactive whiptail menu** (v2.53.0)
+  - Added whiptail-based interactive menu for selective diagnostic testing
+  - Menu offers 10 options: 7 individual tests, run all, save to file, and exit
+  - Organized diagnostic functions for modular execution
+  - Added professional banner matching install.sh/update.sh styling
+  - Added option to save diagnostic output to timestamped file
+  - Improved visual separators and formatting for test results
+  - Maintains non-interactive mode when whiptail unavailable
+  - Allows users to run specific tests instead of always running all
+  - Added pause after each test for review
+  - File: `diagnose.sh`
+
 - **Enhanced uninstall.sh with whiptail dialogs** (v2.52.0)
   - Added whiptail support for all interactive prompts in uninstall.sh
   - Replaced 5 plain text prompts with professional whiptail dialogs
