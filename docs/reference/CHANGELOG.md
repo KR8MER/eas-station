@@ -7,6 +7,18 @@ tracks releases under the 2.x series.
 ## [Unreleased]
 
 ### Enhanced
+- **Enhanced restart_services.sh with interactive whiptail menu** (v2.54.0)
+  - Transformed from single-purpose restart script to full service manager
+  - Added whiptail-based interactive menu for granular service control
+  - Menu offers 12 options: restart all, start/stop all, check status, individual service restarts, view logs, check config
+  - Added professional banner matching other scripts
+  - Individual service restart capability (web, EAS, audio, SDR, hardware)
+  - Service log viewer with sub-menu for selecting specific service
+  - Modular function design for easy maintenance
+  - Maintains non-interactive mode for scripted use
+  - Enhanced service status checking for all 7 services
+  - File: `scripts/restart_services.sh`
+
 - **Enhanced diagnose.sh with interactive whiptail menu** (v2.53.0)
   - Added whiptail-based interactive menu for selective diagnostic testing
   - Menu offers 10 options: 7 individual tests, run all, save to file, and exit
