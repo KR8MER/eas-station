@@ -11,7 +11,8 @@ tracks releases under the 2.x series.
   - Increased BroadcastQueue buffer sizes from 10,000 to 50,000 chunks (71 min buffer vs 14 min)
   - Increased Redis SDR adapter internal queue from 100 to 500 chunks for better headroom
   - Changed queue.put timeout from 0.1s to non-blocking with 1.0s fallback to prevent sample drops during GC pauses
-  - Reduced capture loop idle sleep from 50ms to 1ms to minimize latency
+  - Reduced capture loop idle sleep from 50ms to 10ms for better responsiveness
+  - Changed queue full logging to debug level to prevent log spam
   - These changes eliminate cutouts during GC pauses, network hiccups, and CPU bursts
   - Files: `app_core/audio/ingest.py`, `app_core/audio/redis_sdr_adapter.py`
 
