@@ -90,15 +90,37 @@ PREVIEW_SAMPLE_DATA: Dict[str, Any] = {
             }
         ],
     },
-    "receivers": [
-        {
-            "display_name": "WXJ-93 Airspy",
-            "latest_status": {
-                "signal_strength": -43.0,
-                "locked": True,
+    "receivers": {
+        "receivers": [
+            {
+                "id": 1,
+                "identifier": "WXJ-93",
+                "display_name": "WXJ-93 Airspy",
+                "driver": "airspy",
+                "frequency_hz": 162425000,
+                "enabled": True,
+                "latest_status": {
+                    "locked": True,
+                    "signal_strength": -43.0,
+                    "last_error": None,
+                },
             },
-        }
-    ],
+            {
+                "id": 2,
+                "identifier": "WNCI-FM",
+                "display_name": "WNCI RTL-SDR",
+                "driver": "rtl_sdr",
+                "frequency_hz": 97900000,
+                "enabled": True,
+                "latest_status": {
+                    "locked": True,
+                    "signal_strength": -51.2,
+                    "last_error": None,
+                },
+            },
+        ],
+        "count": 2,
+    },
     "audio": {
         "total_sources": 2,
         "active_source": "WNCI",
@@ -390,14 +412,21 @@ class ScreenRenderer:
             # Split into variable name and property path
             if '.' in var_path:
                 var_name = var_path.split('.')[0]
-                property_path = '.'.join(var_path.split('.')[1:])
 
-                if var_name in all_data:
-                    value = self.get_nested_value({var_name: all_data[var_name]}, var_path)
+                # Strip array index for data lookup (e.g., "receivers[0]" → "receivers")
+                base_var_name = var_name.split('[')[0] if '[' in var_name else var_name
+
+                if base_var_name in all_data:
+                    value = self.get_nested_value({base_var_name: all_data[base_var_name]}, var_path)
                 else:
                     value = ""
             else:
-                value = all_data.get(var_path, "")
+                # Handle top-level array access like {receivers[0]}
+                base_var = var_path.split('[')[0] if '[' in var_path else var_path
+                if base_var != var_path and base_var in all_data:
+                    value = self.get_nested_value({base_var: all_data[base_var]}, var_path)
+                else:
+                    value = all_data.get(var_path, "")
 
             # Format the value
             if isinstance(value, float):

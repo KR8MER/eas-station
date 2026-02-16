@@ -27,7 +27,7 @@ import subprocess
 from pathlib import Path
 from typing import Dict, Any
 
-from flask import Flask, jsonify, render_template, url_for
+from flask import Flask, jsonify, redirect, render_template, url_for
 from sqlalchemy import text
 from alembic import command, config as alembic_config
 from alembic.script import ScriptDirectory
@@ -508,5 +508,7 @@ def register(app: Flask, logger) -> None:
 
         return jsonify({"receivers": payload, "count": len(payload)})
 
-
-__all__ = ["register"]
+    @app.route("/api/receivers")
+    def api_receivers_redirect():
+        """Redirect legacy /api/receivers to /api/monitoring/radio."""
+        return redirect(url_for("monitoring_radio"))

@@ -88,6 +88,7 @@ const ScreenEditor = (function() {
         // Element property changes
         document.getElementById('elem-text').addEventListener('input', updateSelectedElement);
         document.getElementById('elem-font').addEventListener('change', updateSelectedElement);
+        document.getElementById('elem-align').addEventListener('change', updateSelectedElement);
         document.getElementById('elem-x').addEventListener('input', updateSelectedElement);
         document.getElementById('elem-y').addEventListener('input', updateSelectedElement);
         document.getElementById('elem-max-width').addEventListener('input', updateSelectedElement);
@@ -184,6 +185,7 @@ const ScreenEditor = (function() {
             x: 10,
             y: 10,
             font: 'small',
+            align: 'left',
             maxWidth: null,
             wrap: true,
             invert: false,
@@ -214,6 +216,7 @@ const ScreenEditor = (function() {
 
         document.getElementById('elem-text').value = element.text;
         document.getElementById('elem-font').value = element.font;
+        document.getElementById('elem-align').value = element.align || 'left';
         document.getElementById('elem-x').value = element.x;
         document.getElementById('elem-y').value = element.y;
         document.getElementById('elem-max-width').value = element.maxWidth || '';
@@ -236,6 +239,7 @@ const ScreenEditor = (function() {
 
         element.text = document.getElementById('elem-text').value;
         element.font = document.getElementById('elem-font').value;
+        element.align = document.getElementById('elem-align').value;
         element.x = parseInt(document.getElementById('elem-x').value) || 0;
         element.y = parseInt(document.getElementById('elem-y').value) || 0;
 
@@ -386,8 +390,18 @@ const ScreenEditor = (function() {
         ctx.font = `${fontSize}px monospace`;
         ctx.textBaseline = 'top';
 
-        // Simple text rendering (actual OLED will use better fonts)
-        ctx.fillText(element.text, element.x, element.y);
+        const align = element.align || 'left';
+        let x = element.x;
+
+        if (align === 'center') {
+            const textWidth = ctx.measureText(element.text).width;
+            x = element.x - textWidth / 2;
+        } else if (align === 'right') {
+            const textWidth = ctx.measureText(element.text).width;
+            x = element.x - textWidth;
+        }
+
+        ctx.fillText(element.text, x, element.y);
     }
 
     // Update element overlays for drag handles
@@ -688,6 +702,7 @@ const ScreenEditor = (function() {
                 x: e.x,
                 y: e.y,
                 font: e.font,
+                align: e.align || 'left',
                 max_width: e.maxWidth,
                 wrap: e.wrap,
                 invert: e.invert,
@@ -728,6 +743,7 @@ const ScreenEditor = (function() {
                 x: line.x || 0,
                 y: line.y || 0,
                 font: line.font || 'small',
+                align: line.align || 'left',
                 maxWidth: line.max_width || null,
                 wrap: line.wrap !== false,
                 invert: line.invert || false,

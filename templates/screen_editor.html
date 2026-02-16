@@ -94,6 +94,15 @@
                         </select>
                     </div>
 
+                    <div class="form-group">
+                        <label>Alignment</label>
+                        <select id="elem-align" class="form-control">
+                            <option value="left">Left</option>
+                            <option value="center">Center</option>
+                            <option value="right">Right</option>
+                        </select>
+                    </div>
+
                     <div class="row">
                         <div class="col-6">
                             <div class="form-group">
@@ -300,9 +309,10 @@
                         <option value="">Select an endpoint...</option>
                         <option value="/api/system_status">System Status</option>
                         <option value="/api/audio/metrics">Audio Metrics</option>
+                        <option value="/api/audio/health">Audio Health</option>
                         <option value="/api/alerts">Active Alerts</option>
-                        <option value="/api/stream/status">Stream Status</option>
-                        <option value="/api/receivers">Radio Receivers</option>
+                        <option value="/api/monitoring/radio">Radio Receivers</option>
+                        <option value="/api/eas-monitor/status">EAS Monitor</option>
                     </select>
                 </div>
                 <div class="form-group">
