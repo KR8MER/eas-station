@@ -4,7 +4,7 @@
     height: calc(100vh - 60px);
     display: flex;
     flex-direction: column;
-    background: var(--bg-primary, #f8f9fa);
+    background: var(--bg-color, #f8f9fa);
 }
 
 /* Header */
@@ -13,7 +13,7 @@
     justify-content: space-between;
     align-items: center;
     padding: 1rem 1.5rem;
-    background: var(--card-bg, #fff);
+    background: var(--surface-color, #fff);
     border-bottom: 1px solid var(--border-color, #dee2e6);
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
@@ -48,7 +48,7 @@
 /* Sidebars */
 .sidebar {
     width: 300px;
-    background: var(--card-bg, #fff);
+    background: var(--surface-color, #fff);
     border-right: 1px solid var(--border-color, #dee2e6);
     overflow-y: auto;
     display: flex;
@@ -72,7 +72,7 @@
 
 .panel-header {
     padding: 0.75rem 1rem;
-    background: var(--bg-secondary, #f1f3f5);
+    background: var(--bg-color, #f1f5f9);
     font-weight: 600;
     font-size: 0.9rem;
     display: flex;
@@ -95,12 +95,12 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    background: var(--color-neutral-200);
+    background: var(--bg-color, #f1f5f9);
 }
 
 .canvas-toolbar {
     padding: 0.75rem 1rem;
-    background: var(--card-bg, #fff);
+    background: var(--surface-color, #fff);
     border-bottom: 1px solid var(--border-color, #dee2e6);
     display: flex;
     align-items: center;
@@ -140,9 +140,9 @@
 
 .canvas-container {
     position: relative;
-    background: var(--bg-primary);
-    border: 3px solid var(--color-border-dark);
-    border-radius: 8px;
+    background: var(--display-oled-bg, #000);
+    border: 3px solid var(--border-color, #dee2e6);
+    border-radius: var(--radius-sm);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     transform-origin: center center;
 }
@@ -165,21 +165,21 @@
 
 .element-overlay {
     position: absolute;
-    border: 2px dashed var(--color-info);
-    background: var(--color-info-light);
+    border: 2px dashed var(--info-color);
+    background: rgba(59, 130, 246, 0.1);
     cursor: move;
     pointer-events: all;
     transition: border-color 0.2s;
 }
 
 .element-overlay:hover {
-    border-color: var(--color-info-dark);
+    border-color: var(--primary-dark);
     background: rgba(59, 130, 246, 0.2);
 }
 
 .element-overlay.selected {
-    border-color: var(--color-warning);
-    background: var(--color-warning-light);
+    border-color: var(--warning-color);
+    background: rgba(245, 158, 11, 0.1);
     border-style: solid;
 }
 
@@ -187,8 +187,8 @@
     position: absolute;
     top: -20px;
     left: 0;
-    background: var(--color-info);
-    color: var(--color-text-inverse);
+    background: var(--info-color);
+    color: #fff;
     padding: 2px 6px;
     font-size: 10px;
     border-radius: 3px;
@@ -196,7 +196,7 @@
 }
 
 .element-overlay.selected .element-overlay-label {
-    background: var(--color-warning);
+    background: var(--warning-color);
 }
 
 .canvas-info {
@@ -220,7 +220,7 @@
 
 .layer-item {
     padding: 0.75rem;
-    background: var(--bg-primary, #f8f9fa);
+    background: var(--bg-color, #f1f5f9);
     border: 1px solid var(--border-color, #dee2e6);
     border-radius: 6px;
     cursor: pointer;
@@ -232,13 +232,13 @@
 
 .layer-item:hover {
     background: var(--bg-secondary, #e9ecef);
-    border-color: var(--color-info);
+    border-color: var(--info-color);
 }
 
 .layer-item.selected {
-    background: var(--color-info);
-    color: var(--color-text-inverse);
-    border-color: var(--color-info);
+    background: var(--info-color);
+    color: #fff;
+    border-color: var(--info-color);
 }
 
 .layer-icon {
@@ -287,7 +287,7 @@
 }
 
 .layer-count {
-    background: var(--bg-primary, #f8f9fa);
+    background: var(--bg-color, #f1f5f9);
     padding: 2px 8px;
     border-radius: 12px;
     font-size: 0.75rem;
@@ -325,7 +325,7 @@
 
 .data-source-item {
     padding: 0.75rem;
-    background: var(--bg-primary, #f8f9fa);
+    background: var(--bg-color, #f1f5f9);
     border: 1px solid var(--border-color, #dee2e6);
     border-radius: 6px;
     font-size: 0.85rem;
@@ -368,7 +368,7 @@
 
 .variable-item {
     padding: 0.5rem;
-    background: var(--bg-primary, #f8f9fa);
+    background: var(--bg-color, #f1f5f9);
     border-radius: 4px;
     margin-bottom: 0.5rem;
     cursor: pointer;
@@ -382,7 +382,7 @@
 .variable-item code {
     display: block;
     font-weight: 600;
-    color: var(--color-info);
+    color: var(--info-color);
     margin-bottom: 0.25rem;
 }
 
@@ -416,8 +416,8 @@
 
 .form-control:focus {
     outline: none;
-    border-color: var(--color-info);
-    box-shadow: 0 0 0 3px var(--color-info-light);
+    border-color: var(--info-color);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
 }
 
 .form-range {
@@ -429,7 +429,7 @@
     margin-top: 0.25rem;
     font-size: 0.85rem;
     font-weight: 600;
-    color: var(--color-info);
+    color: var(--info-color);
 }
 
 .button-group {
@@ -441,11 +441,20 @@
     flex: 1;
 }
 
+/* Display Canvas Preview (screen editor modal) */
+.display-canvas {
+    border: 2px solid #333;
+    max-width: 100%;
+    height: auto;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+}
+
 /* Data Preview */
 .data-preview {
     margin-top: 1rem;
     padding: 1rem;
-    background: var(--bg-primary, #f8f9fa);
+    background: var(--bg-color, #f1f5f9);
     border-radius: 6px;
     max-height: 300px;
     overflow-y: auto;
@@ -482,18 +491,4 @@
     }
 }
 
-/* Dark mode support */
-@media (prefers-color-scheme: dark) {
-    :root {
-        --bg-primary: #1a1a1a;
-        --bg-secondary: #2d2d2d;
-        --card-bg: #2d2d2d;
-        --text-primary: #ffffff;
-        --text-secondary: #a0a0a0;
-        --border-color: #404040;
-    }
-
-    .canvas-container {
-        border-color: #555;
-    }
-}
+/* Dark mode support - theme overrides handled by styles.css data-theme selectors */

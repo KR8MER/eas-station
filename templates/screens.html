@@ -48,12 +48,12 @@
 }
 
 .summary-card {
-    background: var(--card-bg);
+    background: var(--bg-card);
     border: 1px solid var(--border-color);
-    border-radius: 14px;
+    border-radius: var(--radius-sm);
     padding: 1.25rem;
     min-height: 140px;
-    box-shadow: var(--card-shadow, 0 12px 24px rgba(15, 23, 42, 0.08));
+    box-shadow: var(--shadow-md);
 }
 
 .summary-label {
@@ -75,22 +75,22 @@
 }
 
 .filter-card {
-    border-radius: 14px;
+    border-radius: var(--radius-sm);
     border: 1px solid var(--border-color);
     padding: 1.25rem;
-    background: var(--card-bg);
-    box-shadow: var(--card-shadow, 0 12px 24px rgba(15, 23, 42, 0.08));
+    background: var(--bg-card);
+    box-shadow: var(--shadow-md);
 }
 
 .screen-card,
 .rotation-card,
 .doc-card {
-    background-color: var(--card-bg);
+    background-color: var(--bg-card);
     border: 1px solid var(--border-color);
-    border-radius: 16px;
+    border-radius: var(--radius-md);
     padding: 1.5rem;
     margin-bottom: 1.25rem;
-    box-shadow: var(--card-shadow, 0 12px 24px rgba(15, 23, 42, 0.08));
+    box-shadow: var(--shadow-md);
     transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -98,7 +98,7 @@
 .rotation-card:hover,
 .doc-card:hover {
     transform: translateY(-2px);
-    box-shadow: 0 12px 35px rgba(0, 0, 0, 0.08);
+    box-shadow: var(--shadow-lg);
 }
 
 .screen-card-header {
@@ -142,10 +142,10 @@
 .status-chip.disabled { background: color-mix(in srgb, var(--danger-color) 18%, var(--surface-color)); color: var(--danger-color); }
 
 .screen-preview {
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     padding: 1rem;
     margin: 1.25rem 0 0.5rem;
-    background: #000;
+    background: var(--display-oled-bg);
     font-family: 'JetBrains Mono', 'Courier New', monospace;
     min-height: 110px;
     border: 2px solid #222;
@@ -1026,7 +1026,23 @@ function buildScreenPreview(screen) {
     }
 
     if (screen.display_type === 'oled') {
+        // Support both elements-based and lines-based OLED templates
+        const elements = Array.isArray(template.elements) ? template.elements : [];
         const lines = Array.isArray(template.lines) ? template.lines : [];
+
+        if (elements.length) {
+            // Elements-based format: show text elements as preview lines
+            const textElements = elements.filter(e => e.type === 'text' && e.text);
+            if (!textElements.length) {
+                return '<span class="text-muted">OLED graphical layout</span>';
+            }
+            return textElements.slice(0, 4).map(elem => {
+                const font = (elem.font || 'small').toLowerCase();
+                const sizeClass = font === 'large' || font === 'xlarge' || font === 'huge' ? 'large' : font === 'medium' ? 'medium' : 'small';
+                return `<span class="preview-line ${sizeClass}">${escapeHtml(elem.text)}</span>`;
+            }).join('');
+        }
+
         if (!lines.length) {
             return '<span class="text-muted">OLED layout will appear here</span>';
         }

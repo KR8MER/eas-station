@@ -7,9 +7,9 @@
     .display-container {
         background: var(--surface-color);
         border: 1px solid var(--border-color);
-        border-radius: 12px;
-        padding: 16px;
-        margin-bottom: 20px;
+        border-radius: var(--radius-sm);
+        padding: var(--spacing-4);
+        margin-bottom: var(--spacing-5);
         box-shadow: var(--shadow-md);
     }
 
@@ -37,7 +37,7 @@
     .display-status {
         display: inline-block;
         padding: 4px 12px;
-        border-radius: 12px;
+        border-radius: var(--radius-sm);
         font-size: 0.85rem;
         font-weight: 500;
         flex-shrink: 0;
@@ -54,8 +54,8 @@
     }
 
     .display-canvas-wrapper {
-        border-radius: 8px;
-        padding: 8px;
+        border-radius: var(--radius-sm);
+        padding: var(--spacing-2);
         display: flex;
         justify-content: center;
         position: relative;
@@ -66,12 +66,12 @@
     }
 
     .display-canvas-wrapper.oled-wrapper {
-        background: #000;
+        background: var(--display-oled-bg);
         border-color: #222;
     }
 
     .display-canvas-wrapper.vfd-wrapper {
-        background: #001200;
+        background: var(--display-vfd-bg);
         border-color: color-mix(in srgb, var(--success-color) 20%, #111);
     }
 
@@ -157,24 +157,25 @@
     .led-color-orange { color: var(--secondary-color); }
 
     .page-header {
-        background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
-        color: white;
-        padding: 30px;
-        border-radius: 12px;
-        margin-bottom: 30px;
-        box-shadow: var(--shadow-md);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: var(--spacing-4);
     }
 
-    .page-header h1 {
-        margin: 0;
-        font-size: 2rem;
-        font-weight: 600;
+    .page-header-actions {
+        text-align: right;
     }
 
-    .page-header p {
-        margin: 10px 0 0 0;
+    .page-header-meta {
+        margin-top: var(--spacing-2);
+        font-size: 0.85rem;
         opacity: 0.9;
-        font-size: 1.1rem;
+    }
+
+    .page-header-meta + .page-header-meta {
+        margin-top: var(--spacing-1);
     }
 
     @media (max-width: 575.98px) {
@@ -198,24 +199,22 @@
 {% block content %}
 <div class="container-fluid mt-4">
     <div class="page-header">
-        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
-            <div>
-                <h1><i class="fas fa-tv"></i> Live Display Preview</h1>
-                <p>Real-time visualization of all display outputs with proper colors and animations</p>
+        <div>
+            <h1><i class="fas fa-tv"></i> Live Display Preview</h1>
+            <p>Real-time visualization of all display outputs with proper colors and animations</p>
+        </div>
+        <div class="page-header-actions">
+            <button id="refresh-btn" class="btn btn-light" onclick="manualRefresh()" title="Refresh now">
+                <i class="fas fa-sync-alt"></i> Refresh
+            </button>
+            <div class="page-header-meta">
+                <span id="last-update">Last update: Never</span>
             </div>
-            <div style="text-align: right;">
-                <button id="refresh-btn" class="btn btn-light" onclick="manualRefresh()" title="Refresh now">
-                    <i class="fas fa-sync-alt"></i> Refresh
-                </button>
-                <div style="margin-top: 8px; font-size: 0.85rem; opacity: 0.9;">
-                    <span id="last-update">Last update: Never</span>
-                </div>
-                <div style="margin-top: 4px;">
-                    <label style="font-size: 0.85rem; opacity: 0.9; cursor: pointer;">
-                        <input type="checkbox" id="auto-refresh-toggle" checked onchange="toggleAutoRefresh()">
-                        Auto-refresh (1s)
-                    </label>
-                </div>
+            <div class="page-header-meta">
+                <label class="cursor-pointer">
+                    <input type="checkbox" id="auto-refresh-toggle" checked onchange="toggleAutoRefresh()">
+                    Auto-refresh (1s)
+                </label>
             </div>
         </div>
     </div>
