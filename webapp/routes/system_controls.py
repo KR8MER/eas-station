@@ -62,35 +62,38 @@ def register(app: Flask, logger) -> None:
 
     route_logger = logger.getChild("system_controls")
 
-    def _get_gpio_controller():
-        """Get or create the global GPIO controller instance."""
-        if not hasattr(current_app, "gpio_controller"):
-            from app_utils.gpio import GPIOController
-
-            current_app.gpio_controller = GPIOController(
-                db_session=db.session, logger=route_logger
-            )
-
-            # Load GPIO configuration from environment/database
-            _load_gpio_configuration(current_app.gpio_controller)
-
-        return current_app.gpio_controller
-
-    def _load_gpio_configuration(controller):
-        """Load GPIO pin configurations from environment variables."""
+    def _get_configured_gpio_pins():
+        """Load GPIO pin configuration from database-backed hardware settings."""
 
         oled_enabled = _get_oled_enabled_status()
-        configs = load_gpio_pin_configs_from_db(route_logger, oled_enabled=oled_enabled)
+        return load_gpio_pin_configs_from_db(route_logger, oled_enabled=oled_enabled)
 
+    def _sync_gpio_configuration(controller):
+        """Keep in-memory controller pins aligned with persisted configuration."""
+
+        configs = _get_configured_gpio_pins()
+        configured_pins = {config.pin for config in configs}
+        current_states = controller.get_all_states()
+        loaded_pins = set(current_states.keys())
+
+        # Remove stale pins that are no longer configured.
+        for pin in loaded_pins - configured_pins:
+            try:
+                controller.remove_pin(pin)
+                route_logger.info("Removed stale GPIO configuration for pin %s", pin)
+            except Exception as exc:  # pragma: no cover - hardware teardown
+                route_logger.error("Failed to remove stale GPIO pin %s: %s", pin, exc)
+
+        # Add newly configured pins.
         for config in configs:
+            if config.pin in loaded_pins:
+                continue
             try:
                 controller.add_pin(config)
                 route_logger.info(
                     "Loaded GPIO configuration: pin %s (%s)", config.pin, config.name
                 )
             except ValueError:
-                # Duplicate pins are already logged by the loader but guard against
-                # attempts to register the same pin twice.
                 route_logger.warning("GPIO pin %s already configured; skipping", config.pin)
             except Exception as exc:  # pragma: no cover - hardware setup
                 route_logger.error(
@@ -106,6 +109,20 @@ def register(app: Flask, logger) -> None:
             behavior_manager.update_behavior_matrix(
                 load_gpio_behavior_matrix_from_db(route_logger)
             )
+
+        return configs
+
+    def _get_gpio_controller():
+        """Get or create the global GPIO controller instance."""
+        if not hasattr(current_app, "gpio_controller"):
+            from app_utils.gpio import GPIOController
+
+            current_app.gpio_controller = GPIOController(
+                db_session=db.session, logger=route_logger
+            )
+
+        _sync_gpio_configuration(current_app.gpio_controller)
+        return current_app.gpio_controller
 
     def _build_pin_entry(pin_def, config_map, behavior_matrix):
         entry = {
@@ -455,6 +472,41 @@ def register(app: Flask, logger) -> None:
         try:
             controller = _get_gpio_controller()
             states = controller.get_all_states()
+            configured_pins = _get_configured_gpio_pins()
+            configured_count = len(configured_pins)
+
+            # Build display payload that includes configured pins even if runtime
+            # controller has not loaded them yet (e.g., service restart pending).
+            pin_entries = []
+            state_map = {int(pin): info for pin, info in states.items()}
+
+            for config in configured_pins:
+                runtime_state = state_map.pop(config.pin, None)
+                if runtime_state is not None:
+                    runtime_state['runtime_loaded'] = True
+                    pin_entries.append(runtime_state)
+                    continue
+
+                pin_entries.append(
+                    {
+                        'pin': config.pin,
+                        'name': config.name,
+                        'state': 'unloaded',
+                        'enabled': config.enabled,
+                        'active_high': config.active_high,
+                        'is_active': False,
+                        'flash_enabled': config.flash_enabled,
+                        'flash_interval_ms': config.flash_interval_ms,
+                        'flash_partner_pin': config.flash_partner_pin,
+                        'runtime_loaded': False,
+                    }
+                )
+
+            # Keep any controller-only pins visible for diagnostics.
+            for extra_pin in sorted(state_map.keys()):
+                info = state_map[extra_pin]
+                info['runtime_loaded'] = True
+                pin_entries.append(info)
 
             # Get recent history (last 24 hours)
             cutoff = utc_now() - timedelta(hours=24)
@@ -468,9 +520,11 @@ def register(app: Flask, logger) -> None:
 
             return render_template(
                 "gpio_control.html",
-                pins=list(states.values()),
+                pins=pin_entries,
                 recent_logs=recent_logs,
                 current_user=_get_current_user(),
+                configured_pin_count=configured_count,
+                environment_issues=controller.get_environment_issues(),
             )
 
         except Exception as exc:
@@ -517,10 +571,26 @@ def register(app: Flask, logger) -> None:
                 for behavior in behavior_order
             ]
 
+            oled_enabled = _get_oled_enabled_status()
+            configured_pins = load_gpio_pin_configs_from_db(route_logger, oled_enabled=oled_enabled)
+            pin_config_map = {
+                str(config.pin): {
+                    "name": config.name,
+                    "active_high": config.active_high,
+                    "hold_seconds": config.hold_seconds,
+                    "watchdog_seconds": config.watchdog_seconds,
+                    "flash_enabled": config.flash_enabled,
+                    "flash_interval_ms": config.flash_interval_ms,
+                    "flash_partner_pin": config.flash_partner_pin,
+                }
+                for config in configured_pins
+            }
+
             return render_template(
                 "gpio_pin_map.html",
                 pin_rows=pin_rows,
                 behavior_options=behavior_options,
+                pin_config_map=pin_config_map,
             )
         except Exception as exc:  # pragma: no cover - rendering safety
             route_logger.error(f"Failed to render GPIO pin map: {exc}")

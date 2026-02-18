@@ -184,6 +184,55 @@ class _FakeController:
         return True
 
 
+
+
+def test_gpio_state_includes_output_verification(monkeypatch):
+    """GPIO status should expose output verification details for UI/diagnostics."""
+
+    controller = GPIOController()
+    controller._gpiozero_available = False
+    monkeypatch.setattr(
+        gpio,
+        "_create_gpio_backend",
+        lambda exclude=None: gpio._NullGPIOBackend(),
+    )
+
+    controller.add_pin(GPIOPinConfig(pin=17, name="Verified Pin"))
+
+    assert controller.activate(17) is True
+    states = controller.get_all_states()
+    verification = states[17].get("verification")
+
+    assert verification is not None
+    assert verification["verified"] is True
+    assert verification["observed"] == "active"
+
+
+def test_behavior_manager_flash_alternates_partner_pin():
+    """Flash behavior should alternate phase across partner pins when configured."""
+
+    controller = _FakeController()
+    configs = [
+        GPIOPinConfig(pin=18, name="Red", flash_enabled=True, flash_interval_ms=50, flash_partner_pin=23),
+        GPIOPinConfig(pin=23, name="Amber", flash_enabled=True, flash_interval_ms=50, flash_partner_pin=18),
+    ]
+    manager = GPIOBehaviorManager(
+        controller=controller,
+        pin_configs=configs,
+        behavior_matrix={18: {GPIOBehavior.FLASH}, 23: {GPIOBehavior.FLASH}},
+    )
+
+    handled = manager.start_alert(alert_id="flash", event_code="RWT")
+    assert handled is True
+
+    import time
+    time.sleep(0.18)
+    manager.end_alert(alert_id="flash", event_code="RWT")
+
+    activated_pins = [call[0] for call in controller.activations]
+    assert 18 in activated_pins
+    assert 23 in activated_pins
+
 def test_behavior_manager_hold_lifecycle(monkeypatch):
     """Behavior manager should activate and release pins for alert duration."""
 

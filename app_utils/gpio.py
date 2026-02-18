@@ -96,6 +96,9 @@ class GPIOBackend(Protocol):
     def output(self, pin: int, value: int) -> None:
         ...
 
+    def read(self, pin: int) -> int:
+        ...
+
     def cleanup(self, pin: Optional[int] = None) -> None:
         ...
 
@@ -132,6 +135,11 @@ class _LGPIOBackend:
         if self._chip is None:
             raise RuntimeError("lgpio chip handle not initialized")
         LGPIO.gpio_write(self._chip, pin, value)
+
+    def read(self, pin: int) -> int:
+        if self._chip is None:
+            raise RuntimeError("lgpio chip handle not initialized")
+        return int(LGPIO.gpio_read(self._chip, pin))
 
     def cleanup(self, pin: Optional[int] = None) -> None:
         if self._chip is None:
@@ -213,6 +221,13 @@ class _SysfsGPIOBackend:
         gpio_path = self._base_path / f"gpio{pin}" / "value"
         self._write(gpio_path, "1" if value == self.HIGH else "0")
 
+    def read(self, pin: int) -> int:
+        gpio_path = self._base_path / f"gpio{pin}" / "value"
+        try:
+            return int(gpio_path.read_text(encoding="utf-8").strip() or "0")
+        except Exception as exc:  # pragma: no cover - platform specific file access
+            raise RuntimeError(f"Failed to read {gpio_path}: {exc}") from exc
+
     def cleanup(self, pin: Optional[int] = None) -> None:
         if pin is None:
             pins = list(self._active_pins)
@@ -252,6 +267,9 @@ class _NullGPIOBackend:
 
     def output(self, pin: int, value: int) -> None:
         self._states[pin] = value
+
+    def read(self, pin: int) -> int:
+        return self._states.get(pin, self.LOW)
 
     def cleanup(self, pin: Optional[int] = None) -> None:
         if pin is None:
@@ -414,6 +432,10 @@ class _BackendPinDevice:
     def close(self) -> None:
         self._backend.cleanup(self._pin)
 
+    @property
+    def value(self) -> bool:
+        return self._backend.read(self._pin) == self._active_value
+
 
 class GPIOState(Enum):
     """GPIO pin state enumeration."""
@@ -575,6 +597,7 @@ class GPIOController:
         self._flash_threads: Dict[int, threading.Thread] = {}  # Flash pattern threads
         self._flash_stop_events: Dict[int, threading.Event] = {}  # Flash stop signals
         self._devices: Dict[int, Any] = {}
+        self._last_verification: Dict[int, Dict[str, Any]] = {}
         self._backend: Optional[GPIOBackend] = None
         self._backend_failures: Set[type] = set()
         self._environment_issues: Set[str] = set()
@@ -731,6 +754,32 @@ class GPIOController:
             self._devices[config.pin] = device
         return device
 
+    def _verify_device_state(self, pin: int, device: Any, should_be_active: bool) -> Dict[str, Any]:
+        """Validate the observed GPIO output state after a transition."""
+
+        result = {
+            "verified": None,
+            "expected": "active" if should_be_active else "inactive",
+            "observed": "unknown",
+            "checked_at": datetime.now(timezone.utc).isoformat(),
+            "detail": None,
+        }
+
+        try:
+            value = bool(getattr(device, "value"))
+            result["observed"] = "active" if value else "inactive"
+            result["verified"] = value == should_be_active
+            if not result["verified"]:
+                result["detail"] = (
+                    f"GPIO state mismatch: expected {result['expected']}, observed {result['observed']}"
+                )
+        except Exception as exc:
+            result["verified"] = None
+            result["detail"] = f"Unable to read GPIO state for verification: {exc}"
+
+        self._last_verification[pin] = result
+        return result
+
     def add_pin(self, config: GPIOPinConfig) -> None:
         """Add a GPIO pin to the controller.
 
@@ -870,6 +919,8 @@ class GPIOController:
 
                 # Activate the pin
                 device.on()
+
+                verification = self._verify_device_state(pin, device, should_be_active=True)
                 
                 # Log successful GPIO firing
                 if self.logger:
@@ -877,8 +928,11 @@ class GPIOController:
                         f"✓ GPIO pin {pin} fired successfully: "
                         f"device={device.__class__.__name__}, "
                         f"active_high={config.active_high}, "
-                        f"type={activation_type.value}"
+                        f"type={activation_type.value}, "
+                        f"verified={verification.get('verified')}"
                     )
+                    if verification.get("verified") is False:
+                        self.logger.warning(verification.get("detail"))
 
                 activation_time = time.monotonic()
                 self._activation_times[pin] = activation_time
@@ -974,6 +1028,8 @@ class GPIOController:
                     return False
 
                 device.off()
+
+                verification = self._verify_device_state(pin, device, should_be_active=False)
                 
                 # Log successful GPIO deactivation
                 if self.logger:
@@ -981,8 +1037,11 @@ class GPIOController:
                     self.logger.info(
                         f"✓ GPIO pin {pin} deactivated successfully: "
                         f"active_time={elapsed:.2f}s, "
-                        f"forced={force}"
+                        f"forced={force}, "
+                        f"verified={verification.get('verified')}"
                     )
+                    if verification.get("verified") is False:
+                        self.logger.warning(verification.get("detail"))
 
                 self._states[pin] = GPIOState.INACTIVE
 
@@ -1044,7 +1103,14 @@ class GPIOController:
                     'enabled': config.enabled,
                     'active_high': config.active_high,
                     'is_active': state == GPIOState.ACTIVE,
+                    'flash_enabled': config.flash_enabled,
+                    'flash_interval_ms': config.flash_interval_ms,
+                    'flash_partner_pin': config.flash_partner_pin,
                 }
+
+                verification = self._last_verification.get(pin)
+                if verification is not None:
+                    result[pin]['verification'] = verification
 
                 # Include timing info if active
                 if state == GPIOState.ACTIVE and pin in self._activation_times:
@@ -1598,8 +1664,6 @@ def load_gpio_behavior_matrix_from_db(logger=None, oled_enabled: bool = False) -
 class GPIOBehaviorManager:
     """Coordinate GPIO actions tied to alert lifecycle events."""
 
-    FLASH_PULSE_COUNT = 6
-
     def __init__(
         self,
         controller: Optional["GPIOController"],
@@ -1871,7 +1935,18 @@ class GPIOBehaviorManager:
             return False
 
         started = False
-        for pin in pins:
+        staged: Set[int] = set()
+
+        for pin in sorted(pins):
+            config = self.pin_configs.get(pin)
+            partner_pin = config.flash_partner_pin if config else None
+            if partner_pin not in pins:
+                partner_pin = None
+            # If partner pair already staged in earlier loop iteration, skip to avoid
+            # duplicate opposing flash threads fighting each other.
+            if partner_pin is not None and partner_pin in staged:
+                continue
+
             with self._lock:
                 if pin in self._flash_threads:
                     continue
@@ -1886,11 +1961,20 @@ class GPIOBehaviorManager:
                     "stop_event": stop_event,
                     "alert_id": alert_id,
                     "reason": reason,
+                    "partner_pin": partner_pin,
+                    "interval": (
+                        max(MIN_FLASH_INTERVAL_MS, min(MAX_FLASH_INTERVAL_MS, config.flash_interval_ms)) / 1000.0
+                        if config
+                        else GPIO_BEHAVIOR_PULSE_DEFAULTS.get(GPIOBehavior.FLASH, 0.35)
+                    ),
                 },
                 daemon=True,
             )
             thread.start()
             started = True
+            staged.add(pin)
+            if partner_pin is not None:
+                staged.add(partner_pin)
 
         return started
 
@@ -1901,30 +1985,42 @@ class GPIOBehaviorManager:
         stop_event: threading.Event,
         alert_id: Optional[str],
         reason: str,
+        partner_pin: Optional[int],
+        interval: float,
     ) -> None:
-        pulses = self.FLASH_PULSE_COUNT
-        interval = GPIO_BEHAVIOR_PULSE_DEFAULTS.get(GPIOBehavior.FLASH, 0.35)
-        for _ in range(pulses):
+        phase = 0
+        while not stop_event.is_set():
+            if partner_pin is None:
+                active_pin = pin if phase == 0 else None
+                inactive_pin = pin if phase == 1 else None
+            else:
+                active_pin = pin if phase == 0 else partner_pin
+                inactive_pin = partner_pin if phase == 0 else pin
+
             if stop_event.is_set():
                 break
-            success = self.controller.activate(
-                pin=pin,
-                activation_type=GPIOActivationType.AUTOMATIC,
-                alert_id=alert_id,
-                reason=f"Flash beacon ({reason})",
-            )
-            if success:
-                time.sleep(interval)
+
+            if active_pin is not None:
+                self.controller.activate(
+                    pin=active_pin,
+                    activation_type=GPIOActivationType.AUTOMATIC,
+                    alert_id=alert_id,
+                    reason=f"Flash beacon active phase ({reason})",
+                )
+            if inactive_pin is not None:
                 try:
-                    self.controller.deactivate(pin, force=True)
+                    self.controller.deactivate(inactive_pin, force=True)
                 except Exception as exc:  # pragma: no cover - hardware specific
                     if self.logger:
                         self.logger.warning(
                             "Failed to step flash cycle for pin %s: %s",
-                            pin,
+                            inactive_pin,
                             exc,
                         )
-            time.sleep(interval)
+
+            phase = 1 - phase
+            if stop_event.wait(interval):
+                break
 
         stop_event.set()
         with self._lock:
@@ -1941,8 +2037,12 @@ class GPIOBehaviorManager:
 
         for pin, event in items:
             event.set()
-            try:
-                self.controller.deactivate(pin, force=True)
-            except Exception:  # pragma: no cover - hardware specific
-                pass
-
+            targets = {pin}
+            config = self.pin_configs.get(pin)
+            if config and config.flash_partner_pin is not None:
+                targets.add(config.flash_partner_pin)
+            for target_pin in targets:
+                try:
+                    self.controller.deactivate(target_pin, force=True)
+                except Exception:  # pragma: no cover - hardware specific
+                    pass

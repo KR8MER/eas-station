@@ -100,7 +100,7 @@
                                 <h5 class="card-title mb-0">{{ pin_info.name }}</h5>
                             </div>
                             <span class="badge bg-{{ 'success' if pin_info.is_active else 'secondary' if pin_info.state == 'inactive' else 'danger' }}">
-                                {{ pin_info.state.upper() }}
+                                {{ 'NOT LOADED' if pin_info.state == 'unloaded' else pin_info.state.upper() }}
                             </span>
                         </div>
 
@@ -108,7 +108,26 @@
                             <small class="text-muted">
                                 <strong>BCM GPIO:</strong> GPIO {{ pin_info.pin }}<br>
                                 <strong>Mode:</strong> Active {{ 'High' if pin_info.active_high else 'Low' }}<br>
-                                {% if pin_info.is_active %}
+                                {% if pin_info.verification %}
+                                    <strong>Output Verify:</strong>
+                                    {% if pin_info.verification.verified is sameas true %}
+                                        <span class="text-success">Confirmed {{ pin_info.verification.observed }}</span><br>
+                                    {% elif pin_info.verification.verified is sameas false %}
+                                        <span class="text-danger">Mismatch ({{ pin_info.verification.observed }})</span><br>
+                                    {% else %}
+                                        <span class="text-warning">Unavailable</span><br>
+                                    {% endif %}
+                                {% endif %}
+                                {% if pin_info.flash_enabled %}
+                                    <strong>Flash:</strong> {{ pin_info.flash_interval_ms }}ms
+                                    {% if pin_info.flash_partner_pin %}
+                                        (paired GPIO {{ pin_info.flash_partner_pin }})
+                                    {% endif %}
+                                    <br>
+                                {% endif %}
+                                {% if pin_info.state == 'unloaded' %}
+                                    <strong>Runtime:</strong> <span class="text-warning">Not loaded in GPIO controller</span><br>
+                                {% elif pin_info.is_active %}
                                     <strong>Active for:</strong> {{ "%.1f"|format(pin_info.active_seconds) }}s<br>
                                     {% if pin_info.reason %}
                                         <strong>Reason:</strong> {{ pin_info.reason }}<br>
@@ -121,7 +140,11 @@
                         </div>
 
                         <div class="d-grid gap-2">
-                            {% if pin_info.is_active %}
+                            {% if pin_info.state == 'unloaded' %}
+                                <button class="btn btn-warning btn-sm" disabled>
+                                    <i class="fas fa-triangle-exclamation"></i> Runtime Not Loaded
+                                </button>
+                            {% elif pin_info.is_active %}
                                 <button class="btn btn-danger btn-sm deactivate-pin" data-pin="{{ pin_info.pin }}">
                                     <i class="fas fa-power-off"></i> Deactivate
                                 </button>
@@ -146,12 +169,32 @@
             {% endfor %}
         {% else %}
             <div class="col-12">
+                {% if configured_pin_count and configured_pin_count > 0 %}
+                <div class="alert alert-warning">
+                    <i class="fas fa-triangle-exclamation"></i>
+                    {{ configured_pin_count }} GPIO pin{{ '' if configured_pin_count == 1 else 's are' }} configured in
+                    <a href="/admin/hardware"><strong>Hardware Settings</strong></a>, but none are currently loaded by the runtime controller.
+                    Try restarting hardware services and check environment issues below.
+                </div>
+                {% else %}
                 <div class="alert alert-info">
                     <i class="fas fa-info-circle"></i>
                     No GPIO pins are currently configured. Configure pins in
                     <a href="/admin/hardware"><strong>Hardware Settings</strong></a>
                     and restart the services to apply changes.
                 </div>
+                {% endif %}
+
+                {% if environment_issues %}
+                <div class="alert alert-secondary mt-3">
+                    <h6 class="mb-2"><i class="fas fa-stethoscope"></i> GPIO environment issues</h6>
+                    <ul class="mb-0 ps-3">
+                        {% for issue in environment_issues %}
+                            <li>{{ issue }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
             </div>
         {% endif %}
     </div>

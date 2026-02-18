@@ -126,13 +126,13 @@
                 <strong>How to configure GPIO behaviors:</strong>
                 <ol class="mb-0 mt-2">
                     <li>Select a behavior for each GPIO pin you want to use (or leave as "None" to disable)</li>
-                    <li>Click <strong>"Save Behaviors"</strong> to save changes to the database</li>
+                    <li>Click <strong>"Save Pin Map"</strong> to save pin behaviors and configuration</li>
                     <li>Restart the service for changes to take effect: <code>sudo systemctl restart eas-station.target</code></li>
                 </ol>
                 <p class="mb-0 mt-2">
                     <small class="text-muted">
-                        <i class="fas fa-lightbulb"></i> Tip: Configure pins in <strong>Hardware Settings</strong>
-                        before assigning behaviors here.
+                        <i class="fas fa-lightbulb"></i> Tip: This page now assigns behaviors and automatically
+                        creates pin configuration defaults for selected GPIO pins.
                     </small>
                 </p>
             </div>
@@ -193,8 +193,8 @@
                                 <span class="badge bg-success me-2">Configured</span>
                                 <span class="text-muted small">Active {{ 'HIGH' if pin.active_high else 'LOW' }}</span>
                             {% else %}
-                                <span class="badge bg-secondary me-2">Not configured</span>
-                                <span class="text-muted small">Configure in <a href="/admin/hardware">Hardware Settings</a> to control this pin.</span>
+                                <span class="badge bg-secondary me-2">Not configured yet</span>
+                                <span class="text-muted small">Select a behavior and save on this page to configure this pin.</span>
                             {% endif %}
                         </div>
 
@@ -243,7 +243,7 @@
             <i class="fas fa-eraser"></i> Clear All
         </button>
         <button class="btn btn-primary" id="savePinMap">
-            <i class="fas fa-save"></i> Save Behaviors
+            <i class="fas fa-save"></i> Save Pin Map
         </button>
     </div>
 </div>
@@ -257,6 +257,7 @@
     const clearButton = document.getElementById('clearPinMap');
     const reloadButton = document.getElementById('reloadPinMap');
     let hasUnsavedChanges = false;
+    const existingPinConfigMap = {{ pin_config_map|tojson }};
 
     function showMessage(message, variant) {
         console.log(`showMessage called: ${variant} - ${message}`);
@@ -361,6 +362,35 @@
         return matrix;
     }
 
+    function buildPinConfigMap(matrix) {
+        const pinMap = { ...existingPinConfigMap };
+
+        // Keep existing configs, and auto-create defaults for any pin with a selected behavior.
+        Object.keys(matrix).forEach((bcm) => {
+            if (pinMap[bcm]) {
+                return;
+            }
+            pinMap[bcm] = {
+                name: `GPIO Pin ${bcm}`,
+                active_high: true,
+                hold_seconds: 5.0,
+                watchdog_seconds: 300.0,
+                flash_enabled: false,
+                flash_interval_ms: 500,
+                flash_partner_pin: null,
+            };
+        });
+
+        // Remove unconfigured pins that have no behavior assignment and were never configured.
+        Object.keys(pinMap).forEach((bcm) => {
+            if (!matrix[bcm] && !existingPinConfigMap[bcm]) {
+                delete pinMap[bcm];
+            }
+        });
+
+        return pinMap;
+    }
+
     async function saveMatrix() {
         console.log('saveMatrix function called');
         hideMessage();
@@ -375,8 +405,11 @@
         const matrix = buildBehaviorMatrix();
         console.log('Behavior matrix to save:', matrix);
 
+        const pinConfigMap = buildPinConfigMap(matrix);
+
         const payload = {
-            gpio_behavior_matrix: Object.keys(matrix).length ? JSON.stringify(matrix) : '{}'
+            gpio_behavior_matrix: Object.keys(matrix).length ? JSON.stringify(matrix) : '{}',
+            gpio_pin_map: JSON.stringify(pinConfigMap),
         };
 
         console.log('Payload:', payload);
@@ -438,7 +471,7 @@
                 throw new Error(data.error);
             }
 
-            const message = 'GPIO behavior matrix saved successfully! Restart services for changes to take effect.';
+            const message = 'GPIO pin behaviors and pin configuration saved successfully! Restart services for changes to take effect.';
             console.log('About to show success message:', message);
             showMessage(message, 'success');
 
@@ -469,7 +502,7 @@
             console.log('saveMatrix finally block');
             if (saveButton) {
                 saveButton.disabled = false;
-                saveButton.innerHTML = '<i class="fas fa-save"></i> Save Behaviors';
+                saveButton.innerHTML = '<i class="fas fa-save"></i> Save Pin Map';
             }
         }
     }
