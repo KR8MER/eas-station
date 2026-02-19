@@ -1893,8 +1893,9 @@ class CAPPoller:
                         matched_storage_ugcs.append(ugc)
 
             if matched_zone_ugcs:
-                # Determine storage relevance: True if ANY matched UGC is in storage_zone_codes
-                is_storage_relevant = len(matched_storage_ugcs) > 0
+                # Determine storage relevance: True if ANY matched UGC is in storage_zone_codes,
+                # OR if storage_zone_codes is empty (fall back to zone_codes, same as SAME matching)
+                is_storage_relevant = len(matched_storage_ugcs) > 0 or not self.storage_zone_codes
                 # Use the first storage match for logging, or first zone match if no storage match
                 primary_ugc = matched_storage_ugcs[0] if matched_storage_ugcs else matched_zone_ugcs[0]
                 if is_storage_relevant:
