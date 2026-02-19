@@ -50,6 +50,9 @@ function initLocationSettings() {
 
     // Load location reference data
     loadLocationReference();
+
+    // Initialize zone count badges from server-rendered textarea values
+    updateZoneCounts();
 }
 
 /**
