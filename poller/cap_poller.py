@@ -689,11 +689,23 @@ class CAPPoller:
                 if endpoint not in seen:
                     unique_endpoints.append(endpoint)
                     seen.add(endpoint)
+
+            # Always append NOAA endpoints — they are not user-configured and must
+            # be added regardless of whether IPAWS/custom endpoints are present.
+            noaa_endpoints = self._build_batched_noaa_endpoints(
+                self.location_settings['zone_codes'] or DEFAULT_LOCATION_SETTINGS['zone_codes']
+            )
+            for ep in noaa_endpoints:
+                if ep not in seen:
+                    unique_endpoints.append(ep)
+                    seen.add(ep)
+            self.logger.info("Added %d NOAA endpoint(s)", len(noaa_endpoints))
+
             self.cap_endpoints = unique_endpoints
         else:
             # No explicit endpoints configured - build defaults for both NOAA and IPAWS
             default_endpoints: List[str] = []
-            
+
             # Add IPAWS endpoint
             endpoint_template = (
                 os.getenv(
@@ -709,7 +721,7 @@ class CAPPoller:
 
             default_endpoints.append(ipaws_endpoint)
             self.logger.info("Added default IPAWS endpoint (starting %s)", default_start)
-            
+
             # Add NOAA endpoints
             # Batch zone codes into single requests to reduce API calls
             noaa_endpoints = self._build_batched_noaa_endpoints(
@@ -717,9 +729,9 @@ class CAPPoller:
             )
             default_endpoints.extend(noaa_endpoints)
             self.logger.info("Added %d NOAA endpoint(s)", len(noaa_endpoints))
-            
+
             self.cap_endpoints = default_endpoints
-            
+
             if not default_endpoints:
                 self.logger.warning("No endpoints configured and no defaults could be generated")
 
