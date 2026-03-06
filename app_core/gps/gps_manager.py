@@ -17,24 +17,23 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""GPS receiver manager for the Adafruit Ultimate GPS HAT (#2324).
-
-Reads NMEA-0183 sentences from the serial port, parses position and time
-data, and publishes it to Redis for consumption by the web UI and other
-services.
-
-Hardware:
-- Adafruit Ultimate GPS HAT for Raspberry Pi (#2324)
-- UART interface: /dev/serial0 (BCM UART), 9600 baud
-- PPS output: GPIO BCM 4 (configurable)
-
-Dependencies:
-- pyserial: Serial port I/O
-- pynmea2: NMEA-0183 sentence parser
-- RPi.GPIO (optional): PPS pulse reading
-"""
-
 from __future__ import annotations
+
+# GPS receiver manager for the Adafruit Ultimate GPS HAT (#2324).
+#
+# Reads NMEA-0183 sentences from the serial port, parses position and time
+# data, and publishes it to Redis for consumption by the web UI and other
+# services.
+#
+# Hardware:
+# - Adafruit Ultimate GPS HAT for Raspberry Pi (#2324)
+# - UART interface: /dev/serial0 (BCM UART), 9600 baud
+# - PPS output: GPIO BCM 4 (configurable)
+#
+# Dependencies:
+# - pyserial: Serial port I/O
+# - pynmea2: NMEA-0183 sentence parser
+# - RPi.GPIO (optional): PPS pulse reading
 
 import json
 import logging
