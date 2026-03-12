@@ -6,6 +6,11 @@ tracks releases under the 2.x series.
 
 ## [Unreleased]
 
+## [2.56.1] - Fix EOM missing from broadcast audio detail component segments
+
+### Fixed
+- **EOM segment now shown in broadcast audio detail** — The End of Message (EOM) audio segment was always generated and stored in the database but was missing from the `component_map` in the broadcast audio detail view. This caused the component segments list to only show SAME Header Bursts, Attention Tone, and Silence Buffer — omitting EOM entirely. Added `'eom': ('eom_audio_data', 'End of Message')` to the component map in both the `audio_detail` HTML route and the `audio_detail_pdf` PDF export route.
+
 ## [2.56.0] - UI Visual Modernization
 
 ### Changed

@@ -87,6 +87,7 @@ def register_detail_routes(app, logger) -> None:
                 'attention': ('attention_audio_data', 'Attention Tone'),
                 'tts': ('tts_audio_data', 'Narration / TTS'),
                 'buffer': ('buffer_audio_data', 'Silence Buffer'),
+                'eom': ('eom_audio_data', 'End of Message'),
             }
 
             segment_entries = []
@@ -203,6 +204,7 @@ def register_detail_routes(app, logger) -> None:
                 'attention': ('attention_audio_data', 'Attention Tone'),
                 'tts': ('tts_audio_data', 'Narration / TTS'),
                 'buffer': ('buffer_audio_data', 'Silence Buffer'),
+                'eom': ('eom_audio_data', 'End of Message'),
             }
 
             segment_lines = []
