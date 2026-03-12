@@ -6,6 +6,13 @@ tracks releases under the 2.x series.
 
 ## [Unreleased]
 
+## [2.56.2] - Fix Azure OpenAI TTS audio not generating
+
+### Fixed
+- **Azure OpenAI TTS now generates audio** — The TTS synthesis code requested `response_format: "wav"` from the Azure OpenAI API, then parsed the response with Python's `wave.open()`. Azure OpenAI API versions older than `2024-05-01-preview` (including the `2024-03-01-preview` shown in the UI placeholder) do not support WAV output and silently return MP3 instead. `wave.open()` then fails on the MP3 bytes ("file does not start with RIFF id"), the exception is swallowed, and TTS returns `None` — resulting in `has_tts: false` with no audio generated. Fixed by switching `response_format` to `"pcm"` (raw 24 kHz 16-bit mono PCM) and decoding the bytes directly with `_normalize_pcm_samples` / `audioop`, eliminating any dependency on a container-format parser. This works reliably across all API versions that support TTS.
+- **Azure Cognitive Services TTS credentials now persisted** — The `TTSSettings` database model was missing columns for Azure Cognitive Services Speech (`azure_speech_key`, `azure_speech_region`, `azure_speech_voice`, `azure_speech_sample_rate`). Added the columns, updated `load_eas_config()` to read them from the database, and added a new "Azure Cognitive Services Speech Settings" section to `/admin/tts` with the required fields. New migration `20260312_add_azure_speech_settings` adds the columns.
+- **Stale EAS config in CAP poller** — `auto_forward_cap_alert()` and `auto_forward_ota_alert()` now reload `load_eas_config()` fresh before constructing `EASBroadcaster`, so settings changed via the web UI after poller startup are always picked up.
+
 ## [2.56.1] - Fix EOM missing from broadcast audio detail component segments
 
 ### Fixed

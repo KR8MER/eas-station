@@ -170,6 +170,10 @@ def test_tts():
             'azure_openai_model': settings.azure_openai_model or 'tts-1',
             'azure_openai_voice': settings.azure_openai_voice or 'alloy',
             'azure_openai_speed': settings.azure_openai_speed or 1.0,
+            'azure_speech_key': settings.azure_speech_key or '',
+            'azure_speech_region': settings.azure_speech_region or '',
+            'azure_speech_voice': settings.azure_speech_voice or 'en-US-AriaNeural',
+            'azure_speech_sample_rate': settings.azure_speech_sample_rate or 24000,
         }
         
         # Create TTS engine

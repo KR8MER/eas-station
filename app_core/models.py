@@ -1027,6 +1027,12 @@ class TTSSettings(db.Model):
     azure_openai_voice = db.Column(db.String(50), nullable=False, default='alloy')
     azure_openai_speed = db.Column(db.Float, nullable=False, default=1.0)
 
+    # Azure Cognitive Services Speech Settings
+    azure_speech_key = db.Column(db.String(500), nullable=True)
+    azure_speech_region = db.Column(db.String(100), nullable=True)
+    azure_speech_voice = db.Column(db.String(100), nullable=False, default='en-US-AriaNeural')
+    azure_speech_sample_rate = db.Column(db.Integer, nullable=False, default=24000)
+
     # Metadata
     updated_at = db.Column(db.DateTime, nullable=True, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -1040,6 +1046,10 @@ class TTSSettings(db.Model):
             "azure_openai_model": self.azure_openai_model,
             "azure_openai_voice": self.azure_openai_voice,
             "azure_openai_speed": self.azure_openai_speed,
+            "azure_speech_key": self.azure_speech_key,
+            "azure_speech_region": self.azure_speech_region,
+            "azure_speech_voice": self.azure_speech_voice,
+            "azure_speech_sample_rate": self.azure_speech_sample_rate,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
 

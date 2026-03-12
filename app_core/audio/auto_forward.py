@@ -207,14 +207,22 @@ def auto_forward_cap_alert(
             _update_cap_forwarding_status(cap_alert, db_session, False, reason, log)
             return result
 
-    # Use EASBroadcaster for the full broadcast pipeline
-    from app_utils.eas import EASBroadcaster
+    # Use EASBroadcaster for the full broadcast pipeline.
+    # Reload config fresh from the database so TTS and other settings saved
+    # via the web UI after the poller started are always picked up.
+    from app_utils.eas import EASBroadcaster, load_eas_config
+
+    try:
+        broadcast_config = load_eas_config()
+    except Exception as exc:
+        log.warning("Could not reload EAS config, falling back to caller-supplied config: %s", exc)
+        broadcast_config = eas_config
 
     try:
         broadcaster = EASBroadcaster(
             db_session=db_session,
             model_cls=eas_message_cls,
-            config=eas_config,
+            config=broadcast_config,
             logger=log,
             location_settings=location_settings,
         )
@@ -399,13 +407,21 @@ def auto_forward_ota_alert(
         'forwarded': True,
     }
 
-    from app_utils.eas import EASBroadcaster
+    # Reload config fresh from the database so TTS and other settings saved
+    # via the web UI after the poller started are always picked up.
+    from app_utils.eas import EASBroadcaster, load_eas_config
+
+    try:
+        broadcast_config = load_eas_config()
+    except Exception as exc:
+        log.warning("Could not reload EAS config, falling back to caller-supplied config: %s", exc)
+        broadcast_config = eas_config
 
     try:
         broadcaster = EASBroadcaster(
             db_session=db_session,
             model_cls=eas_message_cls,
-            config=eas_config,
+            config=broadcast_config,
             logger=log,
             location_settings=location_settings,
         )

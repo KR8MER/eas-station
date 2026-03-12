@@ -95,6 +95,40 @@
             </div>
         </div>
 
+        <!-- Azure Cognitive Services Speech Settings -->
+        <div class="admin-form-section" id="azure-section" style="display: none;">
+            <h4>Azure Cognitive Services Speech Settings</h4>
+            <div class="alert alert-info mb-3">
+                <i class="bi bi-info-circle"></i> <strong>Azure Cognitive Services TTS</strong><br>
+                Uses the Azure Speech SDK for high-quality neural voice synthesis. Requires the
+                <code>azure-cognitiveservices-speech</code> Python package to be installed.
+            </div>
+
+            <div class="mb-3">
+                <label for="azure_speech_key" class="form-label">Subscription Key *</label>
+                <input type="text" class="form-control" id="azure_speech_key" name="azure_speech_key"
+                       value="{{ settings.azure_speech_key or '' }}"
+                       placeholder="Enter your Azure Speech subscription key">
+                <div class="form-text">Your Azure Cognitive Services Speech subscription key (stored in database)</div>
+            </div>
+
+            <div class="mb-3">
+                <label for="azure_speech_region" class="form-label">Region *</label>
+                <input type="text" class="form-control" id="azure_speech_region" name="azure_speech_region"
+                       value="{{ settings.azure_speech_region or '' }}"
+                       placeholder="e.g., eastus, westus2, northcentralus">
+                <div class="form-text">Azure region where your Speech resource is deployed</div>
+            </div>
+
+            <div class="mb-3">
+                <label for="azure_speech_voice" class="form-label">Voice</label>
+                <input type="text" class="form-control" id="azure_speech_voice" name="azure_speech_voice"
+                       value="{{ settings.azure_speech_voice or 'en-US-AriaNeural' }}"
+                       placeholder="en-US-AriaNeural">
+                <div class="form-text">Neural voice name (e.g., en-US-AriaNeural, en-US-GuyNeural). See <a href="https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support" target="_blank" rel="noopener">Azure voice list</a>.</div>
+            </div>
+        </div>
+
         <div class="d-flex gap-2">
             <button type="submit" class="btn btn-primary">
                 <i class="bi bi-save"></i> Save Settings
@@ -120,16 +154,14 @@
 </div>
 
 <script>
-// Show/hide Azure OpenAI settings based on provider selection
+// Show/hide provider-specific settings based on provider selection
 function updateProviderSections() {
     const provider = document.getElementById('provider').value;
     const azureOpenAISection = document.getElementById('azure-openai-section');
-    
-    if (provider === 'azure_openai') {
-        azureOpenAISection.style.display = 'block';
-    } else {
-        azureOpenAISection.style.display = 'none';
-    }
+    const azureSection = document.getElementById('azure-section');
+
+    azureOpenAISection.style.display = provider === 'azure_openai' ? 'block' : 'none';
+    azureSection.style.display = provider === 'azure' ? 'block' : 'none';
 }
 
 // Initialize on page load

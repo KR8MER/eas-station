@@ -127,6 +127,10 @@ def load_eas_config(base_path: Optional[str] = None) -> Dict[str, object]:
     azure_openai_model = 'tts-1'
     azure_openai_voice = 'alloy'
     azure_openai_speed = 1.0
+    azure_speech_key = ''
+    azure_speech_region = ''
+    azure_speech_voice = 'en-US-AriaNeural'
+    azure_speech_sample_rate = 24000
 
     try:
         tts_settings = get_tts_settings()
@@ -156,6 +160,20 @@ def load_eas_config(base_path: Optional[str] = None) -> Dict[str, object]:
                     load_logger.error("Azure OpenAI TTS enabled but endpoint is empty!")
                 if not azure_openai_key:
                     load_logger.error("Azure OpenAI TTS enabled but API key is empty!")
+
+            # Load Azure Cognitive Services Speech settings if provider is azure
+            elif tts_provider == 'azure':
+                azure_speech_key = (tts_settings.azure_speech_key or '').strip()
+                azure_speech_region = (tts_settings.azure_speech_region or '').strip()
+                azure_speech_voice = (tts_settings.azure_speech_voice or 'en-US-AriaNeural').strip()
+                azure_speech_sample_rate = int(tts_settings.azure_speech_sample_rate or 24000)
+
+                load_logger.info(f"Azure Speech TTS config loaded: region={'<set>' if azure_speech_region else '<MISSING>'}, key={'<set>' if azure_speech_key else '<MISSING>'}")
+
+                if not azure_speech_key:
+                    load_logger.error("Azure Speech TTS enabled but subscription key is empty!")
+                if not azure_speech_region:
+                    load_logger.error("Azure Speech TTS enabled but region is empty!")
     except Exception as exc:
         load_logger.error(f"Failed to load TTS settings from database: {exc}")
         load_logger.exception("TTS settings load error details:")
@@ -226,10 +244,10 @@ def load_eas_config(base_path: Optional[str] = None) -> Dict[str, object]:
             or (db_sample_rate if db_sample_rate is not None else 16000)
         ),
         'tts_provider': tts_provider,
-        'azure_speech_key': os.getenv('AZURE_SPEECH_KEY'),
-        'azure_speech_region': os.getenv('AZURE_SPEECH_REGION'),
-        'azure_speech_voice': os.getenv('AZURE_SPEECH_VOICE', 'en-US-AriaNeural'),
-        'azure_speech_sample_rate': int(os.getenv('AZURE_SPEECH_SAMPLE_RATE', '24000') or 24000),
+        'azure_speech_key': azure_speech_key or os.getenv('AZURE_SPEECH_KEY') or '',
+        'azure_speech_region': azure_speech_region or os.getenv('AZURE_SPEECH_REGION') or '',
+        'azure_speech_voice': azure_speech_voice,
+        'azure_speech_sample_rate': azure_speech_sample_rate,
         'azure_openai_endpoint': azure_openai_endpoint,
         'azure_openai_key': azure_openai_key,
         'azure_openai_voice': azure_openai_voice,

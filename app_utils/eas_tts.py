@@ -284,7 +284,9 @@ class TTSEngine:
                 "input": text,
                 "voice": voice,
                 "speed": speed,
-                "response_format": "wav",  # Request WAV format
+                "response_format": "pcm",  # Raw 24 kHz 16-bit mono PCM — no container headers,
+                                           # so no WAV/MP3 parser is needed and it works across
+                                           # all Azure OpenAI API versions that support TTS.
             }
 
             # Log the request for debugging
@@ -359,18 +361,21 @@ class TTSEngine:
             return None
 
         try:
-            # Parse the WAV audio
-            with wave.open(io.BytesIO(audio_bytes), "rb") as wav_data:
-                raw_frames = wav_data.readframes(wav_data.getnframes())
-                sample_width = wav_data.getsampwidth()
-                channels = wav_data.getnchannels()
-                source_rate = wav_data.getframerate()
+            # Azure OpenAI returns raw 24 kHz 16-bit signed LE mono PCM when
+            # response_format is "pcm" — no container header to parse.
+            pcm_source_rate = 24000
+            sample_count = len(audio_bytes) // 2
+            if sample_count == 0:
+                self._remember_error("Azure OpenAI TTS returned empty audio.")
+                if self.logger:
+                    self.logger.error("Azure OpenAI TTS returned empty audio.")
+                return None
 
             samples = _normalize_pcm_samples(
-                raw_frames,
-                sample_width,
-                channels,
-                source_rate,
+                audio_bytes[:sample_count * 2],
+                2,              # 16-bit = 2 bytes per sample
+                1,              # mono
+                pcm_source_rate,
                 target_rate,
             )
             if self.logger:

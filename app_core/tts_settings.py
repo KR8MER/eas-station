@@ -98,6 +98,14 @@ def update_tts_settings(data: Dict[str, Any]) -> TTSSettings:
         settings.azure_openai_voice = str(data['azure_openai_voice']).strip()
     if 'azure_openai_speed' in data:
         settings.azure_openai_speed = float(data['azure_openai_speed'])
+    if 'azure_speech_key' in data:
+        settings.azure_speech_key = str(data['azure_speech_key']).strip() if data['azure_speech_key'] else None
+    if 'azure_speech_region' in data:
+        settings.azure_speech_region = str(data['azure_speech_region']).strip() if data['azure_speech_region'] else None
+    if 'azure_speech_voice' in data:
+        settings.azure_speech_voice = str(data['azure_speech_voice']).strip() or 'en-US-AriaNeural'
+    if 'azure_speech_sample_rate' in data:
+        settings.azure_speech_sample_rate = int(data['azure_speech_sample_rate']) if data['azure_speech_sample_rate'] else 24000
 
     try:
         db.session.commit()
