@@ -1911,20 +1911,27 @@ class RBDSDecoder:
             self.tp = tp
             changed = True
 
-        ta = bool((b >> 4) & 0x1)
-        if self.ta != ta:
-            self.ta = ta
-            changed = True
-
-        ms = bool((b >> 3) & 0x1)
-        if self.ms != ms:
-            self.ms = ms
-            changed = True
+        # TA (Traffic Announcement) is only valid in Group 0A/0B.
+        # In Group 2A/2B bit 4 of block B is the RT A/B toggle flag, not TA.
+        # In Group 2A/2B bit 3 of block B is part of the 4-bit segment address, not M/S.
+        # Extracting these bits unconditionally causes TA to flip whenever an RT segment
+        # with AB-flag=1 arrives, and M/S to flip as different RT segment numbers are sent.
+        # Restrict TA and M/S updates to Group 0 only.
 
         group_type = (b >> 12) & 0xF
         version_b = bool((b >> 11) & 0x1)
 
         if group_type == 0:
+            ta = bool((b >> 4) & 0x1)
+            if self.ta != ta:
+                self.ta = ta
+                changed = True
+
+            ms = bool((b >> 3) & 0x1)
+            if self.ms != ms:
+                self.ms = ms
+                changed = True
+
             address = b & 0x3
             chars = d
             changed = self._update_ps_name(address, chars) or changed
@@ -1978,7 +1985,11 @@ class RBDSDecoder:
             if 32 <= char_code < 127:
                 char = chr(char_code)
             else:
-                char = ' '
+                # Non-printable char code from a bad decode — skip this position
+                # entirely rather than writing a space that would erase previously
+                # correct data.  0x20 (space) is handled by the branch above since
+                # it falls in [32, 127).
+                continue
             pos = idx + offset
             if pos < len(self.ps_name) and self.ps_name[pos] != char:
                 logger.debug(
@@ -1992,10 +2003,12 @@ class RBDSDecoder:
     def _update_radio_text(self, index: int, code: int) -> bool:
         if index >= len(self.radio_text):
             return False
-        char = chr(code) if 32 <= code < 127 else ' '
-        if self.radio_text[index] != char:
-            self.radio_text[index] = char
-            return True
+        if 32 <= code < 127:
+            char = chr(code)
+            if self.radio_text[index] != char:
+                self.radio_text[index] = char
+                return True
+        # Non-printable code — ignore rather than overwriting valid data with a space
         return False
 
 

@@ -6,6 +6,29 @@ tracks releases under the 2.x series.
 
 ## [Unreleased]
 
+## [2.57.2] - Fix RBDS data retention and incorrect TA/M/S flags
+
+### Fixed
+- **RBDS PS name and Radio Text not retained across decode windows** — `_update_ps_name` and
+  `_update_radio_text` silently converted any char code outside the printable ASCII range
+  (< 32 or ≥ 127) into a space character and wrote it back, overwriting valid characters
+  that had been decoded in an earlier 10-second window.  After even one noisy batch the
+  accumulated station name and radio text would regress to a single character or disappear
+  entirely.  Fix: non-printable char codes are now silently skipped; only valid printable
+  characters (0x20–0x7E) update the stored value.
+- **TA (Traffic Announcement) flag incorrectly flipped by Radio Text groups** — The TA flag
+  was extracted from bit 4 of block B unconditionally for *all* group types.  In Group 2A/2B
+  bit 4 is the RT A/B toggle flag, not TA, so each time a station toggled its Radio Text
+  content the decoder would incorrectly show a Traffic Announcement in progress.  TA and M/S
+  are now only updated from Group 0A/0B data, where those bits are defined.
+- **M/S (Music/Speech) flag randomly toggled by Radio Text groups** — bit 3 of block B in
+  Group 2A is the most-significant bit of the 4-bit RT segment address (0–15), not the
+  Music/Speech flag.  Segments 8–15 all have bit 3 set, so M/S was flipping between Music
+  and Speech as RT segments cycled.  Fixed alongside the TA correction above.
+- **34 RBDS unit tests** — Extended `tests/test_rbds_demodulation.py` with decoder field
+  extraction, PS name assembly, RT assembly, AB-flag reset, syndrome CRC verification, filter
+  validity, and retention-regression tests for all three bugs above.
+
 ## [2.57.1] - Fix RBDS phase drift from dropped queue samples
 
 ### Fixed

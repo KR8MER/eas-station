@@ -287,7 +287,7 @@ def test_rbds_decoder_group2a_radio_text_segment0():
     # group_type=2 → bits 15-12 = 0x2; version=0; ab_flag=0; segment=0
     b = (2 << 12)
     c = (ord('H') << 8) | ord('i')   # positions 0,1
-    d = (ord('!') << 8) | ord('!')   # positions 2,3 — use non-space so strip() keeps them
+    d = (ord('!') << 8) | ord('!')   # positions 2,3 - use non-space so strip() keeps them
     decoder.process_group((0x1234, b, c, d))
 
     data = decoder.get_current_data()
@@ -453,3 +453,120 @@ def test_fmdemodulator_rbds_disabled_below_min_rate():
     assert demod._rbds_enabled is False
     assert demod._rbds_worker is None
     demod.stop()
+
+
+# ---------------------------------------------------------------------------
+# Retention regression tests  (bugs fixed in this PR)
+# ---------------------------------------------------------------------------
+
+def test_ps_name_non_printable_does_not_overwrite_valid_char():
+    """Non-printable char codes from a bad decode must NOT erase a previously
+    correct PS name character.
+
+    Bug: _update_ps_name converted any char_code outside [32,127) to ' ' and
+    then wrote it back, erasing valid data decoded in a previous window.
+    """
+    decoder = RBDSDecoder()
+
+    # First decode: addr=0, positions 0,1 → 'W','I'
+    b0 = 0x0000  # group_type=0, addr=0
+    d_good = (ord('W') << 8) | ord('I')
+    decoder.process_group((0xABCD, b0, 0x0000, d_good))
+    assert decoder.ps_name[0] == 'W'
+    assert decoder.ps_name[1] == 'I'
+
+    # Second decode: same addr, but chars contain non-printable codes (bad decode)
+    d_bad = (0x01 << 8) | 0x02  # char codes 1 and 2 — non-printable
+    decoder.process_group((0xABCD, b0, 0x0000, d_bad))
+
+    # The previously correct 'W' and 'I' must NOT be overwritten
+    assert decoder.ps_name[0] == 'W', "Valid char was erased by non-printable code"
+    assert decoder.ps_name[1] == 'I', "Valid char was erased by non-printable code"
+
+
+def test_ps_name_explicit_space_updates_position():
+    """A genuine space character (0x20) IS printable and must still update the PS name."""
+    decoder = RBDSDecoder()
+    b0 = 0x0000  # addr=0
+    d = (ord(' ') << 8) | ord('A')  # space then 'A'
+    decoder.process_group((0xABCD, b0, 0x0000, d))
+    assert decoder.ps_name[0] == ' '
+    assert decoder.ps_name[1] == 'A'
+
+
+def test_radio_text_non_printable_does_not_overwrite_valid_char():
+    """Non-printable RT character codes must NOT erase previously decoded RT text."""
+    decoder = RBDSDecoder()
+
+    # Write some valid RT text at segment 0
+    b = (2 << 12)  # group_type=2, ab_flag=0, segment=0
+    c_good = (ord('H') << 8) | ord('i')
+    d_good = (ord('!') << 8) | ord('!')
+    decoder.process_group((0x1234, b, c_good, d_good))
+    assert decoder.radio_text[0] == 'H'
+    assert decoder.radio_text[1] == 'i'
+
+    # Overwrite attempt with non-printable codes at same segment
+    c_bad = (0x01 << 8) | 0x02
+    d_bad = (0x03 << 8) | 0x04
+    decoder.process_group((0x1234, b, c_bad, d_bad))
+
+    # Previously correct chars must survive
+    assert decoder.radio_text[0] == 'H', "Valid RT char erased by non-printable code"
+    assert decoder.radio_text[1] == 'i', "Valid RT char erased by non-printable code"
+
+
+def test_ta_not_modified_by_group2a():
+    """TA flag must NOT be updated when a Group 2A group is processed.
+
+    Bug: ta was extracted unconditionally from bit 4 of block B for all group
+    types.  In Group 2A bit 4 is the RT A/B flag, not TA, so TA would
+    incorrectly flip whenever the station toggled its RT content.
+    """
+    decoder = RBDSDecoder()
+
+    # Establish known TA=False from a Group 0A group
+    b_group0 = 0x0000  # group_type=0, TP=0, PTY=0, TA=0, M/S=0, addr=0
+    decoder.process_group((0x1234, b_group0, 0x0000, 0x0000))
+    assert decoder.ta is False
+
+    # Now send a Group 2A with AB-flag=1 (bit 4 of B set)
+    b_group2a_ab1 = (2 << 12) | (1 << 4)  # group 2A, AB-flag=1, segment=0
+    decoder.process_group((0x1234, b_group2a_ab1, 0x0000, 0x0000))
+
+    # TA must remain False — it should only change via Group 0A/0B
+    assert decoder.ta is False, "TA was incorrectly modified by Group 2A AB-flag"
+
+
+def test_ms_not_modified_by_group2a():
+    """M/S flag must NOT be updated when a Group 2A group is processed.
+
+    Bug: ms was extracted from bit 3 of block B for all group types.  In
+    Group 2A bit 3 is the LSB of the 4-bit segment address, not M/S.
+    """
+    decoder = RBDSDecoder()
+
+    # Set M/S=True via a Group 0A (bit 3 of B set)
+    b_group0_ms1 = (1 << 3)  # group_type=0, M/S=1
+    decoder.process_group((0x1234, b_group0_ms1, 0x0000, 0x0000))
+    assert decoder.ms is True
+
+    # Send Group 2A where bit 3 of B = segment addr bit 3 (segment=8)
+    b_group2a_seg8 = (2 << 12) | 8  # group_type=2, segment=8 (bit 3 is set)
+    decoder.process_group((0x1234, b_group2a_seg8, 0x0000, 0x0000))
+
+    # M/S must remain True
+    assert decoder.ms is True, "M/S was incorrectly modified by Group 2A segment address"
+
+
+def test_ta_updated_correctly_from_group0a():
+    """TA is still updated correctly when a real Group 0A carries it."""
+    decoder = RBDSDecoder()
+
+    b_ta1 = (1 << 4)   # TA=1 in Group 0A
+    decoder.process_group((0x1234, b_ta1, 0x0000, 0x0000))
+    assert decoder.ta is True
+
+    b_ta0 = 0x0000      # TA=0 in Group 0A
+    decoder.process_group((0x1234, b_ta0, 0x0000, 0x0000))
+    assert decoder.ta is False
