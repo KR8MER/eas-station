@@ -21,9 +21,20 @@ Repository: https://github.com/KR8MER/eas-station
 
 # The package exposes commonly used symbols so callers can import from
 # ``app_core`` without having to know the concrete module layout.
+#
+# Flask/SQLAlchemy extensions are only available when the full production
+# dependency stack is installed.  Sub-modules that contain pure-Python DSP
+# or utility logic (e.g. app_core.radio.demodulation) must remain importable
+# in a minimal test environment that only has numpy/scipy installed.
 
-from .extensions import db  # noqa: F401
-from . import models  # noqa: F401
+try:
+    from .extensions import db  # noqa: F401
+    from . import models  # noqa: F401
+    _FLASK_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    db = None  # type: ignore[assignment]
+    models = None  # type: ignore[assignment]
+    _FLASK_AVAILABLE = False
 
 __all__ = [
     "db",
