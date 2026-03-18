@@ -6,6 +6,34 @@ tracks releases under the 2.x series.
 
 ## [Unreleased]
 
+## [2.61.3] - 2026-03-18 - Test and documentation deficiency fixes
+
+### Fixed
+- **`test_future_annotations_is_first`** — Test logic did not account for module-level
+  license docstrings, which Python (PEP 236) allows before `from __future__` imports.
+  Updated the test to correctly skip leading triple-quoted docstring blocks before
+  checking that `from __future__ import annotations` is the first real import.
+- **`test_navbar_uses_auth_blueprint_routes`** — Test referenced the non-existent
+  `templates/components/navbar_new.html`. Updated to reference the active file
+  `templates/components/navbar.html`, which already uses the correct `auth.login`
+  and `auth.logout` blueprint routes.
+- **`test_runbooks_exist`** — Created the missing operator runbooks that the test
+  enforces: `docs/runbooks/outage_response.md` and `docs/runbooks/backup_strategy.md`.
+- **`test_standby_config_exists`** — Created the missing `examples/docker-compose.standby.yml`
+  warm-standby Docker Compose file that the test enforces.
+
+### Added
+- **`docs/runbooks/outage_response.md`** — Operator runbook covering P1/P2/P3 severity
+  triage, common failure scenarios (web, poller, database, Redis, disk, SDR), full
+  service restart order, post-recovery verification steps, and escalation procedures.
+- **`docs/runbooks/backup_strategy.md`** — Backup strategy runbook covering what gets
+  backed up, recommended cron schedules, retention policies, local and off-site storage,
+  command-line and web-UI backup/restore procedures, and backup health monitoring.
+- **`examples/docker-compose.standby.yml`** — Reference Docker Compose configuration
+  for a warm-standby EAS Station deployment, including PostgreSQL, Redis, web service
+  (broadcast disabled), alert poller (read-only standby mode), backup-sync container,
+  and nginx reverse proxy.
+
 ## [2.61.2] - 2026-03-18 - Mermaid diagram fixes and documentation update
 
 ### Fixed

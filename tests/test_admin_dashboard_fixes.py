@@ -48,24 +48,56 @@ def test_dashboard_uses_current_app():
 
 
 def test_future_annotations_is_first():
-    """Test that from __future__ import annotations is the first import."""
+    """Test that from __future__ import annotations is the first import.
+
+    Python requires module docstrings to precede __future__ imports (PEP 236),
+    so we skip over any leading docstring block and comments before checking.
+    """
     with open('webapp/admin/dashboard.py', 'r') as f:
         lines = f.readlines()
-    
-    # Find first non-empty, non-comment line
+
+    # Skip blank lines, comment lines, and module-level docstring blocks.
+    # A single-line docstring opens and closes with the same triple-quote on one
+    # line (e.g. """text""" or """""").  A multi-line docstring spans until the
+    # next occurrence of the matching closing triple-quote.
+    in_docstring = False
+    docstring_quote = None
     first_import_line = None
     for line in lines:
         stripped = line.strip()
-        if stripped and not stripped.startswith('#'):
+        if not stripped:
+            continue
+        if stripped.startswith('#'):
+            continue
+        if in_docstring:
+            # Look for the closing triple-quote
+            if docstring_quote in stripped:
+                in_docstring = False
+                docstring_quote = None
+            continue
+        # Detect start of a triple-quoted string block
+        for quote in ('"""', "'''"):
+            if stripped.startswith(quote):
+                rest = stripped[len(quote):]
+                # Single-line: the closing quote appears in rest (handles empty
+                # docstrings like """""" where rest == '"""')
+                if quote in rest:
+                    break  # single-line — skip and move to next line
+                # Multi-line: wait for closing quote on a later line
+                in_docstring = True
+                docstring_quote = quote
+                break
+        else:
+            # Not a blank/comment/docstring — this is the first real code line
             first_import_line = stripped
             break
-    
+
     assert first_import_line == 'from __future__ import annotations'
 
 
 def test_navbar_uses_auth_blueprint_routes():
-    """Test that navbar_new.html uses correct auth blueprint routes."""
-    with open('templates/components/navbar_new.html', 'r') as f:
+    """Test that navbar.html uses correct auth blueprint routes."""
+    with open('templates/components/navbar.html', 'r') as f:
         content = f.read()
     
     # Verify auth.logout is used instead of plain logout
