@@ -454,3 +454,67 @@ class TestAutoForwardAirChainContextGuard:
             "_auto_forward_to_air_chain must return None (not raise) when "
             "there is no Flask application context."
         )
+
+
+# ===========================================================================
+# eas_service.py — initialize_eas_monitor must wrap callback with app context
+# ===========================================================================
+
+class TestEasServiceMonitorContextWrap:
+    """initialize_eas_monitor in eas_service.py must pass EASMonitor an alert
+    callback that runs inside a Flask application context.
+
+    Previously, the callback was passed without a context wrapper, so every OTA
+    alert was silently dropped by _auto_forward_to_air_chain because
+    has_app_context() returned False in the monitoring thread.
+    """
+
+    def test_alert_callback_runs_with_app_context(self):
+        """The alert callback registered with EASMonitor must push an app context
+        so that _auto_forward_to_air_chain can reach the air-chain broadcast
+        pipeline instead of silently returning None."""
+        from unittest.mock import MagicMock, patch, call
+        import flask
+
+        # Capture the callback that initialize_eas_monitor passes to EASMonitor
+        captured_callbacks = []
+
+        def fake_eas_monitor(**kwargs):
+            captured_callbacks.append(kwargs.get('alert_callback'))
+            mock = MagicMock()
+            mock.start.return_value = True
+            return mock
+
+        mock_app = MagicMock()
+
+        # Simulate a minimal Flask app context manager
+        class FakeContext:
+            def __enter__(self):
+                return self
+            def __exit__(self, *a):
+                return False
+
+        mock_app.app_context.return_value = FakeContext()
+
+        with patch('app_core.audio.eas_monitor.EASMonitor', side_effect=fake_eas_monitor), \
+             patch('app_core.audio.redis_audio_adapter.RedisAudioAdapter', return_value=MagicMock()), \
+             patch('app_core.audio.eas_monitor.create_fips_filtering_callback',
+                   return_value=MagicMock(return_value={'forwarded': True})), \
+             patch('app_core.audio.startup_integration.load_fips_codes_from_config',
+                   return_value=['039137']), \
+             patch('app_core.audio.alert_forwarding.forward_alert_to_api',
+                   return_value={'redis': True, 'broadcast': True}):
+            from eas_service import initialize_eas_monitor
+            initialize_eas_monitor(mock_app)
+
+        assert captured_callbacks, "No callback was passed to EASMonitor"
+        cb = captured_callbacks[0]
+
+        # Exercise the captured callback — the app.app_context() manager must be
+        # entered, proving that the callback wraps its work in a context.
+        mock_app.app_context.reset_mock()
+        cb({'event_code': 'RWT', 'location_codes': ['039137'], 'source_name': 'test'})
+        mock_app.app_context.assert_called(), (
+            "alert_callback must push an app context via app.app_context() "
+            "so that _auto_forward_to_air_chain can reach Flask-SQLAlchemy."
+        )

@@ -176,11 +176,19 @@ def initialize_eas_monitor(app):
             return result
 
         # Create FIPS filtering callback
-        fips_callback = create_fips_filtering_callback(
+        _fips_callback_inner = create_fips_filtering_callback(
             configured_fips_codes=configured_fips,
             forward_callback=forward_alert_handler,
             logger_instance=logger
         )
+
+        # Wrap the callback so the EAS monitor thread always runs with a Flask
+        # application context.  Without this, forward_alert_to_api →
+        # _auto_forward_to_air_chain checks has_app_context() → False and
+        # silently drops every OTA alert (Bug 1).
+        def alert_callback(alert):
+            with app.app_context():
+                return _fips_callback_inner(alert)
 
         # Create Redis audio adapter
         # Subscribes to audio:samples:* channels published by audio-service
@@ -194,7 +202,7 @@ def initialize_eas_monitor(app):
         _eas_monitor = EASMonitor(
             audio_source=audio_adapter,
             sample_rate=16000,
-            alert_callback=fips_callback,
+            alert_callback=alert_callback,
             source_name="eas-service"
         )
 
