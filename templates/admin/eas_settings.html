@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+
+{% block title %}EAS Broadcast Settings - Admin - EAS Station{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="admin-page-header">
+    <div class="container">
+        <h1><i class="fas fa-broadcast-tower"></i> EAS Broadcast Settings</h1>
+        <p class="mb-0">Configure station identity, audio output, and authorized broadcast parameters</p>
+    </div>
+</div>
+
+<div class="admin-container" style="max-width: 1000px">
+
+    <form id="easSettingsForm">
+
+        <!-- Broadcast Control -->
+        <div class="admin-form-section">
+            <h4>Broadcast Control</h4>
+
+            <div class="mb-3">
+                <label for="broadcast_enabled" class="form-label">EAS Broadcast Enabled</label>
+                <select class="form-control" id="broadcast_enabled" name="broadcast_enabled">
+                    <option value="false" {% if not settings.broadcast_enabled %}selected{% endif %}>Disabled</option>
+                    <option value="true" {% if settings.broadcast_enabled %}selected{% endif %}>Enabled</option>
+                </select>
+                <div class="form-text">Master switch for all EAS broadcast functionality. Disable to suppress audio output during testing.</div>
+            </div>
+        </div>
+
+        <!-- Station Identity -->
+        <div class="admin-form-section">
+            <h4>Station Identity</h4>
+
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="originator" class="form-label">Originator Code</label>
+                    <select class="form-control" id="originator" name="originator">
+                        <option value="WXR" {% if settings.originator == 'WXR' %}selected{% endif %}>WXR &mdash; Weather Radio</option>
+                        <option value="EAS" {% if settings.originator == 'EAS' %}selected{% endif %}>EAS &mdash; Emergency Alert System</option>
+                        <option value="PEP" {% if settings.originator == 'PEP' %}selected{% endif %}>PEP &mdash; Primary Entry Point</option>
+                        <option value="CIV" {% if settings.originator == 'CIV' %}selected{% endif %}>CIV &mdash; Civil Authorities</option>
+                    </select>
+                    <div class="form-text">FCC originator code embedded in the SAME header.</div>
+                </div>
+
+                <div class="col-md-6 mb-3">
+                    <label for="station_id" class="form-label">Station ID</label>
+                    <input type="text" class="form-control" id="station_id" name="station_id"
+                           value="{{ settings.station_id }}" maxlength="8"
+                           placeholder="EASNODES">
+                    <div class="form-text">Up to 8-character SAME callsign identifier (e.g. WXJ81).</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Audio Output -->
+        <div class="admin-form-section">
+            <h4>Audio Output</h4>
+
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="sample_rate" class="form-label">Sample Rate</label>
+                    <select class="form-control" id="sample_rate" name="sample_rate">
+                        <option value="8000"  {% if settings.sample_rate == 8000  %}selected{% endif %}>8,000 Hz</option>
+                        <option value="16000" {% if settings.sample_rate == 16000 %}selected{% endif %}>16,000 Hz (recommended)</option>
+                        <option value="22050" {% if settings.sample_rate == 22050 %}selected{% endif %}>22,050 Hz</option>
+                        <option value="44100" {% if settings.sample_rate == 44100 %}selected{% endif %}>44,100 Hz</option>
+                        <option value="48000" {% if settings.sample_rate == 48000 %}selected{% endif %}>48,000 Hz</option>
+                    </select>
+                    <div class="form-text">Sample rate for generated EAS audio files. 16 kHz gives the best balance of quality and CPU usage.</div>
+                </div>
+
+                <div class="col-md-6 mb-3">
+                    <label for="attention_tone_seconds" class="form-label">Attention Tone Duration (seconds)</label>
+                    <input type="number" class="form-control" id="attention_tone_seconds" name="attention_tone_seconds"
+                           value="{{ settings.attention_tone_seconds }}" min="1" max="25">
+                    <div class="form-text">Length of the 853/960 Hz attention tone (1&ndash;25 seconds; FCC recommends 8&ndash;25).</div>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="audio_player" class="form-label">Audio Player Command</label>
+                    <input type="text" class="form-control" id="audio_player" name="audio_player"
+                           value="{{ settings.audio_player }}" placeholder="aplay">
+                    <div class="form-text">System command used to play audio files (e.g. <code>aplay</code>, <code>paplay</code>).</div>
+                </div>
+
+                <div class="col-md-6 mb-3">
+                    <label for="output_dir" class="form-label">Output Directory</label>
+                    <input type="text" class="form-control" id="output_dir" name="output_dir"
+                           value="{{ settings.output_dir }}" placeholder="static/eas_messages">
+                    <div class="form-text">Directory where generated EAS audio files are stored.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Authorized Broadcast Areas -->
+        <div class="admin-form-section">
+            <h4>Authorized Broadcast Areas</h4>
+            <div class="alert alert-warning">
+                <i class="fas fa-exclamation-triangle"></i>
+                <strong>FCC Compliance Notice:</strong> Only broadcast alerts for geographic areas you are
+                licensed or authorized to serve. Consult your station&rsquo;s FCC authorization before
+                adding FIPS codes here.
+            </div>
+
+            <div class="mb-3">
+                <label for="authorized_fips_codes" class="form-label">Authorized FIPS Codes</label>
+                <textarea class="form-control" id="authorized_fips_codes" name="authorized_fips_codes"
+                          rows="4" placeholder="039035&#10;039049&#10;039085">{{ settings.authorized_fips_codes | join('\n') }}</textarea>
+                <div class="form-text">One FIPS code per line (or comma-separated). Leave empty to allow all areas.</div>
+            </div>
+
+            <div class="mb-3">
+                <label for="authorized_event_codes" class="form-label">Authorized Event Codes</label>
+                <textarea class="form-control" id="authorized_event_codes" name="authorized_event_codes"
+                          rows="3" placeholder="RWT&#10;RMT&#10;TOR">{{ settings.authorized_event_codes | join('\n') }}</textarea>
+                <div class="form-text">One event code per line (or comma-separated). Leave empty to allow all event types.</div>
+            </div>
+        </div>
+
+        <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save"></i> Save Settings
+            </button>
+            <button type="button" class="btn btn-secondary" onclick="loadSettings()">
+                <i class="fas fa-sync"></i> Reload
+            </button>
+        </div>
+
+    </form>
+</div>
+
+<script>
+async function loadSettings() {
+    try {
+        const response = await fetch('/admin/eas_settings', {
+            headers: { 'Accept': 'application/json' }
+        });
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        const data = await response.json();
+        const s = data.settings;
+
+        document.getElementById('broadcast_enabled').value = s.broadcast_enabled ? 'true' : 'false';
+        document.getElementById('originator').value = s.originator || 'WXR';
+        document.getElementById('station_id').value = s.station_id || '';
+        document.getElementById('sample_rate').value = String(s.sample_rate || 16000);
+        document.getElementById('attention_tone_seconds').value = s.attention_tone_seconds || 8;
+        document.getElementById('audio_player').value = s.audio_player || 'aplay';
+        document.getElementById('output_dir').value = s.output_dir || 'static/eas_messages';
+        document.getElementById('authorized_fips_codes').value = (s.authorized_fips_codes || []).join('\n');
+        document.getElementById('authorized_event_codes').value = (s.authorized_event_codes || []).join('\n');
+
+        showToast('Settings loaded', 'success');
+    } catch (error) {
+        console.error('Error loading settings:', error);
+        showToast(`Error loading settings: ${error.message}`, 'danger');
+    }
+}
+
+async function saveSettings(event) {
+    event.preventDefault();
+
+    const fipsRaw = document.getElementById('authorized_fips_codes').value;
+    const eventsRaw = document.getElementById('authorized_event_codes').value;
+
+    const data = {
+        broadcast_enabled: document.getElementById('broadcast_enabled').value === 'true',
+        originator: document.getElementById('originator').value,
+        station_id: document.getElementById('station_id').value.trim().toUpperCase(),
+        sample_rate: parseInt(document.getElementById('sample_rate').value, 10),
+        attention_tone_seconds: parseInt(document.getElementById('attention_tone_seconds').value, 10),
+        audio_player: document.getElementById('audio_player').value.trim(),
+        output_dir: document.getElementById('output_dir').value.trim(),
+        authorized_fips_codes: fipsRaw.split(/[\n,]+/).map(s => s.trim()).filter(Boolean),
+        authorized_event_codes: eventsRaw.split(/[\n,]+/).map(s => s.trim().toUpperCase()).filter(Boolean),
+    };
+
+    try {
+        const response = await fetch('/admin/eas_settings', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.error || 'Failed to save settings');
+        }
+
+        showToast('EAS broadcast settings saved', 'success');
+        await loadSettings();
+    } catch (error) {
+        console.error('Error saving settings:', error);
+        showToast(`Error saving settings: ${error.message}`, 'danger');
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    document.getElementById('easSettingsForm').addEventListener('submit', saveSettings);
+});
+</script>
+{% endblock %}

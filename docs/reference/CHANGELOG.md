@@ -5,6 +5,34 @@ All notable changes to this project are documented in this file. The format is b
 tracks releases under the 2.x series.
 
 ## [Unreleased]
+
+## [2.66.0] - 2026-03-20 - EAS Broadcast Settings UI, EAS Decoder Monitor registration, docs
+
+### Added
+- **EAS Broadcast Settings page** (`/admin/eas-settings`) — new HTML admin page exposes all
+  `EASSettings` model fields (broadcast enable/disable, originator code, station ID, sample rate,
+  attention tone duration, audio player command, output directory, authorized FIPS codes, and
+  authorized event codes) via a user-friendly form. Previously these settings were only accessible
+  via the JSON API.
+- **EAS Broadcast card** in the Settings Hub (`/settings`) so operators can reach the new page
+  from the central settings dashboard.
+- **EAS Decoder Monitor card** in the Settings Hub (`/settings`) linking to the existing
+  `/admin/eas_decoder_monitor` page.
+- **DASDEC-III Feature Roadmap** (`docs/roadmap/dasdec3-feature-roadmap.md`) — nine-area feature
+  matrix tracking progress toward commercial EAS appliance parity, fulfilling the broken link
+  referenced throughout the documentation.
+- **DASDEC-III Comparison document** (`docs/reference/DASDEC_COMPARISON.md`) — honest feature-
+  level comparison between EAS Station and the Digital Alert Systems DASDEC-III, including key
+  differentiators and summary assessment.
+
+### Fixed
+- **EAS Decoder Monitor blueprint registration** — `eas_decoder_monitor_bp` was defined but never
+  registered with the Flask application, causing `/admin/eas_decoder_monitor` and its API
+  endpoints to return 404. Blueprint is now registered in `webapp/admin/__init__.py`.
+- **`system_logs.html` template block** — `{% block head %}` renamed to `{% block extra_css %}`
+  to match the block defined in `base.html`, preventing a silent render failure in Jinja2 strict
+  mode and resolving the template-block test failure.
+
 ### Changed
 - Consolidated documentation: removed diagnostic/debug files, merged related hardware and troubleshooting docs into single comprehensive guides, reorganized categories in documentation index
 

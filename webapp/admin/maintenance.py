@@ -31,7 +31,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from urllib.parse import quote
 
 import requests
-from flask import Blueprint, current_app, jsonify, request
+from flask import Blueprint, current_app, jsonify, render_template, request
 from sqlalchemy import desc, or_, text
 from sqlalchemy.exc import OperationalError
 
@@ -1425,6 +1425,13 @@ def _ensure_eas_settings_record() -> EASSettings:
         db.session.add(settings)
         db.session.commit()
     return settings
+
+
+@maintenance_bp.route("/admin/eas-settings")
+def admin_eas_settings_page():
+    """Render the EAS Broadcast Settings admin page."""
+    settings = _ensure_eas_settings_record()
+    return render_template("admin/eas_settings.html", settings=settings)
 
 
 @maintenance_bp.route("/admin/eas_settings", methods=["GET", "PUT"])
