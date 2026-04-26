@@ -274,6 +274,12 @@ class Alpha9120CController:
     EOT = "\x04"
     ACK = b"\x06"
     NAK = b"\x15"
+    # M-Protocol requires a wake-up sequence of NULL bytes at the head of
+    # every transmission so the sign's UART can synchronise before the
+    # SOH framing byte arrives.  The Alpha 9120C manual specifies five
+    # NULLs as the minimum; some adapters lose the first byte or two so
+    # we transmit five for headroom.
+    WAKEUP = b"\x00\x00\x00\x00\x00"
 
     def __init__(
         self,
@@ -915,12 +921,33 @@ class Alpha9120CController:
         return f"{checksum:02X}"
 
     def _build_frame_from_payload(self, payload: str) -> bytes:
-        """Wrap a raw payload with the standard M-Protocol header, ETX, and checksum."""
+        """Wrap a raw payload as a fully-compliant M-Protocol transmission.
+
+        Per the Alpha M-Protocol specification, every transmission has the
+        following layout::
+
+            <NUL>x5  <SOH>  <TT>  <AAAA>  <STX>  <payload>  <ETX>  <CC>  <EOT>
+
+        Where the leading NULLs wake up the sign's UART, ``TT`` is the
+        single-character type code (e.g. ``Z`` for all signs), ``AAAA`` is
+        the two-character sign address, and ``CC`` is the two-hex-digit
+        XOR checksum of the bytes between ``STX`` (exclusive) and ``ETX``
+        (inclusive).
+        """
 
         payload_bytes = payload.encode("latin-1")
-        checksum = self._calculate_checksum(payload_bytes)
+        etx_bytes = self.ETX.encode("latin-1")
+        # Checksum is XOR of every byte after STX up to and including ETX.
+        checksum = self._calculate_checksum(payload_bytes + etx_bytes)
         header = f"{self.SOH}{self.type_code}{self.sign_id}{self.STX}".encode("latin-1")
-        return header + payload_bytes + self.ETX.encode("latin-1") + checksum.encode("ascii")
+        return (
+            self.WAKEUP
+            + header
+            + payload_bytes
+            + etx_bytes
+            + checksum.encode("ascii")
+            + self.EOT.encode("latin-1")
+        )
 
     def _send_raw_message(self, message: bytes) -> bool:
         """Send raw M-Protocol message to Alpha 9120C"""
@@ -936,7 +963,9 @@ class Alpha9120CController:
             # old response as the acknowledgement for the current frame.
             self._drain_input_buffer()
 
-            # Send message using latin-1 encoding
+            # Send message using latin-1 encoding.  The frame already
+            # terminates with EOT, so the sign processes the transaction
+            # immediately and no separate EOT is required after the ACK.
             self.socket.sendall(message)
 
             ack = self._read_acknowledgement()
@@ -944,7 +973,6 @@ class Alpha9120CController:
                 self.logger.debug("No ACK/NAK received from Alpha 9120C")
             elif ack == self.ACK:
                 self.logger.debug("Received ACK from Alpha 9120C")
-                self._send_eot()
             elif ack == self.NAK:
                 self.logger.error("Alpha 9120C responded with NAK")
                 return False
@@ -986,17 +1014,46 @@ class Alpha9120CController:
             if self.socket:
                 self.socket.settimeout(original_timeout or self.timeout)
 
-    def _send_eot(self) -> None:
-        """Transmit the M-Protocol EOT byte once an ACK is received."""
+    def _build_command_frame(self, command_code: str, data: bytes = b"") -> bytes:
+        """Build a fully-compliant M-Protocol frame for a single command.
 
-        if not self.socket:
-            return
+        ``command_code`` is the protocol command character (``"A"`` for
+        write text, ``"B"`` for read text, ``"E"`` for write special
+        function, ``"F"`` for read special function, ``"I"`` for write
+        picture, etc.).  ``data`` is the command-specific payload after
+        the command byte.
+        """
 
+        cmd_byte = (command_code or "")[:1]
+        if not cmd_byte:
+            raise ValueError("M-Protocol command code is required")
+        payload = cmd_byte.encode("latin-1") + (data or b"")
+        # Reuse the canonical frame builder so every transmission carries
+        # the same wake-up, header, ETX, checksum, and EOT framing.
+        return self._build_frame_from_payload(payload.decode("latin-1"))
+
+    def _send_command_and_read_ack(self, frame: bytes, timeout: float = 2.0) -> Optional[bytes]:
+        """Send a pre-built frame and return the ACK/NAK byte (or None)."""
+
+        if not self.connected or not self.socket:
+            if not self.connect():
+                return None
         try:
-            self.socket.sendall(self.EOT.encode("latin-1"))
-            self.logger.debug("Sent EOT to complete M-Protocol transaction")
-        except OSError as exc:  # pragma: no cover - defensive
-            self.logger.debug("Failed to send EOT: %s", exc)
+            self._drain_input_buffer()
+            self.socket.sendall(frame)
+        except Exception as exc:
+            self.logger.error("Error transmitting M-Protocol frame: %s", exc)
+            self.connected = False
+            return None
+
+        original_timeout = self.socket.gettimeout() if self.socket else None
+        try:
+            if self.socket:
+                self.socket.settimeout(timeout)
+            return self._read_acknowledgement()
+        finally:
+            if self.socket:
+                self.socket.settimeout(original_timeout or self.timeout)
 
     def _drain_input_buffer(self) -> None:
         """Clear pending bytes from the socket before sending a new frame."""
@@ -1154,23 +1211,28 @@ class Alpha9120CController:
             self.logger.error(f"Error sending canned message '{message_name}': {e}")
             return False
 
-    def set_time_format(self, time_format: TimeFormat) -> bool:
-        """Set time display format"""
+    def set_display_time_format(self, time_format: TimeFormat) -> bool:
+        """Set the inline date/time format code (M-Protocol Type E, ``*``).
+
+        This selects how ``\\x13X`` time placeholders render inside displayed
+        messages (e.g. MM/DD/YY vs DD/MM/YYYY, 12-hour vs 24-hour clock).
+        For configuring the sign's internal clock format see ``set_time_format``.
+        """
         try:
-            # Build time format command
+            # Build time format command (Type E sub-command '*').
             payload = f"E*{self.TIME_CMD}{time_format.value}"
             frame = self._build_frame_from_payload(payload)
             return self._send_raw_message(frame)
 
         except Exception as e:
-            self.logger.error(f"Error setting time format: {e}")
+            self.logger.error(f"Error setting display time format: {e}")
             return False
 
     def send_time_display(self, time_format: TimeFormat = TimeFormat.TIME_12H) -> bool:
         """Send current time to display"""
         try:
             # Set time format first
-            self.set_time_format(time_format)
+            self.set_display_time_format(time_format)
 
             # Send time display message
             lines = [
@@ -1292,18 +1354,21 @@ class Alpha9120CController:
             return False
 
     def set_brightness(self, level: int, auto: bool = False) -> bool:
-        """Set display brightness.
+        """Set display brightness via the M-Protocol ``E$`` sub-command.
 
-        The M-Protocol supports hexadecimal levels 0-F (16 discrete steps) and an
-        automatic photocell mode signalled with `E$A`.  The previous implementation
-        incorrectly allowed the value `16`, which produced a two-character code and
-        violated the single-hex-digit requirement described in the manual.
+        The Alpha M-Protocol expresses brightness as a single hex digit
+        ``0``-``F`` (16 discrete steps) plus an automatic photocell mode
+        signalled with ``E$A``.  Some callers (and the legacy web UI)
+        pass values in the inclusive range 1-16; we accept either the
+        spec range 0-15 or 1-16 by clamping.
         """
 
         try:
             if auto:
                 payload = "E$A"
             else:
+                if level == 16:
+                    level = 15  # 1-16 → 0-15 fold-back for legacy callers
                 if not 0 <= level <= 15:
                     raise ValueError("Brightness level must be between 0 and 15")
 
@@ -1431,11 +1496,15 @@ class Alpha9120CController:
             return self.connect()
 
         try:
-            # Check if socket is still alive using a quick test
-            # Send a minimal memory allocation command (doesn't affect display)
-            test_cmd = b'\x00\x00' + self.sign_id.encode('ascii') + b'\x1B$A\x00\x00\x00'
-
-            self.socket.sendall(test_cmd)
+            # Send a Type F read for the firmware version: a benign read
+            # that doesn't change sign state.  Use the canonical frame
+            # builder so the wakeup/header/checksum/EOT are correct.
+            frame = self._build_command_frame(
+                "F",
+                bytes([ReadSpecialExtCommand.READ_VERSION.value]),
+            )
+            self._drain_input_buffer()
+            self.socket.sendall(frame)
 
             # Try to read ACK/NAK with short timeout
             original_timeout = self.socket.gettimeout()
@@ -1450,7 +1519,10 @@ class Alpha9120CController:
                     return True
                 else:
                     # Unexpected response, try reconnect
-                    self.logger.warning(f"Unexpected health check response: {response.hex()}")
+                    self.logger.warning(
+                        "Unexpected health check response: %s",
+                        response.hex() if response else "<empty>",
+                    )
                     self.disconnect()
                     return self.connect()
 
@@ -1483,29 +1555,17 @@ class Alpha9120CController:
         if not self.connected or not self.socket:
             self.logger.warning("Not connected to sign")
             return None
-            
+
         try:
-            # Build Type F command packet
-            # Format: <NULL>x5 <ID> <CMD=0x45> <FUNC> <ETX>
-            sign_id = self.sign_id.encode('ascii')
-            command_type = b'\x45'  # Type E/F command byte
-            function = bytes([function_code])
-            etx = b'\x03'  # End of transmission
-            
-            # Build complete packet
-            packet = (
-                b'\x00\x00\x00\x00\x00' +  # NULL padding
-                sign_id +
-                command_type +
-                function +
-                etx
-            )
-            
+            # Build Type F (Read Special Function Extended) frame.
+            # Per spec: <NUL>x5 <SOH> <TT> <ADDR> <STX> 'F' <function> <ETX> <CHECKSUM> <EOT>
+            frame = self._build_command_frame("F", bytes([function_code]))
+
             # Drain input buffer
             self._drain_input_buffer()
-            
+
             # Send command
-            self.socket.sendall(packet)
+            self.socket.sendall(frame)
             self.logger.debug(f"Sent read command: function=0x{function_code:02X}")
             
             # Read response with timeout
@@ -1763,35 +1823,16 @@ class Alpha9120CController:
             time_str = dt.strftime("%H:%M:%S")
             date_str = dt.strftime("%m/%d/%y")
             time_date = f"{time_str}\r{date_str}"
-            
-            # Build Type E command packet
-            # Format: <NULL>x5 <ID> <CMD=0x45> <FUNC=0x20> <TIME_DATE> <ETX>
-            sign_id = self.sign_id.encode('ascii')
-            command_type = b'\x45'  # Type E command
-            function = bytes([WriteSpecialExtCommand.SET_TIME_DATE.value])
-            data = time_date.encode('ascii')
-            etx = b'\x03'
-            
-            packet = (
-                b'\x00\x00\x00\x00\x00' +
-                sign_id +
-                command_type +
-                function +
-                data +
-                etx
-            )
-            
-            # Send command
-            self._drain_input_buffer()
-            self.socket.sendall(packet)
+
+            # Build Type E (Write Special Function Extended) frame.
+            data = bytes([WriteSpecialExtCommand.SET_TIME_DATE.value]) + time_date.encode('ascii')
+            frame = self._build_command_frame("E", data)
+
             self.logger.debug(f"Sent set time/date command: {time_date}")
-            
-            # Wait for ACK/NAK
-            ack = self._read_acknowledgement()
-            
+            ack = self._send_command_and_read_ack(frame)
+
             if ack == self.ACK:
                 self.logger.info(f"Time and date set successfully: {time_date}")
-                self._send_eot()
                 return True
             elif ack == self.NAK:
                 self.logger.error("Sign returned NAK for set time/date")
@@ -1799,7 +1840,7 @@ class Alpha9120CController:
             else:
                 self.logger.error("No acknowledgement received for set time/date")
                 return False
-                
+
         except Exception as e:
             self.logger.error(f"Error setting time and date: {e}")
             return False
@@ -1829,35 +1870,16 @@ class Alpha9120CController:
             return False
             
         try:
-            # Build Type E command packet
-            sign_id = self.sign_id.encode('ascii')
-            command_type = b'\x45'
-            function = bytes([WriteSpecialExtCommand.SET_DAY_OF_WEEK.value])
-            data = bytes([ord('0') + day])  # ASCII digit 0-6
-            etx = b'\x03'
-            
-            packet = (
-                b'\x00\x00\x00\x00\x00' +
-                sign_id +
-                command_type +
-                function +
-                data +
-                etx
-            )
-            
-            # Send command
-            self._drain_input_buffer()
-            self.socket.sendall(packet)
-            
+            data = bytes([WriteSpecialExtCommand.SET_DAY_OF_WEEK.value, ord('0') + day])
+            frame = self._build_command_frame("E", data)
+
             days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
             self.logger.debug(f"Sent set day of week: {days[day]}")
-            
-            # Wait for ACK/NAK
-            ack = self._read_acknowledgement()
-            
+
+            ack = self._send_command_and_read_ack(frame)
+
             if ack == self.ACK:
                 self.logger.info(f"Day of week set successfully: {days[day]}")
-                self._send_eot()
                 return True
             elif ack == self.NAK:
                 self.logger.error("Sign returned NAK for set day of week")
@@ -1865,7 +1887,7 @@ class Alpha9120CController:
             else:
                 self.logger.error("No acknowledgement received")
                 return False
-                
+
         except Exception as e:
             self.logger.error(f"Error setting day of week: {e}")
             return False
@@ -1885,36 +1907,18 @@ class Alpha9120CController:
             return False
             
         try:
-            # Build Type E command packet
-            sign_id = self.sign_id.encode('ascii')
-            command_type = b'\x45'
-            function = bytes([WriteSpecialExtCommand.SET_TIME_FORMAT.value])
             # 'S' for 24h, 'M' for 12h (per M-Protocol spec)
-            data = b'S' if format_24h else b'M'
-            etx = b'\x03'
-            
-            packet = (
-                b'\x00\x00\x00\x00\x00' +
-                sign_id +
-                command_type +
-                function +
-                data +
-                etx
-            )
-            
-            # Send command
-            self._drain_input_buffer()
-            self.socket.sendall(packet)
-            
+            mode_byte = b'S' if format_24h else b'M'
+            data = bytes([WriteSpecialExtCommand.SET_TIME_FORMAT.value]) + mode_byte
+            frame = self._build_command_frame("E", data)
+
             format_str = "24-hour" if format_24h else "12-hour"
             self.logger.debug(f"Sent set time format: {format_str}")
-            
-            # Wait for ACK/NAK
-            ack = self._read_acknowledgement()
-            
+
+            ack = self._send_command_and_read_ack(frame)
+
             if ack == self.ACK:
                 self.logger.info(f"Time format set successfully: {format_str}")
-                self._send_eot()
                 return True
             elif ack == self.NAK:
                 self.logger.error("Sign returned NAK for set time format")
@@ -1922,7 +1926,7 @@ class Alpha9120CController:
             else:
                 self.logger.error("No acknowledgement received")
                 return False
-                
+
         except Exception as e:
             self.logger.error(f"Error setting time format: {e}")
             return False
@@ -1946,36 +1950,18 @@ class Alpha9120CController:
             return False
             
         try:
-            # Build Type E command packet
-            sign_id = self.sign_id.encode('ascii')
-            command_type = b'\x45'
-            function = bytes([WriteSpecialExtCommand.SET_RUN_MODE.value])
             # 'A' for auto, 'M' for manual
-            data = b'A' if auto else b'M'
-            etx = b'\x03'
-            
-            packet = (
-                b'\x00\x00\x00\x00\x00' +
-                sign_id +
-                command_type +
-                function +
-                data +
-                etx
-            )
-            
-            # Send command
-            self._drain_input_buffer()
-            self.socket.sendall(packet)
-            
+            mode_byte = b'A' if auto else b'M'
+            data = bytes([WriteSpecialExtCommand.SET_RUN_MODE.value]) + mode_byte
+            frame = self._build_command_frame("E", data)
+
             mode_str = "auto" if auto else "manual"
             self.logger.debug(f"Sent set run mode: {mode_str}")
-            
-            # Wait for ACK/NAK
-            ack = self._read_acknowledgement()
-            
+
+            ack = self._send_command_and_read_ack(frame)
+
             if ack == self.ACK:
                 self.logger.info(f"Run mode set successfully: {mode_str}")
-                self._send_eot()
                 return True
             elif ack == self.NAK:
                 self.logger.error("Sign returned NAK for set run mode")
@@ -1983,7 +1969,7 @@ class Alpha9120CController:
             else:
                 self.logger.error("No acknowledgement received")
                 return False
-                
+
         except Exception as e:
             self.logger.error(f"Error setting run mode: {e}")
             return False
@@ -2034,36 +2020,18 @@ class Alpha9120CController:
             return False
             
         try:
-            # Build Type E command packet
-            sign_id = self.sign_id.encode('ascii')
-            command_type = b'\x45'
-            function = bytes([WriteSpecialExtCommand.SET_SPEAKER.value])
             # 'E' for enable, 'D' for disable
-            data = b'E' if enabled else b'D'
-            etx = b'\x03'
-            
-            packet = (
-                b'\x00\x00\x00\x00\x00' +
-                sign_id +
-                command_type +
-                function +
-                data +
-                etx
-            )
-            
-            # Send command
-            self._drain_input_buffer()
-            self.socket.sendall(packet)
-            
+            state_byte = b'E' if enabled else b'D'
+            data = bytes([WriteSpecialExtCommand.SET_SPEAKER.value]) + state_byte
+            frame = self._build_command_frame("E", data)
+
             state_str = "enabled" if enabled else "disabled"
             self.logger.debug(f"Sent set speaker: {state_str}")
-            
-            # Wait for ACK/NAK
-            ack = self._read_acknowledgement()
-            
+
+            ack = self._send_command_and_read_ack(frame)
+
             if ack == self.ACK:
                 self.logger.info(f"Speaker {state_str} successfully")
-                self._send_eot()
                 return True
             elif ack == self.NAK:
                 self.logger.error("Sign returned NAK for set speaker")
@@ -2071,7 +2039,7 @@ class Alpha9120CController:
             else:
                 self.logger.error("No acknowledgement received")
                 return False
-                
+
         except Exception as e:
             self.logger.error(f"Error setting speaker: {e}")
             return False
@@ -2079,104 +2047,35 @@ class Alpha9120CController:
     def beep(self, duration: int = 1) -> bool:
         """
         Make the sign beep for attention.
-        
-        Args:
-            duration: Number of beeps (1-3)
-            
-        Returns:
-            True if successful, False otherwise
-            
-        Note:
-            This enables speaker, sends beep, useful for alerts.
-            Sign must support speaker functionality.
+
+        The M-Protocol triggers a beep by writing one or more BEL (0x07)
+        bytes into a transient text file.  The sign emits one tone per
+        BEL byte, then displays the (empty) message.
         """
         if not self.connected:
             return False
-            
-        # Enable speaker first
+
+        if duration < 1:
+            duration = 1
+        if duration > 9:
+            duration = 9
+
+        # Enable speaker first so the sign actually plays the BEL tones.
         if not self.set_speaker(True):
             self.logger.warning("Could not enable speaker for beep")
             return False
-            
-        self.logger.info(f"Sign beeped {duration} time(s)")
-        return True
 
-    def set_brightness(self, level: int = 100, auto: bool = False) -> bool:
-        """
-        Set sign brightness level (M-Protocol Type E, Function 0x30).
-        
-        Args:
-            level: Brightness level 0-100 (0=off, 100=full brightness)
-            auto: If True, use automatic brightness adjustment
-            
-        Returns:
-            True if successful, False otherwise
-            
-        Note:
-            Brightness levels:
-            - 0: Display off
-            - 25: Dim (night mode)
-            - 50: Medium
-            - 75: Bright
-            - 100: Full brightness
-        """
-        if not 0 <= level <= 100:
-            self.logger.error(f"Invalid brightness level: {level} (must be 0-100)")
-            return False
-            
-        if not self.connected or not self.socket:
-            self.logger.warning("Not connected to sign")
-            return False
-            
         try:
-            # Build Type E command packet
-            sign_id = self.sign_id.encode('ascii')
-            command_type = b'\x45'
-            function = bytes([WriteSpecialExtCommand.SET_BRIGHTNESS.value])
-            
-            if auto:
-                # Auto brightness mode
-                data = b'A'
-            else:
-                # Manual brightness - convert 0-100 to ASCII character
-                # Map 0-100 to valid brightness range
-                brightness_char = chr(ord('A') + min(level // 4, 25))
-                data = brightness_char.encode('ascii')
-            
-            etx = b'\x03'
-            
-            packet = (
-                b'\x00\x00\x00\x00\x00' +
-                sign_id +
-                command_type +
-                function +
-                data +
-                etx
-            )
-            
-            # Send command
-            self._drain_input_buffer()
-            self.socket.sendall(packet)
-            
-            mode_str = "auto" if auto else f"{level}%"
-            self.logger.debug(f"Sent set brightness: {mode_str}")
-            
-            # Wait for ACK/NAK
-            ack = self._read_acknowledgement()
-            
-            if ack == self.ACK:
-                self.logger.info(f"Brightness set to {mode_str} successfully")
-                self._send_eot()
-                return True
-            elif ack == self.NAK:
-                self.logger.error("Sign returned NAK for set brightness")
-                return False
-            else:
-                self.logger.error("No acknowledgement received")
-                return False
-                
-        except Exception as e:
-            self.logger.error(f"Error setting brightness: {e}")
+            # Write Text File "A" (file label '0') containing N BEL bytes.
+            # Frame: <NUL>x5 <SOH> <TT> <ADDR> <STX> 'A' '0' <BEL>*N <ETX> <CHK> <EOT>
+            data = b"0" + (b"\x07" * duration)
+            frame = self._build_command_frame("A", data)
+            success = self._send_raw_message(frame)
+            if success:
+                self.logger.info("Sign beeped %d time(s)", duration)
+            return success
+        except Exception as exc:
+            self.logger.error("Error beeping sign: %s", exc)
             return False
 
     def read_text_file(self, file_label: str = '0') -> Optional[str]:
@@ -2199,26 +2098,16 @@ class Alpha9120CController:
             return None
             
         try:
-            # Build Type B command packet
-            # Format: <NULL>x5 <ID> <CMD=0x42> <FILE> <ETX>
-            sign_id = self.sign_id.encode('ascii')
-            command_type = bytes([ReadTextCommand.READ_TEXT_FILE.value])
-            file_byte = file_label.encode('ascii')[:1]  # Ensure single char
-            etx = b'\x03'
-            
-            packet = (
-                b'\x00\x00\x00\x00\x00' +
-                sign_id +
-                command_type +
-                file_byte +
-                etx
-            )
-            
+            # Build Type B (Read Text File) frame.
+            # Per spec: <NUL>x5 <SOH> <TT> <ADDR> <STX> 'B' <file_label> <ETX> <CHECKSUM> <EOT>
+            file_byte = file_label.encode('ascii')[:1] or b'0'
+            frame = self._build_command_frame("B", file_byte)
+
             # Drain input buffer
             self._drain_input_buffer()
-            
+
             # Send command
-            self.socket.sendall(packet)
+            self.socket.sendall(frame)
             self.logger.debug(f"Sent read text file: {file_label}")
             
             # Read response with timeout
