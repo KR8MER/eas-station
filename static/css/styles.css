@@ -1183,7 +1183,7 @@ small,
         0 8px 32px rgba(0, 0, 0, 0.15),
         0 1px 0 rgba(255, 255, 255, 0.15) inset;
     border-bottom: 1px solid rgba(255, 255, 255, 0.18);
-    padding: 0.875rem 2rem;
+    padding: 0.4rem 2rem;
     position: sticky;
     top: 0;
     z-index: 1030;
@@ -1192,7 +1192,7 @@ small,
 
 /* Subtle animation on scroll */
 .navbar.scrolled {
-    padding: 0.625rem 2rem;
+    padding: 0.25rem 2rem;
     background: linear-gradient(135deg,
         color-mix(in srgb, var(--vibrant-indigo) 92%, transparent) 0%,
         color-mix(in srgb, var(--vibrant-purple) 88%, transparent) 50%,
@@ -1212,7 +1212,7 @@ small,
     color: white;
     font-weight: var(--font-weight-bold);
     font-size: 1.25rem;
-    padding: 0.5rem 1.25rem;
+    padding: 0.25rem 1rem;
     margin-right: 1.5rem;
     border-radius: var(--radius-lg);
     transition: all var(--ease-fluid);
@@ -1222,7 +1222,7 @@ small,
 
 .navbar-brand .logo-wordmark,
 .navbar-brand .brand-logo {
-    height: 65px;
+    height: 40px;
     width: auto;
 }
 
@@ -1349,7 +1349,7 @@ small,
 .nav-link {
     color: rgba(255, 255, 255, 0.9);
     font-weight: var(--font-weight-medium);
-    padding: 0.625rem 1.25rem;
+    padding: 0.4rem 1rem;
     border-radius: var(--radius-pill);
     transition: all 0.3s var(--ease-spring);
     position: relative;
