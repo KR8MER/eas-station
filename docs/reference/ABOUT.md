@@ -74,7 +74,7 @@ EAS Station relies on publicly available geographic data to enable spatial filte
   - Licensed under Public Domain / Open Data terms
 
 - **Allen County GIS Office** - County and municipal boundary shapefiles, reference geographic data
-  - Alexas Foundas, GIS Coordinator
+  - Alexis Foundas, GIS Coordinator
   - Licensed under Public Domain / Open Data terms
 
 - **U.S. Census Bureau** - FIPS county codes and TIGER/Line state/county boundaries
