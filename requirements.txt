@@ -124,6 +124,7 @@ pysnmp>=6.2.0  # SNMP v2c trap sender for compliance health alerts
 
 # Geospatial data processing
 pyshp==3.0.3  # Shapefile reader for converting boundary files to GeoJSON
+pyproj==3.7.1  # CRS reprojection from shapefile .prj to WGS84 (optional, gracefully degrades)
 
 # Audio processing - audioop replacement for Python 3.13+
 audioop-lts==0.2.2  # Drop-in replacement for audioop (removed in Python 3.13)
