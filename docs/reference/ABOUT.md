@@ -73,6 +73,10 @@ EAS Station relies on publicly available geographic data to enable spatial filte
   - https://www.putnamcountygis.com/Downloads.html
   - Licensed under Public Domain / Open Data terms
 
+- **Allen County GIS Office** - County and municipal boundary shapefiles, reference geographic data
+  - Alexas Foundas, GIS Coordinator
+  - Licensed under Public Domain / Open Data terms
+
 - **U.S. Census Bureau** - FIPS county codes and TIGER/Line state/county boundaries
   - Public Domain federal data
 
