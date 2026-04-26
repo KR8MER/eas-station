@@ -351,15 +351,104 @@ def extract_feature_metadata(
     }
 
 
+def _read_prj_wkt(shapefile_path: str) -> Optional[str]:
+    """Return the WKT projection string from the companion .prj file, if any."""
+    from pathlib import Path
+
+    prj_path = Path(shapefile_path).with_suffix(".prj")
+    if not prj_path.exists():
+        return None
+    try:
+        wkt = prj_path.read_text(encoding="utf-8", errors="ignore").strip()
+        return wkt or None
+    except OSError:
+        return None
+
+
+def _build_reprojector(prj_wkt: Optional[str]):
+    """
+    Build a function that reprojects (x, y) tuples from the shapefile's CRS to
+    EPSG:4326 (WGS84). Returns None when no transform is needed (already 4326)
+    or when pyproj is unavailable / the .prj cannot be parsed.
+    """
+    if not prj_wkt:
+        return None
+
+    try:
+        from pyproj import CRS, Transformer
+    except ImportError:
+        # pyproj is optional; without it we fall back to the prior behaviour
+        # of trusting that the source is already WGS84.
+        return None
+
+    try:
+        source_crs = CRS.from_wkt(prj_wkt)
+    except Exception:
+        return None
+
+    target_crs = CRS.from_epsg(4326)
+    if source_crs.equals(target_crs):
+        return None
+
+    transformer = Transformer.from_crs(source_crs, target_crs, always_xy=True)
+    return transformer.transform
+
+
+def _reproject_geometry(geometry: Dict[str, Any], transform) -> Dict[str, Any]:
+    """Recursively reproject coordinates in a GeoJSON geometry dict."""
+    if not geometry or transform is None:
+        return geometry
+
+    geom_type = geometry.get("type")
+
+    def _project_point(coord):
+        x, y = coord[0], coord[1]
+        nx, ny = transform(x, y)
+        if len(coord) > 2:
+            return [nx, ny, *coord[2:]]
+        return [nx, ny]
+
+    def _project_ring(ring):
+        return [_project_point(c) for c in ring]
+
+    if geom_type == "Point":
+        return {**geometry, "coordinates": _project_point(geometry["coordinates"])}
+    if geom_type in ("MultiPoint", "LineString"):
+        return {**geometry, "coordinates": _project_ring(geometry["coordinates"])}
+    if geom_type in ("MultiLineString", "Polygon"):
+        return {
+            **geometry,
+            "coordinates": [_project_ring(r) for r in geometry["coordinates"]],
+        }
+    if geom_type == "MultiPolygon":
+        return {
+            **geometry,
+            "coordinates": [
+                [_project_ring(r) for r in poly]
+                for poly in geometry["coordinates"]
+            ],
+        }
+    if geom_type == "GeometryCollection":
+        return {
+            **geometry,
+            "geometries": [
+                _reproject_geometry(g, transform)
+                for g in geometry.get("geometries", [])
+            ],
+        }
+    return geometry
+
+
 def convert_shapefile_to_geojson(shapefile_path: str) -> Dict[str, Any]:
     """
-    Convert a shapefile to GeoJSON format.
+    Convert a shapefile to GeoJSON format, reprojecting to EPSG:4326 when a
+    companion .prj file declares a different CRS.
 
     Args:
         shapefile_path: Path to the .shp file
 
     Returns:
-        GeoJSON FeatureCollection dictionary
+        GeoJSON FeatureCollection dictionary in WGS84 coordinates
 
     Raises:
         ImportError: If pyshp library is not installed
@@ -367,45 +456,64 @@ def convert_shapefile_to_geojson(shapefile_path: str) -> Dict[str, Any]:
     """
     import shapefile
 
-    # Read the shapefile
     sf = shapefile.Reader(shapefile_path)
 
-    # Get field names (skip deletion flag field)
+    # Skip the deletion-flag field
     fields = sf.fields[1:]
     field_names = [field[0] for field in fields]
 
-    # Convert to GeoJSON features
-    features = []
+    prj_wkt = _read_prj_wkt(shapefile_path)
+    transform = _build_reprojector(prj_wkt)
 
+    features = []
     for shape_record in sf.shapeRecords():
         shape = shape_record.shape
         record = shape_record.record
 
-        # Build properties from attributes
         properties = {}
         for i, field_name in enumerate(field_names):
             value = record[i]
-            # Convert bytes to string if needed
             if isinstance(value, bytes):
-                value = value.decode('utf-8', errors='ignore')
+                value = value.decode("utf-8", errors="ignore")
             properties[field_name] = value
 
-        # Convert shape to GeoJSON geometry using __geo_interface__
         geometry = shape.__geo_interface__
+        geometry = _reproject_geometry(geometry, transform)
 
-        # Create GeoJSON feature
-        feature = {
-            "type": "Feature",
-            "properties": properties,
-            "geometry": geometry
-        }
-        features.append(feature)
+        features.append(
+            {
+                "type": "Feature",
+                "properties": properties,
+                "geometry": geometry,
+            }
+        )
 
-    # Create GeoJSON FeatureCollection
     return {
         "type": "FeatureCollection",
-        "features": features
+        "features": features,
     }
+
+
+def get_shapefile_directory() -> "Path":
+    """Return the directory scanned by /admin/list_shapefiles.
+
+    Resolution order:
+      1. EAS_SHAPEFILE_DIR environment variable
+      2. <project_root>/shapefiles
+      3. <project_root>/streams and ponds  (legacy default)
+    """
+    import os
+    from pathlib import Path
+
+    override = os.environ.get("EAS_SHAPEFILE_DIR")
+    if override:
+        return Path(override)
+
+    project_root = Path(__file__).resolve().parents[2]
+    default_dir = project_root / "shapefiles"
+    if default_dir.exists():
+        return default_dir
+    return project_root / "streams and ponds"
 
 
 def register_boundary_routes(app: Flask, logger) -> None:
@@ -617,15 +725,16 @@ def upload_boundaries():
 def list_shapefiles():
     """List available shapefiles in the server directory."""
     try:
-        from pathlib import Path
-
-        base_dir = Path("/home/user/eas-station")
-        shapefile_dir = base_dir / "streams and ponds"
+        shapefile_dir = get_shapefile_directory()
 
         if not shapefile_dir.exists():
             return jsonify({
                 "shapefiles": [],
-                "message": "Shapefile directory not found"
+                "directory": str(shapefile_dir),
+                "message": (
+                    f"Shapefile directory not found: {shapefile_dir}. "
+                    "Set EAS_SHAPEFILE_DIR or create the directory."
+                ),
             })
 
         # Find all .shp files
@@ -715,13 +824,20 @@ def upload_shapefile():
                     shp_path = str(shp_files[0])
                     geojson_data = convert_shapefile_to_geojson(shp_path)
 
-            elif filename_lower.endswith(".shp"):
+            elif filename_lower.endswith((".shp", ".shx", ".dbf", ".prj", ".cpg")):
                 return jsonify({
-                    "error": "Please upload a ZIP file containing .shp, .shx, .dbf, and .prj files"
+                    "error": (
+                        "Shapefiles consist of multiple companion files. "
+                        "Please ZIP the .shp, .shx, .dbf, and (optionally) "
+                        ".prj/.cpg files together and upload the .zip archive."
+                    )
                 }), 400
             else:
                 return jsonify({
-                    "error": "File must be a ZIP archive containing shapefile components"
+                    "error": (
+                        "File must be a ZIP archive containing shapefile "
+                        "components (.shp, .shx, .dbf, optional .prj)."
+                    )
                 }), 400
 
         # Handle directory path for existing shapefiles on server

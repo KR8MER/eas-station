@@ -266,7 +266,8 @@
                         <div class="card-body">
                             <p class="text-muted small">
                                 <i class="fas fa-info-circle"></i>
-                                Upload a ZIP file containing all shapefile components (.shp, .shx, .dbf, .prj files)
+                                Upload a ZIP file containing all shapefile components (.shp, .shx, .dbf, .prj files).
+                                If a .prj file is included, coordinates will be automatically reprojected to WGS84 (EPSG:4326).
                             </p>
                             <form id="shapefileUploadForm" enctype="multipart/form-data">
                                 <div class="row">
