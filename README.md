@@ -708,6 +708,7 @@ See [NOTICE](NOTICE) for licensing notice details.
 - **FEMA/IPAWS** - National alert system integration
 - **PostGIS Team** - Spatial database technology
 - **Putnam County GIS Office** - Geographic boundary data (Greg Luersman, GIS Coordinator)
+- **Allen County GIS Office** - Geographic boundary data (Alexis Foundas, GIS Coordinator)
 - **U.S. Census Bureau** - FIPS codes and TIGER/Line boundary data
 - **Flask Community** - Web framework
 - **RTL-SDR Project** - Software-defined radio tools
