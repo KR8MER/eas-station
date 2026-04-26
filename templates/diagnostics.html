@@ -156,6 +156,30 @@
                     </div>
                 </div>
 
+                <div class="diagnostics-section" id="checksSection" style="display: none;">
+                    <div class="card">
+                        <div class="card-header bg-secondary text-white">
+                            <h5 class="mb-0">
+                                <i class="fas fa-list-check"></i> Checks Run
+                            </h5>
+                        </div>
+                        <div class="card-body p-0">
+                            <table class="table table-sm mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Check</th>
+                                        <th class="text-center">Passed</th>
+                                        <th class="text-center">Warn</th>
+                                        <th class="text-center">Fail</th>
+                                        <th class="text-end">Time</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="checksTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="diagnostics-section" id="infoSection" style="display: none;">
                     <div class="card">
                         <div class="card-header bg-info text-white">
@@ -203,13 +227,9 @@
                         It will check:
                     </p>
                     <ul class="list-unstyled text-start mx-auto" style="max-width: 600px;">
-                        <li><i class="fas fa-check text-success"></i> Systemd services status</li>
-                        <li><i class="fas fa-check text-success"></i> Database connectivity</li>
-                        <li><i class="fas fa-check text-success"></i> Environment configuration</li>
-                        <li><i class="fas fa-check text-success"></i> Web interface accessibility</li>
-                        <li><i class="fas fa-check text-success"></i> System health endpoints</li>
-                        <li><i class="fas fa-check text-success"></i> Audio device availability</li>
-                        <li><i class="fas fa-check text-success"></i> Recent log errors</li>
+                        {% for name in check_names or [] %}
+                        <li><i class="fas fa-check text-success"></i> {{ name }}</li>
+                        {% endfor %}
                     </ul>
                     <button id="startDiagnosticsBtn" class="btn btn-primary btn-lg mt-4">
                         <i class="fas fa-play"></i> Start Diagnostics
@@ -288,6 +308,24 @@
         document.getElementById('warningCount').textContent = data.warnings.length;
         document.getElementById('failedCount').textContent = data.failed.length;
         document.getElementById('infoCount').textContent = data.info.length;
+
+        const checksBody = document.getElementById('checksTableBody');
+        checksBody.innerHTML = '';
+        if (Array.isArray(data.checks) && data.checks.length) {
+            data.checks.forEach(c => {
+                const row = checksBody.insertRow();
+                row.insertCell().textContent = c.name;
+                const pCell = row.insertCell(); pCell.textContent = c.passed; pCell.className = 'text-center status-pass';
+                const wCell = row.insertCell(); wCell.textContent = c.warnings; wCell.className = 'text-center status-warning';
+                const fCell = row.insertCell(); fCell.textContent = c.failed; fCell.className = 'text-center status-fail';
+                const tCell = row.insertCell();
+                tCell.textContent = (c.elapsed_ms != null ? c.elapsed_ms.toFixed(1) + ' ms' : '--');
+                tCell.className = 'text-end text-muted small';
+            });
+            document.getElementById('checksSection').style.display = 'block';
+        } else {
+            document.getElementById('checksSection').style.display = 'none';
+        }
 
         document.getElementById('passedChecks').innerHTML = '';
         document.getElementById('warningChecks').innerHTML = '';

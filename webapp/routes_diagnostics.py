@@ -22,330 +22,473 @@ from __future__ import annotations
 """
 System Diagnostics Routes
 
-Provides web-based system validation and diagnostics.
-Exposes the validation checks as API endpoints for the UI.
+Provides web-based system validation. Each check exercises the actual
+subsystem (Redis ping, Icecast stats fetch, audio-service heartbeat, NTP
+sync, etc.) rather than printing static "looks fine" output. Failures
+include the underlying error message so an operator can act on the result.
 """
 
 import logging
 import os
+import re
 import subprocess
-from typing import Any, Dict, List, Tuple
+import time
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from flask import Flask, jsonify, render_template
-from app_core.config import get_web_service
+
+from app_core.config.services import get_eas_services
 
 logger = logging.getLogger(__name__)
 
 
-def run_command(cmd: List[str]) -> Tuple[int, str, str]:
-    """Run shell command and return exit code, stdout, stderr."""
+CheckResult = Dict[str, List[str]]
+
+
+def _empty_result() -> CheckResult:
+    return {"passed": [], "warnings": [], "failed": [], "info": []}
+
+
+def _project_root() -> Path:
+    return Path(__file__).resolve().parent.parent
+
+
+def _run_command(cmd: List[str], timeout: int = 15) -> Tuple[int, str, str]:
+    """Run a command and return ``(exit_code, stdout, stderr)``."""
     try:
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
-            timeout=30
+            timeout=timeout,
         )
         return result.returncode, result.stdout, result.stderr
+    except FileNotFoundError as exc:
+        return 127, "", str(exc)
     except subprocess.TimeoutExpired:
-        return -1, "", "Command timed out"
-    except Exception as e:
-        return -1, "", str(e)
+        return -1, "", f"Command timed out after {timeout}s: {' '.join(cmd)}"
+    except Exception as exc:
+        return -1, "", str(exc)
 
 
-def check_services_running() -> Dict[str, List[str]]:
-    """Check if systemd services are running."""
-    passed = []
-    warnings = []
-    failed = []
-    info = []
-    
-    try:
-        # Check if main target is active
-        code, stdout, stderr = run_command(["systemctl", "is-active", "eas-station.target"])
-        if code == 0:
-            passed.append("EAS Station systemd target is active")
+# --------------------------------------------------------------------------- #
+# Individual checks
+# --------------------------------------------------------------------------- #
+
+def check_services_running() -> CheckResult:
+    """Verify each EAS Station systemd unit is active."""
+    out = _empty_result()
+
+    code, stdout, _ = _run_command(["systemctl", "is-active", "eas-station.target"])
+    target_state = stdout.strip() or "unknown"
+    if code == 0 and target_state == "active":
+        out["passed"].append("eas-station.target is active")
+    else:
+        # The target is optional in some installs; warn rather than fail so
+        # we still inspect each unit individually below.
+        out["warnings"].append(
+            f"eas-station.target state is '{target_state}' (proceeding with per-unit checks)"
+        )
+
+    services = get_eas_services()
+    if not services:
+        out["warnings"].append("No EAS Station services configured to check")
+        return out
+
+    for unit in services:
+        code, stdout, stderr = _run_command(["systemctl", "is-active", unit])
+        state = stdout.strip() or "unknown"
+        if code == 0 and state == "active":
+            out["passed"].append(f"{unit} is active")
+            continue
+
+        # Distinguish "missing unit" from "failed unit".
+        sub_code, sub_stdout, _ = _run_command(
+            ["systemctl", "show", "-p", "LoadState", "--value", unit]
+        )
+        load_state = sub_stdout.strip()
+        if sub_code == 0 and load_state in {"not-found", "masked"}:
+            out["warnings"].append(f"{unit} is not installed ({load_state})")
         else:
-            failed.append("EAS Station systemd target is not active")
-            info.append("Start with: sudo systemctl start eas-station.target")
-            return {"passed": passed, "warnings": warnings, "failed": failed, "info": info}
-        
-        # Check individual services
-        expected_services = [
-            "eas-station-web",
-            "eas-station-sdr",
-            "eas-station-audio",
-            "eas-station-eas",
-            "eas-station-hardware",
-            "eas-station-noaa-poller",
-            "eas-station-ipaws-poller"
-        ]
-        
-        for service_name in expected_services:
-            service = f"{service_name}.service"
-            code, stdout, stderr = run_command(["systemctl", "is-active", service])
-            state = stdout.strip()
-            
-            if code == 0 and state == "active":
-                passed.append(f"Service '{service_name}' is running")
-            else:
-                failed.append(f"Service '{service_name}' is not running (state: {state})")
-                info.append(f"Check status: sudo systemctl status {service}")
-    
-    except Exception as e:
-        logger.error(f"Error checking services: {e}")
-        failed.append(f"Error checking services: {str(e)}")
-    
-    return {"passed": passed, "warnings": warnings, "failed": failed, "info": info}
+            out["failed"].append(f"{unit} is not active (state: {state})")
+            out["info"].append(f"Inspect with: systemctl status {unit}")
+
+    return out
 
 
-def check_database_connection() -> Dict[str, List[str]]:
-    """Check database connectivity."""
-    passed = []
-    warnings = []
-    failed = []
-    info = []
-    
+def check_database_connection() -> CheckResult:
+    """Confirm we can connect to the database and execute a trivial query."""
+    out = _empty_result()
     try:
+        from sqlalchemy import text
+
         from app_core.extensions import db
         from flask import current_app
-        
-        # Try to execute a simple query
+
         with current_app.app_context():
-            db.engine.connect()
-            passed.append("Database connection successful")
-    
-    except Exception as e:
-        logger.error(f"Database connection failed: {e}")
-        failed.append(f"Database connection failed: {str(e)}")
-    
-    return {"passed": passed, "warnings": warnings, "failed": failed, "info": info}
+            t0 = time.perf_counter()
+            with db.engine.connect() as conn:
+                value = conn.execute(text("SELECT 1")).scalar()
+            elapsed_ms = (time.perf_counter() - t0) * 1000
 
-
-def check_environment_config() -> Dict[str, List[str]]:
-    """Check environment configuration."""
-    passed = []
-    warnings = []
-    failed = []
-    info = []
-    
-    try:
-        import os
-        from pathlib import Path
-        
-        env_file = Path(".env")
-        if not env_file.exists():
-            failed.append(".env file not found")
-            return {"passed": passed, "warnings": warnings, "failed": failed, "info": info}
-        
-        passed.append(".env file exists")
-        
-        # Check critical environment variables
-        critical_vars = [
-            "SECRET_KEY",
-            "POSTGRES_PASSWORD",
-            "DEFAULT_STATE_CODE",
-            "DEFAULT_COUNTY_NAME"
-        ]
-        
-        for var in critical_vars:
-            value = os.getenv(var)
-            if value:
-                # Check for default/weak values
-                if var == "SECRET_KEY" and any(x in value.lower() for x in ["change", "secret", "example"]):
-                    warnings.append(f"{var} appears to use a default value - should be changed for production")
-                elif var == "POSTGRES_PASSWORD" and any(x in value.lower() for x in ["changeme", "password", "postgres"]):
-                    warnings.append(f"{var} appears to use a weak password - should be changed for production")
-                else:
-                    passed.append(f"{var} is configured")
+            if value == 1:
+                out["passed"].append(
+                    f"Database SELECT 1 succeeded ({elapsed_ms:.1f} ms)"
+                )
             else:
-                warnings.append(f"{var} not found in environment")
-    
-    except Exception as e:
-        logger.error(f"Error checking environment: {e}")
-        failed.append(f"Error checking environment: {str(e)}")
-    
-    return {"passed": passed, "warnings": warnings, "failed": failed, "info": info}
+                out["failed"].append(f"Database SELECT 1 returned unexpected value: {value!r}")
+    except Exception as exc:
+        logger.error("Database connection failed: %s", exc)
+        out["failed"].append(f"Database connection failed: {exc}")
+    return out
 
 
-def check_health_endpoint() -> Dict[str, List[str]]:
-    """Check system health endpoint."""
-    passed = []
-    warnings = []
-    failed = []
-    info = []
-    
-    try:
-        import requests
+# Placeholders/defaults that are clearly unsuitable for production. We compare
+# against exact values (case-insensitively) rather than substrings so that a
+# legitimately strong key containing letters like "secret" doesn't false-flag.
+_BAD_SECRET_KEYS = frozenset(
+    s.lower() for s in (
+        "",
+        "change-me",
+        "changeme",
+        "change_me",
+        "dev-secret-key",
+        "development",
+        "example",
+        "example-secret-key",
+        "insecure",
+        "please-change-me",
+        "secret",
+        "secret-key",
+        "your-secret-key-here",
+    )
+)
+_BAD_DB_PASSWORDS = frozenset(
+    s.lower() for s in (
+        "",
+        "changeme",
+        "change-me",
+        "password",
+        "postgres",
+        "admin",
+        "root",
+    )
+)
 
-        # Check health endpoint
-        # In bare metal environment, access via nginx reverse proxy on localhost
-        health_url = os.getenv("HEALTH_CHECK_URL", "http://localhost/health/dependencies")
-        response = requests.get(health_url, timeout=10)
-        
-        if response.status_code == 200:
-            data = response.json()
-            
-            if data.get("status") == "healthy":
-                passed.append("System health check passed")
-                
-                # Check individual dependencies
-                deps = data.get("dependencies", {})
-                for dep_name, dep_status in deps.items():
-                    if dep_status.get("healthy"):
-                        info.append(f"Dependency '{dep_name}' is healthy")
-                    else:
-                        warnings.append(f"Dependency '{dep_name}' is unhealthy")
+
+def _resolve_env_file() -> Optional[Path]:
+    """Locate the .env file used by the running app, if any."""
+    candidate = os.environ.get("CONFIG_PATH")
+    if candidate:
+        path = Path(candidate)
+        if path.is_file():
+            return path
+    for path in (_project_root() / ".env", Path.cwd() / ".env"):
+        if path.is_file():
+            return path
+    return None
+
+
+def check_environment_config() -> CheckResult:
+    """Validate critical environment variables and the .env file."""
+    out = _empty_result()
+
+    env_file = _resolve_env_file()
+    if env_file is None:
+        out["warnings"].append(
+            "No .env file found via CONFIG_PATH, project root, or working directory"
+        )
+    else:
+        out["passed"].append(f".env file located at {env_file}")
+
+    critical_vars = ["SECRET_KEY", "POSTGRES_PASSWORD", "DEFAULT_STATE_CODE", "DEFAULT_COUNTY_NAME"]
+    for var in critical_vars:
+        value = os.getenv(var, "")
+        if not value:
+            out["warnings"].append(f"{var} is not set")
+            continue
+
+        if var == "SECRET_KEY":
+            if value.lower() in _BAD_SECRET_KEYS:
+                out["warnings"].append(f"SECRET_KEY uses a known placeholder value")
+            elif len(value) < 16:
+                out["warnings"].append(
+                    f"SECRET_KEY is only {len(value)} chars; recommend ≥32"
+                )
             else:
-                warnings.append("System health check returned non-healthy status")
+                out["passed"].append("SECRET_KEY is configured (≥16 chars, not a placeholder)")
+        elif var == "POSTGRES_PASSWORD":
+            if value.lower() in _BAD_DB_PASSWORDS:
+                out["warnings"].append("POSTGRES_PASSWORD uses a known weak/default value")
+            else:
+                out["passed"].append("POSTGRES_PASSWORD is configured (not a default)")
         else:
-            warnings.append(f"Health endpoint returned HTTP {response.status_code}")
-    
-    except requests.exceptions.RequestException as e:
-        warnings.append(f"Could not reach health endpoint: {str(e)}")
-    except Exception as e:
-        logger.error(f"Error checking health: {e}")
-        failed.append(f"Error checking health: {str(e)}")
-    
-    return {"passed": passed, "warnings": warnings, "failed": failed, "info": info}
+            out["passed"].append(f"{var} is configured")
+
+    return out
 
 
-def check_audio_devices() -> Dict[str, List[str]]:
-    """Check for audio devices."""
-    passed = []
-    warnings = []
-    failed = []
-    info = []
-    
+def check_audio_devices() -> CheckResult:
+    """Look for ALSA playback devices when audio output is enabled."""
+    out = _empty_result()
+    if os.getenv("AUDIO_OUTPUT_ENABLED", "false").lower() not in {"1", "true", "yes"}:
+        out["info"].append("Audio output is disabled in configuration; skipping ALSA check")
+        return out
+
+    code, stdout, stderr = _run_command(["aplay", "-l"])
+    if code == 127:
+        out["warnings"].append("`aplay` not found — install alsa-utils to enable this check")
+        return out
+    if code != 0:
+        out["warnings"].append(f"`aplay -l` failed: {stderr.strip() or 'no output'}")
+        return out
+
+    cards = re.findall(r"^card (\d+):\s*(\S+)", stdout, flags=re.MULTILINE)
+    if not cards:
+        out["failed"].append("No ALSA playback devices detected")
+        out["info"].append("Verify hardware is connected and the alsa kernel module is loaded")
+        return out
+
+    out["passed"].append(f"Found {len(cards)} ALSA playback device(s)")
+    for card_num, card_id in cards:
+        out["info"].append(f"card {card_num}: {card_id}")
+    return out
+
+
+def check_redis() -> CheckResult:
+    """Ping Redis and report version + latency."""
+    out = _empty_result()
     try:
-        import os
-        
-        # Check if audio is enabled
-        if os.getenv("AUDIO_OUTPUT_ENABLED", "false").lower() == "false":
-            info.append("Audio output is disabled in configuration")
-            return {"passed": passed, "warnings": warnings, "failed": failed, "info": info}
-        
-        # Try to list audio devices
-        code, stdout, stderr = run_command([
-            "aplay", "-l"
-        ])
-        
-        if code == 0:
-            if "card" in stdout.lower():
-                passed.append("Audio devices detected")
-                # Count devices
-                card_count = stdout.lower().count("card ")
-                info.append(f"Found {card_count} audio card(s)")
-            else:
-                warnings.append("No audio devices found")
-        else:
-            info.append("Could not check audio devices (may not be configured)")
-    
-    except Exception as e:
-        logger.error(f"Error checking audio: {e}")
-        info.append(f"Audio device check skipped: {str(e)}")
-    
-    return {"passed": passed, "warnings": warnings, "failed": failed, "info": info}
+        import redis  # noqa: F401  (only to surface ImportError clearly)
+        from app_core.redis_client import get_redis_client
+
+        client = get_redis_client(max_retries=1, initial_backoff=0.5)
+        if client is None:
+            out["failed"].append("Redis client could not be constructed (see logs)")
+            return out
+
+        t0 = time.perf_counter()
+        client.ping()
+        latency_ms = (time.perf_counter() - t0) * 1000
+
+        info = client.info(section="server") or {}
+        version = info.get("redis_version") or "unknown"
+        out["passed"].append(
+            f"Redis PING ok in {latency_ms:.1f} ms (v{version})"
+        )
+    except ImportError as exc:
+        out["failed"].append(f"redis package not importable: {exc}")
+    except Exception as exc:
+        logger.error("Redis check failed: %s", exc)
+        out["failed"].append(f"Redis ping failed: {exc}")
+        out["info"].append("Check that redis-server is running and credentials match")
+    return out
 
 
-def check_recent_logs() -> Dict[str, List[str]]:
-    """Check for recent errors in systemd logs."""
-    passed = []
-    warnings = []
-    failed = []
-    info = []
-    
+def check_icecast() -> CheckResult:
+    """Use the existing system_health helper to check Icecast."""
+    out = _empty_result()
     try:
-        # Check main web service logs
-        web_service = get_web_service()
-        code, stdout, stderr = run_command([
-            "journalctl", "-u", web_service, "-n", "100", "--no-pager"
-        ])
-        
-        if code == 0:
-            # Look for error patterns
-            error_patterns = {
-                "ERROR": 0,
-                "CRITICAL": 0,
-                "Exception": 0,
-                "Traceback": 0
-            }
-            
-            for pattern in error_patterns:
-                count = stdout.count(pattern)
-                error_patterns[pattern] = count
-            
-            total_errors = sum(error_patterns.values())
-            
-            if total_errors == 0:
-                passed.append("No obvious errors in recent logs")
-            elif total_errors < 5:
-                warnings.append(f"Found {total_errors} error pattern(s) in recent logs")
-                info.append(f"Review logs with: sudo journalctl -u {web_service} -n 100")
-            else:
-                warnings.append(f"Found {total_errors} error pattern(s) in recent logs - review recommended")
-                info.append(f"Review logs with: sudo journalctl -u {web_service} -n 100")
-        else:
-            warnings.append("Could not retrieve systemd logs")
-    
-    except Exception as e:
-        logger.error(f"Error checking logs: {e}")
-        info.append(f"Log check skipped: {str(e)}")
-    
-    return {"passed": passed, "warnings": warnings, "failed": failed, "info": info}
+        from app_core.system_health import collect_icecast_status
+
+        status = collect_icecast_status(logger) or {}
+    except Exception as exc:
+        out["failed"].append(f"Could not check Icecast: {exc}")
+        return out
+
+    state = status.get("status") or "unknown"
+    server = status.get("server")
+    port = status.get("port")
+    location = f"{server}:{port}" if server and port else server or "configured server"
+
+    if not status.get("enabled"):
+        out["info"].append("Icecast streaming is disabled — skipping reachability check")
+        return out
+
+    if state == "ok":
+        out["passed"].append(
+            f"Icecast at {location} is reachable "
+            f"(listeners={status.get('listeners', 0)}, sources={status.get('sources', 0)})"
+        )
+    elif state == "degraded":
+        issues = ", ".join(status.get("issues") or []) or "see logs"
+        out["warnings"].append(f"Icecast at {location} is reachable but degraded: {issues}")
+    else:
+        err = status.get("error") or ", ".join(status.get("issues") or []) or "not reachable"
+        out["failed"].append(f"Icecast at {location} is unhealthy: {err}")
+    return out
+
+
+def check_audio_service_heartbeat() -> CheckResult:
+    """Verify the audio-service process is publishing fresh metrics to Redis."""
+    out = _empty_result()
+    if os.getenv("AUDIO_OUTPUT_ENABLED", "false").lower() not in {"1", "true", "yes"}:
+        out["info"].append("AUDIO_OUTPUT_ENABLED=false — skipping audio-service heartbeat check")
+        return out
+
+    try:
+        from app_core.audio.worker_coordinator_redis import read_shared_metrics
+
+        metrics = read_shared_metrics()
+    except Exception as exc:
+        out["warnings"].append(f"Could not read audio metrics from Redis: {exc}")
+        return out
+
+    if not metrics:
+        out["failed"].append("audio-service is not publishing metrics to Redis")
+        out["info"].append("Check: systemctl status eas-station-audio")
+        return out
+
+    heartbeat = float(metrics.get("_heartbeat") or 0)
+    if heartbeat <= 0:
+        out["failed"].append("audio-service metrics present but no heartbeat recorded")
+        return out
+
+    age = time.time() - heartbeat
+    if age <= 15:
+        out["passed"].append(f"audio-service heartbeat is {age:.1f}s old (fresh)")
+    elif age <= 60:
+        out["warnings"].append(f"audio-service heartbeat is {age:.1f}s old (stale)")
+    else:
+        out["failed"].append(f"audio-service heartbeat is {age:.1f}s old (very stale)")
+    return out
+
+
+def check_ntp_sync() -> CheckResult:
+    """Check that the system clock is NTP-synchronised."""
+    out = _empty_result()
+    code, stdout, stderr = _run_command(
+        ["timedatectl", "show", "-p", "NTP", "-p", "NTPSynchronized", "--value"]
+    )
+    if code == 127:
+        out["info"].append("`timedatectl` not available — skipping NTP check")
+        return out
+    if code != 0:
+        out["warnings"].append(f"`timedatectl` failed: {stderr.strip() or 'no output'}")
+        return out
+
+    lines = [line.strip() for line in stdout.splitlines() if line.strip()]
+    # Output: first line = NTP enabled, second = NTPSynchronized
+    ntp_enabled = lines[0].lower() == "yes" if len(lines) >= 1 else False
+    ntp_synced = lines[1].lower() == "yes" if len(lines) >= 2 else False
+
+    if ntp_synced:
+        out["passed"].append("System clock is NTP-synchronised")
+    elif ntp_enabled:
+        out["warnings"].append("NTP is enabled but the clock has not yet synchronised")
+    else:
+        out["warnings"].append("NTP synchronisation is disabled on this host")
+        out["info"].append("Enable with: sudo timedatectl set-ntp true")
+    return out
+
+
+_LOG_ERROR_PATTERN = re.compile(
+    r"\b(ERROR|CRITICAL|Traceback|Exception)\b", flags=re.IGNORECASE
+)
+
+
+def check_recent_logs() -> CheckResult:
+    """Pull recent web-service logs and surface actual error lines, not just counts."""
+    out = _empty_result()
+    try:
+        from app_core.config.services import get_web_service
+
+        unit = get_web_service()
+    except Exception as exc:
+        out["warnings"].append(f"Could not determine web service name: {exc}")
+        return out
+
+    code, stdout, stderr = _run_command(
+        ["journalctl", "-u", unit, "-n", "200", "--no-pager", "-o", "short-iso"],
+        timeout=20,
+    )
+    if code == 127:
+        out["info"].append("`journalctl` not available — skipping log scan")
+        return out
+    if code != 0:
+        out["warnings"].append(f"Could not retrieve logs for {unit}: {stderr.strip() or 'no output'}")
+        return out
+
+    matches = [line for line in stdout.splitlines() if _LOG_ERROR_PATTERN.search(line)]
+    if not matches:
+        out["passed"].append(f"No ERROR/CRITICAL/Exception lines in last 200 entries for {unit}")
+        return out
+
+    out["warnings"].append(
+        f"Found {len(matches)} error line(s) in last 200 entries for {unit}; showing newest 5"
+    )
+    for line in matches[-5:]:
+        if len(line) > 240:
+            line = line[:237] + "..."
+        out["info"].append(line)
+    out["info"].append(f"Full log: journalctl -u {unit} -n 200")
+    return out
+
+
+# --------------------------------------------------------------------------- #
+# Aggregation
+# --------------------------------------------------------------------------- #
+
+CHECKS: List[Tuple[str, Callable[[], CheckResult]]] = [
+    ("Services", check_services_running),
+    ("Database", check_database_connection),
+    ("Environment", check_environment_config),
+    ("Redis", check_redis),
+    ("Icecast", check_icecast),
+    ("Audio Service", check_audio_service_heartbeat),
+    ("Audio Devices", check_audio_devices),
+    ("NTP Sync", check_ntp_sync),
+    ("Recent Logs", check_recent_logs),
+]
 
 
 def register(app: Flask, route_logger: logging.Logger) -> None:
     """Register diagnostics routes."""
-    
+
     @app.route("/diagnostics")
     def diagnostics_page() -> Any:
-        """Render the diagnostics page."""
-        return render_template("diagnostics.html")
-    
+        return render_template(
+            "diagnostics.html",
+            check_names=[name for name, _ in CHECKS],
+        )
+
     @app.route("/api/diagnostics/validate", methods=["POST"])
     def validate_installation() -> Tuple[Any, int]:
-        """Run system validation checks."""
-        try:
-            all_results = {
-                "passed": [],
-                "warnings": [],
-                "failed": [],
-                "info": []
-            }
-            
-            # Run all checks
-            checks = [
-                ("Services", check_services_running),
-                ("Database", check_database_connection),
-                ("Environment", check_environment_config),
-                ("Health", check_health_endpoint),
-                ("Audio", check_audio_devices),
-                ("Logs", check_recent_logs),
-            ]
-            
-            for check_name, check_func in checks:
-                try:
-                    result = check_func()
-                    all_results["passed"].extend(result["passed"])
-                    all_results["warnings"].extend(result["warnings"])
-                    all_results["failed"].extend(result["failed"])
-                    all_results["info"].extend(result["info"])
-                except Exception as e:
-                    route_logger.error(f"Error in {check_name} check: {e}")
-                    all_results["failed"].append(f"{check_name} check failed: {str(e)}")
-            
-            return jsonify({
-                "success": True,
-                **all_results
-            }), 200
-        
-        except Exception as e:
-            route_logger.error(f"Error running diagnostics: {e}")
-            return jsonify({
-                "success": False,
-                "error": str(e)
-            }), 500
+        all_results = _empty_result()
+        per_check: List[Dict[str, Any]] = []
+
+        for name, fn in CHECKS:
+            t0 = time.perf_counter()
+            try:
+                result = fn()
+            except Exception as exc:
+                route_logger.error("Diagnostic check '%s' raised: %s", name, exc, exc_info=True)
+                result = {
+                    "passed": [],
+                    "warnings": [],
+                    "failed": [f"{name} check crashed: {exc}"],
+                    "info": [],
+                }
+            elapsed_ms = (time.perf_counter() - t0) * 1000
+
+            for bucket in ("passed", "warnings", "failed", "info"):
+                all_results[bucket].extend(result.get(bucket, []))
+
+            per_check.append({
+                "name": name,
+                "elapsed_ms": round(elapsed_ms, 1),
+                "passed": len(result.get("passed", [])),
+                "warnings": len(result.get("warnings", [])),
+                "failed": len(result.get("failed", [])),
+                "info": len(result.get("info", [])),
+            })
+
+        return jsonify({
+            "success": True,
+            "checks": per_check,
+            **all_results,
+        }), 200
 
 
 __all__ = ["register"]
