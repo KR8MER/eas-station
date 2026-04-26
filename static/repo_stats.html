@@ -295,7 +295,7 @@
         <div class="hero-section">
             <h1>📊 EAS Station Repository Statistics</h1>
             <p class="timestamp">
-                <i class="far fa-clock"></i> Last Updated: 2026-04-26 16:19:56 UTC
+                <i class="far fa-clock"></i> Last Updated: 2026-04-26 16:29:25 UTC
             </p>
         </div>
         
@@ -313,7 +313,7 @@
             </div>
             <div class="quick-stat-item">
                 <div class="icon">📝</div>
-                <div class="value">657,819</div>
+                <div class="value">657,890</div>
                 <div class="label">Total Lines</div>
             </div>
             <div class="quick-stat-item">
@@ -323,7 +323,7 @@
             </div>
             <div class="quick-stat-item">
                 <div class="icon">💬</div>
-                <div class="value">94,739</div>
+                <div class="value">94,803</div>
                 <div class="label">Comments</div>
             </div>
             <div class="quick-stat-item">
@@ -443,9 +443,9 @@
                         </tr>
                         <tr>
                             <td><strong><svg viewBox="0 0 24 24" width="20" height="20" fill="#1572B6" style="vertical-align: middle; margin-right: 6px;"><path d="M1.5 0h21l-1.91 21.563L11.977 24l-8.565-2.438L1.5 0zm17.09 4.413L5.41 4.41l.213 2.622 10.125.002-.255 2.716h-6.64l.24 2.573h6.182l-.366 3.523-2.91.804-2.956-.81-.188-2.11h-2.61l.29 3.855L12 19.288l5.373-1.53L18.59 4.414z"/></svg>CSS</strong></td>
-                            <td class="text-end">28,267</td>
+                            <td class="text-end">28,338</td>
                             <td class="text-end">13,407</td>
-                            <td class="text-end">7,959</td>
+                            <td class="text-end">8,023</td>
                             <td class="text-end">47%</td>
                             <td>
                                 <div style="background: #e9ecef; border-radius: 4px; height: 8px; overflow: hidden;">
@@ -574,7 +574,7 @@
             data: {
                 labels: ['💻 Code', '💬 Comments', '⬜ Whitespace'],
                 datasets: [{
-                    data: [508773, 94739, 54307],
+                    data: [508773, 94803, 54314],
                     backgroundColor: [
                         'rgba(102, 126, 234, 0.8)',
                         'rgba(118, 75, 162, 0.8)',
@@ -607,7 +607,7 @@
                             label: function(context) {
                                 let label = context.label || '';
                                 let value = context.parsed || 0;
-                                let total = 657819;
+                                let total = 657890;
                                 let percentage = ((value / total) * 100).toFixed(1);
                                 return label + ': ' + value.toLocaleString() + ' lines (' + percentage + '%)';
                             }
