@@ -384,9 +384,12 @@
     position: relative;
     height: 10px;
     border-radius: 5px;
+    /* Reference gradient (red weak → green strong) sits at full strength
+       so the fill below renders at its real opacity.  Putting opacity on
+       the track itself dimmed the fill too, which made an "Excellent"
+       reading visually look like an empty bar. */
     background: linear-gradient(90deg, var(--danger-color) 0%, var(--warning-color) 40%, var(--success-color) 70%);
     overflow: hidden;
-    opacity: 0.35;
 }
 
 .rssi-fill {
@@ -395,9 +398,13 @@
     top: 0;
     bottom: 0;
     width: 0%;
-    background: rgba(255, 255, 255, 0.0);
-    border-right: 2px solid rgba(255, 255, 255, 0.85);
-    box-shadow: 0 0 6px rgba(255,255,255,0.45);
+    /* Same translucent-white treatment as .vu-fill: a visible bar that
+       grows from the left, letting the underlying gradient still hint at
+       weak/strong zones.  The previous fully-transparent background plus
+       a 2px right-edge marker was invisible at 100% fill (clipped by
+       overflow:hidden) and barely visible elsewhere. */
+    background: rgba(255, 255, 255, 0.75);
+    box-shadow: 0 0 6px rgba(255,255,255,0.4);
     transition: width 0.2s ease-out;
 }
 
@@ -545,6 +552,18 @@ function updateMetricsOnly() {
                 rmsLabel.textContent = `RMS: ${formatDbLabel(source.metrics.rms_level_db)}`;
             }
 
+            // The big PEAK/RMS cards below the bar read the same field but
+            // were only painted at full-render time, so they drifted behind
+            // the bar label.  Keep them in lockstep here.
+            const peakCard = document.getElementById(`peak-card-${safeId}`);
+            const rmsCard = document.getElementById(`rms-card-${safeId}`);
+            if (peakCard) {
+                peakCard.textContent = formatDbCard(source.metrics.peak_level_db);
+            }
+            if (rmsCard) {
+                rmsCard.textContent = formatDbCard(source.metrics.rms_level_db);
+            }
+
             // RF RSSI meter live update (polling-fallback path).
             const rfSignal = source.metrics?.metadata?.rf_signal_strength;
             if (typeof rfSignal === 'number' && Number.isFinite(rfSignal)) {
@@ -675,11 +694,11 @@ function renderAudioSources(fullRender = true) {
                         <div class="metrics-grid">
                             <div class="metric-item">
                                 <div class="metric-label">Peak</div>
-                                <div class="metric-value">${typeof source.metrics.peak_level_db === 'number' ? source.metrics.peak_level_db.toFixed(1) : '--'} dB</div>
+                                <div class="metric-value" id="peak-card-${safeId}">${formatDbCard(source.metrics.peak_level_db)}</div>
                             </div>
                             <div class="metric-item">
                                 <div class="metric-label">RMS</div>
-                                <div class="metric-value">${typeof source.metrics.rms_level_db === 'number' ? source.metrics.rms_level_db.toFixed(1) : '--'} dB</div>
+                                <div class="metric-value" id="rms-card-${safeId}">${formatDbCard(source.metrics.rms_level_db)}</div>
                             </div>
                             <div class="metric-item">
                                 <div class="metric-label">Sample Rate</div>
@@ -920,10 +939,41 @@ function renderAudioSources(fullRender = true) {
                                         </div>
                                     ` : ''}
                                     
-                                    ${source.metrics.metadata.rbds_ps_name || source.metrics.metadata.rbds_pi_code || source.metrics.metadata.rbds_pty !== undefined ? `
-                                        <hr class="my-2">
-                                        <div class="text-muted mb-1"><strong>RBDS/RDS Metadata</strong></div>
-                                    ` : ''}
+                                    ${(() => {
+                                        const md = source.metrics.metadata;
+                                        const lockState = md.rbds_lock_state;
+                                        const hasDecoded = md.rbds_ps_name || md.rbds_pi_code
+                                            || (md.rbds_pty !== undefined && md.rbds_pty !== null)
+                                            || md.rbds_radio_text || md.rbds_pty_name
+                                            || md.rbds_clock_time_local || md.rbds_clock_time_utc;
+                                        // Show the section whenever the source is RBDS-capable
+                                        // (LOCKING / LOCKED) so users aren't left guessing whether
+                                        // the empty space means "no transmission" or "still
+                                        // acquiring sync".  UNAVAILABLE means non-FM modulation,
+                                        // for which no section is appropriate.
+                                        if (!hasDecoded && lockState !== 'LOCKING' && lockState !== 'LOCKED') {
+                                            return '';
+                                        }
+                                        let badge = '';
+                                        if (lockState === 'LOCKED') {
+                                            badge = '<span class="badge bg-success ms-2"><i class="fas fa-check-circle"></i> Locked</span>';
+                                        } else if (lockState === 'LOCKING') {
+                                            badge = '<span class="badge bg-warning text-dark ms-2"><i class="fas fa-sync fa-spin"></i> Acquiring sync…</span>';
+                                        }
+                                        const hint = !hasDecoded
+                                            ? (lockState === 'LOCKED'
+                                                ? '<div class="text-muted small fst-italic mb-1">Decoder locked — waiting for the station to transmit RBDS groups.</div>'
+                                                : '<div class="text-muted small fst-italic mb-1">Decoder is acquiring sync; PS/PI/RT will appear once enough valid groups arrive.</div>')
+                                            : '';
+                                        return `
+                                            <hr class="my-2">
+                                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                                <strong class="text-muted">RBDS/RDS Metadata</strong>
+                                                ${badge}
+                                            </div>
+                                            ${hint}
+                                        `;
+                                    })()}
                                     
                                     ${source.metrics.metadata.rbds_ps_name ? `
                                         <div class="d-flex justify-content-between mb-1">
@@ -1101,6 +1151,16 @@ function formatDbLabel(value) {
         return '-- dBFS';
     }
     return `${value.toFixed(1)} dBFS`;
+}
+
+// Same numeric format as formatDbLabel but with the bare " dB" suffix used
+// inside the metric cards.  Kept identical to its inline counterpart so the
+// bar label and the card never disagree on a digit.
+function formatDbCard(value) {
+    if (typeof value !== 'number' || Number.isNaN(value)) {
+        return '-- dB';
+    }
+    return `${value.toFixed(1)} dB`;
 }
 
 function calculateFillWidth(value) {
@@ -1882,6 +1942,17 @@ function updateLevelMetersFromSnapshot(snapshot) {
         }
         if (rmsLabel) {
             rmsLabel.textContent = `RMS: ${formatDbLabel(metric.rms_level_db)}`;
+        }
+
+        // Mirror the raw measurements into the PEAK/RMS cards so they
+        // always agree with the bar label above (broadcast path).
+        const peakCard = document.getElementById(`peak-card-${safeId}`);
+        const rmsCard = document.getElementById(`rms-card-${safeId}`);
+        if (peakCard) {
+            peakCard.textContent = formatDbCard(metric.peak_level_db);
+        }
+        if (rmsCard) {
+            rmsCard.textContent = formatDbCard(metric.rms_level_db);
         }
 
         // RF RSSI meter - updates every broadcast when the demodulator reports

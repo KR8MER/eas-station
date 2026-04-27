@@ -361,8 +361,20 @@ def read_shared_metrics() -> Optional[Dict[str, Any]]:
                     metrics[decoded_key] = json.loads(decoded_value)
                 except json.JSONDecodeError:
                     # Legacy entries written before the type-preserving fix
-                    # are plain strings; keep them as-is.
-                    metrics[decoded_key] = decoded_value
+                    # are plain strings — including the literal "None",
+                    # "True", "False" produced when redis-py stringified
+                    # Python scalars via str().  Without this normalization
+                    # those leak to the audio monitor UI as truthy strings
+                    # ("PS: None", phantom "Yes" badges) until the master
+                    # rewrites every key.
+                    if decoded_value == "None":
+                        metrics[decoded_key] = None
+                    elif decoded_value == "True":
+                        metrics[decoded_key] = True
+                    elif decoded_value == "False":
+                        metrics[decoded_key] = False
+                    else:
+                        metrics[decoded_key] = decoded_value
             else:
                 metrics[decoded_key] = decoded_value
 

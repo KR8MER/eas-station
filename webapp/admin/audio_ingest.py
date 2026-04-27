@@ -841,6 +841,15 @@ def _sanitize_metadata_value(value: Any) -> Any:
     if value is None:
         return None
 
+    # Treat the literal string "None" as missing.  AudioSourceMetrics rows
+    # written before the Redis scalar round-trip fix (commit 44162d8) stored
+    # Python None as the JSON string "None" in the source_metadata JSONB
+    # column, and that value still leaks through _merge_metadata as a truthy
+    # string — rendering "Station Name (PS): None", "PI: None" etc. in the
+    # audio monitor instead of hiding those rows.
+    if isinstance(value, str) and value == "None":
+        return None
+
     if isinstance(value, (str, int)):
         return value
 
