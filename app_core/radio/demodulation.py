@@ -302,13 +302,22 @@ class RBDSWorker:
     RBDS_INTERMEDIATE_RATE = 25000  # Target rate after decimation before resampling (Hz)
 
     # Sliding-window decode thresholds (samples at the 19 kHz RBDS rate).
-    # M&M and Costas state is carried forward across batches (see comments in
-    # _process_rbds), so the loops keep converging between iterations even
-    # with a short window.  A 1-second batch lets the sync state machine in
-    # _decode_rbds_groups run every second, which is what actually determines
-    # how fast we lock — comparable to a car radio's head unit (~1-2 s).
-    RBDS_UNSYNCED_WINDOW = 19000   # ~1 second @ 19 kHz - fast initial lock
-    RBDS_SYNCED_WINDOW = 19000     # ~1 second @ 19 kHz - fast streaming updates
+    # M&M and Costas state is carried forward across batches (see comments
+    # in _process_rbds) so the loops keep converging between iterations
+    # even with a short window — the only thing batching protects is
+    # per-call DSP overhead, not signal continuity.
+    #
+    # Before sync the threshold is the dominant contributor to first-PS
+    # latency: nothing reaches the bit-level state machine until a full
+    # window has accumulated.  A 1 s window left users staring at an
+    # empty section while their car radio decoded the same broadcast in
+    # ~1 s end-to-end.  Drop the cold-start window to ~250 ms (about 300
+    # symbols at 1187.5 baud — well above the 100–150 symbols Costas
+    # needs to converge) so _decode_rbds_groups gets to attempt presync
+    # four times per second.  Once locked we go back to a 1 s window so
+    # steady-state CPU load stays the same.
+    RBDS_UNSYNCED_WINDOW = 4750    # ~250 ms @ 19 kHz - fast initial lock
+    RBDS_SYNCED_WINDOW = 19000     # ~1 second @ 19 kHz - low steady-state overhead
 
     def __init__(self, sample_rate: int, intermediate_rate: int):
         """Initialize RBDS worker thread.
