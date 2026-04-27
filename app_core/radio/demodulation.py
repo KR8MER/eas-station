@@ -1254,7 +1254,7 @@ class RBDSWorker:
                             expected_spacing = block_distance * 26
                             actual_spacing = global_i - self._rbds_lastseen_offset_counter
 
-                            if expected_spacing != actual_spacing:
+                            if abs(actual_spacing - expected_spacing) > 2:
                                 # Wrong spacing - reset presync and try current block as new first
                                 logger.debug(f"RBDS presync spacing mismatch: expected {expected_spacing}, got {actual_spacing}")
                                 self._rbds_lastseen_offset = j
