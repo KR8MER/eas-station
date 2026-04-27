@@ -920,10 +920,41 @@ function renderAudioSources(fullRender = true) {
                                         </div>
                                     ` : ''}
                                     
-                                    ${source.metrics.metadata.rbds_ps_name || source.metrics.metadata.rbds_pi_code || source.metrics.metadata.rbds_pty !== undefined ? `
-                                        <hr class="my-2">
-                                        <div class="text-muted mb-1"><strong>RBDS/RDS Metadata</strong></div>
-                                    ` : ''}
+                                    ${(() => {
+                                        const md = source.metrics.metadata;
+                                        const lockState = md.rbds_lock_state;
+                                        const hasDecoded = md.rbds_ps_name || md.rbds_pi_code
+                                            || (md.rbds_pty !== undefined && md.rbds_pty !== null)
+                                            || md.rbds_radio_text || md.rbds_pty_name
+                                            || md.rbds_clock_time_local || md.rbds_clock_time_utc;
+                                        // Show the section whenever the source is RBDS-capable
+                                        // (LOCKING / LOCKED) so users aren't left guessing whether
+                                        // the empty space means "no transmission" or "still
+                                        // acquiring sync".  UNAVAILABLE means non-FM modulation,
+                                        // for which no section is appropriate.
+                                        if (!hasDecoded && lockState !== 'LOCKING' && lockState !== 'LOCKED') {
+                                            return '';
+                                        }
+                                        let badge = '';
+                                        if (lockState === 'LOCKED') {
+                                            badge = '<span class="badge bg-success ms-2"><i class="fas fa-check-circle"></i> Locked</span>';
+                                        } else if (lockState === 'LOCKING') {
+                                            badge = '<span class="badge bg-warning text-dark ms-2"><i class="fas fa-sync fa-spin"></i> Acquiring sync…</span>';
+                                        }
+                                        const hint = !hasDecoded
+                                            ? (lockState === 'LOCKED'
+                                                ? '<div class="text-muted small fst-italic mb-1">Decoder locked — waiting for the station to transmit RBDS groups.</div>'
+                                                : '<div class="text-muted small fst-italic mb-1">Decoder is acquiring sync; PS/PI/RT will appear once enough valid groups arrive.</div>')
+                                            : '';
+                                        return `
+                                            <hr class="my-2">
+                                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                                <strong class="text-muted">RBDS/RDS Metadata</strong>
+                                                ${badge}
+                                            </div>
+                                            ${hint}
+                                        `;
+                                    })()}
                                     
                                     ${source.metrics.metadata.rbds_ps_name ? `
                                         <div class="d-flex justify-content-between mb-1">
