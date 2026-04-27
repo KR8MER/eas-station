@@ -287,6 +287,14 @@ class DemodulatorStatus:
     # UI show a "LOCKING" vs "LOCKED" indicator instead of leaving users
     # guessing why no data has appeared yet.
     rbds_synced: bool = False
+    # True if the demodulator is even attempting RBDS decoding (i.e. the
+    # receiver has enable_rbds set and the IQ sample rate is high enough
+    # to preserve the 57 kHz subcarrier).  Without this flag a receiver
+    # configured with enable_rbds=False looked indistinguishable from one
+    # that was still acquiring sync — both produced rbds_synced=False —
+    # and users could wait forever for a lock the decoder never even
+    # tried to obtain.
+    rbds_enabled: bool = False
 
 
 class RBDSWorker:
@@ -1818,6 +1826,7 @@ class FMDemodulator:
                 if self._rbds_enabled and self._rbds_worker is not None
                 else False
             ),
+            rbds_enabled=self._rbds_enabled,
         )
 
         return audio.astype(np.float32), status
