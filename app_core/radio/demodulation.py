@@ -784,16 +784,48 @@ class RBDSWorker:
         x = real_out + 1j * imag_out
         time.sleep(0)  # Yield GIL
 
+        # Buffer at the high (post-lowpass) sample rate.  Earlier this code
+        # decimated and resampled per chunk, then accumulated the resampled
+        # output — but `x[::decim]` resets its phase at every chunk boundary
+        # and `scipy.signal.resample_poly` is stateless, so each ~8 ms chunk
+        # injected a polyphase filter transient into the bit stream.  Across
+        # the ~31 chunks that fit in a 250 ms batch that's 31 stitched-together
+        # transients feeding M&M, which manifests downstream as the random
+        # presync spacings the operator was seeing (expected 26, got 92,
+        # expected 104, got 151, …).  Accumulating BEFORE decim+resample
+        # keeps the bit clock continuous within a batch — there's exactly
+        # one resample transient per batch instead of 31.
+        if not hasattr(self, '_rbds_sample_buffer'):
+            self._rbds_sample_buffer = np.array([], dtype=np.complex64)
+
+        self._rbds_sample_buffer = np.concatenate([self._rbds_sample_buffer, x])
+
+        # The window thresholds are expressed in samples at the 19 kHz
+        # output rate, so scale them up to the current input rate.
+        scale = sample_rate / 19000.0
+        locked = getattr(self, '_rbds_synced', False)
+        window_19k = self.RBDS_SYNCED_WINDOW if locked else self.RBDS_UNSYNCED_WINDOW
+        window = int(window_19k * scale)
+        if len(self._rbds_sample_buffer) < window:
+            return self._decode_rbds_groups()
+
+        # Use buffered samples and reset for next accumulation
+        x = self._rbds_sample_buffer
+        self._rbds_sample_buffer = np.array([], dtype=np.complex64)
+
         # Step 4: Decimate to intermediate rate (~25 kHz) to reduce processing load
-        # Now safe to decimate since we've already extracted and mixed down the RBDS signal
+        # Now safe to decimate since we've already extracted and mixed down the
+        # RBDS signal, AND we're operating on a contiguous buffer so x[::decim]
+        # has a single, consistent phase for the whole batch.
         decim = max(1, int(sample_rate / self.RBDS_INTERMEDIATE_RATE))
         if decim > 1:
             x = x[::decim]
             sample_rate = int(sample_rate // decim)  # Keep as int
         time.sleep(0)  # Yield GIL
 
-        # Step 5: Resample to exactly 19 kHz (16 samples per symbol at 1187.5 baud)
-        # Log sample rates periodically for debugging
+        # Step 5: Resample to exactly 19 kHz (16 samples per symbol at 1187.5
+        # baud).  Done once on the entire batch so the polyphase transient
+        # only affects the very first few samples, not every chunk boundary.
         if not hasattr(self, '_rate_log_count'):
             self._rate_log_count = 0
         self._rate_log_count += 1
@@ -805,34 +837,12 @@ class RBDSWorker:
         x = self._resample(x, sample_rate, 19000)
         time.sleep(0)  # Yield GIL
 
-        # CRITICAL: Buffer samples until we have enough for Costas loop to lock
-        # python-radio processes large buffers at once; we need to accumulate samples
-        # to give the Costas loop enough data to converge (at least 100-150 symbols)
-        if not hasattr(self, '_rbds_sample_buffer'):
-            self._rbds_sample_buffer = np.array([], dtype=np.complex64)
-
-        self._rbds_sample_buffer = np.concatenate([self._rbds_sample_buffer, x])
-
-        # Sliding-window decode: use a generous window until the block-level
-        # sync state machine locks, then switch to a short 1-second window so
-        # PS/radiotext changes surface quickly instead of waiting 10 s.  M&M
-        # and Costas state is preserved across batches (see comment below),
-        # so once locked the shorter window keeps the loops locked too.
-        locked = getattr(self, '_rbds_synced', False)
-        window = self.RBDS_SYNCED_WINDOW if locked else self.RBDS_UNSYNCED_WINDOW
-        if len(self._rbds_sample_buffer) < window:
-            return self._decode_rbds_groups()
-
-        # Use buffered samples and reset for next accumulation
-        x = self._rbds_sample_buffer
-        self._rbds_sample_buffer = np.array([], dtype=np.complex64)
-
         # Do NOT reset M&M / Costas state between batches.
         # Unlike an offline recording processed in one pass, this is a continuous
-        # stream that feeds 10-second slices one at a time.  The M&M timing
+        # stream that feeds 250 ms slices one at a time.  The M&M timing
         # estimator (mu) and the Costas carrier-phase/frequency state are
         # intentionally carried forward so the loops stay locked across batches
-        # rather than having to re-converge from scratch every 10 seconds.
+        # rather than having to re-converge from scratch every batch.
 
         if len(x) < 48:  # Need enough samples for processing
             return self._decode_rbds_groups()
