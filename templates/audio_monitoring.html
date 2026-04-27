@@ -384,9 +384,12 @@
     position: relative;
     height: 10px;
     border-radius: 5px;
+    /* Reference gradient (red weak → green strong) sits at full strength
+       so the fill below renders at its real opacity.  Putting opacity on
+       the track itself dimmed the fill too, which made an "Excellent"
+       reading visually look like an empty bar. */
     background: linear-gradient(90deg, var(--danger-color) 0%, var(--warning-color) 40%, var(--success-color) 70%);
     overflow: hidden;
-    opacity: 0.35;
 }
 
 .rssi-fill {
@@ -395,9 +398,13 @@
     top: 0;
     bottom: 0;
     width: 0%;
-    background: rgba(255, 255, 255, 0.0);
-    border-right: 2px solid rgba(255, 255, 255, 0.85);
-    box-shadow: 0 0 6px rgba(255,255,255,0.45);
+    /* Same translucent-white treatment as .vu-fill: a visible bar that
+       grows from the left, letting the underlying gradient still hint at
+       weak/strong zones.  The previous fully-transparent background plus
+       a 2px right-edge marker was invisible at 100% fill (clipped by
+       overflow:hidden) and barely visible elsewhere. */
+    background: rgba(255, 255, 255, 0.75);
+    box-shadow: 0 0 6px rgba(255,255,255,0.4);
     transition: width 0.2s ease-out;
 }
 
