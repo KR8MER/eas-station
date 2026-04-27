@@ -451,6 +451,42 @@ class SDRSourceAdapter(AudioSourceAdapter):
                         metadata['rf_signal_strength'] = float(demod_status.signal_strength)
                         metadata['rf_signal_strength_updated'] = time.time()
 
+                        # RBDS decoder state.  Mirrors what redis_sdr_adapter
+                        # publishes so the audio monitor can render the same
+                        # LOCKED / LOCKING / DISABLED badge for in-process SDR
+                        # sources.  Without this the UI had no signal-of-life
+                        # from the decoder: a stuck sync state machine looked
+                        # identical to "station doesn't transmit RBDS".
+                        rbds_synced = bool(getattr(demod_status, 'rbds_synced', False))
+                        rbds_enabled_runtime = bool(getattr(demod_status, 'rbds_enabled', False))
+                        prev_synced = metadata.get('rbds_synced')
+                        metadata['rbds_synced'] = rbds_synced
+                        metadata['rbds_enabled'] = rbds_enabled_runtime
+                        modulation_supports_stereo = (
+                            (self._receiver_config.modulation_type or '').upper() in ('FM', 'WFM')
+                            if self._receiver_config else False
+                        )
+                        if rbds_synced:
+                            lock_state = 'LOCKED'
+                        elif not modulation_supports_stereo:
+                            lock_state = 'UNAVAILABLE'
+                        elif not rbds_enabled_runtime:
+                            lock_state = 'DISABLED'
+                        else:
+                            lock_state = 'LOCKING'
+                        metadata['rbds_lock_state'] = lock_state
+                        # Surface lock transitions in the journal so users
+                        # can watch sync acquisition without enabling debug
+                        # logging on the whole demodulator.
+                        if rbds_synced and not prev_synced:
+                            logger.info(
+                                "RBDS LOCKED on %s (effective rate=%d Hz)",
+                                self._receiver_id,
+                                getattr(self._demodulator, '_intermediate_rate', 0),
+                            )
+                        elif (prev_synced is True) and not rbds_synced:
+                            logger.info("RBDS sync lost on %s", self._receiver_id)
+
                         # RBDS data (if available)
                         rbds_data = demod_status.rbds_data
                         if rbds_data:
