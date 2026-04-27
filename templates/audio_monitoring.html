@@ -947,11 +947,12 @@ function renderAudioSources(fullRender = true) {
                                             || md.rbds_radio_text || md.rbds_pty_name
                                             || md.rbds_clock_time_local || md.rbds_clock_time_utc;
                                         // Show the section whenever the source is RBDS-capable
-                                        // (LOCKING / LOCKED) so users aren't left guessing whether
-                                        // the empty space means "no transmission" or "still
-                                        // acquiring sync".  UNAVAILABLE means non-FM modulation,
-                                        // for which no section is appropriate.
-                                        if (!hasDecoded && lockState !== 'LOCKING' && lockState !== 'LOCKED') {
+                                        // (LOCKING / LOCKED) or has the decoder turned off
+                                        // (DISABLED) so users aren't left guessing why an FM
+                                        // station has no metadata.  UNAVAILABLE means non-FM
+                                        // modulation, for which no section is appropriate.
+                                        const showStates = ['LOCKING', 'LOCKED', 'DISABLED'];
+                                        if (!hasDecoded && !showStates.includes(lockState)) {
                                             return '';
                                         }
                                         let badge = '';
@@ -959,12 +960,17 @@ function renderAudioSources(fullRender = true) {
                                             badge = '<span class="badge bg-success ms-2"><i class="fas fa-check-circle"></i> Locked</span>';
                                         } else if (lockState === 'LOCKING') {
                                             badge = '<span class="badge bg-warning text-dark ms-2"><i class="fas fa-sync fa-spin"></i> Acquiring sync…</span>';
+                                        } else if (lockState === 'DISABLED') {
+                                            badge = '<span class="badge bg-secondary ms-2"><i class="fas fa-power-off"></i> Disabled</span>';
                                         }
-                                        const hint = !hasDecoded
-                                            ? (lockState === 'LOCKED'
+                                        let hint = '';
+                                        if (lockState === 'DISABLED') {
+                                            hint = '<div class="text-muted small fst-italic mb-1">RBDS decoding is turned off for this receiver — enable it in the receiver settings to see PS / PI / RT.</div>';
+                                        } else if (!hasDecoded) {
+                                            hint = (lockState === 'LOCKED'
                                                 ? '<div class="text-muted small fst-italic mb-1">Decoder locked — waiting for the station to transmit RBDS groups.</div>'
-                                                : '<div class="text-muted small fst-italic mb-1">Decoder is acquiring sync; PS/PI/RT will appear once enough valid groups arrive.</div>')
-                                            : '';
+                                                : '<div class="text-muted small fst-italic mb-1">Decoder is acquiring sync; PS/PI/RT will appear once enough valid groups arrive.</div>');
+                                        }
                                         return `
                                             <hr class="my-2">
                                             <div class="d-flex justify-content-between align-items-center mb-1">

@@ -442,17 +442,25 @@ class RedisSDRSourceAdapter(AudioSourceAdapter):
                 if modulation_supports_stereo:
                     self.metrics.metadata['stereo_enabled'] = status.stereo_pilot_locked
 
-                # RBDS lock state.  Lets the UI render a LOCKING / LOCKED
-                # badge so users know whether a missing PS/RT means no data
-                # yet (still locking) or just nothing transmitted.
+                # RBDS lock state.  Lets the UI render a LOCKING / LOCKED /
+                # DISABLED badge so users know whether a missing PS/RT means
+                # no data yet (still locking), the decoder isn't even trying
+                # (disabled in receiver config), or the modulation isn't FM.
                 rbds_synced = bool(getattr(status, 'rbds_synced', False))
+                rbds_enabled_runtime = bool(getattr(status, 'rbds_enabled', False))
                 self.metrics.metadata['rbds_synced'] = rbds_synced
+                self.metrics.metadata['rbds_enabled'] = rbds_enabled_runtime
                 if rbds_synced:
                     lock_state = 'LOCKED'
-                elif modulation_supports_stereo:
-                    lock_state = 'LOCKING'
-                else:
+                elif not modulation_supports_stereo:
                     lock_state = 'UNAVAILABLE'
+                elif not rbds_enabled_runtime:
+                    # FM modulation but RBDS decoding is off — without this
+                    # branch the UI showed "Acquiring sync…" indefinitely
+                    # for receivers configured with enable_rbds=False.
+                    lock_state = 'DISABLED'
+                else:
+                    lock_state = 'LOCKING'
                 self.metrics.metadata['rbds_lock_state'] = lock_state
 
                 # RF RSSI (mean IQ magnitude).  Linear value; the UI converts to
