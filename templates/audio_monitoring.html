@@ -545,6 +545,18 @@ function updateMetricsOnly() {
                 rmsLabel.textContent = `RMS: ${formatDbLabel(source.metrics.rms_level_db)}`;
             }
 
+            // The big PEAK/RMS cards below the bar read the same field but
+            // were only painted at full-render time, so they drifted behind
+            // the bar label.  Keep them in lockstep here.
+            const peakCard = document.getElementById(`peak-card-${safeId}`);
+            const rmsCard = document.getElementById(`rms-card-${safeId}`);
+            if (peakCard) {
+                peakCard.textContent = formatDbCard(source.metrics.peak_level_db);
+            }
+            if (rmsCard) {
+                rmsCard.textContent = formatDbCard(source.metrics.rms_level_db);
+            }
+
             // RF RSSI meter live update (polling-fallback path).
             const rfSignal = source.metrics?.metadata?.rf_signal_strength;
             if (typeof rfSignal === 'number' && Number.isFinite(rfSignal)) {
@@ -675,11 +687,11 @@ function renderAudioSources(fullRender = true) {
                         <div class="metrics-grid">
                             <div class="metric-item">
                                 <div class="metric-label">Peak</div>
-                                <div class="metric-value">${typeof source.metrics.peak_level_db === 'number' ? source.metrics.peak_level_db.toFixed(1) : '--'} dB</div>
+                                <div class="metric-value" id="peak-card-${safeId}">${formatDbCard(source.metrics.peak_level_db)}</div>
                             </div>
                             <div class="metric-item">
                                 <div class="metric-label">RMS</div>
-                                <div class="metric-value">${typeof source.metrics.rms_level_db === 'number' ? source.metrics.rms_level_db.toFixed(1) : '--'} dB</div>
+                                <div class="metric-value" id="rms-card-${safeId}">${formatDbCard(source.metrics.rms_level_db)}</div>
                             </div>
                             <div class="metric-item">
                                 <div class="metric-label">Sample Rate</div>
@@ -1132,6 +1144,16 @@ function formatDbLabel(value) {
         return '-- dBFS';
     }
     return `${value.toFixed(1)} dBFS`;
+}
+
+// Same numeric format as formatDbLabel but with the bare " dB" suffix used
+// inside the metric cards.  Kept identical to its inline counterpart so the
+// bar label and the card never disagree on a digit.
+function formatDbCard(value) {
+    if (typeof value !== 'number' || Number.isNaN(value)) {
+        return '-- dB';
+    }
+    return `${value.toFixed(1)} dB`;
 }
 
 function calculateFillWidth(value) {
@@ -1913,6 +1935,17 @@ function updateLevelMetersFromSnapshot(snapshot) {
         }
         if (rmsLabel) {
             rmsLabel.textContent = `RMS: ${formatDbLabel(metric.rms_level_db)}`;
+        }
+
+        // Mirror the raw measurements into the PEAK/RMS cards so they
+        // always agree with the bar label above (broadcast path).
+        const peakCard = document.getElementById(`peak-card-${safeId}`);
+        const rmsCard = document.getElementById(`rms-card-${safeId}`);
+        if (peakCard) {
+            peakCard.textContent = formatDbCard(metric.peak_level_db);
+        }
+        if (rmsCard) {
+            rmsCard.textContent = formatDbCard(metric.rms_level_db);
         }
 
         // RF RSSI meter - updates every broadcast when the demodulator reports
