@@ -386,8 +386,15 @@ class RBDSWorker:
             )
 
         # Lowpass filter for post-mixing (removes aliases, keeps baseband RBDS at 0-7.5 kHz)
-        # Design this at sample_rate since we mix BEFORE lowpass filtering
-        self._rbds_lowpass = self._design_fir_lowpass(7500.0, self._sample_rate, taps=101)
+        # Design this at sample_rate since we mix BEFORE lowpass filtering.
+        # Bumped to 301 taps from 101: at 256 kHz input the 101-tap version
+        # had a ~2.5 kHz transition and a sidelobe shoulder near -40 dB,
+        # which let pilot/stereo-subcarrier energy bleed into the post-mix
+        # baseband and was the most plausible cause of M&M / Costas failing
+        # to settle on a real broadcast.  301 taps cuts the transition to
+        # ~800 Hz and lifts the stopband attenuation, at the cost of a few
+        # extra ms of per-batch convolution.
+        self._rbds_lowpass = self._design_fir_lowpass(7500.0, self._sample_rate, taps=301)
 
         # Filter delay-line state, preserved across _process_rbds calls. FIR
         # filters implemented with np.convolve are stateless, so every chunk
@@ -952,7 +959,16 @@ class RBDSWorker:
             x = (out_rail[i_out] - out_rail[i_out - 2]) * np.conj(out[i_out - 1])
             y = (out[i_out] - out[i_out - 2]) * np.conj(out_rail[i_out - 1])
             mm_val = np.real(y - x)
-            mu += sps + 0.01 * mm_val  # python-radio uses 0.01 loop gain
+            # Bumped from 0.01 to 0.05.  python-radio's reference uses 0.01
+            # for offline whole-recording processing where the timing has
+            # all the symbols to converge against.  In a streaming pipeline
+            # where each batch is ~250 ms (~300 symbols) and we then carry
+            # mu forward, 0.01 was too narrow to settle: the user saw
+            # continuous "presync spacing mismatch" with random spacings,
+            # which is the signature of a slowly-wandering symbol clock.
+            # 0.05 still has plenty of margin against oscillation (the
+            # standard rule of thumb for Mueller&Müller is gain < ~0.2).
+            mu += sps + 0.05 * mm_val
             i_in += int(np.floor(mu))
             mu = mu - np.floor(mu)
             i_out += 1
