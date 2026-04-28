@@ -708,6 +708,21 @@ class RBDSWorker:
         if len(multiplex) == 0:
             return None
 
+        # TEMPORARY CAPTURE — remove after debugging
+        if not getattr(self, '_capture_done', False):
+            if not hasattr(self, '_capture_buf'):
+                self._capture_buf = []
+            self._capture_buf.append(multiplex.copy())
+            total = sum(len(c) for c in self._capture_buf)
+            if total >= self._sample_rate * 10:   # 10 seconds
+                import numpy as np, os
+                data = np.concatenate(self._capture_buf)
+                path = f'/tmp/rbds_capture_{self._sample_rate}.npy'
+                np.save(path, data)
+                self._capture_done = True
+                import logging
+                logging.getLogger(__name__).warning('RBDS capture saved to %s (%d samples @ %d Hz)', path, len(data), self._sample_rate)
+
         # Start with multiplex at original sample rate (250 kHz for Airspy after early decim)
         x = multiplex.astype(np.float32)
         sample_rate = self._sample_rate
