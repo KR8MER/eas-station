@@ -327,6 +327,14 @@ class RBDSWorker:
     RBDS_UNSYNCED_WINDOW = 4750    # ~250 ms @ 19 kHz - fast initial lock
     RBDS_SYNCED_WINDOW = 19000     # ~1 second @ 19 kHz - low steady-state overhead
 
+    # Pilot-frequency estimator tunables.  Underscore-prefixed because they
+    # are internal implementation details, not user-facing API.
+    _PILOT_EST_MIN_SAMPLES = 32768           # Smallest chunk we trust for FFT-based estimation
+    _PILOT_EST_MAX_NFFT = 1 << 18            # Cap FFT size at 262 144 bins (~1 Hz @ 250 kHz)
+    _PARABOLIC_INTERP_MIN_DENOM = 1e-12      # Avoid division-by-zero when peak bins are colinear
+    _PILOT_SNR_THRESHOLD = 4.0               # Peak must be ≥ 4× the in-band median to count
+    _MAX_PILOT_DEVIATION_HZ = 4.0            # ~210 ppm; beyond this is broken hardware
+
     def __init__(self, sample_rate: int, intermediate_rate: int):
         """Initialize RBDS worker thread.
 
@@ -420,6 +428,16 @@ class RBDSWorker:
         # Just count samples to generate perfect phase reference
         self._pilot_sample_counter = 0  # Running sample count for phase continuity
 
+        # Measured pilot frequency (Hz). The transmitter's crystal is exact,
+        # but the *receiver* SDR clock often has 25-100 ppm error which shifts
+        # the recovered pilot by ±0.5-2 Hz. Tripling that for the 57 kHz mix
+        # leaves a 1.5-6 Hz residual that the Costas loop has to track on top
+        # of phase noise. Measuring the pilot once per station and using it as
+        # the carrier reference puts the RBDS subcarrier at DC after mixing,
+        # so Costas only has to track residual phase noise. None until we've
+        # collected enough samples; falls back to 19000.0 for compatibility.
+        self._measured_pilot_freq: Optional[float] = None
+
         # RBDS symbol timing
         self._rbds_symbol_rate = 1187.5
         self._rbds_samples_per_symbol = 16
@@ -501,12 +519,87 @@ class RBDSWorker:
             h /= h_at_centre
         return h.astype(np.float32)
 
+    def _estimate_pilot_frequency(self, multiplex: np.ndarray) -> Optional[float]:
+        """Measure the actual 19 kHz pilot frequency in *multiplex*.
+
+        Locates the strongest spectral peak in the 18.5-19.5 kHz band using a
+        zero-padded RFFT and parabolic interpolation around the peak bin for
+        sub-bin accuracy. This compensates for SDR clock error (typical
+        RTL-SDR dongles have 25-100 ppm) so the 57 kHz RBDS subcarrier lands
+        at exactly DC after mixing.
+
+        Args:
+            multiplex: Real-valued FM multiplex samples at self._sample_rate.
+
+        Returns:
+            Measured pilot frequency in Hz, or None if no usable peak was
+            found (e.g. mono station, very weak signal, or chunk too short).
+        """
+        sr = self._sample_rate
+        n = len(multiplex)
+        # Need enough samples for a useful FFT bin width.  At 250 kHz a
+        # 65 536-point FFT gives 3.8 Hz bins; parabolic interpolation around
+        # the peak gets that down to well below 0.5 Hz, more than enough to
+        # eliminate the SDR clock-error residual.
+        if n < self._PILOT_EST_MIN_SAMPLES:
+            return None
+        # Use the largest power-of-two FFT size that fits in *n*, capped at
+        # 2**18 (~1 Hz bins at 250 kHz) for performance.
+        n_fft = min(1 << int(np.floor(np.log2(n))), self._PILOT_EST_MAX_NFFT)
+        data = multiplex[:n_fft].astype(np.float64)
+        # Hann window suppresses spectral leakage from the (much larger)
+        # audio components below 15 kHz, giving a cleaner pilot peak.
+        spectrum = np.abs(np.fft.rfft(data * np.hanning(n_fft)))
+        freqs = np.fft.rfftfreq(n_fft, 1.0 / sr)
+        mask = (freqs >= 18500.0) & (freqs <= 19500.0)
+        if not np.any(mask):
+            return None
+        idx_in_mask = int(np.argmax(spectrum[mask]))
+        idx = int(np.where(mask)[0][idx_in_mask])
+        if 0 < idx < len(spectrum) - 1:
+            # Parabolic interpolation: refine the peak to sub-bin accuracy.
+            # The denominator vanishes when the three samples are colinear;
+            # that almost never happens with windowed FFT magnitudes, but
+            # guard against it to avoid producing inf when it does.
+            a, b, c = float(spectrum[idx - 1]), float(spectrum[idx]), float(spectrum[idx + 1])
+            denom = a - 2.0 * b + c
+            delta = (
+                0.5 * (a - c) / denom
+                if abs(denom) > self._PARABOLIC_INTERP_MIN_DENOM
+                else 0.0
+            )
+            peak_hz = float(freqs[idx]) + delta * (freqs[1] - freqs[0])
+        else:
+            peak_hz = float(freqs[idx])
+        # SNR sanity check: the peak amplitude must clearly stand above the
+        # noise floor of the search band, otherwise we're locking onto stereo
+        # subcarrier sidebands or noise on a mono station. 4× the median
+        # rejects monolithically flat (mono / noise-only) bands while still
+        # accepting weak pilots — a real broadcast pilot is typically 10×+
+        # over the median in this band.
+        band = spectrum[mask]
+        median = float(np.median(band))
+        if median > 0 and float(spectrum[idx]) < self._PILOT_SNR_THRESHOLD * median:
+            return None
+        # Reject obvious nonsense.  At ±4 Hz (~210 ppm at 19 kHz) we're well
+        # past anything an even loosely-calibrated SDR produces (typical
+        # 25-100 ppm), so anything further out signals broken hardware or a
+        # mis-detection — fall back to the 19 000.0 Hz nominal instead.
+        if abs(peak_hz - 19000.0) > self._MAX_PILOT_DEVIATION_HZ:
+            return None
+        return peak_hz
+
     def _generate_pilot_reference(self, n: int, sample_offset: int) -> np.ndarray:
-        """Generate crystal-locked 19 kHz pilot reference.
+        """Generate phase-coherent 19 kHz pilot reference.
 
         FM broadcast stations use crystal oscillators - the 19 kHz pilot is
-        EXACTLY 19000.0 Hz (accurate to parts per million). We don't need to
-        track it - just generate a perfect reference!
+        EXACTLY 19000.0 Hz at the transmitter (accurate to parts per million).
+        However the *receiver* SDR clock typically has 25-100 ppm error, which
+        shifts the recovered pilot by ±0.5-2 Hz.  ``self._measured_pilot_freq``
+        captures that actual recovered frequency so the 57 kHz mix lands the
+        RBDS subcarrier exactly at DC. When no measurement is available yet
+        (very first chunk after reset) we fall back to the nominal 19000.0 Hz
+        — the residual error will be picked up by the Costas loop.
 
         This is simpler, more accurate, and noise-free compared to PLL or
         Hilbert transform approaches which try to extract phase from noisy signals.
@@ -529,8 +622,15 @@ class RBDSWorker:
         # regardless of how many chunks were previously dropped from the queue.
         t = (np.arange(n, dtype=np.float64) + sample_offset) / self._sample_rate
 
-        # Crystal-locked 19 kHz reference phase
-        pilot_phases = 2.0 * np.pi * 19000.0 * t
+        # Use the measured pilot frequency if available, else fall back to
+        # the nominal 19 kHz.  The measured value is locked in once per
+        # station (cleared on reset) so phase stays continuous across chunks.
+        pilot_hz = (
+            self._measured_pilot_freq if self._measured_pilot_freq is not None else 19000.0
+        )
+
+        # Crystal-locked pilot reference phase
+        pilot_phases = 2.0 * np.pi * pilot_hz * t
 
         return pilot_phases
 
@@ -743,6 +843,30 @@ class RBDSWorker:
         # the resulting 57 kHz reference phase is completely wrong for every subsequent
         # chunk, making the extracted RBDS bits pure noise.
         n = len(multiplex)
+
+        # On the first chunk after a reset, measure the actual recovered pilot
+        # frequency.  RTL-SDR dongles often have 25-100 ppm clock error, which
+        # shifts the recovered pilot by 0.5-2 Hz.  Tripling that for the 57 kHz
+        # mix leaves a 1.5-6 Hz residual the Costas loop has to track on top
+        # of phase noise.  Locking the carrier reference to the measured
+        # frequency puts the RBDS subcarrier at DC after mixing, eliminating
+        # that systematic offset entirely.  We measure once and freeze: the
+        # *transmitter* is crystal-locked and the *receiver* clock drifts on
+        # the order of tens of ppb per minute, far below what Costas tracks.
+        if self._measured_pilot_freq is None:
+            measured = self._estimate_pilot_frequency(multiplex)
+            if measured is not None:
+                self._measured_pilot_freq = measured
+                ppm = (measured - 19000.0) / 19000.0 * 1e6
+                logger.info(
+                    "RBDS pilot measured: %.3f Hz (offset %+0.3f Hz, %+.1f ppm SDR clock error). "
+                    "57 kHz reference will be %.3f Hz.",
+                    measured,
+                    measured - 19000.0,
+                    ppm,
+                    3.0 * measured,
+                )
+
         pilot_phases = self._generate_pilot_reference(n, sample_offset)
 
         # Log pilot reference generation periodically
@@ -754,8 +878,9 @@ class RBDSWorker:
             pilot_rms = np.sqrt(np.mean(multiplex ** 2))
             pilot_filtered_sig = np.convolve(multiplex[:min(1000, len(multiplex))], self._pilot_bandpass, mode='same')
             pilot_filtered_rms = np.sqrt(np.mean(pilot_filtered_sig ** 2))
-            expected_phase = 2.0 * np.pi * 19000.0 * n / self._sample_rate
-            logger.info(f"RBDS Pilot (Crystal-locked): multiplex_rms={pilot_rms:.3f}, "
+            pilot_hz = self._measured_pilot_freq if self._measured_pilot_freq is not None else 19000.0
+            expected_phase = 2.0 * np.pi * pilot_hz * n / self._sample_rate
+            logger.info(f"RBDS Pilot (locked at {pilot_hz:.3f} Hz): multiplex_rms={pilot_rms:.3f}, "
                        f"filtered_rms={pilot_filtered_rms:.3f}, samples={n}, expected_phase={expected_phase:.2f} rad")
         time.sleep(0)  # Yield GIL
 

@@ -152,6 +152,101 @@ def test_rbds_submit_samples_accepts_offset():
     worker.stop()
 
 
+def test_rbds_estimate_pilot_frequency_recovers_clock_offset():
+    """_estimate_pilot_frequency must recover a sub-Hz pilot offset.
+
+    Models a typical RTL-SDR with ~50 ppm clock error: the pilot, ostensibly
+    19 000 Hz at the transmitter, is recovered at 18 999.05 Hz.  The
+    estimator must measure that within 0.2 Hz so the 57 kHz mix can land the
+    RBDS subcarrier at exactly DC.
+    """
+    sr = 250_000
+    worker = _make_worker(sample_rate=sr)
+
+    n = 1 << 16  # 65 536 samples ≈ 262 ms @ 250 kHz
+    t = np.arange(n) / sr
+
+    # Synthesise a realistic FM multiplex: pilot + audio + RBDS subcarrier + noise.
+    pilot_hz = 18999.05  # 50 ppm low (typical uncorrected RTL-SDR)
+    rng = np.random.default_rng(0)
+    multiplex = (
+        0.10 * np.sin(2 * np.pi * pilot_hz * t)
+        + 0.50 * np.sin(2 * np.pi * 1000.0 * t)            # audio component
+        + 0.05 * np.sin(2 * np.pi * (3 * pilot_hz) * t)    # RBDS subcarrier
+        + 0.05 * rng.standard_normal(n)
+    ).astype(np.float32)
+
+    measured = worker._estimate_pilot_frequency(multiplex)
+    assert measured is not None, "estimator should return a frequency for a station with a pilot"
+    assert abs(measured - pilot_hz) < 0.2, (
+        f"measured={measured} Hz but expected {pilot_hz} Hz (±0.2 Hz)"
+    )
+    worker.stop()
+
+
+def test_rbds_estimate_pilot_frequency_rejects_mono_station():
+    """Without a pilot the estimator must return None, not a noise peak."""
+    sr = 250_000
+    worker = _make_worker(sample_rate=sr)
+
+    n = 1 << 16
+    t = np.arange(n) / sr
+    rng = np.random.default_rng(1)
+    # Just audio + noise — no 19 kHz pilot.
+    multiplex = (
+        0.50 * np.sin(2 * np.pi * 1000.0 * t)
+        + 0.05 * rng.standard_normal(n)
+    ).astype(np.float32)
+
+    measured = worker._estimate_pilot_frequency(multiplex)
+    assert measured is None, f"expected None for mono station, got {measured}"
+    worker.stop()
+
+
+def test_rbds_pilot_reference_uses_measured_frequency():
+    """Once a pilot has been measured, _generate_pilot_reference must use it.
+
+    This is the whole point of the SDR-clock-drift fix: the carrier reference
+    must follow the *recovered* pilot, not the nominal 19 000.0 Hz, so the
+    57 kHz RBDS subcarrier mixes down to exactly DC.
+    """
+    sr = 250_000
+    worker = _make_worker(sample_rate=sr)
+
+    # Simulate a successful measurement (e.g. SDR clock 50 ppm low).
+    measured = 18999.05
+    worker._measured_pilot_freq = measured
+
+    n = 1000
+    sample_offset = 250_000  # 1 s into the stream
+    phases = worker._generate_pilot_reference(n, sample_offset)
+
+    # First sample's phase should reflect the measured frequency, not 19 kHz.
+    expected = 2.0 * np.pi * measured * (sample_offset / sr)
+    nominal = 2.0 * np.pi * 19000.0 * (sample_offset / sr)
+    assert abs(phases[0] - expected) < 1e-6
+    # And it should be measurably different from what 19 000 Hz would give.
+    assert abs(phases[0] - nominal) > 1e-3
+    worker.stop()
+
+
+def test_rbds_apply_reset_clears_measured_pilot():
+    """A worker reset (e.g. retune) must clear the measured pilot frequency.
+
+    Otherwise the new station would be demodulated against the previous
+    station's SDR clock measurement.  Although the SDR clock itself doesn't
+    change, this also re-baselines the measurement from a fresh capture so
+    we never carry forward a stale or low-quality estimate.
+    """
+    worker = _make_worker()
+    worker._measured_pilot_freq = 18999.5
+
+    worker._apply_reset()
+
+    assert worker._measured_pilot_freq is None
+    worker.stop()
+
+
 def _run_presync_sequence(worker: RBDSWorker, hit_map: dict[int, int]) -> None:
     """Drive _decode_rbds_groups with synthetic syndrome hits at specific bit indices."""
     worker._rbds_bit_buffer = [0] * 220
