@@ -327,6 +327,14 @@ class RBDSWorker:
     RBDS_UNSYNCED_WINDOW = 4750    # ~250 ms @ 19 kHz - fast initial lock
     RBDS_SYNCED_WINDOW = 19000     # ~1 second @ 19 kHz - low steady-state overhead
 
+    # Pilot-frequency estimator tunables.  Underscore-prefixed because they
+    # are internal implementation details, not user-facing API.
+    _PILOT_EST_MIN_SAMPLES = 32768           # Smallest chunk we trust for FFT-based estimation
+    _PILOT_EST_MAX_NFFT = 1 << 18            # Cap FFT size at 262 144 bins (~1 Hz @ 250 kHz)
+    _PARABOLIC_INTERP_MIN_DENOM = 1e-12      # Avoid division-by-zero when peak bins are colinear
+    _PILOT_SNR_THRESHOLD = 4.0               # Peak must be ≥ 4× the in-band median to count
+    _MAX_PILOT_DEVIATION_HZ = 4.0            # ~210 ppm; beyond this is broken hardware
+
     def __init__(self, sample_rate: int, intermediate_rate: int):
         """Initialize RBDS worker thread.
 
@@ -533,14 +541,11 @@ class RBDSWorker:
         # 65 536-point FFT gives 3.8 Hz bins; parabolic interpolation around
         # the peak gets that down to well below 0.5 Hz, more than enough to
         # eliminate the SDR clock-error residual.
-        if n < 32768:
+        if n < self._PILOT_EST_MIN_SAMPLES:
             return None
-        # Cap the FFT size for speed.  For typical 250 ms chunks at 250 kHz
-        # (62 500 samples) this rounds to 65 536; longer captures get better
-        # resolution but we don't need it.
-        n_fft = min(1 << int(np.ceil(np.log2(n))), 1 << 18)
-        if n_fft > n:
-            n_fft = 1 << int(np.floor(np.log2(n)))
+        # Use the largest power-of-two FFT size that fits in *n*, capped at
+        # 2**18 (~1 Hz bins at 250 kHz) for performance.
+        n_fft = min(1 << int(np.floor(np.log2(n))), self._PILOT_EST_MAX_NFFT)
         data = multiplex[:n_fft].astype(np.float64)
         # Hann window suppresses spectral leakage from the (much larger)
         # audio components below 15 kHz, giving a cleaner pilot peak.
@@ -553,22 +558,34 @@ class RBDSWorker:
         idx = int(np.where(mask)[0][idx_in_mask])
         if 0 < idx < len(spectrum) - 1:
             # Parabolic interpolation: refine the peak to sub-bin accuracy.
+            # The denominator vanishes when the three samples are colinear;
+            # that almost never happens with windowed FFT magnitudes, but
+            # guard against it to avoid producing inf when it does.
             a, b, c = float(spectrum[idx - 1]), float(spectrum[idx]), float(spectrum[idx + 1])
             denom = a - 2.0 * b + c
-            delta = 0.5 * (a - c) / denom if abs(denom) > 1e-12 else 0.0
+            delta = (
+                0.5 * (a - c) / denom
+                if abs(denom) > self._PARABOLIC_INTERP_MIN_DENOM
+                else 0.0
+            )
             peak_hz = float(freqs[idx]) + delta * (freqs[1] - freqs[0])
         else:
             peak_hz = float(freqs[idx])
-        # Sanity check: the peak amplitude must clearly exceed the surrounding
-        # noise floor in the search band, otherwise we're locking onto stereo
-        # subcarrier sidebands or noise on a mono station.
+        # SNR sanity check: the peak amplitude must clearly stand above the
+        # noise floor of the search band, otherwise we're locking onto stereo
+        # subcarrier sidebands or noise on a mono station. 4× the median
+        # rejects monolithically flat (mono / noise-only) bands while still
+        # accepting weak pilots — a real broadcast pilot is typically 10×+
+        # over the median in this band.
         band = spectrum[mask]
         median = float(np.median(band))
-        if median > 0 and float(spectrum[idx]) < 4.0 * median:
+        if median > 0 and float(spectrum[idx]) < self._PILOT_SNR_THRESHOLD * median:
             return None
-        # Reject obvious nonsense (peak more than 200 ppm off nominal would
-        # mean a broken SDR; trust the hard-coded 19000 Hz fallback instead).
-        if abs(peak_hz - 19000.0) > 4.0:
+        # Reject obvious nonsense.  At ±4 Hz (~210 ppm at 19 kHz) we're well
+        # past anything an even loosely-calibrated SDR produces (typical
+        # 25-100 ppm), so anything further out signals broken hardware or a
+        # mis-detection — fall back to the 19 000.0 Hz nominal instead.
+        if abs(peak_hz - 19000.0) > self._MAX_PILOT_DEVIATION_HZ:
             return None
         return peak_hz
 
