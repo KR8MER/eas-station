@@ -1309,31 +1309,43 @@ class RBDSWorker:
                     self._rbds_block_bit_counter += 1
                 else:
                     # Complete 26-bit block received - check CRC
+                    def _crc_ok_for_block(block_word_value: int, block_number: int) -> bool:
+                        dataword_value = (block_word_value >> 10) & 0xFFFF
+                        block_calculated_crc_value = self._calc_syndrome(dataword_value, 16)
+                        checkword_value = block_word_value & 0x3FF
+                        if block_number == 2:
+                            # Block C can be C or C' offset word.
+                            return (
+                                (checkword_value ^ offset_word[2]) == block_calculated_crc_value
+                                or (checkword_value ^ offset_word[4]) == block_calculated_crc_value
+                            )
+                        return (checkword_value ^ offset_word[block_number]) == block_calculated_crc_value
+
                     good_block = False
                     block_word = self._rbds_reg ^ 0x3FFFFFF if self._rbds_inverted_polarity else self._rbds_reg
-                    dataword = (block_word >> 10) & 0xFFFF
-                    block_calculated_crc = self._calc_syndrome(dataword, 16)
-                    checkword = block_word & 0x3FF
-                    
-                    if self._rbds_block_number == 2:
-                        # Block C can be C or C' offset word
-                        block_received_crc = checkword ^ offset_word[self._rbds_block_number]
-                        if block_received_crc == block_calculated_crc:
-                            good_block = True
-                        else:
-                            block_received_crc = checkword ^ offset_word[4]
-                            if block_received_crc == block_calculated_crc:
-                                good_block = True
-                            else:
-                                self._rbds_wrong_blocks_counter += 1
-                                good_block = False
+
+                    if _crc_ok_for_block(block_word, self._rbds_block_number):
+                        good_block = True
                     else:
-                        block_received_crc = checkword ^ offset_word[self._rbds_block_number]
-                        if block_received_crc == block_calculated_crc:
+                        # If current polarity suddenly fails CRC but opposite polarity passes,
+                        # recover immediately instead of waiting for a full sync-loss window.
+                        alternate_block_word = block_word ^ 0x3FFFFFF
+                        if _crc_ok_for_block(alternate_block_word, self._rbds_block_number):
+                            self._rbds_inverted_polarity = not self._rbds_inverted_polarity
+                            block_word = alternate_block_word
                             good_block = True
+                            logger.info(
+                                "RBDS polarity flipped while synced; continuing decode (%s polarity)",
+                                "inverted" if self._rbds_inverted_polarity else "normal",
+                            )
                         else:
                             self._rbds_wrong_blocks_counter += 1
-                            good_block = False
+
+                    dataword = (block_word >> 10) & 0xFFFF
+                    if good_block:
+                        self._rbds_consecutive_crc_failures = 0
+                    else:
+                        self._rbds_consecutive_crc_failures += 1
                     
                     # Group assembly (python-radio logic)
                     if self._rbds_block_number == 0 and good_block:
