@@ -483,11 +483,18 @@ _PROD_SOURCE_PATH = (
     / "app_core" / "radio" / "demodulation.py"
 )
 
+# When source introspection fails (e.g. the script is running outside the repo
+# layout) we fall back to assuming the production code is in its known-good
+# state.  Setting this flag lets us tell the user we made that assumption.
+_INTROSPECTION_FAILED: list[str] = []
+
 
 def _read_prod_source() -> str:
     try:
         return _PROD_SOURCE_PATH.read_text(encoding="utf-8")
-    except OSError:
+    except OSError as exc:
+        if not _INTROSPECTION_FAILED:
+            _INTROSPECTION_FAILED.append(str(exc))
         return ""
 
 
@@ -514,25 +521,44 @@ def _production_costas_params() -> tuple[float, float]:
 def _production_bandpass_is_fixed() -> bool:
     """True when RBDSWorker._design_fir_bandpass uses |H(f_centre)|=1 norm."""
     src = _read_prod_source()
-    # The fixed implementation evaluates the centre-frequency response.
-    # The legacy implementation divided by max(|h|).  We treat the presence
-    # of a centre-frequency normalisation as the "fixed" marker.
-    return ("h_at_centre" in src) or ("fc_centre" in src and "np.exp(-1j" in src)
+    if not src:
+        return True  # source unreachable → trust the known-good default
+    # The fixed implementation evaluates the centre-frequency response (i.e.
+    # it computes h_at_centre / fc_centre and divides by it).  The legacy
+    # implementation just divided by max(|h|).  Match either of the markers
+    # we've used historically for the fixed implementation; the regex on
+    # ``np\.exp\(\s*-\s*1\.?0?j`` tolerates whitespace and the float-literal
+    # form of ``-1j`` that black may emit.
+    if "h_at_centre" in src:
+        return True
+    if "fc_centre" in src and re.search(r"np\.exp\(\s*-\s*1\.?0?j", src):
+        return True
+    return False
 
 
 def _production_costas_runs_before_mm() -> bool:
     """True when RBDSWorker._process_rbds calls Costas before M&M."""
     src = _read_prod_source()
+    if not src:
+        return True  # source unreachable → trust the known-good default
     # Find the first occurrences within _process_rbds.  A simple ordering
     # check is sufficient because each helper is called exactly once.
     start = src.find("def _process_rbds")
     if start < 0:
-        return True  # no source → trust the production default
+        if not _INTROSPECTION_FAILED:
+            _INTROSPECTION_FAILED.append(
+                "could not locate _process_rbds in production source"
+            )
+        return True
     end = src.find("\n    def ", start + 1)
     body = src[start:end] if end > start else src[start:]
     costas_idx = body.find("_costas_pysdr(")
     mm_idx     = body.find("_mm_timing_pysdr(")
     if costas_idx < 0 or mm_idx < 0:
+        if not _INTROSPECTION_FAILED:
+            _INTROSPECTION_FAILED.append(
+                "could not locate _costas_pysdr / _mm_timing_pysdr calls"
+            )
         return True
     return costas_idx < mm_idx
 
@@ -719,6 +745,12 @@ def diagnose(path: pathlib.Path, sample_rate: int) -> None:
     ALPHA_LEGACY, BETA_LEGACY = 0.026, 0.00035   # pre-fix, MM-first @ symbol rate
     SYMBOL_RATE   = 1187.5
     RATE_19K      = 19000
+
+    if _INTROSPECTION_FAILED:
+        _warn("Could not introspect app_core/radio/demodulation.py "
+              f"({_INTROSPECTION_FAILED[0]}).")
+        _info("Falling back to known-good PySDR parameters; the analysis below")
+        _info("assumes the production code is in its corrected state.")
 
     def loop_bw(alpha: float, beta: float, fs: float) -> float:
         """Approximate noise bandwidth of a 2nd-order Costas loop."""
