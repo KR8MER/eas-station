@@ -1271,8 +1271,14 @@ class RBDSWorker:
                             expected_spacing = block_distance * 26
                             actual_spacing = global_i - self._rbds_lastseen_offset_counter
 
-                            if abs(actual_spacing - expected_spacing) > 2:
-                                # Wrong spacing - reset presync and try current block as new first
+                            if abs(actual_spacing - expected_spacing) > 4:
+                                # Wrong spacing - reset presync and try current block as new first.
+                                # Tolerance is ±4 bits (not 0 as in offline python-radio): M&M
+                                # symbol timing jitter accumulates ~1 bit per 26-bit block so
+                                # over a 78-bit (3-block) span the spacing error reaches ±3-4
+                                # bits.  ±2 caused every near-miss to fail (seen in the field
+                                # as continuous "expected 78, got 75/82" mismatches with 0
+                                # groups decoded).
                                 logger.debug(f"RBDS presync spacing mismatch: expected {expected_spacing}, got {actual_spacing}")
                                 self._rbds_lastseen_offset = j
                                 self._rbds_lastseen_offset_counter = global_i
