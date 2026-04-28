@@ -437,12 +437,18 @@ class RBDSWorker:
         self._rbds_mm_leftover = np.array([], dtype=np.complex64)
 
         # Costas loop state
-        # Loop parameters calculated for 1% bandwidth, damping=0.707
-        # Old values (0.132, 0.00932) gave 20% bandwidth - way too wide!
+        # Parameters are matched to the 19 kHz sample rate at which the loop now
+        # runs (before M&M, per the PySDR / GNU Radio standard).  At 19 kHz the
+        # PySDR values (alpha=8.7e-3, beta=3.2e-5) give:
+        #   loop BW ≈ 17 Hz   damping ≈ 0.77
+        # This comfortably handles the ±5.7 Hz carrier offset produced by an
+        # RTL-SDR with ±100 ppm clock error at 57 kHz.  The old streaming values
+        # (0.026 / 0.00035) gave only 3.5 Hz at symbol rate — too narrow to
+        # acquire the carrier reliably.
         self._rbds_costas_phase = 0.0
-        self._rbds_costas_freq = 0.0
-        self._rbds_costas_alpha = 0.026  # Was 0.132 - reduced for stable lock
-        self._rbds_costas_beta = 0.00035  # Was 0.00932 - reduced proportionally
+        self._rbds_costas_freq  = 0.0
+        self._rbds_costas_alpha = 8.7e-3   # PySDR / GNU Radio standard value
+        self._rbds_costas_beta  = 3.2e-5   # PySDR / GNU Radio standard value
 
         # Bit buffer and decoding
         self._rbds_bit_buffer: List[int] = []
@@ -470,18 +476,29 @@ class RBDSWorker:
         return h.astype(np.float32)
 
     def _design_fir_bandpass(self, low: float, high: float, sample_rate: int, taps: int = 101) -> np.ndarray:
-        """Design FIR bandpass filter."""
-        fc_low = low / sample_rate
+        """Design FIR bandpass filter with unity gain at the passband centre.
+
+        The filter is built as the difference of two windowed-sinc lowpass
+        prototypes.  Normalising by max(|h|) — the old approach — does NOT
+        guarantee passband unity gain because the centre tap of a bandpass
+        impulse response is zero; the actual passband gain depends on the
+        filter bandwidth and could be many dB away from 0 dB.  Correct
+        normalisation evaluates |H(f_centre)| in the frequency domain and
+        divides by that value, ensuring |H(f_centre)| = 1.
+        """
+        fc_low  = low  / sample_rate
         fc_high = high / sample_rate
-        n = np.arange(taps)
-        mid = (taps - 1) / 2
+        n = np.arange(taps, dtype=np.float64)
+        mid = (taps - 1) / 2.0
         h_high = np.sinc(2 * fc_high * (n - mid))
-        h_low = np.sinc(2 * fc_low * (n - mid))
+        h_low  = np.sinc(2 * fc_low  * (n - mid))
         h = h_high - h_low
         h *= np.blackman(taps)
-        # Normalize to unit gain at center frequency instead of sum(abs(h))
-        # sum(abs(h)) is wrong for bandpass (has negative coefficients)
-        h /= np.max(np.abs(h))
+        # Normalise so |H(f_centre)| = 1
+        fc_centre = (fc_low + fc_high) / 2.0
+        h_at_centre = float(np.abs(np.sum(h * np.exp(-1j * 2.0 * np.pi * fc_centre * (n - mid)))))
+        if h_at_centre > 1e-9:
+            h /= h_at_centre
         return h.astype(np.float32)
 
     def _generate_pilot_reference(self, n: int, sample_offset: int) -> np.ndarray:
@@ -879,9 +896,34 @@ class RBDSWorker:
         if len(x) < 48:  # Need enough samples for processing
             return self._decode_rbds_groups()
 
-        # Step 6: M&M Symbol Timing Recovery (FIRST per PySDR standard)
-        # CRITICAL: M&M must come BEFORE Costas to properly detect symbol transitions
-        # Reference: https://pysdr.org/content/rds.html
+        # Step 6: Costas Loop for BPSK carrier phase/frequency correction (FIRST).
+        # Running Costas at the full 19 kHz sample rate (16 samples/symbol) gives
+        # the loop enough bandwidth (~17 Hz) to acquire the carrier even when the
+        # SDR clock has ±100 ppm error (which shifts the 57 kHz subcarrier by
+        # ~5.7 Hz).  Running it after M&M at symbol rate — the old order — reduced
+        # the effective bandwidth to ~3.5 Hz, which was too narrow to lock reliably.
+        # Reference: https://pysdr.org/content/rds.html (Costas before M&M)
+        x = self._costas_pysdr(x)
+        time.sleep(0)  # Yield GIL
+
+        # Log Costas frequency offset to check if it's locked
+        if hasattr(self, '_costas_log_count'):
+            self._costas_log_count += 1
+        else:
+            self._costas_log_count = 0
+        if self._costas_log_count % 50 == 0:
+            logger.debug(
+                "RBDS Costas: freq=%.3f Hz, phase=%.2f rad",
+                self._rbds_costas_freq * 19000.0 / (2 * np.pi),  # Convert to Hz at 19 kHz
+                self._rbds_costas_phase
+            )
+
+        if len(x) < 2:
+            return self._decode_rbds_groups()
+
+        # Step 7: M&M Symbol Timing Recovery (SECOND, after carrier correction).
+        # M&M now operates on a signal whose carrier phase has already been
+        # corrected by the Costas loop, so timing error estimates are clean.
         n_before = len(x)
         x = self._mm_timing_pysdr(x)
         time.sleep(0)  # Yield GIL
@@ -891,26 +933,6 @@ class RBDSWorker:
         self._mm_log_count += 1
         if self._mm_log_count % 500 == 1:
             logger.debug("RBDS M&M: %d samples -> %d symbols (logged every 500 calls)", n_before, len(x))
-
-        if len(x) < 2:
-            return self._decode_rbds_groups()
-
-        # Step 7: Costas Loop for BPSK Phase Correction (SECOND per PySDR standard)
-        # Corrects carrier phase offset after symbol timing is recovered
-        x = self._costas_pysdr(x)
-        time.sleep(0)  # Yield GIL
-        
-        # Log Costas frequency offset to check if it's locked
-        if hasattr(self, '_costas_log_count'):
-            self._costas_log_count += 1
-        else:
-            self._costas_log_count = 0
-        if self._costas_log_count % 50 == 0:
-            logger.debug(
-                "RBDS Costas: freq=%.3f Hz, phase=%.2f rad",
-                self._rbds_costas_freq * 1187.5 / (2 * np.pi),  # Convert to Hz
-                self._rbds_costas_phase
-            )
 
         if len(x) < 2:
             return self._decode_rbds_groups()
