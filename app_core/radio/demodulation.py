@@ -708,10 +708,11 @@ class RBDSWorker:
         Based on PySDR's working implementation:
         https://pysdr.org/content/rds.html
 
-        CRITICAL: M&M timing FIRST, then Costas loop!
-        This order is essential - M&M must come BEFORE Costas to properly detect
-        symbol transitions. Reversing this order breaks synchronization.
-        
+        Processing order: Costas carrier-phase loop FIRST (at 19 kHz), then M&M
+        symbol timing recovery.  This is the standard order used by PySDR, GNU Radio,
+        and redsea: running M&M on a phase-rotating signal produces noisy timing
+        estimates and prevents the Costas loop from acquiring carrier lock.
+
         CRITICAL FIX for Airspy: The multiplex arrives at 250 kHz after early decimation.
         We must extract the 57 kHz RBDS subcarrier BEFORE any lowpass filtering that would
         remove it. Correct order: bandpass → mix → lowpass → decimate.
@@ -724,31 +725,6 @@ class RBDSWorker:
         """
         if len(multiplex) == 0:
             return None
-
-        # TEMPORARY CAPTURE — remove after debugging
-        if not getattr(self, '_capture_done', False):
-            if not hasattr(self, '_capture_buf'):
-                self._capture_buf = []
-            self._capture_buf.append(multiplex.copy())
-            total = sum(len(c) for c in self._capture_buf)
-            if total >= self._sample_rate * 10:   # 10 seconds
-                import numpy as np, os
-                data = np.concatenate(self._capture_buf)
-                # Write outside /tmp so the file is visible from the host shell.
-                # The SDR systemd service runs with PrivateTmp=true, which would
-                # otherwise hide the capture in a per-service private tmp namespace.
-                # /var/log/eas-station is created by the installer/updater and is
-                # writable by the eas-station service user.
-                preferred_dir = '/var/log/eas-station'
-                filename = f'rbds_capture_{self._sample_rate}.npy'
-                if os.path.isdir(preferred_dir) and os.access(preferred_dir, os.W_OK):
-                    path = os.path.join(preferred_dir, filename)
-                else:
-                    path = os.path.join('/tmp', filename)
-                np.save(path, data)
-                self._capture_done = True
-                import logging
-                logging.getLogger(__name__).warning('RBDS capture saved to %s (%d samples @ %d Hz)', path, len(data), self._sample_rate)
 
         # Start with multiplex at original sample rate (250 kHz for Airspy after early decim)
         x = multiplex.astype(np.float32)
@@ -1059,19 +1035,17 @@ class RBDSWorker:
 
         Adapted from https://github.com/ChrisDev8/python-radio but uses the
         instance-level loop parameters (alpha / beta) rather than the
-        python-radio defaults.  python-radio processes a full recording in one
-        shot and can afford aggressive gains (alpha=4.25) to converge quickly.
-        Here we process 10-second streaming slices and carry phase/frequency
-        state across batches, so a much tighter loop (alpha=0.026, beta=0.00035)
-        is required to avoid oscillation and maintain a stable carrier lock.
+        python-radio defaults.  Loop runs at the full 19 kHz rate (before M&M),
+        using the PySDR / GNU Radio standard values (alpha=8.7e-3, beta=3.2e-5)
+        which give ~17 Hz bandwidth — wide enough to acquire the carrier even
+        when an RTL-SDR has ±100 ppm clock error (≈5.7 Hz offset at 57 kHz).
+        Loop state is carried forward across batches so it stays locked.
         """
         n = len(samples)
         if n == 0:
             return samples
 
-        # Use the tuned streaming parameters from __init__; these were explicitly
-        # chosen to keep loop bandwidth narrow enough to prevent oscillation on
-        # continuous streaming data.
+        # Use the tuned streaming parameters from _init_rbds_state.
         alpha = self._rbds_costas_alpha
         beta = self._rbds_costas_beta
 
