@@ -430,6 +430,11 @@ class RBDSWorker:
         self._rbds_mm_out_prev = complex(0.0)  # sample[n-1]
         self._rbds_mm_out_prev2 = complex(0.0)  # sample[n-2] - needed for M&M error formula
         self._rbds_mm_rail_prev = complex(0.0)  # decision[n-1]
+        # Unconsumed samples carried forward across batches to prevent bit-count drift.
+        # The M&M loop always leaves up to ~sps-1 samples at the end of each batch;
+        # without buffering them the block boundary drifts by ~1 symbol per batch,
+        # causing every block to CRC-fail immediately after sync is acquired.
+        self._rbds_mm_leftover = np.array([], dtype=np.complex64)
 
         # Costas loop state
         # Loop parameters calculated for 1% bandwidth, damping=0.707
@@ -926,9 +931,17 @@ class RBDSWorker:
         This is the EXACT implementation from https://github.com/ChrisDev8/python-radio
         which is known to work correctly for RBDS decoding.
         """
+        # Prepend any unconsumed samples from the previous call so that the M&M
+        # loop never silently discards the partial symbol at the end of a batch.
+        # Without this, the block boundary drifts by ~1 symbol (~16 samples) every
+        # 250 ms, causing every block to CRC-fail immediately after sync is acquired.
+        if len(self._rbds_mm_leftover) > 0:
+            samples = np.concatenate((self._rbds_mm_leftover, samples))
+
         n = len(samples)
         if n < 32:
-            return samples
+            self._rbds_mm_leftover = samples.astype(np.complex64, copy=False)
+            return np.array([], dtype=np.complex64)
 
         # Upsample by 16x for interpolation (python-radio method)
         try:
@@ -983,7 +996,11 @@ class RBDSWorker:
             mu = mu - np.floor(mu)
             i_out += 1
 
-        # Save state for next call
+        # Save unconsumed tail samples so the next call can consume them instead
+        # of silently dropping them and drifting the symbol clock.
+        self._rbds_mm_leftover = samples[i_in:].astype(np.complex64, copy=False)
+
+        # Save mu state for next call
         self._rbds_mm_mu = mu
 
         return out[2:i_out]
