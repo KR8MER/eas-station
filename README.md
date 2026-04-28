@@ -2,355 +2,154 @@
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue?style=flat-square&logo=gnu&logoColor=white)](https://www.gnu.org/licenses/agpl-3.0)
 [![Commercial License](https://img.shields.io/badge/License-Commercial-green?style=flat-square)](LICENSE-COMMERCIAL)
-
 [![Python](https://img.shields.io/badge/Python-3.11%20|%203.12%20|%203.13-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/Flask-3.1.2-000000?style=flat-square&logo=flask&logoColor=white)](https://flask.palletsprojects.com/)
-[![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0.45-CA2C39?style=flat-square&logo=sqlalchemy&logoColor=white)](https://www.sqlalchemy.org/)
 [![PostgreSQL + PostGIS](https://img.shields.io/badge/PostgreSQL%20%2B%20PostGIS-17%20%2F%203.4-0093D0?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Redis](https://img.shields.io/badge/Redis-7.1-DC382D?style=flat-square&logo=redis&logoColor=white)](https://redis.io/)
-
-[![Systemd](https://img.shields.io/badge/Systemd-Services-33A9DC?style=flat-square&logo=linux&logoColor=white)](https://systemd.io/)
-[![Gunicorn](https://img.shields.io/badge/Gunicorn-23.0-499848?style=flat-square&logo=gunicorn&logoColor=white)](https://gunicorn.org/)
-[![Nginx](https://img.shields.io/badge/Nginx-Latest-009639?style=flat-square&logo=nginx&logoColor=white)](https://nginx.org/)
 [![Bootstrap](https://img.shields.io/badge/Bootstrap-5.3.0-7952B3?style=flat-square&logo=bootstrap&logoColor=white)](https://getbootstrap.com/)
-[![Leaflet](https://img.shields.io/badge/Leaflet-1.9.4-199900?style=flat-square&logo=leaflet&logoColor=white)](https://leafletjs.com/)
 
-> **A professional Emergency Alert System (EAS) platform for monitoring, broadcasting, and verifying NOAA and IPAWS alerts**
+> **A professional Emergency Alert System (EAS) research platform — CAP ingestion, SAME encoding, SDR verification, and multi-channel distribution, all on commodity hardware.**
 
-EAS Station is a software-defined drop-in replacement for commercial EAS encoder/decoder hardware, built on commodity hardware like Raspberry Pi. It provides comprehensive alert processing with FCC-compliant SAME encoding, multi-source aggregation, PostGIS spatial intelligence, SDR verification, and integrated LED signage.
-
----
-
-!!! warning "**IMPORTANT: Laboratory Use Only**"
-    EAS Station is experimental software for research and development. It is **not FCC-certified** and must only be used in controlled test environments. Never use for production emergency alerting.
+EAS Station is a software-defined drop-in replacement for commercial EAS encoder/decoder hardware costing **$5,000–$7,000**, built on a Raspberry Pi or any Linux server. It delivers a complete, automated CAP-to-broadcast workflow with PostGIS spatial intelligence, real-time SDR verification, and a polished web dashboard — wired together from boring, battle-tested open-source components.
 
 ---
 
-## ✨ Key Features
+> ⚠️ **Laboratory Use Only** — EAS Station is experimental software for research, training, and development. It is **not FCC-certified** and must only be used in controlled test environments. Never connect to production broadcast chains or on-air RF. [See Legal & Compliance.](#-legal--compliance)
 
-| Feature | Description |
-|---------|-------------|
-| 🌐 **Multi-Source Ingestion** | NOAA Weather, IPAWS federal alerts, and custom CAP feeds |
-| 📻 **FCC-Compliant SAME** | Specific Area Message Encoding per FCC Part 11 |
-| 🗺️ **Geographic Intelligence** | PostGIS spatial filtering with county/state/polygon support |
-| 📡 **SDR Verification** | Automated broadcast verification with RTL-SDR/Airspy |
-| 🔒 **Built-in HTTPS** | Automatic SSL/TLS with Let's Encrypt, nginx reverse proxy |
-| 🎨 **Modern Web UI** | Responsive Bootstrap 5 interface with real-time updates |
-| ⚡ **Hardware Integration** | GPIO relay control, LED signs, multiple audio outputs |
+---
+
+## ✨ Everything You Get
+
+### 📥 Multi-Source Alert Ingestion
+- **NOAA/NWS CAP feeds** — poll and parse all active weather alerts for your region
+- **FEMA IPAWS** — federal Integrated Public Alert and Warning System integration
+- **Custom CAP endpoints** — add any CAP 1.2-compatible feed source
+- **Automatic deduplication** — stores once, no duplicate processing
+- **FIPS & NWS zone lookup** — built-in setup wizard to find the right codes for your coverage area
+
+### 📻 FCC-Compliant SAME Audio Engine
+- **Full SAME encoding** — generates bit-perfect Specific Area Message Encoding headers per FCC Part 11
+- **Attention tone synthesis** — 853/960 Hz two-tone sequence generated in software
+- **Text-to-Speech voice-over** — eSpeak TTS narrates alert details automatically
+- **Manual EAS print** — compose and broadcast custom SAME messages for drills and tests
+- **Raw SAME parser** — paste any `ZCZC-…` string for instant field-by-field decode and validation
+
+### 🗺️ PostGIS Geographic Intelligence
+- **County/state spatial filtering** — alerts matched to your exact geographic footprint
+- **Polygon-based targeting** — NWS zones, FIPS codes, and custom shapefile boundaries
+- **Interactive Leaflet maps** — visualize alert areas and your coverage zone in the web UI
+- **Shapefile import** — load ESRI boundary data directly into PostGIS for custom regions
+- **US Census TIGER/Line** integration for authoritative boundary data
+
+### 📡 SDR Broadcast Verification
+- **RTL-SDR and Airspy support** via SoapySDR abstraction layer
+- **FM demodulation** — tunes to 162 MHz NOAA Weather Radio and custom frequencies
+- **Live SAME decode** — decodes received EAS headers in real time to confirm broadcast
+- **Audio spectrum monitoring** — waveform display and signal metrics in the dashboard
+- **Icecast streaming** — demodulated audio streamed over HTTP for remote monitoring
+- **Multi-bitrate stream profiles** — configure multiple Icecast streams with different formats
+
+### ⚡ Hardware Integration
+- **GPIO relay control** — switch transmitters, PTT lines, and external equipment
+- **LED sign support** — RS-232 protocol driver for scrolling marquee displays
+- **OLED display** — I2C status display showing current alert and system state
+- **VFD (Vacuum Fluorescent Display)** — custom screen editor and graphic support
+- **Zigbee integration** — optional wireless sensor/device control
+- **Multi-relay HAT support** — coordinate multiple relay outputs for complex workflows
+- **GPIO pin map** — visual interface showing every pin assignment and current state
+
+### 🌐 Modern Web Dashboard
+- **Responsive Bootstrap 5 UI** — works on desktop, tablet, and mobile
+- **Real-time updates** — Socket.IO pushes live alert and system data without page refresh
+- **Alert timeline** — full history with search, filter, and detail view
+- **Analytics dashboard** — alert frequency, type breakdown, and geographic distribution charts (Chart.js)
+- **Audio monitoring** — live receive history, source routing view, and playback
+- **System health panel** — CPU, memory, disk, and service status at a glance
+- **Dark-mode-friendly** design with accessible color system
+
+### 🔒 Security & Access Control
+- **Role-based access control (RBAC)** — admin, operator, and viewer roles
+- **Multi-factor authentication (MFA)** — TOTP-based second factor for all accounts
+- **API key management** — generate and revoke keys for automation integrations
+- **Built-in HTTPS** — nginx reverse proxy with Let's Encrypt auto-provisioning
+- **Self-signed fallback** — works out of the box before DNS/cert setup
+
+### 📬 Notifications
+- **Email alerts** — configurable SMTP for alert and system health notifications
+- **SMS** — outbound SMS notifications for critical alerts
+- **SNMP v2c traps** — send traps to any NMS target for system health events
+
+### 🗓️ Automated Scheduling
+- **Required Weekly Test (RWT) scheduler** — automatically generates and schedules FCC-required weekly EAS tests
+- **Required Monthly Test (RMT) support** — configurable monthly test scheduling
+- **Cron-style scheduling** — flexible time rules for any recurring broadcast task
+
+### 🛠️ Administration & Operations
+- **Settings Hub** — single `/settings` dashboard with links to every configuration page
+- **Stream Profile Manager** — multi-stream Icecast configuration with bitrate and format control
+- **`sudo eas-config`** — interactive whiptail TUI to reconfigure any `.env` setting without manual file editing
+- **Alembic database migrations** — schema upgrades run automatically on update
+- **Comprehensive diagnostics** — built-in web diagnostics page and CLI scripts for SDR, network, and database
+- **Alert Self-Test** — replay bundled RWT captures to verify your FIPS codes trigger correctly
+- **System logs viewer** — tail journalctl logs from any service directly in the browser
+- **Docs viewer** — browse the full 90+ document library from within the web UI
+
+### 📡 REST API
+- Full REST API namespaced under `/api/`
+- `X-API-Key` header authentication — keys generated in the web UI
+- Endpoints for alerts, GPIO, audio, streaming, and system control
+- JavaScript API client for browser-side integrations
+- [Complete API reference →](docs/frontend/JAVASCRIPT_API.md)
+
+---
 
 ## 🏗️ Architecture
 
-**Separated Systemd Service Design** - Modern, reliable, production-grade architecture:
+Five focused systemd services with clear ownership — a web crash won't affect audio, and a hardware fault won't bring down the dashboard.
 
 ```mermaid
 graph TB
     subgraph External["External Sources"]
-        NOAA[NOAA Weather<br/>CAP Feeds]
-        IPAWS[FEMA IPAWS<br/>CAP Feeds]
-        RF[RF Signals<br/>162 MHz]
+        SRC[Alert Sources<br/>NOAA · IPAWS · CAP]
+        RF[RF Signals<br/>162 MHz · SDR]
     end
 
     subgraph Services["Systemd Services"]
-        POLL[eas-station-poller<br/>Alert Polling]
-        WEB[eas-station-web<br/>Flask + Gunicorn]
-        SDR[eas-station-sdr<br/>SDR Hardware]
-        AUDIO[eas-station-audio<br/>EAS Monitoring]
-        HW[eas-station-hardware<br/>GPIO/Displays]
+        POLL[eas-station-poller<br/>CAP Feed Polling]
+        WEB[eas-station-web<br/>Flask · Gunicorn]
+        SDR_SVC[eas-station-sdr<br/>SDR Hardware]
+        AUDIO_SVC[eas-station-audio<br/>EAS Monitoring]
+        HW_SVC[eas-station-hardware<br/>GPIO · Displays]
     end
 
     subgraph Infrastructure["Infrastructure"]
         DB[(PostgreSQL 17<br/>+ PostGIS 3.4)]
-        REDIS[(Redis 7<br/>Cache + IPC)]
-        NGINX[nginx<br/>HTTPS Proxy]
+        REDIS[(Redis 7<br/>Cache · Pub/Sub)]
+        NGINX[nginx<br/>HTTPS · Proxy]
     end
 
     subgraph Output["Outputs"]
-        TX[FM Transmitter]
-        UI[Web Browser]
-        LED[LED Signs]
-    end
-
-    NOAA --> POLL
-    IPAWS --> POLL
-    RF --> SDR
-    
-    POLL --> DB
-    WEB --> DB
-    WEB --> REDIS
-    SDR --> REDIS
-    AUDIO --> REDIS
-    
-    NGINX --> WEB
-    WEB --> UI
-    HW --> TX
-    HW --> LED
-    
-    style External fill:#3b82f6,color:#fff
-    style DB fill:#8b5cf6,color:#fff
-    style WEB fill:#10b981,color:#fff
-    style AUDIO fill:#f59e0b,color:#000
-    style UI fill:#6366f1,color:#fff
-```
-
-**Benefits:**
-- ✅ **Reliable** - Services isolated (web crashes don't affect audio/SDR)
-- ✅ **Simple** - No container orchestration, standard systemd
-- ✅ **Fast** - Direct hardware access, dedicated resources per service
-- ✅ **Debuggable** - Separate logs via journalctl, independent restart
-
-### Project Structure
-
-```
-eas-station/
-├── app.py                      # Main Flask application
-├── *_service.py                # Service entry points (EAS, SDR, hardware, audio)
-├── wsgi.py                     # WSGI server entry point
-├── app_core/                   # Core business logic
-│   ├── audio/                  # Audio processing and EAS monitoring
-│   ├── radio/                  # SDR radio management
-│   ├── auth/                   # Authentication and RBAC
-│   └── models.py               # Database models
-├── app_utils/                  # Utility modules
-│   ├── eas.py                  # SAME encoding/generation
-│   ├── eas_decode.py           # SAME decoding
-│   └── eas_tts.py              # Text-to-speech synthesis
-├── webapp/                     # Web application routes and templates
-│   ├── admin/                  # Admin routes and API
-│   └── templates/              # Jinja2 HTML templates
-├── poller/                     # CAP feed polling service
-├── static/                     # Frontend assets (CSS, JS, images)
-├── scripts/                    # Utility and maintenance scripts
-│   ├── debug/                  # Debug and testing scripts
-│   ├── fixes/                  # One-time fix scripts
-│   ├── diagnostics/            # Diagnostic tools
-│   └── maintenance/            # Database and system maintenance
-├── tests/                      # Comprehensive test suite (80+ files)
-├── docs/                       # Documentation
-│   ├── guides/                 # Setup and user guides
-│   ├── architecture/           # Architecture documentation
-│   └── FUTURE_ENHANCEMENTS.md  # Planned enhancements
-└── legacy/                     # Archived code for reference
-
-**Key Files:**
-- `app.py` - Main web application and Flask initialization
-- `eas_service.py` - EAS monitoring service (subscribes to Redis audio)
-- `sdr_hardware_service.py` - SDR hardware USB access (publishes IQ samples)
-- `hardware_service.py` - GPIO, displays, and Zigbee hardware
-- `eas_monitoring_service.py` - Audio processing and EAS monitoring
-```
-
-## 🚀 Quick Start
-
-### Interactive Installation
-
-```bash
-git clone https://github.com/KR8MER/eas-station.git && \
-cd eas-station && \
-sudo bash install.sh
-```
-
-**The installer uses an interactive TUI (whiptail) to collect all configuration:**
-- 👤 Administrator account (username, password, email)
-- 🖥️ System settings (hostname, domain, EAS originator, station callsign)
-- 📍 Location & timezone (state, county, optional FIPS codes)
-- 📡 Alert sources (NOAA, IPAWS)
-- 🎵 Audio/streaming (Icecast with auto-generated passwords)
-- 🔌 Hardware (GPIO, LED signs, VFD displays, Zigbee)
-
-**Then automatically:**
-- ✅ Installs all dependencies (PostgreSQL, Redis, Python, nginx, etc.)
-- ✅ Generates secure SECRET_KEY and passwords
-- ✅ Creates `/opt/eas-station/.env` with your settings
-- ✅ Initializes the database schema (Alembic migrations)
-- ✅ Creates your administrator account
-- ✅ Starts all systemd services
-- ✅ Configures nginx with a self-signed certificate (Let's Encrypt optional)
-
-**All configuration is done during installation - no post-install wizard needed!**
-
-> 💡 **Debian Trixie (Testing)**: Fully supported! The installer auto-detects your OS version and installs compatible packages. Python 3.13 is fully supported with the latest dependency updates.
-
-### Updating
-
-To update an existing installation to the latest version:
-
-```bash
-cd /opt/eas-station
-sudo bash update.sh
-```
-
-The update script will:
-- ✅ Optionally create a backup of your current installation
-- ✅ Stop all EAS Station services
-- ✅ Pull the latest code from GitHub (`git fetch` + `git reset --hard`)
-- ✅ Preserve your `/opt/eas-station/.env` configuration
-- ✅ Update Python dependencies
-- ✅ Run any pending database migrations
-- ✅ Reload systemd service definitions
-- ✅ Restart all services
-
-### Uninstallation
-
-To completely remove EAS Station from your system:
-
-```bash
-cd eas-station
-sudo bash uninstall.sh
-```
-
-The uninstall script will:
-- ✅ Stop and remove all EAS Station services
-- ✅ Remove application files and logs
-- ✅ Optionally remove PostgreSQL database
-- ✅ Optionally remove dependencies (PostgreSQL, Redis, Nginx, etc.)
-
-### Access Your Station
-
-Open your web browser and navigate to:
-- **https://localhost** (on the server)
-- **https://your-server-ip** (from network)
-
-Accept the self-signed certificate warning (safe for initial setup).
-
-**Log in** with the administrator account you created during installation - your station is ready!
-
-### Optional: Fine-Tune Configuration
-
-All essential settings are configured during installation, but you can:
-
-1. **Reconfigure Core Settings** - Use `sudo eas-config` for a whiptail TUI to update hostname, domain, location, FIPS codes, and other `.env` settings
-
-2. **FIPS / Zone Code Tools** - Use the web-based setup wizard at `/setup` to:
-   - Look up FIPS codes from county names
-   - Auto-derive NWS zone codes from FIPS codes
-
-3. **Feature Settings** - Configure hardware, Icecast, notifications, TTS, and more through the web UI at `/settings`
-
-4. **Advanced `.env` Editing** - Edit `/opt/eas-station/.env` directly for core infrastructure settings (SECRET_KEY, DATABASE_URL, Redis)
-
-> 💡 **Production SSL**: Run `sudo certbot --nginx -d your-domain.com` after pointing your DNS to the server, or answer "Yes" to the Let's Encrypt prompt during installation.
-
-### System Requirements
-
-- **OS**: Debian 12 (Bookworm), Debian 13 (Trixie), Ubuntu 22.04+, or Raspberry Pi OS
-- **CPU**: 2+ cores (4+ recommended)
-- **RAM**: 2GB minimum (4GB+ recommended)
-- **Storage**: 20GB minimum (50GB+ recommended for alerts database)
-- **Network**: Internet connection for alert polling
-
-### Key Benefits
-
-- ✅ **Native Performance** - Runs directly on host OS
-- ✅ **Direct Hardware Access** - SDR, GPIO, and audio devices work natively
-- ✅ **Standard Linux Management** - Familiar systemd service control
-- ✅ **Interactive Setup** - whiptail TUI for easy configuration
-- ✅ **All-in-One Install** - Complete configuration during installation
-- ✅ **Reconfigurable** - Change settings anytime with `sudo eas-config`
-
-**📖 Full Guide:** See [docs/guides/SETUP_INSTRUCTIONS.md](docs/guides/SETUP_INSTRUCTIONS.md) for detailed installation, upgrades, configuration, and troubleshooting.
-
-### Installation Notes for Debian Trixie
-
-**Debian 13 (Trixie)** is the current testing distribution and is fully supported:
-
-- **Python 3.13**: All dependencies updated to support Python 3.13 (gevent 25.9.1+, pytest 9.0+, etc.)
-- **PostgreSQL**: Works with PostgreSQL 15, 16, or 17 with PostGIS 3.3 or 3.4
-- **Package availability**: All required packages are available in Trixie repositories
-- **Testing status**: While Trixie is "testing", it's stable enough for development and lab use
-
-If you encounter any package availability issues on Trixie, the installer will attempt to install from Debian Backports or skip optional packages gracefully.
-
-## 📚 Documentation
-
-```mermaid
-graph TD
-    START{What do you<br/>want to do?}
-    START -->|Install & Setup| SETUP[📖 Quick Start Guide<br/>Installation]
-    START -->|Configure Hardware| HW[📡 SDR Setup<br/>🎧 Audio Sources<br/>🔌 GPIO/Displays]
-    START -->|Daily Operations| OPS[📘 User Guide<br/>🛠️ Admin Interface<br/>📊 Monitoring]
-    START -->|Development| DEV[💻 Developer Guide<br/>🏗️ Architecture<br/>🎨 Frontend Docs]
-    START -->|Troubleshooting| TROUBLE[🔧 SDR Issues<br/>🌐 Network/504<br/>🗄️ Database]
-
-    SETUP --> DOCS[📚 Full Documentation<br/>92 Documents]
-    HW --> DOCS
-    OPS --> DOCS
-    DEV --> DOCS
-    TROUBLE --> DOCS
-
-    style START fill:#3b82f6,color:#fff
-    style DOCS fill:#10b981,color:#fff
-    style TROUBLE fill:#f59e0b,color:#000
-```
-
-### Quick Links
-
-| For... | Start Here |
-|--------|------------|
-| **First Time Setup** | [Setup Instructions](docs/guides/SETUP_INSTRUCTIONS) → [Quick Start](#quick-start) |
-| **Radio Configuration** | [SDR Setup Guide](docs/hardware/SDR_SETUP) |
-| **Daily Operations** | [User Guide](docs/guides/HELP) |
-| **Deployment** | [Installation Guide](docs/installation/README.md) |
-| **Development** | [Developer Guide](docs/development/AGENTS) |
-| **Remote Development (VSCode)** | [VSCode Setup Guide](.vscode/VSCODE_SETUP.md) - **5-minute setup!** |
-| **Debugging on Pi** | [PyCharm Remote Debugging Guide](docs/guides/PYCHARM_DEBUGGING) |
-
-**📖 [Complete Documentation Index](docs/INDEX)** - Searchable topics and detailed guides
-
-## 📡 API Endpoints
-
-EAS Station exposes a comprehensive REST API for automation and integrations:
-
-- [Endpoint reference](docs/frontend/JAVASCRIPT_API.md) – Complete request/response catalog and authentication model
-- [Architecture overview](docs/architecture/SYSTEM_ARCHITECTURE.md) – How the API interacts with pollers, database, and broadcast services
-- [JavaScript API Guide](docs/frontend/JAVASCRIPT_API.md) – Using the JavaScript client to control GPIO and audio devices
-
-> Tip: All API routes are namespaced under `/api/`. Use the `X-API-Key` header generated from the Configuration → API Keys page.
-
-## 🏗️ Architecture
-
-```mermaid
-graph TB
-    subgraph External["External Sources"]
-        SRC[Alert Sources<br/>NOAA, IPAWS]
-        RF[RF Signals<br/>SDR Receivers]
-    end
-
-    subgraph Services["Systemd Services"]
-        POLL[Alert Poller<br/>Unified CAP Polling]
-        WEB[Web Application<br/>Flask + Gunicorn]
-        SDR_SVC[SDR Service<br/>Radio Hardware]
-        AUDIO_SVC[Audio Service<br/>EAS Monitoring]
-        HW_SVC[Hardware Service<br/>GPIO/Displays]
-    end
-
-    subgraph Infrastructure["Infrastructure"]
-        DB[(PostgreSQL 17<br/>+ PostGIS 3.4)]
-        REDIS[(Redis 7<br/>Cache + Pub/Sub)]
-        NGINX[nginx<br/>HTTPS + Proxy]
-    end
-
-    subgraph Output["Outputs"]
-        TX[FM Transmitter<br/>GPIO Control]
+        TX[FM Transmitter<br/>GPIO Relay]
         UI[Web Browser<br/>HTTPS]
-        LED[LED Signs<br/>RS-232]
-        STREAM[Audio Streams<br/>Icecast]
+        LED[LED · OLED · VFD<br/>Displays]
+        STREAM[Icecast<br/>Audio Stream]
     end
 
     SRC -->|CAP XML| POLL
     RF --> SDR_SVC
-    
+
     POLL -->|Store Alerts| DB
     WEB -->|Query Data| DB
     WEB -->|Commands| REDIS
-    SDR_SVC -->|Metrics| REDIS
+    SDR_SVC -->|IQ Samples| REDIS
     AUDIO_SVC -->|Decode| REDIS
-    
+
     NGINX -->|Reverse Proxy| WEB
     WEB --> UI
     HW_SVC -->|Relay Control| TX
     HW_SVC -->|Messages| LED
     SDR_SVC -->|Demod Audio| STREAM
-    
+
     style External fill:#3b82f6,color:#fff
     style DB fill:#8b5cf6,color:#fff
     style WEB fill:#10b981,color:#fff
@@ -358,439 +157,232 @@ graph TB
     style UI fill:#6366f1,color:#fff
 ```
 
-### Core Components
+| Service | Responsibility |
+|---------|---------------|
+| **eas-station-web** | Flask UI, REST API, dashboards — no direct hardware access |
+| **eas-station-poller** | CAP feed polling, XML parsing, deduplication, database writes |
+| **eas-station-sdr** | SDR capture, FM demodulation, SAME decoding, Icecast streaming |
+| **eas-station-hardware** | GPIO relays, OLED/VFD displays, LED sign protocols |
+| **eas-station-audio** | Audio processing, EAS monitoring, Redis pub/sub |
 
-| Component | Technology | Purpose |
-|-----------|-----------|---------|
-| **Web Application** | Flask 3.1 + Bootstrap 5 | User interface and REST API |
-| **Alert Poller** | Python asyncio | Unified NOAA/IPAWS CAP monitoring |
-| **Database** | PostgreSQL 17 + PostGIS 3.4 | Spatial data storage and queries |
-| **SDR Service** | SoapySDR + RTL-SDR/Airspy | Radio reception and demodulation |
-| **Audio Service** | Python + ALSA | EAS decoding and monitoring |
-| **Hardware Service** | RPi.GPIO + lgpio | GPIO relay, OLED, VFD, LED control |
-| **Web Server** | Gunicorn 23.0 + nginx | WSGI server + HTTPS termination |
-| **Cache & IPC** | Redis 7 | Real-time metrics and pub/sub messaging |
+**Infrastructure:** PostgreSQL 17 + PostGIS 3.4 for persistent storage · Redis 7 for real-time metrics and inter-service messaging · nginx for HTTPS termination.
 
-## 🎯 Use Cases
+---
 
-<table>
-<tr>
-<td width="50%">
+## 🚀 Quick Start
 
-**Broadcasters**
-- Replace $5,000-$7,000 commercial encoders
-- Multi-station coordination
-- Automated compliance logging
+### One-Command Install
 
-**Amateur Radio**
-- Emergency communications testing
-- Alert relay networks
-- Training and education
+```bash
+git clone https://github.com/KR8MER/eas-station.git
+cd eas-station
+sudo bash install.sh
+```
 
-</td>
-<td width="50%">
+The interactive **whiptail TUI installer** guides you through every option and then handles everything automatically:
 
-**Alert Distribution**
-- Custom alert distribution
-- Geographic targeting
-- Integration with existing systems
+| What you configure | What it does automatically |
+|---|---|
+| Admin account (user/pass/email) | Installs PostgreSQL, Redis, Python, nginx |
+| Hostname, domain, callsign, EAS originator | Generates a secure 64-char `SECRET_KEY` |
+| State, county, FIPS/NWS zone codes | Runs Alembic database migrations |
+| Alert sources (NOAA, IPAWS) | Creates your administrator account |
+| Icecast streaming passwords | Starts all systemd services |
+| Hardware (GPIO, LED, VFD, Zigbee) | Configures nginx with SSL (Let's Encrypt optional) |
 
-**Developers**
-- CAP protocol experimentation
-- Alert system research
-- Custom integrations
+Then open **https://your-server-ip** and log in — your station is live.
 
-</td>
-</tr>
-</table>
+> 💡 **Debian 13 (Trixie) and Python 3.13 are fully supported.** The installer auto-detects your OS and selects the right packages.
+
+### Update an Existing Installation
+
+```bash
+cd /opt/eas-station
+sudo bash update.sh
+```
+
+Backs up optionally → stops services → pulls latest code → preserves `.env` → migrates database → restarts everything.
+
+### Reconfigure After Install
+
+```bash
+sudo eas-config        # interactive whiptail TUI for any .env setting
+```
+
+Or visit `/settings` in the web UI to configure hardware, Icecast, notifications, TTS, FIPS codes, and more.
+
+### Uninstall
+
+```bash
+sudo bash uninstall.sh   # stops services, removes files, optionally removes PostgreSQL/Redis/nginx
+```
+
+---
 
 ## ⚙️ System Requirements
 
-### Recommended Hardware
+| Category | Minimum | Recommended |
+|----------|---------|-------------|
+| **Compute** | 2-core CPU, 2 GB RAM | Raspberry Pi 5 (8 GB) or x86 server |
+| **Storage** | 20 GB | 50 GB+ SSD (alerts database grows over time) |
+| **OS** | Debian 12 / Ubuntu 22.04 | Debian 13 (Trixie) · Raspberry Pi OS |
+| **Python** | 3.11 | 3.12 or 3.13 |
+| **SDR** | *(optional)* RTL-SDR v3 | Airspy R2/Mini |
+| **GPIO** | *(optional)* any relay HAT | Multi-relay HAT + USB sound card |
 
-| Component | Specification |
-|-----------|---------------|
-| **Compute** | Raspberry Pi 5 (8GB) or equivalent x86 |
-| **Control** | Multi-relay GPIO HAT |
-| **Audio** | USB sound card or Pi HAT |
-| **SDR** | RTL-SDR v3 or Airspy |
-| **Storage** | External SSD (50GB+) |
+The install script handles all system packages and Python dependencies automatically. See [requirements.txt](requirements.txt) for the full Python dependency list (50+ packages).
 
-### Software Requirements
-
-**Operating System**:
-- Debian 12 (Bookworm) or Debian 13 (Trixie)
-- Ubuntu 22.04 LTS or newer
-- Raspberry Pi OS (based on Debian Bookworm/Trixie)
-- Python 3.11, 3.12, or 3.13
-- PostgreSQL 14+ with PostGIS 3+
-- Redis 7+
-
-### System Package Dependencies
-
-**Core System Packages** (all Debian/Ubuntu versions including Trixie):
-```bash
-# Build tools and Python development
-python3 python3-pip python3-venv python3-dev
-build-essential gcc g++ make
-
-# Database and spatial extensions
-postgresql postgresql-contrib postgis
-postgresql-17-postgis-3  # or postgresql-16-postgis-3 on older systems
-
-# Networking and web services
-redis-server nginx certbot python3-certbot-nginx
-
-# Audio processing
-ffmpeg espeak libespeak-ng1
-
-# Development libraries
-libpq-dev libev-dev libevent-dev libffi-dev libssl-dev
-
-# USB and hardware support
-libusb-1.0-0 libusb-1.0-0-dev usbutils ca-certificates
-
-# Version control and utilities
-git curl wget
-```
-
-**Optional Packages** (for SDR and hardware features):
-```bash
-# SDR receiver support (RTL-SDR, Airspy)
-python3-soapysdr soapysdr-tools
-soapysdr-module-rtlsdr soapysdr-module-airspy
-libairspy0 librtlsdr0
-
-# Raspberry Pi GPIO support (Pi only)
-python3-lgpio  # Preferred on Pi 5
-```
-
-**Python Package Requirements** (installed via pip in virtual environment):
-- Flask 3.1.2 - Web framework
-- SQLAlchemy 2.0.45 - Database ORM
-- gevent 25.9.1+ - WSGI async support (Python 3.13 compatible)
-- redis 7.1.0 - Redis client
-- psutil 7.1.3 - System monitoring
-- numpy 2.3.5 - Numerical processing for SDR
-- Pillow 12.0.0 - Image processing for displays
-- pytest 9.0.2 - Testing framework
-
-> 📘 **Complete dependency list**: See [requirements.txt](requirements.txt) for all 50+ Python packages
-
-> 📘 **Automated Installation**: The installation script (`install.sh`) installs all required and optional dependencies automatically.
->
-> 📘 **Manual Installation**: See [Setup Instructions](docs/guides/SETUP_INSTRUCTIONS.md) for step-by-step installation guide.
+---
 
 ## 🛠️ Configuration
 
-The `.env` file at `/opt/eas-station/.env` is auto-generated by the installer and holds core infrastructure settings:
+Core infrastructure settings live in `/opt/eas-station/.env` (auto-generated by the installer):
 
 ```bash
-# Core application settings (auto-generated by installer)
-SECRET_KEY=<generated 64-char hex key>
-FLASK_ENV=production
-
-# Database connection
+SECRET_KEY=<64-char hex>
 DATABASE_URL=postgresql+psycopg2://eas_station:<password>@127.0.0.1:5432/alerts
-
-# Redis
 REDIS_HOST=localhost
 REDIS_PORT=6379
-REDIS_DB=0
-
-# Domain / SSL
 DOMAIN_NAME=your-domain.com
 SSL_EMAIL=admin@example.com
 ```
 
-Most feature settings (hardware, Icecast, notifications, TTS, broadcast, FIPS codes, etc.) are stored in the database and configured through the web UI at `/settings` and `/admin/`.
+All feature settings (hardware, Icecast, TTS, notifications, FIPS codes, stream profiles) are stored in the database and managed through the web UI at `/settings`.
 
-To reconfigure core `.env` settings after installation:
-```bash
-sudo eas-config        # interactive whiptail TUI
-# or edit directly:
-sudo nano /opt/eas-station/.env
-sudo systemctl restart eas-station.target
-```
+> 💡 **Production SSL**: The installer can provision Let's Encrypt automatically, or run `sudo certbot --nginx -d your-domain.com` at any time after pointing DNS.
 
-See [Configuration Guide](docs/guides/HELP.md) for complete reference.
+---
 
-## 📊 System Diagrams
-
-Professional flowcharts and block diagrams illustrating system architecture and workflows:
+## 🎯 Who Is This For?
 
 <table>
 <tr>
 <td width="50%">
-<a href="docs/assets/diagrams/alert-processing-pipeline.svg">
-<img src="docs/assets/diagrams/alert-processing-pipeline.svg" alt="Alert Processing Pipeline" />
-</a>
-<p align="center"><em><strong>Alert Processing Pipeline</strong></em><br/>CAP ingestion, validation, and storage workflow</p>
+
+**Amateur Radio / ARES / RACES**
+- Research and training on CAP-to-EAS workflows
+- Emergency communications lab and net testing
+- Alert relay experimentation
+- Skywarn and public-safety integration study
+
+**Broadcasters & Researchers**
+- Evaluate a $5K–$7K commercial encoder replacement on commodity hardware
+- Automated compliance logging and audit trail research
+- CAP protocol and SAME encoding experimentation
+
 </td>
 <td width="50%">
-<a href="docs/assets/diagrams/broadcast-workflow.svg">
-<img src="docs/assets/diagrams/broadcast-workflow.svg" alt="Broadcast Workflow" />
-</a>
-<p align="center"><em><strong>EAS Broadcast Workflow</strong></em><br/>SAME generation and transmission process</p>
-</td>
-</tr>
-<tr>
-<td width="50%">
-<a href="docs/assets/diagrams/sdr-setup-flow.svg">
-<img src="docs/assets/diagrams/sdr-setup-flow.svg" alt="SDR Setup Flow" />
-</a>
-<p align="center"><em><strong>SDR Setup & Configuration</strong></em><br/>Complete radio receiver setup guide</p>
-</td>
-<td width="50%">
-<a href="docs/assets/diagrams/audio-source-routing.svg">
-<img src="docs/assets/diagrams/audio-source-routing.svg" alt="Audio Source Routing" />
-</a>
-<p align="center"><em><strong>Audio Source Architecture</strong></em><br/>Multi-source audio routing and monitoring</p>
-</td>
-</tr>
-<tr>
-<td colspan="2">
-<a href="docs/assets/diagrams/system-deployment-hardware.svg">
-<img src="docs/assets/diagrams/system-deployment-hardware.svg" alt="Hardware Deployment" />
-</a>
-<p align="center"><em><strong>Hardware Deployment Architecture</strong></em><br/>Raspberry Pi 5 reference configuration with peripherals</p>
+
+**Emergency Managers**
+- Custom alert distribution and geographic targeting testing
+- Understand CAP ingestion pipelines firsthand
+- Integration prototyping with existing systems
+
+**Developers**
+- Explore a full-stack Python/Flask/PostGIS application
+- Build custom CAP integrations against the REST API
+- Contribute to open-source EAS tooling
+
 </td>
 </tr>
 </table>
 
-📖 **[View all architectural diagrams →](docs/architecture/SYSTEM_ARCHITECTURE)**
-
-## 📊 Screenshots
-
-<table>
-<tr>
-<td width="50%">
-<img src="static/img/eas-system-wordmark.svg" alt="Dashboard" />
-<p align="center"><em>Main Dashboard</em></p>
-</td>
-<td width="50%">
-<img src="static/img/raspberry-pi-hero.svg" alt="Admin Panel" />
-<p align="center"><em>Administration Panel</em></p>
-</td>
-</tr>
-</table>
-
-## 🤝 Contributing
-
-We welcome contributions! Please see:
-
-- [Contributing Guide](docs/process/CONTRIBUTING)
-- [Code Standards](docs/development/AGENTS)
-- [Development Setup](docs/development/AGENTS)
-
-### Development
-
-```bash
-# Clone repository
-git clone https://github.com/KR8MER/eas-station.git
-cd eas-station
-
-# Set up environment
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-
-# Configure database
-cp .env.example .env
-# Edit .env with local database settings
-
-# Run development server
-python app.py
-```
-
-## 🆘 Support
-
-- 📖 **Documentation**: [Complete Docs](docs/INDEX)
-- 🔧 **Diagnostic Tools**: [Troubleshooting Scripts](scripts/diagnostics/)
-- 💬 **Discussions**: [GitHub Discussions](https://github.com/KR8MER/eas-station/discussions)
-- 🐛 **Issues**: [GitHub Issues](https://github.com/KR8MER/eas-station/issues)
-- 📡 **Community**: Join our amateur radio forums
-
-> **Quick Diagnostics**: 
-> - **SDR not working?** Run `bash scripts/collect_sdr_diagnostics.sh` or see [SDR Quick Fix Guide](docs/troubleshooting/SDR_QUICK_FIX_GUIDE.md)
-> - **Connection issues?** Run `bash scripts/diagnostics/troubleshoot_connection.sh` 
-> - **See all tools**: [scripts/diagnostics/README.md](scripts/diagnostics/README.md)
-
-> **Alert Self-Test**: Open **Tools → Alert Verification** and use the built-in Alert Self-Test panel to replay bundled RWT captures and confirm your configured FIPS codes still trigger activations.
-
-## ⚖️ Legal & Compliance
-
-!!! danger "FCC Compliance Warning"
-    **EAS Station generates valid EAS SAME headers and attention tones.** Unauthorized broadcast violates FCC regulations and can result in substantial fines:
-
-    - 2015 iHeartMedia: [$1M settlement](https://docs.fcc.gov/public/attachments/DA-15-199A1.pdf)
-    - 2014 Multiple Networks: [$1.9M settlement](https://docs.fcc.gov/public/attachments/DA-14-1097A1.pdf)
-
-    Always work in shielded test environments. Never connect to production broadcast chains.
-
-See [Terms of Use](docs/policies/TERMS_OF_USE.md), [FCC Compliance](docs/reference/ABOUT.md), and [Trademark Policy](docs/policies/TRADEMARK_POLICY.md) for details.
+---
 
 ## 📈 Roadmap
 
-Current development focuses on:
+| Status | Item |
+|--------|------|
+| ✅ Done | Multi-source CAP ingestion, SAME encoding, geographic filtering |
+| ✅ Done | SDR verification, Icecast streaming, stream profile manager |
+| ✅ Done | Settings Hub, system diagnostics, analytics dashboard |
+| ✅ Done | SNMP trap notifications, MFA, RBAC, API keys |
+| ✅ Done | LED/OLED/VFD display drivers, GPIO relay control |
+| ✅ Done | RWT/RMT automatic scheduling |
+| 🔄 In Progress | Advanced relay control, multi-receiver coordination |
+| ⏳ Planned | FCC Part 11 certification documentation |
+| ⏳ Planned | Cloud sync, mobile app, multi-site coordination |
 
-- ✅ **Core Features**: Multi-source ingestion, SAME encoding, geographic filtering
-- ✅ **System Diagnostics**: Web-based validation and health checking tool
-- ✅ **Stream Profiles**: Multi-bitrate Icecast streaming configuration
-- 🔄 **Hardware Parity**: Advanced relay control, multi-receiver coordination
-- ⏳ **Certification**: FCC Part 11 compliance documentation
-- ⏳ **Advanced Features**: Cloud sync, mobile app, multi-site coordination
+See [Changelog](docs/reference/CHANGELOG.md) and [Feature Roadmap](docs/roadmap/dasdec3-feature-roadmap.md) for full details.
 
-See [Feature Roadmap](docs/roadmap/dasdec3-feature-roadmap.md) for complete details.
+---
 
-### Recent Additions
+## 📚 Documentation
 
-- **SNMP v2c Trap Notifications** - Send SNMP traps to NMS targets for system health alerts (`/admin/notifications`)
-- **Raw SAME Header Parser** - Paste any `ZCZC-…` string for instant field-by-field decode (`/admin/alert-verification`)
-- **EAS Decode Performance** - Skip redundant baud-rate scan passes, vectorized Goertzel filter, polyphase resampler
-- **Settings Hub** - All admin pages reachable from a single `/settings` dashboard
-- **Stream Profile Manager** (`/settings/stream-profiles`) - Configure multiple Icecast streams with different bitrates and formats
+| Topic | Link |
+|-------|------|
+| **Setup & Installation** | [docs/guides/SETUP_INSTRUCTIONS](docs/guides/SETUP_INSTRUCTIONS) |
+| **SDR Configuration** | [docs/hardware/SDR_SETUP](docs/hardware/SDR_SETUP) |
+| **Daily Operations** | [docs/guides/HELP](docs/guides/HELP) |
+| **REST API Reference** | [docs/frontend/JAVASCRIPT_API.md](docs/frontend/JAVASCRIPT_API.md) |
+| **Architecture** | [docs/architecture/SYSTEM_ARCHITECTURE.md](docs/architecture/SYSTEM_ARCHITECTURE.md) |
+| **Developer Guide** | [docs/development/AGENTS](docs/development/AGENTS) |
+| **Remote Dev (VSCode)** | [.vscode/VSCODE_SETUP.md](.vscode/VSCODE_SETUP.md) |
+| **Full Index** | [docs/INDEX](docs/INDEX) — 90+ documents |
 
-See [Changelog](docs/reference/CHANGELOG.md) for detailed documentation of recent changes.
+**Quick diagnostics:**
+- SDR not working? `bash scripts/collect_sdr_diagnostics.sh` → [SDR Quick Fix Guide](docs/troubleshooting/SDR_QUICK_FIX_GUIDE.md)
+- Connection issues? `bash scripts/diagnostics/troubleshoot_connection.sh`
+
+---
+
+## 🤝 Contributing
+
+```bash
+git clone https://github.com/KR8MER/eas-station.git
+cd eas-station
+python3 -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env   # edit with local DB settings
+python app.py
+```
+
+See [Contributing Guide](docs/process/CONTRIBUTING) and [Code Standards](docs/development/AGENTS).
+
+---
+
+## ⚖️ Legal & Compliance
+
+> 🚨 **EAS Station generates valid SAME headers and attention tones.** These signals will trigger downstream EAS equipment if coupled to any RF, STL, or streaming chain.
+>
+> - **Not FCC-certified** — for laboratory, research, and training use only.
+> - **Never connect to on-air infrastructure** without explicit authorization.
+> - Unauthorized broadcast has real consequences: iHeartMedia paid a [$1M settlement](https://docs.fcc.gov/public/attachments/DA-15-199A1.pdf) (2015); the *Olympus Has Fallen* trailer misuse cost [$1.9M](https://docs.fcc.gov/public/attachments/DA-14-1097A1.pdf).
+> - The maintainer will cooperate fully with authorities against any misuse.
+
+See [Terms of Use](docs/policies/TERMS_OF_USE.md), [FCC Compliance](docs/reference/ABOUT.md), and [Trademark Policy](docs/policies/TRADEMARK_POLICY.md).
+
+---
 
 ## 📜 License
 
-EAS Station is available under **dual licensing**:
+EAS Station is **dual-licensed**:
 
-### Open Source License (AGPL v3)
-
-For users who comply with AGPL v3 obligations, EAS Station is licensed under the [GNU Affero General Public License v3 (AGPL-3.0)](LICENSE).
-
-**Key requirements:**
-- ✅ Free to use, modify, and distribute
-- ✅ Must keep source code open
-- ✅ Must share modifications if you deploy as a web service
-- ✅ Must retain copyright and license notices
-- ✅ Must mark modified network deployments with source availability as required by AGPL v3
-- ✅ Must avoid implying endorsement by the upstream project
-
-See [LICENSE](LICENSE) file for full AGPL terms.
+### Open Source — AGPL v3
+Free to use, modify, and distribute under the [GNU Affero General Public License v3](LICENSE). Modifications to network-deployed versions must be made available as source.
 
 ### Commercial License
-
-For proprietary/closed-source use without AGPL obligations, a [Commercial License](LICENSE-COMMERCIAL) is available.
-
-**Benefits:**
-- ✅ No source code disclosure requirements
-- ✅ Integration into proprietary systems
-- ✅ Priority support and updates
-- ✅ Custom development assistance
-
-**Contact for commercial licensing:** See [LICENSE-COMMERCIAL](LICENSE-COMMERCIAL) for details.
-
----
-
-### Copyright & Attribution
+For proprietary or closed-source use without AGPL obligations — no source disclosure required, priority support, custom development assistance. See [LICENSE-COMMERCIAL](LICENSE-COMMERCIAL).
 
 ```
 Copyright (c) 2025-2026 Timothy Kramer (KR8MER)
-EAS Station - https://github.com/KR8MER/eas-station
+EAS Station — https://github.com/KR8MER/eas-station
 ```
 
-**IMPORTANT:** Preserve required legal notices under your chosen license.
-Branding and logo usage are governed separately by the [Trademark Policy](docs/policies/TRADEMARK_POLICY.md).
-See [NOTICE](NOTICE) for licensing notice details.
-
-### Why Dual Licensing?
-
-- **For open-source and commercial users**: AGPL is available for anyone who complies with copyleft requirements
-- **For proprietary use**: Commercial licensing is available without AGPL obligations
-- **For branding clarity**: Trademark usage is handled by separate trademark policy terms
-
-## 🙏 Acknowledgments
-
-- **NOAA/NWS** - Weather alert data and CAP specifications
-- **FEMA/IPAWS** - National alert system integration
-- **PostGIS Team** - Spatial database technology
-- **Putnam County GIS Office** - Geographic boundary data (Greg Luersman, GIS Coordinator)
-- **Allen County GIS Office** - Geographic boundary data (Alexis Foundas, GIS Coordinator)
-- **U.S. Census Bureau** - FIPS codes and TIGER/Line boundary data
-- **Flask Community** - Web framework
-- **RTL-SDR Project** - Software-defined radio tools
-- **Amateur Radio Community** - Testing and feedback
-
-## 📞 Resources
-
-| Resource | Link |
-|----------|------|
-| **Documentation** | [docs/](docs/INDEX) |
-| **NOAA CAP API** | https://www.weather.gov/documentation/services-web-api |
-| **IPAWS** | https://www.fema.gov/emergency-managers/practitioners/integrated-public-alert-warning-system |
-| **FCC Part 11** | https://www.ecfr.gov/current/title-47/chapter-I/subchapter-A/part-11 |
-| **PostGIS** | https://postgis.net/documentation/ |
+Branding governed by the [Trademark Policy](docs/policies/TRADEMARK_POLICY.md). See [NOTICE](NOTICE) for required attribution details.
 
 ---
 
-## 🛠️ Technology Stack
+## 🙏 Acknowledgments
 
-<details>
-<summary><strong>Click to expand complete technology stack</strong></summary>
+NOAA/NWS · FEMA/IPAWS · PostGIS Team · U.S. Census Bureau (TIGER/Line) · Putnam County GIS Office · Allen County GIS Office · Flask Community · RTL-SDR Project · Amateur Radio Community
 
-### Backend Framework
-- **Flask 3.1.2** - Web framework for UI and REST API
-- **Gunicorn 23.0** - Production WSGI server
-- **nginx** - HTTPS termination and reverse proxy
-
-### Database & Caching
-- **PostgreSQL 17** - Primary relational database
-- **PostGIS 3.4** - Geographic/spatial data extension
-- **SQLAlchemy 2.0.45** - Python ORM and database toolkit
-- **GeoAlchemy2 0.18.1** - PostGIS integration for SQLAlchemy
-- **Alembic 1.17.2** - Database migration management
-- **Redis 7.1** - Cache, pub/sub messaging, and IPC
-
-### Frontend
-- **Bootstrap 5.3.0** - Responsive UI framework
-- **Leaflet 1.9.4** - Interactive mapping library
-- **Chart.js** - Data visualization and metrics
-- **Socket.IO** - Real-time bidirectional communication
-- **Jinja2 3.1.6** - Template rendering engine
-
-### Audio & SDR
-- **SoapySDR** - Software-defined radio abstraction layer
-- **RTL-SDR / Airspy** - Radio receiver hardware support
-- **ALSA** - Advanced Linux Sound Architecture
-- **Icecast** - Audio streaming server
-- **numpy** - Audio signal processing
-- **scipy** - Digital signal processing
-
-### Hardware Integration
-- **RPi.GPIO / lgpio** - Raspberry Pi GPIO control
-- **pyserial** - Serial port communication (LED signs, VFD)
-- **smbus2** - I2C bus interface (OLED displays)
-
-### Alert Processing
-- **lxml** - Fast XML parsing for CAP feeds
-- **requests 2.32.5** - Synchronous HTTP client
-- **httpx 0.28.1** - Async HTTP client with connection pooling
-- **certifi 2025.11.12** - Updated CA bundle for SSL/TLS
-- **pytz 2025.2** - Timezone handling
-
-### System & Monitoring
-- **psutil 7.1.3** - System resource monitoring
-- **python-dotenv 1.2.1** - Environment variable management
-- **Systemd** - Service orchestration and management
-- **journalctl** - Centralized logging
-
-### Development & Testing
-- **pytest** - Testing framework
-- **black** - Code formatting
-- **flake8** - Linting
-- **mypy** - Static type checking
-
-### Python Runtime
-- **Python 3.11 / 3.12 / 3.13** - Tested on all three versions
-- **Debian 12 (Bookworm)** - Primary target OS
-- **Debian 13 (Trixie)** - Fully supported
-- **Ubuntu 22.04+** - Compatible
-- **Raspberry Pi OS** - Optimized support
-
-</details>
+| Resource | Link |
+|----------|------|
+| NOAA CAP API | https://www.weather.gov/documentation/services-web-api |
+| FEMA IPAWS | https://www.fema.gov/emergency-managers/practitioners/integrated-public-alert-warning-system |
+| FCC Part 11 | https://www.ecfr.gov/current/title-47/chapter-I/subchapter-A/part-11 |
+| PostGIS Docs | https://postgis.net/documentation/ |
 
 ---
 
