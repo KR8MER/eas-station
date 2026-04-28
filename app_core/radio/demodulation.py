@@ -717,7 +717,17 @@ class RBDSWorker:
             if total >= self._sample_rate * 10:   # 10 seconds
                 import numpy as np, os
                 data = np.concatenate(self._capture_buf)
-                path = f'/tmp/rbds_capture_{self._sample_rate}.npy'
+                # Write outside /tmp so the file is visible from the host shell.
+                # The SDR systemd service runs with PrivateTmp=true, which would
+                # otherwise hide the capture in a per-service private tmp namespace.
+                # /var/log/eas-station is created by the installer/updater and is
+                # writable by the eas-station service user.
+                preferred_dir = '/var/log/eas-station'
+                filename = f'rbds_capture_{self._sample_rate}.npy'
+                if os.path.isdir(preferred_dir) and os.access(preferred_dir, os.W_OK):
+                    path = os.path.join(preferred_dir, filename)
+                else:
+                    path = os.path.join('/tmp', filename)
                 np.save(path, data)
                 self._capture_done = True
                 import logging
