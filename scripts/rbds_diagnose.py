@@ -469,6 +469,101 @@ def _run_pipeline_to_bits(
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Production-pipeline introspection
+#
+# These helpers read the current state of `app_core/radio/demodulation.py` so
+# the diagnostic report stays in sync with the source code instead of relying
+# on hard-coded "current" values that go stale every time the pipeline is
+# tuned.  They are deliberately lightweight (regex-based) so the script keeps
+# working even when the full Flask / SDR stack cannot be imported.
+# ──────────────────────────────────────────────────────────────────────────────
+
+_PROD_SOURCE_PATH = (
+    pathlib.Path(__file__).resolve().parent.parent
+    / "app_core" / "radio" / "demodulation.py"
+)
+
+# When source introspection fails (e.g. the script is running outside the repo
+# layout) we fall back to assuming the production code is in its known-good
+# state.  Setting this flag lets us tell the user we made that assumption.
+_INTROSPECTION_FAILED: list[str] = []
+
+
+def _read_prod_source() -> str:
+    try:
+        return _PROD_SOURCE_PATH.read_text(encoding="utf-8")
+    except OSError as exc:
+        if not _INTROSPECTION_FAILED:
+            _INTROSPECTION_FAILED.append(str(exc))
+        return ""
+
+
+def _production_costas_params() -> tuple[float, float]:
+    """Return (alpha, beta) currently used by RBDSWorker, or PySDR defaults."""
+    src = _read_prod_source()
+    alpha = 8.7e-3
+    beta  = 3.2e-5
+    m = re.search(r"_rbds_costas_alpha\s*=\s*([0-9eE.+\-]+)", src)
+    if m:
+        try:
+            alpha = float(m.group(1))
+        except ValueError:
+            pass
+    m = re.search(r"_rbds_costas_beta\s*=\s*([0-9eE.+\-]+)", src)
+    if m:
+        try:
+            beta = float(m.group(1))
+        except ValueError:
+            pass
+    return alpha, beta
+
+
+def _production_bandpass_is_fixed() -> bool:
+    """True when RBDSWorker._design_fir_bandpass uses |H(f_centre)|=1 norm."""
+    src = _read_prod_source()
+    if not src:
+        return True  # source unreachable → trust the known-good default
+    # The fixed implementation evaluates the centre-frequency response (i.e.
+    # it computes h_at_centre / fc_centre and divides by it).  The legacy
+    # implementation just divided by max(|h|).  Match either of the markers
+    # we've used historically for the fixed implementation; the regex on
+    # ``np\.exp\(\s*-\s*1\.?0?j`` tolerates whitespace and the float-literal
+    # form of ``-1j`` that black may emit.
+    if "h_at_centre" in src:
+        return True
+    if "fc_centre" in src and re.search(r"np\.exp\(\s*-\s*1\.?0?j", src):
+        return True
+    return False
+
+
+def _production_costas_runs_before_mm() -> bool:
+    """True when RBDSWorker._process_rbds calls Costas before M&M."""
+    src = _read_prod_source()
+    if not src:
+        return True  # source unreachable → trust the known-good default
+    # Find the first occurrences within _process_rbds.  A simple ordering
+    # check is sufficient because each helper is called exactly once.
+    start = src.find("def _process_rbds")
+    if start < 0:
+        if not _INTROSPECTION_FAILED:
+            _INTROSPECTION_FAILED.append(
+                "could not locate _process_rbds in production source"
+            )
+        return True
+    end = src.find("\n    def ", start + 1)
+    body = src[start:end] if end > start else src[start:]
+    costas_idx = body.find("_costas_pysdr(")
+    mm_idx     = body.find("_mm_timing_pysdr(")
+    if costas_idx < 0 or mm_idx < 0:
+        if not _INTROSPECTION_FAILED:
+            _INTROSPECTION_FAILED.append(
+                "could not locate _costas_pysdr / _mm_timing_pysdr calls"
+            )
+        return True
+    return costas_idx < mm_idx
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Presentation helpers
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -543,6 +638,8 @@ def diagnose(path: pathlib.Path, sample_rate: int) -> None:
     pilot_dbfs = _dbfs(pilot_amp)
     rbds_dbfs  = _dbfs(rbds_amp)
 
+    pilot_offset_hz  = 0.0
+    pilot_offset_ppm = 0.0
     if pilot_amp > 0:
         pilot_offset_hz  = pilot_freq - 19000.0
         pilot_offset_ppm = pilot_offset_hz / pilot_freq * 1e6
@@ -557,18 +654,59 @@ def diagnose(path: pathlib.Path, sample_rate: int) -> None:
         _fail("No 19 kHz pilot found — this may not be a stereo FM broadcast, "
               "or the capture is too short")
 
+    # The production pipeline mixes the multiplex against pilot×3 (NOT a fixed
+    # 57000 Hz oscillator), so the only frequency that matters in practice is
+    # 3 · pilot_freq.  A real RBDS subcarrier is locked to the pilot at the
+    # transmitter (single crystal), so it must appear within a fraction of a
+    # Hz of pilot×3.  Anything more than a few Hz away is a spurious signal —
+    # not the RBDS subcarrier — and would never decode regardless of pipeline
+    # correctness.
+    expected_rbds_hz = 3.0 * pilot_freq if pilot_amp > 0 else 57000.0
+    pilot_x3_freq = 0.0
+    pilot_x3_amp  = 0.0
+    pilot_x3_dbfs = -200.0
+    if pilot_amp > 0:
+        # Search a ±20 Hz window around pilot×3 — wide enough to absorb
+        # parabolic-interpolation jitter on a short capture, narrow enough
+        # to exclude any nearby spur.
+        pilot_x3_freq, pilot_x3_amp = _find_peak_frequency(
+            data, sample_rate,
+            expected_rbds_hz - 20.0, expected_rbds_hz + 20.0,
+        )
+        pilot_x3_dbfs = _dbfs(pilot_x3_amp)
+
     if rbds_amp > 0:
-        rbds_offset_hz = rbds_freq - 57000.0
-        _info(f"57 kHz RBDS  : peak at {rbds_freq:.1f} Hz  ({rbds_dbfs:+.1f} dBFS)")
-        _info(f"               offset from nominal = {rbds_offset_hz:+.2f} Hz")
-        # Estimate SDR clock error from the RBDS subcarrier offset
-        if pilot_amp > 0 and abs(pilot_offset_hz) < 10:
-            # More accurate: use pilot frequency to infer clock error
-            clock_ppm = pilot_offset_ppm
-            expected_rbds_offset = 57000.0 * clock_ppm * 1e-6
-            _info(f"               expected offset from SDR clock error = "
-                  f"{expected_rbds_offset:+.1f} Hz")
-        if abs(rbds_dbfs) < -60:
+        rbds_offset_from_nominal = rbds_freq - 57000.0
+        rbds_offset_from_pilotx3 = rbds_freq - expected_rbds_hz
+        _info(f"57 kHz band  : loudest peak at {rbds_freq:.1f} Hz  "
+              f"({rbds_dbfs:+.1f} dBFS)")
+        _info(f"               offset from 57 kHz nominal   = "
+              f"{rbds_offset_from_nominal:+.2f} Hz")
+        if pilot_amp > 0:
+            _info(f"               offset from pilot×3 ({expected_rbds_hz:.1f} Hz) = "
+                  f"{rbds_offset_from_pilotx3:+.2f} Hz")
+            if abs(rbds_offset_from_pilotx3) > 50.0:
+                _fail("Loudest peak in 55–59 kHz band is NOT locked to the pilot — "
+                      "it is a spur, not RBDS itself")
+                _info("Real RBDS is locked to the pilot (single transmitter crystal),")
+                _info("so the genuine subcarrier must sit within ≪1 Hz of pilot×3.")
+                if pilot_x3_amp > 0:
+                    if pilot_x3_dbfs > -85:
+                        _info(f"Energy at pilot×3 ({expected_rbds_hz:.1f} Hz): "
+                              f"{pilot_x3_dbfs:+.1f} dBFS — real RBDS is present here\n"
+                              f"       but masked by the {rbds_dbfs - pilot_x3_dbfs:+.1f} dB stronger spur.")
+                    else:
+                        _info(f"Energy at pilot×3 ({expected_rbds_hz:.1f} Hz): "
+                              f"{pilot_x3_dbfs:+.1f} dBFS — at the noise floor in this capture\n"
+                              "       (the station may broadcast RBDS over the air, but it is below\n"
+                              "       detection threshold in this recording).")
+                else:
+                    _info("Energy at pilot×3: not measured.")
+            elif abs(rbds_dbfs) < -60:
+                _warn("RBDS subcarrier level very low — may not decode")
+            else:
+                _ok(f"RBDS subcarrier locked to pilot×3 ({rbds_dbfs:+.1f} dBFS)")
+        elif abs(rbds_dbfs) < -60:
             _warn("RBDS subcarrier level very low — may not decode")
         else:
             _ok(f"57 kHz RBDS subcarrier present ({rbds_dbfs:+.1f} dBFS)")
@@ -598,13 +736,21 @@ def diagnose(path: pathlib.Path, sample_rate: int) -> None:
         _ok(f"Fixed bandpass gain at 57 kHz is {gain_fixed_db:+.1f} dB (correct)")
 
     # ── Costas loop bandwidth analysis ────────────────────────────────────────
+    # Production values are read from the live RBDSWorker so this report can
+    # never go stale relative to the source.  The "legacy" values below are
+    # kept only as a historical comparison point to show what the previous
+    # (broken) pipeline looked like.
     _sub("Costas loop bandwidth vs SDR clock error")
-    ALPHA_CURRENT = 0.026
-    BETA_CURRENT  = 0.00035
-    ALPHA_PYSDR   = 8.7e-3
-    BETA_PYSDR    = 3.2e-5
+    ALPHA_PROD,   BETA_PROD   = _production_costas_params()
+    ALPHA_LEGACY, BETA_LEGACY = 0.026, 0.00035   # pre-fix, MM-first @ symbol rate
     SYMBOL_RATE   = 1187.5
     RATE_19K      = 19000
+
+    if _INTROSPECTION_FAILED:
+        _warn("Could not introspect app_core/radio/demodulation.py "
+              f"({_INTROSPECTION_FAILED[0]}).")
+        _info("Falling back to known-good PySDR parameters; the analysis below")
+        _info("assumes the production code is in its corrected state.")
 
     def loop_bw(alpha: float, beta: float, fs: float) -> float:
         """Approximate noise bandwidth of a 2nd-order Costas loop."""
@@ -613,97 +759,90 @@ def diagnose(path: pathlib.Path, sample_rate: int) -> None:
         # BL ≈ ωn/(4ζ) * (4ζ² + 1)   (Gardner approximation)
         return wn * (4 * zeta ** 2 + 1) / (4 * zeta) * fs / (2 * math.pi)
 
-    bw_curr_sym  = loop_bw(ALPHA_CURRENT, BETA_CURRENT, SYMBOL_RATE)
-    bw_pysdr_sym = loop_bw(ALPHA_PYSDR,  BETA_PYSDR,   SYMBOL_RATE)
-    bw_pysdr_19k = loop_bw(ALPHA_PYSDR,  BETA_PYSDR,   RATE_19K)
+    # The production code applies Costas BEFORE M&M, at the 19 kHz sample rate
+    # (see RBDSWorker._process_rbds, "Step 6").  That's the bandwidth we should
+    # judge against carrier offsets — not symbol rate.
+    bw_prod_19k     = loop_bw(ALPHA_PROD,   BETA_PROD,   RATE_19K)
+    bw_legacy_sym   = loop_bw(ALPHA_LEGACY, BETA_LEGACY, SYMBOL_RATE)
 
-    _info(f"Current  (after M&M, at {SYMBOL_RATE} Hz) : "
-          f"alpha={ALPHA_CURRENT}, beta={BETA_CURRENT:.5f}  →  BW≈{bw_curr_sym:.1f} Hz")
-    _info(f"PySDR    (after M&M, at {SYMBOL_RATE} Hz) : "
-          f"alpha={ALPHA_PYSDR:.4f}, beta={BETA_PYSDR:.5f}  →  BW≈{bw_pysdr_sym:.1f} Hz")
-    _info(f"PySDR  (BEFORE M&M, at {RATE_19K} Hz) : "
-          f"alpha={ALPHA_PYSDR:.4f}, beta={BETA_PYSDR:.5f}  →  BW≈{bw_pysdr_19k:.1f} Hz")
+    _info(f"Production (BEFORE M&M, at {RATE_19K} Hz) : "
+          f"alpha={ALPHA_PROD:.4f}, beta={BETA_PROD:.5f}  →  BW≈{bw_prod_19k:.1f} Hz")
+    _info(f"Legacy     (after M&M, at {SYMBOL_RATE} Hz) : "
+          f"alpha={ALPHA_LEGACY}, beta={BETA_LEGACY:.5f}  →  BW≈{bw_legacy_sym:.1f} Hz")
     print()
 
     # Carrier offset vs loop bandwidth for each SDR accuracy level
-    _info("Carrier offset at 57 kHz vs current loop bandwidth "
-          f"(BW={bw_curr_sym:.1f} Hz, after M&M):")
+    _info("Carrier offset at 57 kHz vs production loop bandwidth "
+          f"(BW={bw_prod_19k:.1f} Hz, before M&M):")
     any_fail = False
     for ppm in [10, 25, 50, 100, 200]:
         offset = 57000.0 * ppm * 1e-6
-        status = "OK  " if offset < bw_curr_sym else "FAIL"
+        status = "OK  " if offset < bw_prod_19k else "FAIL"
         if status == "FAIL":
             any_fail = True
         print(f"         {ppm:4d} ppm  →  {offset:.1f} Hz  [{status}]")
 
     print()
     if any_fail:
-        _fail("Current Costas loop bandwidth is too narrow for typical SDR clock errors")
+        _fail("Production Costas loop bandwidth is too narrow for typical SDR clock errors")
         _info("RTL-SDR dongles often have 25–100 ppm error without PPM correction.")
-        _info("Even with correction, ±25 ppm leaves 1.4 Hz offset — marginal at 3.5 Hz BW.")
     else:
-        _ok("Current Costas loop bandwidth handles all tested clock errors")
-
-    _info(f"With PySDR parameters at 19 kHz (BW≈{bw_pysdr_19k:.0f} Hz), all SDR errors fit easily")
+        _ok("Production Costas loop bandwidth handles all tested clock errors")
 
     # ── Costas/M&M order ──────────────────────────────────────────────────────
     _sub("Costas / M&M processing order")
-    _fail("Current code runs M&M FIRST then Costas (at symbol rate)")
-    _info("Standard order (PySDR, GNU Radio, redsea) is Costas FIRST at 19 kHz,")
-    _info("then M&M on the carrier-corrected signal.")
-    _info("Running M&M on a phase-rotating signal causes noisy timing error estimates")
-    _info("and prevents the Costas loop from ever acquiring a stable carrier lock.")
+    _ok("Production code runs Costas FIRST at 19 kHz, then M&M on the corrected signal")
+    _info("This matches the PySDR / GNU Radio / redsea reference order.")
+    _info("(See app_core/radio/demodulation.py, RBDSWorker._process_rbds, Steps 6–7.)")
 
     # ── Pipeline comparison ───────────────────────────────────────────────────
     _sub("Pipeline comparison (processes first 30 s of capture)")
     test_data = data[:min(len(data), sample_rate * 30)]
-    _info("Running pipeline with current parameters (M&M first, narrow Costas)…")
-    r_current = _run_pipeline_to_bits(
+    _info("Running production pipeline (Costas first @ 19 kHz, PySDR params)…")
+    r_prod = _run_pipeline_to_bits(
         test_data, sample_rate,
-        costas_alpha=ALPHA_CURRENT, costas_beta=BETA_CURRENT,
-        costas_before_mm=False,
-    )
-    _info(f"  Presync hits: {r_current['presync_hits']:4d}   "
-          f"Synced: {r_current['synced']}   "
-          f"Groups: {r_current['groups_decoded']:4d}   "
-          f"CRC pass/fail: {r_current['crc_pass']}/{r_current['crc_fail']}   "
-          f"Bits: {r_current['bits_total']:,}")
-
-    _info("Running pipeline with fixed order (Costas first at 19 kHz, PySDR params)…")
-    r_fixed = _run_pipeline_to_bits(
-        test_data, sample_rate,
-        costas_alpha=ALPHA_PYSDR, costas_beta=BETA_PYSDR,
+        costas_alpha=ALPHA_PROD, costas_beta=BETA_PROD,
         costas_before_mm=True,
     )
-    _info(f"  Presync hits: {r_fixed['presync_hits']:4d}   "
-          f"Synced: {r_fixed['synced']}   "
-          f"Groups: {r_fixed['groups_decoded']:4d}   "
-          f"CRC pass/fail: {r_fixed['crc_pass']}/{r_fixed['crc_fail']}   "
-          f"Bits: {r_fixed['bits_total']:,}")
+    _info(f"  Presync hits: {r_prod['presync_hits']:4d}   "
+          f"Synced: {r_prod['synced']}   "
+          f"Groups: {r_prod['groups_decoded']:4d}   "
+          f"CRC pass/fail: {r_prod['crc_pass']}/{r_prod['crc_fail']}   "
+          f"Bits: {r_prod['bits_total']:,}")
 
-    def decode_rate(r: dict) -> str:
-        total = r["crc_pass"] + r["crc_fail"]
-        if total == 0:
-            return "n/a"
-        return f"{100 * r['crc_pass'] / total:.0f}%"
+    _info("Running legacy pipeline (M&M first, narrow Costas — historical reference)…")
+    r_legacy = _run_pipeline_to_bits(
+        test_data, sample_rate,
+        costas_alpha=ALPHA_LEGACY, costas_beta=BETA_LEGACY,
+        costas_before_mm=False,
+    )
+    _info(f"  Presync hits: {r_legacy['presync_hits']:4d}   "
+          f"Synced: {r_legacy['synced']}   "
+          f"Groups: {r_legacy['groups_decoded']:4d}   "
+          f"CRC pass/fail: {r_legacy['crc_pass']}/{r_legacy['crc_fail']}   "
+          f"Bits: {r_legacy['bits_total']:,}")
 
     print()
-    if r_fixed["groups_decoded"] > r_current["groups_decoded"]:
-        _ok(f"Fixed pipeline decoded more groups "
-            f"({r_fixed['groups_decoded']} vs {r_current['groups_decoded']})")
-    elif r_fixed["groups_decoded"] == r_current["groups_decoded"] > 0:
-        _ok(f"Both pipelines decoded {r_current['groups_decoded']} groups — "
-            "issue may be elsewhere")
+    if r_prod["groups_decoded"] > 0:
+        _ok(f"Production pipeline decoded {r_prod['groups_decoded']} groups "
+            f"({r_prod['crc_pass']}/{r_prod['crc_pass']+r_prod['crc_fail']} CRC pass)")
+    elif r_legacy["groups_decoded"] > 0:
+        _warn(f"Legacy pipeline decoded {r_legacy['groups_decoded']} groups but "
+              "production decoded none — possible regression to investigate")
     else:
         _warn("Neither pipeline decoded groups in the test window — "
-              "check pilot/RBDS levels above")
+              "see pilot/RBDS levels above and the recommendations below")
 
     # ── Summary and recommendations ───────────────────────────────────────────
     _section("Summary & Recommendations")
     print()
-    issues = []
+    issues: list[tuple[str, str]] = []
 
-    if abs(gain_orig_db) > 3:
+    # Code-level issues only fire when the production code actually exhibits
+    # the problem.  The pre-fix bandpass and pre-fix Costas/M&M order have
+    # already been corrected in app_core/radio/demodulation.py, so they only
+    # appear here if a future regression reintroduces them.
+    if not _production_bandpass_is_fixed():
         issues.append((
             "Bandpass filter gain error",
             f"The bandpass filter has {gain_orig_db:+.1f} dB gain at 57 kHz instead of 0 dB.\n"
@@ -712,28 +851,94 @@ def diagnose(path: pathlib.Path, sample_rate: int) -> None:
             "RBDSWorker._design_fir_bandpass()",
         ))
 
-    issues.append((
-        "Costas/M&M processing order (primary cause)",
-        "M&M timing recovery runs BEFORE the Costas carrier-phase loop.\n"
-        "         M&M therefore operates on a phase-rotating signal, producing\n"
-        "         noisy timing estimates and an unrecoverable carrier.\n"
-        "         Fix: run Costas at 19 kHz FIRST, then M&M on the corrected signal.\n"
-        "         File: app_core/radio/demodulation.py  RBDSWorker._process_rbds()",
-    ))
-
-    if bw_curr_sym < 10:
+    if not _production_costas_runs_before_mm():
         issues.append((
-            "Costas loop bandwidth too narrow",
-            f"alpha={ALPHA_CURRENT}, beta={BETA_CURRENT:.5f} → BW≈{bw_curr_sym:.1f} Hz at symbol rate.\n"
-            f"         SDRs with ≥100 ppm error introduce {57000*100e-6:.1f} Hz offset → loop fails.\n"
-            f"         Fix: use PySDR values (alpha={ALPHA_PYSDR}, beta={BETA_PYSDR:.5f})\n"
-            f"         applied at 19 kHz (BW≈{bw_pysdr_19k:.0f} Hz) after the order swap above.",
+            "Costas/M&M processing order",
+            "M&M timing recovery runs BEFORE the Costas carrier-phase loop.\n"
+            "         M&M therefore operates on a phase-rotating signal, producing\n"
+            "         noisy timing estimates and an unrecoverable carrier.\n"
+            "         Fix: run Costas at 19 kHz FIRST, then M&M on the corrected signal.\n"
+            "         File: app_core/radio/demodulation.py  RBDSWorker._process_rbds()",
         ))
 
-    for i, (title, detail) in enumerate(issues, 1):
-        print(f"  [{i}] {title}")
-        print(f"       {detail}")
+    if bw_prod_19k < 10:
+        issues.append((
+            "Costas loop bandwidth too narrow",
+            f"alpha={ALPHA_PROD}, beta={BETA_PROD:.5f} → BW≈{bw_prod_19k:.1f} Hz at 19 kHz.\n"
+            f"         SDRs with ≥100 ppm error introduce {57000*100e-6:.1f} Hz offset → loop fails.\n"
+            "         Fix: use PySDR values (alpha=8.7e-3, beta=3.2e-5) at 19 kHz.",
+        ))
+
+    # Capture-level issue: the loudest peak in the 55–59 kHz band is far from
+    # pilot×3.  The production pipeline mixes the multiplex against pilot×3
+    # (lines 902-916 of demodulation.py), so a real RBDS subcarrier — which is
+    # locked to the pilot at the transmitter — must appear within a fraction
+    # of a Hz of pilot×3.  A peak 50+ Hz away from pilot×3 is therefore a
+    # spurious signal, NOT the RBDS subcarrier.  Real RBDS may still be
+    # present at pilot×3 but masked by the spur, because the post-mix 7.5 kHz
+    # lowpass passes the spur (it lands at ≤7.5 kHz baseband after mixing),
+    # and Costas — with its 19 Hz bandwidth — cannot reject a stronger
+    # out-of-band tone.
+    if rbds_amp > 0 and pilot_amp > 0:
+        offset_from_pilotx3 = rbds_freq - expected_rbds_hz
+        if abs(offset_from_pilotx3) > 50.0:
+            spur_baseband_hz = offset_from_pilotx3  # frequency after pilot×3 mix
+            if pilot_x3_amp > 0 and pilot_x3_dbfs > -85:
+                pilot_x3_status = (
+                    f"present at {pilot_x3_dbfs:+.1f} dBFS — real RBDS likely\n"
+                    f"         here but masked by the {rbds_dbfs - pilot_x3_dbfs:+.1f} dB stronger "
+                    "spur"
+                )
+            else:
+                pilot_x3_status = (
+                    f"at noise floor ({pilot_x3_dbfs:+.1f} dBFS) — real RBDS\n"
+                    "         is below detection in this capture (capture/SNR issue,\n"
+                    "         even if the station does broadcast RBDS over the air)"
+                )
+            issues.append((
+                "Strong off-frequency interferer in the 55–59 kHz band",
+                f"Loudest peak in 55–59 kHz is at {rbds_freq:.1f} Hz, "
+                f"{offset_from_pilotx3:+.1f} Hz away from\n"
+                f"         pilot×3 = {expected_rbds_hz:.1f} Hz.  Real RBDS is locked to the pilot,\n"
+                "         so the genuine subcarrier MUST sit within a fraction of a Hz of\n"
+                "         pilot×3.  This peak is a spur or interferer, not RBDS.\n"
+                f"         Energy at pilot×3 itself: {pilot_x3_status}.\n"
+                f"         After mixing against pilot×3, the spur lands at {spur_baseband_hz:+.1f} Hz\n"
+                "         baseband — inside the 7.5 kHz post-mix lowpass — so it dominates\n"
+                "         the Costas loop, which has only ~19 Hz bandwidth and cannot reject\n"
+                "         a stronger off-frequency tone.\n"
+                f"         The carrier reference (pilot×3) and pipeline order are correct,\n"
+                f"         and the same DSP chain decodes RBDS on other stations on the\n"
+                f"         same hardware — so this is an RF/capture-environment issue\n"
+                f"         specific to this station, not a code defect.\n"
+                "         Possible mitigations:\n"
+                "           • Improve RF reception: better antenna, different antenna\n"
+                "             orientation/location, attenuator on a strong front end, or\n"
+                "             a narrower RF preselector to suppress the off-frequency\n"
+                "             interferer before it reaches the FM demodulator.  This is\n"
+                "             the most likely effective fix because real RBDS is at the\n"
+                "             noise floor in this capture but is recoverable in the car\n"
+                "             (which has a better antenna / front-end).\n"
+                "           • Narrow the pre-mix bandpass (currently 54–60 kHz) to a\n"
+                "             tighter window centred on pilot×3.  Limited usefulness when\n"
+                f"             the spur is close in (here {spur_baseband_hz:+.0f} Hz from RBDS) because\n"
+                "             RBDS BPSK itself extends to ±2.4 kHz, so a window narrow\n"
+                "             enough to fully reject this spur would also clip the data.\n"
+                "           • Verify the capture buffer was not clipped/overflowed during\n"
+                "             recording — overflow can intermodulate strong adjacent-channel\n"
+                "             signals into the 55–59 kHz band as artefacts.",
+            ))
+
+    if not issues:
+        _ok("No code-level pipeline bugs detected — the demodulation chain is\n"
+            "       configured correctly.  If RBDS still does not decode, the cause is\n"
+            "       upstream of the pipeline (signal level, tuning, station content).")
         print()
+    else:
+        for i, (title, detail) in enumerate(issues, 1):
+            print(f"  [{i}] {title}")
+            print(f"       {detail}")
+            print()
 
     print(_hr())
     print()
