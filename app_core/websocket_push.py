@@ -20,13 +20,19 @@ Repository: https://github.com/KR8MER/eas-station
 """WebSocket push service for real-time updates.
 
 This service pushes multiple event types at different intervals:
-- audio_monitoring_update: 10Hz (100ms) - VU meters, EAS monitor status
+- audio_monitoring_update: 4Hz (250ms) - VU meters, EAS monitor status
 - system_health_update: 0.0167Hz (60s) - system health, status indicators
 - audio_sources_update: 0.033Hz (30s) - audio source list
 - audio_health_update: 0.033Hz (30s) - audio health dashboard data
 - operation_status_update: 0.1Hz (10s) - admin operations status
 - ipaws_status_update: 0.033Hz (30s) - IPAWS connection status
+- gpio_status_update: 0.33Hz (3s) - GPIO pin states
+- led_status_update: 0.033Hz (30s) - LED controller state
+- analytics_update: 0.033Hz (30s) - analytics dashboard rollup
+- radio_status_update: 0.067Hz (15s) - radio receiver list
 - logs_update: 0.1Hz (10s) - recent log entries for real-time log viewer
+- broadcast_state_update: 1Hz (1s) - airchain broadcast active state
+- alerts_update: 0.2Hz (5s) - active CAP alert summary list
 """
 
 import json
@@ -143,6 +149,8 @@ ANALYTICS_INTERVAL = 30.0          # Analytics dashboard
 RADIO_STATUS_INTERVAL = 15.0       # Radio diagnostics
 LOGS_UPDATE_INTERVAL = 10.0        # Log viewer updates
 BROADCAST_STATE_INTERVAL = 1.0     # Airchain broadcast state (1Hz during broadcast)
+ALERTS_UPDATE_INTERVAL = 5.0       # Active CAP alert list (changes infrequently;
+                                   # 5 s gives near-real-time feel without DB load)
 
 
 def start_websocket_push(app: 'Flask', socketio: 'SocketIO') -> None:
@@ -203,6 +211,11 @@ def _push_worker(app: 'Flask', socketio: 'SocketIO') -> None:
     last_radio_status_emit = 0.0
     last_logs_emit = 0.0
     last_broadcast_state_emit = 0.0
+    last_alerts_emit = 0.0
+    # Cache of last-emitted alert signature so we can short-circuit the JSON
+    # serialization when nothing has changed (most ticks).  Cleared on app
+    # restart only.
+    last_alerts_signature: Optional[str] = None
 
     with app.app_context():
         while not _stop_event.is_set():
@@ -350,6 +363,20 @@ def _push_worker(app: 'Flask', socketio: 'SocketIO') -> None:
                     last_broadcast_state_emit = now
                 except Exception as e:
                     logger.debug(f"Error emitting broadcast_state_update: {e}")
+
+            # ================================================================
+            # ALERTS UPDATE (every 5s, change-detected)
+            # Active CAP alert summary so the alerts page and dashboard widgets
+            # don't have to poll /api/alerts on a timer.
+            # ================================================================
+            if now - last_alerts_emit >= ALERTS_UPDATE_INTERVAL:
+                try:
+                    new_sig = _emit_alerts_update(app, socketio, last_alerts_signature)
+                    if new_sig is not None:
+                        last_alerts_signature = new_sig
+                    last_alerts_emit = now
+                except Exception as e:
+                    logger.debug(f"Error emitting alerts_update: {e}")
 
             # Sleep for 250ms (4Hz base loop) — low CPU, smooth VU meters
             _stop_event.wait(AUDIO_MONITORING_INTERVAL)
@@ -764,6 +791,74 @@ def _emit_logs_update(app: 'Flask', socketio: 'SocketIO') -> None:
         })
     except Exception as e:
         logger.debug(f"Error fetching logs data: {e}")
+
+
+def _emit_alerts_update(
+    app: 'Flask',
+    socketio: 'SocketIO',
+    last_signature: Optional[str],
+) -> Optional[str]:
+    """Emit a lightweight summary of currently-active CAP alerts.
+
+    Pushes a compact list (id, identifier, event, severity, urgency, headline,
+    expires) so the active-alerts page and dashboard widgets can render
+    immediately without their own polling loop.  When the active set hasn't
+    changed since the previous tick we still emit (so newly-connected clients
+    get a value) but skip the JSON payload churn cheaply.
+
+    Returns the new signature so the caller can cache it.  Returning None
+    means "no change, leave the previous signature in place".
+    """
+    import hashlib
+    from datetime import datetime, timezone
+
+    try:
+        from app_core.models import CAPAlert
+    except Exception as e:
+        logger.debug(f"alerts_update unavailable: {e}")
+        return None
+
+    try:
+        now_utc = datetime.now(timezone.utc)
+        rows = (
+            CAPAlert.query
+            .filter(CAPAlert.expires > now_utc)
+            .order_by(CAPAlert.received_at.desc())
+            .limit(50)
+            .all()
+        )
+    except Exception as e:
+        logger.debug(f"alerts_update DB query failed: {e}")
+        return None
+
+    alerts = []
+    for a in rows:
+        alerts.append({
+            'id': a.id,
+            'identifier': a.identifier,
+            'event': a.event,
+            'severity': a.severity,
+            'urgency': a.urgency,
+            'headline': a.headline,
+            'expires': a.expires.isoformat() if a.expires else None,
+            'received_at': a.received_at.isoformat() if a.received_at else None,
+            'eas_forwarded': bool(getattr(a, 'eas_forwarded', False)),
+        })
+
+    # Cheap signature: just the (id, expires) pairs.  Captures inserts, deletes,
+    # and updates that change expiry time.  Doesn't catch in-place edits to e.g.
+    # the headline, which is fine — those don't drive UI urgency.
+    sig_input = '|'.join(f"{a['id']}:{a['expires']}" for a in alerts)
+    signature = hashlib.sha1(sig_input.encode('utf-8')).hexdigest()
+
+    payload = {
+        'alerts': alerts,
+        'count': len(alerts),
+        'changed': signature != last_signature,
+        'timestamp': time.time(),
+    }
+    _safe_emit(socketio, 'alerts_update', payload)
+    return signature
 
 
 def _emit_broadcast_state_update(socketio: 'SocketIO') -> None:

@@ -1701,7 +1701,233 @@ def main():
                         'Connection': 'keep-alive',
                     }
                 )
-            
+
+            def _eas_decoder_monitor_settings():
+                """Read EASDecoderMonitorSettings via the main app's DB context.
+
+                Returns ``(enabled, stream_name)``.  Defaults to (False,
+                'eas-decoder-monitor') if the row doesn't exist or the query
+                fails.  The audio service runs in its own process so the only
+                way to reach the settings is through the Flask `app` created
+                by initialize_database().
+                """
+                try:
+                    from app_core.models import EASDecoderMonitorSettings
+                    with app.app_context():
+                        row = EASDecoderMonitorSettings.query.first()
+                        if row is None:
+                            return (False, 'eas-decoder-monitor')
+                        return (bool(row.enabled), row.stream_name or 'eas-decoder-monitor')
+                except Exception as exc:
+                    logger.debug(f"EAS decoder monitor settings unavailable: {exc}")
+                    return (False, 'eas-decoder-monitor')
+
+            @stream_app.route('/api/eas/decoder-stream/sources')
+            def list_decoder_stream_sources():
+                """List per-source decoder-tap stream URLs for running sources.
+
+                Returns the same 16 kHz EAS-decoder audio as
+                ``/api/eas/decoder-stream`` but split out per source.  The
+                ``enabled`` flag from EASDecoderMonitorSettings is included so
+                the admin UI can show whether the per-source streams are
+                currently being served.
+                """
+                enabled, stream_name = _eas_decoder_monitor_settings()
+                sources = []
+                if _audio_controller:
+                    from app_core.audio.ingest import AudioSourceStatus
+                    for s_name, adapter in _audio_controller.get_all_sources().items():
+                        if (
+                            adapter.status == AudioSourceStatus.RUNNING
+                            and hasattr(adapter, 'get_eas_broadcast_queue')
+                            and callable(getattr(adapter, 'get_eas_broadcast_queue', None))
+                        ):
+                            sources.append({
+                                'name': s_name,
+                                'mount_name': f"{stream_name}-{s_name}",
+                                'stream_url': f"/api/eas/decoder-stream/{s_name}",
+                                'sample_rate': 16000,
+                                'channels': 1,
+                            })
+                return jsonify({
+                    'enabled': enabled,
+                    'stream_name_prefix': stream_name,
+                    'mixed_stream_url': '/api/eas/decoder-stream',
+                    'sources': sources,
+                    'count': len(sources),
+                })
+
+            @stream_app.route('/api/eas/decoder-stream/<source_name>')
+            def stream_eas_decoder_per_source(source_name):
+                """Stream a single source's 16 kHz decoder-tap audio as MP3.
+
+                Subscribes to the named source's EAS broadcast queue (the
+                same 16 kHz signal fed to the SAME decoder) and pipes it
+                through ffmpeg.  Gated by EASDecoderMonitorSettings.enabled
+                so per-source taps are only available when the operator has
+                explicitly turned them on (the mixed stream at
+                /api/eas/decoder-stream remains available unconditionally).
+                """
+                import queue as queue_module
+                import numpy as np
+                import subprocess as _subprocess
+                from app_core.audio.ingest import AudioSourceStatus
+
+                enabled, _ = _eas_decoder_monitor_settings()
+                if not enabled:
+                    return jsonify({
+                        'error': (
+                            'Per-source decoder monitor streams are disabled. '
+                            'Enable them in Admin → EAS Decoder Monitor.'
+                        )
+                    }), 403
+
+                if not _audio_controller:
+                    return jsonify({'error': 'Audio controller not initialized'}), 503
+
+                adapter = _audio_controller.get_source(source_name)
+                if not adapter:
+                    return jsonify({'error': f'Audio source "{source_name}" not found'}), 404
+                if adapter.status != AudioSourceStatus.RUNNING:
+                    return jsonify({
+                        'error': f'Audio source "{source_name}" is not running',
+                        'status': adapter.status.value,
+                    }), 503
+                if not (
+                    hasattr(adapter, 'get_eas_broadcast_queue')
+                    and callable(getattr(adapter, 'get_eas_broadcast_queue', None))
+                ):
+                    return jsonify({
+                        'error': f'Audio source "{source_name}" does not expose an EAS broadcast queue'
+                    }), 400
+
+                broadcast_queue = adapter.get_eas_broadcast_queue()
+
+                def generate_per_source_mp3():
+                    stream_sample_rate = 16000
+                    stream_channels = 1
+                    silence_samples = int(stream_sample_rate * stream_channels * 0.1)
+                    silence_pcm = np.zeros(silence_samples, dtype=np.int16).tobytes()
+                    tid = threading.current_thread().ident
+                    sub_id = f"eas-decoder-stream-{source_name}-{tid}"
+                    sub_q = broadcast_queue.subscribe(sub_id)
+
+                    ffmpeg_proc = None
+                    feeder = None
+                    try:
+                        try:
+                            ffmpeg_proc = _subprocess.Popen(
+                                [
+                                    'ffmpeg', '-loglevel', 'error',
+                                    '-f', 's16le',
+                                    '-ar', str(stream_sample_rate),
+                                    '-ac', str(stream_channels),
+                                    '-i', 'pipe:0',
+                                    '-c:a', 'libmp3lame',
+                                    '-b:a', '32k',
+                                    '-reservoir', '0',
+                                    '-write_xing', '0',
+                                    '-id3v2_version', '0',
+                                    '-f', 'mp3',
+                                    'pipe:1',
+                                ],
+                                stdin=_subprocess.PIPE,
+                                stdout=_subprocess.PIPE,
+                                stderr=_subprocess.DEVNULL,
+                            )
+                        except FileNotFoundError:
+                            logger.error("ffmpeg not found; cannot stream EAS decoder audio")
+                            return
+
+                        logger.info(
+                            f"EAS decoder per-source stream started "
+                            f"(source={source_name}, 16kHz MP3)"
+                        )
+
+                        # Pre-roll silence so the browser sees an MP3 frame quickly.
+                        try:
+                            ffmpeg_proc.stdin.write(
+                                np.zeros(int(stream_sample_rate * 0.20), dtype=np.int16).tobytes()
+                            )
+                        except (BrokenPipeError, OSError):
+                            pass
+
+                        def _to_mono_int16(chunk):
+                            if not isinstance(chunk, np.ndarray):
+                                chunk = np.array(chunk, dtype=np.float32)
+                            if chunk.ndim == 2:
+                                chunk = np.mean(chunk, axis=1)
+                            elif chunk.ndim != 1:
+                                chunk = chunk.flatten()
+                            return (np.clip(chunk, -1.0, 1.0) * 32767).astype(np.int16).tobytes()
+
+                        def _feed_ffmpeg():
+                            try:
+                                while _running and ffmpeg_proc.poll() is None:
+                                    try:
+                                        raw = sub_q.get(timeout=0.1)
+                                        if raw is None or len(raw) == 0:
+                                            ffmpeg_proc.stdin.write(silence_pcm)
+                                        else:
+                                            ffmpeg_proc.stdin.write(_to_mono_int16(raw))
+                                    except queue_module.Empty:
+                                        ffmpeg_proc.stdin.write(silence_pcm)
+                                    except (BrokenPipeError, OSError):
+                                        break
+                                    except Exception as exc:
+                                        logger.error(f"EAS per-source feeder error ({source_name}): {exc}")
+                            finally:
+                                try:
+                                    ffmpeg_proc.stdin.close()
+                                except OSError:
+                                    pass
+
+                        feeder = threading.Thread(
+                            target=_feed_ffmpeg, daemon=True,
+                            name=f"eas-decoder-feeder-{source_name}",
+                        )
+                        feeder.start()
+
+                        while True:
+                            mp3_chunk = ffmpeg_proc.stdout.read(512)
+                            if not mp3_chunk:
+                                break
+                            yield mp3_chunk
+
+                    except GeneratorExit:
+                        pass
+                    except Exception as exc:
+                        logger.error(f"Error in per-source EAS stream ({source_name}): {exc}")
+                    finally:
+                        broadcast_queue.unsubscribe(sub_id)
+                        if ffmpeg_proc is not None:
+                            try:
+                                ffmpeg_proc.kill()
+                            except OSError:
+                                pass
+                        if feeder is not None:
+                            feeder.join(timeout=2)
+                            if feeder.is_alive():
+                                logger.warning(
+                                    f"EAS per-source feeder did not stop within timeout ({source_name})"
+                                )
+                        logger.info(f"EAS decoder per-source stream ended ({source_name})")
+
+                return Response(
+                    stream_with_context(generate_per_source_mp3()),
+                    mimetype='audio/mpeg',
+                    headers={
+                        'Content-Disposition': f'inline; filename="eas-decoder-{source_name}-16khz.mp3"',
+                        'Cache-Control': 'no-cache, no-store, must-revalidate',
+                        'Pragma': 'no-cache',
+                        'Expires': '0',
+                        'X-Content-Type-Options': 'nosniff',
+                        'Access-Control-Allow-Origin': '*',
+                        'Accept-Ranges': 'none',
+                        'Connection': 'keep-alive',
+                    },
+                )
+
             # Start Flask server in background thread
             # Use AUDIO_STREAMING_PORT env var (default 5002)
             streaming_port = int(os.environ.get('AUDIO_STREAMING_PORT', '5002'))

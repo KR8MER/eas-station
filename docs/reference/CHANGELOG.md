@@ -6,7 +6,45 @@ tracks releases under the 2.x series.
 
 ## [Unreleased]
 
-- No pending changes.
+### Fixed
+- **FM stereo (L–R) decoding** now produces real channel separation. The
+  previous `_decode_stereo` in `app_core/radio/demodulation.py` synthesized a
+  free-running 38 kHz oscillator and then *discarded* the bandpass-filtered
+  pilot it had just computed.  With any pilot frequency offset (always the
+  case in practice — SDR clocks differ from broadcasters' by tens of ppm) the
+  L-R signal slowly rotated against the carrier and channel separation
+  collapsed toward mono, with random crosstalk from the chunk-boundary phase
+  reset.  The fix derives the 38 kHz reference directly from the recovered
+  pilot by squaring it (`cos²(ωt) = ½(1 + cos(2ωt))`), giving an exact,
+  phase-coherent carrier that tracks both pilot drift and chunk boundaries
+  with no PLL state.  New `tests/test_fm_stereo_decoder.py` verifies >30 dB
+  channel separation in the basic case, with a +12 Hz pilot offset, and
+  across chunk boundaries.  Resolves the long-standing CHANGELOG note "FM
+  stereo decoding (L-R separation) not yet implemented; only pilot detection
+  works".
+
+### Added
+- **Per-source EAS decoder-tap streaming** — new endpoint
+  `GET /api/eas/decoder-stream/<source_name>` in `eas_monitoring_service.py`
+  serves the 16 kHz audio fed to the SAME decoder for one specific source as
+  MP3.  A companion `GET /api/eas/decoder-stream/sources` returns the live
+  list of streamable sources for the admin UI.  The per-source streams are
+  gated on `EASDecoderMonitorSettings.enabled` so they only run when the
+  operator has explicitly turned them on; the existing mixed-source endpoint
+  at `/api/eas/decoder-stream` is unchanged.  The admin page
+  (`templates/admin/eas_decoder_monitor.html`) gains a "Live Decoder Streams"
+  card with one play/stop button per source, replacing the old static
+  reference-only mount-point list.  Closes the CHANGELOG TODO "Implement
+  actual streaming endpoint for decoder tap".
+- **WebSocket `alerts_update` event** — `app_core/websocket_push.py` now
+  emits a compact list of currently-active CAP alerts every 5 s (id,
+  identifier, event, severity, urgency, headline, expires, eas_forwarded).
+  A SHA-1 signature of the active set is cached so unchanged ticks skip
+  rebuilding the payload.  The frontend client
+  (`static/js/core/websocket.js`) registers the new event with a 5 s polling
+  fallback against `/api/alerts`.  This is the first concrete delivery
+  against the standing TODO "Extend WebSocket push service to broadcast all
+  data types (alerts, system health, etc.) to eliminate remaining polling".
 
 ## [2.71.62] - 2026-04-22 - Redesign About page with modern hero section and component styling
 

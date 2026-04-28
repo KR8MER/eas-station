@@ -108,6 +108,39 @@
         </div>
 
         <div class="col-lg-4">
+            <!-- Live Per-Source Streams Card -->
+            <div class="card mb-4">
+                <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                    <h4 class="h5 mb-0"><i class="fas fa-play-circle"></i> Live Decoder Streams</h4>
+                    <button type="button" class="btn btn-sm btn-light" onclick="loadStreamSources()">
+                        <i class="fas fa-sync"></i>
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div id="stream-sources-status" class="small text-muted mb-2">Loading…</div>
+
+                    <!-- Mixed stream (always available) -->
+                    <div class="mb-3 pb-3 border-bottom">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <div>
+                                <strong>All Sources (Mixed)</strong><br>
+                                <code class="small">/api/eas/decoder-stream</code>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-primary"
+                                    onclick="toggleStream('__mixed__', '/api/eas/decoder-stream', this)">
+                                <i class="fas fa-play"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Per-source streams (populated dynamically) -->
+                    <div id="per-source-streams"></div>
+
+                    <!-- Hidden audio element used by the player buttons -->
+                    <audio id="decoder-tap-player" preload="none" style="display:none"></audio>
+                </div>
+            </div>
+
             <div class="card mb-4">
                 <div class="card-header bg-info text-white">
                     <h4 class="h5 mb-0">Mount Point Reference</h4>
@@ -115,9 +148,10 @@
                 <div class="card-body">
                     <h6>Per-Source Streams</h6>
                     <p class="small">
-                        Each running audio source gets its own monitoring mount point:<br>
-                        <code>/{prefix}-{source-name}.mp3</code><br>
-                        Access directly on Icecast (port&nbsp;8000) or through the nginx proxy.
+                        Each running audio source is exposed at:<br>
+                        <code>/api/eas/decoder-stream/{source-name}</code><br>
+                        and (when configured) at the Icecast mount
+                        <code>/{prefix}-{source-name}.mp3</code> on port&nbsp;8000.
                     </p>
 
                     <h6>Sample Rate</h6>
@@ -130,7 +164,7 @@
                     publishing to the EAS queue.</p>
 
                     <h6>Bandwidth</h6>
-                    <p class="small">Each stream uses ~48 kbps (MP3, 16 kHz mono).</p>
+                    <p class="small">Each stream uses ~32 kbps (MP3, 16 kHz mono).</p>
                 </div>
             </div>
 
@@ -280,10 +314,104 @@ async function injectTestSignal() {
     }
 }
 
+// ----------------------------------------------------------------------------
+// Live Per-Source Decoder Streams
+// ----------------------------------------------------------------------------
+
+let _activeStreamId = null;  // which stream is currently playing, '__mixed__' or source name
+
+function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, c => (
+        {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
+    ));
+}
+
+async function loadStreamSources() {
+    const statusEl = document.getElementById('stream-sources-status');
+    const listEl = document.getElementById('per-source-streams');
+    statusEl.textContent = 'Loading…';
+    listEl.innerHTML = '';
+
+    try {
+        const response = await fetch('/api/eas/decoder-stream/sources', { cache: 'no-store' });
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        const data = await response.json();
+        const sources = data.sources || [];
+
+        if (!data.enabled) {
+            statusEl.innerHTML = '<span class="text-warning"><i class="fas fa-exclamation-triangle"></i> ' +
+                'Per-source streams are disabled. Enable them above to listen.</span>';
+        } else if (sources.length === 0) {
+            statusEl.innerHTML = '<span class="text-muted">No running audio sources.</span>';
+        } else {
+            statusEl.innerHTML = `<span class="text-success">${sources.length} source(s) available.</span>`;
+        }
+
+        for (const src of sources) {
+            const safeName = escapeHtml(src.name);
+            const safeUrl  = escapeHtml(src.stream_url);
+            const safeMount = escapeHtml(src.mount_name);
+            const div = document.createElement('div');
+            div.className = 'mb-2 pb-2 border-bottom';
+            div.innerHTML = `
+                <div class="d-flex align-items-center justify-content-between">
+                    <div style="min-width:0;">
+                        <strong>${safeName}</strong><br>
+                        <code class="small d-block text-truncate">${safeUrl}</code>
+                        <small class="text-muted">Icecast mount: <code>/${safeMount}.mp3</code></small>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-primary ms-2"
+                            data-source="${safeName}" data-url="${safeUrl}">
+                        <i class="fas fa-play"></i>
+                    </button>
+                </div>`;
+            const btn = div.querySelector('button');
+            btn.disabled = !data.enabled;
+            btn.addEventListener('click', () => toggleStream(src.name, src.stream_url, btn));
+            listEl.appendChild(div);
+        }
+    } catch (err) {
+        statusEl.innerHTML = `<span class="text-danger">Error loading streams: ${escapeHtml(err.message)}</span>`;
+    }
+}
+
+function _resetAllStreamButtons() {
+    document.querySelectorAll('#per-source-streams button, #decoder-tap-player ~ button')
+        .forEach(b => { b.innerHTML = '<i class="fas fa-play"></i>'; });
+    // Also reset the mixed-stream button (it's a sibling of the player)
+    const mixed = document.querySelector('button[onclick*="__mixed__"]');
+    if (mixed) mixed.innerHTML = '<i class="fas fa-play"></i>';
+}
+
+function toggleStream(streamId, url, btn) {
+    const player = document.getElementById('decoder-tap-player');
+    if (_activeStreamId === streamId) {
+        // Stop
+        player.pause();
+        player.removeAttribute('src');
+        player.load();
+        _activeStreamId = null;
+        btn.innerHTML = '<i class="fas fa-play"></i>';
+        return;
+    }
+    _resetAllStreamButtons();
+    player.pause();
+    player.src = url + '?t=' + Date.now();  // cache-bust
+    player.play().then(() => {
+        _activeStreamId = streamId;
+        btn.innerHTML = '<i class="fas fa-stop"></i>';
+    }).catch(err => {
+        showToast(`Could not start stream: ${err.message}`, 'danger');
+    });
+}
+
 // Initialize
 document.addEventListener('DOMContentLoaded', function() {
     loadSettings();
     loadSources();
+    loadStreamSources();
     document.getElementById('decoder-monitor-form').addEventListener('submit', saveSettings);
 });
 </script>
