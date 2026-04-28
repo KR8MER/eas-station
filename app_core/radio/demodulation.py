@@ -1834,7 +1834,6 @@ class FMDemodulator:
             except Exception as e:
                 logger.warning(f"Stereo decoding error: {e}", exc_info=True)
                 stereo_audio = None
-
         # CRITICAL FIX: Use proper resampling to exact target rate instead of simple decimation
         # Simple decimation produces wrong sample rate: e.g., 2.5MHz / 52 = 48,077 Hz (not 48,000 Hz)
         # This causes "chipmunk" audio when played back at declared rate
