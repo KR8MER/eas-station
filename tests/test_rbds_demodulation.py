@@ -152,6 +152,40 @@ def test_rbds_submit_samples_accepts_offset():
     worker.stop()
 
 
+def _run_presync_sequence(worker: RBDSWorker, hit_map: dict[int, int]) -> None:
+    """Drive _decode_rbds_groups with synthetic syndrome hits at specific bit indices."""
+    worker._rbds_bit_buffer = [0] * 220
+    call_index = 0
+
+    def fake_calc_syndrome(_word: int, message_length: int) -> int:
+        nonlocal call_index
+        bit_index = call_index // 2
+        is_inverted_path = (call_index % 2) == 1
+        call_index += 1
+        if message_length == 26 and not is_inverted_path:
+            return hit_map.get(bit_index, 0)
+        return 0
+
+    worker._calc_syndrome = fake_calc_syndrome  # type: ignore[assignment]
+    worker._decode_rbds_groups()
+
+
+def test_rbds_presync_requires_three_spaced_hits_before_lock():
+    """RBDS lock should only occur after 3 correctly spaced presync detections."""
+    worker = _make_worker()
+    # A -> B -> C detections with exact 26-bit spacing.
+    _run_presync_sequence(worker, {100: 383, 126: 14, 152: 303})
+    assert worker._rbds_synced is True
+
+
+def test_rbds_presync_two_hits_do_not_lock():
+    """Two spaced detections are insufficient; avoid false sync in noise."""
+    worker = _make_worker()
+    # Only A -> B (single spacing confirmation) should not lock.
+    _run_presync_sequence(worker, {100: 383, 126: 14})
+    assert worker._rbds_synced is False
+
+
 # ---------------------------------------------------------------------------
 # RBDSDecoder.process_group tests
 #
