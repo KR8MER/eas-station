@@ -606,6 +606,8 @@ class RBDSWorker:
         for attr in (
             '_rbds_synced',
             '_rbds_presync',
+            '_rbds_presync_hits',
+            '_rbds_presync_polarity',
             '_rbds_wrong_blocks_counter',
             '_rbds_blocks_counter',
             '_rbds_group_good_blocks_counter',
@@ -1212,6 +1214,8 @@ class RBDSWorker:
         if not hasattr(self, '_rbds_synced'):
             self._rbds_synced = False
             self._rbds_presync = False
+            self._rbds_presync_hits = 0
+            self._rbds_presync_polarity: Optional[bool] = None
             self._rbds_wrong_blocks_counter = 0
             self._rbds_blocks_counter = 0
             self._rbds_group_good_blocks_counter = 0
@@ -1253,6 +1257,8 @@ class RBDSWorker:
                             self._rbds_lastseen_offset = j
                             self._rbds_lastseen_offset_counter = global_i
                             self._rbds_inverted_polarity = polarity
+                            self._rbds_presync_polarity = polarity
+                            self._rbds_presync_hits = 0
                             self._rbds_presync = True
                             polarity_text = "inverted" if polarity else "normal"
                             logger.info(
@@ -1263,6 +1269,17 @@ class RBDSWorker:
                             )
                         else:
                             # Second valid block - check spacing
+                            if self._rbds_presync_polarity is not None and polarity != self._rbds_presync_polarity:
+                                # Mixed polarity during presync usually indicates a random
+                                # syndrome collision in noise.  Restart presync from this
+                                # block to avoid false "sync then immediate 50/50 CRC fail".
+                                self._rbds_lastseen_offset = j
+                                self._rbds_lastseen_offset_counter = global_i
+                                self._rbds_inverted_polarity = polarity
+                                self._rbds_presync_polarity = polarity
+                                self._rbds_presync_hits = 0
+                                break
+
                             if offset_pos[self._rbds_lastseen_offset] >= offset_pos[j]:
                                 block_distance = offset_pos[j] + 4 - offset_pos[self._rbds_lastseen_offset]
                             else:
@@ -1283,24 +1300,36 @@ class RBDSWorker:
                                 self._rbds_lastseen_offset = j
                                 self._rbds_lastseen_offset_counter = global_i
                                 self._rbds_inverted_polarity = polarity
+                                self._rbds_presync_polarity = polarity
+                                self._rbds_presync_hits = 0
                                 # Keep presync=True with new first block
                             else:
-                                # SYNC ACHIEVED!
-                                logger.info(f'RBDS SYNCHRONIZED at bit {global_i}')
-                                self._rbds_wrong_blocks_counter = 0
-                                self._rbds_blocks_counter = 0
-                                self._rbds_block_bit_counter = 0
-                                # CRITICAL FIX: Use offset_pos[j] to determine the next expected
-                                # block number, not j directly.  For C' (j=4), offset_pos[4]=2
-                                # (same slot as C), so the next block is D (3), not B (1).
-                                # Using (j+1)%4 gives 1 for j=4 which is wrong and causes
-                                # immediate sync loss for stations broadcasting Group 2B.
-                                self._rbds_block_number = (offset_pos[j] + 1) % 4
-                                self._rbds_group_assembly_started = False
-                                # Update polarity to match the triggering block so synced-mode
-                                # CRC checks use the correct inversion flag.
+                                # Require 3 consecutive correctly spaced presync blocks
+                                # (two spacing confirmations) before declaring lock.
+                                # This materially reduces false-lock events where random
+                                # syndrome hits produce "SYNCED" followed by 50/50 CRC loss.
+                                self._rbds_presync_hits += 1
+                                self._rbds_lastseen_offset = j
+                                self._rbds_lastseen_offset_counter = global_i
                                 self._rbds_inverted_polarity = polarity
-                                self._rbds_synced = True
+                                self._rbds_presync_polarity = polarity
+
+                                if self._rbds_presync_hits >= 2:
+                                    logger.info(f'RBDS SYNCHRONIZED at bit {global_i}')
+                                    self._rbds_wrong_blocks_counter = 0
+                                    self._rbds_blocks_counter = 0
+                                    self._rbds_block_bit_counter = 0
+                                    # CRITICAL FIX: Use offset_pos[j] to determine the next expected
+                                    # block number, not j directly.  For C' (j=4), offset_pos[4]=2
+                                    # (same slot as C), so the next block is D (3), not B (1).
+                                    # Using (j+1)%4 gives 1 for j=4 which is wrong and causes
+                                    # immediate sync loss for stations broadcasting Group 2B.
+                                    self._rbds_block_number = (offset_pos[j] + 1) % 4
+                                    self._rbds_group_assembly_started = False
+                                    # Update polarity to match the triggering block so synced-mode
+                                    # CRC checks use the correct inversion flag.
+                                    self._rbds_inverted_polarity = polarity
+                                    self._rbds_synced = True
                         break  # Syndrome found, exit j loop
             
             else:
