@@ -10,5 +10,5 @@
  * Setting it to 0 ensures the footer sits flush against the last content
  * element on every page without breaking the sticky-footer layout. */
 .md-main__inner {
-    margin-bottom: 0;
+    margin-bottom: 0 !important;
 }
