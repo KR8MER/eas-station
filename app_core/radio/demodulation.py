@@ -2389,6 +2389,12 @@ class RBDSDecoder:
         # The RDS spec says a carriage-return ends the displayed text and
         # anything beyond it is padding that must not be shown.
         self._radio_text_len = 64
+        # Index where the most-recent CR landed (0x0D arrived in a previous
+        # group at this position).  Tracked so that if a later broadcast of
+        # the same segment overwrites that exact index with a non-CR
+        # character, the terminator can be released and the visible RT
+        # allowed to grow back out.  ``None`` when no CR is in effect.
+        self._radio_text_cr_index: Optional[int] = None
         self.pty = None
         self.pty_name = None
         self._pty_name_buf = [' '] * 8
@@ -2502,6 +2508,7 @@ class RBDSDecoder:
                 self._radio_text_ab = ab_flag
                 self.radio_text = [' '] * 64
                 self._radio_text_len = 64
+                self._radio_text_cr_index = None
                 changed = True
             # Within this single group, any chars arriving after a 0x0D are
             # the padding that fills the final segment. Track it so
@@ -2579,7 +2586,7 @@ class RBDSDecoder:
             call_sign=self.call_sign,
             ps_name=''.join(self.ps_name).strip(),
             pty_name=self.pty_name,
-            radio_text=''.join(rt_chars).rstrip(),
+            radio_text=''.join(rt_chars).strip(),
             pty=self.pty,
             tp=self.tp,
             ta=self.ta,
@@ -2667,6 +2674,7 @@ class RBDSDecoder:
         # Everything that follows 0x0D *within the same group* is padding.
         if code == 0x0D:
             self._rt_saw_cr_this_group = True
+            self._radio_text_cr_index = index
             if self._radio_text_len > index:
                 self._radio_text_len = index
                 return True
@@ -2674,6 +2682,20 @@ class RBDSDecoder:
         # Post-CR characters in this same group are padding → drop.
         if self._rt_saw_cr_this_group and index >= self._radio_text_len:
             return False
+        # If a *previous* group placed a CR at this exact index and the
+        # station is now broadcasting a non-CR byte at the same slot, the
+        # CR is no longer in effect — release the terminator so later
+        # segments can extend the displayed RT.  Bare padding past the old
+        # terminator (a different index) is still rejected below, so a
+        # CRC-lucky garbage byte in some unrelated segment can't drag junk
+        # into the display.
+        if (
+            not self._rt_saw_cr_this_group
+            and self._radio_text_cr_index is not None
+            and index == self._radio_text_cr_index
+        ):
+            self._radio_text_cr_index = None
+            self._radio_text_len = len(self.radio_text)
         char = chr(code) if 32 <= code < 127 else ' '
         # Characters past the current terminator are padding by default.
         # An earlier pass extended the length on any non-space byte, but

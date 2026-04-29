@@ -7,6 +7,22 @@ tracks releases under the 2.x series.
 ## [Unreleased]
 
 ### Fixed
+- **RBDS Radio Text reassembly** in `app_core/radio/demodulation.py`. Two
+  long-standing bugs in `RBDSDecoder._update_radio_text`:
+  (a) the visible RT was joined with `rstrip()`, so any leading spaces
+  introduced by unprintable RDS Annex-E bytes (e.g. 0xE9, which the
+  printable-ASCII filter maps to space) leaked into the displayed text and
+  pushed the actual content rightward; and
+  (b) once a 0x0D carriage-return arrived at index N, the terminator was
+  permanent — if the station later re-broadcast the same segment with a
+  non-CR byte at index N (the documented RDS-extension idiom), the visible
+  RT could never grow back out.  Fix:  track the most-recent CR index and
+  release the terminator when a later group writes a non-CR byte to that
+  exact slot, and trim both ends of the assembled RT.  Restores the two
+  previously-failing tests in `tests/test_rbds_demodulation.py`
+  (`test_group_2a_preserves_high_bit_characters` and
+  `test_radio_text_grows_when_station_extends_without_cr`).
+
 - **FM stereo (L–R) decoding** now produces real channel separation. The
   previous `_decode_stereo` in `app_core/radio/demodulation.py` synthesized a
   free-running 38 kHz oscillator and then *discarded* the bandpass-filtered
