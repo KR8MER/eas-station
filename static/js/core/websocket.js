@@ -48,6 +48,7 @@
 
         // Alert events
         'alert_verification_update': 10000,   // 10s - alert verification
+        'alerts_update': 5000,                // 5s - active CAP alert list
 
         // Log events
         'logs_update': 10000,                 // 10s - log viewer
@@ -72,6 +73,7 @@
         'display_preview_update': '/api/displays/preview',
         'analytics_update': '/api/analytics/dashboard',
         'alert_verification_update': '/api/alerts/verification/status',
+        'alerts_update': '/api/alerts',
         'logs_update': '/api/logs/recent',
     };
 

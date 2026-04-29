@@ -2191,15 +2191,23 @@ class FMDemodulator:
     def _decode_stereo(self, multiplex: np.ndarray, sample_indices: np.ndarray) -> Optional[np.ndarray]:
         """Decode FM stereo from multiplex signal.
 
-        Uses the 19 kHz pilot tone to generate a coherent 38 kHz carrier for
-        demodulating the L-R stereo difference signal.
+        Derives a phase-coherent 38 kHz carrier directly from the recovered
+        19 kHz pilot tone by squaring it (cos²(ωt) = ½(1 + cos(2ωt))).  This
+        approach is automatically locked to the transmitter's pilot phase and
+        frequency, so it tracks both crystal drift and chunk-boundary phase
+        without any PLL state.  An earlier implementation generated a free-
+        running 38 kHz oscillator that reset to phase 0 on every chunk; with
+        the SDR clock differing from the broadcaster's by tens of ppm the L-R
+        signal slowly rotated against the carrier, collapsing the stereo image
+        toward mono and bleeding L into R.
 
         Args:
             multiplex: FM multiplex signal (after discriminator)
-            sample_indices: Sample indices at intermediate rate
+            sample_indices: Sample indices (unused; kept for backwards-compat)
 
         Returns:
-            Stereo audio as Nx2 array (left, right) or None if stereo disabled
+            Stereo audio as Nx2 array (left, right) or None if stereo cannot
+            be decoded for this chunk.
         """
         if not self._stereo_enabled or len(multiplex) == 0:
             return None
@@ -2207,30 +2215,35 @@ class FMDemodulator:
         # Extract L+R (mono) using lowpass filter
         lpr = np.convolve(multiplex, self._lpr_filter, mode="same")
 
-        # Generate 38 kHz carrier using time at ORIGINAL sample rate
-        # CRITICAL FIX: The multiplex signal is at original SDR rate, not intermediate rate
-        # The carrier must be coherent with the 19 kHz pilot (doubled)
-        time = sample_indices / float(self.config.sample_rate)
-
-        # Try to extract pilot tone and lock to it for better carrier coherence
-        # For now, use a synthetic carrier (can be improved with PLL later)
+        # Recover the 19 kHz pilot tone via the pre-designed bandpass.
         pilot_filtered = np.convolve(multiplex, self._pilot_filter, mode="same")
 
-        # Generate 38 kHz carrier from pilot (pilot is at 19 kHz)
-        # Use analytical signal approach: pilot × 2 for phase doubling
-        carrier = 2.0 * np.cos(2.0 * np.pi * 38000.0 * time)
+        # Normalize the pilot to ~unit amplitude so the derived 38 kHz carrier
+        # has a stable amplitude and the L-R recovery gain doesn't depend on
+        # signal strength.  RMS · √2 is the peak amplitude of a sinusoid.
+        pilot_rms = float(np.sqrt(np.mean(pilot_filtered ** 2)))
+        pilot_peak = pilot_rms * np.sqrt(2.0)
+        if pilot_peak < 1e-9:
+            # Pilot vanished mid-chunk; let the caller fall back to mono.
+            return None
+        pilot_unit = pilot_filtered / pilot_peak
 
-        # Demodulate L-R signal by mixing with 38 kHz carrier
-        suppressed = multiplex * carrier
+        # cos²(ωt) = ½(1 + cos(2ωt)) → 2·cos²(ωt) − 1 = cos(2ωt)
+        # This is an exact, phase-coherent 38 kHz reference that tracks the
+        # actual pilot frequency (no PLL or oscillator state needed).
+        carrier_38k = 2.0 * (pilot_unit * pilot_unit) - 1.0
+
+        # Demodulate L-R: mix with the 38 kHz carrier and lowpass.  The 2× gain
+        # compensates for the ½ factor that DSB-SC mixing of unit-amplitude
+        # signals introduces (cos(A)·cos(A) = ½(1 + cos(2A))).
+        suppressed = 2.0 * multiplex * carrier_38k
         lmr = np.convolve(suppressed, self._dsb_filter, mode="same")
 
-        # Matrix decode: L = (L+R) + (L-R), R = (L+R) - (L-R)
-        # Scale by 0.5 to normalize
+        # Matrix decode: L = ½((L+R) + (L-R)), R = ½((L+R) - (L-R))
         left = 0.5 * (lpr + lmr)
         right = 0.5 * (lpr - lmr)
 
-        stereo = np.column_stack((left, right))
-        return stereo
+        return np.column_stack((left, right))
 
     def stop(self) -> None:
         """Stop the demodulator and clean up resources."""
@@ -2376,6 +2389,12 @@ class RBDSDecoder:
         # The RDS spec says a carriage-return ends the displayed text and
         # anything beyond it is padding that must not be shown.
         self._radio_text_len = 64
+        # Index where the most-recent CR landed (0x0D arrived in a previous
+        # group at this position).  Tracked so that if a later broadcast of
+        # the same segment overwrites that exact index with a non-CR
+        # character, the terminator can be released and the visible RT
+        # allowed to grow back out.  ``None`` when no CR is in effect.
+        self._radio_text_cr_index: Optional[int] = None
         self.pty = None
         self.pty_name = None
         self._pty_name_buf = [' '] * 8
@@ -2489,6 +2508,7 @@ class RBDSDecoder:
                 self._radio_text_ab = ab_flag
                 self.radio_text = [' '] * 64
                 self._radio_text_len = 64
+                self._radio_text_cr_index = None
                 changed = True
             # Within this single group, any chars arriving after a 0x0D are
             # the padding that fills the final segment. Track it so
@@ -2566,7 +2586,7 @@ class RBDSDecoder:
             call_sign=self.call_sign,
             ps_name=''.join(self.ps_name).strip(),
             pty_name=self.pty_name,
-            radio_text=''.join(rt_chars).rstrip(),
+            radio_text=''.join(rt_chars).strip(),
             pty=self.pty,
             tp=self.tp,
             ta=self.ta,
@@ -2654,6 +2674,7 @@ class RBDSDecoder:
         # Everything that follows 0x0D *within the same group* is padding.
         if code == 0x0D:
             self._rt_saw_cr_this_group = True
+            self._radio_text_cr_index = index
             if self._radio_text_len > index:
                 self._radio_text_len = index
                 return True
@@ -2661,6 +2682,20 @@ class RBDSDecoder:
         # Post-CR characters in this same group are padding → drop.
         if self._rt_saw_cr_this_group and index >= self._radio_text_len:
             return False
+        # If a *previous* group placed a CR at this exact index and the
+        # station is now broadcasting a non-CR byte at the same slot, the
+        # CR is no longer in effect — release the terminator so later
+        # segments can extend the displayed RT.  Bare padding past the old
+        # terminator (a different index) is still rejected below, so a
+        # CRC-lucky garbage byte in some unrelated segment can't drag junk
+        # into the display.
+        if (
+            not self._rt_saw_cr_this_group
+            and self._radio_text_cr_index is not None
+            and index == self._radio_text_cr_index
+        ):
+            self._radio_text_cr_index = None
+            self._radio_text_len = len(self.radio_text)
         char = chr(code) if 32 <= code < 127 else ' '
         # Characters past the current terminator are padding by default.
         # An earlier pass extended the length on any non-space byte, but
