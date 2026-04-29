@@ -129,6 +129,15 @@ class ReceiverInterface(ABC):
     ) -> Path:
         """Capture a block of samples and persist them to disk."""
 
+    def set_frequency(self, frequency_hz: float) -> bool:
+        """Retune the live SDR stream to ``frequency_hz`` without stopping it.
+
+        Drivers that can retune the active stream override this and return
+        True on success.  The default implementation returns False, which
+        signals to callers that a full reconfigure/restart is required.
+        """
+        return False
+
     # ------------------------------------------------------------------
     # Event logging helpers
     # ------------------------------------------------------------------

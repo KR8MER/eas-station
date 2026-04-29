@@ -490,6 +490,98 @@ class _SoapySDRReceiver(ReceiverInterface):
         self._cancel_capture_requests(RuntimeError("Receiver stopped"), teardown=False)
         self._update_status(locked=False)
 
+    def set_frequency(self, frequency_hz: float) -> bool:  # noqa: D401 - documented in base class
+        """Retune the live SDR stream to ``frequency_hz`` without restarting it.
+
+        SoapySDR's ``setFrequency`` is safe to call concurrently with an active
+        ``readStream``, so we can change the tuner mid-flight.  The new
+        frequency is also persisted into ``self.config`` so subsequent samples
+        published to Redis report the correct ``center_frequency`` and the
+        downstream demodulator/RBDS state can reset cleanly.
+        """
+        from dataclasses import replace as _replace_dc
+
+        try:
+            freq_hz = float(frequency_hz)
+        except (TypeError, ValueError):
+            self._interface_logger.error(
+                "set_frequency: invalid frequency value %r for %s",
+                frequency_hz,
+                self.config.identifier,
+            )
+            return False
+
+        if freq_hz <= 0:
+            self._interface_logger.error(
+                "set_frequency: non-positive frequency %s for %s",
+                freq_hz,
+                self.config.identifier,
+            )
+            return False
+
+        handle = self._handle
+        if handle is None or not self._running.is_set():
+            self._interface_logger.warning(
+                "set_frequency: cannot retune %s while device is not open/running",
+                self.config.identifier,
+            )
+            return False
+
+        # Apply the same PPM correction as the initial tune so the actual
+        # tuner frequency matches what the operator selected after correction.
+        corrected_freq = freq_hz
+        if self.config.frequency_correction_ppm:
+            correction_factor = 1.0 + (self.config.frequency_correction_ppm / 1_000_000.0)
+            corrected_freq = freq_hz * correction_factor
+
+        channel = self.config.channel if self.config.channel is not None else 0
+
+        try:
+            handle.device.setFrequency(handle.sdr.SOAPY_SDR_RX, channel, corrected_freq)
+        except Exception as exc:
+            self._interface_logger.error(
+                "Live retune failed for %s to %.6f MHz: %s",
+                self.config.identifier,
+                freq_hz / 1_000_000,
+                exc,
+            )
+            self._update_status(last_error=f"Live retune failed: {exc}", context="set_frequency")
+            return False
+
+        # Persist the new frequency so status payloads, Redis sample messages,
+        # and any subsequent restart use the new value.  ReceiverConfig is a
+        # frozen dataclass, so we rebind ``self.config`` to a new instance.
+        self.config = _replace_dc(self.config, frequency_hz=freq_hz)
+
+        # Best-effort readback for diagnostics.
+        try:
+            actual_freq = handle.device.getFrequency(handle.sdr.SOAPY_SDR_RX, channel)
+            self._interface_logger.info(
+                "Live-retuned %s to %.6f MHz (corrected: %.6f MHz, readback: %.6f MHz)",
+                self.config.identifier,
+                freq_hz / 1_000_000,
+                corrected_freq / 1_000_000,
+                actual_freq / 1_000_000,
+            )
+        except Exception:
+            self._interface_logger.info(
+                "Live-retuned %s to %.6f MHz",
+                self.config.identifier,
+                freq_hz / 1_000_000,
+            )
+
+        self._emit_event(
+            "INFO",
+            f"{self.config.identifier} retuned to {freq_hz / 1_000_000:.6f} MHz",
+            module_suffix="set_frequency",
+            details={
+                "identifier": self.config.identifier,
+                "frequency_hz": freq_hz,
+                "ppm_corrected_hz": corrected_freq,
+            },
+        )
+        return True
+
     # ------------------------------------------------------------------
     # Status reporting
     # ------------------------------------------------------------------
@@ -1795,6 +1887,33 @@ class AirspyReceiver(_SoapySDRReceiver):
             ) from exc
 
         return handle
+
+    def set_frequency(self, frequency_hz: float) -> bool:  # noqa: D401 - documented in base class
+        """Live-retune Airspy, including the explicit "RF" component."""
+        if not super().set_frequency(frequency_hz):
+            return False
+
+        # _open_handle() sets the "RF" component explicitly because some
+        # SoapyAirspy builds need it.  Mirror that here so a live retune
+        # actually moves the tuner instead of leaving it on the previous LO.
+        handle = self._handle
+        if handle is None:
+            return True  # parent already logged; treat as success of the main set
+
+        try:
+            channel = self.config.channel if self.config.channel is not None else 0
+            corrected_freq = self.config.frequency_hz
+            if self.config.frequency_correction_ppm:
+                corrected_freq *= 1.0 + (self.config.frequency_correction_ppm / 1_000_000.0)
+            handle.device.setFrequency(handle.sdr.SOAPY_SDR_RX, channel, "RF", corrected_freq)
+        except Exception as exc:
+            # Best-effort: parent already moved the main frequency; log and continue.
+            self._interface_logger.debug(
+                "Airspy %s: could not set RF component during live retune: %s",
+                self.config.identifier,
+                exc,
+            )
+        return True
 
 
 def register_builtin_drivers(manager: RadioManager) -> None:

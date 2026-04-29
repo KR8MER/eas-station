@@ -706,6 +706,22 @@ def register(app: Flask, logger) -> None:
                 if conflict and conflict.id != receiver.id:
                     return jsonify({"error": "Another receiver already uses this identifier."}), 400
 
+            # Detect frequency-only changes so we can issue a live retune
+            # instead of bouncing the whole audio system.  A change counts as
+            # "frequency only" when nothing else (driver, sample rate, gain,
+            # modulation, enabled state, identifier, …) is being touched.
+            receiver_identifier = receiver.identifier
+            old_frequency = receiver.frequency_hz
+            new_frequency = data.get("frequency_hz")
+            non_freq_keys = {k for k in data.keys() if k != "frequency_hz"}
+            frequency_only_change = (
+                "frequency_hz" in data
+                and not non_freq_keys
+                and new_frequency is not None
+                and float(new_frequency) != float(old_frequency or 0)
+                and bool(receiver.enabled)
+            )
+
             for key, value in data.items():
                 setattr(receiver, key, value)
 
@@ -725,7 +741,37 @@ def register(app: Flask, logger) -> None:
                 )
                 return jsonify({"error": "Failed to update receiver."}), 500
 
-            manager_state = _sync_radio_manager_state(route_logger)
+            # Try a live retune first when only the frequency changed.  If the
+            # driver/device cannot retune live, fall back to the full reload.
+            manager_state: Optional[Dict[str, Any]] = None
+            if frequency_only_change:
+                tune_result = _send_sdr_command(
+                    "tune_frequency",
+                    receiver_id=receiver_identifier,
+                    frequency_hz=float(new_frequency),
+                )
+                if tune_result.get("success"):
+                    route_logger.info(
+                        "Live retune succeeded for %s: %.6f MHz -> %.6f MHz",
+                        receiver_identifier,
+                        float(old_frequency or 0) / 1_000_000,
+                        float(new_frequency) / 1_000_000,
+                    )
+                    manager_state = {
+                        "configured": 1,
+                        "auto_started": [],
+                        "errors": [],
+                        "live_retune": True,
+                    }
+                else:
+                    route_logger.warning(
+                        "Live retune unavailable for %s (%s); falling back to reload",
+                        receiver_identifier,
+                        tune_result.get("error", "unknown reason"),
+                    )
+
+            if manager_state is None:
+                manager_state = _sync_radio_manager_state(route_logger)
 
             # Explicitly re-query with a fresh session query to avoid DetachedInstanceError
             # We use filter_by + first() instead of get() to ensure a fresh query

@@ -178,6 +178,15 @@ class AudioSourceAdapter(ABC):
         self._restart_count = 0
         self._last_restart = 0.0
         self._last_error: Optional[str] = None
+        # Circuit breaker: a source that fails to restart repeatedly is
+        # quarantined for a cooldown period so the monitor stops hammering it.
+        # This prevents one broken stream (bad URL, missing hardware, persistent
+        # exception) from monopolizing CPU and log volume, and isolates it from
+        # the rest of the audio system.
+        self._consecutive_failed_restarts = 0
+        self._quarantine_threshold = 3      # failed restarts before quarantine
+        self._quarantine_seconds = 60.0      # cooldown before retrying
+        self._quarantined_until = 0.0
 
     @abstractmethod
     def _start_capture(self) -> None:
@@ -517,6 +526,10 @@ class AudioSourceAdapter(ABC):
 
         self._last_metrics_update = current_time
 
+    def is_quarantined(self) -> bool:
+        """Return True if this source is in restart cooldown after repeated failures."""
+        return time.time() < self._quarantined_until
+
     def restart(
         self,
         reason: str,
@@ -524,12 +537,30 @@ class AudioSourceAdapter(ABC):
         delay: float = 0.25,
         max_attempts: int = 2,
     ) -> bool:
-        """Attempt to restart the adapter when it becomes unhealthy."""
+        """Attempt to restart the adapter when it becomes unhealthy.
+
+        A source that fails to restart ``_quarantine_threshold`` consecutive
+        times is placed in quarantine for ``_quarantine_seconds`` so the
+        monitor loop stops trying.  This prevents one broken stream from
+        consuming CPU, log volume, and lock contention shared with healthy
+        sources.
+        """
 
         if not self.config.enabled:
             logger.debug(
                 "Skipping restart for %s because the source is disabled",
                 self.config.name,
+            )
+            return False
+
+        if self.is_quarantined():
+            remaining = max(0.0, self._quarantined_until - time.time())
+            logger.debug(
+                "%s: quarantined after %d failed restarts; %.1fs remaining (%s)",
+                self.config.name,
+                self._consecutive_failed_restarts,
+                remaining,
+                reason,
             )
             return False
 
@@ -543,13 +574,33 @@ class AudioSourceAdapter(ABC):
                     attempt,
                     attempts,
                 )
-                self.stop()
+                try:
+                    self.stop()
+                except Exception as exc:
+                    logger.error(
+                        "%s: error during stop() before restart: %s",
+                        self.config.name,
+                        exc,
+                        exc_info=True,
+                    )
                 if delay > 0:
                     time.sleep(delay)
-                if self.start():
+                try:
+                    started = self.start()
+                except Exception as exc:
+                    logger.error(
+                        "%s: unexpected exception during restart: %s",
+                        self.config.name,
+                        exc,
+                        exc_info=True,
+                    )
+                    started = False
+                if started:
                     self._restart_count += 1
                     self._last_restart = time.time()
                     self._last_error = None
+                    self._consecutive_failed_restarts = 0
+                    self._quarantined_until = 0.0
                     logger.info(
                         "%s: audio source restarted successfully after %s",
                         self.config.name,
@@ -560,12 +611,24 @@ class AudioSourceAdapter(ABC):
                 if backoff > 0:
                     time.sleep(backoff)
 
-            logger.error(
-                "%s: failed to restart audio source after %s attempt(s) (%s)",
-                self.config.name,
-                attempts,
-                reason,
-            )
+            self._consecutive_failed_restarts += 1
+            if self._consecutive_failed_restarts >= self._quarantine_threshold:
+                self._quarantined_until = time.time() + self._quarantine_seconds
+                logger.error(
+                    "%s: quarantining audio source for %.0fs after %d consecutive "
+                    "failed restarts (last reason: %s)",
+                    self.config.name,
+                    self._quarantine_seconds,
+                    self._consecutive_failed_restarts,
+                    reason,
+                )
+            else:
+                logger.error(
+                    "%s: failed to restart audio source after %s attempt(s) (%s)",
+                    self.config.name,
+                    attempts,
+                    reason,
+                )
             return False
 
     def get_waveform_data(self) -> np.ndarray:
@@ -956,22 +1019,42 @@ class AudioIngestController:
             self._active_source = None
 
     def _monitor_loop(self) -> None:
-        """Background monitor that auto-recovers unhealthy sources."""
+        """Background monitor that auto-recovers unhealthy sources.
+
+        The outer try/except is the firewall that prevents one source's bug
+        (DB error, exception in restart, AttributeError on a partially-
+        initialized adapter, etc.) from killing the monitor thread for the
+        entire audio system.  Each source is evaluated in isolation; a failure
+        in one cannot affect the others or stop future monitoring iterations.
+        """
         while not self._monitor_stop.is_set():
-            now = time.time()
-            with self._lock:
-                snapshot = list(self._sources.items())
-            
-            # Wrap health evaluation in Flask app context if available
-            # This allows database operations during source restarts
-            if self._flask_app:
-                with self._flask_app.app_context():
-                    for name, adapter in snapshot:
-                        self._evaluate_source_health(name, adapter, now)
-            else:
+            try:
+                now = time.time()
+                with self._lock:
+                    snapshot = list(self._sources.items())
+
                 for name, adapter in snapshot:
-                    self._evaluate_source_health(name, adapter, now)
-            
+                    try:
+                        if self._flask_app:
+                            with self._flask_app.app_context():
+                                self._evaluate_source_health(name, adapter, now)
+                        else:
+                            self._evaluate_source_health(name, adapter, now)
+                    except Exception as exc:
+                        # Isolate per-source failures so they cannot take down
+                        # other healthy sources or the monitor itself.
+                        logger.error(
+                            "Error evaluating health of source %s: %s",
+                            name,
+                            exc,
+                            exc_info=True,
+                        )
+            except Exception as exc:
+                # Last-line-of-defense for anything unexpected (e.g. lock
+                # acquisition failure, snapshot iteration issue).  Logged and
+                # swallowed so the monitor stays alive.
+                logger.error("Unexpected error in audio monitor loop: %s", exc, exc_info=True)
+
             self._monitor_stop.wait(timeout=self._monitor_interval)
 
     def _evaluate_source_health(
@@ -981,6 +1064,12 @@ class AudioIngestController:
         now: float,
     ) -> None:
         if not adapter.config.enabled:
+            return
+
+        # Quarantined sources are skipped to break the restart-storm cycle
+        # that otherwise has the monitor flooding logs and CPU on a stream
+        # that simply cannot be brought up right now.
+        if adapter.is_quarantined():
             return
 
         status = adapter.status
