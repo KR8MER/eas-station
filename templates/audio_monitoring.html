@@ -1171,11 +1171,70 @@ function renderAudioSources(fullRender = true) {
                                         </div>
                                     ` : ''}
 
+                                    ${(source.metrics.metadata.rbds_language_code !== undefined && source.metrics.metadata.rbds_language_code !== null) ? `
+                                        <div class="d-flex justify-content-between mb-1">
+                                            <span class="text-muted">Language Code:</span>
+                                            <span class="font-monospace small">0x${source.metrics.metadata.rbds_language_code.toString(16).toUpperCase().padStart(2,'0')}</span>
+                                        </div>
+                                    ` : ''}
+
+                                    ${(source.metrics.metadata.rbds_linkage_set_number !== undefined && source.metrics.metadata.rbds_linkage_set_number !== null) ? `
+                                        <hr class="my-2">
+                                        <div class="text-muted mb-1"><strong>Linkage (Group 1A)</strong></div>
+                                        <div class="d-flex justify-content-between mb-1">
+                                            <span class="text-muted">Linkage Set Number:</span>
+                                            <span class="font-monospace small">0x${source.metrics.metadata.rbds_linkage_set_number.toString(16).toUpperCase().padStart(3,'0')}</span>
+                                        </div>
+                                        ${(source.metrics.metadata.rbds_linkage_actuator !== undefined && source.metrics.metadata.rbds_linkage_actuator !== null) ? `
+                                            <div class="d-flex justify-content-between mb-1">
+                                                <span class="text-muted">Linkage Actuator:</span>
+                                                <span>${source.metrics.metadata.rbds_linkage_actuator ? '<span class="badge bg-warning text-dark">Active</span>' : '<span class="badge bg-secondary">Inactive</span>'}</span>
+                                            </div>
+                                        ` : ''}
+                                        ${(source.metrics.metadata.rbds_linkage_soft_coupling !== undefined && source.metrics.metadata.rbds_linkage_soft_coupling !== null) ? `
+                                            <div class="d-flex justify-content-between mb-1">
+                                                <span class="text-muted">Soft Coupling:</span>
+                                                <span>${source.metrics.metadata.rbds_linkage_soft_coupling ? '<span class="badge bg-info">Yes</span>' : '<span class="badge bg-secondary">No</span>'}</span>
+                                            </div>
+                                        ` : ''}
+                                    ` : ''}
+
+                                    ${(source.metrics.metadata.rbds_oda_apps && source.metrics.metadata.rbds_oda_apps.length > 0) ? `
+                                        <hr class="my-2">
+                                        <div class="text-muted mb-1"><strong>Open Data Applications (ODA)</strong></div>
+                                        <div class="d-flex flex-wrap gap-1 mb-1">
+                                            ${source.metrics.metadata.rbds_oda_apps.map(id => `<span class="badge bg-secondary font-monospace">0x${id.toString(16).toUpperCase().padStart(4,'0')}</span>`).join('')}
+                                        </div>
+                                    ` : ''}
+
+                                    ${(source.metrics.metadata.rbds_tdc_data) ? `
+                                        <hr class="my-2">
+                                        <div class="text-muted mb-1"><strong>Transparent Data Channel (TDC)</strong></div>
+                                        <div class="font-monospace small text-break bg-light p-1 rounded mb-1" style="max-height:60px;overflow-y:auto;">${escapeHtml(source.metrics.metadata.rbds_tdc_data)}</div>
+                                    ` : ''}
+
+                                    ${(source.metrics.metadata.rbds_in_house_data && source.metrics.metadata.rbds_in_house_data.length > 0) ? `
+                                        <hr class="my-2">
+                                        <div class="text-muted mb-1"><strong>In-House Application Data</strong></div>
+                                        <div class="font-monospace small text-break bg-light p-1 rounded mb-1">${source.metrics.metadata.rbds_in_house_data.map(w => w.toString(16).toUpperCase().padStart(4,'0')).join(' ')}</div>
+                                    ` : ''}
+
+                                    ${(source.metrics.metadata.rbds_fast_tp !== undefined && source.metrics.metadata.rbds_fast_tp !== null) || (source.metrics.metadata.rbds_fast_ta !== undefined && source.metrics.metadata.rbds_fast_ta !== null) || (source.metrics.metadata.rbds_fast_ms !== undefined && source.metrics.metadata.rbds_fast_ms !== null) ? `
+                                        <hr class="my-2">
+                                        <div class="text-muted mb-1"><strong>Fast Switching (Group 15B)</strong></div>
+                                        <div class="d-flex gap-2 flex-wrap mb-1">
+                                            ${source.metrics.metadata.rbds_fast_tp !== undefined && source.metrics.metadata.rbds_fast_tp !== null ? `<span class="badge ${source.metrics.metadata.rbds_fast_tp ? 'bg-info' : 'bg-secondary'}">TP: ${source.metrics.metadata.rbds_fast_tp ? 'Yes' : 'No'}</span>` : ''}
+                                            ${source.metrics.metadata.rbds_fast_ta !== undefined && source.metrics.metadata.rbds_fast_ta !== null ? `<span class="badge ${source.metrics.metadata.rbds_fast_ta ? 'bg-warning text-dark' : 'bg-secondary'}">TA: ${source.metrics.metadata.rbds_fast_ta ? 'Active' : 'No'}</span>` : ''}
+                                            ${source.metrics.metadata.rbds_fast_ms !== undefined && source.metrics.metadata.rbds_fast_ms !== null ? `<span class="badge bg-secondary">Audio: ${source.metrics.metadata.rbds_fast_ms ? 'Music' : 'Speech'}</span>` : ''}
+                                            ${source.metrics.metadata.rbds_fast_di_bits !== undefined && source.metrics.metadata.rbds_fast_di_bits !== null ? `<span class="badge bg-secondary font-monospace">DI: 0x${source.metrics.metadata.rbds_fast_di_bits.toString(16).toUpperCase()}</span>` : ''}
+                                        </div>
+                                    ` : ''}
+
                                     ${(source.metrics.metadata.rbds_eon_list && source.metrics.metadata.rbds_eon_list.length > 0) ? `
                                         <hr class="my-2">
                                         <div class="text-muted mb-1"><strong>Enhanced Other Networks (EON)</strong></div>
                                         <table class="table table-sm table-bordered small mb-1">
-                                            <thead><tr><th>PI</th><th>PS</th><th>TP</th><th>TA</th></tr></thead>
+                                            <thead><tr><th>PI</th><th>PS</th><th>TP</th><th>TA</th><th>AF</th></tr></thead>
                                             <tbody>
                                                 ${source.metrics.metadata.rbds_eon_list.map(e => `
                                                     <tr>
@@ -1183,6 +1242,7 @@ function renderAudioSources(fullRender = true) {
                                                         <td>${escapeHtml((e.ps || '').trim())}</td>
                                                         <td>${e.tp ? '<span class="badge bg-info">Y</span>' : '<span class="badge bg-secondary">N</span>'}</td>
                                                         <td>${e.ta !== undefined ? (e.ta ? '<span class="badge bg-warning text-dark">Y</span>' : '<span class="badge bg-secondary">N</span>') : '-'}</td>
+                                                        <td class="font-monospace small">${(e.af && e.af.length) ? e.af.map(f => f + ' MHz').join(', ') : '-'}</td>
                                                     </tr>
                                                 `).join('')}
                                             </tbody>

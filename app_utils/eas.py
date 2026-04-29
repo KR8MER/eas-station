@@ -541,8 +541,8 @@ NRSC4B_PREAMBLE_BYTE: int = 0xAB
 NRSC4B_PREAMBLE_COUNT: int = 16
 
 # NRSC-4-B §4.4 — FSK physical-layer constants.
-# Baud rate 520 5/6 (≈ 520.83) symbols/second; mark = 4× baud, space = 3× baud.
-NRSC4B_BAUD_RATE_FRAC: str = '3125/6'   # exact rational: 520 5/6 baud
+# Baud rate: exactly 25000/48 = 520.833... symbols/second per NRSC-4-B §4.4.
+NRSC4B_BAUD_RATE_FRAC: str = '25000/48'  # exact rational representation (≈ 520.83 baud)
 NRSC4B_MARK_FREQ_HZ: float = 2083.0 + 1.0 / 3.0   # 2083 1/3 Hz
 NRSC4B_SPACE_FREQ_HZ: float = 1562.5                # 1562.5 Hz
 NRSC4B_CENTER_FREQ_HZ: float = 1822.916666          # midpoint (mark+space)/2

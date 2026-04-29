@@ -217,6 +217,7 @@ nav:
       - Diagrams Index: reference/DIAGRAMS.md
       - Ohio EAS Documentation: reference/OHIO_EAS_DOCUMENTATION.md
       - RBDS Standard: reference/RBDS_STANDARD.md
+      - NRSC-4-B SAME Standard: reference/NRSC4B_SAME_STANDARD.md
   - Roadmap:
       - Feature Roadmap: roadmap/dasdec3-feature-roadmap.md
       - Future Enhancements: roadmap/FUTURE_ENHANCEMENTS.md

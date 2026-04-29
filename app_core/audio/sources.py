@@ -514,17 +514,22 @@ class SDRSourceAdapter(AudioSourceAdapter):
                             metadata['rbds_language_code'] = rbds_data.language_code
                             metadata['rbds_language_name'] = rbds_data.language_name
                             metadata['rbds_linkage_set_number'] = rbds_data.linkage_set_number
+                            metadata['rbds_linkage_actuator'] = rbds_data.linkage_actuator
+                            metadata['rbds_linkage_soft_coupling'] = rbds_data.linkage_soft_coupling
                             metadata['rbds_oda_apps'] = rbds_data.oda_apps
                             metadata['rbds_tdc_data'] = (
                                 rbds_data.tdc_data.hex() if rbds_data.tdc_data else None
                             )
+                            metadata['rbds_in_house_data'] = rbds_data.in_house_data
                             metadata['rbds_tmc_present'] = rbds_data.tmc_present
                             metadata['rbds_ews_channel'] = rbds_data.ews_channel
                             metadata['rbds_ews_message_c'] = rbds_data.ews_message_c
                             metadata['rbds_ews_message_d'] = rbds_data.ews_message_d
                             metadata['rbds_eon_list'] = rbds_data.eon_list
+                            metadata['rbds_fast_tp'] = rbds_data.fast_tp
                             metadata['rbds_fast_ta'] = rbds_data.fast_ta
                             metadata['rbds_fast_ms'] = rbds_data.fast_ms
+                            metadata['rbds_fast_di_bits'] = rbds_data.fast_di_bits
                             metadata['rbds_program_type_name'] = (
                                 RBDS_PROGRAM_TYPES.get(int(rbds_data.pty))
                                 if rbds_data.pty is not None
@@ -556,18 +561,23 @@ class SDRSourceAdapter(AudioSourceAdapter):
                             metadata['rbds_language_code'] = self._rbds_data.language_code
                             metadata['rbds_language_name'] = self._rbds_data.language_name
                             metadata['rbds_linkage_set_number'] = self._rbds_data.linkage_set_number
+                            metadata['rbds_linkage_actuator'] = self._rbds_data.linkage_actuator
+                            metadata['rbds_linkage_soft_coupling'] = self._rbds_data.linkage_soft_coupling
                             metadata['rbds_oda_apps'] = self._rbds_data.oda_apps
                             metadata['rbds_tdc_data'] = (
                                 self._rbds_data.tdc_data.hex()
                                 if self._rbds_data.tdc_data else None
                             )
+                            metadata['rbds_in_house_data'] = self._rbds_data.in_house_data
                             metadata['rbds_tmc_present'] = self._rbds_data.tmc_present
                             metadata['rbds_ews_channel'] = self._rbds_data.ews_channel
                             metadata['rbds_ews_message_c'] = self._rbds_data.ews_message_c
                             metadata['rbds_ews_message_d'] = self._rbds_data.ews_message_d
                             metadata['rbds_eon_list'] = self._rbds_data.eon_list
+                            metadata['rbds_fast_tp'] = self._rbds_data.fast_tp
                             metadata['rbds_fast_ta'] = self._rbds_data.fast_ta
                             metadata['rbds_fast_ms'] = self._rbds_data.fast_ms
+                            metadata['rbds_fast_di_bits'] = self._rbds_data.fast_di_bits
                             metadata['rbds_program_type_name'] = (
                                 RBDS_PROGRAM_TYPES.get(int(self._rbds_data.pty))
                                 if self._rbds_data.pty is not None
