@@ -1554,12 +1554,14 @@ function expandDailyKeys(alerts) {
     const dates = alerts.map(a => a.sentDate).sort((a, b) => a - b);
     const start = new Date(dates[0]); start.setHours(0, 0, 0, 0);
     const end = new Date(dates[dates.length - 1]); end.setHours(0, 0, 0, 0);
-    // Cap range to avoid runaway loops on a misconfigured filter (years of data is fine, decades is not).
-    const maxDays = 366 * 5;
+    // Cap range to ~5 years to avoid runaway loops on misconfigured filters.
+    // Multi-year filters are legitimate; decades of contiguous days would just
+    // produce an unreadable chart and waste browser memory.
+    const MAX_DAILY_BUCKETS = 366 * 5;
     const out = [];
     const cursor = new Date(start);
     let i = 0;
-    while (cursor <= end && i < maxDays) {
+    while (cursor <= end && i < MAX_DAILY_BUCKETS) {
         out.push(cursor.toISOString().slice(0, 10));
         cursor.setDate(cursor.getDate() + 1);
         i++;
