@@ -421,7 +421,7 @@ EAS Station implements the simple case (direct codes 1-204 only). Count bytes (2
 | `language_name` | `rbds_language_name` | Derived from language_code |
 | `linkage_set_number` | `rbds_linkage_set_number` | Group 1A variant 5 |
 | `oda_apps` | `rbds_oda_apps` | Group 3A |
-| `tdc_data` | — | Group 5A/5B channel 0 |
+| `tdc_data` | `rbds_tdc_data` | Group 5A/5B channel 0 (hex string) |
 | `tmc_present` | `rbds_tmc_present` | Group 8A |
 | `ews_channel` | `rbds_ews_channel` | Group 9A |
 | `ews_message_c` | `rbds_ews_message_c` | Group 9A Block C |

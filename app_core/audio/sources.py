@@ -515,6 +515,9 @@ class SDRSourceAdapter(AudioSourceAdapter):
                             metadata['rbds_language_name'] = rbds_data.language_name
                             metadata['rbds_linkage_set_number'] = rbds_data.linkage_set_number
                             metadata['rbds_oda_apps'] = rbds_data.oda_apps
+                            metadata['rbds_tdc_data'] = (
+                                rbds_data.tdc_data.hex() if rbds_data.tdc_data else None
+                            )
                             metadata['rbds_tmc_present'] = rbds_data.tmc_present
                             metadata['rbds_ews_channel'] = rbds_data.ews_channel
                             metadata['rbds_ews_message_c'] = rbds_data.ews_message_c
@@ -554,6 +557,10 @@ class SDRSourceAdapter(AudioSourceAdapter):
                             metadata['rbds_language_name'] = self._rbds_data.language_name
                             metadata['rbds_linkage_set_number'] = self._rbds_data.linkage_set_number
                             metadata['rbds_oda_apps'] = self._rbds_data.oda_apps
+                            metadata['rbds_tdc_data'] = (
+                                self._rbds_data.tdc_data.hex()
+                                if self._rbds_data.tdc_data else None
+                            )
                             metadata['rbds_tmc_present'] = self._rbds_data.tmc_present
                             metadata['rbds_ews_channel'] = self._rbds_data.ews_channel
                             metadata['rbds_ews_message_c'] = self._rbds_data.ews_message_c

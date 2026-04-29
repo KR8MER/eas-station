@@ -2611,45 +2611,17 @@ class RBDSDecoder:
             pin_day = (c >> 11) & 0x1F
             pin_hour = (c >> 6) & 0x1F
             pin_minute = c & 0x3F
-            if pin_day > 0:
-                if (self.pin_day != pin_day or self.pin_hour != pin_hour
-                        or self.pin_minute != pin_minute):
-                    self.pin_day, self.pin_hour, self.pin_minute = pin_day, pin_hour, pin_minute
-                    changed = True
+            if pin_day > 0 and (self.pin_day != pin_day or self.pin_hour != pin_hour
+                                 or self.pin_minute != pin_minute):
+                self.pin_day, self.pin_hour, self.pin_minute = pin_day, pin_hour, pin_minute
+                changed = True
             variant = (b >> 2) & 0x7
-            if variant == 0:
-                lang = d & 0xFF
-                if lang != 0 and self.language_code != lang:
-                    self.language_code = lang
-                    self.language_name = RBDS_LANGUAGE_CODES.get(lang)
-                    changed = True
-            elif variant == 4:
-                ecc_val = d & 0xFF
-                if ecc_val != 0 and self.ecc != ecc_val:
-                    self.ecc = ecc_val
-                    changed = True
-            elif variant == 5:
-                lsn = d & 0x0FFF
-                la = bool((d >> 15) & 0x1)
-                sc = bool((d >> 14) & 0x1)
-                if self.linkage_set_number != lsn:
-                    self.linkage_set_number = lsn
-                    self.linkage_actuator = la
-                    self.linkage_soft_coupling = sc
-                    changed = True
+            if self._apply_group1_variant(variant, d):
+                changed = True
         elif group_type == 1 and version_b:
             variant = (b >> 2) & 0x7
-            if variant == 0:
-                lang = d & 0xFF
-                if lang != 0 and self.language_code != lang:
-                    self.language_code = lang
-                    self.language_name = RBDS_LANGUAGE_CODES.get(lang)
-                    changed = True
-            elif variant == 4:
-                ecc_val = d & 0xFF
-                if ecc_val != 0 and self.ecc != ecc_val:
-                    self.ecc = ecc_val
-                    changed = True
+            if self._apply_group1_variant(variant, d):
+                changed = True
         elif group_type == 2:
             text_segment = b & 0xF
             ab_flag = (b >> 4) & 0x1
@@ -2715,20 +2687,11 @@ class RBDSDecoder:
             if self._update_clock_time(mjd, hour, minute, offset_sign, offset_half_hours):
                 changed = True
         elif group_type == 5 and not version_b:
-            channel = b & 0x1F
             raw = [(c >> 8) & 0xFF, c & 0xFF, (d >> 8) & 0xFF, d & 0xFF]
-            if channel not in self._tdc_channels:
-                self._tdc_channels[channel] = []
-            self._tdc_channels[channel].extend(raw)
-            self._tdc_channels[channel] = self._tdc_channels[channel][-256:]
+            self._accumulate_tdc(b & 0x1F, raw)
             changed = True
         elif group_type == 5 and version_b:
-            channel = b & 0x1F
-            raw = [(d >> 8) & 0xFF, d & 0xFF]
-            if channel not in self._tdc_channels:
-                self._tdc_channels[channel] = []
-            self._tdc_channels[channel].extend(raw)
-            self._tdc_channels[channel] = self._tdc_channels[channel][-256:]
+            self._accumulate_tdc(b & 0x1F, [(d >> 8) & 0xFF, d & 0xFF])
             changed = True
         elif group_type == 6 and not version_b:
             raw = [b & 0x1F, c, d]
@@ -2908,6 +2871,37 @@ class RBDSDecoder:
             fast_ms=self.fast_ms,
             fast_di_bits=None,
         )
+
+    def _apply_group1_variant(self, variant: int, d: int) -> bool:
+        """Process Group 1A/1B variant payload (language, ECC, linkage). Returns True if changed."""
+        if variant == 0:
+            lang = d & 0xFF
+            if lang != 0 and self.language_code != lang:
+                self.language_code = lang
+                self.language_name = RBDS_LANGUAGE_CODES.get(lang)
+                return True
+        elif variant == 4:
+            ecc_val = d & 0xFF
+            if ecc_val != 0 and self.ecc != ecc_val:
+                self.ecc = ecc_val
+                return True
+        elif variant == 5:
+            lsn = d & 0x0FFF
+            la = bool((d >> 15) & 0x1)
+            sc = bool((d >> 14) & 0x1)
+            if self.linkage_set_number != lsn:
+                self.linkage_set_number = lsn
+                self.linkage_actuator = la
+                self.linkage_soft_coupling = sc
+                return True
+        return False
+
+    def _accumulate_tdc(self, channel: int, raw: list) -> None:
+        """Append TDC bytes to a channel buffer, capped at 256 bytes."""
+        if channel not in self._tdc_channels:
+            self._tdc_channels[channel] = []
+        self._tdc_channels[channel].extend(raw)
+        self._tdc_channels[channel] = self._tdc_channels[channel][-256:]
 
     def _update_ps_name(self, address: int, chars: int) -> bool:
         """Stage PS segments into a pending buffer, display once a full

@@ -521,6 +521,9 @@ class RedisSDRSourceAdapter(AudioSourceAdapter):
                     self.metrics.metadata['rbds_language_name'] = rbds.language_name
                     self.metrics.metadata['rbds_linkage_set_number'] = rbds.linkage_set_number
                     self.metrics.metadata['rbds_oda_apps'] = rbds.oda_apps
+                    self.metrics.metadata['rbds_tdc_data'] = (
+                        rbds.tdc_data.hex() if rbds.tdc_data else None
+                    )
                     self.metrics.metadata['rbds_tmc_present'] = rbds.tmc_present
                     self.metrics.metadata['rbds_ews_channel'] = rbds.ews_channel
                     self.metrics.metadata['rbds_ews_message_c'] = rbds.ews_message_c
@@ -576,6 +579,9 @@ class RedisSDRSourceAdapter(AudioSourceAdapter):
                     self.metrics.metadata['rbds_language_name'] = last.language_name
                     self.metrics.metadata['rbds_linkage_set_number'] = last.linkage_set_number
                     self.metrics.metadata['rbds_oda_apps'] = last.oda_apps
+                    self.metrics.metadata['rbds_tdc_data'] = (
+                        last.tdc_data.hex() if last.tdc_data else None
+                    )
                     self.metrics.metadata['rbds_tmc_present'] = last.tmc_present
                     self.metrics.metadata['rbds_ews_channel'] = last.ews_channel
                     self.metrics.metadata['rbds_ews_message_c'] = last.ews_message_c
