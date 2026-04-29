@@ -241,6 +241,36 @@ def fast_decimate(samples: np.ndarray, factor: int) -> np.ndarray:
         return samples.reshape(-1, factor).mean(axis=1).astype(np.float32)
 
 
+RBDS_LANGUAGE_CODES: Dict[int, str] = {
+    0x01: "Albanian", 0x02: "Breton", 0x03: "Catalan", 0x04: "Croatian",
+    0x05: "Welsh", 0x06: "Czech", 0x07: "Danish", 0x08: "German",
+    0x09: "English", 0x0A: "Spanish", 0x0B: "Esperanto", 0x0C: "Estonian",
+    0x0D: "Basque", 0x0E: "Faroese", 0x0F: "French", 0x10: "Frisian",
+    0x11: "Irish", 0x12: "Gaelic", 0x13: "Galician", 0x14: "Icelandic",
+    0x15: "Italian", 0x16: "Lappish", 0x17: "Latin", 0x18: "Latvian",
+    0x19: "Luxembourgian", 0x1A: "Lithuanian", 0x1B: "Hungarian",
+    0x1C: "Macedonian", 0x1D: "Maltese", 0x1E: "Norwegian", 0x1F: "Occitan",
+    0x20: "Polish", 0x21: "Portuguese", 0x22: "Romanian", 0x23: "Romansh",
+    0x24: "Serbian", 0x25: "Slovak", 0x26: "Slovene", 0x27: "Finnish",
+    0x28: "Swedish", 0x29: "Turkish", 0x2A: "Flemish", 0x2B: "Walloon",
+    0x40: "Background sound", 0x45: "Zulu", 0x46: "Vietnamese", 0x47: "Uzbek",
+    0x48: "Urdu", 0x49: "Ukrainian", 0x4A: "Thai", 0x4B: "Telugu",
+    0x4C: "Tatar", 0x4D: "Tamil", 0x4E: "Tajik", 0x4F: "Swahili",
+    0x50: "Sranan Tongo", 0x51: "Somali", 0x52: "Sinhalese", 0x53: "Shona",
+    0x54: "Serbo-Croat", 0x55: "Ruthenian", 0x56: "Russian", 0x57: "Quechua",
+    0x58: "Pushtu", 0x59: "Punjabi", 0x5A: "Persian", 0x5B: "Papamiento",
+    0x5C: "Oriya", 0x5D: "Nepali", 0x5E: "Ndebele", 0x5F: "Marathi",
+    0x60: "Moldovian", 0x61: "Malaysian", 0x62: "Malagasy", 0x63: "Macedonian",
+    0x64: "Laotian", 0x65: "Korean", 0x66: "Khmer", 0x67: "Kazakh",
+    0x68: "Kannada", 0x69: "Japanese", 0x6A: "Indonesian", 0x6B: "Hindi",
+    0x6C: "Hebrew", 0x6D: "Hausa", 0x6E: "Gurani", 0x6F: "Gujurati",
+    0x70: "Greek", 0x71: "Georgian", 0x72: "Fulah", 0x73: "Dari",
+    0x74: "Churash", 0x75: "Chinese", 0x76: "Burmese", 0x77: "Bulgarian",
+    0x78: "Bengali", 0x79: "Belorussian", 0x7A: "Bambora", 0x7B: "Azerbaijani",
+    0x7C: "Assamese", 0x7D: "Armenian", 0x7E: "Arabic", 0x7F: "Amharic",
+}
+
+
 @dataclass
 class DemodulatorConfig:
     """Configuration for audio demodulator."""
@@ -270,6 +300,37 @@ class RBDSData:
     di_dynamic_pty: Optional[bool] = None  # Decoder Identification: dynamic PTY
     clock_time_utc: Optional[str] = None  # ISO-8601 UTC timestamp from Group 4A
     clock_time_local: Optional[str] = None  # ISO-8601 local timestamp from Group 4A
+    # Group 0A Block C - Alternative Frequencies
+    af_list: Optional[List[float]] = None  # list of AF frequencies in MHz
+    # Group 1A/1B - Programme Item Number + Slow Labeling Codes
+    pin_day: Optional[int] = None
+    pin_hour: Optional[int] = None
+    pin_minute: Optional[int] = None
+    ecc: Optional[int] = None  # Extended Country Code
+    language_code: Optional[int] = None
+    language_name: Optional[str] = None
+    linkage_set_number: Optional[int] = None
+    linkage_actuator: Optional[bool] = None
+    linkage_soft_coupling: Optional[bool] = None
+    # Group 3A - Open Data Application registration
+    oda_apps: Optional[List[int]] = None
+    # Group 5A/5B - Transparent Data Channel
+    tdc_data: Optional[bytes] = None
+    # Group 6A/6B - In-House Applications
+    in_house_data: Optional[List[int]] = None
+    # Group 8A - Traffic Message Channel
+    tmc_present: Optional[bool] = None
+    # Group 9A - Emergency Warning System
+    ews_channel: Optional[int] = None
+    ews_message_c: Optional[int] = None
+    ews_message_d: Optional[int] = None
+    # Group 14A/14B - Enhanced Other Networks
+    eon_list: Optional[List[dict]] = None
+    # Group 15B - Fast Switching Information
+    fast_tp: Optional[bool] = None
+    fast_ta: Optional[bool] = None
+    fast_ms: Optional[bool] = None
+    fast_di_bits: Optional[int] = None
 
 
 @dataclass
@@ -2411,6 +2472,39 @@ class RBDSDecoder:
         self.clock_time_local = None
         self._radio_text_ab = 0
         self._rt_saw_cr_this_group = False
+        # Group 0A AF state
+        self._af_buffer: List[float] = []
+        self._af_method_a_count: Optional[int] = None
+        # Group 1A/1B PIN and slow labeling state
+        self.pin_day: Optional[int] = None
+        self.pin_hour: Optional[int] = None
+        self.pin_minute: Optional[int] = None
+        self.ecc: Optional[int] = None
+        self.language_code: Optional[int] = None
+        self.language_name: Optional[str] = None
+        self.linkage_set_number: Optional[int] = None
+        self.linkage_actuator: Optional[bool] = None
+        self.linkage_soft_coupling: Optional[bool] = None
+        # Group 3A ODA state
+        self._oda_app_map: Dict[int, int] = {}
+        self.oda_apps: List[int] = []
+        # Group 5A/5B TDC state
+        self._tdc_channels: Dict[int, List[int]] = {}
+        # Group 6A/6B In-house state
+        self.in_house_data: List[int] = []
+        # Group 8A TMC state
+        self.tmc_present: Optional[bool] = None
+        # Group 9A EWS state
+        self.ews_channel: Optional[int] = None
+        self.ews_message_c: Optional[int] = None
+        self.ews_message_d: Optional[int] = None
+        # Group 14A/14B EON state
+        self._eon_map: Dict[int, dict] = {}
+        # Group 15B fast switching state
+        self.fast_tp: Optional[bool] = None
+        self.fast_ta: Optional[bool] = None
+        self.fast_ms: Optional[bool] = None
+        self.fast_di_bits: Optional[int] = None
         # Dynamic-PS cycle assembly. Stations that rotate multiple
         # 8-char PS strings send them one after another in complete
         # cycles of 4 segments (addresses 0..3). To avoid displaying
@@ -2489,18 +2583,73 @@ class RBDSDecoder:
                 self.ms = ms
                 changed = True
 
-            # Bit 2 of Block B carries one of four DI (Decoder
-            # Identification) bits, selected by the segment address in
-            # bits 1-0. The four bits together describe stereo / binaural
-            # / compressed / dynamic-PTY status.
             di_bit = bool((b >> 2) & 0x1)
             address = b & 0x3
             if self._update_di(address, di_bit):
                 changed = True
 
+            # Group 0A Block C: Alternative Frequencies (Method A, direct codes only)
+            if not version_b:
+                af1 = (c >> 8) & 0xFF
+                af2 = c & 0xFF
+                new_freqs = []
+                for code in (af1, af2):
+                    if 1 <= code <= 204:
+                        new_freqs.append(round(87.6 + 0.1 * code, 1))
+                if new_freqs:
+                    prev_len = len(self._af_buffer)
+                    for f in new_freqs:
+                        if f not in self._af_buffer:
+                            self._af_buffer.append(f)
+                    if len(self._af_buffer) != prev_len:
+                        changed = True
+
             chars = d
             if self._update_ps_name(address, chars):
                 changed = True
+        elif group_type == 1 and not version_b:
+            pin_day = (c >> 11) & 0x1F
+            pin_hour = (c >> 6) & 0x1F
+            pin_minute = c & 0x3F
+            if pin_day > 0:
+                if (self.pin_day != pin_day or self.pin_hour != pin_hour
+                        or self.pin_minute != pin_minute):
+                    self.pin_day, self.pin_hour, self.pin_minute = pin_day, pin_hour, pin_minute
+                    changed = True
+            variant = (b >> 2) & 0x7
+            if variant == 0:
+                lang = d & 0xFF
+                if lang != 0 and self.language_code != lang:
+                    self.language_code = lang
+                    self.language_name = RBDS_LANGUAGE_CODES.get(lang)
+                    changed = True
+            elif variant == 4:
+                ecc_val = d & 0xFF
+                if ecc_val != 0 and self.ecc != ecc_val:
+                    self.ecc = ecc_val
+                    changed = True
+            elif variant == 5:
+                lsn = d & 0x0FFF
+                la = bool((d >> 15) & 0x1)
+                sc = bool((d >> 14) & 0x1)
+                if self.linkage_set_number != lsn:
+                    self.linkage_set_number = lsn
+                    self.linkage_actuator = la
+                    self.linkage_soft_coupling = sc
+                    changed = True
+        elif group_type == 1 and version_b:
+            variant = (b >> 2) & 0x7
+            if variant == 0:
+                lang = d & 0xFF
+                if lang != 0 and self.language_code != lang:
+                    self.language_code = lang
+                    self.language_name = RBDS_LANGUAGE_CODES.get(lang)
+                    changed = True
+            elif variant == 4:
+                ecc_val = d & 0xFF
+                if ecc_val != 0 and self.ecc != ecc_val:
+                    self.ecc = ecc_val
+                    changed = True
         elif group_type == 2:
             text_segment = b & 0xF
             ab_flag = (b >> 4) & 0x1
@@ -2539,6 +2688,17 @@ class RBDSDecoder:
                     if idx < len(self.radio_text):
                         if self._update_radio_text(idx, code):
                             changed = True
+        elif group_type == 3 and not version_b:
+            oda_group_type = (b >> 1) & 0xF
+            oda_version = b & 0x1
+            aid = c
+            if aid != 0:
+                key = (oda_group_type, oda_version)
+                if key not in self._oda_app_map or self._oda_app_map[key] != aid:
+                    self._oda_app_map[key] = aid
+                    if aid not in self.oda_apps:
+                        self.oda_apps.append(aid)
+                    changed = True
         elif group_type == 4 and not version_b:
             # Group 4A: Clock Time and Date.
             # Block B bits 1-0 + Block C bits 15-1  -> MJD (17 bits)
@@ -2554,6 +2714,50 @@ class RBDSDecoder:
             offset_half_hours = d & 0x1F
             if self._update_clock_time(mjd, hour, minute, offset_sign, offset_half_hours):
                 changed = True
+        elif group_type == 5 and not version_b:
+            channel = b & 0x1F
+            raw = [(c >> 8) & 0xFF, c & 0xFF, (d >> 8) & 0xFF, d & 0xFF]
+            if channel not in self._tdc_channels:
+                self._tdc_channels[channel] = []
+            self._tdc_channels[channel].extend(raw)
+            self._tdc_channels[channel] = self._tdc_channels[channel][-256:]
+            changed = True
+        elif group_type == 5 and version_b:
+            channel = b & 0x1F
+            raw = [(d >> 8) & 0xFF, d & 0xFF]
+            if channel not in self._tdc_channels:
+                self._tdc_channels[channel] = []
+            self._tdc_channels[channel].extend(raw)
+            self._tdc_channels[channel] = self._tdc_channels[channel][-256:]
+            changed = True
+        elif group_type == 6 and not version_b:
+            raw = [b & 0x1F, c, d]
+            self.in_house_data = self.in_house_data[-15:] + raw
+            changed = True
+        elif group_type == 6 and version_b:
+            raw = [b & 0x1F, d]
+            self.in_house_data = self.in_house_data[-16:] + raw
+            changed = True
+        elif group_type == 7 and not version_b:
+            logger.debug("RBDS Group 7A (Paging): B=%04X C=%04X D=%04X", b, c, d)
+        elif group_type == 8 and not version_b:
+            if not self.tmc_present:
+                self.tmc_present = True
+                changed = True
+            logger.debug("RBDS Group 8A (TMC): B=%04X C=%04X D=%04X", b, c, d)
+        elif group_type == 9 and not version_b:
+            ews_channel = b & 0x1F
+            if (self.ews_channel != ews_channel
+                    or self.ews_message_c != c
+                    or self.ews_message_d != d):
+                self.ews_channel = ews_channel
+                self.ews_message_c = c
+                self.ews_message_d = d
+                changed = True
+                logger.info(
+                    "RBDS EWS: channel=%d msg_c=0x%04X msg_d=0x%04X",
+                    ews_channel, c, d
+                )
         elif group_type == 10 and not version_b:
             # Group 10A: Program Type Name (8 chars in two 4-char segments).
             ab_flag = (b >> 4) & 0x1
@@ -2575,6 +2779,90 @@ class RBDSDecoder:
                         if self.pty_name != name:
                             self.pty_name = name
                             changed = True
+        elif group_type == 10 and version_b:
+            segment = b & 0x1
+            ab_flag = (b >> 4) & 0x1
+            if ab_flag != self._pty_name_ab:
+                self._pty_name_ab = ab_flag
+                self._pty_name_buf = [' '] * 8
+            block_chars = [(d >> 8) & 0xFF, d & 0xFF]
+            for i, code in enumerate(block_chars):
+                idx = segment * 2 + i
+                if idx < len(self._pty_name_buf):
+                    char = chr(code) if 32 <= code < 127 else ' '
+                    if self._pty_name_buf[idx] != char:
+                        self._pty_name_buf[idx] = char
+                        name = ''.join(self._pty_name_buf).strip()
+                        if self.pty_name != name:
+                            self.pty_name = name
+                            changed = True
+        elif group_type == 14 and not version_b:
+            variant = b & 0xF
+            eon_tp = bool((b >> 4) & 0x1)
+            eon_pi = c
+            if eon_pi not in self._eon_map:
+                self._eon_map[eon_pi] = {
+                    'pi': f"{eon_pi:04X}", 'tp': eon_tp, 'ps': ' ' * 8, 'af': []
+                }
+            eon = self._eon_map[eon_pi]
+            eon['tp'] = eon_tp
+            if variant <= 3:
+                ps_chars = [(d >> 8) & 0xFF, d & 0xFF]
+                ps_list = list(eon['ps'])
+                for i, code in enumerate(ps_chars):
+                    idx = variant * 2 + i
+                    if idx < 8:
+                        ps_list[idx] = chr(code) if 32 <= code < 127 else ' '
+                eon['ps'] = ''.join(ps_list)
+            elif variant == 4:
+                af_code = (d >> 8) & 0xFF
+                if 1 <= af_code <= 204:
+                    af_mhz = round(87.6 + 0.1 * af_code, 1)
+                    if af_mhz not in eon['af']:
+                        eon['af'].append(af_mhz)
+            elif variant == 12:
+                eon['linkage'] = d
+            elif variant == 13:
+                eon['pty'] = (d >> 11) & 0x1F
+                eon['ta'] = bool((d >> 0) & 0x1)
+            elif variant == 14:
+                eon['pin_day'] = (d >> 11) & 0x1F
+                eon['pin_hour'] = (d >> 6) & 0x1F
+                eon['pin_minute'] = d & 0x3F
+            changed = True
+        elif group_type == 14 and version_b:
+            eon_tp = bool((b >> 4) & 0x1)
+            eon_ta = bool((b >> 3) & 0x1)
+            eon_pi = c
+            if eon_pi not in self._eon_map:
+                self._eon_map[eon_pi] = {
+                    'pi': f"{eon_pi:04X}", 'tp': eon_tp, 'ta': eon_ta,
+                    'ps': ' ' * 8, 'af': []
+                }
+            self._eon_map[eon_pi]['tp'] = eon_tp
+            self._eon_map[eon_pi]['ta'] = eon_ta
+            changed = True
+        elif group_type == 15 and version_b:
+            fast_ta = bool((b >> 4) & 0x1)
+            fast_ms = bool((b >> 3) & 0x1)
+            fast_di = bool((b >> 2) & 0x1)
+            address = b & 0x3
+            changed_flags = False
+            if self.fast_tp != tp:
+                self.fast_tp = tp
+                changed_flags = True
+            if self.fast_ta != fast_ta:
+                self.fast_ta = fast_ta
+                changed_flags = True
+            if self.fast_ms != fast_ms:
+                self.fast_ms = fast_ms
+                changed_flags = True
+            if changed_flags:
+                changed = True
+            if self._update_di(address, fast_di):
+                changed = True
+            if self._update_ps_name(address, d):
+                changed = True
 
         return changed
 
@@ -2597,6 +2885,28 @@ class RBDSDecoder:
             di_dynamic_pty=self.di_dynamic_pty,
             clock_time_utc=self.clock_time_utc,
             clock_time_local=self.clock_time_local,
+            af_list=sorted(self._af_buffer) if self._af_buffer else None,
+            pin_day=self.pin_day,
+            pin_hour=self.pin_hour,
+            pin_minute=self.pin_minute,
+            ecc=self.ecc,
+            language_code=self.language_code,
+            language_name=self.language_name,
+            linkage_set_number=self.linkage_set_number,
+            linkage_actuator=self.linkage_actuator,
+            linkage_soft_coupling=self.linkage_soft_coupling,
+            oda_apps=list(self.oda_apps) if self.oda_apps else None,
+            tdc_data=bytes(self._tdc_channels.get(0, [])) if self._tdc_channels else None,
+            in_house_data=list(self.in_house_data) if self.in_house_data else None,
+            tmc_present=self.tmc_present,
+            ews_channel=self.ews_channel,
+            ews_message_c=self.ews_message_c,
+            ews_message_d=self.ews_message_d,
+            eon_list=list(self._eon_map.values()) if self._eon_map else None,
+            fast_tp=self.fast_tp,
+            fast_ta=self.fast_ta,
+            fast_ms=self.fast_ms,
+            fast_di_bits=None,
         )
 
     def _update_ps_name(self, address: int, chars: int) -> bool:

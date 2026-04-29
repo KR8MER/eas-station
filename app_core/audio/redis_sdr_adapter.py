@@ -512,6 +512,22 @@ class RedisSDRSourceAdapter(AudioSourceAdapter):
                     self.metrics.metadata['rbds_di_dynamic_pty'] = rbds.di_dynamic_pty
                     self.metrics.metadata['rbds_clock_time_utc'] = rbds.clock_time_utc
                     self.metrics.metadata['rbds_clock_time_local'] = rbds.clock_time_local
+                    self.metrics.metadata['rbds_af_list'] = rbds.af_list
+                    self.metrics.metadata['rbds_pin_day'] = rbds.pin_day
+                    self.metrics.metadata['rbds_pin_hour'] = rbds.pin_hour
+                    self.metrics.metadata['rbds_pin_minute'] = rbds.pin_minute
+                    self.metrics.metadata['rbds_ecc'] = rbds.ecc
+                    self.metrics.metadata['rbds_language_code'] = rbds.language_code
+                    self.metrics.metadata['rbds_language_name'] = rbds.language_name
+                    self.metrics.metadata['rbds_linkage_set_number'] = rbds.linkage_set_number
+                    self.metrics.metadata['rbds_oda_apps'] = rbds.oda_apps
+                    self.metrics.metadata['rbds_tmc_present'] = rbds.tmc_present
+                    self.metrics.metadata['rbds_ews_channel'] = rbds.ews_channel
+                    self.metrics.metadata['rbds_ews_message_c'] = rbds.ews_message_c
+                    self.metrics.metadata['rbds_ews_message_d'] = rbds.ews_message_d
+                    self.metrics.metadata['rbds_eon_list'] = rbds.eon_list
+                    self.metrics.metadata['rbds_fast_ta'] = rbds.fast_ta
+                    self.metrics.metadata['rbds_fast_ms'] = rbds.fast_ms
                     # rbds_last_seen advances every time we observe a decoded
                     # group, even if the content is identical to the last one.
                     # This is the "decoder is alive" heartbeat: it lets the
@@ -551,6 +567,22 @@ class RedisSDRSourceAdapter(AudioSourceAdapter):
                     self.metrics.metadata['rbds_di_dynamic_pty'] = last.di_dynamic_pty
                     self.metrics.metadata['rbds_clock_time_utc'] = last.clock_time_utc
                     self.metrics.metadata['rbds_clock_time_local'] = last.clock_time_local
+                    self.metrics.metadata['rbds_af_list'] = last.af_list
+                    self.metrics.metadata['rbds_pin_day'] = last.pin_day
+                    self.metrics.metadata['rbds_pin_hour'] = last.pin_hour
+                    self.metrics.metadata['rbds_pin_minute'] = last.pin_minute
+                    self.metrics.metadata['rbds_ecc'] = last.ecc
+                    self.metrics.metadata['rbds_language_code'] = last.language_code
+                    self.metrics.metadata['rbds_language_name'] = last.language_name
+                    self.metrics.metadata['rbds_linkage_set_number'] = last.linkage_set_number
+                    self.metrics.metadata['rbds_oda_apps'] = last.oda_apps
+                    self.metrics.metadata['rbds_tmc_present'] = last.tmc_present
+                    self.metrics.metadata['rbds_ews_channel'] = last.ews_channel
+                    self.metrics.metadata['rbds_ews_message_c'] = last.ews_message_c
+                    self.metrics.metadata['rbds_ews_message_d'] = last.ews_message_d
+                    self.metrics.metadata['rbds_eon_list'] = last.eon_list
+                    self.metrics.metadata['rbds_fast_ta'] = last.fast_ta
+                    self.metrics.metadata['rbds_fast_ms'] = last.fast_ms
                 else:
                     # No cached data and nothing new this cycle — e.g. right
                     # after a frequency change.  Publish explicit nulls so

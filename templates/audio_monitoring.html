@@ -1107,6 +1107,88 @@ function renderAudioSources(fullRender = true) {
                                         ` : ''}
                                     ` : ''}
 
+                                    ${(source.metrics.metadata.rbds_ews_channel !== undefined && source.metrics.metadata.rbds_ews_channel !== null) ? `
+                                        <hr class="my-2">
+                                        <div class="alert alert-danger p-2 mb-2" role="alert">
+                                            <strong><i class="fas fa-exclamation-triangle"></i> Emergency Warning System (EWS)</strong>
+                                            <div class="mt-1 small">
+                                                <div class="d-flex justify-content-between mb-1">
+                                                    <span>Channel:</span>
+                                                    <span class="font-monospace fw-bold">${source.metrics.metadata.rbds_ews_channel}</span>
+                                                </div>
+                                                ${(source.metrics.metadata.rbds_ews_message_c !== undefined && source.metrics.metadata.rbds_ews_message_c !== null) ? `
+                                                    <div class="d-flex justify-content-between mb-1">
+                                                        <span>Word C:</span>
+                                                        <span class="font-monospace">0x${source.metrics.metadata.rbds_ews_message_c.toString(16).toUpperCase().padStart(4,'0')}</span>
+                                                    </div>
+                                                ` : ''}
+                                                ${(source.metrics.metadata.rbds_ews_message_d !== undefined && source.metrics.metadata.rbds_ews_message_d !== null) ? `
+                                                    <div class="d-flex justify-content-between mb-1">
+                                                        <span>Word D:</span>
+                                                        <span class="font-monospace">0x${source.metrics.metadata.rbds_ews_message_d.toString(16).toUpperCase().padStart(4,'0')}</span>
+                                                    </div>
+                                                ` : ''}
+                                            </div>
+                                        </div>
+                                    ` : ''}
+
+                                    ${source.metrics.metadata.rbds_tmc_present ? `
+                                        <hr class="my-2">
+                                        <div class="d-flex justify-content-between mb-1">
+                                            <span class="text-muted">Traffic Message Channel (TMC):</span>
+                                            <span class="badge bg-info"><i class="fas fa-road"></i> Present</span>
+                                        </div>
+                                    ` : ''}
+
+                                    ${(source.metrics.metadata.rbds_af_list && source.metrics.metadata.rbds_af_list.length > 0) ? `
+                                        <hr class="my-2">
+                                        <div class="text-muted mb-1"><strong>Alternative Frequencies (AF)</strong></div>
+                                        <div class="small font-monospace">
+                                            ${source.metrics.metadata.rbds_af_list.map(f => `<span class="badge bg-secondary me-1">${f} MHz</span>`).join('')}
+                                        </div>
+                                    ` : ''}
+
+                                    ${source.metrics.metadata.rbds_pin_day ? `
+                                        <hr class="my-2">
+                                        <div class="d-flex justify-content-between mb-1">
+                                            <span class="text-muted">Programme Item Number (PIN):</span>
+                                            <span class="font-monospace small">Day ${source.metrics.metadata.rbds_pin_day} ${String(source.metrics.metadata.rbds_pin_hour).padStart(2,'0')}:${String(source.metrics.metadata.rbds_pin_minute).padStart(2,'0')}</span>
+                                        </div>
+                                    ` : ''}
+
+                                    ${source.metrics.metadata.rbds_language_name ? `
+                                        <hr class="my-2">
+                                        <div class="d-flex justify-content-between mb-1">
+                                            <span class="text-muted">Language:</span>
+                                            <span>${escapeHtml(source.metrics.metadata.rbds_language_name)}</span>
+                                        </div>
+                                    ` : ''}
+
+                                    ${(source.metrics.metadata.rbds_ecc !== undefined && source.metrics.metadata.rbds_ecc !== null) ? `
+                                        <div class="d-flex justify-content-between mb-1">
+                                            <span class="text-muted">Extended Country Code (ECC):</span>
+                                            <span class="font-monospace small">0x${source.metrics.metadata.rbds_ecc.toString(16).toUpperCase().padStart(2,'0')}</span>
+                                        </div>
+                                    ` : ''}
+
+                                    ${(source.metrics.metadata.rbds_eon_list && source.metrics.metadata.rbds_eon_list.length > 0) ? `
+                                        <hr class="my-2">
+                                        <div class="text-muted mb-1"><strong>Enhanced Other Networks (EON)</strong></div>
+                                        <table class="table table-sm table-bordered small mb-1">
+                                            <thead><tr><th>PI</th><th>PS</th><th>TP</th><th>TA</th></tr></thead>
+                                            <tbody>
+                                                ${source.metrics.metadata.rbds_eon_list.map(e => `
+                                                    <tr>
+                                                        <td class="font-monospace">${escapeHtml(e.pi || '')}</td>
+                                                        <td>${escapeHtml((e.ps || '').trim())}</td>
+                                                        <td>${e.tp ? '<span class="badge bg-info">Y</span>' : '<span class="badge bg-secondary">N</span>'}</td>
+                                                        <td>${e.ta !== undefined ? (e.ta ? '<span class="badge bg-warning text-dark">Y</span>' : '<span class="badge bg-secondary">N</span>') : '-'}</td>
+                                                    </tr>
+                                                `).join('')}
+                                            </tbody>
+                                        </table>
+                                    ` : ''}
+
                                     ${(source.metrics.metadata.rbds_last_updated || source.metrics.metadata.rbds_last_seen) ? `
                                         <hr class="my-2">
                                         ${source.metrics.metadata.rbds_last_seen ? `

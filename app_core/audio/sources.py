@@ -506,6 +506,22 @@ class SDRSourceAdapter(AudioSourceAdapter):
                             metadata['rbds_di_dynamic_pty'] = rbds_data.di_dynamic_pty
                             metadata['rbds_clock_time_utc'] = rbds_data.clock_time_utc
                             metadata['rbds_clock_time_local'] = rbds_data.clock_time_local
+                            metadata['rbds_af_list'] = rbds_data.af_list
+                            metadata['rbds_pin_day'] = rbds_data.pin_day
+                            metadata['rbds_pin_hour'] = rbds_data.pin_hour
+                            metadata['rbds_pin_minute'] = rbds_data.pin_minute
+                            metadata['rbds_ecc'] = rbds_data.ecc
+                            metadata['rbds_language_code'] = rbds_data.language_code
+                            metadata['rbds_language_name'] = rbds_data.language_name
+                            metadata['rbds_linkage_set_number'] = rbds_data.linkage_set_number
+                            metadata['rbds_oda_apps'] = rbds_data.oda_apps
+                            metadata['rbds_tmc_present'] = rbds_data.tmc_present
+                            metadata['rbds_ews_channel'] = rbds_data.ews_channel
+                            metadata['rbds_ews_message_c'] = rbds_data.ews_message_c
+                            metadata['rbds_ews_message_d'] = rbds_data.ews_message_d
+                            metadata['rbds_eon_list'] = rbds_data.eon_list
+                            metadata['rbds_fast_ta'] = rbds_data.fast_ta
+                            metadata['rbds_fast_ms'] = rbds_data.fast_ms
                             metadata['rbds_program_type_name'] = (
                                 RBDS_PROGRAM_TYPES.get(int(rbds_data.pty))
                                 if rbds_data.pty is not None
@@ -529,6 +545,22 @@ class SDRSourceAdapter(AudioSourceAdapter):
                             metadata['rbds_di_dynamic_pty'] = self._rbds_data.di_dynamic_pty
                             metadata['rbds_clock_time_utc'] = self._rbds_data.clock_time_utc
                             metadata['rbds_clock_time_local'] = self._rbds_data.clock_time_local
+                            metadata['rbds_af_list'] = self._rbds_data.af_list
+                            metadata['rbds_pin_day'] = self._rbds_data.pin_day
+                            metadata['rbds_pin_hour'] = self._rbds_data.pin_hour
+                            metadata['rbds_pin_minute'] = self._rbds_data.pin_minute
+                            metadata['rbds_ecc'] = self._rbds_data.ecc
+                            metadata['rbds_language_code'] = self._rbds_data.language_code
+                            metadata['rbds_language_name'] = self._rbds_data.language_name
+                            metadata['rbds_linkage_set_number'] = self._rbds_data.linkage_set_number
+                            metadata['rbds_oda_apps'] = self._rbds_data.oda_apps
+                            metadata['rbds_tmc_present'] = self._rbds_data.tmc_present
+                            metadata['rbds_ews_channel'] = self._rbds_data.ews_channel
+                            metadata['rbds_ews_message_c'] = self._rbds_data.ews_message_c
+                            metadata['rbds_ews_message_d'] = self._rbds_data.ews_message_d
+                            metadata['rbds_eon_list'] = self._rbds_data.eon_list
+                            metadata['rbds_fast_ta'] = self._rbds_data.fast_ta
+                            metadata['rbds_fast_ms'] = self._rbds_data.fast_ms
                             metadata['rbds_program_type_name'] = (
                                 RBDS_PROGRAM_TYPES.get(int(self._rbds_data.pty))
                                 if self._rbds_data.pty is not None
