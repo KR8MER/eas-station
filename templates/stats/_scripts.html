@@ -4,6 +4,10 @@
 <script src="{{ url_for('static', filename='vendor/chartjs/chartjs-plugin-datalabels.min.js') }}"></script>
 <script src="{{ url_for('static', filename='vendor/chartjs/chartjs-chart-matrix.min.js') }}"></script>
 
+<!-- jsPDF + html2canvas for client-side PDF report export (vendored locally) -->
+<script src="{{ url_for('static', filename='vendor/jspdf/jspdf.umd.min.js') }}"></script>
+<script src="{{ url_for('static', filename='vendor/jspdf/html2canvas.min.js') }}"></script>
+
 <script>
 console.log('Statistics dashboard initializing...');
 
@@ -183,7 +187,16 @@ const statsData = {
     alertByMessageType: {{ alert_by_message_type | tojson | safe }} || [],
     relayStats: {{ relay_stats | tojson | safe }} || { total: 0, success_rate: 0, by_type: [] },
     pollingTrend: {{ polling_trend | tojson | safe }} || {},
-    broadcastLatency: {{ broadcast_latency | tojson | safe }}
+    broadcastLatency: {{ broadcast_latency | tojson | safe }},
+    receivedEasStats: {{ received_eas_stats | tojson | safe }} || { total: 0, forwarded: 0, ignored: 0 },
+    easForwardingStats: {{ eas_forwarding_stats | tojson | safe }} || { forwarded: 0, total: 0, rate: 0 },
+    manualActivationCount: {{ manual_activation_count | tojson | safe }} || 0,
+    pageMeta: {
+        totalAlerts: {{ total_alerts | tojson | safe }} || 0,
+        activeAlerts: {{ active_alerts | tojson | safe }} || 0,
+        expiredAlerts: {{ expired_alerts | tojson | safe }} || 0,
+        totalBoundaries: {{ total_boundaries | tojson | safe }} || 0
+    }
 };
 
 const baseAlerts = (statsData.alertEvents || []).map(alert => ({
@@ -1245,6 +1258,12 @@ function renderDynamicCharts(agg) {
     createMonthlyChart(agg);
     createYearlyTrendChart(agg);
     createRecentActivityChart(agg);
+    createSeverityOverTimeChart(agg);
+    createCumulativeAlertsChart(agg);
+    createTopEventsTrendChart(agg);
+    createHourSeverityChart(agg);
+    createLeadTimeHistogramChart();
+    createYoYComparisonChart();
 }
 
 function renderStaticCharts() {
@@ -1257,6 +1276,7 @@ function renderStaticCharts() {
     createMessageTypeChart();
     createRelayActivationsChart();
     createPollingTrendChart();
+    createForwardingFunnelChart();
     computeStreakStats();
 }
 
@@ -1286,6 +1306,8 @@ function initializeFilters() {
     document.getElementById('applyFiltersBtn')?.addEventListener('click', applyFiltersFromInputs);
     document.getElementById('resetFiltersBtn')?.addEventListener('click', resetFilters);
     document.getElementById('exportDashboardBtn')?.addEventListener('click', exportFilteredData);
+    document.getElementById('exportDashboardPdfBtn')?.addEventListener('click', exportDashboardAsPdf);
+    initializeExportDropdown();
     document.getElementById('updateStartDateBtn')?.addEventListener('click', updateSystemStartDate);
     document.getElementById('resetStartDateBtn')?.addEventListener('click', resetSystemStartDate);
 
@@ -1511,5 +1533,715 @@ function computeStreakStats() {
     const quietEl = document.getElementById('longestQuietPeriod');
     if (activeEl) activeEl.textContent = longestActive > 0 ? `${longestActive}d` : '-';
     if (quietEl) quietEl.textContent = longestQuiet > 0 ? `${longestQuiet}d` : '-';
+}
+
+// ============================================
+// NEW DYNAMIC CHARTS (driven by filtered alerts)
+// ============================================
+
+const SEVERITY_GRADIENTS = {
+    'Extreme':  GRADIENT_PALETTES.danger,
+    'Severe':   GRADIENT_PALETTES.orange,
+    'Moderate': GRADIENT_PALETTES.warning,
+    'Minor':    GRADIENT_PALETTES.info,
+    'Unknown':  GRADIENT_PALETTES.indigo
+};
+
+const SEVERITY_ORDER = ['Extreme', 'Severe', 'Moderate', 'Minor', 'Unknown'];
+
+function expandDailyKeys(alerts) {
+    if (!alerts.length) return [];
+    const dates = alerts.map(a => a.sentDate).sort((a, b) => a - b);
+    const start = new Date(dates[0]); start.setHours(0, 0, 0, 0);
+    const end = new Date(dates[dates.length - 1]); end.setHours(0, 0, 0, 0);
+    // Cap range to avoid runaway loops on a misconfigured filter (years of data is fine, decades is not).
+    const maxDays = 366 * 5;
+    const out = [];
+    const cursor = new Date(start);
+    let i = 0;
+    while (cursor <= end && i < maxDays) {
+        out.push(cursor.toISOString().slice(0, 10));
+        cursor.setDate(cursor.getDate() + 1);
+        i++;
+    }
+    return out;
+}
+
+function createSeverityOverTimeChart(agg) {
+    const id = 'severityOverTimeChart';
+    if (!document.getElementById(id)) return;
+    const alerts = state.filteredAlerts || [];
+    if (!alerts.length) return showNoData(id, 'No alerts in selected range');
+
+    const days = expandDailyKeys(alerts);
+    if (!days.length) return showNoData(id, 'No alerts in selected range');
+
+    const counts = {};
+    SEVERITY_ORDER.forEach(s => { counts[s] = Object.fromEntries(days.map(d => [d, 0])); });
+    alerts.forEach(a => {
+        const day = a.sentDate.toISOString().slice(0, 10);
+        const sev = SEVERITY_ORDER.includes(a.severity) ? a.severity : 'Unknown';
+        if (counts[sev][day] !== undefined) counts[sev][day]++;
+    });
+
+    createOrUpdateChart(id, canvas => {
+        const ctx = canvas.getContext('2d');
+        const datasets = SEVERITY_ORDER
+            .filter(sev => days.some(d => counts[sev][d] > 0))
+            .map(sev => ({
+                label: sev,
+                data: days.map(d => counts[sev][d]),
+                backgroundColor: createGradient(ctx, SEVERITY_GRADIENTS[sev]),
+                borderColor: SEVERITY_GRADIENTS[sev][0],
+                borderWidth: 1,
+                stack: 'severity'
+            }));
+
+        return new Chart(canvas, {
+            type: 'bar',
+            data: { labels: days, datasets },
+            options: {
+                plugins: {
+                    legend: { position: 'bottom', labels: { padding: 12, usePointStyle: true } },
+                    tooltip: { mode: 'index', intersect: false }
+                },
+                scales: {
+                    x: {
+                        stacked: true,
+                        grid: { display: false },
+                        ticks: { maxTicksLimit: 10, autoSkip: true }
+                    },
+                    y: {
+                        stacked: true,
+                        beginAtZero: true,
+                        grid: { color: getChartThemeColors().gridLines },
+                        title: { display: true, text: 'Alerts per day' }
+                    }
+                }
+            }
+        });
+    });
+}
+
+function createCumulativeAlertsChart(agg) {
+    const id = 'cumulativeAlertsChart';
+    if (!document.getElementById(id)) return;
+    const alerts = state.filteredAlerts || [];
+    if (!alerts.length) return showNoData(id, 'No alerts in selected range');
+
+    const series = (agg.dailySeries || []).slice();
+    if (!series.length) return showNoData(id, 'No alerts in selected range');
+
+    let running = 0;
+    const cumulative = series.map(p => { running += p.count; return { date: p.date, count: running }; });
+
+    createOrUpdateChart(id, canvas => {
+        const ctx = canvas.getContext('2d');
+        return new Chart(canvas, {
+            type: 'line',
+            data: {
+                labels: cumulative.map(p => p.date),
+                datasets: [{
+                    label: 'Cumulative alerts',
+                    data: cumulative.map(p => p.count),
+                    borderColor: GRADIENT_PALETTES.primary[0],
+                    backgroundColor: createGradient(ctx, [
+                        GRADIENT_PALETTES.primary[0] + 'B3',
+                        GRADIENT_PALETTES.primary[1] + '1A'
+                    ]),
+                    borderWidth: 2.5,
+                    tension: 0.25,
+                    fill: true,
+                    pointRadius: 0,
+                    pointHoverRadius: 4
+                }]
+            },
+            options: {
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { grid: { display: false }, ticks: { maxTicksLimit: 10, autoSkip: true } },
+                    y: { beginAtZero: true, grid: { color: getChartThemeColors().gridLines } }
+                }
+            }
+        });
+    });
+}
+
+function createTopEventsTrendChart(agg) {
+    const id = 'topEventsTrendChart';
+    if (!document.getElementById(id)) return;
+    const alerts = state.filteredAlerts || [];
+    if (!alerts.length) return showNoData(id, 'No alerts in selected range');
+
+    const top = (agg.alertByEvent || []).slice(0, 5).map(e => e.event);
+    if (!top.length) return showNoData(id, 'No alerts in selected range');
+
+    const days = expandDailyKeys(alerts);
+    const buckets = Object.fromEntries(top.map(e => [e, Object.fromEntries(days.map(d => [d, 0]))]));
+    alerts.forEach(a => {
+        if (!top.includes(a.event)) return;
+        const day = a.sentDate.toISOString().slice(0, 10);
+        if (buckets[a.event][day] !== undefined) buckets[a.event][day]++;
+    });
+
+    createOrUpdateChart(id, canvas => {
+        const ctx = canvas.getContext('2d');
+        const datasets = top.map((evt, i) => {
+            const palette = CHART_GRADIENTS[i % CHART_GRADIENTS.length];
+            return {
+                label: evt,
+                data: days.map(d => buckets[evt][d]),
+                borderColor: palette[0],
+                backgroundColor: palette[0] + '33',
+                borderWidth: 2,
+                tension: 0.3,
+                pointRadius: 0,
+                pointHoverRadius: 4,
+                fill: false
+            };
+        });
+
+        return new Chart(canvas, {
+            type: 'line',
+            data: { labels: days, datasets },
+            options: {
+                plugins: {
+                    legend: { position: 'bottom', labels: { padding: 12, usePointStyle: true, boxWidth: 8 } },
+                    tooltip: { mode: 'index', intersect: false }
+                },
+                scales: {
+                    x: { grid: { display: false }, ticks: { maxTicksLimit: 10, autoSkip: true } },
+                    y: { beginAtZero: true, grid: { color: getChartThemeColors().gridLines } }
+                }
+            }
+        });
+    });
+}
+
+function createHourSeverityChart(agg) {
+    const id = 'hourSeverityChart';
+    if (!document.getElementById(id)) return;
+    const alerts = state.filteredAlerts || [];
+    if (!alerts.length) return showNoData(id, 'No alerts in selected range');
+
+    const matrix = {};
+    SEVERITY_ORDER.forEach(s => { matrix[s] = Array(24).fill(0); });
+    alerts.forEach(a => {
+        const sev = SEVERITY_ORDER.includes(a.severity) ? a.severity : 'Unknown';
+        const hour = a.sentDate.getHours();
+        matrix[sev][hour]++;
+    });
+
+    const presentSeverities = SEVERITY_ORDER.filter(s => matrix[s].some(v => v > 0));
+    if (!presentSeverities.length) return showNoData(id, 'No alerts in selected range');
+
+    createOrUpdateChart(id, canvas => {
+        const ctx = canvas.getContext('2d');
+        const datasets = presentSeverities.map(sev => ({
+            label: sev,
+            data: matrix[sev],
+            backgroundColor: createGradient(ctx, SEVERITY_GRADIENTS[sev]),
+            borderRadius: 4,
+            borderSkipped: false,
+            stack: 'sev'
+        }));
+
+        return new Chart(canvas, {
+            type: 'bar',
+            data: { labels: Array.from({ length: 24 }, (_, h) => `${h}:00`), datasets },
+            options: {
+                plugins: {
+                    legend: { position: 'bottom', labels: { padding: 12, usePointStyle: true } },
+                    tooltip: { mode: 'index', intersect: false }
+                },
+                scales: {
+                    x: { stacked: true, grid: { display: false }, title: { display: true, text: 'Hour of day' } },
+                    y: { stacked: true, beginAtZero: true, grid: { color: getChartThemeColors().gridLines }, title: { display: true, text: 'Alerts' } }
+                }
+            }
+        });
+    });
+}
+
+function createLeadTimeHistogramChart() {
+    const id = 'leadTimeHistogramChart';
+    if (!document.getElementById(id)) return;
+    const alerts = (state.filteredAlerts || []).filter(a => a.sentDate && a.expiresDate && a.expiresDate > a.sentDate);
+    if (!alerts.length) return showNoData(id, 'No duration data in selected range');
+
+    // Bucket by alert duration (hours), bins: <1h, 1-3, 3-6, 6-12, 12-24, 1-2d, 2-7d, >7d
+    const bins = [
+        { label: '<1h',   max: 1   },
+        { label: '1–3h',  max: 3   },
+        { label: '3–6h',  max: 6   },
+        { label: '6–12h', max: 12  },
+        { label: '12–24h',max: 24  },
+        { label: '1–2d',  max: 48  },
+        { label: '2–7d',  max: 168 },
+        { label: '>7d',   max: Infinity }
+    ];
+    const counts = bins.map(() => 0);
+    alerts.forEach(a => {
+        const hours = (a.expiresDate - a.sentDate) / 3600000;
+        const idx = bins.findIndex(b => hours <= b.max);
+        if (idx >= 0) counts[idx]++;
+    });
+
+    createOrUpdateChart(id, canvas => {
+        const ctx = canvas.getContext('2d');
+        return new Chart(canvas, {
+            type: 'bar',
+            data: {
+                labels: bins.map(b => b.label),
+                datasets: [{
+                    label: 'Alerts',
+                    data: counts,
+                    backgroundColor: bins.map((_, i) => createGradient(ctx, CHART_GRADIENTS[i % CHART_GRADIENTS.length])),
+                    borderRadius: 8,
+                    borderSkipped: false
+                }]
+            },
+            options: {
+                plugins: {
+                    legend: { display: false },
+                    datalabels: {
+                        display: true, anchor: 'end', align: 'top',
+                        color: getChartThemeColors().text, font: { weight: 'bold' },
+                        formatter: v => v > 0 ? v : ''
+                    }
+                },
+                scales: {
+                    x: { grid: { display: false }, title: { display: true, text: 'Duration (sent → expires)' } },
+                    y: { beginAtZero: true, grid: { color: getChartThemeColors().gridLines }, title: { display: true, text: 'Alert count' } }
+                }
+            }
+        });
+    });
+}
+
+function createYoYComparisonChart() {
+    const id = 'yoyComparisonChart';
+    const wrapper = document.getElementById('yoyChartWrapper');
+    if (!document.getElementById(id)) return;
+
+    // Year-over-year only meaningful when at least one full prior year exists
+    if (baseAlerts.length < 2) {
+        if (wrapper) wrapper.style.display = 'none';
+        return;
+    }
+    const years = new Set(baseAlerts.map(a => a.sentDate.getFullYear()));
+    if (years.size < 2) {
+        if (wrapper) wrapper.style.display = 'none';
+        return;
+    }
+    if (wrapper) wrapper.style.display = '';
+
+    const start = state.filters.startDate ? new Date(state.filters.startDate) : null;
+    const end = state.filters.endDate ? new Date(state.filters.endDate) : null;
+    if (!start || !end) return showNoData(id, 'Select a date range');
+
+    // Build day-of-year buckets for current window vs same window shifted back 1 year.
+    const fmtDayKey = (d) => `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const labels = [];
+    const cursor = new Date(start); cursor.setHours(0, 0, 0, 0);
+    const endCap = new Date(end); endCap.setHours(0, 0, 0, 0);
+    let safety = 0;
+    while (cursor <= endCap && safety < 400) {
+        labels.push(fmtDayKey(cursor));
+        cursor.setDate(cursor.getDate() + 1);
+        safety++;
+    }
+
+    const thisYearCounts = Object.fromEntries(labels.map(l => [l, 0]));
+    const lastYearCounts = Object.fromEntries(labels.map(l => [l, 0]));
+    const startKey = +start, endKey = +endCap + 86400000 - 1;
+    const startPrev = +(new Date(start.getFullYear() - 1, start.getMonth(), start.getDate(), 0, 0, 0, 0));
+    const endPrev = +(new Date(end.getFullYear() - 1, end.getMonth(), end.getDate(), 23, 59, 59, 999));
+
+    baseAlerts.forEach(a => {
+        const t = +a.sentDate;
+        const k = fmtDayKey(a.sentDate);
+        if (t >= startKey && t <= endKey && thisYearCounts[k] !== undefined) thisYearCounts[k]++;
+        else if (t >= startPrev && t <= endPrev && lastYearCounts[k] !== undefined) lastYearCounts[k]++;
+    });
+
+    const thisTotal = Object.values(thisYearCounts).reduce((a, b) => a + b, 0);
+    const lastTotal = Object.values(lastYearCounts).reduce((a, b) => a + b, 0);
+    if (thisTotal === 0 && lastTotal === 0) return showNoData(id, 'No comparable prior-year data');
+
+    createOrUpdateChart(id, canvas => {
+        const ctx = canvas.getContext('2d');
+        return new Chart(canvas, {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [
+                    {
+                        label: `${start.getFullYear()} (current window)`,
+                        data: labels.map(l => thisYearCounts[l]),
+                        borderColor: GRADIENT_PALETTES.primary[0],
+                        backgroundColor: GRADIENT_PALETTES.primary[0] + '33',
+                        borderWidth: 2.5, tension: 0.3, pointRadius: 0, fill: false
+                    },
+                    {
+                        label: `${start.getFullYear() - 1} (prior year)`,
+                        data: labels.map(l => lastYearCounts[l]),
+                        borderColor: GRADIENT_PALETTES.warning[0],
+                        backgroundColor: GRADIENT_PALETTES.warning[0] + '22',
+                        borderWidth: 2, borderDash: [6, 4], tension: 0.3, pointRadius: 0, fill: false
+                    }
+                ]
+            },
+            options: {
+                plugins: {
+                    legend: { position: 'bottom', labels: { padding: 12, usePointStyle: true } },
+                    tooltip: { mode: 'index', intersect: false }
+                },
+                scales: {
+                    x: { grid: { display: false }, ticks: { maxTicksLimit: 10, autoSkip: true } },
+                    y: { beginAtZero: true, grid: { color: getChartThemeColors().gridLines } }
+                }
+            }
+        });
+    });
+}
+
+function createForwardingFunnelChart() {
+    const id = 'forwardingFunnelChart';
+    const wrapper = document.getElementById('forwardingFunnelWrapper');
+    if (!document.getElementById(id)) return;
+
+    const totalAlerts = statsData.pageMeta?.totalAlerts || 0;
+    const received = statsData.receivedEasStats?.total || 0;
+    const fwdCap = statsData.easForwardingStats?.forwarded || 0;
+    const fwdAudio = statsData.receivedEasStats?.forwarded || 0;
+    const broadcasts = statsData.broadcastLatency?.total_broadcasts || 0;
+    const relays = statsData.relayStats?.total || 0;
+    const manual = statsData.manualActivationCount || 0;
+
+    const stages = [
+        { label: 'CAP alerts ingested',  value: totalAlerts },
+        { label: 'EAS audio received',   value: received },
+        { label: 'CAP → EAS forwarded',  value: fwdCap },
+        { label: 'Audio forwarded',      value: fwdAudio },
+        { label: 'EAS broadcasts',       value: broadcasts },
+        { label: 'Relay activations',    value: relays },
+        { label: 'Manual activations',   value: manual }
+    ].filter(s => s.value && s.value > 0);
+
+    if (!stages.length) {
+        if (wrapper) wrapper.style.display = 'none';
+        return;
+    }
+    if (wrapper) wrapper.style.display = '';
+
+    createOrUpdateChart(id, canvas => {
+        const ctx = canvas.getContext('2d');
+        return new Chart(canvas, {
+            type: 'bar',
+            data: {
+                labels: stages.map(s => s.label),
+                datasets: [{
+                    label: 'Count',
+                    data: stages.map(s => s.value),
+                    backgroundColor: stages.map((_, i) => createGradient(
+                        ctx, CHART_GRADIENTS[i % CHART_GRADIENTS.length], false
+                    )),
+                    borderRadius: 8,
+                    borderSkipped: false
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                plugins: {
+                    legend: { display: false },
+                    datalabels: {
+                        display: true, anchor: 'end', align: 'right',
+                        color: getChartThemeColors().text, font: { weight: 'bold' },
+                        formatter: v => v.toLocaleString()
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: (item) => {
+                                const v = item.raw;
+                                const top = stages[0].value;
+                                const pct = top > 0 ? ((v / top) * 100).toFixed(1) : '0.0';
+                                return `${v.toLocaleString()} (${pct}% of ingested)`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: { beginAtZero: true, grid: { color: getChartThemeColors().gridLines } },
+                    y: { grid: { display: false } }
+                },
+                layout: { padding: { right: 56 } }
+            }
+        });
+    });
+}
+
+// ============================================
+// EXPORT DROPDOWN
+// ============================================
+
+function initializeExportDropdown() {
+    const dd = document.getElementById('exportDropdown');
+    if (!dd) return;
+    const toggle = document.getElementById('exportToggleBtn');
+    if (!toggle) return;
+
+    toggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = dd.classList.toggle('open');
+        toggle.setAttribute('aria-expanded', String(isOpen));
+    });
+    document.addEventListener('click', (e) => {
+        if (!dd.contains(e.target)) {
+            dd.classList.remove('open');
+            toggle.setAttribute('aria-expanded', 'false');
+        }
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            dd.classList.remove('open');
+            toggle.setAttribute('aria-expanded', 'false');
+        }
+    });
+    // Close after clicking any menu item.
+    dd.querySelectorAll('.export-menu button, .export-menu a').forEach(el => {
+        el.addEventListener('click', () => {
+            dd.classList.remove('open');
+            toggle.setAttribute('aria-expanded', 'false');
+        });
+    });
+}
+
+// ============================================
+// PDF EXPORT
+// ============================================
+
+function setPdfStatus(text) {
+    const el = document.getElementById('pdfExportStatus');
+    if (el) el.textContent = text;
+}
+
+function showPdfOverlay(show) {
+    const el = document.getElementById('pdfExportOverlay');
+    if (!el) return;
+    if (show) el.removeAttribute('hidden');
+    else el.setAttribute('hidden', '');
+}
+
+function describeFilterRange() {
+    const f = state.filters;
+    const fmt = (d) => d ? d.toISOString().slice(0, 10) : '—';
+    const presetLabels = {
+        last7: 'Last 7 days', last30: 'Last 30 days', last90: 'Last 90 days',
+        last180: 'Last 180 days', last365: 'Last year', custom: 'Custom range'
+    };
+    const presetLabel = presetLabels[f.preset] || f.preset || 'Custom range';
+    return `${presetLabel} · ${fmt(f.startDate)} → ${fmt(f.endDate)}`;
+}
+
+async function exportDashboardAsPdf() {
+    if (typeof window.jspdf === 'undefined' || !window.jspdf.jsPDF) {
+        alert('PDF library failed to load. Please refresh the page and try again.');
+        return;
+    }
+    const { jsPDF } = window.jspdf;
+    showPdfOverlay(true);
+    setPdfStatus('Preparing report…');
+
+    try {
+        // A4 portrait: 210 x 297 mm
+        const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+        const pageW = doc.internal.pageSize.getWidth();
+        const pageH = doc.internal.pageSize.getHeight();
+        const margin = 12;
+        const contentW = pageW - margin * 2;
+        let cursorY = margin;
+
+        const ensureSpace = (needed) => {
+            if (cursorY + needed > pageH - margin) {
+                doc.addPage();
+                cursorY = margin;
+                drawPageHeader();
+            }
+        };
+
+        const drawPageHeader = () => {
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(8);
+            doc.setTextColor(120);
+            doc.text('EAS Station — Statistics Report', margin, 8);
+            doc.text(new Date().toLocaleString(), pageW - margin, 8, { align: 'right' });
+            doc.setDrawColor(220);
+            doc.line(margin, 10, pageW - margin, 10);
+            doc.setTextColor(20);
+        };
+
+        // ---------------- Cover page ----------------
+        doc.setFillColor(102, 126, 234);
+        doc.rect(0, 0, pageW, 70, 'F');
+        doc.setTextColor(255);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(26);
+        doc.text('EAS Station', margin, 28);
+        doc.setFontSize(18);
+        doc.text('Statistics Report', margin, 40);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(11);
+        doc.text(describeFilterRange(), margin, 52);
+        doc.text(`Generated: ${new Date().toLocaleString()}`, margin, 60);
+
+        cursorY = 84;
+        doc.setTextColor(20);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(13);
+        doc.text('Summary', margin, cursorY);
+        cursorY += 6;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(10);
+
+        const meta = statsData.pageMeta || {};
+        const agg = state.aggregates || {};
+        const summaryRows = [
+            ['Total alerts (all time)',   String(meta.totalAlerts ?? '—')],
+            ['Active alerts',             String(meta.activeAlerts ?? '—')],
+            ['Expired alerts',            String(meta.expiredAlerts ?? '—')],
+            ['Boundaries tracked',        String(meta.totalBoundaries ?? '—')],
+            ['Alerts in selected range',  String((state.filteredAlerts || []).length)],
+            ['Avg per day (range)',       (agg.avgPerDay || 0).toFixed(2)],
+            ['Top severity (range)',      String(agg.topSeverity || '—')],
+            ['Most common event (range)', String(agg.topEvent || '—')]
+        ];
+        const colW = contentW / 2;
+        summaryRows.forEach(([k, v], i) => {
+            const col = i % 2;
+            const row = Math.floor(i / 2);
+            const x = margin + col * colW;
+            const y = cursorY + row * 7;
+            doc.setTextColor(110);
+            doc.text(k, x, y);
+            doc.setTextColor(20);
+            doc.setFont('helvetica', 'bold');
+            doc.text(v, x + colW - 4, y, { align: 'right' });
+            doc.setFont('helvetica', 'normal');
+        });
+        cursorY += Math.ceil(summaryRows.length / 2) * 7 + 6;
+
+        // ---------------- Charts ----------------
+        const chartsToInclude = [
+            { id: 'alertTypesChart',         title: 'By Alert Type' },
+            { id: 'severityChart',           title: 'By Severity' },
+            { id: 'severityOverTimeChart',   title: 'Severity Mix Over Time' },
+            { id: 'cumulativeAlertsChart',   title: 'Cumulative Alerts' },
+            { id: 'topEventsTrendChart',     title: 'Top 5 Event Types Trend' },
+            { id: 'hourSeverityChart',       title: 'Hour-of-Day × Severity' },
+            { id: 'temporalHeatmapChart',    title: 'Activity Heatmap (Day × Hour)' },
+            { id: 'hourlyLineChart',         title: 'Hourly Distribution' },
+            { id: 'dayOfWeekChart',          title: 'Weekly Trend' },
+            { id: 'monthlyChart',            title: 'Monthly Trend' },
+            { id: 'recentActivityChart',     title: 'Recent Activity' },
+            { id: 'yearlyTrendChart',        title: 'Yearly Trend' },
+            { id: 'leadTimeHistogramChart',  title: 'Alert Duration Distribution' },
+            { id: 'yoyComparisonChart',      title: 'Year-over-Year Comparison' },
+            { id: 'forwardingFunnelChart',   title: 'EAS Forwarding Funnel' },
+            { id: 'affectedAreasChart',      title: 'Most Affected Areas' },
+            { id: 'boundaryTypesChart',      title: 'Boundary Types' },
+            { id: 'reliabilityGauge',        title: 'Reliability Score' },
+            { id: 'durationChart',           title: 'Avg Alert Duration' },
+            { id: 'messageTypeChart',        title: 'Message Type Breakdown' },
+            { id: 'pollingTrendChart',       title: 'Polling Reliability Trend' },
+            { id: 'urgencyChart',            title: 'By Urgency' },
+            { id: 'certaintyChart',          title: 'By Certainty' },
+            { id: 'statusChart',             title: 'By Status' },
+            { id: 'relayActivationsChart',   title: 'Relay Activations by Type' }
+        ];
+
+        const chartImgW = contentW;
+        const chartImgH = 75; // mm
+
+        for (let i = 0; i < chartsToInclude.length; i++) {
+            const item = chartsToInclude[i];
+            const chart = state.charts[item.id];
+            if (!chart) continue;
+            setPdfStatus(`Rendering chart ${i + 1}/${chartsToInclude.length}: ${item.title}`);
+            // Yield to the event loop so the overlay can repaint.
+            await new Promise(r => setTimeout(r, 0));
+
+            ensureSpace(chartImgH + 10);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(11);
+            doc.setTextColor(30);
+            doc.text(item.title, margin, cursorY);
+            cursorY += 4;
+
+            let dataUrl;
+            try {
+                dataUrl = chart.toBase64Image('image/png', 1.0);
+            } catch (err) {
+                console.warn('Failed to render chart', item.id, err);
+                continue;
+            }
+            try {
+                doc.addImage(dataUrl, 'PNG', margin, cursorY, chartImgW, chartImgH, undefined, 'FAST');
+            } catch (err) {
+                console.warn('addImage failed', item.id, err);
+                continue;
+            }
+            cursorY += chartImgH + 8;
+        }
+
+        // ---------------- Top boundaries table ----------------
+        const boundaryRows = (statsData.mostAffectedBoundaries || []).slice(0, 12);
+        if (boundaryRows.length) {
+            ensureSpace(20 + boundaryRows.length * 6);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(12);
+            doc.text('Top affected boundaries', margin, cursorY);
+            cursorY += 6;
+
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(9);
+            doc.setFillColor(240, 240, 245);
+            doc.rect(margin, cursorY - 4, contentW, 6, 'F');
+            doc.text('Boundary', margin + 2, cursorY);
+            doc.text('Type', margin + contentW * 0.55, cursorY);
+            doc.text('Alerts', margin + contentW - 4, cursorY, { align: 'right' });
+            cursorY += 4;
+            doc.setFont('helvetica', 'normal');
+            boundaryRows.forEach(b => {
+                ensureSpace(6);
+                cursorY += 5;
+                doc.text(String(b.name || '—').slice(0, 60), margin + 2, cursorY);
+                doc.text(String(b.type || '—'), margin + contentW * 0.55, cursorY);
+                doc.text(String(b.count || 0), margin + contentW - 4, cursorY, { align: 'right' });
+            });
+            cursorY += 6;
+        }
+
+        setPdfStatus('Finalizing…');
+        // Add page numbers
+        const pageCount = doc.internal.getNumberOfPages();
+        for (let i = 1; i <= pageCount; i++) {
+            doc.setPage(i);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(8);
+            doc.setTextColor(120);
+            doc.text(`Page ${i} / ${pageCount}`, pageW - margin, pageH - 5, { align: 'right' });
+        }
+
+        const today = new Date();
+        const ymd = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
+        const rangeSlug = (state.filters.preset || 'custom').replace(/[^a-z0-9]/gi, '');
+        doc.save(`eas-station-statistics_${ymd}_${rangeSlug}.pdf`);
+    } catch (err) {
+        console.error('PDF export failed:', err);
+        alert('Could not generate PDF: ' + (err && err.message ? err.message : err));
+    } finally {
+        showPdfOverlay(false);
+    }
 }
 </script>
