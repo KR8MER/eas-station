@@ -6,6 +6,12 @@ tracks releases under the 2.x series.
 
 ## [Unreleased]
 
+### Added
+- **Statistics dashboard** — new charts (severity-mix-over-time, cumulative alerts, top 5 events trend, hour-of-day × severity, alert duration histogram, year-over-year overlay, EAS forwarding funnel), a one-click **PDF report export** of the dashboard, and a print stylesheet so the browser "Print to PDF" route also produces a clean report. Filtered alerts CSV / dashboard PDF / summary metrics JSON are now grouped under a single **Export ▾** dropdown in the filter panel.
+
+### Dependencies
+- **Added (frontend, vendored under `static/vendor/jspdf/`):** `jspdf` 4.2.1 and `html2canvas` 1.4.1 (both MIT) — used by the Statistics dashboard for client-side PDF report generation. No new server-side dependencies; PDF generation runs entirely in the browser.
+
 ## [2.71.74] - 2026-04-29 - FM stereo decoding, per-source decoder streams, WebSocket alerts
 
 ### Fixed

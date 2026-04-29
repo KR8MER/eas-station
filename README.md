@@ -62,7 +62,7 @@ EAS Station is a software-defined drop-in replacement for commercial EAS encoder
 - **Responsive Bootstrap 5 UI** — works on desktop, tablet, and mobile
 - **Real-time updates** — Socket.IO pushes live alert and system data without page refresh
 - **Alert timeline** — full history with search, filter, and detail view
-- **Analytics dashboard** — alert frequency, type breakdown, and geographic distribution charts (Chart.js)
+- **Analytics dashboard** — alert frequency, type breakdown, and geographic distribution charts (Chart.js), with one-click **PDF export** of the full statistics report (jsPDF + html2canvas)
 - **Audio monitoring** — live receive history, source routing view, and playback
 - **System health panel** — CPU, memory, disk, and service status at a glance
 - **Dark-mode-friendly** design with accessible color system
@@ -166,6 +166,8 @@ graph TB
 | **eas-station-audio** | Audio processing, EAS monitoring, Redis pub/sub |
 
 **Infrastructure:** PostgreSQL 17 + PostGIS 3.4 for persistent storage · Redis 7 for real-time metrics and inter-service messaging · nginx for HTTPS termination.
+
+**Frontend libraries (all vendored locally under `static/vendor/`):** Bootstrap 5, jQuery, Font Awesome, Leaflet (maps), Mermaid (diagrams), Chart.js 3 with the datalabels, matrix and date-fns adapter plugins (dashboards), and jsPDF + html2canvas (client-side PDF report export from the Statistics dashboard).
 
 ---
 

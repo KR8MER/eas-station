@@ -4,6 +4,23 @@
 
 This comprehensive reference documents all UI components available in the EAS Station interface. Each component includes usage examples, customization options, and accessibility guidelines.
 
+### Vendored frontend libraries
+
+All frontend libraries are vendored locally under `static/vendor/` (no CDN dependencies at runtime). When you need any of these, link to the static path rather than a public CDN.
+
+| Library | Version | Path | Used for |
+|---|---|---|---|
+| Bootstrap | 5.3 | `static/vendor/bootstrap/` | Layout, grid, base components |
+| jQuery | 3.x | `static/vendor/jquery/` | Legacy DOM helpers on some admin pages |
+| Font Awesome | 6.x | `static/vendor/fontawesome/` | Iconography |
+| Leaflet | latest stable | `static/vendor/leaflet/` | Interactive maps |
+| Mermaid | latest stable | `static/vendor/mermaid/` | In-browser diagram rendering |
+| Chart.js (v3) + datalabels + matrix + date-fns adapter | 3.x | `static/vendor/chartjs/` | Dashboards & analytics charts |
+| jsPDF | 4.2.1 | `static/vendor/jspdf/jspdf.umd.min.js` | Client-side PDF generation (Statistics dashboard report) |
+| html2canvas | 1.4.1 | `static/vendor/jspdf/html2canvas.min.js` | DOM → canvas snapshots for PDF sections that aren't `<canvas>` |
+
+> When adding a new vendored frontend library, also update this table, the [About page](../../templates/about.html) Software Stack section, and the project [README](../../README.md) so the dependency is discoverable.
+
 ## 🎯 Component Categories
 
 ### Navigation Components
