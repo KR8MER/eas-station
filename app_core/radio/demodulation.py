@@ -1557,18 +1557,52 @@ class RBDSWorker:
                             )
                         return (checkword_value ^ offset_word[block_number]) == block_calculated_crc_value
 
+                    def _try_correct_single_bit_error(
+                        block_word_value: int,
+                        block_number: int,
+                    ) -> tuple[bool, int]:
+                        """Attempt single-bit RBDS block repair.
+
+                        NRSC-4-B / IEC 62106 uses a (26,16) code with 10 check bits. A
+                        one-bit error is correctable if toggling exactly one bit produces
+                        a valid CRC+offset check for this expected block slot.
+                        """
+                        if _crc_ok_for_block(block_word_value, block_number):
+                            return True, block_word_value
+
+                        corrected_word: Optional[int] = None
+                        for bit_index in range(26):
+                            candidate = block_word_value ^ (1 << bit_index)
+                            if _crc_ok_for_block(candidate, block_number):
+                                # Ambiguous multi-candidate correction can happen in noise;
+                                # reject ambiguous cases instead of guessing.
+                                if corrected_word is not None:
+                                    return False, block_word_value
+                                corrected_word = candidate
+
+                        if corrected_word is None:
+                            return False, block_word_value
+                        return True, corrected_word
+
                     good_block = False
                     block_word = self._rbds_reg ^ 0x3FFFFFF if self._rbds_inverted_polarity else self._rbds_reg
 
-                    if _crc_ok_for_block(block_word, self._rbds_block_number):
+                    corrected, corrected_word = _try_correct_single_bit_error(
+                        block_word, self._rbds_block_number
+                    )
+                    if corrected:
+                        block_word = corrected_word
                         good_block = True
                     else:
                         # If current polarity suddenly fails CRC but opposite polarity passes,
                         # recover immediately instead of waiting for a full sync-loss window.
                         alternate_block_word = block_word ^ 0x3FFFFFF
-                        if _crc_ok_for_block(alternate_block_word, self._rbds_block_number):
+                        corrected_alt, corrected_alt_word = _try_correct_single_bit_error(
+                            alternate_block_word, self._rbds_block_number
+                        )
+                        if corrected_alt:
                             self._rbds_inverted_polarity = not self._rbds_inverted_polarity
-                            block_word = alternate_block_word
+                            block_word = corrected_alt_word
                             good_block = True
                             logger.info(
                                 "RBDS polarity flipped while synced; continuing decode (%s polarity)",
