@@ -51,7 +51,16 @@
         <div class="filters-actions">
             <button class="apply" id="applyFiltersBtn"><i class="fas fa-check"></i> Apply</button>
             <button class="reset" id="resetFiltersBtn"><i class="fas fa-undo"></i> Reset</button>
-            <button class="reset" id="exportDashboardBtn"><i class="fas fa-download"></i> Export CSV</button>
+            <div class="export-dropdown" id="exportDropdown">
+                <button class="reset export-toggle" type="button" id="exportToggleBtn" aria-haspopup="true" aria-expanded="false">
+                    <i class="fas fa-download"></i> Export <i class="fas fa-caret-down" style="margin-left:0.25rem;"></i>
+                </button>
+                <div class="export-menu" role="menu">
+                    <button type="button" id="exportDashboardBtn" role="menuitem"><i class="fas fa-file-csv"></i> Filtered alerts (CSV)</button>
+                    <button type="button" id="exportDashboardPdfBtn" role="menuitem"><i class="fas fa-file-pdf"></i> Dashboard report (PDF)</button>
+                    <a href="/export/statistics" role="menuitem"><i class="fas fa-file-code"></i> Summary metrics (JSON)</a>
+                </div>
+            </div>
         </div>
         <div class="filter-summary" id="filterSummary">
             <span><i class="fas fa-info-circle"></i> Select filters to refine the data.</span>
@@ -162,6 +171,21 @@
                 <div class="stat-number">{{ received_eas_stats.forwarded or 0 }}</div>
                 <div class="stat-label">Audio Forwarded</div>
                 <div class="stat-subtitle">{{ received_eas_stats.ignored or 0 }} ignored</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- EAS Forwarding Funnel -->
+    <div class="chart-grid-large" id="forwardingFunnelWrapper">
+        <div class="chart-container">
+            <div class="chart-title">
+                <i class="fas fa-filter"></i> EAS Forwarding Funnel
+            </div>
+            <div id="forwardingFunnelChart">
+                <div class="loading-message">
+                    <div class="spinner"></div>
+                    <div>Loading...</div>
+                </div>
             </div>
         </div>
     </div>
@@ -388,6 +412,89 @@
         </div>
     </div>
     {% endif %}
+
+    <!-- Severity / Event / Cumulative trends in filtered range -->
+    <h2 class="section-header">
+        <i class="fas fa-stream"></i> Trends in Selected Range
+    </h2>
+
+    <div class="chart-grid">
+        <div class="chart-container">
+            <div class="chart-title">
+                <i class="fas fa-layer-group"></i> Severity Mix Over Time
+            </div>
+            <div id="severityOverTimeChart">
+                <div class="loading-message">
+                    <div class="spinner"></div>
+                    <div>Loading...</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <div class="chart-title">
+                <i class="fas fa-infinity"></i> Cumulative Alerts
+            </div>
+            <div id="cumulativeAlertsChart">
+                <div class="loading-message">
+                    <div class="spinner"></div>
+                    <div>Loading...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="chart-grid">
+        <div class="chart-container">
+            <div class="chart-title">
+                <i class="fas fa-project-diagram"></i> Top 5 Event Types Trend
+            </div>
+            <div id="topEventsTrendChart">
+                <div class="loading-message">
+                    <div class="spinner"></div>
+                    <div>Loading...</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <div class="chart-title">
+                <i class="fas fa-business-time"></i> Hour-of-Day × Severity
+            </div>
+            <div id="hourSeverityChart">
+                <div class="loading-message">
+                    <div class="spinner"></div>
+                    <div>Loading...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="chart-grid">
+        <div class="chart-container">
+            <div class="chart-title">
+                <i class="fas fa-hourglass"></i> Alert Duration Distribution
+            </div>
+            <div id="leadTimeHistogramChart">
+                <div class="loading-message">
+                    <div class="spinner"></div>
+                    <div>Loading...</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="chart-container" id="yoyChartWrapper">
+            <div class="chart-title">
+                <i class="fas fa-calendar-alt"></i> Year-over-Year Comparison
+            </div>
+            <div id="yoyComparisonChart">
+                <div class="loading-message">
+                    <div class="spinner"></div>
+                    <div>Loading...</div>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Geographic Impact -->
     {% if most_affected_boundaries and most_affected_boundaries|length > 0 %}
@@ -662,7 +769,16 @@
         <p>
             Last updated: <span id="stats-timestamp"></span>
             &nbsp;|&nbsp;
-            <a href="/export/statistics"><i class="fas fa-download"></i> Export Full Report</a>
+            <a href="/export/statistics"><i class="fas fa-download"></i> Export Full Report (JSON)</a>
         </p>
+    </div>
+</div>
+
+<!-- PDF generation overlay -->
+<div id="pdfExportOverlay" class="pdf-export-overlay" hidden>
+    <div class="pdf-export-card">
+        <div class="spinner"></div>
+        <div class="pdf-export-text">Generating PDF report…</div>
+        <div class="pdf-export-subtext" id="pdfExportStatus">Preparing charts</div>
     </div>
 </div>

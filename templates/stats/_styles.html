@@ -716,4 +716,171 @@
     .stat-card:nth-child(4) { animation-delay: 0.2s; }
     .stat-card:nth-child(5) { animation-delay: 0.25s; }
     .stat-card:nth-child(6) { animation-delay: 0.3s; }
+
+    /* ============================================
+       EXPORT DROPDOWN
+       ============================================ */
+    .export-dropdown {
+        position: relative;
+        display: inline-block;
+    }
+
+    .export-dropdown .export-toggle {
+        cursor: pointer;
+    }
+
+    .export-dropdown .export-menu {
+        position: absolute;
+        top: calc(100% + 0.4rem);
+        right: 0;
+        min-width: 240px;
+        background: var(--surface-color, #fff);
+        border: 1px solid var(--border-color, #e2e8f0);
+        border-radius: 12px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+        padding: 0.4rem;
+        display: none;
+        z-index: 25;
+    }
+
+    .export-dropdown.open .export-menu {
+        display: block;
+    }
+
+    .export-dropdown .export-menu button,
+    .export-dropdown .export-menu a {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        width: 100%;
+        text-align: left;
+        background: transparent;
+        border: none;
+        color: var(--text-color, #1e293b);
+        font: inherit;
+        font-size: 0.9rem;
+        font-weight: 500;
+        padding: 0.6rem 0.8rem;
+        border-radius: 8px;
+        cursor: pointer;
+        text-decoration: none;
+        transition: background 0.15s ease;
+    }
+
+    .export-dropdown .export-menu button:hover,
+    .export-dropdown .export-menu a:hover {
+        background: var(--glass-bg);
+    }
+
+    .export-dropdown .export-menu i {
+        width: 18px;
+        text-align: center;
+        color: var(--chart-primary-start, #667eea);
+    }
+
+    /* ============================================
+       PDF GENERATION OVERLAY
+       ============================================ */
+    .pdf-export-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.55);
+        backdrop-filter: blur(4px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+    }
+
+    .pdf-export-overlay[hidden] {
+        display: none;
+    }
+
+    .pdf-export-card {
+        background: var(--surface-color, #fff);
+        color: var(--text-color, #1e293b);
+        border-radius: var(--card-radius, 16px);
+        padding: 2rem 2.5rem;
+        text-align: center;
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+        min-width: 280px;
+    }
+
+    .pdf-export-card .spinner {
+        margin: 0 auto 1rem auto;
+    }
+
+    .pdf-export-card .pdf-export-text {
+        font-size: 1.05rem;
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+    }
+
+    .pdf-export-card .pdf-export-subtext {
+        font-size: 0.85rem;
+        color: var(--text-muted, #64748b);
+    }
+
+    /* ============================================
+       PRINT STYLESHEET (browser "Print to PDF")
+       ============================================ */
+    @media print {
+        @page { size: A4; margin: 12mm; }
+
+        body {
+            background: #fff !important;
+            color: #000 !important;
+        }
+
+        /* Hide chrome and interactive controls */
+        nav, header, footer:not(.stats-footer),
+        .filters-actions, .settings-panel, .export-dropdown,
+        .pdf-export-overlay, #exportToggleBtn,
+        .stats-page-header .header-actions {
+            display: none !important;
+        }
+
+        .stats-page-header {
+            background: none !important;
+            color: #000 !important;
+            padding: 0 0 1rem 0 !important;
+            margin-bottom: 1rem !important;
+            border-bottom: 2px solid #333;
+        }
+
+        .stats-page-header::before { display: none !important; }
+        .stats-page-header h1 { color: #000 !important; font-size: 1.5rem !important; }
+        .stats-page-header small { color: #444 !important; }
+
+        .filters-panel {
+            border: 1px solid #ccc;
+            background: #f7f7f7 !important;
+            color: #000 !important;
+            page-break-inside: avoid;
+        }
+        .filters-panel .filters-grid { display: none !important; }
+        .filter-summary { color: #000 !important; }
+
+        .stat-card,
+        .quick-stat,
+        .chart-container {
+            box-shadow: none !important;
+            border: 1px solid #ddd !important;
+            background: #fff !important;
+            color: #000 !important;
+            page-break-inside: avoid;
+        }
+
+        .section-header {
+            color: #000 !important;
+            border-bottom: 1px solid #999;
+            page-break-after: avoid;
+        }
+
+        .chart-grid, .chart-grid-large, .chart-grid-small {
+            page-break-inside: avoid;
+        }
+
+        a { color: #000 !important; text-decoration: none !important; }
+    }
 </style>
