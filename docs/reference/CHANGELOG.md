@@ -6,9 +6,11 @@ tracks releases under the 2.x series.
 
 ## [Unreleased]
 
+## [2.71.74] - 2026-04-29 - FM stereo decoding, per-source decoder streams, WebSocket alerts
+
 ### Fixed
-- **RBDS Radio Text reassembly** in `app_core/radio/demodulation.py`. Two
-  long-standing bugs in `RBDSDecoder._update_radio_text`:
+- **RBDS Radio Text reassembly** in `app_core/radio/demodulation.py` (PR #1953).
+  Two long-standing bugs in `RBDSDecoder._update_radio_text`:
   (a) the visible RT was joined with `rstrip()`, so any leading spaces
   introduced by unprintable RDS Annex-E bytes (e.g. 0xE9, which the
   printable-ASCII filter maps to space) leaked into the displayed text and
@@ -16,15 +18,15 @@ tracks releases under the 2.x series.
   (b) once a 0x0D carriage-return arrived at index N, the terminator was
   permanent — if the station later re-broadcast the same segment with a
   non-CR byte at index N (the documented RDS-extension idiom), the visible
-  RT could never grow back out.  Fix:  track the most-recent CR index and
+  RT could never grow back out.  Fix: track the most-recent CR index and
   release the terminator when a later group writes a non-CR byte to that
   exact slot, and trim both ends of the assembled RT.  Restores the two
   previously-failing tests in `tests/test_rbds_demodulation.py`
   (`test_group_2a_preserves_high_bit_characters` and
   `test_radio_text_grows_when_station_extends_without_cr`).
 
-- **FM stereo (L–R) decoding** now produces real channel separation. The
-  previous `_decode_stereo` in `app_core/radio/demodulation.py` synthesized a
+- **FM stereo (L–R) decoding** now produces real channel separation (PR #1953).
+  The previous `_decode_stereo` in `app_core/radio/demodulation.py` synthesized a
   free-running 38 kHz oscillator and then *discarded* the bandpass-filtered
   pilot it had just computed.  With any pilot frequency offset (always the
   case in practice — SDR clocks differ from broadcasters' by tens of ppm) the
@@ -43,24 +45,185 @@ tracks releases under the 2.x series.
 - **Per-source EAS decoder-tap streaming** — new endpoint
   `GET /api/eas/decoder-stream/<source_name>` in `eas_monitoring_service.py`
   serves the 16 kHz audio fed to the SAME decoder for one specific source as
-  MP3.  A companion `GET /api/eas/decoder-stream/sources` returns the live
-  list of streamable sources for the admin UI.  The per-source streams are
-  gated on `EASDecoderMonitorSettings.enabled` so they only run when the
-  operator has explicitly turned them on; the existing mixed-source endpoint
-  at `/api/eas/decoder-stream` is unchanged.  The admin page
+  MP3 (PR #1953).  A companion `GET /api/eas/decoder-stream/sources` returns
+  the live list of streamable sources for the admin UI.  The per-source
+  streams are gated on `EASDecoderMonitorSettings.enabled` so they only run
+  when the operator has explicitly turned them on; the existing mixed-source
+  endpoint at `/api/eas/decoder-stream` is unchanged.  The admin page
   (`templates/admin/eas_decoder_monitor.html`) gains a "Live Decoder Streams"
   card with one play/stop button per source, replacing the old static
   reference-only mount-point list.  Closes the CHANGELOG TODO "Implement
   actual streaming endpoint for decoder tap".
 - **WebSocket `alerts_update` event** — `app_core/websocket_push.py` now
   emits a compact list of currently-active CAP alerts every 5 s (id,
-  identifier, event, severity, urgency, headline, expires, eas_forwarded).
-  A SHA-1 signature of the active set is cached so unchanged ticks skip
-  rebuilding the payload.  The frontend client
+  identifier, event, severity, urgency, headline, expires, eas_forwarded)
+  (PR #1953).  A SHA-1 signature of the active set is cached so unchanged
+  ticks skip rebuilding the payload.  The frontend client
   (`static/js/core/websocket.js`) registers the new event with a 5 s polling
   fallback against `/api/alerts`.  This is the first concrete delivery
   against the standing TODO "Extend WebSocket push service to broadcast all
   data types (alerts, system health, etc.) to eliminate remaining polling".
+
+## [2.71.73] - 2026-04-28 - Add maintainer portrait to About page
+
+### Changed
+- **`templates/about.html`** — Replaced the generic ham-radio icon in the
+  Maintainer section with an actual portrait photo (PR #1952).  New
+  `.avatar.has-photo` CSS variant fills the circle with the portrait image,
+  with improved `object-fit` sizing and crop alignment for a cleaner
+  presentation.
+
+## [2.71.72] - 2026-04-28 - Rewrite README as project overview and feature guide
+
+### Changed
+- **`README.md`** — Complete rewrite from ~800 lines of technical
+  documentation to ~390 lines of focused feature coverage (PR #1951).  Leads
+  with value proposition and $5K–$7K commercial hardware cost comparison;
+  replaces two sparse feature tables with nine detailed sections covering
+  every major capability (multi-source CAP ingestion, SAME audio engine,
+  PostGIS geographic intelligence, SDR verification, hardware integration,
+  web dashboard, security/RBAC/MFA, notifications, scheduling); reformats
+  Quick Start as a before/after table; removes the duplicate Architecture
+  section; drops the raw `apt install` block (handled by `install.sh`),
+  placeholder screenshot SVGs, and the 60-line collapsible tech stack.
+
+## [2.71.71] - 2026-04-28 - rbds_diagnose: introspect production pipeline; detect pilot-locked RBDS vs. spurs
+
+### Changed
+- **`scripts/rbds_diagnose.py`** — Updated to introspect the live
+  `app_core/radio/demodulation.py` for the current Costas α/β values, FIR
+  normalisation marker, and Costas/M&M call order, so recommendations no
+  longer fire for bugs already fixed in production (PR #1950).  The three
+  stale "fix this" recommendations (bandpass gain, Costas/M&M order, narrow
+  BW) are now conditional on introspection actually finding the defect.
+  Added pilot-locked RBDS detection: the RBDS subcarrier is identified by
+  its offset from `pilot×3` rather than from nominal 57 kHz; spectral
+  energy at `pilot×3 ± 20 Hz` distinguishes a masked real RBDS signal from
+  an off-frequency spur; peaks ≥ 50 Hz off `pilot×3` are flagged as
+  interferers with actionable RF/antenna/preselector recommendations.
+
+## [2.71.70] - 2026-04-28 - RBDS: lock 57 kHz carrier reference to measured pilot frequency
+
+### Fixed
+- **`app_core/radio/demodulation.py`** — `RBDSWorker` previously built its
+  57 kHz mixing reference from a hard-coded 19 000.0 Hz constant (PR #1949).
+  RTL-SDR dongles running 25–100 ppm off-frequency left a 1.5–6 Hz residual
+  that the Costas loop had to absorb on top of phase noise.  New
+  `_estimate_pilot_frequency` uses a Hann-windowed RFFT and parabolic peak
+  interpolation over 18.5–19.5 kHz (SNR ≥ 4× in-band median; ±210 ppm
+  ceiling) to measure the actual pilot once per station.
+  `_generate_pilot_reference` uses that value so the subcarrier mixes to
+  exactly DC.  A single log line per station reports the measured offset and
+  derived ppm error.  `_apply_reset` clears the measurement on retune.  New
+  tests in `tests/test_rbds_demodulation.py` cover the estimator, fallback
+  path, and reset behaviour.
+
+## [2.71.69] - 2026-04-28 - RBDS DSP: fix Costas/M&M order, widen loop bandwidth, correct bandpass gain
+
+### Fixed
+- **`app_core/radio/demodulation.py`** — Three compounding RBDS bugs fixed
+  (PR #1947, docstring cleanup in PR #1948):
+  - **Costas/M&M processing order** — M&M timing recovery was running before
+    the Costas carrier-phase loop, operating on a phase-rotating signal.
+    Fixed to run Costas at 19 kHz first (standard PySDR/GNU Radio
+    architecture), then M&M on the phase-corrected signal.
+  - **Costas loop bandwidth** — previous `alpha=0.026 / beta=0.00035` gave
+    ~3.5 Hz noise bandwidth at symbol rate, narrower than the 5.7 Hz shift
+    from a 100 ppm RTL-SDR clock error.  Updated to PySDR values
+    (`alpha=8.7e-3, beta=3.2e-5`), yielding ~17 Hz bandwidth at 19 kHz with
+    ≥ 100 ppm margin.
+  - **Bandpass filter gain** — `_design_fir_bandpass` normalised by
+    `max(|h|)` in the time domain, which evaluates to zero for a narrow
+    bandpass and produced +22.5 dB passband gain.  Fixed to normalise by
+    `|H(f_centre)|` in the frequency domain.
+  - **Stale docstrings** — `_process_rbds` and `_costas_pysdr` docstrings
+    updated to reflect the corrected pipeline order and actual loop gain
+    values in use.
+  - **Temporary debug capture removed** — the `# TEMPORARY CAPTURE — remove
+    after debugging` block that wrote `rbds_capture_*.npy` to
+    `/var/log/eas-station` on every startup has been removed.
+
+### Added
+- **`scripts/rbds_diagnose.py`** *(new)* — standalone offline diagnostic
+  (PR #1947) that processes a captured `.npy` FM multiplex file and reports
+  pilot frequency, SDR clock offset, filter gain at 57 kHz, Costas BW vs
+  carrier offset, and side-by-side decode rates for old vs. fixed pipeline:
+  `python3 scripts/rbds_diagnose.py /var/log/eas-station/rbds_capture_256000.npy`.
+
+## [2.71.68] - 2026-04-28 - Harden RBDS presync lock against false synchronisation
+
+### Fixed
+- **`app_core/radio/demodulation.py`** — `RBDSWorker` presync state machine
+  made more robust against random syndrome collisions (PR #1944).  Now
+  requires three consecutive correctly-spaced presync hits (two spacing
+  confirmations) before setting `_rbds_synced`, rather than declaring sync
+  after a single confirmation.  Mixed polarity during presync restarts from
+  the newest candidate to avoid false locks caused by random syndrome
+  collisions.  New presync tracking fields (`_rbds_presync_hits`,
+  `_rbds_presync_polarity`) are cleared by `_apply_reset` on retune.  New
+  tests `test_rbds_presync_requires_three_spaced_hits_before_lock` and
+  `test_rbds_presync_two_hits_do_not_lock` cover the state machine.
+
+## [2.71.67] - 2026-04-28 - Improve RBDS synced-mode polarity recovery and CRC failure tracking
+
+### Fixed
+- **`app_core/radio/demodulation.py`** — Fragile synced-mode handling caused
+  immediate `RBDS SYNC LOST` after `RBDS SYNCHRONIZED` with zero groups
+  decoded (PR #1943).  Refactored block CRC validation into a
+  `_crc_ok_for_block` helper that correctly handles C/C′ offset semantics
+  and reduces duplicated logic.  Added in-sync polarity recovery: when the
+  current polarity fails CRC but the alternate succeeds,
+  `_rbds_inverted_polarity` is immediately flipped and decoding continues
+  without waiting for the 50-block sync-loss window.
+  `_rbds_consecutive_crc_failures` is now properly tracked per-block, with a
+  `logger.info` emitted on polarity flip for diagnostics.
+
+## [2.71.66] - 2026-04-28 - Widen RBDS presync spacing tolerance from ±2 to ±4 bits
+
+### Fixed
+- **`app_core/radio/demodulation.py`** — Presync spacing tolerance widened
+  from ±2 to ±4 bits (PR #1942).  M&M timing recovery in a streaming
+  pipeline carries forward ~1 bit of residual per batch; over 2–3 blocks
+  this reaches ±3–4 bits, which the former ±2 threshold rejected
+  unconditionally.  Valid 26-bit block spacings {26, 52, 78, 104} maintain
+  non-overlapping ±4 windows so no new ambiguity is introduced.
+
+## [2.71.65] - 2026-04-28 - Fix M&M symbol clock drift by buffering unconsumed samples across batches
+
+### Fixed
+- **`app_core/radio/demodulation.py`** — `_mm_timing_pysdr` was silently
+  dropping up to `sps-1` (~15) tail samples at the end of each batch
+  (PR #1941).  The M&M loop exits when
+  `interp_idx >= len(samples_interpolated) - 1`, leaving unconsumed samples
+  that, when discarded, slipped the symbol boundary by ~1 sample per 250 ms
+  batch — enough to misalign block framing and cause continuous CRC
+  failures.  Fixed by adding `_rbds_mm_leftover` as a persistent per-worker
+  carry buffer: unconsumed samples are prepended to the next call's input
+  rather than dropped.
+
+## [2.71.64] - 2026-04-27 - Tolerate ±2-bit jitter in RBDS presync spacing check
+
+### Fixed
+- **`app_core/radio/demodulation.py`** — Presync spacing check relaxed from
+  an exact match to a ±2-bit window (PR #1940).  Sub-bit drift in the
+  streaming M&M clock produced frequent near-misses (e.g. expected 26, got
+  25) that repeatedly reset the presync anchor and delayed sync acquisition.
+  Valid spacings {26, 52, 78, 104} cannot overlap at ±2 bits, so no false
+  positives are introduced.
+
+## [2.71.63] - 2026-04-27 - RBDS: buffer pre-decimation to keep the bit clock continuous
+
+### Fixed
+- **`app_core/radio/demodulation.py`** — Per-chunk `x[::decim]` decimation
+  and `scipy.signal.resample_poly` were stateless (PR #1939), so each of
+  the ~31 sub-chunks in a 250 ms batch contributed its own decimation phase
+  reset and polyphase filter transient.  The stitched bit stream fed M&M
+  with 31 separate transients per batch, producing random block spacing even
+  on stations with a strong, fully-locked pilot and a -1 dBFS signal.
+  Fixed by accumulating raw samples in a pre-decimation buffer and
+  processing a full window's worth at once; the bandpass+mix+lowpass chain
+  (which already preserved `zi` state) now feeds one contiguous block to
+  decimation per batch, reducing transients from 31 per batch to one.
 
 ## [2.71.62] - 2026-04-22 - Redesign About page with modern hero section and component styling
 
