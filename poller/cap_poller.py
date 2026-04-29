@@ -2200,6 +2200,136 @@ class CAPPoller:
         except Exception:
             return True
 
+    def _try_build_geometry_from_same_codes(self, alert: CAPAlert) -> bool:
+        """Attempt to build alert geometry from SAME geocodes via the county boundary table.
+
+        Fallback for alerts that carry no polygon geometry in the feed (e.g.
+        county-wide watches, advisories, and statements that use SAME codes
+        instead of a specific area polygon).  This mirrors the Priority 3 logic
+        in ``webapp/admin/coverage.py::try_build_geometry_from_same_codes`` but
+        uses the poller's own ``db_session`` instead of Flask-SQLAlchemy.
+
+        Returns True if the alert now has geometry, False otherwise.
+        """
+        try:
+            if alert.geom:
+                return True
+
+            # Confirm the county boundary table exists and has rows.
+            try:
+                table_exists = self.db_session.execute(
+                    text(
+                        "SELECT EXISTS ("
+                        "  SELECT 1 FROM information_schema.tables"
+                        "  WHERE table_name = 'us_county_boundaries'"
+                        ")"
+                    )
+                ).scalar()
+                if not table_exists:
+                    return False
+                row_count = self.db_session.execute(
+                    text("SELECT COUNT(*) FROM us_county_boundaries LIMIT 1")
+                ).scalar()
+                if not row_count:
+                    return False
+            except Exception:
+                return False
+
+            raw_json = alert.raw_json if isinstance(alert.raw_json, dict) else {}
+
+            # Guard: if the alert has a polygon in raw_json but an earlier parse
+            # attempt failed, do not substitute a coarse county union — it would
+            # inflate coverage for a localized event (e.g. a partial-county warning).
+            raw_geom = raw_json.get('geometry')
+            if raw_geom and isinstance(raw_geom, dict) and raw_geom.get('coordinates'):
+                return False
+
+            same_codes = (
+                raw_json.get('properties', {})
+                .get('geocode', {})
+                .get('SAME', [])
+            )
+            if not same_codes:
+                return False
+
+            geoids: set = set()
+            statewide_state_fps: set = set()
+
+            for code in same_codes:
+                if not isinstance(code, str) or len(code) < 5:
+                    continue
+                if code.endswith('000'):
+                    # Statewide: SAME 039000 → state FIPS "39"
+                    state_fp = code[1:3] if len(code) == 6 else code.lstrip('0')[:2]
+                    statewide_state_fps.add(state_fp)
+                    continue
+                # SAME codes are 6 chars: 0SSCCC.  Drop the single leading zero
+                # to obtain the 5-digit Census GEOID (SSCCC).  Using lstrip('0')
+                # would over-strip codes for states 01-09.
+                geoid = code[1:]
+                geoids.add(geoid)
+
+            if not geoids and not statewide_state_fps:
+                return False
+
+            conditions = []
+            params: Dict[str, Any] = {}
+
+            if geoids:
+                conditions.append("geoid = ANY(:geoids)")
+                params["geoids"] = list(geoids)
+            if statewide_state_fps:
+                conditions.append("statefp = ANY(:state_fps)")
+                params["state_fps"] = list(statewide_state_fps)
+
+            where_clause = " OR ".join(conditions)
+
+            county_count = self.db_session.execute(
+                text(
+                    f"SELECT COUNT(*) FROM us_county_boundaries"
+                    f" WHERE ({where_clause}) AND geom IS NOT NULL"
+                ),
+                params,
+            ).scalar()
+
+            if not county_count:
+                return False
+
+            union_geom = self.db_session.execute(
+                text(
+                    f"SELECT ST_SetSRID(ST_Multi(ST_Union(geom)), 4326)"
+                    f" FROM us_county_boundaries"
+                    f" WHERE ({where_clause}) AND geom IS NOT NULL"
+                ),
+                params,
+            ).scalar()
+
+            if union_geom is None:
+                return False
+
+            alert.geom = union_geom
+            self.db_session.commit()
+
+            self.logger.info(
+                "Built geometry from %d SAME codes (%d counties) for alert %s",
+                len(same_codes),
+                county_count,
+                getattr(alert, 'identifier', '?'),
+            )
+            return True
+
+        except Exception as exc:
+            self.logger.warning(
+                "SAME geometry build failed for alert %s: %s",
+                getattr(alert, 'identifier', '?'),
+                exc,
+            )
+            try:
+                self.db_session.rollback()
+            except Exception:
+                pass
+            return False
+
     def process_intersections(self, alert: CAPAlert):
         """Calculate and store intersections with proper transaction handling.
         
@@ -2446,6 +2576,11 @@ class CAPPoller:
 
         self.db_session.commit()
 
+        # For alerts with no polygon geometry, try building from SAME codes so
+        # that intersection calculation can proceed automatically.
+        if not existing.geom:
+            self._try_build_geometry_from_same_codes(existing)
+
         # Use PostGIS ST_Equals for reliable geometry comparison
         geom_changed = self._has_geometry_changed(old_geom, existing.geom)
 
@@ -2552,6 +2687,8 @@ class CAPPoller:
                 )
 
         if new_alert.geom:
+            self.process_intersections(new_alert)
+        elif self._try_build_geometry_from_same_codes(new_alert):
             self.process_intersections(new_alert)
         
         # Publish new alert event to Redis for other services
