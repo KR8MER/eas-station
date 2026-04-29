@@ -139,6 +139,9 @@ class IcecastStreamer:
         self._last_metadata_payload: Optional[Tuple[str, Optional[str]]] = None
         self._last_metadata_song: Optional[str] = None
         self._last_metadata_check = 0.0
+        # When an alert is being forwarded, an override is set so the
+        # source-metadata poller doesn't overwrite the alert text mid-broadcast.
+        self._alert_metadata_override: Optional[Tuple[str, Optional[str]]] = None
         self._metadata_poll_interval = max(self.config.metadata_poll_interval, 0.5)
         self._source_timeout = max(getattr(self.config, 'source_timeout', 30.0) or 0.0, 0.0)
         self._last_write_time = 0.0
@@ -841,6 +844,11 @@ class IcecastStreamer:
         if not (self.config.admin_user and self.config.admin_password):
             return
 
+        # An alert metadata override takes precedence over the upstream
+        # source's now-playing info until clear_alert_metadata() is called.
+        if self._alert_metadata_override is not None:
+            return
+
         metrics = getattr(self.audio_source, 'metrics', None)
         metadata = getattr(metrics, 'metadata', None)
         if not isinstance(metadata, dict):
@@ -1320,6 +1328,44 @@ class IcecastStreamer:
             return True
 
         return False
+
+    def update_alert_metadata(
+        self, title: str, artist: Optional[str] = "EAS Alert"
+    ) -> bool:
+        """Override stream metadata with alert text and suppress source polling.
+
+        The override stays in effect until :meth:`clear_alert_metadata` is
+        called, so the next ``_maybe_update_metadata`` poll will not replace
+        the alert title with the upstream source's now-playing info.
+        """
+        safe_title = self._sanitize_metadata_value(title, "")
+        safe_title = safe_title.strip() if safe_title else ""
+        if not safe_title:
+            return False
+
+        safe_artist = self._sanitize_metadata_value(artist, "") if artist else ""
+        safe_artist = safe_artist.strip() if safe_artist else None
+
+        self._alert_metadata_override = (safe_title, safe_artist)
+
+        sent_value = self._send_metadata_update(safe_title, safe_artist or "")
+        if sent_value:
+            cache_key = (safe_title, safe_artist)
+            self._last_metadata_payload = cache_key
+            self._last_metadata_song = sent_value
+            return True
+
+        return False
+
+    def clear_alert_metadata(self) -> None:
+        """Release the alert metadata override; source metadata resumes on next poll."""
+        if self._alert_metadata_override is None:
+            return
+        self._alert_metadata_override = None
+        # Force the next source-metadata sync to push an update by clearing
+        # the cache key — otherwise the poller's "no change" guard would
+        # leave the alert text on the stream until the song genuinely changes.
+        self._last_metadata_payload = None
 
     def get_stats(self) -> dict:
         """Get streaming statistics."""

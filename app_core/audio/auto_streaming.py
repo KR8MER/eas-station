@@ -373,6 +373,38 @@ class AutoStreamingService:
         """
         return self.enabled and bool(self.icecast_password)
 
+    def update_alert_metadata(
+        self, title: str, artist: Optional[str] = "EAS Alert"
+    ) -> int:
+        """Override metadata on every active streamer with alert text.
+
+        Returns the number of streamers that accepted the override.
+        """
+        if not title:
+            return 0
+        count = 0
+        with self._lock:
+            for key, streamer in self._streamers.items():
+                try:
+                    if streamer.update_alert_metadata(title, artist):
+                        count += 1
+                except Exception as exc:
+                    logger.warning(
+                        "Failed to set alert metadata on %s: %s", key, exc
+                    )
+        return count
+
+    def clear_alert_metadata(self) -> None:
+        """Release the alert metadata override on every active streamer."""
+        with self._lock:
+            for key, streamer in self._streamers.items():
+                try:
+                    streamer.clear_alert_metadata()
+                except Exception as exc:
+                    logger.warning(
+                        "Failed to clear alert metadata on %s: %s", key, exc
+                    )
+
     def _add_eas_ingest_stream(self, source_name: str, source_adapter, mount_name: str = "eas-ingest") -> bool:
         """
         Create an Icecast stream for the EAS decoder input (16 kHz mono).

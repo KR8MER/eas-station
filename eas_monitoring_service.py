@@ -585,6 +585,14 @@ def initialize_auto_streaming(app, audio_controller):
             else:
                 logger.warning("Icecast auto-streaming service failed to start")
 
+            # Register with the alert-metadata coordinator so the auto-forwarder
+            # can override stream titles with the alert text mid-broadcast.
+            try:
+                from app_core.audio import alert_metadata
+                alert_metadata.set_service(_auto_streaming_service)
+            except Exception as exc:
+                logger.warning("Failed to register alert metadata coordinator: %s", exc)
+
             return _auto_streaming_service
 
     except Exception as exc:
