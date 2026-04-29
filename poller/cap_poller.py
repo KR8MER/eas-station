@@ -2228,7 +2228,7 @@ class CAPPoller:
                 if not table_exists:
                     return False
                 row_count = self.db_session.execute(
-                    text("SELECT COUNT(*) FROM us_county_boundaries LIMIT 1")
+                    text("SELECT COUNT(*) FROM us_county_boundaries")
                 ).scalar()
                 if not row_count:
                     return False
@@ -2256,15 +2256,14 @@ class CAPPoller:
             statewide_state_fps: set = set()
 
             for code in same_codes:
-                if not isinstance(code, str) or len(code) < 5:
+                if not isinstance(code, str) or len(code) != 6:
                     continue
                 if code.endswith('000'):
                     # Statewide: SAME 039000 → state FIPS "39"
-                    state_fp = code[1:3] if len(code) == 6 else code.lstrip('0')[:2]
-                    statewide_state_fps.add(state_fp)
+                    statewide_state_fps.add(code[1:3])
                     continue
-                # SAME codes are 6 chars: 0SSCCC.  Drop the single leading zero
-                # to obtain the 5-digit Census GEOID (SSCCC).  Using lstrip('0')
+                # SAME codes are always 6 chars: 0SSCCC.  Drop the single leading
+                # zero to obtain the 5-digit Census GEOID (SSCCC).  Using lstrip('0')
                 # would over-strip codes for states 01-09.
                 geoid = code[1:]
                 geoids.add(geoid)
@@ -2284,36 +2283,27 @@ class CAPPoller:
 
             where_clause = " OR ".join(conditions)
 
-            county_count = self.db_session.execute(
+            # Compute the county union and match count in a single query.
+            row = self.db_session.execute(
                 text(
-                    f"SELECT COUNT(*) FROM us_county_boundaries"
-                    f" WHERE ({where_clause}) AND geom IS NOT NULL"
-                ),
-                params,
-            ).scalar()
-
-            if not county_count:
-                return False
-
-            union_geom = self.db_session.execute(
-                text(
-                    f"SELECT ST_SetSRID(ST_Multi(ST_Union(geom)), 4326)"
+                    f"SELECT ST_SetSRID(ST_Multi(ST_Union(geom)), 4326) AS union_geom,"
+                    f" COUNT(*) AS county_count"
                     f" FROM us_county_boundaries"
                     f" WHERE ({where_clause}) AND geom IS NOT NULL"
                 ),
                 params,
-            ).scalar()
+            ).one()
 
-            if union_geom is None:
+            if not row.county_count or row.union_geom is None:
                 return False
 
-            alert.geom = union_geom
+            alert.geom = row.union_geom
             self.db_session.commit()
 
             self.logger.info(
                 "Built geometry from %d SAME codes (%d counties) for alert %s",
                 len(same_codes),
-                county_count,
+                row.county_count,
                 getattr(alert, 'identifier', '?'),
             )
             return True
@@ -2686,9 +2676,7 @@ class CAPPoller:
                     new_alert.identifier, exc,
                 )
 
-        if new_alert.geom:
-            self.process_intersections(new_alert)
-        elif self._try_build_geometry_from_same_codes(new_alert):
+        if new_alert.geom or self._try_build_geometry_from_same_codes(new_alert):
             self.process_intersections(new_alert)
         
         # Publish new alert event to Redis for other services
