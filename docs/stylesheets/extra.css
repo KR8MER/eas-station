@@ -1,0 +1,14 @@
+/*
+ * EAS Station Documentation — extra CSS overrides for MkDocs Material theme.
+ */
+
+/* Fix: large blank area below the page footer
+ *
+ * With navigation.instant + navigation.tabs.sticky the Material theme can
+ * leave a large empty region after <footer> because .md-main__inner retains
+ * a residual margin-bottom calculated during Instant-loading transitions.
+ * Setting it to 0 ensures the footer sits flush against the last content
+ * element on every page without breaking the sticky-footer layout. */
+.md-main__inner {
+    margin-bottom: 0;
+}

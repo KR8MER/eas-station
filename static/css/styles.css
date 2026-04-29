@@ -1061,6 +1061,71 @@
     }
 }
 
+/* Lightning Theme - Page header readability
+   .page-header uses a --primary-color → --secondary-color gradient which
+   resolves to yellow (#ffeb3b) → cyan (#40c4ff) in this theme.  White text
+   on those colours fails every WCAG contrast threshold.  Switch to dark ink
+   (matching the theme's --dark-color) so the header text remains legible. */
+[data-theme="lightning"] .page-header {
+    color: #0d1b2a;
+}
+
+[data-theme="lightning"] .page-header h1,
+[data-theme="lightning"] .page-header h2,
+[data-theme="lightning"] .page-header .page-title {
+    color: #0d1b2a;
+    text-shadow: 0 1px 3px rgba(255, 255, 255, 0.25);
+}
+
+[data-theme="lightning"] .page-header .page-subtitle {
+    color: rgba(13, 27, 42, 0.85);
+    text-shadow: none;
+}
+
+/* Lightning Theme - Form check / switch readability
+   .form-check-input:checked sets background to --primary-color (yellow).
+   The standard Bootstrap checkmark and radio SVGs use a white stroke/fill
+   which is nearly invisible on yellow.  Override with dark-ink SVGs. */
+[data-theme="lightning"] .form-check-input:checked {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3e%3cpath fill='none' stroke='%230d1b2a' stroke-linecap='round' stroke-linejoin='round' stroke-width='3' d='m6 10 3 3 6-6'/%3e%3c/svg%3e");
+}
+
+[data-theme="lightning"] .form-check-input[type="radio"]:checked {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='2' fill='%230d1b2a'/%3e%3c/svg%3e");
+}
+
+[data-theme="lightning"] .form-switch .form-check-input:checked {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%230d1b2a'/%3e%3c/svg%3e");
+}
+
+/* Lightning Theme - Active list-group item readability
+   .list-group-item.active uses --primary-color (yellow) as background with
+   white text, producing a near-invisible combination. */
+[data-theme="lightning"] .list-group-item.active {
+    color: #0d1b2a;
+    text-shadow: none;
+}
+
+/* Lightning Theme - Progress bar readability
+   .progress-bar fills with --primary-color (yellow); any embedded text label
+   would be white-on-yellow.  Force dark text so percentage labels are legible. */
+[data-theme="lightning"] .progress-bar {
+    color: #0d1b2a;
+}
+
+/* Lightning Theme - Success colour readability
+   --success-color resolves to #00e676 (bright lime-green) in this theme.
+   White text on that background fails WCAG AA (contrast ≈ 2:1).  Apply dark
+   text to every component that paints with the success colour. */
+[data-theme="lightning"] .badge.bg-success,
+[data-theme="lightning"] .text-bg-success,
+[data-theme="lightning"] .card-header.bg-success,
+[data-theme="lightning"] .card-header.bg-success *,
+[data-theme="lightning"] .bg-success {
+    color: #0d1b2a !important;
+    text-shadow: none;
+}
+
 
    2. BASE & RESET STYLES
 

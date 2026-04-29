@@ -112,8 +112,8 @@ extra:
     provider: mike
 
 # Additional CSS
-# extra_css:
-#   - stylesheets/extra.css  # Not available in current docs structure
+extra_css:
+  - stylesheets/extra.css
 
 # Additional JavaScript
 extra_javascript:
