@@ -237,53 +237,94 @@ class AudioSourceManager:
         logger.info("AudioSourceManager stopped")
 
     def _monitor_loop(self) -> None:
-        """Monitor source health and trigger failover if needed."""
+        """Monitor source health and trigger failover if needed.
+
+        The double try/except is intentional: the inner block isolates a
+        single iteration's failure (so the loop can continue to the next
+        source/iteration), the outer block guarantees the thread itself never
+        dies from an unhandled exception (e.g. dictionary mutation during
+        iteration, callback bug).  Without these guards, a single source's
+        exception could silently kill the monitor for the entire audio system.
+        """
         logger.debug("Source monitor loop started")
 
         while not self._stop_event.wait(1.0):
             try:
-                # Check if active source is still healthy
-                if self._active_source:
-                    source = self._sources[self._active_source]
-                    metrics = source.get_metrics()
+                try:
+                    # Check if active source is still healthy
+                    if self._active_source:
+                        source = self._sources.get(self._active_source)
+                        if source is None:
+                            # Active source was removed under us; reselect.
+                            self._select_best_source(reason=FailoverReason.SOURCE_FAILED)
+                            continue
+                        metrics = source.get_metrics()
 
-                    # Check if source failed
-                    if metrics.health == SourceHealth.FAILED:
-                        logger.warning(f"Active source {self._active_source} failed")
-                        self._select_best_source(reason=FailoverReason.SOURCE_FAILED)
-                        continue
+                        # Check if source failed
+                        if metrics.health == SourceHealth.FAILED:
+                            logger.warning(f"Active source {self._active_source} failed")
+                            self._select_best_source(reason=FailoverReason.SOURCE_FAILED)
+                            continue
 
-                    # Check for silence
-                    config = self._source_configs[self._active_source]
-                    if self._check_silence(self._active_source, config):
-                        logger.warning(f"Silence detected on {self._active_source}")
-                        self._select_best_source(reason=FailoverReason.SILENCE_DETECTED)
-                        continue
+                        # Check for silence
+                        config = self._source_configs[self._active_source]
+                        if self._check_silence(self._active_source, config):
+                            logger.warning(f"Silence detected on {self._active_source}")
+                            self._select_best_source(reason=FailoverReason.SILENCE_DETECTED)
+                            continue
 
-                # Check if a higher priority source became available
-                self._check_priority_failover()
+                    # Check if a higher priority source became available
+                    self._check_priority_failover()
 
+                except Exception as e:
+                    logger.error(f"Error in monitor loop iteration: {e}", exc_info=True)
             except Exception as e:
-                logger.error(f"Error in monitor loop: {e}")
+                # Last-resort guard so a programming error cannot kill the thread.
+                logger.error(f"Unhandled error in monitor loop: {e}", exc_info=True)
 
         logger.debug("Source monitor loop stopped")
 
     def _mixer_loop(self) -> None:
-        """Mix active source audio into master buffer."""
+        """Mix active source audio into master buffer.
+
+        Stall detection: if the active source returns no samples for longer
+        than ``_mixer_stall_seconds``, we trigger a failover instead of
+        silently starving the EAS decoder.  Without this, a stalled source
+        keeps the audio system "running" while delivering zero audio — the
+        worst possible failure mode for emergency alert monitoring.
+        """
         logger.debug("Audio mixer loop started")
         chunk_samples = int(self.sample_rate * 0.05)  # 50ms chunks
 
-        while not self._stop_event.is_set():
-            if not self._active_source:
-                # No active source, sleep
-                time.sleep(0.1)
-                continue
+        # Stall detection state (per active-source).  Reset whenever the
+        # active source changes or successfully returns audio.
+        last_audio_at = time.time()
+        last_active_source: Optional[str] = None
+        mixer_stall_seconds = 5.0
 
+        while not self._stop_event.is_set():
             try:
-                source = self._sources[self._active_source]
+                if not self._active_source:
+                    # No active source, sleep
+                    time.sleep(0.1)
+                    last_audio_at = time.time()
+                    last_active_source = None
+                    continue
+
+                if self._active_source != last_active_source:
+                    last_active_source = self._active_source
+                    last_audio_at = time.time()
+
+                source = self._sources.get(self._active_source)
+                if source is None:
+                    # Active source disappeared; let monitor reselect.
+                    time.sleep(0.05)
+                    continue
+
                 samples = source.read_samples(chunk_samples)
 
                 if samples is not None:
+                    last_audio_at = time.time()
                     # Write to master buffer
                     written = self.master_buffer.write(samples, block=False)
                     if written == 0:
@@ -292,8 +333,21 @@ class AudioSourceManager:
                     # No data available, yield briefly
                     time.sleep(0.05)  # 50ms sleep to prevent CPU spinning
 
+                    if time.time() - last_audio_at > mixer_stall_seconds:
+                        logger.warning(
+                            "Mixer detected stall on %s after %.1fs of no samples; "
+                            "triggering failover",
+                            self._active_source,
+                            time.time() - last_audio_at,
+                        )
+                        self._select_best_source(reason=FailoverReason.SOURCE_FAILED)
+                        last_audio_at = time.time()  # avoid back-to-back failovers
+
             except Exception as e:
-                logger.error(f"Error in mixer loop: {e}")
+                # Per-iteration guard prevents a single bad source or buffer
+                # error from killing the mixer thread (which would silently
+                # starve the EAS decoder).
+                logger.error(f"Error in mixer loop: {e}", exc_info=True)
                 time.sleep(0.1)
 
         logger.debug("Audio mixer loop stopped")

@@ -920,6 +920,74 @@ def process_commands(redis_client):
                         "success": False,
                         "error": f"Receiver {receiver_id} not found"
                     }
+            elif action == "tune_frequency":
+                # Live retune of an active receiver — does NOT stop the stream
+                # so the audio system keeps decoding without interruption.
+                # On failure the webapp can fall back to reload_receivers.
+                receiver = radio_manager.get_receiver(receiver_id)
+                if not receiver:
+                    result = {
+                        "command_id": command_id,
+                        "success": False,
+                        "error": f"Receiver {receiver_id} not found",
+                    }
+                else:
+                    freq_hz = command.get("frequency_hz")
+                    try:
+                        freq_hz = float(freq_hz) if freq_hz is not None else None
+                    except (TypeError, ValueError):
+                        freq_hz = None
+                    if freq_hz is None or freq_hz <= 0:
+                        result = {
+                            "command_id": command_id,
+                            "success": False,
+                            "error": "frequency_hz is required and must be positive",
+                        }
+                    else:
+                        try:
+                            tuned = receiver.set_frequency(freq_hz)
+                        except Exception as e:
+                            logger.error(
+                                "tune_frequency failed for %s: %s",
+                                receiver_id, e, exc_info=True,
+                            )
+                            tuned = False
+                        if tuned:
+                            # Persist to database so a future restart keeps the tune.
+                            try:
+                                if _state.flask_app:
+                                    with _state.flask_app.app_context():
+                                        from app_core.models import RadioReceiver
+                                        from app_core.extensions import db
+                                        row = RadioReceiver.query.filter_by(
+                                            identifier=receiver_id
+                                        ).first()
+                                        if row is not None:
+                                            row.frequency_hz = freq_hz
+                                            db.session.commit()
+                            except Exception as e:
+                                logger.warning(
+                                    "tune_frequency: retune ok but DB update failed for %s: %s",
+                                    receiver_id, e,
+                                )
+                            result = {
+                                "command_id": command_id,
+                                "success": True,
+                                "frequency_hz": freq_hz,
+                                "live": True,
+                            }
+                        else:
+                            # Driver can't live-retune (or device not running) —
+                            # caller should fall back to reload_receivers.
+                            result = {
+                                "command_id": command_id,
+                                "success": False,
+                                "live": False,
+                                "error": (
+                                    "Live retune not supported or device not running; "
+                                    "caller should fall back to reload_receivers"
+                                ),
+                            }
             elif action == "stop":
                 receiver = radio_manager.get_receiver(receiver_id)
                 if receiver:
