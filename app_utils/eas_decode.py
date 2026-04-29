@@ -320,6 +320,12 @@ class SAMEAudioDecodeResult:
     segments: Dict[str, SAMEAudioSegment] = field(default_factory=OrderedDict)
     endec_mode: str = ENDEC_MODE_UNKNOWN
     burst_timing_gaps_ms: List[float] = field(default_factory=list)
+    # Number of SAME header bursts detected in the audio (NRSC-4-B §4.5
+    # mandates three; fewer indicates a degraded or partial transmission).
+    burst_count: int = 0
+    # True when 2-of-3 majority voting was applied across multiple bursts.
+    # False when only a single burst was decoded (no voting possible).
+    voting_applied: bool = False
 
     def to_dict(self) -> Dict[str, object]:
         return {
@@ -337,6 +343,8 @@ class SAMEAudioDecodeResult:
             },
             "endec_mode": self.endec_mode,
             "burst_timing_gaps_ms": self.burst_timing_gaps_ms,
+            "burst_count": self.burst_count,
+            "voting_applied": self.voting_applied,
         }
 
     @property
@@ -757,25 +765,31 @@ def _vote_on_bytes(burst_bytes: List[List[int]]) -> List[int]:
         if not candidates:
             continue
 
-        # Perform majority voting
+        # Perform majority voting per NRSC-4-B §4.5:
+        # • 2-of-3 agreement → use the agreed byte.
+        # • All bursts agree → same result.
+        # • No majority (all three differ) OR only 2 bursts received →
+        #   use the most-recently-received burst (last in the list),
+        #   because later transmissions are more likely to be the correct
+        #   value at a receiver that is just entering coverage.
         if len(candidates) == 1:
             voted_bytes.append(candidates[0])
         elif len(candidates) == 2:
-            # With 2 candidates, take the first one (or could average)
-            voted_bytes.append(candidates[0])
+            # Only two bursts decoded; fall back to the later one per spec.
+            voted_bytes.append(candidates[-1])
         else:
             # With 3 candidates, find the majority
-            # Count occurrences
             from collections import Counter
             counts = Counter(candidates)
             most_common = counts.most_common(1)[0]
 
-            # If there's a clear majority (at least 2), use it
+            # If there's a clear majority (at least 2 of 3), use it
             if most_common[1] >= 2:
                 voted_bytes.append(most_common[0])
             else:
-                # No majority, take the first one
-                voted_bytes.append(candidates[0])
+                # All three differ — no majority.  NRSC-4-B §4.5 says use
+                # the most recently received transmission.
+                voted_bytes.append(candidates[-1])
 
     return voted_bytes
 
@@ -1738,6 +1752,9 @@ def _decode_from_samples(
 
     frame_count = int(metadata.get("frame_count") or 0)
     frame_errors = int(metadata.get("frame_errors") or 0)
+    burst_positions_from_meta = metadata.get("burst_positions") or []
+    burst_count = len(burst_positions_from_meta)
+    voting_applied = burst_count >= 2
 
     # Apply adjusted confidence scoring based on decode quality
     adjusted_confidence = _calculate_adjusted_confidence(
@@ -1760,6 +1777,8 @@ def _decode_from_samples(
         segments=segments,
         endec_mode=endec_mode,
         burst_timing_gaps_ms=burst_timing_gaps_ms,
+        burst_count=burst_count,
+        voting_applied=voting_applied,
     )
 
 

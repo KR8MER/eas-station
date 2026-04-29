@@ -650,3 +650,178 @@ def test_fmdemodulator_tracks_sample_index():
 
     demod.stop()
     time.sleep(0.05)
+
+
+# ---------------------------------------------------------------------------
+# New group decoder tests (full RBDS specification)
+# ---------------------------------------------------------------------------
+
+def _pack_group1a_b(tp: bool, pty: int, variant: int) -> int:
+    return (
+        (1 << 12)
+        | (0 << 11)
+        | ((1 if tp else 0) << 10)
+        | ((pty & 0x1F) << 5)
+        | ((variant & 0x7) << 2)
+    )
+
+
+def test_group_0a_decodes_af_list():
+    """Group 0A Block C with two direct AF codes → af_list contains two frequencies."""
+    decoder = RBDSDecoder()
+    # AF codes: 1 = 87.7 MHz, 2 = 87.8 MHz
+    af_c = (1 << 8) | 2
+    b = _pack_block_b(group_type=0, version_b=False, tp=False, pty=0, low_bits=0)
+    decoder.process_group((0x5862, b, af_c, 0x2020))
+    data = decoder.get_current_data()
+    assert data.af_list is not None
+    assert 87.7 in data.af_list
+    assert 87.8 in data.af_list
+
+
+def test_group_1a_decodes_language_code():
+    """Group 1A, variant 0, Block D bits 7-0 = 0x09 → language_code=9, language_name='English'."""
+    decoder = RBDSDecoder()
+    b = _pack_group1a_b(tp=False, pty=0, variant=0)
+    decoder.process_group((0x5862, b, 0x0000, 0x0009))
+    data = decoder.get_current_data()
+    assert data.language_code == 9
+    assert data.language_name == "English"
+
+
+def test_group_1a_decodes_ecc():
+    """Group 1A, variant 4, Block D bits 7-0 = 0xA0 → ecc=0xA0."""
+    decoder = RBDSDecoder()
+    b = _pack_group1a_b(tp=False, pty=0, variant=4)
+    decoder.process_group((0x5862, b, 0x0000, 0x00A0))
+    data = decoder.get_current_data()
+    assert data.ecc == 0xA0
+
+
+def test_group_1a_decodes_pin():
+    """Group 1A Block C day=15, hour=13, minute=30 → pin_day=15, pin_hour=13, pin_minute=30."""
+    decoder = RBDSDecoder()
+    # Block C: bits 15-11=day, bits 10-6=hour, bits 5-0=minute
+    pin_c = (15 << 11) | (13 << 6) | 30
+    b = _pack_group1a_b(tp=False, pty=0, variant=0)
+    decoder.process_group((0x5862, b, pin_c, 0x0000))
+    data = decoder.get_current_data()
+    assert data.pin_day == 15
+    assert data.pin_hour == 13
+    assert data.pin_minute == 30
+
+
+def test_group_1a_decodes_linkage():
+    """Group 1A, variant 5, LA=1, SC=0, LSN=0x042 → linkage_actuator=True, linkage_set_number=0x042."""
+    decoder = RBDSDecoder()
+    b = _pack_group1a_b(tp=False, pty=0, variant=5)
+    # Block D: bit 15=LA=1, bit 14=SC=0, bits 11-0=LSN=0x042
+    d = (1 << 15) | (0 << 14) | 0x042
+    decoder.process_group((0x5862, b, 0x0000, d))
+    data = decoder.get_current_data()
+    assert data.linkage_actuator is True
+    assert data.linkage_soft_coupling is False
+    assert data.linkage_set_number == 0x042
+
+
+def test_group_3a_registers_oda_app():
+    """Group 3A, AID=0x4BD7 (RDS-TMC) → oda_apps contains 0x4BD7."""
+    decoder = RBDSDecoder()
+    # Block B: group_type=3, version_b=False, ODA group type bits in low 5
+    b = _pack_block_b(group_type=3, version_b=False, tp=False, pty=0, low_bits=0x10)
+    decoder.process_group((0x5862, b, 0x4BD7, 0x0000))
+    data = decoder.get_current_data()
+    assert data.oda_apps is not None
+    assert 0x4BD7 in data.oda_apps
+
+
+def test_group_5a_accumulates_tdc():
+    """Group 5A, two groups with channel 0 → tdc_data has 8 bytes."""
+    decoder = RBDSDecoder()
+    b = _pack_block_b(group_type=5, version_b=False, tp=False, pty=0, low_bits=0x00)
+    decoder.process_group((0x5862, b, 0x0102, 0x0304))
+    decoder.process_group((0x5862, b, 0x0506, 0x0708))
+    data = decoder.get_current_data()
+    assert data.tdc_data is not None
+    assert len(data.tdc_data) == 8
+
+
+def test_group_8a_sets_tmc_present():
+    """Group 8A → tmc_present=True."""
+    decoder = RBDSDecoder()
+    b = _pack_block_b(group_type=8, version_b=False, tp=False, pty=0, low_bits=0x00)
+    decoder.process_group((0x5862, b, 0x0000, 0x0000))
+    data = decoder.get_current_data()
+    assert data.tmc_present is True
+
+
+def test_group_9a_decodes_ews():
+    """Group 9A, channel=5, C=0xABCD, D=0x1234 → ews_channel=5, ews_message_c=0xABCD, ews_message_d=0x1234."""
+    decoder = RBDSDecoder()
+    b = _pack_block_b(group_type=9, version_b=False, tp=False, pty=0, low_bits=0x05)
+    decoder.process_group((0x5862, b, 0xABCD, 0x1234))
+    data = decoder.get_current_data()
+    assert data.ews_channel == 5
+    assert data.ews_message_c == 0xABCD
+    assert data.ews_message_d == 0x1234
+
+
+def test_group_14a_decodes_eon_ps():
+    """Four Group 14A groups, variants 0-3 → eon_list has one entry with correct PS name."""
+    decoder = RBDSDecoder()
+    eon_pi = 0x1234
+    ps = "WXYZ-FM "
+    for variant in range(4):
+        low_bits = variant  # bits 3-0 = variant; bit 4 = eon_tp
+        b = _pack_block_b(group_type=14, version_b=False, tp=False, pty=0, low_bits=low_bits)
+        c1, c2 = ps[variant * 2], ps[variant * 2 + 1]
+        decoder.process_group((0x5862, b, eon_pi, (ord(c1) << 8) | ord(c2)))
+    data = decoder.get_current_data()
+    assert data.eon_list is not None
+    assert len(data.eon_list) == 1
+    assert data.eon_list[0]['ps'].strip() == ps.strip()
+
+
+def test_group_14b_updates_eon_ta():
+    """Group 14B with TA=1 → eon entry has ta=True."""
+    decoder = RBDSDecoder()
+    eon_pi = 0xABCD
+    # Block B bit 3 = eon_ta=1
+    low_bits = (1 << 3)
+    b = _pack_block_b(group_type=14, version_b=True, tp=False, pty=0, low_bits=low_bits)
+    decoder.process_group((0x5862, b, eon_pi, 0x0000))
+    data = decoder.get_current_data()
+    assert data.eon_list is not None
+    entry = next(e for e in data.eon_list if e['pi'] == f"{eon_pi:04X}")
+    assert entry['ta'] is True
+
+
+def test_group_15b_updates_fast_tp():
+    """Group 15B with TP=1, TA=0 → fast_tp=True, fast_ta=False."""
+    decoder = RBDSDecoder()
+    # version_b=True, tp=True (bit 10 of B), bit 4 of low_bits = TA=0
+    b = _pack_block_b(group_type=15, version_b=True, tp=True, pty=0, low_bits=0x00)
+    decoder.process_group((0x5862, b, 0x0000, 0x2020))
+    data = decoder.get_current_data()
+    assert data.fast_tp is True
+    assert data.fast_ta is False
+
+
+def test_group_10b_decodes_pty_name():
+    """Group 10B with 2 chars per segment → pty_name updated."""
+    decoder = RBDSDecoder()
+    # Seed PTY so PTY-change logic doesn't reset on every group
+    b0 = _pack_block_b(group_type=0, version_b=False, tp=False, pty=5, low_bits=0)
+    decoder.process_group((0x5862, b0, 0x0000, 0x2020))
+
+    # Group 10B segment 0: "NE" in Block D
+    b = _pack_block_b(group_type=10, version_b=True, tp=False, pty=5, low_bits=0x00)
+    decoder.process_group((0x5862, b, 0x0000, (ord('N') << 8) | ord('E')))
+    # Group 10B segment 1: "WS" in Block D
+    b = _pack_block_b(group_type=10, version_b=True, tp=False, pty=5, low_bits=0x01)
+    decoder.process_group((0x5862, b, 0x0000, (ord('W') << 8) | ord('S')))
+
+    data = decoder.get_current_data()
+    assert data.pty_name is not None
+    assert "NE" in data.pty_name
+    assert "WS" in data.pty_name

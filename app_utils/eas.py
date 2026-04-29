@@ -514,72 +514,139 @@ def decode_county_originator(originator_code: str) -> Optional[str]:
 
 PRIMARY_ORIGINATORS: Tuple[str, ...] = ('EAS', 'CIV', 'WXR', 'PEP')
 
+# NRSC-4-B §4.3.3.4 — exactly fourteen valid purge-time HHMM values.
+# Times are encoded as HHMM (hours and minutes), not decimal minutes.
+# 15-minute increments up to 0045; 30-minute increments from 0100 to 0600.
+NRSC4B_VALID_PURGE_TIMES: Tuple[str, ...] = (
+    '0015', '0030', '0045',
+    '0100', '0130',
+    '0200', '0230',
+    '0300', '0330',
+    '0400', '0430',
+    '0500', '0530',
+    '0600',
+)
+
+# NRSC-4-B §4.3.3.3 — maximum number of location codes in a single header.
+NRSC4B_MAX_LOCATIONS: int = 31
+
+# NRSC-4-B §4.3.3.2 — valid originator codes.
+NRSC4B_VALID_ORIGINATORS: Tuple[str, ...] = PRIMARY_ORIGINATORS
+
+# NRSC-4-B §4.3.3.7 — station identifier length (characters, excluding delimiters).
+NRSC4B_STATION_ID_MAX_LEN: int = 8
+
+# NRSC-4-B §4.2 — preamble byte value and repetition count.
+NRSC4B_PREAMBLE_BYTE: int = 0xAB
+NRSC4B_PREAMBLE_COUNT: int = 16
+
+# NRSC-4-B §4.4 — FSK physical-layer constants.
+# Baud rate: exactly 25000/48 = 520.833... symbols/second per NRSC-4-B §4.4.
+NRSC4B_BAUD_RATE_FRAC: str = '25000/48'  # exact rational representation (≈ 520.83 baud)
+NRSC4B_MARK_FREQ_HZ: float = 2083.0 + 1.0 / 3.0   # 2083 1/3 Hz
+NRSC4B_SPACE_FREQ_HZ: float = 1562.5                # 1562.5 Hz
+NRSC4B_CENTER_FREQ_HZ: float = 1822.916666          # midpoint (mark+space)/2
+
+# NRSC-4-B §4.5 — triple-burst transmission count.
+NRSC4B_BURST_COUNT: int = 3
+
 
 SAME_HEADER_FIELD_DESCRIPTIONS = [
     {
         'segment': 'Preamble',
         'label': '16 × 0xAB',
+        'nrsc4b_section': '§4.2',
         'description': (
-            'Binary 10101011 bytes transmitted sixteen times to calibrate and synchronise '
-            'receivers before the ASCII header.'
+            'Sixteen bytes of 0xAB (10101011 binary) transmitted before the ASCII header '
+            'to calibrate and synchronise receivers.  Each byte is sent LSB-first with no '
+            'start or stop framing, giving a 128-bit alternating mark/space pattern.'
         ),
     },
     {
         'segment': 'ZCZC',
         'label': 'Start code',
+        'nrsc4b_section': '§4.3.2',
         'description': (
-            'Marks the start of the SAME header, inherited from NAVTEX to trigger decoders.'
+            'Four ASCII characters marking the start of the SAME header.  '
+            'Inherited from NAVTEX to trigger automatic decoders.  '
+            'Always the literal string "ZCZC" with no leading dash.'
         ),
     },
     {
         'segment': 'ORG',
         'label': 'Originator code',
+        'nrsc4b_section': '§4.3.3.2',
         'description': (
-            'Three-character identifier for the sender such as PEP, WXR, CIV, or EAS.'
+            'Three-character code identifying who issued the alert.  '
+            'Valid values: EAS (EAS Participant/broadcaster), CIV (Civil authorities), '
+            'WXR (National Weather Service), PEP (National Public Warning System).'
         ),
+        'valid_values': list(NRSC4B_VALID_ORIGINATORS),
     },
     {
         'segment': 'EEE',
         'label': 'Event code',
-        'description': 'Three-character SAME event describing the hazard (for example TOR or RWT).',
+        'nrsc4b_section': '§4.3.3.3',
+        'description': (
+            'Three-character SAME event code describing the hazard (e.g. TOR, FFW, RWT).  '
+            'Codes are maintained by FEMA/IPAWS and published in the FCC Part 11 rules.'
+        ),
     },
     {
         'segment': 'PSSCCC',
         'label': 'Location codes',
+        'nrsc4b_section': '§4.3.3.3',
         'description': (
-            'One to thirty-one SAME/FIPS identifiers. P denotes the portion of the area, '
-            'SS is the state FIPS, and CCC is the county (000 represents the entire state).'
+            'One to thirty-one six-digit SAME/FIPS location identifiers separated by dashes.  '
+            'P (1 digit) = geographic subset (0 = entire area, 1–9 = compass octant).  '
+            'SS (2 digits) = state FIPS code.  '
+            'CCC (3 digits) = county FIPS code (000 = entire state).'
         ),
+        'max_count': NRSC4B_MAX_LOCATIONS,
     },
     {
         'segment': '+TTTT',
         'label': 'Purge time',
+        'nrsc4b_section': '§4.3.3.4',
         'description': (
-            'Duration code expressed in minutes using SAME rounding rules (15-minute increments '
-            'up to an hour, 30-minute increments to six hours, then hourly).'
+            'Four-digit HHMM duration code indicating how long the alert is valid.  '
+            'Valid values are 0015 through 0600 in the increments defined by NRSC-4-B: '
+            '15-minute steps up to 45 minutes, then 30-minute steps up to 6 hours.'
         ),
+        'valid_values': list(NRSC4B_VALID_PURGE_TIMES),
     },
     {
         'segment': '-JJJHHMM',
         'label': 'Issue time',
+        'nrsc4b_section': '§4.3.3.5',
         'description': (
-            'Julian day-of-year with UTC hour and minute indicating when the alert was issued.'
+            'Seven-digit UTC issue timestamp: JJJ = Julian day of year (001–366), '
+            'HH = hour (00–23), MM = minute (00–59).  '
+            'Year is not encoded; receivers infer it from the current calendar year.'
         ),
     },
     {
         'segment': '-LLLLLLLL-',
         'label': 'Station identifier',
+        'nrsc4b_section': '§4.3.3.6',
         'description': (
-            'Eight-character station, system, or call-sign identifier using “/” instead of “-”.'
+            'Eight-character call-sign or system identifier for the originating station, '
+            'padded with hyphens if shorter.  Slashes may substitute for hyphens inside '
+            'the identifier.  Terminated by a trailing hyphen delimiter.'
         ),
+        'max_length': NRSC4B_STATION_ID_MAX_LEN,
     },
     {
         'segment': 'NNNN',
         'label': 'End of message',
-        'description': 'Transmitted three times after audio content to terminate the activation.',
+        'nrsc4b_section': '§4.3.4',
+        'description': (
+            'End Of Message marker transmitted three times after audio content to '
+            'terminate the activation.  Each EOM burst consists of the standard '
+            'preamble followed by the ASCII string "NNNN" with no trailing CR.'
+        ),
     },
 ]
-
 
 def describe_same_header(
     header: str,
@@ -698,28 +765,99 @@ def describe_same_header(
             'description': description or digits,
         })
 
+    # ── NRSC-4-B compliance checks ────────────────────────────────────────
+    # §4.3.3.2 — originator must be one of EAS, CIV, WXR, PEP.
+    nrsc4b_valid_originator: bool = originator in NRSC4B_VALID_ORIGINATORS
+    # §4.3.3.3 — event code must be a registered SAME code.
+    nrsc4b_valid_event: bool = event_code in EVENT_CODE_REGISTRY
+    # §4.3.3.4 — purge time must be one of the fourteen defined HHMM values.
+    nrsc4b_valid_purge: bool = (duration_digits in NRSC4B_VALID_PURGE_TIMES)
+    # §4.3.3.5 — issue time must be seven digits with valid JJJ/HH/MM ranges.
+    _issue_valid = False
+    if issue_components:
+        try:
+            _jjj = issue_components['day_of_year']
+            _hh = issue_components['hour']
+            _mm = issue_components['minute']
+            _issue_valid = (1 <= _jjj <= 366) and (0 <= _hh <= 23) and (0 <= _mm <= 59)
+        except (KeyError, TypeError, ValueError):
+            pass
+    nrsc4b_valid_issue_time: bool = _issue_valid
+    # §4.3.3.3 — one to thirty-one location codes required.
+    _loc_count = len(detailed_locations)
+    nrsc4b_valid_location_count: bool = 1 <= _loc_count <= NRSC4B_MAX_LOCATIONS
+    # §4.3.3.6 — station identifier must be 1–8 printable ASCII characters.
+    _sid = station_identifier.strip('-')
+    nrsc4b_valid_station_id: bool = bool(_sid) and len(_sid) <= NRSC4B_STATION_ID_MAX_LEN
+    # Overall NRSC-4-B compliance flag.
+    nrsc4b_compliant: bool = (
+        nrsc4b_valid_originator
+        and nrsc4b_valid_event
+        and nrsc4b_valid_purge
+        and nrsc4b_valid_issue_time
+        and nrsc4b_valid_location_count
+        and nrsc4b_valid_station_id
+    )
+
+    # ── Convenience decompositions ────────────────────────────────────────
+    purge_hh: Optional[int] = int(duration_digits[:2]) if len(duration_digits) == 4 else None
+    purge_mm: Optional[int] = int(duration_digits[2:]) if len(duration_digits) == 4 else None
+    issue_day_of_year: Optional[int] = (
+        issue_components['day_of_year'] if issue_components else None
+    )
+    issue_hour: Optional[int] = (
+        issue_components['hour'] if issue_components else None
+    )
+    issue_minute: Optional[int] = (
+        issue_components['minute'] if issue_components else None
+    )
+    # Raw station identifier as received (may include trailing dashes used as padding).
+    station_identifier_raw: str = station_identifier
+
     return {
+        # ── Structural fields ──────────────────────────────────────────────
         'preamble': parts[0] if parts else 'ZCZC',
         'preamble_description': (
             'SAME headers begin with a sixteen-byte 0xAB preamble for receiver synchronisation.'
         ),
         'start_code': parts[0] if parts else 'ZCZC',
+        'header_length': len(header),
+        'header_parts': parts,
+        # ── Originator (NRSC-4-B §4.3.3.2) ───────────────────────────────
         'originator': originator,
         'originator_description': ORIGINATOR_DESCRIPTIONS.get(originator),
+        'nrsc4b_valid_originator': nrsc4b_valid_originator,
+        # ── Event code (NRSC-4-B §4.3.3.3) ───────────────────────────────
         'event_code': event_code,
         'event_name': event_name,
-        'location_count': len(detailed_locations),
+        'nrsc4b_valid_event': nrsc4b_valid_event,
+        # ── Location codes (NRSC-4-B §4.3.3.3) ───────────────────────────
+        'location_count': _loc_count,
+        'location_count_valid': nrsc4b_valid_location_count,
         'locations': detailed_locations,
+        'raw_locations': locations,
+        # ── Purge time (NRSC-4-B §4.3.3.4) ───────────────────────────────
         'purge_code': duration_digits or None,
+        'purge_hh': purge_hh,
+        'purge_mm': purge_mm,
         'purge_minutes': purge_minutes,
         'purge_label': _format_duration(purge_minutes),
+        'nrsc4b_valid_purge': nrsc4b_valid_purge,
+        # ── Issue time (NRSC-4-B §4.3.3.5) ───────────────────────────────
         'issue_code': julian_digits or None,
+        'issue_day_of_year': issue_day_of_year,
+        'issue_hour': issue_hour,
+        'issue_minute': issue_minute,
         'issue_time_label': issue_time_label,
         'issue_time_iso': issue_time_iso,
         'issue_components': issue_components,
+        'nrsc4b_valid_issue_time': nrsc4b_valid_issue_time,
+        # ── Station identifier (NRSC-4-B §4.3.3.6) ───────────────────────
         'station_identifier': station_identifier,
-        'raw_locations': locations,
-        'header_parts': parts,
+        'station_identifier_raw': station_identifier_raw,
+        'nrsc4b_valid_station_id': nrsc4b_valid_station_id,
+        # ── Overall NRSC-4-B compliance ────────────────────────────────────
+        'nrsc4b_compliant': nrsc4b_compliant,
     }
 
 
