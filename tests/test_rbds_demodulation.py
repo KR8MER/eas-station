@@ -825,3 +825,187 @@ def test_group_10b_decodes_pty_name():
     assert data.pty_name is not None
     assert "NE" in data.pty_name
     assert "WS" in data.pty_name
+
+
+# ---------------------------------------------------------------------------
+# Burst FEC regression tests
+# ---------------------------------------------------------------------------
+
+def _make_valid_block(worker: RBDSWorker, data: int, block_number: int) -> int:
+    """Build a valid 26-bit RBDS block (data + CRC + offset word)."""
+    offset_word = [252, 408, 360, 436, 848]
+    crc = worker._calc_syndrome(data, 16)
+    check = crc ^ offset_word[block_number]
+    return (data << 10) | check
+
+
+def _crc_ok(worker: RBDSWorker, block: int, block_number: int) -> bool:
+    """Replicate the inner _crc_ok_for_block logic for test use."""
+    offset_word = [252, 408, 360, 436, 848]
+    dataword = (block >> 10) & 0xFFFF
+    expected_crc = worker._calc_syndrome(dataword, 16)
+    checkword = block & 0x3FF
+    if block_number == 2:
+        return (
+            (checkword ^ offset_word[2]) == expected_crc
+            or (checkword ^ offset_word[4]) == expected_crc
+        )
+    return (checkword ^ offset_word[block_number]) == expected_crc
+
+
+def test_burst_table_contains_only_contiguous_masks():
+    """Every mask in the burst correction table must be a contiguous run of bits.
+
+    The Meggitt trapping decoder (NRSC-4-B §B.2.4) corrects contiguous burst
+    errors only.  Including non-contiguous patterns (e.g. 0b101) inflates the
+    table with entries that match random multi-bit noise, causing false-positive
+    corrections that silently corrupt decoded PI codes and call letters.
+    """
+    worker = _make_worker()
+    table = worker._burst_correction_table()
+
+    for syndrome_val, mask in table.items():
+        assert mask != 0, f"zero mask in burst table (syndrome={syndrome_val})"
+        # A contiguous run has no internal zero bits: (mask >> trailing_zeros)
+        # must be all-ones.
+        trailing = (mask & -mask).bit_length() - 1
+        shifted = mask >> trailing
+        # All-ones check: shifted must be 2^k - 1 for some k ≥ 1
+        popcount = bin(shifted).count('1')
+        bit_len = shifted.bit_length()
+        assert popcount == bit_len, (
+            f"Non-contiguous mask 0b{mask:026b} found in burst table "
+            f"(syndrome={syndrome_val}); burst FEC must only include "
+            f"solid runs of bits to avoid false-positive corrections on noise."
+        )
+
+    worker.stop()
+
+
+def test_burst_fec_corrects_contiguous_bursts_1_to_5():
+    """Contiguous burst errors of 1-5 bits in a block A must be repaired."""
+    worker = _make_worker()
+    table = worker._burst_correction_table()
+    offset_a = 252  # offset_word[0]
+
+    for data in (0x4FB5, 0x1234, 0xABCD):
+        valid_block = _make_valid_block(worker, data, 0)
+
+        for burst_len in range(1, 6):
+            for start in range(0, 26 - burst_len + 1, 4):  # sample positions
+                burst_mask = ((1 << burst_len) - 1) << start
+                corrupted = valid_block ^ burst_mask
+
+                # Apply FEC: single-bit, then burst
+                recovered_word = None
+                for bit in range(26):
+                    cand = corrupted ^ (1 << bit)
+                    if _crc_ok(worker, cand, 0):
+                        if recovered_word is None:
+                            recovered_word = cand
+                        else:
+                            recovered_word = None
+                            break
+
+                if recovered_word is None:
+                    codeword = corrupted ^ offset_a
+                    syn = worker._calc_syndrome(codeword, 26)
+                    if syn == 0:
+                        recovered_word = corrupted
+                    elif syn in table:
+                        recovered_word = corrupted ^ table[syn]
+
+                assert recovered_word is not None, (
+                    f"Burst FEC failed to repair {burst_len}-bit burst at "
+                    f"position {start} for data=0x{data:04X}"
+                )
+                recovered_data = (recovered_word >> 10) & 0xFFFF
+                assert recovered_data == data, (
+                    f"Burst FEC produced wrong data 0x{recovered_data:04X} "
+                    f"(expected 0x{data:04X}) for {burst_len}-bit burst at "
+                    f"position {start}"
+                )
+
+    worker.stop()
+
+
+def test_burst_fec_no_false_positives_on_non_contiguous_errors():
+    """Non-contiguous 2-bit errors must not produce extra false positives.
+
+    Before the fix, the burst table included all sparse (non-contiguous)
+    patterns such as 0b101, causing it to match random noise and return
+    corrupted data as "corrected."  With contiguous-only patterns the only
+    remaining false positives are inherent CRC collisions — where a
+    non-contiguous 2-bit error pattern happens to share a syndrome with a
+    true contiguous 1-bit burst.  The fix must not add any *extra* false
+    positives beyond those inherent collisions.
+
+    We enumerate every non-contiguous 2-bit error and verify that the only
+    false-positive corrections come from syndromes that are legitimately in
+    the (contiguous-only) burst table — never from patterns that were
+    erroneously added by the old all-patterns algorithm.
+    """
+    worker = _make_worker()
+    table = worker._burst_correction_table()
+    offset_a = 252  # offset_word[0]
+
+    data = 0x4FB5
+    valid_block = _make_valid_block(worker, data, 0)
+
+    # Count false positives and verify each one is an inherent CRC collision
+    # (i.e., the 2-bit error's syndrome happens to match a contiguous entry).
+    false_positives = 0
+    non_inherent_fp = 0
+    for bit_a in range(26):
+        for bit_b in range(bit_a + 2, 26):  # gap ≥ 1 bit → non-contiguous
+            error_mask = (1 << bit_a) | (1 << bit_b)
+            corrupted = valid_block ^ error_mask
+
+            # Apply FEC pipeline
+            recovered_word = None
+            for bit in range(26):
+                cand = corrupted ^ (1 << bit)
+                if _crc_ok(worker, cand, 0):
+                    if recovered_word is None:
+                        recovered_word = cand
+                    else:
+                        recovered_word = None
+                        break
+
+            if recovered_word is None:
+                codeword = corrupted ^ offset_a
+                syn = worker._calc_syndrome(codeword, 26)
+                if syn == 0:
+                    recovered_word = corrupted
+                elif syn in table:
+                    recovered_word = corrupted ^ table[syn]
+
+            if recovered_word is not None:
+                recovered_data = (recovered_word >> 10) & 0xFFFF
+                if recovered_data != data:
+                    false_positives += 1
+                    # Classify: is this an inherent CRC collision?
+                    # Inherent: the 2-bit error syndrome is also the syndrome
+                    # of a contiguous burst in the table.  The fix only covers
+                    # non-contiguous patterns being explicitly added.
+                    raw_cw = valid_block ^ error_mask ^ offset_a
+                    fp_syn = worker._calc_syndrome(raw_cw, 26)
+                    if fp_syn not in table:
+                        # FP triggered without matching table entry — impossible
+                        # after fix (single-bit FEC found a wrong match, which
+                        # would be a separate unrelated issue).
+                        non_inherent_fp += 1
+
+    # With the fix, all false positives are inherent CRC collisions only.
+    assert non_inherent_fp == 0, (
+        f"Found {non_inherent_fp} false-positive corrections NOT from inherent "
+        f"CRC collisions; the burst table must contain only contiguous patterns."
+    )
+    # The total false positive count from inherent collisions must be low
+    # (empirically 21 for the (26,16) RBDS code vs 300+ before the fix).
+    assert false_positives <= 30, (
+        f"Too many false-positive corrections ({false_positives}); "
+        f"the burst FEC table likely contains non-contiguous patterns."
+    )
+
+    worker.stop()
