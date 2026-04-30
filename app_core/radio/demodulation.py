@@ -539,6 +539,22 @@ class RBDSWorker:
     _PILOT_SNR_THRESHOLD = 4.0               # Peak must be ≥ 4× the in-band median to count
     _MAX_PILOT_DEVIATION_HZ = 4.0            # ~210 ppm; beyond this is broken hardware
 
+    # Periodic pilot re-measurement.  The transmitter's crystal is exact, but
+    # cheap-SDR TCXOs drift 1–3 ppm with temperature swings (cold start →
+    # warm operation can easily move the recovered pilot 0.5–1 Hz over a few
+    # minutes).  Tripling that for the 57 kHz mix leaves a residual the
+    # Costas loop has to absorb, narrow but enough to push a marginally-
+    # locked Costas into cycle slips.  Re-measure every 30 s and blend the
+    # new estimate with the previous one via EMA so transient FFT noise
+    # can't yank the reference around.  Implausibly large jumps are
+    # rejected outright (see _PILOT_REMEASURE_MAX_DRIFT_HZ) — at 1 ppm per
+    # 30 s the legitimate drift between samples is well under 0.1 Hz, so
+    # anything bigger is an artifact (e.g. station change in flight, brief
+    # de-sense from a stronger adjacent signal) and best ignored.
+    _PILOT_REMEASURE_INTERVAL_SEC = 30.0
+    _PILOT_REMEASURE_MAX_DRIFT_HZ = 1.0
+    _PILOT_REMEASURE_EMA_ALPHA = 0.3
+
     def __init__(self, sample_rate: int, intermediate_rate: int):
         """Initialize RBDS worker thread.
 
@@ -659,6 +675,10 @@ class RBDSWorker:
         # so Costas only has to track residual phase noise. None until we've
         # collected enough samples; falls back to 19000.0 for compatibility.
         self._measured_pilot_freq: Optional[float] = None
+
+        # Sample-budget counter for periodic pilot re-measurement.  Reset to 0
+        # whenever a fresh measurement (initial or remeasure) is captured.
+        self._pilot_samples_since_remeasure: int = 0
 
         # RBDS symbol timing
         self._rbds_symbol_rate = 1187.5
@@ -993,6 +1013,8 @@ class RBDSWorker:
             '_rbds_bytes_array',
             '_rbds_global_bit_counter',
             '_rbds_inverted_polarity',
+            '_rbds_sync_tentative',
+            '_rbds_tentative_good_groups',
             '_rbds_sample_buffer',
         ):
             if hasattr(self, attr):
@@ -1113,6 +1135,7 @@ class RBDSWorker:
             measured = self._estimate_pilot_frequency(multiplex)
             if measured is not None:
                 self._measured_pilot_freq = measured
+                self._pilot_samples_since_remeasure = 0
                 ppm = (measured - 19000.0) / 19000.0 * 1e6
                 logger.info(
                     "RBDS pilot measured: %.3f Hz (offset %+0.3f Hz, %+.1f ppm SDR clock error). "
@@ -1122,6 +1145,37 @@ class RBDSWorker:
                     ppm,
                     3.0 * measured,
                 )
+        else:
+            # Periodic re-measurement to track slow TCXO thermal drift.  We
+            # accumulate sample count rather than wall-clock time so this
+            # behaves identically across queue stalls and is trivially
+            # testable.  Implausibly large jumps and SNR-fail returns from
+            # _estimate_pilot_frequency (None) are rejected; only small
+            # drifts blend in via EMA.
+            self._pilot_samples_since_remeasure += len(multiplex)
+            remeasure_interval_samples = int(
+                self._PILOT_REMEASURE_INTERVAL_SEC * self._sample_rate
+            )
+            if self._pilot_samples_since_remeasure >= remeasure_interval_samples:
+                self._pilot_samples_since_remeasure = 0
+                new_measure = self._estimate_pilot_frequency(multiplex)
+                if (
+                    new_measure is not None
+                    and abs(new_measure - self._measured_pilot_freq)
+                    <= self._PILOT_REMEASURE_MAX_DRIFT_HZ
+                ):
+                    old = self._measured_pilot_freq
+                    alpha = self._PILOT_REMEASURE_EMA_ALPHA
+                    self._measured_pilot_freq = (1.0 - alpha) * old + alpha * new_measure
+                    drift = self._measured_pilot_freq - old
+                    if abs(drift) > 0.05:
+                        logger.info(
+                            "RBDS pilot remeasured: %.3f Hz (was %.3f, raw %.3f, drift %+.3f Hz)",
+                            self._measured_pilot_freq,
+                            old,
+                            new_measure,
+                            drift,
+                        )
 
         pilot_phases = self._generate_pilot_reference(n, sample_offset)
 
@@ -1630,6 +1684,20 @@ class RBDSWorker:
             self._rbds_bytes_array = bytearray(8)
             self._rbds_global_bit_counter = 0  # CRITICAL: maintain across buffer clears
             self._rbds_inverted_polarity = False
+            # Tentative-sync state: when the presync state machine declares a
+            # lock we do NOT immediately trust it.  The presync gate accepts a
+            # candidate after only 2 spacing-confirmed syndrome hits (~52 bits
+            # of evidence), and on a Bernoulli-1/2 stream a syndrome match
+            # arrives every ~1024 bits; with the ±4-bit spacing tolerance
+            # false locks are statistically inevitable on weak/no signal.
+            # Once tentatively-synced we wait until at least
+            # _RBDS_TENTATIVE_GOOD_GROUPS fully-decoded (4-block) groups land
+            # in the next 50-block sync-quality window before confirming.
+            # While tentative we suppress process_group() publishing and the
+            # sync_acquired_unix / groups_decoded stat updates so fake-sync
+            # events can't inject corrupt metadata into the UI.
+            self._rbds_sync_tentative = False
+            self._rbds_tentative_good_groups = 0
 
         # Process all bits in buffer (python-radio style)
         bits = self._rbds_bit_buffer
@@ -1717,7 +1785,7 @@ class RBDSWorker:
                                 self._rbds_presync_polarity = polarity
 
                                 if self._rbds_presync_hits >= 2:
-                                    logger.info(f'RBDS SYNCHRONIZED at bit {global_i}')
+                                    logger.info(f'RBDS TENTATIVELY SYNCED at bit {global_i} (awaiting group confirmation)')
                                     self._rbds_wrong_blocks_counter = 0
                                     self._rbds_blocks_counter = 0
                                     self._rbds_block_bit_counter = 0
@@ -1732,10 +1800,12 @@ class RBDSWorker:
                                     # CRC checks use the correct inversion flag.
                                     self._rbds_inverted_polarity = polarity
                                     self._rbds_synced = True
-                                    # Stamp the lock time so the UI can show
-                                    # "synced for N seconds" (per-station).
-                                    with self._stats_lock:
-                                        self._stats.sync_acquired_unix = time.time()
+                                    # Enter tentative mode: don't publish or set
+                                    # sync_acquired_unix until the next 50-block
+                                    # window confirms enough fully-decoded
+                                    # groups (see _RBDS_TENTATIVE_GOOD_GROUPS).
+                                    self._rbds_sync_tentative = True
+                                    self._rbds_tentative_good_groups = 0
                         break  # Syndrome found, exit j loop
             
             else:
@@ -1928,17 +1998,35 @@ class RBDSWorker:
                                 group_1 = self._rbds_bytes_array[3] | (self._rbds_bytes_array[2] << 8)
                                 group_2 = self._rbds_bytes_array[5] | (self._rbds_bytes_array[4] << 8)
                                 group_3 = self._rbds_bytes_array[7] | (self._rbds_bytes_array[6] << 8)
-                                
+
                                 group_type = (group_1 >> 12) & 0xF
                                 program_identification = group_0
-                                
-                                # Update our RBDSData decoder
-                                self._rbds_decoder.process_group((group_0, group_1, group_2, group_3))
-                                changed = True
-                                with self._stats_lock:
-                                    self._stats.groups_decoded += 1
 
-                                logger.info(f"RBDS group: PI=0x{program_identification:04X} type={group_type}")
+                                if self._rbds_sync_tentative:
+                                    # Sync not yet confirmed: count this group
+                                    # toward the confirmation threshold but do
+                                    # NOT publish to the RBDSDecoder (which
+                                    # feeds the UI) and do NOT bump the
+                                    # groups_decoded stat.  If the lock turns
+                                    # out to be false the discarded group is
+                                    # exactly the kind of bogus PI/group-type
+                                    # we don't want to surface.
+                                    self._rbds_tentative_good_groups += 1
+                                    logger.debug(
+                                        "RBDS tentative group %d/%d: PI=0x%04X type=%d (not published)",
+                                        self._rbds_tentative_good_groups,
+                                        self._RBDS_TENTATIVE_GOOD_GROUPS,
+                                        program_identification,
+                                        group_type,
+                                    )
+                                else:
+                                    # Update our RBDSData decoder
+                                    self._rbds_decoder.process_group((group_0, group_1, group_2, group_3))
+                                    changed = True
+                                    with self._stats_lock:
+                                        self._stats.groups_decoded += 1
+
+                                    logger.info(f"RBDS group: PI=0x{program_identification:04X} type={group_type}")
                     
                     # Reset for next block
                     self._rbds_block_bit_counter = 0
@@ -1947,7 +2035,41 @@ class RBDSWorker:
                     
                     # Check sync quality every 50 blocks
                     if self._rbds_blocks_counter == 50:
-                        if self._rbds_wrong_blocks_counter > 35:
+                        if self._rbds_sync_tentative:
+                            # Tentative-sync confirmation window: confirm only
+                            # if at least _RBDS_TENTATIVE_GOOD_GROUPS fully-
+                            # decoded groups landed in this window.  This
+                            # ratifies the presync state machine's lock
+                            # against actual valid RBDS frames before we
+                            # publish anything to the UI or start the
+                            # sync_acquired_unix clock.
+                            if self._rbds_tentative_good_groups >= self._RBDS_TENTATIVE_GOOD_GROUPS:
+                                logger.info(
+                                    "RBDS sync CONFIRMED (%d good groups, %d bad blocks on %d total)",
+                                    self._rbds_tentative_good_groups,
+                                    self._rbds_wrong_blocks_counter,
+                                    50,
+                                )
+                                self._rbds_sync_tentative = False
+                                with self._stats_lock:
+                                    self._stats.sync_acquired_unix = time.time()
+                            else:
+                                # Quality gate failed: drop back to presync
+                                # silently.  This was a false lock — never
+                                # surfaced to the UI — so we deliberately do
+                                # NOT bump sync_lost_count (that counter is
+                                # for *real* drops the operator should see).
+                                logger.info(
+                                    "RBDS tentative sync REJECTED (only %d good groups, %d bad blocks on %d total)",
+                                    self._rbds_tentative_good_groups,
+                                    self._rbds_wrong_blocks_counter,
+                                    50,
+                                )
+                                self._rbds_synced = False
+                                self._rbds_presync = False
+                                self._rbds_sync_tentative = False
+                            self._rbds_tentative_good_groups = 0
+                        elif self._rbds_wrong_blocks_counter > 35:
                             logger.info(f"RBDS SYNC LOST ({self._rbds_wrong_blocks_counter} bad blocks on {self._rbds_blocks_counter} total)")
                             self._rbds_synced = False
                             self._rbds_presync = False
@@ -2081,6 +2203,17 @@ class RBDSWorker:
     # lands (i.e. real signal returns), so legitimate burst saves on a
     # healthy channel are unaffected.
     _BURST_FEC_SUPPRESS_AFTER = 2
+
+    # Post-lock quality gate.  After the presync state machine declares a
+    # lock we wait through the next 50-block sync-quality window and only
+    # *confirm* the lock if at least this many fully-decoded (4-block)
+    # groups land in that window.  Until confirmation we suppress
+    # process_group() publishing and the sync_acquired_unix /
+    # groups_decoded stat updates so a fake-sync event (random syndrome
+    # collisions during noise) cannot inject corrupt metadata into the
+    # UI.  3-of-(up-to-12.5)-groups is a strong filter against random
+    # locks while still being achievable on a healthy channel within ~1.3 s.
+    _RBDS_TENTATIVE_GOOD_GROUPS = 3
 
     @classmethod
     def _burst_correction_table(cls) -> Dict[int, int]:

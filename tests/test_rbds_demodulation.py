@@ -334,6 +334,264 @@ def test_rbds_presync_two_hits_do_not_lock():
 
 
 # ---------------------------------------------------------------------------
+# Tentative-sync (post-lock quality gate) tests
+#
+# When the presync state machine declares a lock we enter a tentative-sync
+# state.  In that state we suppress process_group() publishing and the
+# sync_acquired_unix / groups_decoded stat updates until the next 50-block
+# sync-quality window confirms enough fully-decoded RBDS groups.  This stops
+# fake-sync events (random syndrome collisions during noise) from injecting
+# corrupt PI / group-type / RT / PS / CT into the UI.
+# ---------------------------------------------------------------------------
+
+
+# Offset words for blocks A, B, C, D, C' per EN 50067.  Used to build
+# CRC-valid 26-bit blocks for synced-mode tests.
+_RBDS_OFFSETS = [252, 408, 360, 436, 848]
+
+
+def _bits_for_valid_block(worker: RBDSWorker, dataword: int, block_number: int) -> list[int]:
+    """Build the 26 MSB-first bits of a CRC-valid RBDS block."""
+    crc = worker._calc_syndrome(dataword, 16)
+    checkword = crc ^ _RBDS_OFFSETS[block_number]
+    block_value = (dataword << 10) | checkword
+    return [(block_value >> i) & 1 for i in range(25, -1, -1)]
+
+
+def _force_synced_tentative(worker: RBDSWorker, *, block_number: int = 0) -> None:
+    """Drive the worker into synced+tentative state without running presync.
+
+    Calls _decode_rbds_groups once with an empty buffer to trigger the lazy
+    state-machine init, then flips the flags directly.  This mirrors the
+    state the worker is in immediately after RBDS TENTATIVELY SYNCED fires.
+    """
+    worker._rbds_bit_buffer = []
+    worker._decode_rbds_groups()
+    worker._rbds_synced = True
+    worker._rbds_sync_tentative = True
+    worker._rbds_tentative_good_groups = 0
+    worker._rbds_block_number = block_number
+    worker._rbds_block_bit_counter = 0
+    worker._rbds_blocks_counter = 0
+    worker._rbds_wrong_blocks_counter = 0
+    worker._rbds_group_assembly_started = False
+    worker._rbds_inverted_polarity = False
+    worker._rbds_reg = 0
+    worker._rbds_group_good_blocks_counter = 0
+    worker._rbds_consecutive_crc_failures = 0
+
+
+def test_rbds_lock_starts_in_tentative_state():
+    """After the presync gate fires, sync should be tentative, not confirmed.
+
+    sync_acquired_unix must remain None until the 50-block confirmation window
+    succeeds — the UI's "synced for N seconds" indicator should not start
+    counting on what may turn out to be a fake lock.
+    """
+    worker = _make_worker()
+    _run_presync_sequence(worker, {100: 383, 126: 14, 152: 303})
+
+    assert worker._rbds_synced is True
+    assert worker._rbds_sync_tentative is True
+    assert worker._rbds_tentative_good_groups == 0
+    assert worker._stats.sync_acquired_unix is None
+    worker.stop()
+
+
+def test_rbds_tentative_sync_confirms_with_enough_good_groups():
+    """≥ _RBDS_TENTATIVE_GOOD_GROUPS fully-decoded groups in 50 blocks → CONFIRMED."""
+    worker = _make_worker()
+    _force_synced_tentative(worker, block_number=0)
+
+    # Capture process_group calls so we can verify gating below.
+    published: list[tuple[int, int, int, int]] = []
+    worker._rbds_decoder.process_group = lambda group: published.append(tuple(group))  # type: ignore[assignment]
+
+    # Drive exactly 50 valid blocks through synced-mode decoding.
+    # 50 blocks = 12 complete groups (A,B,C,D × 12) + 2 leftover blocks (A,B
+    # of the 13th group, which is not yet "complete" so doesn't count).
+    bits: list[int] = []
+    for i in range(50):
+        block_no = i % 4
+        # Distinct datawords keep the test from accidentally relying on any
+        # zero-special-casing in the decoder.
+        bits.extend(_bits_for_valid_block(worker, 0xABCD + i, block_no))
+    worker._rbds_bit_buffer = bits
+    worker._decode_rbds_groups()
+
+    assert worker._rbds_synced is True
+    assert worker._rbds_sync_tentative is False, "sync should have been confirmed"
+    assert worker._stats.sync_acquired_unix is not None
+    # While tentative, process_group must not have been called once: every
+    # one of the 12 complete groups was suppressed.
+    assert published == [], (
+        "process_group must not be called while sync is tentative; got "
+        f"{len(published)} publishes"
+    )
+    # And groups_decoded must not have been bumped during tentative either.
+    assert worker._stats.groups_decoded == 0
+    worker.stop()
+
+
+def test_rbds_tentative_sync_rejected_when_too_few_groups():
+    """50-block window with too few good groups → drop sync silently.
+
+    Crucially this drop must NOT bump sync_lost_count — that counter is
+    reserved for *real* sync drops the operator should see, and a tentative
+    rejection means the lock never reached the UI in the first place.
+    """
+    worker = _make_worker()
+    worker._stats.sync_lost_count = 7  # pre-existing operator-visible drops
+    _force_synced_tentative(worker, block_number=0)
+
+    # Drive 50 blocks where every CRC fails (we use a wrong offset on every
+    # block).  None of them complete a group, so tentative_good_groups stays 0.
+    bits: list[int] = []
+    bad_offset_block_number = 1  # send block-A bits with block-B offset → CRC fails
+    for _ in range(50):
+        bits.extend(_bits_for_valid_block(worker, 0xDEAD, bad_offset_block_number))
+    worker._rbds_bit_buffer = bits
+    worker._decode_rbds_groups()
+
+    assert worker._rbds_synced is False, "tentative sync should have been rejected"
+    assert worker._rbds_sync_tentative is False
+    assert worker._stats.sync_acquired_unix is None
+    # sync_lost_count must NOT have been incremented for a tentative rejection.
+    assert worker._stats.sync_lost_count == 7
+    worker.stop()
+
+
+def test_rbds_tentative_sync_does_not_publish_groups_mid_window():
+    """While tentative, completed groups must not reach RBDSDecoder.process_group.
+
+    This is the primary user-visible benefit of the gate: even if a fake-lock
+    happens to assemble a "valid" group (random bits coincidentally pass CRC),
+    the bogus PI / group-type / RT / PS / CT it carries never reaches the UI.
+    """
+    worker = _make_worker()
+    _force_synced_tentative(worker, block_number=0)
+
+    published: list[tuple[int, int, int, int]] = []
+    worker._rbds_decoder.process_group = lambda group: published.append(tuple(group))  # type: ignore[assignment]
+
+    # Drive exactly 4 valid blocks (one complete group), well below the
+    # 50-block confirmation boundary.  The group is fully assembled and
+    # counted toward the tentative threshold but must not publish.
+    bits: list[int] = []
+    for block_no in range(4):
+        bits.extend(_bits_for_valid_block(worker, 0xCAFE, block_no))
+    worker._rbds_bit_buffer = bits
+    worker._decode_rbds_groups()
+
+    assert worker._rbds_sync_tentative is True
+    assert worker._rbds_tentative_good_groups == 1
+    assert published == []
+    assert worker._stats.groups_decoded == 0
+    worker.stop()
+
+
+# ---------------------------------------------------------------------------
+# Periodic pilot re-measurement tests
+#
+# Cheap-SDR TCXOs drift 1–3 ppm with temperature swings, which translates to
+# ~0.02–0.06 Hz/s at the 19 kHz pilot.  Tripling that for the 57 kHz mix
+# leaves a residual that the Costas loop has to absorb on top of phase noise.
+# Re-measuring every 30 s and EMA-blending the result keeps the carrier
+# reference accurate without yanking it around on a single noisy FFT.
+# ---------------------------------------------------------------------------
+
+
+def test_rbds_pilot_remeasure_blends_small_drift():
+    """A small post-interval re-measurement should EMA-blend into the reference."""
+    sr = 250_000
+    worker = _make_worker(sample_rate=sr)
+    worker._measured_pilot_freq = 19000.500
+    # Park the counter just below the threshold so a single chunk pushes it over.
+    interval_samples = int(worker._PILOT_REMEASURE_INTERVAL_SEC * sr)
+    chunk = np.zeros(sr, dtype=np.float32)  # 1 s of samples
+    worker._pilot_samples_since_remeasure = interval_samples - len(chunk) + 1
+
+    # Stub the FFT-based estimator to return a plausible 0.2 Hz drift.
+    worker._estimate_pilot_frequency = lambda mux: 19000.700  # type: ignore[assignment]
+
+    worker._process_rbds(chunk, sample_offset=0)
+
+    # EMA: new = 0.7 * 19000.500 + 0.3 * 19000.700 = 19000.560
+    expected = (
+        (1.0 - worker._PILOT_REMEASURE_EMA_ALPHA) * 19000.500
+        + worker._PILOT_REMEASURE_EMA_ALPHA * 19000.700
+    )
+    assert abs(worker._measured_pilot_freq - expected) < 1e-6
+    # Counter must be reset so the next remeasure waits another full interval.
+    assert worker._pilot_samples_since_remeasure == 0
+    worker.stop()
+
+
+def test_rbds_pilot_remeasure_rejects_implausible_jump():
+    """An implausibly large jump (>_PILOT_REMEASURE_MAX_DRIFT_HZ) must be ignored."""
+    sr = 250_000
+    worker = _make_worker(sample_rate=sr)
+    worker._measured_pilot_freq = 19000.500
+    interval_samples = int(worker._PILOT_REMEASURE_INTERVAL_SEC * sr)
+    chunk = np.zeros(sr, dtype=np.float32)
+    worker._pilot_samples_since_remeasure = interval_samples - len(chunk) + 1
+
+    # 5 Hz jump would mean the SDR clock changed by >250 ppm in 30 s — not
+    # physically plausible.  Treat as artifact (e.g. brief de-sense, tuner
+    # transient) and keep the previous reference.
+    worker._estimate_pilot_frequency = lambda mux: 19005.500  # type: ignore[assignment]
+
+    worker._process_rbds(chunk, sample_offset=0)
+
+    assert worker._measured_pilot_freq == 19000.500
+    # Counter still resets so we don't re-test the same bad chunk forever.
+    assert worker._pilot_samples_since_remeasure == 0
+    worker.stop()
+
+
+def test_rbds_pilot_remeasure_skips_when_estimator_returns_none():
+    """SNR-fail (None) returns from the estimator must leave the reference alone."""
+    sr = 250_000
+    worker = _make_worker(sample_rate=sr)
+    worker._measured_pilot_freq = 19000.500
+    interval_samples = int(worker._PILOT_REMEASURE_INTERVAL_SEC * sr)
+    chunk = np.zeros(sr, dtype=np.float32)
+    worker._pilot_samples_since_remeasure = interval_samples - len(chunk) + 1
+
+    worker._estimate_pilot_frequency = lambda mux: None  # type: ignore[assignment]
+
+    worker._process_rbds(chunk, sample_offset=0)
+
+    assert worker._measured_pilot_freq == 19000.500
+    worker.stop()
+
+
+def test_rbds_pilot_remeasure_does_not_fire_before_interval():
+    """Below the sample threshold, the estimator must not be invoked at all."""
+    sr = 250_000
+    worker = _make_worker(sample_rate=sr)
+    worker._measured_pilot_freq = 19000.500
+    chunk = np.zeros(1000, dtype=np.float32)  # tiny chunk, well below threshold
+    worker._pilot_samples_since_remeasure = 0
+
+    invocations = {"count": 0}
+
+    def counting_estimator(mux: np.ndarray) -> float:
+        invocations["count"] += 1
+        return 19010.0  # would be rejected anyway, but should not be called
+
+    worker._estimate_pilot_frequency = counting_estimator  # type: ignore[assignment]
+
+    worker._process_rbds(chunk, sample_offset=0)
+
+    assert invocations["count"] == 0
+    assert worker._measured_pilot_freq == 19000.500
+    # Counter advanced by the chunk length.
+    assert worker._pilot_samples_since_remeasure == len(chunk)
+    worker.stop()
+
+
+# ---------------------------------------------------------------------------
 # RBDSDecoder.process_group tests
 #
 # Block B layout per EN 50067 / NRSC-4:
