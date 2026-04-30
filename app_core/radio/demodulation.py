@@ -193,6 +193,86 @@ def _costas_loop_numba(
     return out_real, out_imag, phase, freq
 
 
+@jit(nopython=True, cache=True, fastmath=True)
+def _mm_timing_loop_numba(
+    samples_interp_real: np.ndarray,
+    samples_interp_imag: np.ndarray,
+    mu: float,
+    max_out: int,
+) -> tuple:
+    """JIT-compiled M&M symbol timing recovery inner loop.
+
+    Operates on 16x-upsampled samples and recovers one symbol per ~16
+    original input samples.  The loop runs at symbol rate so the per-call
+    Python overhead of a pure-Python while loop — not the iteration cost —
+    is the bottleneck this eliminates.
+
+    Args:
+        samples_interp_real: Real component of 16x-upsampled samples (float64)
+        samples_interp_imag: Imaginary component of 16x-upsampled samples (float64)
+        mu: Initial fractional timing offset state (0 ≤ mu < 1)
+        max_out: Upper bound on the number of output symbols to produce
+
+    Returns:
+        Tuple of (out_real, out_imag, i_out, i_in, mu)
+        where out_real/out_imag are the recovered symbol values (length max_out),
+        i_out is the number of symbols written (output slice is [2:i_out]),
+        i_in is the consumed original-sample index (for leftover calculation),
+        and mu is the final fractional timing offset.
+    """
+    sps = 16
+    n_interp = len(samples_interp_real)
+
+    out_real = np.zeros(max_out, dtype=np.float64)
+    out_imag = np.zeros(max_out, dtype=np.float64)
+    out_rail_real = np.zeros(max_out, dtype=np.float64)
+    out_rail_imag = np.zeros(max_out, dtype=np.float64)
+
+    i_in = 0
+    i_out = 2  # first two outputs stay zero (history initialization)
+
+    while i_out < max_out - 1:
+        interp_idx = i_in * 16 + int(mu * 16)
+        if interp_idx >= n_interp - 1:
+            break
+
+        s_real = samples_interp_real[interp_idx]
+        s_imag = samples_interp_imag[interp_idx]
+        out_real[i_out] = s_real
+        out_imag[i_out] = s_imag
+
+        # Rail values use 0/1 to match the pure-Python fallback which does
+        # int(np.real(out[i_out]) > 0).  Standard M&M typically uses ±1, but
+        # matching the fallback exactly preserves identical mm_val scaling.
+        rail_r = 1.0 if s_real > 0.0 else 0.0
+        rail_i = 1.0 if s_imag > 0.0 else 0.0
+        out_rail_real[i_out] = rail_r
+        out_rail_imag[i_out] = rail_i
+
+        # x = (out_rail[i] - out_rail[i-2]) * conj(out[i-1])
+        # y = (out[i]      - out[i-2])      * conj(out_rail[i-1])
+        # mm_val = real(y - x)  — only the real part is needed
+        dr_r = out_rail_real[i_out] - out_rail_real[i_out - 2]
+        dr_i = out_rail_imag[i_out] - out_rail_imag[i_out - 2]
+        do_r = out_real[i_out] - out_real[i_out - 2]
+        do_i = out_imag[i_out] - out_imag[i_out - 2]
+        prev_out_r = out_real[i_out - 1]
+        prev_out_i = out_imag[i_out - 1]
+        prev_rail_r = out_rail_real[i_out - 1]
+        prev_rail_i = out_rail_imag[i_out - 1]
+        # real part of complex multiply a*conj(b): re(a)*re(b) + im(a)*im(b)
+        x_real = dr_r * prev_out_r + dr_i * prev_out_i
+        y_real = do_r * prev_rail_r + do_i * prev_rail_i
+        mm_val = y_real - x_real
+
+        mu += sps + 0.05 * mm_val
+        i_in += int(np.floor(mu))
+        mu = mu - np.floor(mu)
+        i_out += 1
+
+    return out_real, out_imag, i_out, i_in, mu
+
+
 def fm_discriminator(iq_samples: np.ndarray) -> np.ndarray:
     """FM phase discriminator - dispatches to JIT or NumPy implementation.
 
@@ -443,6 +523,11 @@ class RBDSDecoderStats:
     groups_decoded: int = 0
     sync_acquired_unix: Optional[float] = None
     sync_lost_count: int = 0
+    # Number of sample chunks dropped because the worker queue was full.
+    # A non-zero value here means the DSP thread is behind real-time;
+    # it triggers M&M timing phase errors because state carries over
+    # across the resulting time gaps.
+    chunks_dropped: int = 0
     # Keys are e.g. "0A", "2A", "11A" — bare "A"/"B" suffixes match what
     # the RDS specs use everywhere so the UI doesn't have to translate.
     group_type_counts: Dict[str, int] = field(default_factory=dict)
@@ -578,6 +663,12 @@ class RBDSWorker:
         # through one mutex regardless of which thread updates a counter.
         self._stats: RBDSDecoderStats = RBDSDecoderStats()
         self._stats_lock = threading.Lock()
+
+        # Count of sample chunks dropped because the queue was full (audio
+        # thread writes this, worker thread reads it via get_stats).  Using
+        # a plain int protected by _stats_lock so the UI can surface it in
+        # the Decoder Health panel without a separate atomic/lock.
+        self._chunks_dropped: int = 0
 
         # Worker thread
         self._stop_event = threading.Event()
@@ -913,8 +1004,11 @@ class RBDSWorker:
             # regardless of how many chunks were dropped in between.
             self._sample_queue.put_nowait((multiplex, sample_offset))
         except queue.Full:
-            # This is expected and fine - RBDS is lower priority than audio
-            pass
+            # RBDS is lower priority than audio — dropping is expected when
+            # the DSP worker can't keep up.  Count it so the UI can surface
+            # "chunks dropped" in the Decoder Health panel.
+            with self._stats_lock:
+                self._chunks_dropped += 1
 
     def get_latest_data(self) -> Optional[RBDSData]:
         """Get the latest RBDS data (thread-safe)."""
@@ -942,6 +1036,7 @@ class RBDSWorker:
                 groups_decoded=self._stats.groups_decoded,
                 sync_acquired_unix=self._stats.sync_acquired_unix,
                 sync_lost_count=self._stats.sync_lost_count,
+                chunks_dropped=self._chunks_dropped,
                 group_type_counts={},
             )
         # Group histogram lives on the RBDSDecoder; pull a copy here so
@@ -1314,7 +1409,7 @@ class RBDSWorker:
         # ~5.7 Hz).  Running it after M&M at symbol rate — the old order — reduced
         # the effective bandwidth to ~3.5 Hz, which was too narrow to lock reliably.
         # Reference: https://pysdr.org/content/rds.html (Costas before M&M)
-        x = self._costas_pysdr(x)
+        x = self._costas_loop(x)
         time.sleep(0)  # Yield GIL
 
         # Log Costas frequency offset to check if it's locked
@@ -1423,38 +1518,49 @@ class RBDSWorker:
         # Output should be ~len(samples)/16 symbols (downsampling from 16 sps to 1 sps)
         # Allocate conservatively
         max_out = len(samples) // 16 + 100
-        out = np.zeros(max_out, dtype=np.complex64)
-        out_rail = np.zeros(max_out, dtype=np.complex64)
-        i_in = 0  # input sample index (original sample space)
-        i_out = 2  # output symbol index (let first two outputs be 0)
 
-        # CRITICAL FIX: Check against interpolated array length, not original length
-        while i_out < max_out - 1:
-            # Calculate index into interpolated array
-            interp_idx = i_in * 16 + int(mu * 16)
+        if _NUMBA_AVAILABLE and len(samples_interpolated) > 50:
+            # JIT-compiled inner loop: converts ~n/16 Python iterations to
+            # one native call, eliminating per-symbol Python overhead.
+            interp_r = np.ascontiguousarray(samples_interpolated.real, dtype=np.float64)
+            interp_i = np.ascontiguousarray(samples_interpolated.imag, dtype=np.float64)
+            out_real, out_imag, i_out, i_in, mu = _mm_timing_loop_numba(
+                interp_r, interp_i, mu, max_out
+            )
+            out = (out_real + 1j * out_imag).astype(np.complex64)
+        else:
+            out = np.zeros(max_out, dtype=np.complex64)
+            out_rail = np.zeros(max_out, dtype=np.complex64)
+            i_in = 0  # input sample index (original sample space)
+            i_out = 2  # output symbol index (let first two outputs be 0)
 
-            # Boundary check: ensure we don't read past end of interpolated array
-            if interp_idx >= len(samples_interpolated) - 1:
-                break
+            # CRITICAL FIX: Check against interpolated array length, not original length
+            while i_out < max_out - 1:
+                # Calculate index into interpolated array
+                interp_idx = i_in * 16 + int(mu * 16)
 
-            out[i_out] = samples_interpolated[interp_idx]
-            out_rail[i_out] = int(np.real(out[i_out]) > 0) + 1j * int(np.imag(out[i_out]) > 0)
-            x = (out_rail[i_out] - out_rail[i_out - 2]) * np.conj(out[i_out - 1])
-            y = (out[i_out] - out[i_out - 2]) * np.conj(out_rail[i_out - 1])
-            mm_val = np.real(y - x)
-            # Bumped from 0.01 to 0.05.  python-radio's reference uses 0.01
-            # for offline whole-recording processing where the timing has
-            # all the symbols to converge against.  In a streaming pipeline
-            # where each batch is ~250 ms (~300 symbols) and we then carry
-            # mu forward, 0.01 was too narrow to settle: the user saw
-            # continuous "presync spacing mismatch" with random spacings,
-            # which is the signature of a slowly-wandering symbol clock.
-            # 0.05 still has plenty of margin against oscillation (the
-            # standard rule of thumb for Mueller&Müller is gain < ~0.2).
-            mu += sps + 0.05 * mm_val
-            i_in += int(np.floor(mu))
-            mu = mu - np.floor(mu)
-            i_out += 1
+                # Boundary check: ensure we don't read past end of interpolated array
+                if interp_idx >= len(samples_interpolated) - 1:
+                    break
+
+                out[i_out] = samples_interpolated[interp_idx]
+                out_rail[i_out] = int(np.real(out[i_out]) > 0) + 1j * int(np.imag(out[i_out]) > 0)
+                x = (out_rail[i_out] - out_rail[i_out - 2]) * np.conj(out[i_out - 1])
+                y = (out[i_out] - out[i_out - 2]) * np.conj(out_rail[i_out - 1])
+                mm_val = np.real(y - x)
+                # Bumped from 0.01 to 0.05.  python-radio's reference uses 0.01
+                # for offline whole-recording processing where the timing has
+                # all the symbols to converge against.  In a streaming pipeline
+                # where each batch is ~250 ms (~300 symbols) and we then carry
+                # mu forward, 0.01 was too narrow to settle: the user saw
+                # continuous "presync spacing mismatch" with random spacings,
+                # which is the signature of a slowly-wandering symbol clock.
+                # 0.05 still has plenty of margin against oscillation (the
+                # standard rule of thumb for Mueller&Müller is gain < ~0.2).
+                mu += sps + 0.05 * mm_val
+                i_in += int(np.floor(mu))
+                mu = mu - np.floor(mu)
+                i_out += 1
 
         # Save unconsumed tail samples so the next call can consume them instead
         # of silently dropping them and drifting the symbol clock.

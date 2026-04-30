@@ -1435,6 +1435,12 @@ function renderAudioSources(fullRender = true) {
                                                 <span class="font-monospace small">${source.metrics.metadata.rbds_sync_lost_count}</span>
                                             </div>
                                         ` : ''}
+                                        ${(source.metrics.metadata.rbds_chunks_dropped !== undefined && source.metrics.metadata.rbds_chunks_dropped !== null) ? `
+                                            <div class="d-flex justify-content-between mb-1">
+                                                <span class="text-muted">Queue chunks dropped:</span>
+                                                <span class="font-monospace small ${source.metrics.metadata.rbds_chunks_dropped > 0 ? 'text-warning' : ''}">${source.metrics.metadata.rbds_chunks_dropped}</span>
+                                            </div>
+                                        ` : ''}
                                     ` : ''}
 
                                     ${(source.metrics.metadata.rbds_group_type_counts && Object.keys(source.metrics.metadata.rbds_group_type_counts).length > 0) ? `
