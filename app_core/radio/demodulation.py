@@ -2394,20 +2394,89 @@ class FMDemodulator:
         self._rbds_worker: Optional[RBDSWorker] = None
         self._rbds_intermediate_rate = self._intermediate_rate
 
+        # Early-decimation state (PySDR architecture).  The RBDSWorker's
+        # filter chain (54-60 kHz bandpass, 57 kHz mix, 2.4 kHz post-mix
+        # lowpass, downstream decim to 25 kHz, then resample to 19 kHz) is
+        # sized for ~250 kHz inputs — that's how PySDR's reference RDS
+        # tutorial does it (https://pysdr.org/content/rds.html: starts at
+        # sample_rate=250e3 and uses a 101-tap firwin lowpass).  Feeding the
+        # worker raw SDR rate (e.g. 1 MHz, 2.4 MHz) leaves its 101-tap
+        # bandpass with ~40-95 kHz transition vs a 6 kHz target passband —
+        # essentially all-pass — and its 501-tap 2.4 kHz lowpass with ~10-25
+        # kHz transition, so the 4 kHz post-mix stereo artifact lands in
+        # the passband.  We must decimate the multiplex from the *actual,
+        # user-configured* SDR rate down to _rbds_intermediate_rate before
+        # submitting, with a proper anti-alias filter ahead of the
+        # downsampler.  Initialised below only when RBDS is enabled.
+        self._rbds_decim: int = 1
+        self._rbds_aa_filter: Optional[np.ndarray] = None
+        self._rbds_aa_zi: Optional[np.ndarray] = None
+        # Sample-offset counter at the *decimated* rate.  The worker's
+        # crystal-locked 57 kHz / pilot-locked 19 kHz reference uses
+        # sample_offset / self._sample_rate to compute time, so the offset
+        # must count samples at the rate the worker actually receives.
+        self._rbds_sample_index: int = 0
+
         if self._rbds_enabled:
-            # Calculate intermediate rate for RBDS (preserves 57 kHz subcarrier)
+            # Pick the largest divisor of config.sample_rate that lands the
+            # worker between 130 and ~280 kHz — the band where its filters
+            # are correctly proportioned and post-decim Nyquist (>= 65 kHz)
+            # safely covers the 57 kHz RBDS subcarrier.  This mirrors the
+            # earlier branch that already existed for the audio path but
+            # makes it the *actually-applied* rate for the RBDS path too.
             if config.sample_rate > self._intermediate_rate * 2:
                 rbds_decim = config.sample_rate // self._intermediate_rate
                 while (config.sample_rate // rbds_decim) < 130000 and rbds_decim > 1:
                     rbds_decim -= 1
                 self._rbds_intermediate_rate = config.sample_rate // rbds_decim
+                self._rbds_decim = rbds_decim
+            else:
+                # Low-rate SDR (e.g. user already running at 250 kHz):
+                # multiplex is already at a reasonable rate, no early
+                # decimation needed.  rbds_decim stays at 1.
+                self._rbds_intermediate_rate = config.sample_rate
+                self._rbds_decim = 1
 
-            # Create RBDS worker thread - all processing happens there
-            self._rbds_worker = RBDSWorker(config.sample_rate, self._rbds_intermediate_rate)
+            # Build the rate-adaptive anti-alias filter when we're going to
+            # decimate.  Cutoff must (a) preserve the 57 kHz RBDS subcarrier
+            # (whose upper edge is 60 kHz) and (b) put the stopband edge
+            # below post-decim Nyquist so nothing folds back into the RBDS
+            # band.  Tap count scales with the input rate to hold the
+            # transition bandwidth roughly constant — the cap of 1025
+            # caps CPU even at Airspy's 10 MHz native rate while keeping
+            # the stopband under post-decim Nyquist for any rate the user
+            # is realistically going to set.
+            if self._rbds_decim > 1:
+                post_decim_nyquist = self._rbds_intermediate_rate / 2.0
+                rbds_aa_cutoff = min(80_000.0, max(63_000.0, post_decim_nyquist * 0.85))
+                rbds_aa_taps = max(127, min(1025, (int(config.sample_rate / 4000) | 1)))
+                self._rbds_aa_filter = self._design_fir_lowpass(
+                    rbds_aa_cutoff, config.sample_rate, taps=rbds_aa_taps
+                )
+                logger.info(
+                    "RBDS anti-alias filter: %d taps, cutoff %.1f kHz @ %d Hz "
+                    "→ %d Hz (decim=%d), post-decim Nyquist=%.1f kHz",
+                    rbds_aa_taps,
+                    rbds_aa_cutoff / 1000.0,
+                    config.sample_rate,
+                    self._rbds_intermediate_rate,
+                    self._rbds_decim,
+                    post_decim_nyquist / 1000.0,
+                )
+
+            # Create RBDS worker thread - all processing happens there.
+            # CRITICAL: pass the *effective* sample rate the worker will
+            # receive (post early-decimation), NOT the raw SDR rate.  Its
+            # internal filters (bandpass / pilot bandpass / 2.4 kHz post-
+            # mix lowpass) are designed against this value.
+            self._rbds_worker = RBDSWorker(
+                self._rbds_intermediate_rate, self._rbds_intermediate_rate
+            )
             logger.info(
-                "RBDS ENABLED: creating worker thread at %d Hz (input sample_rate=%d Hz)",
+                "RBDS ENABLED: worker at %d Hz (input sample_rate=%d Hz, decim=%d)",
                 self._rbds_intermediate_rate,
-                config.sample_rate
+                config.sample_rate,
+                self._rbds_decim,
             )
         else:
             # Log clearly why RBDS is not enabled
@@ -2557,11 +2626,46 @@ class FMDemodulator:
         # 24/7 RELIABILITY: Wrap in try-except to ensure RBDS issues never affect audio
         if self._rbds_enabled and self._rbds_worker:
             try:
-                # Pass the absolute sample offset so the worker generates the
-                # correct crystal-locked 57 kHz carrier phase even when chunks
-                # are dropped from the queue (queue overflow discards chunks in
-                # the audio thread, so the worker's local counter would lag).
-                self._rbds_worker.submit_samples(multiplex, self._sample_index)
+                # Early-decimate the multiplex from the user-configured SDR
+                # rate down to the worker's intermediate rate (PySDR
+                # architecture).  When _rbds_decim == 1 (low-rate SDR or
+                # already-decimated input) we skip the filter and pass the
+                # multiplex through untouched — same as the legacy code
+                # path.
+                if self._rbds_decim > 1 and self._rbds_aa_filter is not None:
+                    from scipy import signal as scipy_signal
+                    if self._rbds_aa_zi is None:
+                        # Initialize the lfilter delay line so the very
+                        # first chunk doesn't ring up from zero.  Using
+                        # the steady-state response scaled by the first
+                        # input sample matches the convention already
+                        # used in _process_rbds for the bandpass/lowpass.
+                        self._rbds_aa_zi = scipy_signal.lfilter_zi(
+                            self._rbds_aa_filter, 1.0
+                        )
+                        if multiplex.size:
+                            self._rbds_aa_zi = self._rbds_aa_zi * float(multiplex[0])
+                    filtered, self._rbds_aa_zi = scipy_signal.lfilter(
+                        self._rbds_aa_filter, 1.0, multiplex, zi=self._rbds_aa_zi
+                    )
+                    # Decimate by integer factor.  Anti-aliasing was just
+                    # done above so the [::N] is safe — same pattern PySDR
+                    # uses (firwin → np.convolve → x[::10]).
+                    rbds_multiplex = filtered[:: self._rbds_decim].astype(np.float32)
+                else:
+                    rbds_multiplex = multiplex
+
+                # Pass the absolute sample offset *in the worker's domain*
+                # so its crystal-locked 57 kHz / pilot-locked 19 kHz
+                # reference stays phase-coherent across chunks even when
+                # chunks are dropped from the queue (queue overflow
+                # discards chunks in the audio thread).  This counter is
+                # decoupled from self._sample_index, which counts
+                # multiplex samples at the raw SDR rate for any callers
+                # that depend on that semantic (e.g. tests).
+                self._rbds_worker.submit_samples(rbds_multiplex, self._rbds_sample_index)
+                self._rbds_sample_index += len(rbds_multiplex)
+
                 # Get whatever RBDS data is available (may be from previous chunks)
                 rbds_data = self._rbds_worker.get_latest_data()
             except Exception as e:

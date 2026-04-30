@@ -592,6 +592,207 @@ def test_rbds_pilot_remeasure_does_not_fire_before_interval():
 
 
 # ---------------------------------------------------------------------------
+# Early-decimation tests (sample-rate-aware front end).
+#
+# The worker's filter chain (54-60 kHz bandpass, 57 kHz mix, 2.4 kHz post-mix
+# lowpass, downstream decim to 25 kHz) is sized for ~250 kHz inputs — the
+# rate at which both PySDR (https://pysdr.org/content/rds.html) and
+# RdsSurveyor2 (core/signals/mpx.ts: hardcoded `sampleRate = 250000`) run
+# their RDS demodulators.  At higher SDR rates (1 MHz, 2.4 MHz, etc.) the
+# capped 101-tap bandpass becomes essentially all-pass and the 501-tap
+# 2.4 kHz lowpass leaves the 4 kHz stereo artifact in the passband.
+# FMDemodulator must therefore decimate the multiplex from the user's actual
+# SDR rate down to _rbds_intermediate_rate (always 130-280 kHz) BEFORE
+# submitting it to the RBDSWorker, with a proper anti-alias filter ahead of
+# the downsampler.  These tests verify that pipeline at multiple sample
+# rates the user might realistically configure.
+# ---------------------------------------------------------------------------
+
+
+def test_fmdemodulator_creates_worker_at_post_decim_rate_for_1mhz_rtlsdr():
+    """At 1 MHz (typical RTL-SDR), the worker must run at 250 kHz, not 1 MHz.
+
+    This is the critical bug RdsSurveyor2 / PySDR both flag implicitly with
+    their hardcoded 250 kHz: the worker's filters only work at that rate.
+    """
+    demod = _make_demodulator(sample_rate=1_000_000)
+    assert demod._rbds_worker is not None
+    assert demod._rbds_decim == 4
+    assert demod._rbds_intermediate_rate == 250_000
+    # The worker's _sample_rate (used to design every filter) MUST be the
+    # post-decimation rate, not config.sample_rate.
+    assert demod._rbds_worker._sample_rate == 250_000
+    # And an anti-alias filter must have been built.
+    assert demod._rbds_aa_filter is not None
+    demod.stop()
+    time.sleep(0.05)
+
+
+def test_fmdemodulator_creates_worker_at_post_decim_rate_for_2_4mhz_rtlsdr():
+    """At 2.4 MHz (max RTL-SDR), worker also runs near 250 kHz, decim ~9."""
+    demod = _make_demodulator(sample_rate=2_400_000)
+    assert demod._rbds_worker is not None
+    assert demod._rbds_decim >= 8 and demod._rbds_decim <= 10
+    # Post-decim rate stays in the band where the worker's filters are sized.
+    assert 200_000 <= demod._rbds_intermediate_rate <= 300_000
+    assert demod._rbds_worker._sample_rate == demod._rbds_intermediate_rate
+    assert demod._rbds_aa_filter is not None
+    demod.stop()
+    time.sleep(0.05)
+
+
+def test_fmdemodulator_no_decim_when_already_at_target_rate():
+    """At 250 kHz input (e.g. user pre-decimated, Airspy R2 audio), no extra decim."""
+    demod = _make_demodulator(sample_rate=250_000)
+    assert demod._rbds_decim == 1
+    assert demod._rbds_intermediate_rate == 250_000
+    assert demod._rbds_worker is not None
+    assert demod._rbds_worker._sample_rate == 250_000
+    # No decim → no AA filter needed (multiplex passes through).
+    assert demod._rbds_aa_filter is None
+    demod.stop()
+    time.sleep(0.05)
+
+
+def test_fmdemodulator_anti_alias_filter_protects_post_decim_nyquist():
+    """The AA filter must reject content above post-decim Nyquist by ≥40 dB.
+
+    Without this, downstream filters operating at the worker's intermediate
+    rate would see aliases of the FM stereo subcarrier (38 kHz) and pilot
+    harmonics folded into the RBDS band, which is precisely the failure
+    mode the user is observing.
+    """
+    sr = 1_000_000
+    demod = _make_demodulator(sample_rate=sr)
+    assert demod._rbds_aa_filter is not None
+    h = demod._rbds_aa_filter
+    post_decim_rate = demod._rbds_intermediate_rate
+    nyquist = post_decim_rate / 2.0
+
+    def _gain_db(freq_hz: float) -> float:
+        n = np.arange(len(h), dtype=np.float64)
+        mid = (len(h) - 1) / 2.0
+        gain = float(
+            np.abs(np.sum(h * np.exp(-1j * 2.0 * np.pi * freq_hz * (n - mid) / sr)))
+        )
+        return 20.0 * np.log10(max(gain, 1e-12))
+
+    # Passband: the 57 kHz RBDS subcarrier must come through with negligible
+    # attenuation, otherwise the worker's 54-60 kHz bandpass has nothing to
+    # latch onto.
+    rbds_db = _gain_db(57000.0)
+    assert rbds_db > -1.0, f"57 kHz RBDS subcarrier attenuated {rbds_db:.1f} dB"
+
+    # Stopband: with decimation by N, an input tone at f aliases in the
+    # post-decim spectrum to (f mod post_decim_rate).  Worst case for the
+    # RBDS band is an input tone at (post_decim_rate - 57 kHz) which folds
+    # exactly onto the 57 kHz subcarrier after decimation.  For 1 MHz / 4 →
+    # 250 kHz post-decim, that tone is at 250000 - 57000 = 193 kHz, well
+    # below SDR Nyquist (500 kHz) and squarely in our AA filter's stopband.
+    fold_freq = post_decim_rate - 57000.0
+    assert fold_freq < sr / 2.0, "test frequency must be below SDR Nyquist"
+    fold_db = _gain_db(fold_freq)
+    assert fold_db < -40.0, (
+        f"AA filter must reject {fold_freq/1000:.1f} kHz (folds onto 57 kHz "
+        f"RBDS after [::{demod._rbds_decim}]) by ≥40 dB; got {fold_db:.1f} dB"
+    )
+    # And the next fold zone (input tones near post_decim_rate * k + 57 kHz)
+    # must also be rejected, otherwise stereo subcarrier energy at 38 kHz
+    # could fold from the (post_decim_rate, 2*post_decim_rate) zone into
+    # the worker's 0-125 kHz band.
+    next_fold = post_decim_rate + 57000.0
+    if next_fold < sr / 2.0:
+        next_fold_db = _gain_db(next_fold)
+        assert next_fold_db < -40.0, (
+            f"AA filter rejection at {next_fold/1000:.1f} kHz: "
+            f"{next_fold_db:.1f} dB (need < -40 dB)"
+        )
+    demod.stop()
+    time.sleep(0.05)
+
+
+def test_fmdemodulator_decimates_multiplex_before_submitting():
+    """submit_samples must receive multiplex at the worker's intermediate rate.
+
+    The submitted chunk count and sample-offset must be in the worker's
+    domain (post-decimation), not in the raw SDR domain — otherwise the
+    worker's pilot-locked 57 kHz reference (which uses sample_offset /
+    self._sample_rate) drifts immediately.
+    """
+    sr = 1_000_000
+    demod = _make_demodulator(sample_rate=sr)
+
+    # Capture every submit_samples call into a list.
+    calls: list[tuple[int, int]] = []
+
+    def fake_submit(multiplex: np.ndarray, sample_offset: int) -> None:
+        calls.append((len(multiplex), sample_offset))
+
+    assert demod._rbds_worker is not None
+    demod._rbds_worker.submit_samples = fake_submit  # type: ignore[assignment]
+
+    # 8192 IQ samples at 1 MHz → 8191 multiplex on first call (no prepend),
+    # then divided by decim=4 yields ~2047 samples submitted to the worker.
+    chunk = np.exp(
+        1j * 2.0 * np.pi * 0.001 * np.arange(8192)
+    ).astype(np.complex64)
+    demod.process(chunk)
+    demod.process(chunk)
+
+    assert len(calls) == 2
+    decim = demod._rbds_decim
+    assert decim == 4
+
+    # First call: 8191 multiplex / 4 ≈ 2047 (or 2048, depending on lfilter
+    # state initialisation).  Sanity-check it's near 8191/4 and starts at
+    # offset 0.
+    n0, off0 = calls[0]
+    assert abs(n0 - (8191 // decim)) <= 1
+    assert off0 == 0
+
+    # Second call: offset must equal the count submitted in the first call.
+    n1, off1 = calls[1]
+    assert off1 == n0
+    # And the second call should submit ~8192 / 4 = 2048 samples.
+    assert abs(n1 - (8192 // decim)) <= 1
+
+    demod.stop()
+    time.sleep(0.05)
+
+
+def test_fmdemodulator_works_across_realistic_sdr_rates():
+    """Smoke-test construction at every realistic RTL-SDR rate.
+
+    The user can configure any rate the SDR supports (RTL-SDR allows
+    225-300 kHz and 900 kHz - 3.2 MHz; common picks: 1.024, 1.92, 2.048,
+    2.4 MHz).  None of these should crash the demodulator or leave
+    _rbds_intermediate_rate outside the 200-300 kHz comfort band that the
+    worker's filters were designed for.
+    """
+    for sdr_rate in (250_000, 960_000, 1_024_000, 1_000_000, 1_400_000,
+                     1_920_000, 2_048_000, 2_400_000, 2_500_000):
+        demod = _make_demodulator(sample_rate=sdr_rate)
+        try:
+            assert demod._rbds_worker is not None, f"rate {sdr_rate}"
+            worker_rate = demod._rbds_worker._sample_rate
+            # 130 kHz is the floor enforced by the loop in __init__; the
+            # upper bound ~350 kHz is what the existing audio-path
+            # _intermediate_rate produces for awkward integer divisions
+            # like 960k / 3.  Anything above ~350 kHz means the worker's
+            # capped 101-tap bandpass starts to lose selectivity.
+            assert 130_000 <= worker_rate <= 350_000, (
+                f"sdr_rate={sdr_rate} produced worker_rate={worker_rate}, "
+                "outside the 130-350 kHz comfort band"
+            )
+            # And submit_samples must accept zero-length input without crashing
+            # (regression guard for the lfilter_zi initialization path).
+            demod._rbds_worker.submit_samples(np.array([], dtype=np.float32), 0)
+        finally:
+            demod.stop()
+            time.sleep(0.02)
+
+
+# ---------------------------------------------------------------------------
 # RBDSDecoder.process_group tests
 #
 # Block B layout per EN 50067 / NRSC-4:
