@@ -230,6 +230,58 @@ def test_rbds_pilot_reference_uses_measured_frequency():
     worker.stop()
 
 
+def test_rbds_post_mix_lowpass_rejects_stereo_sideband_artifact():
+    """The post-mix lowpass must reject the 4 kHz stereo subcarrier artifact.
+
+    Background: after mixing the FM multiplex with a 57 kHz local oscillator
+    to bring the RBDS subcarrier to baseband, the upper edge of the FM stereo
+    DSB sideband (which spans 23-53 kHz around the 38 kHz carrier) lands at
+    ~4 kHz in the RBDS baseband.  Stereo modulation depth is roughly 10× the
+    RBDS depth, so any of that energy that survives the lowpass overwhelms
+    the BPSK and prevents Costas/M&M lock — observed in the field as 80%+
+    raw BLER and constant sync drops despite a perfect RF signal.
+
+    The fix sets the post-mix lowpass cutoff to 2.4 kHz (the matched-filter
+    bandwidth for 1187.5-baud biphase BPSK, where the spectrum has its first
+    null at 2375 Hz).  This test verifies that rejection at 4 kHz is at least
+    40 dB stronger than the worst-case 7.5 kHz design it replaced, which is
+    well into the stopband and far below the RBDS signal level.
+    """
+    sr = 250_000
+    worker = _make_worker(sample_rate=sr)
+    h = worker._rbds_lowpass
+
+    def _gain_db(freq_hz: float) -> float:
+        n = np.arange(len(h), dtype=np.float64)
+        mid = (len(h) - 1) / 2.0
+        gain = float(np.abs(np.sum(h * np.exp(-1j * 2.0 * np.pi * freq_hz * (n - mid) / sr))))
+        return 20.0 * np.log10(max(gain, 1e-12))
+
+    # Passband: at 1187.5 Hz (peak of the RBDS biphase main lobe) the filter
+    # must be essentially unity gain so the BPSK is delivered unattenuated.
+    rbds_main_lobe_db = _gain_db(1187.5)
+    assert rbds_main_lobe_db > -1.0, (
+        f"RBDS main lobe at 1187.5 Hz should be ~0 dB, got {rbds_main_lobe_db:.1f} dB"
+    )
+
+    # Stopband: at 4 kHz (where the stereo upper-sideband artifact lands)
+    # the filter must attenuate by at least 40 dB.  The previous 7500 Hz /
+    # 301-tap design left this artifact in the passband entirely (~0 dB).
+    stereo_artifact_db = _gain_db(4000.0)
+    assert stereo_artifact_db < -40.0, (
+        f"4 kHz stereo bleed-through must be at least -40 dB, "
+        f"got {stereo_artifact_db:.1f} dB"
+    )
+
+    # The pilot harmonic at 19 kHz, if any leakage survives the bandpass,
+    # would mix to 38 kHz - far outside any reasonable cutoff.  Sanity check
+    # that we still attenuate well at higher frequencies.
+    far_stop_db = _gain_db(10000.0)
+    assert far_stop_db < -40.0, f"10 kHz stopband should be < -40 dB, got {far_stop_db:.1f} dB"
+
+    worker.stop()
+
+
 def test_rbds_apply_reset_clears_measured_pilot():
     """A worker reset (e.g. retune) must clear the measured pilot frequency.
 

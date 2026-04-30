@@ -603,16 +603,28 @@ class RBDSWorker:
                 self.RBDS_MIN_SAMPLE_RATE
             )
 
-        # Lowpass filter for post-mixing (removes aliases, keeps baseband RBDS at 0-7.5 kHz)
+        # Lowpass filter for post-mixing (removes aliases, keeps baseband RBDS).
         # Design this at sample_rate since we mix BEFORE lowpass filtering.
-        # Bumped to 301 taps from 101: at 256 kHz input the 101-tap version
-        # had a ~2.5 kHz transition and a sidelobe shoulder near -40 dB,
-        # which let pilot/stereo-subcarrier energy bleed into the post-mix
-        # baseband and was the most plausible cause of M&M / Costas failing
-        # to settle on a real broadcast.  301 taps cuts the transition to
-        # ~800 Hz and lifts the stopband attenuation, at the cost of a few
-        # extra ms of per-batch convolution.
-        self._rbds_lowpass = self._design_fir_lowpass(7500.0, self._sample_rate, taps=301)
+        #
+        # Cutoff = 2.4 kHz: This is the standard matched-filter bandwidth for
+        # the 1187.5-baud biphase-coded RBDS BPSK signal.  The biphase spectrum
+        # has its peak at 1187.5 Hz and a null at 2375 Hz, so 2.4 kHz preserves
+        # the entire main lobe while sharply attenuating everything beyond it.
+        #
+        # Why this is critical: the 57 kHz mix down-converts the FM stereo DSB
+        # upper sideband (38 + 15 = 53 kHz) to ~4 kHz in the RBDS baseband.
+        # A 7.5 kHz lowpass passes that 4 kHz stereo artifact untouched, and
+        # because stereo modulation depth (~45%) is more than 10× the RBDS
+        # depth (~3%), the stereo bleed-through buries the BPSK and the
+        # Costas/M&M loops cannot settle.  This was producing 85%+ raw BLER
+        # and constant sync drops on stations with strong RF (see Audio
+        # Monitoring report from 2026-04).  A 2.4 kHz cutoff puts the 4 kHz
+        # stereo artifact firmly into the stopband.
+        #
+        # 501 taps gives a Blackman transition of ~5.5*fs/N ≈ 2.7 kHz at
+        # 250 kHz, so 2.4 kHz cutoff reaches -60 dB by ~3.8 kHz, comfortably
+        # ahead of the 4 kHz interferer.
+        self._rbds_lowpass = self._design_fir_lowpass(2400.0, self._sample_rate, taps=501)
 
         # Filter delay-line state, preserved across _process_rbds calls. FIR
         # filters implemented with np.convolve are stateless, so every chunk
