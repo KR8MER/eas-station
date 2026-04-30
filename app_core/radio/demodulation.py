@@ -2449,6 +2449,17 @@ class FMDemodulator:
             if self._rbds_decim > 1:
                 post_decim_nyquist = self._rbds_intermediate_rate / 2.0
                 rbds_aa_cutoff = min(80_000.0, max(63_000.0, post_decim_nyquist * 0.85))
+                # Tap-count heuristic: scale linearly with input rate to
+                # hold transition bandwidth roughly constant.  Dividing by
+                # 4000 gives ~250 taps at 1 MHz and ~600 taps at 2.4 MHz,
+                # which yields a transition bandwidth of ~16 kHz — wide
+                # enough that the stopband edge sits comfortably below
+                # post-decim Nyquist for every realistic SDR rate.  The
+                # `| 1` forces an odd number, required for a Type-I linear-
+                # phase symmetric FIR (so group delay is an integer number
+                # of samples).  Floor of 127 keeps low-rate users from
+                # getting a useless filter; cap of 1025 bounds CPU at
+                # Airspy's 10 MHz native rate.
                 rbds_aa_taps = max(127, min(1025, (int(config.sample_rate / 4000) | 1)))
                 self._rbds_aa_filter = self._design_fir_lowpass(
                     rbds_aa_cutoff, config.sample_rate, taps=rbds_aa_taps
