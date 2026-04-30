@@ -998,6 +998,16 @@ function renderAudioSources(fullRender = true) {
                                             <span class="text-muted">Program ID (PI):</span>
                                             <span class="font-monospace small">${escapeHtml(source.metrics.metadata.rbds_pi_code)}</span>
                                         </div>
+                                        ${(source.metrics.metadata.rbds_pi_country_code !== undefined && source.metrics.metadata.rbds_pi_country_code !== null) ? `
+                                            <div class="d-flex justify-content-between mb-1">
+                                                <span class="text-muted ps-3 small">PI breakdown:</span>
+                                                <span class="font-monospace small">
+                                                    country=0x${source.metrics.metadata.rbds_pi_country_code.toString(16).toUpperCase()}
+                                                    area=0x${source.metrics.metadata.rbds_pi_area_code.toString(16).toUpperCase()}
+                                                    prog=0x${source.metrics.metadata.rbds_pi_program_ref.toString(16).toUpperCase().padStart(2,'0')}
+                                                </span>
+                                            </div>
+                                        ` : ''}
                                     ` : ''}
                                     ${(source.metrics.metadata.rbds_program_type_name || (source.metrics.metadata.rbds_pty !== undefined && source.metrics.metadata.rbds_pty !== null)) ? `
                                         <div class="d-flex justify-content-between mb-1">
@@ -1020,7 +1030,24 @@ function renderAudioSources(fullRender = true) {
                                             <div class="text-break small bg-light p-2 rounded mt-1">${escapeHtml(source.metrics.metadata.rbds_radio_text)}</div>
                                         </div>
                                     ` : ''}
-                                    
+
+                                    ${(source.metrics.metadata.rbds_rt_plus_tags && source.metrics.metadata.rbds_rt_plus_tags.length > 0) ? `
+                                        <div class="mb-1">
+                                            <div class="text-muted">
+                                                Now Playing (RT+):
+                                                ${source.metrics.metadata.rbds_rt_plus_item_running === false ? '<span class="badge bg-secondary ms-1">paused</span>' : ''}
+                                            </div>
+                                            <div class="bg-light p-2 rounded mt-1">
+                                                ${source.metrics.metadata.rbds_rt_plus_tags.map(t => `
+                                                    <div class="d-flex justify-content-between small mb-1">
+                                                        <span class="text-muted font-monospace">${escapeHtml(t.content_type_name || ('TYPE_' + t.content_type))}</span>
+                                                        <span class="fw-bold text-end ms-2">${escapeHtml(t.text)}</span>
+                                                    </div>
+                                                `).join('')}
+                                            </div>
+                                        </div>
+                                    ` : ''}
+
                                     ${((source.metrics.metadata.rbds_tp !== undefined && source.metrics.metadata.rbds_tp !== null) || (source.metrics.metadata.rbds_ta !== undefined && source.metrics.metadata.rbds_ta !== null)) ? `
                                         <hr class="my-2">
                                         <div class="text-muted mb-1"><strong>Traffic Information</strong></div>
@@ -1142,9 +1169,23 @@ function renderAudioSources(fullRender = true) {
 
                                     ${(source.metrics.metadata.rbds_af_list && source.metrics.metadata.rbds_af_list.length > 0) ? `
                                         <hr class="my-2">
-                                        <div class="text-muted mb-1"><strong>Alternative Frequencies (AF)</strong></div>
+                                        <div class="text-muted mb-1">
+                                            <strong>Alternative Frequencies (AF)</strong>
+                                            ${(source.metrics.metadata.rbds_af_method_a_count !== undefined && source.metrics.metadata.rbds_af_method_a_count !== null) ? `
+                                                <span class="badge ${source.metrics.metadata.rbds_af_list.length >= source.metrics.metadata.rbds_af_method_a_count ? 'bg-success' : 'bg-warning text-dark'} ms-1">
+                                                    ${source.metrics.metadata.rbds_af_list.length}/${source.metrics.metadata.rbds_af_method_a_count}
+                                                    ${source.metrics.metadata.rbds_af_list.length >= source.metrics.metadata.rbds_af_method_a_count ? 'complete' : 'partial'}
+                                                </span>
+                                            ` : ''}
+                                            ${source.metrics.metadata.rbds_af_follow_on_indicator ? '<span class="badge bg-info ms-1">LF/MF follow-on</span>' : ''}
+                                            ${source.metrics.metadata.rbds_af_method_b ? `<span class="badge bg-primary ms-1">Method B${source.metrics.metadata.rbds_af_tuning_frequency ? ' @ ' + source.metrics.metadata.rbds_af_tuning_frequency + ' MHz' : ''}</span>` : ''}
+                                        </div>
                                         <div class="small font-monospace">
-                                            ${source.metrics.metadata.rbds_af_list.map(f => `<span class="badge bg-secondary me-1">${f} MHz</span>`).join('')}
+                                            ${source.metrics.metadata.rbds_af_list.map(f => {
+                                                const tuned = source.metrics.metadata.rbds_af_tuning_frequency;
+                                                const cls = (tuned !== undefined && tuned !== null && f === tuned) ? 'bg-primary' : 'bg-secondary';
+                                                return `<span class="badge ${cls} me-1">${f} MHz</span>`;
+                                            }).join('')}
                                         </div>
                                     ` : ''}
 
@@ -1199,7 +1240,22 @@ function renderAudioSources(fullRender = true) {
                                         ` : ''}
                                     ` : ''}
 
-                                    ${(source.metrics.metadata.rbds_oda_apps && source.metrics.metadata.rbds_oda_apps.length > 0) ? `
+                                    ${(source.metrics.metadata.rbds_oda_assignments && source.metrics.metadata.rbds_oda_assignments.length > 0) ? `
+                                        <hr class="my-2">
+                                        <div class="text-muted mb-1"><strong>Open Data Applications (ODA)</strong></div>
+                                        <table class="table table-sm table-bordered small mb-1">
+                                            <thead><tr><th>Group</th><th>AID</th><th>Name</th></tr></thead>
+                                            <tbody>
+                                                ${source.metrics.metadata.rbds_oda_assignments.map(a => `
+                                                    <tr>
+                                                        <td class="font-monospace">${escapeHtml(a.group)}</td>
+                                                        <td class="font-monospace">${escapeHtml(a.aid_hex)}</td>
+                                                        <td>${escapeHtml(a.name || '')}</td>
+                                                    </tr>
+                                                `).join('')}
+                                            </tbody>
+                                        </table>
+                                    ` : (source.metrics.metadata.rbds_oda_apps && source.metrics.metadata.rbds_oda_apps.length > 0) ? `
                                         <hr class="my-2">
                                         <div class="text-muted mb-1"><strong>Open Data Applications (ODA)</strong></div>
                                         <div class="d-flex flex-wrap gap-1 mb-1">
@@ -1207,7 +1263,95 @@ function renderAudioSources(fullRender = true) {
                                         </div>
                                     ` : ''}
 
-                                    ${(source.metrics.metadata.rbds_tdc_data) ? `
+                                    ${(source.metrics.metadata.rbds_oda_payloads && source.metrics.metadata.rbds_oda_payloads.length > 0) ? `
+                                        <div class="text-muted mb-1 mt-2 small"><strong>Raw ODA payloads (no decoder)</strong></div>
+                                        <table class="table table-sm table-bordered small mb-1">
+                                            <thead><tr><th>AID</th><th>Group</th><th>Count</th><th>Last B[4:0]</th><th>Last C</th><th>Last D</th></tr></thead>
+                                            <tbody>
+                                                ${source.metrics.metadata.rbds_oda_payloads.map(p => `
+                                                    <tr>
+                                                        <td class="font-monospace">${escapeHtml(p.aid_hex)}</td>
+                                                        <td class="font-monospace">${escapeHtml(p.group)}</td>
+                                                        <td>${p.count}</td>
+                                                        <td class="font-monospace">0x${p.last_b_low.toString(16).toUpperCase().padStart(2,'0')}</td>
+                                                        <td class="font-monospace">0x${p.last_c.toString(16).toUpperCase().padStart(4,'0')}</td>
+                                                        <td class="font-monospace">0x${p.last_d.toString(16).toUpperCase().padStart(4,'0')}</td>
+                                                    </tr>
+                                                `).join('')}
+                                            </tbody>
+                                        </table>
+                                    ` : ''}
+
+                                    ${(source.metrics.metadata.rbds_slow_labelling_raw && Object.keys(source.metrics.metadata.rbds_slow_labelling_raw).length > 0) ? `
+                                        <hr class="my-2">
+                                        <div class="text-muted mb-1"><strong>Slow Labelling (Group 1A variants)</strong></div>
+                                        <table class="table table-sm table-bordered small mb-1">
+                                            <thead><tr><th>Variant</th><th>Raw Block D</th><th>Decoded</th></tr></thead>
+                                            <tbody>
+                                                ${Object.entries(source.metrics.metadata.rbds_slow_labelling_raw).sort((a,b)=>parseInt(a[0])-parseInt(b[0])).map(([v, raw]) => {
+                                                    let decoded = '-';
+                                                    if (v === '0' && source.metrics.metadata.rbds_language_name) decoded = 'language ' + escapeHtml(source.metrics.metadata.rbds_language_name);
+                                                    else if (v === '1' && source.metrics.metadata.rbds_paging_tmc_id != null) decoded = 'TMC id 0x' + source.metrics.metadata.rbds_paging_tmc_id.toString(16).toUpperCase().padStart(3,'0');
+                                                    else if (v === '2' && source.metrics.metadata.rbds_paging_operator_code != null) decoded = 'paging op 0x' + source.metrics.metadata.rbds_paging_operator_code.toString(16).toUpperCase().padStart(3,'0');
+                                                    else if (v === '3' && source.metrics.metadata.rbds_language_name) decoded = 'language ' + escapeHtml(source.metrics.metadata.rbds_language_name);
+                                                    else if (v === '4' && source.metrics.metadata.rbds_ecc != null) decoded = 'ECC 0x' + source.metrics.metadata.rbds_ecc.toString(16).toUpperCase().padStart(2,'0');
+                                                    else if (v === '5' && source.metrics.metadata.rbds_linkage_set_number != null) decoded = 'LSN 0x' + source.metrics.metadata.rbds_linkage_set_number.toString(16).toUpperCase().padStart(3,'0');
+                                                    else if (v === '6') decoded = 'broadcaster-use';
+                                                    else if (v === '7' && source.metrics.metadata.rbds_ews_channel_identifier != null) decoded = 'EWS chan-id 0x' + source.metrics.metadata.rbds_ews_channel_identifier.toString(16).toUpperCase().padStart(3,'0');
+                                                    return `<tr><td class="font-monospace">${escapeHtml(v)}</td><td class="font-monospace">0x${raw.toString(16).toUpperCase().padStart(4,'0')}</td><td>${decoded}</td></tr>`;
+                                                }).join('')}
+                                            </tbody>
+                                        </table>
+                                    ` : ''}
+
+                                    ${(source.metrics.metadata.rbds_paging_messages && source.metrics.metadata.rbds_paging_messages.length > 0) ? `
+                                        <hr class="my-2">
+                                        <div class="text-muted mb-1"><strong>Radio Paging (Group 7A) — last ${source.metrics.metadata.rbds_paging_messages.length}</strong></div>
+                                        <table class="table table-sm table-bordered small mb-1">
+                                            <thead><tr><th>Time</th><th>Seg</th><th>A/B</th><th>Block C</th><th>Block D</th></tr></thead>
+                                            <tbody>
+                                                ${source.metrics.metadata.rbds_paging_messages.slice().reverse().map(m => `
+                                                    <tr>
+                                                        <td class="font-monospace small">${new Date(m.unix_ts * 1000).toLocaleTimeString()}</td>
+                                                        <td class="font-monospace">${m.paging_segment}</td>
+                                                        <td>${m.a_b_flag ? 'B' : 'A'}</td>
+                                                        <td class="font-monospace">0x${m.block_c.toString(16).toUpperCase().padStart(4,'0')}</td>
+                                                        <td class="font-monospace">0x${m.block_d.toString(16).toUpperCase().padStart(4,'0')}</td>
+                                                    </tr>
+                                                `).join('')}
+                                            </tbody>
+                                        </table>
+                                    ` : ''}
+
+                                    ${(source.metrics.metadata.rbds_enhanced_paging_messages && source.metrics.metadata.rbds_enhanced_paging_messages.length > 0) ? `
+                                        <hr class="my-2">
+                                        <div class="text-muted mb-1"><strong>Enhanced Radio Paging (Group 13A) — last ${source.metrics.metadata.rbds_enhanced_paging_messages.length}</strong></div>
+                                        <table class="table table-sm table-bordered small mb-1">
+                                            <thead><tr><th>Time</th><th>B[4:0]</th><th>Block C</th><th>Block D</th></tr></thead>
+                                            <tbody>
+                                                ${source.metrics.metadata.rbds_enhanced_paging_messages.slice().reverse().map(m => `
+                                                    <tr>
+                                                        <td class="font-monospace small">${new Date(m.unix_ts * 1000).toLocaleTimeString()}</td>
+                                                        <td class="font-monospace">0x${m.block_b_low.toString(16).toUpperCase().padStart(2,'0')}</td>
+                                                        <td class="font-monospace">0x${m.block_c.toString(16).toUpperCase().padStart(4,'0')}</td>
+                                                        <td class="font-monospace">0x${m.block_d.toString(16).toUpperCase().padStart(4,'0')}</td>
+                                                    </tr>
+                                                `).join('')}
+                                            </tbody>
+                                        </table>
+                                    ` : ''}
+
+                                    ${(source.metrics.metadata.rbds_tdc_channels && Object.keys(source.metrics.metadata.rbds_tdc_channels).length > 0) ? `
+                                        <hr class="my-2">
+                                        <div class="text-muted mb-1"><strong>Transparent Data Channel (TDC)</strong></div>
+                                        ${Object.entries(source.metrics.metadata.rbds_tdc_channels).sort((a,b)=>parseInt(a[0])-parseInt(b[0])).map(([ch, hex]) => `
+                                            <div class="d-flex justify-content-between mb-1 small">
+                                                <span class="text-muted">Channel ${escapeHtml(ch)}</span>
+                                                <span class="text-muted">${(hex.length/2)} bytes</span>
+                                            </div>
+                                            <div class="font-monospace small text-break bg-light p-1 rounded mb-1" style="max-height:60px;overflow-y:auto;">${escapeHtml(hex)}</div>
+                                        `).join('')}
+                                    ` : (source.metrics.metadata.rbds_tdc_data) ? `
                                         <hr class="my-2">
                                         <div class="text-muted mb-1"><strong>Transparent Data Channel (TDC)</strong></div>
                                         <div class="font-monospace small text-break bg-light p-1 rounded mb-1" style="max-height:60px;overflow-y:auto;">${escapeHtml(source.metrics.metadata.rbds_tdc_data)}</div>
@@ -1234,7 +1378,7 @@ function renderAudioSources(fullRender = true) {
                                         <hr class="my-2">
                                         <div class="text-muted mb-1"><strong>Enhanced Other Networks (EON)</strong></div>
                                         <table class="table table-sm table-bordered small mb-1">
-                                            <thead><tr><th>PI</th><th>PS</th><th>TP</th><th>TA</th><th>AF</th></tr></thead>
+                                            <thead><tr><th>PI</th><th>PS</th><th>TP</th><th>TA</th><th>PTY</th><th>AF</th><th>Linkage</th><th>PIN</th></tr></thead>
                                             <tbody>
                                                 ${source.metrics.metadata.rbds_eon_list.map(e => `
                                                     <tr>
@@ -1242,11 +1386,65 @@ function renderAudioSources(fullRender = true) {
                                                         <td>${escapeHtml((e.ps || '').trim())}</td>
                                                         <td>${e.tp ? '<span class="badge bg-info">Y</span>' : '<span class="badge bg-secondary">N</span>'}</td>
                                                         <td>${e.ta !== undefined ? (e.ta ? '<span class="badge bg-warning text-dark">Y</span>' : '<span class="badge bg-secondary">N</span>') : '-'}</td>
+                                                        <td>${e.pty !== undefined ? e.pty : '-'}</td>
                                                         <td class="font-monospace small">${(e.af && e.af.length) ? e.af.map(f => f + ' MHz').join(', ') : '-'}</td>
+                                                        <td class="font-monospace small">${e.linkage !== undefined ? '0x' + e.linkage.toString(16).toUpperCase().padStart(4,'0') : '-'}</td>
+                                                        <td class="font-monospace small">${e.pin_day !== undefined ? `Day ${e.pin_day} ${String(e.pin_hour).padStart(2,'0')}:${String(e.pin_minute).padStart(2,'0')}` : '-'}</td>
                                                     </tr>
                                                 `).join('')}
                                             </tbody>
                                         </table>
+                                    ` : ''}
+
+                                    ${(source.metrics.metadata.rbds_blocks_total !== undefined && source.metrics.metadata.rbds_blocks_total !== null && source.metrics.metadata.rbds_blocks_total > 0) ? `
+                                        <hr class="my-2">
+                                        <div class="text-muted mb-1"><strong>Decoder Health (NRSC-4-B BLER)</strong></div>
+                                        <div class="d-flex justify-content-between mb-1">
+                                            <span class="text-muted">Raw block error rate:</span>
+                                            <span class="font-monospace small">
+                                                ${source.metrics.metadata.rbds_raw_bler !== null && source.metrics.metadata.rbds_raw_bler !== undefined ? (source.metrics.metadata.rbds_raw_bler * 100).toFixed(2) + '%' : '-'}
+                                            </span>
+                                        </div>
+                                        <div class="d-flex justify-content-between mb-1">
+                                            <span class="text-muted">Net BLER (after FEC):</span>
+                                            <span class="font-monospace small">
+                                                ${source.metrics.metadata.rbds_net_bler !== null && source.metrics.metadata.rbds_net_bler !== undefined ? (source.metrics.metadata.rbds_net_bler * 100).toFixed(2) + '%' : '-'}
+                                            </span>
+                                        </div>
+                                        <div class="d-flex justify-content-between mb-1">
+                                            <span class="text-muted">Blocks total / groups:</span>
+                                            <span class="font-monospace small">
+                                                ${source.metrics.metadata.rbds_blocks_total} / ${source.metrics.metadata.rbds_groups_decoded || 0}
+                                            </span>
+                                        </div>
+                                        <div class="d-flex flex-wrap gap-1 mb-1 small">
+                                            <span class="badge bg-success">clean ${source.metrics.metadata.rbds_blocks_ok || 0}</span>
+                                            <span class="badge bg-info">FEC-1 ${source.metrics.metadata.rbds_blocks_fec_single || 0}</span>
+                                            <span class="badge bg-primary">FEC-burst ${source.metrics.metadata.rbds_blocks_fec_burst || 0}</span>
+                                            <span class="badge bg-danger">uncorrected ${source.metrics.metadata.rbds_blocks_uncorrected || 0}</span>
+                                        </div>
+                                        ${source.metrics.metadata.rbds_sync_acquired_unix ? `
+                                            <div class="d-flex justify-content-between mb-1">
+                                                <span class="text-muted">Synced for:</span>
+                                                <span class="font-monospace small">${Math.floor((Date.now()/1000) - source.metrics.metadata.rbds_sync_acquired_unix)}s</span>
+                                            </div>
+                                        ` : ''}
+                                        ${(source.metrics.metadata.rbds_sync_lost_count !== undefined && source.metrics.metadata.rbds_sync_lost_count !== null) ? `
+                                            <div class="d-flex justify-content-between mb-1">
+                                                <span class="text-muted">Sync drops since boot:</span>
+                                                <span class="font-monospace small">${source.metrics.metadata.rbds_sync_lost_count}</span>
+                                            </div>
+                                        ` : ''}
+                                    ` : ''}
+
+                                    ${(source.metrics.metadata.rbds_group_type_counts && Object.keys(source.metrics.metadata.rbds_group_type_counts).length > 0) ? `
+                                        <hr class="my-2">
+                                        <div class="text-muted mb-1"><strong>Group Type Traffic</strong></div>
+                                        <div class="d-flex flex-wrap gap-1 mb-1 small">
+                                            ${Object.entries(source.metrics.metadata.rbds_group_type_counts).sort((a,b) => b[1] - a[1]).map(([gt, n]) => `
+                                                <span class="badge bg-secondary font-monospace">${escapeHtml(gt)}: ${n}</span>
+                                            `).join('')}
+                                        </div>
                                     ` : ''}
 
                                     ${(source.metrics.metadata.rbds_last_updated || source.metrics.metadata.rbds_last_seen) ? `

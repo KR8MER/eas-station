@@ -30,7 +30,7 @@ import math
 import queue
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple
 
@@ -241,6 +241,39 @@ def fast_decimate(samples: np.ndarray, factor: int) -> np.ndarray:
         return samples.reshape(-1, factor).mean(axis=1).astype(np.float32)
 
 
+# RT+ (RadioText Plus) ODA Application Identifier per RDS Forum R03/040.1.
+# Stations broadcast it on the group type assigned in their Group 3A
+# registration (most US music stations use 11A, some use 12A).
+RT_PLUS_AID = 0xCD46
+
+# Content type codes from the RT+ specification (R03/040.1 §6.2 Table 1).
+# Codes 0 and >= 53 are dummy / reserved-for-future-use; we still expose
+# the raw code so receivers can render unknown classes generically.
+RT_PLUS_CONTENT_TYPES: Dict[int, str] = {
+    0: "DUMMY", 1: "ITEM.TITLE", 2: "ITEM.ALBUM", 3: "ITEM.TRACKNUMBER",
+    4: "ITEM.ARTIST", 5: "ITEM.COMPOSITION", 6: "ITEM.MOVEMENT",
+    7: "ITEM.CONDUCTOR", 8: "ITEM.COMPOSER", 9: "ITEM.BAND",
+    10: "ITEM.COMMENT", 11: "ITEM.GENRE", 12: "INFO.NEWS",
+    13: "INFO.NEWS.LOCAL", 14: "INFO.STOCKMARKET", 15: "INFO.SPORT",
+    16: "INFO.LOTTERY", 17: "INFO.HOROSCOPE", 18: "INFO.DAILY_DIVERSION",
+    19: "INFO.HEALTH", 20: "INFO.EVENT", 21: "INFO.SCENE",
+    22: "INFO.CINEMA", 23: "INFO.TV", 24: "INFO.DATE_TIME",
+    25: "INFO.WEATHER", 26: "INFO.TRAFFIC", 27: "INFO.ALARM",
+    28: "INFO.ADVERTISEMENT", 29: "INFO.URL", 30: "INFO.OTHER",
+    31: "STATIONNAME.SHORT", 32: "STATIONNAME.LONG",
+    33: "PROGRAMME.NOW", 34: "PROGRAMME.NEXT", 35: "PROGRAMME.PART",
+    36: "PROGRAMME.HOST", 37: "PROGRAMME.EDITORIAL_STAFF",
+    38: "PROGRAMME.FREQUENCY", 39: "PROGRAMME.HOMEPAGE",
+    40: "PROGRAMME.SUBCHANNEL", 41: "PHONE.HOTLINE",
+    42: "PHONE.STUDIO", 43: "PHONE.OTHER", 44: "SMS.STUDIO",
+    45: "SMS.OTHER", 46: "EMAIL.HOTLINE", 47: "EMAIL.STUDIO",
+    48: "EMAIL.OTHER", 49: "MMS.OTHER", 50: "CHAT", 51: "CHAT.CENTRE",
+    52: "VOTE.QUESTION", 53: "VOTE.CENTRE",
+    58: "PLACE", 59: "APPOINTMENT", 60: "IDENTIFIER",
+    61: "PURCHASE", 62: "GET_DATA",
+}
+
+
 RBDS_LANGUAGE_CODES: Dict[int, str] = {
     0x01: "Albanian", 0x02: "Breton", 0x03: "Catalan", 0x04: "Croatian",
     0x05: "Welsh", 0x06: "Czech", 0x07: "Danish", 0x08: "German",
@@ -286,10 +319,21 @@ class DemodulatorConfig:
 class RBDSData:
     """Decoded RBDS/RDS data from FM broadcast."""
     pi_code: Optional[str] = None  # Program Identification (raw 16-bit hex)
+    # PI is structured as 4 bits country code + 4 bits area/coverage code +
+    # 8 bits programme reference (Annex D of NRSC-4-B).  For US stations
+    # this is a synthetic-call-sign mapping; for European stations the
+    # split is the actual country/region/programme identifier.
+    pi_country_code: Optional[int] = None       # high 4 bits
+    pi_area_code: Optional[int] = None          # next 4 bits (coverage area)
+    pi_program_ref: Optional[int] = None        # low 8 bits
     call_sign: Optional[str] = None  # Decoded US call letters (e.g. "WXYZ"), if PI is US
     ps_name: Optional[str] = None  # Program Service name (8 chars)
     pty_name: Optional[str] = None  # Program Type Name (PTYN, 8 chars, Group 10A)
     radio_text: Optional[str] = None  # Radio Text (up to 64 chars)
+    # RT A/B flag.  The station toggles this every time the displayed
+    # message restarts; the UI can use it to detect when an RT change is
+    # in progress (vs. just being extended segment-by-segment).
+    radio_text_ab: Optional[int] = None
     pty: Optional[int] = None  # Program Type
     tp: Optional[bool] = None  # Traffic Program flag
     ta: Optional[bool] = None  # Traffic Announcement flag
@@ -302,6 +346,20 @@ class RBDSData:
     clock_time_local: Optional[str] = None  # ISO-8601 local timestamp from Group 4A
     # Group 0A Block C - Alternative Frequencies
     af_list: Optional[List[float]] = None  # list of AF frequencies in MHz
+    # Method-A AF list count (codes 224-249).  None until announced; once
+    # set, len(af_list) == af_method_a_count means the list is complete.
+    af_method_a_count: Optional[int] = None
+    # True if the station has signalled an LF/MF follow-on (code 250),
+    # i.e. the AF list extends to non-VHF frequencies we can't represent
+    # in MHz directly.  Pure indicator — no further data captured.
+    af_follow_on_indicator: Optional[bool] = None
+    # True once the station has emitted a Method-B regional-variant
+    # marker (an AF pair where both bytes are the same direct code).
+    # Method B and Method A both still produce frequencies in af_list;
+    # this flag plus af_tuning_frequency just say "this station also
+    # broadcasts the AF list paired against the tuned frequency".
+    af_method_b: Optional[bool] = None
+    af_tuning_frequency: Optional[float] = None
     # Group 1A/1B - Programme Item Number + Slow Labeling Codes
     pin_day: Optional[int] = None
     pin_hour: Optional[int] = None
@@ -312,10 +370,37 @@ class RBDSData:
     linkage_set_number: Optional[int] = None
     linkage_actuator: Optional[bool] = None
     linkage_soft_coupling: Optional[bool] = None
+    # Group 1A variant-1: 12-bit TMC identification provider code.
+    paging_tmc_id: Optional[int] = None
+    # Group 1A variant-2: 12-bit paging operator code.
+    paging_operator_code: Optional[int] = None
+    # Group 1A variant-7: 12-bit EWS slow-labelling channel identifier
+    # (which EWS provider feeds the Group 9A messages on this station).
+    ews_channel_identifier: Optional[int] = None
+    # Raw 16-bit Block-D payload per Group 1A variant (0..7), so the UI
+    # can show every variant byte the station broadcasts even where no
+    # decoder semantics apply.
+    slow_labelling_raw: Optional[Dict[int, int]] = None
     # Group 3A - Open Data Application registration
     oda_apps: Optional[List[int]] = None
+    # Full ODA assignment table — list of {group, version, aid, aid_hex,
+    # name?} items so the UI can show *which* group type carries each
+    # registered application instead of just listing AIDs.
+    oda_assignments: Optional[List[dict]] = None
+    # Per-AID raw payload buffer for ODAs we don't have a specific
+    # decoder for.  Each entry: {aid, aid_hex, group, count,
+    # last_b_low, last_c, last_d, last_seen_unix}.
+    oda_payloads: Optional[List[dict]] = None
+    # Group 7A / 13A paging messages.  Each is a list of dicts with
+    # the raw bytes and a unix timestamp; format is operator-defined,
+    # so the decoder doesn't try to interpret the payload.
+    paging_messages: Optional[List[dict]] = None
+    enhanced_paging_messages: Optional[List[dict]] = None
     # Group 5A/5B - Transparent Data Channel
+    # tdc_data is channel 0 (kept for backwards compat); tdc_channels
+    # exposes every channel TS the station broadcasts.
     tdc_data: Optional[bytes] = None
+    tdc_channels: Optional[Dict[int, bytes]] = None
     # Group 6A/6B - In-House Applications
     in_house_data: Optional[List[int]] = None
     # Group 8A - Traffic Message Channel
@@ -331,6 +416,60 @@ class RBDSData:
     fast_ta: Optional[bool] = None
     fast_ms: Optional[bool] = None
     fast_di_bits: Optional[int] = None
+    # RT+ (ODA AID 0xCD46) - structured tags pointing into Radio Text.
+    # Each tag is a dict {content_type, content_type_name, text, start, length}.
+    rt_plus_item_running: Optional[bool] = None
+    rt_plus_item_toggle: Optional[int] = None
+    rt_plus_tags: Optional[List[dict]] = None
+
+
+@dataclass
+class RBDSDecoderStats:
+    """Snapshot of RBDS decoder health and traffic.
+
+    Reset on every sync acquisition (so values reflect the *current* lock
+    rather than lifetime totals across station changes), except for
+    ``sync_lost_count`` which is cumulative since the worker was started.
+    Surfaces what redsea calls "block error rate" plus a per-group-type
+    traffic histogram so operators can tell *why* a station is missing
+    metadata (e.g. it doesn't broadcast any 2A groups, so RT will never
+    appear).
+    """
+    blocks_total: int = 0
+    blocks_ok: int = 0          # passed CRC without FEC
+    blocks_fec_single: int = 0  # repaired by single-bit corrector
+    blocks_fec_burst: int = 0   # repaired by burst-trapping decoder
+    blocks_uncorrected: int = 0
+    groups_decoded: int = 0
+    sync_acquired_unix: Optional[float] = None
+    sync_lost_count: int = 0
+    # Keys are e.g. "0A", "2A", "11A" — bare "A"/"B" suffixes match what
+    # the RDS specs use everywhere so the UI doesn't have to translate.
+    group_type_counts: Dict[str, int] = field(default_factory=dict)
+
+    @property
+    def raw_block_error_rate(self) -> Optional[float]:
+        """Fraction of received blocks that didn't pass CRC on first try.
+
+        This is the NRSC-4-B §7.4.2 definition of BLER — any block whose
+        syndrome was non-zero before FEC counts as an error, regardless
+        of whether FEC later repaired it.  Returns None until at least
+        one block has been processed (so the UI doesn't display 0/0).
+        """
+        if self.blocks_total == 0:
+            return None
+        return (self.blocks_total - self.blocks_ok) / self.blocks_total
+
+    @property
+    def net_block_error_rate(self) -> Optional[float]:
+        """Fraction of blocks the decoder still couldn't recover after FEC.
+
+        Operationally what users care about — this is what drives PS/RT
+        gaps.  raw - net = "how much FEC saved us".
+        """
+        if self.blocks_total == 0:
+            return None
+        return self.blocks_uncorrected / self.blocks_total
 
 
 @dataclass
@@ -356,6 +495,10 @@ class DemodulatorStatus:
     # and users could wait forever for a lock the decoder never even
     # tried to obtain.
     rbds_enabled: bool = False
+    # Decoder-side health metrics — block error rate, FEC correction
+    # split, and group-type histogram.  None until an RBDS worker is
+    # running; otherwise updated each frame.
+    rbds_decoder_stats: Optional[RBDSDecoderStats] = None
 
 
 class RBDSWorker:
@@ -413,6 +556,12 @@ class RBDSWorker:
         # Thread-safe storage for latest RBDS data
         self._latest_data: Optional[RBDSData] = None
         self._data_lock = threading.Lock()
+
+        # Decoder health stats (FEC counts, sync lifecycle, group histogram).
+        # The dataclass and the lock are owned here so all reads/writes go
+        # through one mutex regardless of which thread updates a counter.
+        self._stats: RBDSDecoderStats = RBDSDecoderStats()
+        self._stats_lock = threading.Lock()
 
         # Worker thread
         self._stop_event = threading.Event()
@@ -744,6 +893,33 @@ class RBDSWorker:
         """Whether the RBDS bit-level sync state machine has locked."""
         return bool(getattr(self, '_rbds_synced', False))
 
+    def get_stats(self) -> RBDSDecoderStats:
+        """Return a thread-safe snapshot of decoder health/traffic stats.
+
+        Merges the worker's own counters (block-level FEC stats and sync
+        lifecycle) with the decoder's group-type histogram so callers
+        get one combined view per call.
+        """
+        with self._stats_lock:
+            snap = RBDSDecoderStats(
+                blocks_total=self._stats.blocks_total,
+                blocks_ok=self._stats.blocks_ok,
+                blocks_fec_single=self._stats.blocks_fec_single,
+                blocks_fec_burst=self._stats.blocks_fec_burst,
+                blocks_uncorrected=self._stats.blocks_uncorrected,
+                groups_decoded=self._stats.groups_decoded,
+                sync_acquired_unix=self._stats.sync_acquired_unix,
+                sync_lost_count=self._stats.sync_lost_count,
+                group_type_counts={},
+            )
+        # Group histogram lives on the RBDSDecoder; pull a copy here so
+        # the snapshot is internally consistent.
+        if self._rbds_decoder is not None:
+            snap.group_type_counts = dict(
+                getattr(self._rbds_decoder, '_group_type_counts', {}) or {}
+            )
+        return snap
+
     def reset(self) -> None:
         """Request the worker thread to drop all sync/decoder state.
 
@@ -776,6 +952,13 @@ class RBDSWorker:
         # Rebuild filters / loop / decoder.  RBDSDecoder is recreated so
         # PS/RT buffers start blank.
         self._init_rbds_state()
+
+        # Wipe per-station stats but keep cumulative sync_lost_count so
+        # the UI can show "this receiver has dropped sync N times since
+        # boot" across station changes.
+        with self._stats_lock:
+            sync_lost_count = self._stats.sync_lost_count
+            self._stats = RBDSDecoderStats(sync_lost_count=sync_lost_count)
 
         # _init_rbds_state doesn't own the bit-level sync state machine
         # vars (they're lazily created in _decode_rbds_groups), so clear
@@ -1537,6 +1720,10 @@ class RBDSWorker:
                                     # CRC checks use the correct inversion flag.
                                     self._rbds_inverted_polarity = polarity
                                     self._rbds_synced = True
+                                    # Stamp the lock time so the UI can show
+                                    # "synced for N seconds" (per-station).
+                                    with self._stats_lock:
+                                        self._stats.sync_acquired_unix = time.time()
                         break  # Syndrome found, exit j loop
             
             else:
@@ -1584,10 +1771,74 @@ class RBDSWorker:
                             return False, block_word_value
                         return True, corrected_word
 
+                    burst_table = self._burst_correction_table()
+
+                    def _try_correct_burst_error(
+                        block_word_value: int,
+                        block_number: int,
+                    ) -> tuple[bool, int]:
+                        """Burst-trapping FEC for the (26,16) RBDS block code.
+
+                        Recovers single bursts of up to 5 contiguous error bits, the
+                        common multipath/fade failure mode where 2-5 consecutive bits
+                        are corrupted together.  Implemented as a pre-computed
+                        syndrome lookup (equivalent to the Meggitt trapping decoder
+                        in NRSC-4-B §B.2.4).  Each candidate offset is tried
+                        independently and the lowest-weight correction wins.
+                        """
+                        if block_number == 2:
+                            offsets_to_try = (offset_word[2], offset_word[4])
+                        else:
+                            offsets_to_try = (offset_word[block_number],)
+
+                        best: Optional[Tuple[int, int]] = None  # (corrected_word, weight)
+                        for off in offsets_to_try:
+                            # XOR offset out of the lower 10 bits to recover the
+                            # raw codeword; the syndrome of a clean codeword is 0.
+                            codeword = block_word_value ^ off
+                            syn = self._calc_syndrome(codeword, 26)
+                            if syn == 0:
+                                return True, block_word_value
+                            mask = burst_table.get(syn)
+                            if mask is None:
+                                continue
+                            corrected = block_word_value ^ mask
+                            weight = bin(mask).count('1')
+                            if best is None or weight < best[1]:
+                                best = (corrected, weight)
+
+                        if best is None:
+                            return False, block_word_value
+                        return True, best[0]
+
+                    def _repair_block(
+                        candidate_word: int, block_number: int
+                    ) -> tuple[bool, int, str]:
+                        """Two-stage block repair: try strict single-bit first, then
+                        burst-of-up-to-5 if that fails.  Single-bit is preferred
+                        because it rejects ambiguous multi-candidate fits;
+                        burst-trapping then catches the multipath-fade case.
+                        Third tuple element labels the path used so the caller
+                        can attribute the fix in the FEC stats: 'clean' (no
+                        correction needed), 'single', 'burst', or 'fail'."""
+                        if _crc_ok_for_block(candidate_word, block_number):
+                            return True, candidate_word, 'clean'
+                        ok, fixed = _try_correct_single_bit_error(
+                            candidate_word, block_number
+                        )
+                        if ok:
+                            return True, fixed, 'single'
+                        ok, fixed = _try_correct_burst_error(
+                            candidate_word, block_number
+                        )
+                        if ok:
+                            return True, fixed, 'burst'
+                        return False, candidate_word, 'fail'
+
                     good_block = False
                     block_word = self._rbds_reg ^ 0x3FFFFFF if self._rbds_inverted_polarity else self._rbds_reg
 
-                    corrected, corrected_word = _try_correct_single_bit_error(
+                    corrected, corrected_word, repair_path = _repair_block(
                         block_word, self._rbds_block_number
                     )
                     if corrected:
@@ -1597,12 +1848,13 @@ class RBDSWorker:
                         # If current polarity suddenly fails CRC but opposite polarity passes,
                         # recover immediately instead of waiting for a full sync-loss window.
                         alternate_block_word = block_word ^ 0x3FFFFFF
-                        corrected_alt, corrected_alt_word = _try_correct_single_bit_error(
+                        corrected_alt, corrected_alt_word, alt_path = _repair_block(
                             alternate_block_word, self._rbds_block_number
                         )
                         if corrected_alt:
                             self._rbds_inverted_polarity = not self._rbds_inverted_polarity
                             block_word = corrected_alt_word
+                            repair_path = alt_path
                             good_block = True
                             logger.info(
                                 "RBDS polarity flipped while synced; continuing decode (%s polarity)",
@@ -1610,6 +1862,21 @@ class RBDSWorker:
                             )
                         else:
                             self._rbds_wrong_blocks_counter += 1
+
+                    # Attribute this block to the FEC counters.  'clean' means
+                    # the syndrome was zero before any FEC; the others are
+                    # categorised by which corrector won.  These feed the
+                    # NRSC-4-B BLER computation surfaced via get_stats().
+                    with self._stats_lock:
+                        self._stats.blocks_total += 1
+                        if repair_path == 'clean':
+                            self._stats.blocks_ok += 1
+                        elif repair_path == 'single':
+                            self._stats.blocks_fec_single += 1
+                        elif repair_path == 'burst':
+                            self._stats.blocks_fec_burst += 1
+                        else:
+                            self._stats.blocks_uncorrected += 1
 
                     dataword = (block_word >> 10) & 0xFFFF
                     if good_block:
@@ -1645,7 +1912,9 @@ class RBDSWorker:
                                 # Update our RBDSData decoder
                                 self._rbds_decoder.process_group((group_0, group_1, group_2, group_3))
                                 changed = True
-                                
+                                with self._stats_lock:
+                                    self._stats.groups_decoded += 1
+
                                 logger.info(f"RBDS group: PI=0x{program_identification:04X} type={group_type}")
                     
                     # Reset for next block
@@ -1659,6 +1928,9 @@ class RBDSWorker:
                             logger.info(f"RBDS SYNC LOST ({self._rbds_wrong_blocks_counter} bad blocks on {self._rbds_blocks_counter} total)")
                             self._rbds_synced = False
                             self._rbds_presync = False
+                            with self._stats_lock:
+                                self._stats.sync_lost_count += 1
+                                self._stats.sync_acquired_unix = None
                         else:
                             logger.info(f"RBDS sync OK ({self._rbds_wrong_blocks_counter} bad blocks on {self._rbds_blocks_counter} total)")
                         self._rbds_blocks_counter = 0
@@ -1760,6 +2032,66 @@ class RBDSWorker:
             if reg & (1 << plen):
                 reg = reg ^ 0x5B9
         return reg & ((1 << plen) - 1)
+
+    # Class-level cache for the burst-error syndrome table.  The table is a
+    # pure function of the (26,16) generator polynomial g(x)=0x5B9 and is
+    # ~hundreds of entries, so we build it once and share across workers.
+    _BURST_CORRECTION_TABLE: Optional[Dict[int, int]] = None
+    # Maximum burst length (in bits) we attempt to repair.  NRSC-4-B §B.2.4
+    # specifies a Meggitt trapping decoder that handles bursts up to 5 bits;
+    # the (26,16) RBDS code's 10 parity bits are exactly enough to cover
+    # this range unambiguously.
+    _BURST_LIMIT_BITS = 5
+
+    @classmethod
+    def _burst_correction_table(cls) -> Dict[int, int]:
+        """Lazy-built syndrome -> error-mask table for burst-trapping FEC.
+
+        Maps the 10-bit syndrome of every contiguous burst error of length
+        ≤ _BURST_LIMIT_BITS in a 26-bit block to its correction mask.
+        Ambiguous syndromes (where two different masks of equal Hamming
+        weight share a syndrome) are dropped so the decoder never guesses.
+        """
+        if cls._BURST_CORRECTION_TABLE is not None:
+            return cls._BURST_CORRECTION_TABLE
+
+        n_bits = 26
+        plen = 10
+        gen = 0x5B9
+
+        def syndrome(x: int) -> int:
+            reg = 0
+            for ii in range(n_bits, 0, -1):
+                reg = (reg << 1) | ((x >> (ii - 1)) & 0x1)
+                if reg & (1 << plen):
+                    reg ^= gen
+            for _ in range(plen):
+                reg <<= 1
+                if reg & (1 << plen):
+                    reg ^= gen
+            return reg & ((1 << plen) - 1)
+
+        candidates: Dict[int, set] = {}
+        for start in range(n_bits):
+            max_len = min(cls._BURST_LIMIT_BITS, n_bits - start)
+            for pattern in range(1, 1 << max_len):
+                mask = pattern << start
+                syn = syndrome(mask)
+                if syn == 0:
+                    continue
+                candidates.setdefault(syn, set()).add(mask)
+
+        table: Dict[int, int] = {}
+        for syn, masks in candidates.items():
+            sorted_masks = sorted(masks, key=lambda m: bin(m).count('1'))
+            if len(sorted_masks) == 1:
+                table[syn] = sorted_masks[0]
+            elif bin(sorted_masks[0]).count('1') < bin(sorted_masks[1]).count('1'):
+                table[syn] = sorted_masks[0]
+            # Equal-weight collision: ambiguous, skip.
+
+        cls._BURST_CORRECTION_TABLE = table
+        return table
 
 
 class FMDemodulator:
@@ -2145,6 +2477,9 @@ class FMDemodulator:
         audio = np.tanh(audio * 0.7) / 0.7
 
         # Create demodulator status with stereo pilot and RBDS info
+        decoder_stats: Optional[RBDSDecoderStats] = None
+        if self._rbds_enabled and self._rbds_worker is not None:
+            decoder_stats = self._rbds_worker.get_stats()
         status = DemodulatorStatus(
             rbds_data=rbds_data,
             stereo_pilot_locked=stereo_pilot_locked,
@@ -2157,6 +2492,7 @@ class FMDemodulator:
                 else False
             ),
             rbds_enabled=self._rbds_enabled,
+            rbds_decoder_stats=decoder_stats,
         )
 
         return audio.astype(np.float32), status
@@ -2509,6 +2845,23 @@ class RBDSDecoder:
         # Group 0A AF state
         self._af_buffer: List[float] = []
         self._af_method_a_count: Optional[int] = None
+        # Method B / LF-MF follow-on indicator (code 250).  Doesn't tell
+        # us anything about LF/MF AFs without further decoding, but the
+        # presence of the marker is itself useful information.
+        self._af_follow_on_indicator: bool = False
+        # Method B mode flag and the tuning frequency captured from the
+        # regional-variant marker pair (af1 == af2).  Method A and
+        # Method B AFs both populate _af_buffer; this just exposes which
+        # encoding the station used so receivers can correlate the list
+        # against an actual tuning frequency.
+        self._af_method_b: bool = False
+        self._af_tuning_frequency: Optional[float] = None
+        # Slow-labelling raw capture: every Group 1A variant byte we
+        # observe, keyed by variant code (0-7).  Specific decoders for
+        # variants 0/4/5 still produce semantic fields; this dict gives
+        # the UI the raw 16-bit Block-D contents for *all* variants so
+        # nothing the station broadcasts is silently dropped.
+        self._slow_labelling_raw: Dict[int, int] = {}
         # Group 1A/1B PIN and slow labeling state
         self.pin_day: Optional[int] = None
         self.pin_hour: Optional[int] = None
@@ -2519,11 +2872,40 @@ class RBDSDecoder:
         self.linkage_set_number: Optional[int] = None
         self.linkage_actuator: Optional[bool] = None
         self.linkage_soft_coupling: Optional[bool] = None
+        # Group 1A variant-1: TMC identification provider code (12 bits).
+        self.paging_tmc_id: Optional[int] = None
+        # Group 1A variant-2: paging operator code (12 bits).
+        self.paging_operator_code: Optional[int] = None
+        # Group 1A variant-7: EWS slow-labelling channel identifier (12 bits).
+        self.ews_channel_identifier: Optional[int] = None
         # Group 3A ODA state
         self._oda_app_map: Dict[int, int] = {}
         self.oda_apps: List[int] = []
+        # RT+ (AID 0xCD46) state.  Populated when 3A registers RT+ on a
+        # specific group type; the decoder then routes those groups to
+        # _handle_rt_plus.
+        self._rt_plus_item_running: Optional[bool] = None
+        self._rt_plus_item_toggle: Optional[int] = None
+        self._rt_plus_tags: Optional[List[dict]] = None
+        # Per-AID raw ODA payload buffer.  For every registered AID that
+        # we don't have a specific decoder for, we keep the most recent
+        # (b_low5, c, d) bytes, a count of received groups, and a unix
+        # timestamp.  Lets the UI display "0xC563: 12 groups, last
+        # B-low=0x1A C=0x1234 D=0x5678" so unknown ODA traffic isn't
+        # silently discarded — useful when stations broadcast custom
+        # AIDs (eRT, custom paging, vendor data) we can't yet parse.
+        self._oda_payloads: Dict[int, dict] = {}
+        # Per-(group_type+version) traffic histogram populated in
+        # process_group.  RBDSWorker.get_stats() merges this with its
+        # own block-level counters into a single RBDSDecoderStats.
+        self._group_type_counts: Dict[str, int] = {}
         # Group 5A/5B TDC state
         self._tdc_channels: Dict[int, List[int]] = {}
+        # Group 7A / 13A paging buffers — each capped to the most recent
+        # 16 messages.  Format is operator-defined so we only keep raw
+        # bytes plus the segmentation hints.
+        self._paging_messages: List[dict] = []
+        self._enhanced_paging_messages: List[dict] = []
         # Group 6A/6B In-house state
         self.in_house_data: List[int] = []
         # Group 8A TMC state
@@ -2579,6 +2961,12 @@ class RBDSDecoder:
             a, b, c, d, group_type, "B" if version_b else "A"
         )
 
+        # Tally this group into the per-type histogram so the UI can show
+        # what mix of services this station broadcasts (e.g. "no 2A => no
+        # Radio Text" is much clearer than just an empty RT panel).
+        gt_key = f"{group_type}{'B' if version_b else 'A'}"
+        self._group_type_counts[gt_key] = self._group_type_counts.get(gt_key, 0) + 1
+
         pi_code = f"{a:04X}"
         if self.pi_code != pi_code:
             self.pi_code = pi_code
@@ -2622,14 +3010,47 @@ class RBDSDecoder:
             if self._update_di(address, di_bit):
                 changed = True
 
-            # Group 0A Block C: Alternative Frequencies (Method A, direct codes only)
+            # Group 0A Block C: Alternative Frequencies (Method A).
+            # Codes 1-204     -> direct VHF FM frequency 87.6 + 0.1*code MHz
+            # Codes 205-223   -> filler / not used
+            # Codes 224-249   -> AF list count (224 = "no AF", 225 = 1 AF, ... 249 = 25)
+            # Code 250        -> LF/MF follow-on indicator (Method B)
+            # Codes 251-255   -> reserved
+            # Either byte of Block C may carry a count or follow-on code
+            # paired with a direct code; surface both so the UI can mark
+            # the AF list "complete" once enough direct codes have arrived.
             if not version_b:
                 af1 = (c >> 8) & 0xFF
                 af2 = c & 0xFF
+
+                # Method B detection: a pair where both bytes are equal
+                # direct codes is the "regional variant exists at this
+                # frequency" / tuning-frequency marker (NRSC-4-B Annex C).
+                # The presence of this marker tags the station as Method
+                # B; the actual AF codes still arrive as direct values in
+                # the regular pairs and populate af_list naturally, so we
+                # only need to remember the tuning frequency for display.
+                if af1 == af2 and 1 <= af1 <= 204:
+                    tuning_mhz = round(87.6 + 0.1 * af1, 1)
+                    if (not self._af_method_b
+                            or self._af_tuning_frequency != tuning_mhz):
+                        self._af_method_b = True
+                        self._af_tuning_frequency = tuning_mhz
+                        changed = True
+
                 new_freqs = []
                 for code in (af1, af2):
                     if 1 <= code <= 204:
                         new_freqs.append(round(87.6 + 0.1 * code, 1))
+                    elif 224 <= code <= 249:
+                        announced = code - 224  # number of AFs the station says follow
+                        if self._af_method_a_count != announced:
+                            self._af_method_a_count = announced
+                            changed = True
+                    elif code == 250:
+                        if not self._af_follow_on_indicator:
+                            self._af_follow_on_indicator = True
+                            changed = True
                 if new_freqs:
                     prev_len = len(self._af_buffer)
                     for f in new_freqs:
@@ -2736,7 +3157,38 @@ class RBDSDecoder:
             self.in_house_data = self.in_house_data[-16:] + raw
             changed = True
         elif group_type == 7 and not version_b:
+            # Group 7A: Radio Paging.  NRSC-4-B / IEC 62106 §5 leaves the
+            # payload format to the paging operator (different operators
+            # use PSWF / PSC / RDS-Paging-1).  We capture the raw bytes
+            # plus the segmentation hints from Block B so downstream
+            # systems can decode whichever paging dialect their local
+            # broadcaster is using; the buffer is capped so a chatty
+            # paging stream can't grow unbounded.
+            paging_msg = {
+                'a_b_flag': bool((b >> 4) & 0x1),
+                'paging_segment': b & 0xF,
+                'block_c': c,
+                'block_d': d,
+                'unix_ts': time.time(),
+            }
+            self._paging_messages.append(paging_msg)
+            self._paging_messages = self._paging_messages[-16:]
+            changed = True
             logger.debug("RBDS Group 7A (Paging): B=%04X C=%04X D=%04X", b, c, d)
+        elif group_type == 13 and not version_b:
+            # Group 13A: Enhanced Radio Paging.  Same situation as 7A —
+            # the payload format is operator-defined, so we just keep
+            # the raw bytes and let an external decoder handle them.
+            erp_msg = {
+                'block_b_low': b & 0x1F,
+                'block_c': c,
+                'block_d': d,
+                'unix_ts': time.time(),
+            }
+            self._enhanced_paging_messages.append(erp_msg)
+            self._enhanced_paging_messages = self._enhanced_paging_messages[-16:]
+            changed = True
+            logger.debug("RBDS Group 13A (ERP): B=%04X C=%04X D=%04X", b, c, d)
         elif group_type == 8 and not version_b:
             if not self.tmc_present:
                 self.tmc_present = True
@@ -2812,11 +3264,17 @@ class RBDSDecoder:
                         ps_list[idx] = chr(code) if 32 <= code < 127 else ' '
                 eon['ps'] = ''.join(ps_list)
             elif variant == 4:
-                af_code = (d >> 8) & 0xFF
-                if 1 <= af_code <= 204:
-                    af_mhz = round(87.6 + 0.1 * af_code, 1)
-                    if af_mhz not in eon['af']:
-                        eon['af'].append(af_mhz)
+                # Block D in EON variant 4 carries TWO 8-bit AF codes:
+                # high byte = mapped frequency for the cross-referenced
+                # programme, low byte = matched frequency for the tuned
+                # programme.  Earlier code dropped the low byte, halving
+                # EON AF coverage; capture both as direct codes 1..204.
+                for shift in (8, 0):
+                    af_code = (d >> shift) & 0xFF
+                    if 1 <= af_code <= 204:
+                        af_mhz = round(87.6 + 0.1 * af_code, 1)
+                        if af_mhz not in eon['af']:
+                            eon['af'].append(af_mhz)
             elif variant == 12:
                 eon['linkage'] = d
             elif variant == 13:
@@ -2861,17 +3319,169 @@ class RBDSDecoder:
             if self._update_ps_name(address, d):
                 changed = True
 
+        # ODA payload dispatch.  The Group 3A handler (above) records which
+        # (group_type, version) slots a station has assigned to ODA AIDs;
+        # decode any payload group that matches a known AID.  RT+
+        # (0xCD46) gets a real decoder; every other AID has its raw
+        # payload captured into _oda_payloads so the UI can show that
+        # something is being broadcast on the slot even when we can't
+        # interpret it.
+        oda_key = (group_type, 1 if version_b else 0)
+        oda_aid = self._oda_app_map.get(oda_key)
+        if oda_aid is not None:
+            if oda_aid == RT_PLUS_AID:
+                if self._handle_rt_plus(b, c, d):
+                    changed = True
+            else:
+                # Capture the lower 5 bits of B (the payload nibble — the
+                # rest of B is group-type / TP / PTY which we already
+                # decoded) plus all of C and D.  Bump count and stamp
+                # last-seen so the UI can show traffic activity per AID.
+                entry = self._oda_payloads.setdefault(oda_aid, {
+                    'aid': oda_aid,
+                    'aid_hex': f"0x{oda_aid:04X}",
+                    'group': f"{group_type}{'B' if version_b else 'A'}",
+                    'count': 0,
+                    'last_b_low': 0,
+                    'last_c': 0,
+                    'last_d': 0,
+                    'last_seen_unix': 0.0,
+                })
+                entry['count'] += 1
+                entry['last_b_low'] = b & 0x1F
+                entry['last_c'] = c
+                entry['last_d'] = d
+                entry['last_seen_unix'] = time.time()
+                changed = True
+
+        return changed
+
+    def _handle_rt_plus(self, b: int, c: int, d: int) -> bool:
+        """Decode an RT+ payload group (AID 0xCD46) per RDS Forum R03/040.1.
+
+        RT+ piggybacks on whatever group type the station registers via 3A
+        (most US music stations use 11A).  Each group carries two
+        (content_type, start, length) tag pointers into the current Radio
+        Text buffer plus item-running / item-toggle bits announcing
+        when a new programme item is on air.
+
+        Block layout (16 bits each, MSB first):
+            B[4]    : item toggle bit
+            B[3]    : item running bit
+            B[2:0]  : content type 1 high 3 bits
+            C[15:13]: content type 1 low 3 bits  (6-bit total)
+            C[12:7] : start marker 1 (0..63)
+            C[6:1]  : length marker 1 (length-1, 0..63)
+            C[0]    : content type 2 high 1 bit
+            D[15:11]: content type 2 low 5 bits  (6-bit total)
+            D[10:5] : start marker 2 (0..63)
+            D[4:0]  : length marker 2 (length-1, 0..31)
+
+        Returns True if any RT+ field changed.
+        """
+        item_toggle = (b >> 4) & 0x1
+        item_running = bool((b >> 3) & 0x1)
+        content_type_1 = ((b & 0x7) << 3) | ((c >> 13) & 0x7)
+        start_1 = (c >> 7) & 0x3F
+        length_1 = (c >> 1) & 0x3F
+        content_type_2 = ((c & 0x1) << 5) | ((d >> 11) & 0x1F)
+        start_2 = (d >> 5) & 0x3F
+        length_2 = d & 0x1F
+
+        rt_string = ''.join(self.radio_text[:self._radio_text_len])
+
+        new_tags: List[dict] = []
+        for ctype, start, length_field in (
+            (content_type_1, start_1, length_1),
+            (content_type_2, start_2, length_2),
+        ):
+            # Content type 0 ("DUMMY") signals "no tag in this slot" — used
+            # when only one of the two tag pairs is meaningful for the
+            # current programme item.  Skip it entirely.
+            if ctype == 0:
+                continue
+            end = start + length_field + 1  # length field is length-minus-1
+            if end > len(rt_string) or start >= len(rt_string):
+                # Tag points outside the buffered RT.  This usually means
+                # we have not yet received all the RT segments the station
+                # is referencing; skip and wait for the next RT+ group
+                # rather than emit a truncated artist/title.
+                continue
+            text = rt_string[start:end].strip()
+            if not text:
+                continue
+            new_tags.append({
+                'content_type': ctype,
+                'content_type_name': RT_PLUS_CONTENT_TYPES.get(
+                    ctype, f'TYPE_{ctype}'
+                ),
+                'text': text,
+                'start': start,
+                'length': length_field + 1,
+            })
+
+        changed = False
+        if self._rt_plus_item_running != item_running:
+            self._rt_plus_item_running = item_running
+            changed = True
+        if self._rt_plus_item_toggle != item_toggle:
+            # Toggle flip => new programme item.  Replace tags even if
+            # decode came back empty so the UI clears the prior song.
+            self._rt_plus_item_toggle = item_toggle
+            self._rt_plus_tags = new_tags or None
+            changed = True
+        elif new_tags and new_tags != self._rt_plus_tags:
+            # Same item but text refined (RT extended, or station retransmits
+            # with corrected content) — promote the newer tag list.
+            self._rt_plus_tags = new_tags
+            changed = True
         return changed
 
     def get_current_data(self) -> RBDSData:
         """Get the currently decoded RBDS data."""
         rt_chars = self.radio_text[:self._radio_text_len]
+
+        # Derived PI breakdown — Annex D layout: 4 bits country code,
+        # 4 bits area/coverage, 8 bits programme reference.  Surface raw
+        # values; the UI is responsible for any region-specific naming.
+        pi_country = pi_area = pi_program = None
+        if self.pi_code:
+            try:
+                pi_int = int(self.pi_code, 16)
+                pi_country = (pi_int >> 12) & 0xF
+                pi_area = (pi_int >> 8) & 0xF
+                pi_program = pi_int & 0xFF
+            except ValueError:
+                pass
+
+        # Reconstruct the ODA assignment table: each entry says which
+        # group/version slot a given AID lives on, with the AID rendered
+        # in hex for direct comparison against vendor docs.
+        oda_assignments: Optional[List[dict]] = None
+        if self._oda_app_map:
+            oda_assignments = []
+            for (gt, ver), aid in sorted(self._oda_app_map.items()):
+                entry = {
+                    'group': f"{gt}{'B' if ver else 'A'}",
+                    'group_type': gt,
+                    'version_b': bool(ver),
+                    'aid': aid,
+                    'aid_hex': f"0x{aid:04X}",
+                }
+                if aid == RT_PLUS_AID:
+                    entry['name'] = 'RT+'
+                oda_assignments.append(entry)
+
         return RBDSData(
             pi_code=self.pi_code,
+            pi_country_code=pi_country,
+            pi_area_code=pi_area,
+            pi_program_ref=pi_program,
             call_sign=self.call_sign,
             ps_name=''.join(self.ps_name).strip(),
             pty_name=self.pty_name,
             radio_text=''.join(rt_chars).strip(),
+            radio_text_ab=self._radio_text_ab,
             pty=self.pty,
             tp=self.tp,
             ta=self.ta,
@@ -2883,6 +3493,12 @@ class RBDSDecoder:
             clock_time_utc=self.clock_time_utc,
             clock_time_local=self.clock_time_local,
             af_list=sorted(self._af_buffer) if self._af_buffer else None,
+            af_method_a_count=self._af_method_a_count,
+            af_follow_on_indicator=(
+                True if self._af_follow_on_indicator else None
+            ),
+            af_method_b=(True if self._af_method_b else None),
+            af_tuning_frequency=self._af_tuning_frequency,
             pin_day=self.pin_day,
             pin_hour=self.pin_hour,
             pin_minute=self.pin_minute,
@@ -2892,8 +3508,32 @@ class RBDSDecoder:
             linkage_set_number=self.linkage_set_number,
             linkage_actuator=self.linkage_actuator,
             linkage_soft_coupling=self.linkage_soft_coupling,
+            paging_tmc_id=self.paging_tmc_id,
+            paging_operator_code=self.paging_operator_code,
+            ews_channel_identifier=self.ews_channel_identifier,
+            slow_labelling_raw=(
+                dict(self._slow_labelling_raw)
+                if self._slow_labelling_raw else None
+            ),
             oda_apps=list(self.oda_apps) if self.oda_apps else None,
+            oda_assignments=oda_assignments,
+            oda_payloads=(
+                [dict(v) for v in self._oda_payloads.values()]
+                if self._oda_payloads else None
+            ),
+            paging_messages=(
+                [dict(m) for m in self._paging_messages]
+                if self._paging_messages else None
+            ),
+            enhanced_paging_messages=(
+                [dict(m) for m in self._enhanced_paging_messages]
+                if self._enhanced_paging_messages else None
+            ),
             tdc_data=bytes(self._tdc_channels.get(0, [])) if self._tdc_channels else None,
+            tdc_channels=(
+                {ch: bytes(buf) for ch, buf in self._tdc_channels.items() if buf}
+                if self._tdc_channels else None
+            ),
             in_house_data=list(self.in_house_data) if self.in_house_data else None,
             tmc_present=self.tmc_present,
             ews_channel=self.ews_channel,
@@ -2904,21 +3544,75 @@ class RBDSDecoder:
             fast_ta=self.fast_ta,
             fast_ms=self.fast_ms,
             fast_di_bits=None,
+            rt_plus_item_running=self._rt_plus_item_running,
+            rt_plus_item_toggle=self._rt_plus_item_toggle,
+            rt_plus_tags=(
+                [dict(t) for t in self._rt_plus_tags]
+                if self._rt_plus_tags else None
+            ),
         )
 
     def _apply_group1_variant(self, variant: int, d: int) -> bool:
-        """Process Group 1A/1B variant payload (language, ECC, linkage). Returns True if changed."""
+        """Process a Group 1A/1B slow-labelling variant payload.
+
+        Variants 0/4/5 produce semantic fields (language code, ECC,
+        linkage); for completeness every variant — including 1/2/3/6/7
+        which the spec leaves loosely defined or assigns to paging /
+        TMC ID / EWS slow-labelling pointer — has its raw 16-bit Block-D
+        contents captured into _slow_labelling_raw, keyed by variant
+        number, so the UI can show "variant N said XXXX" even for codes
+        no decoder understands.
+
+        Returns True if any field changed.
+        """
+        # Always store the raw byte first.  Even when a specific decoder
+        # below picks fields out of d we keep the raw word so the UI can
+        # show low-level diagnostics next to the interpreted value.
+        changed_raw = (
+            self._slow_labelling_raw.get(variant) != d
+        )
+        if changed_raw:
+            self._slow_labelling_raw[variant] = d
+
+        changed_decoded = False
         if variant == 0:
+            # Per the existing implementation: variant 0 has historically
+            # been used for the legacy language code on some installations
+            # (RBDS pre-2005 supplements).  Keep the behaviour but only
+            # consider it a "language" update when the byte is in range.
             lang = d & 0xFF
             if lang != 0 and self.language_code != lang:
                 self.language_code = lang
                 self.language_name = RBDS_LANGUAGE_CODES.get(lang)
-                return True
+                changed_decoded = True
+        elif variant == 1:
+            # Variant 1 is reserved/local in NRSC-4-B; some EU stations
+            # use it for "TMC identification" carrying a 12-bit TMC
+            # provider code in d[11:0].  Capture it as a structured value.
+            tmc_id = d & 0x0FFF
+            if self.paging_tmc_id != tmc_id:
+                self.paging_tmc_id = tmc_id
+                changed_decoded = True
+        elif variant == 2:
+            # Variant 2: Paging Identification (operator code in d[11:0]
+            # plus 4 bits of operator-defined subfield in d[15:12]).
+            paging_op = d & 0x0FFF
+            if self.paging_operator_code != paging_op:
+                self.paging_operator_code = paging_op
+                changed_decoded = True
+        elif variant == 3:
+            # Variant 3: legacy language-code assignment used by some
+            # EU broadcasters in place of variant 0.  Treat identically.
+            lang = d & 0xFF
+            if lang != 0 and self.language_code != lang:
+                self.language_code = lang
+                self.language_name = RBDS_LANGUAGE_CODES.get(lang)
+                changed_decoded = True
         elif variant == 4:
             ecc_val = d & 0xFF
             if ecc_val != 0 and self.ecc != ecc_val:
                 self.ecc = ecc_val
-                return True
+                changed_decoded = True
         elif variant == 5:
             lsn = d & 0x0FFF
             la = bool((d >> 15) & 0x1)
@@ -2927,8 +3621,22 @@ class RBDSDecoder:
                 self.linkage_set_number = lsn
                 self.linkage_actuator = la
                 self.linkage_soft_coupling = sc
-                return True
-        return False
+                changed_decoded = True
+        elif variant == 6:
+            # Variant 6: broadcaster-use 16 bits.  No standard interpretation,
+            # but we expose it raw in the slow-labelling table above; nothing
+            # extra to compute.
+            pass
+        elif variant == 7:
+            # Variant 7: EWS channel identifier slow-labelling pointer.
+            # Carries a 12-bit EWS service identifier in d[11:0] that
+            # tells receivers which EWS provider feeds Group 9A.  Useful
+            # diagnostic alongside the actual EWS messages.
+            ews_id = d & 0x0FFF
+            if self.ews_channel_identifier != ews_id:
+                self.ews_channel_identifier = ews_id
+                changed_decoded = True
+        return changed_raw or changed_decoded
 
     def _accumulate_tdc(self, channel: int, raw: list) -> None:
         """Append TDC bytes to a channel buffer, capped at 256 bytes."""

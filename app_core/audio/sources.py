@@ -487,6 +487,27 @@ class SDRSourceAdapter(AudioSourceAdapter):
                         elif (prev_synced is True) and not rbds_synced:
                             logger.info("RBDS sync lost on %s", self._receiver_id)
 
+                        # Decoder health stats (block error rate, FEC counts,
+                        # group histogram).  Always serialise when present —
+                        # the dataclass is independent of whether content
+                        # was decoded this cycle.
+                        decoder_stats = getattr(demod_status, 'rbds_decoder_stats', None)
+                        if decoder_stats is not None:
+                            metadata['rbds_blocks_total'] = decoder_stats.blocks_total
+                            metadata['rbds_blocks_ok'] = decoder_stats.blocks_ok
+                            metadata['rbds_blocks_fec_single'] = decoder_stats.blocks_fec_single
+                            metadata['rbds_blocks_fec_burst'] = decoder_stats.blocks_fec_burst
+                            metadata['rbds_blocks_uncorrected'] = decoder_stats.blocks_uncorrected
+                            metadata['rbds_groups_decoded'] = decoder_stats.groups_decoded
+                            metadata['rbds_sync_acquired_unix'] = decoder_stats.sync_acquired_unix
+                            metadata['rbds_sync_lost_count'] = decoder_stats.sync_lost_count
+                            metadata['rbds_raw_bler'] = decoder_stats.raw_block_error_rate
+                            metadata['rbds_net_bler'] = decoder_stats.net_block_error_rate
+                            metadata['rbds_group_type_counts'] = (
+                                dict(decoder_stats.group_type_counts)
+                                if decoder_stats.group_type_counts else None
+                            )
+
                         # RBDS data (if available)
                         rbds_data = demod_status.rbds_data
                         if rbds_data:
@@ -530,6 +551,32 @@ class SDRSourceAdapter(AudioSourceAdapter):
                             metadata['rbds_fast_ta'] = rbds_data.fast_ta
                             metadata['rbds_fast_ms'] = rbds_data.fast_ms
                             metadata['rbds_fast_di_bits'] = rbds_data.fast_di_bits
+                            metadata['rbds_rt_plus_item_running'] = rbds_data.rt_plus_item_running
+                            metadata['rbds_rt_plus_item_toggle'] = rbds_data.rt_plus_item_toggle
+                            metadata['rbds_rt_plus_tags'] = rbds_data.rt_plus_tags
+                            metadata['rbds_radio_text_ab'] = rbds_data.radio_text_ab
+                            metadata['rbds_pi_country_code'] = rbds_data.pi_country_code
+                            metadata['rbds_pi_area_code'] = rbds_data.pi_area_code
+                            metadata['rbds_pi_program_ref'] = rbds_data.pi_program_ref
+                            metadata['rbds_oda_assignments'] = rbds_data.oda_assignments
+                            metadata['rbds_oda_payloads'] = rbds_data.oda_payloads
+                            metadata['rbds_af_method_a_count'] = rbds_data.af_method_a_count
+                            metadata['rbds_af_follow_on_indicator'] = rbds_data.af_follow_on_indicator
+                            metadata['rbds_af_method_b'] = rbds_data.af_method_b
+                            metadata['rbds_af_tuning_frequency'] = rbds_data.af_tuning_frequency
+                            metadata['rbds_paging_messages'] = rbds_data.paging_messages
+                            metadata['rbds_enhanced_paging_messages'] = rbds_data.enhanced_paging_messages
+                            metadata['rbds_paging_tmc_id'] = rbds_data.paging_tmc_id
+                            metadata['rbds_paging_operator_code'] = rbds_data.paging_operator_code
+                            metadata['rbds_ews_channel_identifier'] = rbds_data.ews_channel_identifier
+                            metadata['rbds_slow_labelling_raw'] = (
+                                {str(k): v for k, v in rbds_data.slow_labelling_raw.items()}
+                                if rbds_data.slow_labelling_raw else None
+                            )
+                            metadata['rbds_tdc_channels'] = (
+                                {str(ch): buf.hex() for ch, buf in rbds_data.tdc_channels.items()}
+                                if rbds_data.tdc_channels else None
+                            )
                             metadata['rbds_program_type_name'] = (
                                 RBDS_PROGRAM_TYPES.get(int(rbds_data.pty))
                                 if rbds_data.pty is not None
@@ -578,6 +625,32 @@ class SDRSourceAdapter(AudioSourceAdapter):
                             metadata['rbds_fast_ta'] = self._rbds_data.fast_ta
                             metadata['rbds_fast_ms'] = self._rbds_data.fast_ms
                             metadata['rbds_fast_di_bits'] = self._rbds_data.fast_di_bits
+                            metadata['rbds_rt_plus_item_running'] = self._rbds_data.rt_plus_item_running
+                            metadata['rbds_rt_plus_item_toggle'] = self._rbds_data.rt_plus_item_toggle
+                            metadata['rbds_rt_plus_tags'] = self._rbds_data.rt_plus_tags
+                            metadata['rbds_radio_text_ab'] = self._rbds_data.radio_text_ab
+                            metadata['rbds_pi_country_code'] = self._rbds_data.pi_country_code
+                            metadata['rbds_pi_area_code'] = self._rbds_data.pi_area_code
+                            metadata['rbds_pi_program_ref'] = self._rbds_data.pi_program_ref
+                            metadata['rbds_oda_assignments'] = self._rbds_data.oda_assignments
+                            metadata['rbds_oda_payloads'] = self._rbds_data.oda_payloads
+                            metadata['rbds_af_method_a_count'] = self._rbds_data.af_method_a_count
+                            metadata['rbds_af_follow_on_indicator'] = self._rbds_data.af_follow_on_indicator
+                            metadata['rbds_af_method_b'] = self._rbds_data.af_method_b
+                            metadata['rbds_af_tuning_frequency'] = self._rbds_data.af_tuning_frequency
+                            metadata['rbds_paging_messages'] = self._rbds_data.paging_messages
+                            metadata['rbds_enhanced_paging_messages'] = self._rbds_data.enhanced_paging_messages
+                            metadata['rbds_paging_tmc_id'] = self._rbds_data.paging_tmc_id
+                            metadata['rbds_paging_operator_code'] = self._rbds_data.paging_operator_code
+                            metadata['rbds_ews_channel_identifier'] = self._rbds_data.ews_channel_identifier
+                            metadata['rbds_slow_labelling_raw'] = (
+                                {str(k): v for k, v in self._rbds_data.slow_labelling_raw.items()}
+                                if self._rbds_data.slow_labelling_raw else None
+                            )
+                            metadata['rbds_tdc_channels'] = (
+                                {str(ch): buf.hex() for ch, buf in self._rbds_data.tdc_channels.items()}
+                                if self._rbds_data.tdc_channels else None
+                            )
                             metadata['rbds_program_type_name'] = (
                                 RBDS_PROGRAM_TYPES.get(int(self._rbds_data.pty))
                                 if self._rbds_data.pty is not None
