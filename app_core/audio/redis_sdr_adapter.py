@@ -463,6 +463,23 @@ class RedisSDRSourceAdapter(AudioSourceAdapter):
                     lock_state = 'LOCKING'
                 self.metrics.metadata['rbds_lock_state'] = lock_state
 
+                decoder_stats = getattr(status, 'rbds_decoder_stats', None)
+                if decoder_stats is not None:
+                    self.metrics.metadata['rbds_blocks_total'] = decoder_stats.blocks_total
+                    self.metrics.metadata['rbds_blocks_ok'] = decoder_stats.blocks_ok
+                    self.metrics.metadata['rbds_blocks_fec_single'] = decoder_stats.blocks_fec_single
+                    self.metrics.metadata['rbds_blocks_fec_burst'] = decoder_stats.blocks_fec_burst
+                    self.metrics.metadata['rbds_blocks_uncorrected'] = decoder_stats.blocks_uncorrected
+                    self.metrics.metadata['rbds_groups_decoded'] = decoder_stats.groups_decoded
+                    self.metrics.metadata['rbds_sync_acquired_unix'] = decoder_stats.sync_acquired_unix
+                    self.metrics.metadata['rbds_sync_lost_count'] = decoder_stats.sync_lost_count
+                    self.metrics.metadata['rbds_raw_bler'] = decoder_stats.raw_block_error_rate
+                    self.metrics.metadata['rbds_net_bler'] = decoder_stats.net_block_error_rate
+                    self.metrics.metadata['rbds_group_type_counts'] = (
+                        dict(decoder_stats.group_type_counts)
+                        if decoder_stats.group_type_counts else None
+                    )
+
                 # RF RSSI (mean IQ magnitude).  Linear value; the UI converts to
                 # dBFS for the signal meter.  Without this the RSSI indicator is
                 # permanently blank on Redis-backed SDR sources.
@@ -539,6 +556,11 @@ class RedisSDRSourceAdapter(AudioSourceAdapter):
                     self.metrics.metadata['rbds_rt_plus_item_running'] = rbds.rt_plus_item_running
                     self.metrics.metadata['rbds_rt_plus_item_toggle'] = rbds.rt_plus_item_toggle
                     self.metrics.metadata['rbds_rt_plus_tags'] = rbds.rt_plus_tags
+                    self.metrics.metadata['rbds_radio_text_ab'] = rbds.radio_text_ab
+                    self.metrics.metadata['rbds_pi_country_code'] = rbds.pi_country_code
+                    self.metrics.metadata['rbds_pi_area_code'] = rbds.pi_area_code
+                    self.metrics.metadata['rbds_pi_program_ref'] = rbds.pi_program_ref
+                    self.metrics.metadata['rbds_oda_assignments'] = rbds.oda_assignments
                     # rbds_last_seen advances every time we observe a decoded
                     # group, even if the content is identical to the last one.
                     # This is the "decoder is alive" heartbeat: it lets the
@@ -605,6 +627,11 @@ class RedisSDRSourceAdapter(AudioSourceAdapter):
                     self.metrics.metadata['rbds_rt_plus_item_running'] = last.rt_plus_item_running
                     self.metrics.metadata['rbds_rt_plus_item_toggle'] = last.rt_plus_item_toggle
                     self.metrics.metadata['rbds_rt_plus_tags'] = last.rt_plus_tags
+                    self.metrics.metadata['rbds_radio_text_ab'] = last.radio_text_ab
+                    self.metrics.metadata['rbds_pi_country_code'] = last.pi_country_code
+                    self.metrics.metadata['rbds_pi_area_code'] = last.pi_area_code
+                    self.metrics.metadata['rbds_pi_program_ref'] = last.pi_program_ref
+                    self.metrics.metadata['rbds_oda_assignments'] = last.oda_assignments
                 else:
                     # No cached data and nothing new this cycle — e.g. right
                     # after a frequency change.  Publish explicit nulls so

@@ -998,6 +998,16 @@ function renderAudioSources(fullRender = true) {
                                             <span class="text-muted">Program ID (PI):</span>
                                             <span class="font-monospace small">${escapeHtml(source.metrics.metadata.rbds_pi_code)}</span>
                                         </div>
+                                        ${(source.metrics.metadata.rbds_pi_country_code !== undefined && source.metrics.metadata.rbds_pi_country_code !== null) ? `
+                                            <div class="d-flex justify-content-between mb-1">
+                                                <span class="text-muted ps-3 small">PI breakdown:</span>
+                                                <span class="font-monospace small">
+                                                    country=0x${source.metrics.metadata.rbds_pi_country_code.toString(16).toUpperCase()}
+                                                    area=0x${source.metrics.metadata.rbds_pi_area_code.toString(16).toUpperCase()}
+                                                    prog=0x${source.metrics.metadata.rbds_pi_program_ref.toString(16).toUpperCase().padStart(2,'0')}
+                                                </span>
+                                            </div>
+                                        ` : ''}
                                     ` : ''}
                                     ${(source.metrics.metadata.rbds_program_type_name || (source.metrics.metadata.rbds_pty !== undefined && source.metrics.metadata.rbds_pty !== null)) ? `
                                         <div class="d-flex justify-content-between mb-1">
@@ -1216,7 +1226,22 @@ function renderAudioSources(fullRender = true) {
                                         ` : ''}
                                     ` : ''}
 
-                                    ${(source.metrics.metadata.rbds_oda_apps && source.metrics.metadata.rbds_oda_apps.length > 0) ? `
+                                    ${(source.metrics.metadata.rbds_oda_assignments && source.metrics.metadata.rbds_oda_assignments.length > 0) ? `
+                                        <hr class="my-2">
+                                        <div class="text-muted mb-1"><strong>Open Data Applications (ODA)</strong></div>
+                                        <table class="table table-sm table-bordered small mb-1">
+                                            <thead><tr><th>Group</th><th>AID</th><th>Name</th></tr></thead>
+                                            <tbody>
+                                                ${source.metrics.metadata.rbds_oda_assignments.map(a => `
+                                                    <tr>
+                                                        <td class="font-monospace">${escapeHtml(a.group)}</td>
+                                                        <td class="font-monospace">${escapeHtml(a.aid_hex)}</td>
+                                                        <td>${escapeHtml(a.name || '')}</td>
+                                                    </tr>
+                                                `).join('')}
+                                            </tbody>
+                                        </table>
+                                    ` : (source.metrics.metadata.rbds_oda_apps && source.metrics.metadata.rbds_oda_apps.length > 0) ? `
                                         <hr class="my-2">
                                         <div class="text-muted mb-1"><strong>Open Data Applications (ODA)</strong></div>
                                         <div class="d-flex flex-wrap gap-1 mb-1">
@@ -1251,7 +1276,7 @@ function renderAudioSources(fullRender = true) {
                                         <hr class="my-2">
                                         <div class="text-muted mb-1"><strong>Enhanced Other Networks (EON)</strong></div>
                                         <table class="table table-sm table-bordered small mb-1">
-                                            <thead><tr><th>PI</th><th>PS</th><th>TP</th><th>TA</th><th>AF</th></tr></thead>
+                                            <thead><tr><th>PI</th><th>PS</th><th>TP</th><th>TA</th><th>PTY</th><th>AF</th><th>Linkage</th><th>PIN</th></tr></thead>
                                             <tbody>
                                                 ${source.metrics.metadata.rbds_eon_list.map(e => `
                                                     <tr>
@@ -1259,11 +1284,65 @@ function renderAudioSources(fullRender = true) {
                                                         <td>${escapeHtml((e.ps || '').trim())}</td>
                                                         <td>${e.tp ? '<span class="badge bg-info">Y</span>' : '<span class="badge bg-secondary">N</span>'}</td>
                                                         <td>${e.ta !== undefined ? (e.ta ? '<span class="badge bg-warning text-dark">Y</span>' : '<span class="badge bg-secondary">N</span>') : '-'}</td>
+                                                        <td>${e.pty !== undefined ? e.pty : '-'}</td>
                                                         <td class="font-monospace small">${(e.af && e.af.length) ? e.af.map(f => f + ' MHz').join(', ') : '-'}</td>
+                                                        <td class="font-monospace small">${e.linkage !== undefined ? '0x' + e.linkage.toString(16).toUpperCase().padStart(4,'0') : '-'}</td>
+                                                        <td class="font-monospace small">${e.pin_day !== undefined ? `Day ${e.pin_day} ${String(e.pin_hour).padStart(2,'0')}:${String(e.pin_minute).padStart(2,'0')}` : '-'}</td>
                                                     </tr>
                                                 `).join('')}
                                             </tbody>
                                         </table>
+                                    ` : ''}
+
+                                    ${(source.metrics.metadata.rbds_blocks_total !== undefined && source.metrics.metadata.rbds_blocks_total !== null && source.metrics.metadata.rbds_blocks_total > 0) ? `
+                                        <hr class="my-2">
+                                        <div class="text-muted mb-1"><strong>Decoder Health (NRSC-4-B BLER)</strong></div>
+                                        <div class="d-flex justify-content-between mb-1">
+                                            <span class="text-muted">Raw block error rate:</span>
+                                            <span class="font-monospace small">
+                                                ${source.metrics.metadata.rbds_raw_bler !== null && source.metrics.metadata.rbds_raw_bler !== undefined ? (source.metrics.metadata.rbds_raw_bler * 100).toFixed(2) + '%' : '-'}
+                                            </span>
+                                        </div>
+                                        <div class="d-flex justify-content-between mb-1">
+                                            <span class="text-muted">Net BLER (after FEC):</span>
+                                            <span class="font-monospace small">
+                                                ${source.metrics.metadata.rbds_net_bler !== null && source.metrics.metadata.rbds_net_bler !== undefined ? (source.metrics.metadata.rbds_net_bler * 100).toFixed(2) + '%' : '-'}
+                                            </span>
+                                        </div>
+                                        <div class="d-flex justify-content-between mb-1">
+                                            <span class="text-muted">Blocks total / groups:</span>
+                                            <span class="font-monospace small">
+                                                ${source.metrics.metadata.rbds_blocks_total} / ${source.metrics.metadata.rbds_groups_decoded || 0}
+                                            </span>
+                                        </div>
+                                        <div class="d-flex flex-wrap gap-1 mb-1 small">
+                                            <span class="badge bg-success">clean ${source.metrics.metadata.rbds_blocks_ok || 0}</span>
+                                            <span class="badge bg-info">FEC-1 ${source.metrics.metadata.rbds_blocks_fec_single || 0}</span>
+                                            <span class="badge bg-primary">FEC-burst ${source.metrics.metadata.rbds_blocks_fec_burst || 0}</span>
+                                            <span class="badge bg-danger">uncorrected ${source.metrics.metadata.rbds_blocks_uncorrected || 0}</span>
+                                        </div>
+                                        ${source.metrics.metadata.rbds_sync_acquired_unix ? `
+                                            <div class="d-flex justify-content-between mb-1">
+                                                <span class="text-muted">Synced for:</span>
+                                                <span class="font-monospace small">${Math.floor((Date.now()/1000) - source.metrics.metadata.rbds_sync_acquired_unix)}s</span>
+                                            </div>
+                                        ` : ''}
+                                        ${(source.metrics.metadata.rbds_sync_lost_count !== undefined && source.metrics.metadata.rbds_sync_lost_count !== null) ? `
+                                            <div class="d-flex justify-content-between mb-1">
+                                                <span class="text-muted">Sync drops since boot:</span>
+                                                <span class="font-monospace small">${source.metrics.metadata.rbds_sync_lost_count}</span>
+                                            </div>
+                                        ` : ''}
+                                    ` : ''}
+
+                                    ${(source.metrics.metadata.rbds_group_type_counts && Object.keys(source.metrics.metadata.rbds_group_type_counts).length > 0) ? `
+                                        <hr class="my-2">
+                                        <div class="text-muted mb-1"><strong>Group Type Traffic</strong></div>
+                                        <div class="d-flex flex-wrap gap-1 mb-1 small">
+                                            ${Object.entries(source.metrics.metadata.rbds_group_type_counts).sort((a,b) => b[1] - a[1]).map(([gt, n]) => `
+                                                <span class="badge bg-secondary font-monospace">${escapeHtml(gt)}: ${n}</span>
+                                            `).join('')}
+                                        </div>
                                     ` : ''}
 
                                     ${(source.metrics.metadata.rbds_last_updated || source.metrics.metadata.rbds_last_seen) ? `

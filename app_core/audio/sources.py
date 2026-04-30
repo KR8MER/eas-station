@@ -487,6 +487,27 @@ class SDRSourceAdapter(AudioSourceAdapter):
                         elif (prev_synced is True) and not rbds_synced:
                             logger.info("RBDS sync lost on %s", self._receiver_id)
 
+                        # Decoder health stats (block error rate, FEC counts,
+                        # group histogram).  Always serialise when present —
+                        # the dataclass is independent of whether content
+                        # was decoded this cycle.
+                        decoder_stats = getattr(demod_status, 'rbds_decoder_stats', None)
+                        if decoder_stats is not None:
+                            metadata['rbds_blocks_total'] = decoder_stats.blocks_total
+                            metadata['rbds_blocks_ok'] = decoder_stats.blocks_ok
+                            metadata['rbds_blocks_fec_single'] = decoder_stats.blocks_fec_single
+                            metadata['rbds_blocks_fec_burst'] = decoder_stats.blocks_fec_burst
+                            metadata['rbds_blocks_uncorrected'] = decoder_stats.blocks_uncorrected
+                            metadata['rbds_groups_decoded'] = decoder_stats.groups_decoded
+                            metadata['rbds_sync_acquired_unix'] = decoder_stats.sync_acquired_unix
+                            metadata['rbds_sync_lost_count'] = decoder_stats.sync_lost_count
+                            metadata['rbds_raw_bler'] = decoder_stats.raw_block_error_rate
+                            metadata['rbds_net_bler'] = decoder_stats.net_block_error_rate
+                            metadata['rbds_group_type_counts'] = (
+                                dict(decoder_stats.group_type_counts)
+                                if decoder_stats.group_type_counts else None
+                            )
+
                         # RBDS data (if available)
                         rbds_data = demod_status.rbds_data
                         if rbds_data:
@@ -533,6 +554,11 @@ class SDRSourceAdapter(AudioSourceAdapter):
                             metadata['rbds_rt_plus_item_running'] = rbds_data.rt_plus_item_running
                             metadata['rbds_rt_plus_item_toggle'] = rbds_data.rt_plus_item_toggle
                             metadata['rbds_rt_plus_tags'] = rbds_data.rt_plus_tags
+                            metadata['rbds_radio_text_ab'] = rbds_data.radio_text_ab
+                            metadata['rbds_pi_country_code'] = rbds_data.pi_country_code
+                            metadata['rbds_pi_area_code'] = rbds_data.pi_area_code
+                            metadata['rbds_pi_program_ref'] = rbds_data.pi_program_ref
+                            metadata['rbds_oda_assignments'] = rbds_data.oda_assignments
                             metadata['rbds_program_type_name'] = (
                                 RBDS_PROGRAM_TYPES.get(int(rbds_data.pty))
                                 if rbds_data.pty is not None
@@ -584,6 +610,11 @@ class SDRSourceAdapter(AudioSourceAdapter):
                             metadata['rbds_rt_plus_item_running'] = self._rbds_data.rt_plus_item_running
                             metadata['rbds_rt_plus_item_toggle'] = self._rbds_data.rt_plus_item_toggle
                             metadata['rbds_rt_plus_tags'] = self._rbds_data.rt_plus_tags
+                            metadata['rbds_radio_text_ab'] = self._rbds_data.radio_text_ab
+                            metadata['rbds_pi_country_code'] = self._rbds_data.pi_country_code
+                            metadata['rbds_pi_area_code'] = self._rbds_data.pi_area_code
+                            metadata['rbds_pi_program_ref'] = self._rbds_data.pi_program_ref
+                            metadata['rbds_oda_assignments'] = self._rbds_data.oda_assignments
                             metadata['rbds_program_type_name'] = (
                                 RBDS_PROGRAM_TYPES.get(int(self._rbds_data.pty))
                                 if self._rbds_data.pty is not None

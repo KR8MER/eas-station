@@ -30,7 +30,7 @@ import math
 import queue
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple
 
@@ -319,10 +319,21 @@ class DemodulatorConfig:
 class RBDSData:
     """Decoded RBDS/RDS data from FM broadcast."""
     pi_code: Optional[str] = None  # Program Identification (raw 16-bit hex)
+    # PI is structured as 4 bits country code + 4 bits area/coverage code +
+    # 8 bits programme reference (Annex D of NRSC-4-B).  For US stations
+    # this is a synthetic-call-sign mapping; for European stations the
+    # split is the actual country/region/programme identifier.
+    pi_country_code: Optional[int] = None       # high 4 bits
+    pi_area_code: Optional[int] = None          # next 4 bits (coverage area)
+    pi_program_ref: Optional[int] = None        # low 8 bits
     call_sign: Optional[str] = None  # Decoded US call letters (e.g. "WXYZ"), if PI is US
     ps_name: Optional[str] = None  # Program Service name (8 chars)
     pty_name: Optional[str] = None  # Program Type Name (PTYN, 8 chars, Group 10A)
     radio_text: Optional[str] = None  # Radio Text (up to 64 chars)
+    # RT A/B flag.  The station toggles this every time the displayed
+    # message restarts; the UI can use it to detect when an RT change is
+    # in progress (vs. just being extended segment-by-segment).
+    radio_text_ab: Optional[int] = None
     pty: Optional[int] = None  # Program Type
     tp: Optional[bool] = None  # Traffic Program flag
     ta: Optional[bool] = None  # Traffic Announcement flag
@@ -347,6 +358,10 @@ class RBDSData:
     linkage_soft_coupling: Optional[bool] = None
     # Group 3A - Open Data Application registration
     oda_apps: Optional[List[int]] = None
+    # Full ODA assignment table — list of {group, version, aid, aid_hex,
+    # name?} items so the UI can show *which* group type carries each
+    # registered application instead of just listing AIDs.
+    oda_assignments: Optional[List[dict]] = None
     # Group 5A/5B - Transparent Data Channel
     tdc_data: Optional[bytes] = None
     # Group 6A/6B - In-House Applications
@@ -372,6 +387,55 @@ class RBDSData:
 
 
 @dataclass
+class RBDSDecoderStats:
+    """Snapshot of RBDS decoder health and traffic.
+
+    Reset on every sync acquisition (so values reflect the *current* lock
+    rather than lifetime totals across station changes), except for
+    ``sync_lost_count`` which is cumulative since the worker was started.
+    Surfaces what redsea calls "block error rate" plus a per-group-type
+    traffic histogram so operators can tell *why* a station is missing
+    metadata (e.g. it doesn't broadcast any 2A groups, so RT will never
+    appear).
+    """
+    blocks_total: int = 0
+    blocks_ok: int = 0          # passed CRC without FEC
+    blocks_fec_single: int = 0  # repaired by single-bit corrector
+    blocks_fec_burst: int = 0   # repaired by burst-trapping decoder
+    blocks_uncorrected: int = 0
+    groups_decoded: int = 0
+    sync_acquired_unix: Optional[float] = None
+    sync_lost_count: int = 0
+    # Keys are e.g. "0A", "2A", "11A" — bare "A"/"B" suffixes match what
+    # the RDS specs use everywhere so the UI doesn't have to translate.
+    group_type_counts: Dict[str, int] = field(default_factory=dict)
+
+    @property
+    def raw_block_error_rate(self) -> Optional[float]:
+        """Fraction of received blocks that didn't pass CRC on first try.
+
+        This is the NRSC-4-B §7.4.2 definition of BLER — any block whose
+        syndrome was non-zero before FEC counts as an error, regardless
+        of whether FEC later repaired it.  Returns None until at least
+        one block has been processed (so the UI doesn't display 0/0).
+        """
+        if self.blocks_total == 0:
+            return None
+        return (self.blocks_total - self.blocks_ok) / self.blocks_total
+
+    @property
+    def net_block_error_rate(self) -> Optional[float]:
+        """Fraction of blocks the decoder still couldn't recover after FEC.
+
+        Operationally what users care about — this is what drives PS/RT
+        gaps.  raw - net = "how much FEC saved us".
+        """
+        if self.blocks_total == 0:
+            return None
+        return self.blocks_uncorrected / self.blocks_total
+
+
+@dataclass
 class DemodulatorStatus:
     """Status information from FM demodulator."""
     rbds_data: Optional[RBDSData] = None  # RBDS data if available
@@ -394,6 +458,10 @@ class DemodulatorStatus:
     # and users could wait forever for a lock the decoder never even
     # tried to obtain.
     rbds_enabled: bool = False
+    # Decoder-side health metrics — block error rate, FEC correction
+    # split, and group-type histogram.  None until an RBDS worker is
+    # running; otherwise updated each frame.
+    rbds_decoder_stats: Optional[RBDSDecoderStats] = None
 
 
 class RBDSWorker:
@@ -451,6 +519,12 @@ class RBDSWorker:
         # Thread-safe storage for latest RBDS data
         self._latest_data: Optional[RBDSData] = None
         self._data_lock = threading.Lock()
+
+        # Decoder health stats (FEC counts, sync lifecycle, group histogram).
+        # The dataclass and the lock are owned here so all reads/writes go
+        # through one mutex regardless of which thread updates a counter.
+        self._stats: RBDSDecoderStats = RBDSDecoderStats()
+        self._stats_lock = threading.Lock()
 
         # Worker thread
         self._stop_event = threading.Event()
@@ -782,6 +856,33 @@ class RBDSWorker:
         """Whether the RBDS bit-level sync state machine has locked."""
         return bool(getattr(self, '_rbds_synced', False))
 
+    def get_stats(self) -> RBDSDecoderStats:
+        """Return a thread-safe snapshot of decoder health/traffic stats.
+
+        Merges the worker's own counters (block-level FEC stats and sync
+        lifecycle) with the decoder's group-type histogram so callers
+        get one combined view per call.
+        """
+        with self._stats_lock:
+            snap = RBDSDecoderStats(
+                blocks_total=self._stats.blocks_total,
+                blocks_ok=self._stats.blocks_ok,
+                blocks_fec_single=self._stats.blocks_fec_single,
+                blocks_fec_burst=self._stats.blocks_fec_burst,
+                blocks_uncorrected=self._stats.blocks_uncorrected,
+                groups_decoded=self._stats.groups_decoded,
+                sync_acquired_unix=self._stats.sync_acquired_unix,
+                sync_lost_count=self._stats.sync_lost_count,
+                group_type_counts={},
+            )
+        # Group histogram lives on the RBDSDecoder; pull a copy here so
+        # the snapshot is internally consistent.
+        if self._rbds_decoder is not None:
+            snap.group_type_counts = dict(
+                getattr(self._rbds_decoder, '_group_type_counts', {}) or {}
+            )
+        return snap
+
     def reset(self) -> None:
         """Request the worker thread to drop all sync/decoder state.
 
@@ -814,6 +915,13 @@ class RBDSWorker:
         # Rebuild filters / loop / decoder.  RBDSDecoder is recreated so
         # PS/RT buffers start blank.
         self._init_rbds_state()
+
+        # Wipe per-station stats but keep cumulative sync_lost_count so
+        # the UI can show "this receiver has dropped sync N times since
+        # boot" across station changes.
+        with self._stats_lock:
+            sync_lost_count = self._stats.sync_lost_count
+            self._stats = RBDSDecoderStats(sync_lost_count=sync_lost_count)
 
         # _init_rbds_state doesn't own the bit-level sync state machine
         # vars (they're lazily created in _decode_rbds_groups), so clear
@@ -1575,6 +1683,10 @@ class RBDSWorker:
                                     # CRC checks use the correct inversion flag.
                                     self._rbds_inverted_polarity = polarity
                                     self._rbds_synced = True
+                                    # Stamp the lock time so the UI can show
+                                    # "synced for N seconds" (per-station).
+                                    with self._stats_lock:
+                                        self._stats.sync_acquired_unix = time.time()
                         break  # Syndrome found, exit j loop
             
             else:
@@ -1664,24 +1776,32 @@ class RBDSWorker:
 
                     def _repair_block(
                         candidate_word: int, block_number: int
-                    ) -> tuple[bool, int]:
+                    ) -> tuple[bool, int, str]:
                         """Two-stage block repair: try strict single-bit first, then
                         burst-of-up-to-5 if that fails.  Single-bit is preferred
                         because it rejects ambiguous multi-candidate fits;
-                        burst-trapping then catches the multipath-fade case."""
+                        burst-trapping then catches the multipath-fade case.
+                        Third tuple element labels the path used so the caller
+                        can attribute the fix in the FEC stats: 'clean' (no
+                        correction needed), 'single', 'burst', or 'fail'."""
+                        if _crc_ok_for_block(candidate_word, block_number):
+                            return True, candidate_word, 'clean'
                         ok, fixed = _try_correct_single_bit_error(
                             candidate_word, block_number
                         )
                         if ok:
-                            return True, fixed
-                        return _try_correct_burst_error(
+                            return True, fixed, 'single'
+                        ok, fixed = _try_correct_burst_error(
                             candidate_word, block_number
                         )
+                        if ok:
+                            return True, fixed, 'burst'
+                        return False, candidate_word, 'fail'
 
                     good_block = False
                     block_word = self._rbds_reg ^ 0x3FFFFFF if self._rbds_inverted_polarity else self._rbds_reg
 
-                    corrected, corrected_word = _repair_block(
+                    corrected, corrected_word, repair_path = _repair_block(
                         block_word, self._rbds_block_number
                     )
                     if corrected:
@@ -1691,12 +1811,13 @@ class RBDSWorker:
                         # If current polarity suddenly fails CRC but opposite polarity passes,
                         # recover immediately instead of waiting for a full sync-loss window.
                         alternate_block_word = block_word ^ 0x3FFFFFF
-                        corrected_alt, corrected_alt_word = _repair_block(
+                        corrected_alt, corrected_alt_word, alt_path = _repair_block(
                             alternate_block_word, self._rbds_block_number
                         )
                         if corrected_alt:
                             self._rbds_inverted_polarity = not self._rbds_inverted_polarity
                             block_word = corrected_alt_word
+                            repair_path = alt_path
                             good_block = True
                             logger.info(
                                 "RBDS polarity flipped while synced; continuing decode (%s polarity)",
@@ -1704,6 +1825,21 @@ class RBDSWorker:
                             )
                         else:
                             self._rbds_wrong_blocks_counter += 1
+
+                    # Attribute this block to the FEC counters.  'clean' means
+                    # the syndrome was zero before any FEC; the others are
+                    # categorised by which corrector won.  These feed the
+                    # NRSC-4-B BLER computation surfaced via get_stats().
+                    with self._stats_lock:
+                        self._stats.blocks_total += 1
+                        if repair_path == 'clean':
+                            self._stats.blocks_ok += 1
+                        elif repair_path == 'single':
+                            self._stats.blocks_fec_single += 1
+                        elif repair_path == 'burst':
+                            self._stats.blocks_fec_burst += 1
+                        else:
+                            self._stats.blocks_uncorrected += 1
 
                     dataword = (block_word >> 10) & 0xFFFF
                     if good_block:
@@ -1739,7 +1875,9 @@ class RBDSWorker:
                                 # Update our RBDSData decoder
                                 self._rbds_decoder.process_group((group_0, group_1, group_2, group_3))
                                 changed = True
-                                
+                                with self._stats_lock:
+                                    self._stats.groups_decoded += 1
+
                                 logger.info(f"RBDS group: PI=0x{program_identification:04X} type={group_type}")
                     
                     # Reset for next block
@@ -1753,6 +1891,9 @@ class RBDSWorker:
                             logger.info(f"RBDS SYNC LOST ({self._rbds_wrong_blocks_counter} bad blocks on {self._rbds_blocks_counter} total)")
                             self._rbds_synced = False
                             self._rbds_presync = False
+                            with self._stats_lock:
+                                self._stats.sync_lost_count += 1
+                                self._stats.sync_acquired_unix = None
                         else:
                             logger.info(f"RBDS sync OK ({self._rbds_wrong_blocks_counter} bad blocks on {self._rbds_blocks_counter} total)")
                         self._rbds_blocks_counter = 0
@@ -2299,6 +2440,9 @@ class FMDemodulator:
         audio = np.tanh(audio * 0.7) / 0.7
 
         # Create demodulator status with stereo pilot and RBDS info
+        decoder_stats: Optional[RBDSDecoderStats] = None
+        if self._rbds_enabled and self._rbds_worker is not None:
+            decoder_stats = self._rbds_worker.get_stats()
         status = DemodulatorStatus(
             rbds_data=rbds_data,
             stereo_pilot_locked=stereo_pilot_locked,
@@ -2311,6 +2455,7 @@ class FMDemodulator:
                 else False
             ),
             rbds_enabled=self._rbds_enabled,
+            rbds_decoder_stats=decoder_stats,
         )
 
         return audio.astype(np.float32), status
@@ -2682,6 +2827,10 @@ class RBDSDecoder:
         self._rt_plus_item_running: Optional[bool] = None
         self._rt_plus_item_toggle: Optional[int] = None
         self._rt_plus_tags: Optional[List[dict]] = None
+        # Per-(group_type+version) traffic histogram populated in
+        # process_group.  RBDSWorker.get_stats() merges this with its
+        # own block-level counters into a single RBDSDecoderStats.
+        self._group_type_counts: Dict[str, int] = {}
         # Group 5A/5B TDC state
         self._tdc_channels: Dict[int, List[int]] = {}
         # Group 6A/6B In-house state
@@ -2738,6 +2887,12 @@ class RBDSDecoder:
             "RBDS group: A=%04X B=%04X C=%04X D=%04X (type=%d%s)",
             a, b, c, d, group_type, "B" if version_b else "A"
         )
+
+        # Tally this group into the per-type histogram so the UI can show
+        # what mix of services this station broadcasts (e.g. "no 2A => no
+        # Radio Text" is much clearer than just an empty RT panel).
+        gt_key = f"{group_type}{'B' if version_b else 'A'}"
+        self._group_type_counts[gt_key] = self._group_type_counts.get(gt_key, 0) + 1
 
         pi_code = f"{a:04X}"
         if self.pi_code != pi_code:
@@ -3118,12 +3273,48 @@ class RBDSDecoder:
     def get_current_data(self) -> RBDSData:
         """Get the currently decoded RBDS data."""
         rt_chars = self.radio_text[:self._radio_text_len]
+
+        # Derived PI breakdown — Annex D layout: 4 bits country code,
+        # 4 bits area/coverage, 8 bits programme reference.  Surface raw
+        # values; the UI is responsible for any region-specific naming.
+        pi_country = pi_area = pi_program = None
+        if self.pi_code:
+            try:
+                pi_int = int(self.pi_code, 16)
+                pi_country = (pi_int >> 12) & 0xF
+                pi_area = (pi_int >> 8) & 0xF
+                pi_program = pi_int & 0xFF
+            except ValueError:
+                pass
+
+        # Reconstruct the ODA assignment table: each entry says which
+        # group/version slot a given AID lives on, with the AID rendered
+        # in hex for direct comparison against vendor docs.
+        oda_assignments: Optional[List[dict]] = None
+        if self._oda_app_map:
+            oda_assignments = []
+            for (gt, ver), aid in sorted(self._oda_app_map.items()):
+                entry = {
+                    'group': f"{gt}{'B' if ver else 'A'}",
+                    'group_type': gt,
+                    'version_b': bool(ver),
+                    'aid': aid,
+                    'aid_hex': f"0x{aid:04X}",
+                }
+                if aid == RT_PLUS_AID:
+                    entry['name'] = 'RT+'
+                oda_assignments.append(entry)
+
         return RBDSData(
             pi_code=self.pi_code,
+            pi_country_code=pi_country,
+            pi_area_code=pi_area,
+            pi_program_ref=pi_program,
             call_sign=self.call_sign,
             ps_name=''.join(self.ps_name).strip(),
             pty_name=self.pty_name,
             radio_text=''.join(rt_chars).strip(),
+            radio_text_ab=self._radio_text_ab,
             pty=self.pty,
             tp=self.tp,
             ta=self.ta,
@@ -3145,6 +3336,7 @@ class RBDSDecoder:
             linkage_actuator=self.linkage_actuator,
             linkage_soft_coupling=self.linkage_soft_coupling,
             oda_apps=list(self.oda_apps) if self.oda_apps else None,
+            oda_assignments=oda_assignments,
             tdc_data=bytes(self._tdc_channels.get(0, [])) if self._tdc_channels else None,
             in_house_data=list(self.in_house_data) if self.in_house_data else None,
             tmc_present=self.tmc_present,
