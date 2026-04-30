@@ -530,6 +530,9 @@ class SDRSourceAdapter(AudioSourceAdapter):
                             metadata['rbds_fast_ta'] = rbds_data.fast_ta
                             metadata['rbds_fast_ms'] = rbds_data.fast_ms
                             metadata['rbds_fast_di_bits'] = rbds_data.fast_di_bits
+                            metadata['rbds_rt_plus_item_running'] = rbds_data.rt_plus_item_running
+                            metadata['rbds_rt_plus_item_toggle'] = rbds_data.rt_plus_item_toggle
+                            metadata['rbds_rt_plus_tags'] = rbds_data.rt_plus_tags
                             metadata['rbds_program_type_name'] = (
                                 RBDS_PROGRAM_TYPES.get(int(rbds_data.pty))
                                 if rbds_data.pty is not None
@@ -578,6 +581,9 @@ class SDRSourceAdapter(AudioSourceAdapter):
                             metadata['rbds_fast_ta'] = self._rbds_data.fast_ta
                             metadata['rbds_fast_ms'] = self._rbds_data.fast_ms
                             metadata['rbds_fast_di_bits'] = self._rbds_data.fast_di_bits
+                            metadata['rbds_rt_plus_item_running'] = self._rbds_data.rt_plus_item_running
+                            metadata['rbds_rt_plus_item_toggle'] = self._rbds_data.rt_plus_item_toggle
+                            metadata['rbds_rt_plus_tags'] = self._rbds_data.rt_plus_tags
                             metadata['rbds_program_type_name'] = (
                                 RBDS_PROGRAM_TYPES.get(int(self._rbds_data.pty))
                                 if self._rbds_data.pty is not None

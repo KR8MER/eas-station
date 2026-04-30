@@ -536,6 +536,9 @@ class RedisSDRSourceAdapter(AudioSourceAdapter):
                     self.metrics.metadata['rbds_fast_ta'] = rbds.fast_ta
                     self.metrics.metadata['rbds_fast_ms'] = rbds.fast_ms
                     self.metrics.metadata['rbds_fast_di_bits'] = rbds.fast_di_bits
+                    self.metrics.metadata['rbds_rt_plus_item_running'] = rbds.rt_plus_item_running
+                    self.metrics.metadata['rbds_rt_plus_item_toggle'] = rbds.rt_plus_item_toggle
+                    self.metrics.metadata['rbds_rt_plus_tags'] = rbds.rt_plus_tags
                     # rbds_last_seen advances every time we observe a decoded
                     # group, even if the content is identical to the last one.
                     # This is the "decoder is alive" heartbeat: it lets the
@@ -599,6 +602,9 @@ class RedisSDRSourceAdapter(AudioSourceAdapter):
                     self.metrics.metadata['rbds_fast_ta'] = last.fast_ta
                     self.metrics.metadata['rbds_fast_ms'] = last.fast_ms
                     self.metrics.metadata['rbds_fast_di_bits'] = last.fast_di_bits
+                    self.metrics.metadata['rbds_rt_plus_item_running'] = last.rt_plus_item_running
+                    self.metrics.metadata['rbds_rt_plus_item_toggle'] = last.rt_plus_item_toggle
+                    self.metrics.metadata['rbds_rt_plus_tags'] = last.rt_plus_tags
                 else:
                     # No cached data and nothing new this cycle — e.g. right
                     # after a frequency change.  Publish explicit nulls so

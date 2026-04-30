@@ -241,6 +241,39 @@ def fast_decimate(samples: np.ndarray, factor: int) -> np.ndarray:
         return samples.reshape(-1, factor).mean(axis=1).astype(np.float32)
 
 
+# RT+ (RadioText Plus) ODA Application Identifier per RDS Forum R03/040.1.
+# Stations broadcast it on the group type assigned in their Group 3A
+# registration (most US music stations use 11A, some use 12A).
+RT_PLUS_AID = 0xCD46
+
+# Content type codes from the RT+ specification (R03/040.1 §6.2 Table 1).
+# Codes 0 and >= 53 are dummy / reserved-for-future-use; we still expose
+# the raw code so receivers can render unknown classes generically.
+RT_PLUS_CONTENT_TYPES: Dict[int, str] = {
+    0: "DUMMY", 1: "ITEM.TITLE", 2: "ITEM.ALBUM", 3: "ITEM.TRACKNUMBER",
+    4: "ITEM.ARTIST", 5: "ITEM.COMPOSITION", 6: "ITEM.MOVEMENT",
+    7: "ITEM.CONDUCTOR", 8: "ITEM.COMPOSER", 9: "ITEM.BAND",
+    10: "ITEM.COMMENT", 11: "ITEM.GENRE", 12: "INFO.NEWS",
+    13: "INFO.NEWS.LOCAL", 14: "INFO.STOCKMARKET", 15: "INFO.SPORT",
+    16: "INFO.LOTTERY", 17: "INFO.HOROSCOPE", 18: "INFO.DAILY_DIVERSION",
+    19: "INFO.HEALTH", 20: "INFO.EVENT", 21: "INFO.SCENE",
+    22: "INFO.CINEMA", 23: "INFO.TV", 24: "INFO.DATE_TIME",
+    25: "INFO.WEATHER", 26: "INFO.TRAFFIC", 27: "INFO.ALARM",
+    28: "INFO.ADVERTISEMENT", 29: "INFO.URL", 30: "INFO.OTHER",
+    31: "STATIONNAME.SHORT", 32: "STATIONNAME.LONG",
+    33: "PROGRAMME.NOW", 34: "PROGRAMME.NEXT", 35: "PROGRAMME.PART",
+    36: "PROGRAMME.HOST", 37: "PROGRAMME.EDITORIAL_STAFF",
+    38: "PROGRAMME.FREQUENCY", 39: "PROGRAMME.HOMEPAGE",
+    40: "PROGRAMME.SUBCHANNEL", 41: "PHONE.HOTLINE",
+    42: "PHONE.STUDIO", 43: "PHONE.OTHER", 44: "SMS.STUDIO",
+    45: "SMS.OTHER", 46: "EMAIL.HOTLINE", 47: "EMAIL.STUDIO",
+    48: "EMAIL.OTHER", 49: "MMS.OTHER", 50: "CHAT", 51: "CHAT.CENTRE",
+    52: "VOTE.QUESTION", 53: "VOTE.CENTRE",
+    58: "PLACE", 59: "APPOINTMENT", 60: "IDENTIFIER",
+    61: "PURCHASE", 62: "GET_DATA",
+}
+
+
 RBDS_LANGUAGE_CODES: Dict[int, str] = {
     0x01: "Albanian", 0x02: "Breton", 0x03: "Catalan", 0x04: "Croatian",
     0x05: "Welsh", 0x06: "Czech", 0x07: "Danish", 0x08: "German",
@@ -331,6 +364,11 @@ class RBDSData:
     fast_ta: Optional[bool] = None
     fast_ms: Optional[bool] = None
     fast_di_bits: Optional[int] = None
+    # RT+ (ODA AID 0xCD46) - structured tags pointing into Radio Text.
+    # Each tag is a dict {content_type, content_type_name, text, start, length}.
+    rt_plus_item_running: Optional[bool] = None
+    rt_plus_item_toggle: Optional[int] = None
+    rt_plus_tags: Optional[List[dict]] = None
 
 
 @dataclass
@@ -1584,10 +1622,66 @@ class RBDSWorker:
                             return False, block_word_value
                         return True, corrected_word
 
+                    burst_table = self._burst_correction_table()
+
+                    def _try_correct_burst_error(
+                        block_word_value: int,
+                        block_number: int,
+                    ) -> tuple[bool, int]:
+                        """Burst-trapping FEC for the (26,16) RBDS block code.
+
+                        Recovers single bursts of up to 5 contiguous error bits, the
+                        common multipath/fade failure mode where 2-5 consecutive bits
+                        are corrupted together.  Implemented as a pre-computed
+                        syndrome lookup (equivalent to the Meggitt trapping decoder
+                        in NRSC-4-B §B.2.4).  Each candidate offset is tried
+                        independently and the lowest-weight correction wins.
+                        """
+                        if block_number == 2:
+                            offsets_to_try = (offset_word[2], offset_word[4])
+                        else:
+                            offsets_to_try = (offset_word[block_number],)
+
+                        best: Optional[Tuple[int, int]] = None  # (corrected_word, weight)
+                        for off in offsets_to_try:
+                            # XOR offset out of the lower 10 bits to recover the
+                            # raw codeword; the syndrome of a clean codeword is 0.
+                            codeword = block_word_value ^ off
+                            syn = self._calc_syndrome(codeword, 26)
+                            if syn == 0:
+                                return True, block_word_value
+                            mask = burst_table.get(syn)
+                            if mask is None:
+                                continue
+                            corrected = block_word_value ^ mask
+                            weight = bin(mask).count('1')
+                            if best is None or weight < best[1]:
+                                best = (corrected, weight)
+
+                        if best is None:
+                            return False, block_word_value
+                        return True, best[0]
+
+                    def _repair_block(
+                        candidate_word: int, block_number: int
+                    ) -> tuple[bool, int]:
+                        """Two-stage block repair: try strict single-bit first, then
+                        burst-of-up-to-5 if that fails.  Single-bit is preferred
+                        because it rejects ambiguous multi-candidate fits;
+                        burst-trapping then catches the multipath-fade case."""
+                        ok, fixed = _try_correct_single_bit_error(
+                            candidate_word, block_number
+                        )
+                        if ok:
+                            return True, fixed
+                        return _try_correct_burst_error(
+                            candidate_word, block_number
+                        )
+
                     good_block = False
                     block_word = self._rbds_reg ^ 0x3FFFFFF if self._rbds_inverted_polarity else self._rbds_reg
 
-                    corrected, corrected_word = _try_correct_single_bit_error(
+                    corrected, corrected_word = _repair_block(
                         block_word, self._rbds_block_number
                     )
                     if corrected:
@@ -1597,7 +1691,7 @@ class RBDSWorker:
                         # If current polarity suddenly fails CRC but opposite polarity passes,
                         # recover immediately instead of waiting for a full sync-loss window.
                         alternate_block_word = block_word ^ 0x3FFFFFF
-                        corrected_alt, corrected_alt_word = _try_correct_single_bit_error(
+                        corrected_alt, corrected_alt_word = _repair_block(
                             alternate_block_word, self._rbds_block_number
                         )
                         if corrected_alt:
@@ -1760,6 +1854,66 @@ class RBDSWorker:
             if reg & (1 << plen):
                 reg = reg ^ 0x5B9
         return reg & ((1 << plen) - 1)
+
+    # Class-level cache for the burst-error syndrome table.  The table is a
+    # pure function of the (26,16) generator polynomial g(x)=0x5B9 and is
+    # ~hundreds of entries, so we build it once and share across workers.
+    _BURST_CORRECTION_TABLE: Optional[Dict[int, int]] = None
+    # Maximum burst length (in bits) we attempt to repair.  NRSC-4-B §B.2.4
+    # specifies a Meggitt trapping decoder that handles bursts up to 5 bits;
+    # the (26,16) RBDS code's 10 parity bits are exactly enough to cover
+    # this range unambiguously.
+    _BURST_LIMIT_BITS = 5
+
+    @classmethod
+    def _burst_correction_table(cls) -> Dict[int, int]:
+        """Lazy-built syndrome -> error-mask table for burst-trapping FEC.
+
+        Maps the 10-bit syndrome of every contiguous burst error of length
+        ≤ _BURST_LIMIT_BITS in a 26-bit block to its correction mask.
+        Ambiguous syndromes (where two different masks of equal Hamming
+        weight share a syndrome) are dropped so the decoder never guesses.
+        """
+        if cls._BURST_CORRECTION_TABLE is not None:
+            return cls._BURST_CORRECTION_TABLE
+
+        n_bits = 26
+        plen = 10
+        gen = 0x5B9
+
+        def syndrome(x: int) -> int:
+            reg = 0
+            for ii in range(n_bits, 0, -1):
+                reg = (reg << 1) | ((x >> (ii - 1)) & 0x1)
+                if reg & (1 << plen):
+                    reg ^= gen
+            for _ in range(plen):
+                reg <<= 1
+                if reg & (1 << plen):
+                    reg ^= gen
+            return reg & ((1 << plen) - 1)
+
+        candidates: Dict[int, set] = {}
+        for start in range(n_bits):
+            max_len = min(cls._BURST_LIMIT_BITS, n_bits - start)
+            for pattern in range(1, 1 << max_len):
+                mask = pattern << start
+                syn = syndrome(mask)
+                if syn == 0:
+                    continue
+                candidates.setdefault(syn, set()).add(mask)
+
+        table: Dict[int, int] = {}
+        for syn, masks in candidates.items():
+            sorted_masks = sorted(masks, key=lambda m: bin(m).count('1'))
+            if len(sorted_masks) == 1:
+                table[syn] = sorted_masks[0]
+            elif bin(sorted_masks[0]).count('1') < bin(sorted_masks[1]).count('1'):
+                table[syn] = sorted_masks[0]
+            # Equal-weight collision: ambiguous, skip.
+
+        cls._BURST_CORRECTION_TABLE = table
+        return table
 
 
 class FMDemodulator:
@@ -2522,6 +2676,12 @@ class RBDSDecoder:
         # Group 3A ODA state
         self._oda_app_map: Dict[int, int] = {}
         self.oda_apps: List[int] = []
+        # RT+ (AID 0xCD46) state.  Populated when 3A registers RT+ on a
+        # specific group type; the decoder then routes those groups to
+        # _handle_rt_plus.
+        self._rt_plus_item_running: Optional[bool] = None
+        self._rt_plus_item_toggle: Optional[int] = None
+        self._rt_plus_tags: Optional[List[dict]] = None
         # Group 5A/5B TDC state
         self._tdc_channels: Dict[int, List[int]] = {}
         # Group 6A/6B In-house state
@@ -2861,6 +3021,98 @@ class RBDSDecoder:
             if self._update_ps_name(address, d):
                 changed = True
 
+        # ODA payload dispatch.  The Group 3A handler (above) records which
+        # (group_type, version) slots a station has assigned to ODA AIDs;
+        # decode any payload group that matches a known AID.  Today only
+        # RT+ (AID 0xCD46) is decoded here; other ODAs fall through silently
+        # so their AID still appears in oda_apps via 3A registration.
+        oda_key = (group_type, 1 if version_b else 0)
+        oda_aid = self._oda_app_map.get(oda_key)
+        if oda_aid == RT_PLUS_AID:
+            if self._handle_rt_plus(b, c, d):
+                changed = True
+
+        return changed
+
+    def _handle_rt_plus(self, b: int, c: int, d: int) -> bool:
+        """Decode an RT+ payload group (AID 0xCD46) per RDS Forum R03/040.1.
+
+        RT+ piggybacks on whatever group type the station registers via 3A
+        (most US music stations use 11A).  Each group carries two
+        (content_type, start, length) tag pointers into the current Radio
+        Text buffer plus item-running / item-toggle bits announcing
+        when a new programme item is on air.
+
+        Block layout (16 bits each, MSB first):
+            B[4]    : item toggle bit
+            B[3]    : item running bit
+            B[2:0]  : content type 1 high 3 bits
+            C[15:13]: content type 1 low 3 bits  (6-bit total)
+            C[12:7] : start marker 1 (0..63)
+            C[6:1]  : length marker 1 (length-1, 0..63)
+            C[0]    : content type 2 high 1 bit
+            D[15:11]: content type 2 low 5 bits  (6-bit total)
+            D[10:5] : start marker 2 (0..63)
+            D[4:0]  : length marker 2 (length-1, 0..31)
+
+        Returns True if any RT+ field changed.
+        """
+        item_toggle = (b >> 4) & 0x1
+        item_running = bool((b >> 3) & 0x1)
+        content_type_1 = ((b & 0x7) << 3) | ((c >> 13) & 0x7)
+        start_1 = (c >> 7) & 0x3F
+        length_1 = (c >> 1) & 0x3F
+        content_type_2 = ((c & 0x1) << 5) | ((d >> 11) & 0x1F)
+        start_2 = (d >> 5) & 0x3F
+        length_2 = d & 0x1F
+
+        rt_string = ''.join(self.radio_text[:self._radio_text_len])
+
+        new_tags: List[dict] = []
+        for ctype, start, length_field in (
+            (content_type_1, start_1, length_1),
+            (content_type_2, start_2, length_2),
+        ):
+            # Content type 0 ("DUMMY") signals "no tag in this slot" — used
+            # when only one of the two tag pairs is meaningful for the
+            # current programme item.  Skip it entirely.
+            if ctype == 0:
+                continue
+            end = start + length_field + 1  # length field is length-minus-1
+            if end > len(rt_string) or start >= len(rt_string):
+                # Tag points outside the buffered RT.  This usually means
+                # we have not yet received all the RT segments the station
+                # is referencing; skip and wait for the next RT+ group
+                # rather than emit a truncated artist/title.
+                continue
+            text = rt_string[start:end].strip()
+            if not text:
+                continue
+            new_tags.append({
+                'content_type': ctype,
+                'content_type_name': RT_PLUS_CONTENT_TYPES.get(
+                    ctype, f'TYPE_{ctype}'
+                ),
+                'text': text,
+                'start': start,
+                'length': length_field + 1,
+            })
+
+        changed = False
+        if self._rt_plus_item_running != item_running:
+            self._rt_plus_item_running = item_running
+            changed = True
+        if self._rt_plus_item_toggle != item_toggle:
+            # Toggle flip => new programme item.  Replace tags even if
+            # decode came back empty so the UI clears the prior song.
+            self._rt_plus_item_toggle = item_toggle
+            self._rt_plus_tags = new_tags or None
+            changed = True
+        elif new_tags and new_tags != self._rt_plus_tags:
+            # Same item but text refined (RT extended, or station retransmits
+            # with corrected content) — promote the newer tag list.
+            self._rt_plus_tags = new_tags
+            changed = True
         return changed
 
     def get_current_data(self) -> RBDSData:
@@ -2904,6 +3156,12 @@ class RBDSDecoder:
             fast_ta=self.fast_ta,
             fast_ms=self.fast_ms,
             fast_di_bits=None,
+            rt_plus_item_running=self._rt_plus_item_running,
+            rt_plus_item_toggle=self._rt_plus_item_toggle,
+            rt_plus_tags=(
+                [dict(t) for t in self._rt_plus_tags]
+                if self._rt_plus_tags else None
+            ),
         )
 
     def _apply_group1_variant(self, variant: int, d: int) -> bool:

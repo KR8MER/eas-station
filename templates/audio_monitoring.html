@@ -1020,7 +1020,24 @@ function renderAudioSources(fullRender = true) {
                                             <div class="text-break small bg-light p-2 rounded mt-1">${escapeHtml(source.metrics.metadata.rbds_radio_text)}</div>
                                         </div>
                                     ` : ''}
-                                    
+
+                                    ${(source.metrics.metadata.rbds_rt_plus_tags && source.metrics.metadata.rbds_rt_plus_tags.length > 0) ? `
+                                        <div class="mb-1">
+                                            <div class="text-muted">
+                                                Now Playing (RT+):
+                                                ${source.metrics.metadata.rbds_rt_plus_item_running === false ? '<span class="badge bg-secondary ms-1">paused</span>' : ''}
+                                            </div>
+                                            <div class="bg-light p-2 rounded mt-1">
+                                                ${source.metrics.metadata.rbds_rt_plus_tags.map(t => `
+                                                    <div class="d-flex justify-content-between small mb-1">
+                                                        <span class="text-muted font-monospace">${escapeHtml(t.content_type_name || ('TYPE_' + t.content_type))}</span>
+                                                        <span class="fw-bold text-end ms-2">${escapeHtml(t.text)}</span>
+                                                    </div>
+                                                `).join('')}
+                                            </div>
+                                        </div>
+                                    ` : ''}
+
                                     ${((source.metrics.metadata.rbds_tp !== undefined && source.metrics.metadata.rbds_tp !== null) || (source.metrics.metadata.rbds_ta !== undefined && source.metrics.metadata.rbds_ta !== null)) ? `
                                         <hr class="my-2">
                                         <div class="text-muted mb-1"><strong>Traffic Information</strong></div>
