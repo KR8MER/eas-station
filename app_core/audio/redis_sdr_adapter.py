@@ -564,6 +564,10 @@ class RedisSDRSourceAdapter(AudioSourceAdapter):
                     self.metrics.metadata['rbds_oda_payloads'] = rbds.oda_payloads
                     self.metrics.metadata['rbds_af_method_a_count'] = rbds.af_method_a_count
                     self.metrics.metadata['rbds_af_follow_on_indicator'] = rbds.af_follow_on_indicator
+                    self.metrics.metadata['rbds_af_method_b'] = rbds.af_method_b
+                    self.metrics.metadata['rbds_af_tuning_frequency'] = rbds.af_tuning_frequency
+                    self.metrics.metadata['rbds_paging_messages'] = rbds.paging_messages
+                    self.metrics.metadata['rbds_enhanced_paging_messages'] = rbds.enhanced_paging_messages
                     self.metrics.metadata['rbds_paging_tmc_id'] = rbds.paging_tmc_id
                     self.metrics.metadata['rbds_paging_operator_code'] = rbds.paging_operator_code
                     self.metrics.metadata['rbds_ews_channel_identifier'] = rbds.ews_channel_identifier
@@ -649,6 +653,10 @@ class RedisSDRSourceAdapter(AudioSourceAdapter):
                     self.metrics.metadata['rbds_oda_payloads'] = last.oda_payloads
                     self.metrics.metadata['rbds_af_method_a_count'] = last.af_method_a_count
                     self.metrics.metadata['rbds_af_follow_on_indicator'] = last.af_follow_on_indicator
+                    self.metrics.metadata['rbds_af_method_b'] = last.af_method_b
+                    self.metrics.metadata['rbds_af_tuning_frequency'] = last.af_tuning_frequency
+                    self.metrics.metadata['rbds_paging_messages'] = last.paging_messages
+                    self.metrics.metadata['rbds_enhanced_paging_messages'] = last.enhanced_paging_messages
                     self.metrics.metadata['rbds_paging_tmc_id'] = last.paging_tmc_id
                     self.metrics.metadata['rbds_paging_operator_code'] = last.paging_operator_code
                     self.metrics.metadata['rbds_ews_channel_identifier'] = last.ews_channel_identifier

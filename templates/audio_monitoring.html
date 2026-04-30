@@ -1178,9 +1178,14 @@ function renderAudioSources(fullRender = true) {
                                                 </span>
                                             ` : ''}
                                             ${source.metrics.metadata.rbds_af_follow_on_indicator ? '<span class="badge bg-info ms-1">LF/MF follow-on</span>' : ''}
+                                            ${source.metrics.metadata.rbds_af_method_b ? `<span class="badge bg-primary ms-1">Method B${source.metrics.metadata.rbds_af_tuning_frequency ? ' @ ' + source.metrics.metadata.rbds_af_tuning_frequency + ' MHz' : ''}</span>` : ''}
                                         </div>
                                         <div class="small font-monospace">
-                                            ${source.metrics.metadata.rbds_af_list.map(f => `<span class="badge bg-secondary me-1">${f} MHz</span>`).join('')}
+                                            ${source.metrics.metadata.rbds_af_list.map(f => {
+                                                const tuned = source.metrics.metadata.rbds_af_tuning_frequency;
+                                                const cls = (tuned !== undefined && tuned !== null && f === tuned) ? 'bg-primary' : 'bg-secondary';
+                                                return `<span class="badge ${cls} me-1">${f} MHz</span>`;
+                                            }).join('')}
                                         </div>
                                     ` : ''}
 
@@ -1295,6 +1300,43 @@ function renderAudioSources(fullRender = true) {
                                                     else if (v === '7' && source.metrics.metadata.rbds_ews_channel_identifier != null) decoded = 'EWS chan-id 0x' + source.metrics.metadata.rbds_ews_channel_identifier.toString(16).toUpperCase().padStart(3,'0');
                                                     return `<tr><td class="font-monospace">${escapeHtml(v)}</td><td class="font-monospace">0x${raw.toString(16).toUpperCase().padStart(4,'0')}</td><td>${decoded}</td></tr>`;
                                                 }).join('')}
+                                            </tbody>
+                                        </table>
+                                    ` : ''}
+
+                                    ${(source.metrics.metadata.rbds_paging_messages && source.metrics.metadata.rbds_paging_messages.length > 0) ? `
+                                        <hr class="my-2">
+                                        <div class="text-muted mb-1"><strong>Radio Paging (Group 7A) — last ${source.metrics.metadata.rbds_paging_messages.length}</strong></div>
+                                        <table class="table table-sm table-bordered small mb-1">
+                                            <thead><tr><th>Time</th><th>Seg</th><th>A/B</th><th>Block C</th><th>Block D</th></tr></thead>
+                                            <tbody>
+                                                ${source.metrics.metadata.rbds_paging_messages.slice().reverse().map(m => `
+                                                    <tr>
+                                                        <td class="font-monospace small">${new Date(m.unix_ts * 1000).toLocaleTimeString()}</td>
+                                                        <td class="font-monospace">${m.paging_segment}</td>
+                                                        <td>${m.a_b_flag ? 'B' : 'A'}</td>
+                                                        <td class="font-monospace">0x${m.block_c.toString(16).toUpperCase().padStart(4,'0')}</td>
+                                                        <td class="font-monospace">0x${m.block_d.toString(16).toUpperCase().padStart(4,'0')}</td>
+                                                    </tr>
+                                                `).join('')}
+                                            </tbody>
+                                        </table>
+                                    ` : ''}
+
+                                    ${(source.metrics.metadata.rbds_enhanced_paging_messages && source.metrics.metadata.rbds_enhanced_paging_messages.length > 0) ? `
+                                        <hr class="my-2">
+                                        <div class="text-muted mb-1"><strong>Enhanced Radio Paging (Group 13A) — last ${source.metrics.metadata.rbds_enhanced_paging_messages.length}</strong></div>
+                                        <table class="table table-sm table-bordered small mb-1">
+                                            <thead><tr><th>Time</th><th>B[4:0]</th><th>Block C</th><th>Block D</th></tr></thead>
+                                            <tbody>
+                                                ${source.metrics.metadata.rbds_enhanced_paging_messages.slice().reverse().map(m => `
+                                                    <tr>
+                                                        <td class="font-monospace small">${new Date(m.unix_ts * 1000).toLocaleTimeString()}</td>
+                                                        <td class="font-monospace">0x${m.block_b_low.toString(16).toUpperCase().padStart(2,'0')}</td>
+                                                        <td class="font-monospace">0x${m.block_c.toString(16).toUpperCase().padStart(4,'0')}</td>
+                                                        <td class="font-monospace">0x${m.block_d.toString(16).toUpperCase().padStart(4,'0')}</td>
+                                                    </tr>
+                                                `).join('')}
                                             </tbody>
                                         </table>
                                     ` : ''}

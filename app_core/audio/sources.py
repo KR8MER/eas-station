@@ -562,6 +562,10 @@ class SDRSourceAdapter(AudioSourceAdapter):
                             metadata['rbds_oda_payloads'] = rbds_data.oda_payloads
                             metadata['rbds_af_method_a_count'] = rbds_data.af_method_a_count
                             metadata['rbds_af_follow_on_indicator'] = rbds_data.af_follow_on_indicator
+                            metadata['rbds_af_method_b'] = rbds_data.af_method_b
+                            metadata['rbds_af_tuning_frequency'] = rbds_data.af_tuning_frequency
+                            metadata['rbds_paging_messages'] = rbds_data.paging_messages
+                            metadata['rbds_enhanced_paging_messages'] = rbds_data.enhanced_paging_messages
                             metadata['rbds_paging_tmc_id'] = rbds_data.paging_tmc_id
                             metadata['rbds_paging_operator_code'] = rbds_data.paging_operator_code
                             metadata['rbds_ews_channel_identifier'] = rbds_data.ews_channel_identifier
@@ -632,6 +636,10 @@ class SDRSourceAdapter(AudioSourceAdapter):
                             metadata['rbds_oda_payloads'] = self._rbds_data.oda_payloads
                             metadata['rbds_af_method_a_count'] = self._rbds_data.af_method_a_count
                             metadata['rbds_af_follow_on_indicator'] = self._rbds_data.af_follow_on_indicator
+                            metadata['rbds_af_method_b'] = self._rbds_data.af_method_b
+                            metadata['rbds_af_tuning_frequency'] = self._rbds_data.af_tuning_frequency
+                            metadata['rbds_paging_messages'] = self._rbds_data.paging_messages
+                            metadata['rbds_enhanced_paging_messages'] = self._rbds_data.enhanced_paging_messages
                             metadata['rbds_paging_tmc_id'] = self._rbds_data.paging_tmc_id
                             metadata['rbds_paging_operator_code'] = self._rbds_data.paging_operator_code
                             metadata['rbds_ews_channel_identifier'] = self._rbds_data.ews_channel_identifier

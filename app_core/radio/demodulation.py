@@ -353,6 +353,13 @@ class RBDSData:
     # i.e. the AF list extends to non-VHF frequencies we can't represent
     # in MHz directly.  Pure indicator — no further data captured.
     af_follow_on_indicator: Optional[bool] = None
+    # True once the station has emitted a Method-B regional-variant
+    # marker (an AF pair where both bytes are the same direct code).
+    # Method B and Method A both still produce frequencies in af_list;
+    # this flag plus af_tuning_frequency just say "this station also
+    # broadcasts the AF list paired against the tuned frequency".
+    af_method_b: Optional[bool] = None
+    af_tuning_frequency: Optional[float] = None
     # Group 1A/1B - Programme Item Number + Slow Labeling Codes
     pin_day: Optional[int] = None
     pin_hour: Optional[int] = None
@@ -384,6 +391,11 @@ class RBDSData:
     # decoder for.  Each entry: {aid, aid_hex, group, count,
     # last_b_low, last_c, last_d, last_seen_unix}.
     oda_payloads: Optional[List[dict]] = None
+    # Group 7A / 13A paging messages.  Each is a list of dicts with
+    # the raw bytes and a unix timestamp; format is operator-defined,
+    # so the decoder doesn't try to interpret the payload.
+    paging_messages: Optional[List[dict]] = None
+    enhanced_paging_messages: Optional[List[dict]] = None
     # Group 5A/5B - Transparent Data Channel
     # tdc_data is channel 0 (kept for backwards compat); tdc_channels
     # exposes every channel TS the station broadcasts.
@@ -2837,6 +2849,13 @@ class RBDSDecoder:
         # us anything about LF/MF AFs without further decoding, but the
         # presence of the marker is itself useful information.
         self._af_follow_on_indicator: bool = False
+        # Method B mode flag and the tuning frequency captured from the
+        # regional-variant marker pair (af1 == af2).  Method A and
+        # Method B AFs both populate _af_buffer; this just exposes which
+        # encoding the station used so receivers can correlate the list
+        # against an actual tuning frequency.
+        self._af_method_b: bool = False
+        self._af_tuning_frequency: Optional[float] = None
         # Slow-labelling raw capture: every Group 1A variant byte we
         # observe, keyed by variant code (0-7).  Specific decoders for
         # variants 0/4/5 still produce semantic fields; this dict gives
@@ -2882,6 +2901,11 @@ class RBDSDecoder:
         self._group_type_counts: Dict[str, int] = {}
         # Group 5A/5B TDC state
         self._tdc_channels: Dict[int, List[int]] = {}
+        # Group 7A / 13A paging buffers — each capped to the most recent
+        # 16 messages.  Format is operator-defined so we only keep raw
+        # bytes plus the segmentation hints.
+        self._paging_messages: List[dict] = []
+        self._enhanced_paging_messages: List[dict] = []
         # Group 6A/6B In-house state
         self.in_house_data: List[int] = []
         # Group 8A TMC state
@@ -2998,6 +3022,22 @@ class RBDSDecoder:
             if not version_b:
                 af1 = (c >> 8) & 0xFF
                 af2 = c & 0xFF
+
+                # Method B detection: a pair where both bytes are equal
+                # direct codes is the "regional variant exists at this
+                # frequency" / tuning-frequency marker (NRSC-4-B Annex C).
+                # The presence of this marker tags the station as Method
+                # B; the actual AF codes still arrive as direct values in
+                # the regular pairs and populate af_list naturally, so we
+                # only need to remember the tuning frequency for display.
+                if af1 == af2 and 1 <= af1 <= 204:
+                    tuning_mhz = round(87.6 + 0.1 * af1, 1)
+                    if (not self._af_method_b
+                            or self._af_tuning_frequency != tuning_mhz):
+                        self._af_method_b = True
+                        self._af_tuning_frequency = tuning_mhz
+                        changed = True
+
                 new_freqs = []
                 for code in (af1, af2):
                     if 1 <= code <= 204:
@@ -3117,7 +3157,38 @@ class RBDSDecoder:
             self.in_house_data = self.in_house_data[-16:] + raw
             changed = True
         elif group_type == 7 and not version_b:
+            # Group 7A: Radio Paging.  NRSC-4-B / IEC 62106 §5 leaves the
+            # payload format to the paging operator (different operators
+            # use PSWF / PSC / RDS-Paging-1).  We capture the raw bytes
+            # plus the segmentation hints from Block B so downstream
+            # systems can decode whichever paging dialect their local
+            # broadcaster is using; the buffer is capped so a chatty
+            # paging stream can't grow unbounded.
+            paging_msg = {
+                'a_b_flag': bool((b >> 4) & 0x1),
+                'paging_segment': b & 0xF,
+                'block_c': c,
+                'block_d': d,
+                'unix_ts': time.time(),
+            }
+            self._paging_messages.append(paging_msg)
+            self._paging_messages = self._paging_messages[-16:]
+            changed = True
             logger.debug("RBDS Group 7A (Paging): B=%04X C=%04X D=%04X", b, c, d)
+        elif group_type == 13 and not version_b:
+            # Group 13A: Enhanced Radio Paging.  Same situation as 7A —
+            # the payload format is operator-defined, so we just keep
+            # the raw bytes and let an external decoder handle them.
+            erp_msg = {
+                'block_b_low': b & 0x1F,
+                'block_c': c,
+                'block_d': d,
+                'unix_ts': time.time(),
+            }
+            self._enhanced_paging_messages.append(erp_msg)
+            self._enhanced_paging_messages = self._enhanced_paging_messages[-16:]
+            changed = True
+            logger.debug("RBDS Group 13A (ERP): B=%04X C=%04X D=%04X", b, c, d)
         elif group_type == 8 and not version_b:
             if not self.tmc_present:
                 self.tmc_present = True
@@ -3426,6 +3497,8 @@ class RBDSDecoder:
             af_follow_on_indicator=(
                 True if self._af_follow_on_indicator else None
             ),
+            af_method_b=(True if self._af_method_b else None),
+            af_tuning_frequency=self._af_tuning_frequency,
             pin_day=self.pin_day,
             pin_hour=self.pin_hour,
             pin_minute=self.pin_minute,
@@ -3447,6 +3520,14 @@ class RBDSDecoder:
             oda_payloads=(
                 [dict(v) for v in self._oda_payloads.values()]
                 if self._oda_payloads else None
+            ),
+            paging_messages=(
+                [dict(m) for m in self._paging_messages]
+                if self._paging_messages else None
+            ),
+            enhanced_paging_messages=(
+                [dict(m) for m in self._enhanced_paging_messages]
+                if self._enhanced_paging_messages else None
             ),
             tdc_data=bytes(self._tdc_channels.get(0, [])) if self._tdc_channels else None,
             tdc_channels=(
