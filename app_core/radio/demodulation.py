@@ -2033,9 +2033,9 @@ class RBDSWorker:
                 reg = reg ^ 0x5B9
         return reg & ((1 << plen) - 1)
 
-    # Class-level cache for the burst-error syndrome table.  The table is a
-    # pure function of the (26,16) generator polynomial g(x)=0x5B9 and is
-    # ~hundreds of entries, so we build it once and share across workers.
+    # Class-level cache for the burst-error syndrome table.  The table maps
+    # the syndrome of each contiguous burst error (length 1-5) to the
+    # corresponding correction mask.  Built once and shared across workers.
     _BURST_CORRECTION_TABLE: Optional[Dict[int, int]] = None
     # Maximum burst length (in bits) we attempt to repair.  NRSC-4-B §B.2.4
     # specifies a Meggitt trapping decoder that handles bursts up to 5 bits;
@@ -2047,10 +2047,16 @@ class RBDSWorker:
     def _burst_correction_table(cls) -> Dict[int, int]:
         """Lazy-built syndrome -> error-mask table for burst-trapping FEC.
 
-        Maps the 10-bit syndrome of every contiguous burst error of length
+        Maps the 10-bit syndrome of every *contiguous* burst error of length
         ≤ _BURST_LIMIT_BITS in a 26-bit block to its correction mask.
-        Ambiguous syndromes (where two different masks of equal Hamming
-        weight share a syndrome) are dropped so the decoder never guesses.
+        Only solid runs of consecutive bits are considered (e.g. 0b111 at
+        some position), never sparse patterns like 0b101.  Including
+        non-contiguous patterns inflates the table with entries that match
+        random multi-bit noise, causing false-positive "corrections" that
+        silently corrupt the decoded data (manifesting as nonsense PI codes
+        and call letters).
+        Ambiguous syndromes (where two different contiguous masks share a
+        syndrome) are dropped so the decoder never guesses.
         """
         if cls._BURST_CORRECTION_TABLE is not None:
             return cls._BURST_CORRECTION_TABLE
@@ -2074,8 +2080,12 @@ class RBDSWorker:
         candidates: Dict[int, set] = {}
         for start in range(n_bits):
             max_len = min(cls._BURST_LIMIT_BITS, n_bits - start)
-            for pattern in range(1, 1 << max_len):
-                mask = pattern << start
+            for burst_len in range(1, max_len + 1):
+                # Contiguous burst: all bits set from 'start' through
+                # 'start + burst_len - 1'.  Non-contiguous patterns
+                # (e.g. 0b101) are intentionally excluded to prevent
+                # them from matching random noise and corrupting data.
+                mask = ((1 << burst_len) - 1) << start
                 syn = syndrome(mask)
                 if syn == 0:
                     continue
