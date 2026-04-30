@@ -539,6 +539,22 @@ class RBDSWorker:
     _PILOT_SNR_THRESHOLD = 4.0               # Peak must be ≥ 4× the in-band median to count
     _MAX_PILOT_DEVIATION_HZ = 4.0            # ~210 ppm; beyond this is broken hardware
 
+    # Periodic pilot re-measurement.  The transmitter's crystal is exact, but
+    # cheap-SDR TCXOs drift 1–3 ppm with temperature swings (cold start →
+    # warm operation can easily move the recovered pilot 0.5–1 Hz over a few
+    # minutes).  Tripling that for the 57 kHz mix leaves a residual the
+    # Costas loop has to absorb, narrow but enough to push a marginally-
+    # locked Costas into cycle slips.  Re-measure every 30 s and blend the
+    # new estimate with the previous one via EMA so transient FFT noise
+    # can't yank the reference around.  Implausibly large jumps are
+    # rejected outright (see _PILOT_REMEASURE_MAX_DRIFT_HZ) — at 1 ppm per
+    # 30 s the legitimate drift between samples is well under 0.1 Hz, so
+    # anything bigger is an artifact (e.g. station change in flight, brief
+    # de-sense from a stronger adjacent signal) and best ignored.
+    _PILOT_REMEASURE_INTERVAL_SEC = 30.0
+    _PILOT_REMEASURE_MAX_DRIFT_HZ = 1.0
+    _PILOT_REMEASURE_EMA_ALPHA = 0.3
+
     def __init__(self, sample_rate: int, intermediate_rate: int):
         """Initialize RBDS worker thread.
 
@@ -659,6 +675,10 @@ class RBDSWorker:
         # so Costas only has to track residual phase noise. None until we've
         # collected enough samples; falls back to 19000.0 for compatibility.
         self._measured_pilot_freq: Optional[float] = None
+
+        # Sample-budget counter for periodic pilot re-measurement.  Reset to 0
+        # whenever a fresh measurement (initial or remeasure) is captured.
+        self._pilot_samples_since_remeasure: int = 0
 
         # RBDS symbol timing
         self._rbds_symbol_rate = 1187.5
@@ -993,6 +1013,8 @@ class RBDSWorker:
             '_rbds_bytes_array',
             '_rbds_global_bit_counter',
             '_rbds_inverted_polarity',
+            '_rbds_sync_tentative',
+            '_rbds_tentative_good_groups',
             '_rbds_sample_buffer',
         ):
             if hasattr(self, attr):
@@ -1113,6 +1135,7 @@ class RBDSWorker:
             measured = self._estimate_pilot_frequency(multiplex)
             if measured is not None:
                 self._measured_pilot_freq = measured
+                self._pilot_samples_since_remeasure = 0
                 ppm = (measured - 19000.0) / 19000.0 * 1e6
                 logger.info(
                     "RBDS pilot measured: %.3f Hz (offset %+0.3f Hz, %+.1f ppm SDR clock error). "
@@ -1122,6 +1145,37 @@ class RBDSWorker:
                     ppm,
                     3.0 * measured,
                 )
+        else:
+            # Periodic re-measurement to track slow TCXO thermal drift.  We
+            # accumulate sample count rather than wall-clock time so this
+            # behaves identically across queue stalls and is trivially
+            # testable.  Implausibly large jumps and SNR-fail returns from
+            # _estimate_pilot_frequency (None) are rejected; only small
+            # drifts blend in via EMA.
+            self._pilot_samples_since_remeasure += len(multiplex)
+            remeasure_interval_samples = int(
+                self._PILOT_REMEASURE_INTERVAL_SEC * self._sample_rate
+            )
+            if self._pilot_samples_since_remeasure >= remeasure_interval_samples:
+                self._pilot_samples_since_remeasure = 0
+                new_measure = self._estimate_pilot_frequency(multiplex)
+                if (
+                    new_measure is not None
+                    and abs(new_measure - self._measured_pilot_freq)
+                    <= self._PILOT_REMEASURE_MAX_DRIFT_HZ
+                ):
+                    old = self._measured_pilot_freq
+                    alpha = self._PILOT_REMEASURE_EMA_ALPHA
+                    self._measured_pilot_freq = (1.0 - alpha) * old + alpha * new_measure
+                    drift = self._measured_pilot_freq - old
+                    if abs(drift) > 0.05:
+                        logger.info(
+                            "RBDS pilot remeasured: %.3f Hz (was %.3f, raw %.3f, drift %+.3f Hz)",
+                            self._measured_pilot_freq,
+                            old,
+                            new_measure,
+                            drift,
+                        )
 
         pilot_phases = self._generate_pilot_reference(n, sample_offset)
 
@@ -1630,6 +1684,20 @@ class RBDSWorker:
             self._rbds_bytes_array = bytearray(8)
             self._rbds_global_bit_counter = 0  # CRITICAL: maintain across buffer clears
             self._rbds_inverted_polarity = False
+            # Tentative-sync state: when the presync state machine declares a
+            # lock we do NOT immediately trust it.  The presync gate accepts a
+            # candidate after only 2 spacing-confirmed syndrome hits (~52 bits
+            # of evidence), and on a Bernoulli-1/2 stream a syndrome match
+            # arrives every ~1024 bits; with the ±4-bit spacing tolerance
+            # false locks are statistically inevitable on weak/no signal.
+            # Once tentatively-synced we wait until at least
+            # _RBDS_TENTATIVE_GOOD_GROUPS fully-decoded (4-block) groups land
+            # in the next 50-block sync-quality window before confirming.
+            # While tentative we suppress process_group() publishing and the
+            # sync_acquired_unix / groups_decoded stat updates so fake-sync
+            # events can't inject corrupt metadata into the UI.
+            self._rbds_sync_tentative = False
+            self._rbds_tentative_good_groups = 0
 
         # Process all bits in buffer (python-radio style)
         bits = self._rbds_bit_buffer
@@ -1717,7 +1785,7 @@ class RBDSWorker:
                                 self._rbds_presync_polarity = polarity
 
                                 if self._rbds_presync_hits >= 2:
-                                    logger.info(f'RBDS SYNCHRONIZED at bit {global_i}')
+                                    logger.info(f'RBDS TENTATIVELY SYNCED at bit {global_i} (awaiting group confirmation)')
                                     self._rbds_wrong_blocks_counter = 0
                                     self._rbds_blocks_counter = 0
                                     self._rbds_block_bit_counter = 0
@@ -1732,10 +1800,12 @@ class RBDSWorker:
                                     # CRC checks use the correct inversion flag.
                                     self._rbds_inverted_polarity = polarity
                                     self._rbds_synced = True
-                                    # Stamp the lock time so the UI can show
-                                    # "synced for N seconds" (per-station).
-                                    with self._stats_lock:
-                                        self._stats.sync_acquired_unix = time.time()
+                                    # Enter tentative mode: don't publish or set
+                                    # sync_acquired_unix until the next 50-block
+                                    # window confirms enough fully-decoded
+                                    # groups (see _RBDS_TENTATIVE_GOOD_GROUPS).
+                                    self._rbds_sync_tentative = True
+                                    self._rbds_tentative_good_groups = 0
                         break  # Syndrome found, exit j loop
             
             else:
@@ -1832,7 +1902,8 @@ class RBDSWorker:
                         burst-trapping then catches the multipath-fade case.
                         Third tuple element labels the path used so the caller
                         can attribute the fix in the FEC stats: 'clean' (no
-                        correction needed), 'single', 'burst', or 'fail'."""
+                        correction needed), 'single', 'burst', 'fail', or
+                        'fail-suppressed' (burst-FEC gate active)."""
                         if _crc_ok_for_block(candidate_word, block_number):
                             return True, candidate_word, 'clean'
                         ok, fixed = _try_correct_single_bit_error(
@@ -1840,6 +1911,16 @@ class RBDSWorker:
                         )
                         if ok:
                             return True, fixed, 'single'
+                        # Suppress burst-FEC during sustained bad streaks: see
+                        # _BURST_FEC_SUPPRESS_AFTER for rationale.  The counter
+                        # we read here was incremented at the end of the
+                        # previous block, so it reflects the *prior* blocks'
+                        # state and is not affected by the current attempt.
+                        if (
+                            self._rbds_consecutive_crc_failures
+                            >= self._BURST_FEC_SUPPRESS_AFTER
+                        ):
+                            return False, candidate_word, 'fail-suppressed'
                         ok, fixed = _try_correct_burst_error(
                             candidate_word, block_number
                         )
@@ -1917,17 +1998,35 @@ class RBDSWorker:
                                 group_1 = self._rbds_bytes_array[3] | (self._rbds_bytes_array[2] << 8)
                                 group_2 = self._rbds_bytes_array[5] | (self._rbds_bytes_array[4] << 8)
                                 group_3 = self._rbds_bytes_array[7] | (self._rbds_bytes_array[6] << 8)
-                                
+
                                 group_type = (group_1 >> 12) & 0xF
                                 program_identification = group_0
-                                
-                                # Update our RBDSData decoder
-                                self._rbds_decoder.process_group((group_0, group_1, group_2, group_3))
-                                changed = True
-                                with self._stats_lock:
-                                    self._stats.groups_decoded += 1
 
-                                logger.info(f"RBDS group: PI=0x{program_identification:04X} type={group_type}")
+                                if self._rbds_sync_tentative:
+                                    # Sync not yet confirmed: count this group
+                                    # toward the confirmation threshold but do
+                                    # NOT publish to the RBDSDecoder (which
+                                    # feeds the UI) and do NOT bump the
+                                    # groups_decoded stat.  If the lock turns
+                                    # out to be false the discarded group is
+                                    # exactly the kind of bogus PI/group-type
+                                    # we don't want to surface.
+                                    self._rbds_tentative_good_groups += 1
+                                    logger.debug(
+                                        "RBDS tentative group %d/%d: PI=0x%04X type=%d (not published)",
+                                        self._rbds_tentative_good_groups,
+                                        self._RBDS_TENTATIVE_GOOD_GROUPS,
+                                        program_identification,
+                                        group_type,
+                                    )
+                                else:
+                                    # Update our RBDSData decoder
+                                    self._rbds_decoder.process_group((group_0, group_1, group_2, group_3))
+                                    changed = True
+                                    with self._stats_lock:
+                                        self._stats.groups_decoded += 1
+
+                                    logger.info(f"RBDS group: PI=0x{program_identification:04X} type={group_type}")
                     
                     # Reset for next block
                     self._rbds_block_bit_counter = 0
@@ -1936,7 +2035,41 @@ class RBDSWorker:
                     
                     # Check sync quality every 50 blocks
                     if self._rbds_blocks_counter == 50:
-                        if self._rbds_wrong_blocks_counter > 35:
+                        if self._rbds_sync_tentative:
+                            # Tentative-sync confirmation window: confirm only
+                            # if at least _RBDS_TENTATIVE_GOOD_GROUPS fully-
+                            # decoded groups landed in this window.  This
+                            # ratifies the presync state machine's lock
+                            # against actual valid RBDS frames before we
+                            # publish anything to the UI or start the
+                            # sync_acquired_unix clock.
+                            if self._rbds_tentative_good_groups >= self._RBDS_TENTATIVE_GOOD_GROUPS:
+                                logger.info(
+                                    "RBDS sync CONFIRMED (%d good groups, %d bad blocks on %d total)",
+                                    self._rbds_tentative_good_groups,
+                                    self._rbds_wrong_blocks_counter,
+                                    50,
+                                )
+                                self._rbds_sync_tentative = False
+                                with self._stats_lock:
+                                    self._stats.sync_acquired_unix = time.time()
+                            else:
+                                # Quality gate failed: drop back to presync
+                                # silently.  This was a false lock — never
+                                # surfaced to the UI — so we deliberately do
+                                # NOT bump sync_lost_count (that counter is
+                                # for *real* drops the operator should see).
+                                logger.info(
+                                    "RBDS tentative sync REJECTED (only %d good groups, %d bad blocks on %d total)",
+                                    self._rbds_tentative_good_groups,
+                                    self._rbds_wrong_blocks_counter,
+                                    50,
+                                )
+                                self._rbds_synced = False
+                                self._rbds_presync = False
+                                self._rbds_sync_tentative = False
+                            self._rbds_tentative_good_groups = 0
+                        elif self._rbds_wrong_blocks_counter > 35:
                             logger.info(f"RBDS SYNC LOST ({self._rbds_wrong_blocks_counter} bad blocks on {self._rbds_blocks_counter} total)")
                             self._rbds_synced = False
                             self._rbds_presync = False
@@ -2054,6 +2187,33 @@ class RBDSWorker:
     # the (26,16) RBDS code's 10 parity bits are exactly enough to cover
     # this range unambiguously.
     _BURST_LIMIT_BITS = 5
+
+    # Burst-FEC gate: after this many consecutive uncorrected blocks, we stop
+    # consulting the burst-trapping table for the duration of the bad streak
+    # and accept only `clean` or single-bit repairs.  The burst table covers
+    # ~75 syndromes (~7% of the 1024-entry syndrome space), so when fed a
+    # stream of essentially-random words during fake-sync it produces a
+    # steady ~7% rate of false "corrections" that get passed to group
+    # assembly as plausible-looking datawords.  This produces visibly
+    # corrupt RBDS output (impossible CT timestamps, wrong language codes,
+    # AID-on-15B groups, hashed AF lists).  Single-bit FEC is much safer
+    # under noise because it requires *exactly one* candidate word to pass
+    # CRC and rejects ambiguous cases — false-positive rate is dramatically
+    # lower.  The gate self-clears as soon as a clean or single-bit repair
+    # lands (i.e. real signal returns), so legitimate burst saves on a
+    # healthy channel are unaffected.
+    _BURST_FEC_SUPPRESS_AFTER = 2
+
+    # Post-lock quality gate.  After the presync state machine declares a
+    # lock we wait through the next 50-block sync-quality window and only
+    # *confirm* the lock if at least this many fully-decoded (4-block)
+    # groups land in that window.  Until confirmation we suppress
+    # process_group() publishing and the sync_acquired_unix /
+    # groups_decoded stat updates so a fake-sync event (random syndrome
+    # collisions during noise) cannot inject corrupt metadata into the
+    # UI.  3-of-(up-to-12.5)-groups is a strong filter against random
+    # locks while still being achievable on a healthy channel within ~1.3 s.
+    _RBDS_TENTATIVE_GOOD_GROUPS = 3
 
     @classmethod
     def _burst_correction_table(cls) -> Dict[int, int]:
@@ -2234,20 +2394,100 @@ class FMDemodulator:
         self._rbds_worker: Optional[RBDSWorker] = None
         self._rbds_intermediate_rate = self._intermediate_rate
 
+        # Early-decimation state (PySDR architecture).  The RBDSWorker's
+        # filter chain (54-60 kHz bandpass, 57 kHz mix, 2.4 kHz post-mix
+        # lowpass, downstream decim to 25 kHz, then resample to 19 kHz) is
+        # sized for ~250 kHz inputs — that's how PySDR's reference RDS
+        # tutorial does it (https://pysdr.org/content/rds.html: starts at
+        # sample_rate=250e3 and uses a 101-tap firwin lowpass).  Feeding the
+        # worker raw SDR rate (e.g. 1 MHz, 2.4 MHz) leaves its 101-tap
+        # bandpass with ~40-95 kHz transition vs a 6 kHz target passband —
+        # essentially all-pass — and its 501-tap 2.4 kHz lowpass with ~10-25
+        # kHz transition, so the 4 kHz post-mix stereo artifact lands in
+        # the passband.  We must decimate the multiplex from the *actual,
+        # user-configured* SDR rate down to _rbds_intermediate_rate before
+        # submitting, with a proper anti-alias filter ahead of the
+        # downsampler.  Initialised below only when RBDS is enabled.
+        self._rbds_decim: int = 1
+        self._rbds_aa_filter: Optional[np.ndarray] = None
+        self._rbds_aa_zi: Optional[np.ndarray] = None
+        # Sample-offset counter at the *decimated* rate.  The worker's
+        # crystal-locked 57 kHz / pilot-locked 19 kHz reference uses
+        # sample_offset / self._sample_rate to compute time, so the offset
+        # must count samples at the rate the worker actually receives.
+        self._rbds_sample_index: int = 0
+
         if self._rbds_enabled:
-            # Calculate intermediate rate for RBDS (preserves 57 kHz subcarrier)
+            # Pick the largest divisor of config.sample_rate that lands the
+            # worker between 130 and ~280 kHz — the band where its filters
+            # are correctly proportioned and post-decim Nyquist (>= 65 kHz)
+            # safely covers the 57 kHz RBDS subcarrier.  This mirrors the
+            # earlier branch that already existed for the audio path but
+            # makes it the *actually-applied* rate for the RBDS path too.
             if config.sample_rate > self._intermediate_rate * 2:
                 rbds_decim = config.sample_rate // self._intermediate_rate
                 while (config.sample_rate // rbds_decim) < 130000 and rbds_decim > 1:
                     rbds_decim -= 1
                 self._rbds_intermediate_rate = config.sample_rate // rbds_decim
+                self._rbds_decim = rbds_decim
+            else:
+                # Low-rate SDR (e.g. user already running at 250 kHz):
+                # multiplex is already at a reasonable rate, no early
+                # decimation needed.  rbds_decim stays at 1.
+                self._rbds_intermediate_rate = config.sample_rate
+                self._rbds_decim = 1
 
-            # Create RBDS worker thread - all processing happens there
-            self._rbds_worker = RBDSWorker(config.sample_rate, self._rbds_intermediate_rate)
+            # Build the rate-adaptive anti-alias filter when we're going to
+            # decimate.  Cutoff must (a) preserve the 57 kHz RBDS subcarrier
+            # (whose upper edge is 60 kHz) and (b) put the stopband edge
+            # below post-decim Nyquist so nothing folds back into the RBDS
+            # band.  Tap count scales with the input rate to hold the
+            # transition bandwidth roughly constant — the cap of 1025
+            # caps CPU even at Airspy's 10 MHz native rate while keeping
+            # the stopband under post-decim Nyquist for any rate the user
+            # is realistically going to set.
+            if self._rbds_decim > 1:
+                post_decim_nyquist = self._rbds_intermediate_rate / 2.0
+                rbds_aa_cutoff = min(80_000.0, max(63_000.0, post_decim_nyquist * 0.85))
+                # Tap-count heuristic: scale linearly with input rate to
+                # hold transition bandwidth roughly constant.  Dividing by
+                # 4000 gives ~250 taps at 1 MHz and ~600 taps at 2.4 MHz,
+                # which yields a transition bandwidth of ~16 kHz — wide
+                # enough that the stopband edge sits comfortably below
+                # post-decim Nyquist for every realistic SDR rate.  The
+                # `| 1` forces an odd number, required for a Type-I linear-
+                # phase symmetric FIR (so group delay is an integer number
+                # of samples).  Floor of 127 keeps low-rate users from
+                # getting a useless filter; cap of 1025 bounds CPU at
+                # Airspy's 10 MHz native rate.
+                rbds_aa_taps = max(127, min(1025, (int(config.sample_rate / 4000) | 1)))
+                self._rbds_aa_filter = self._design_fir_lowpass(
+                    rbds_aa_cutoff, config.sample_rate, taps=rbds_aa_taps
+                )
+                logger.info(
+                    "RBDS anti-alias filter: %d taps, cutoff %.1f kHz @ %d Hz "
+                    "→ %d Hz (decim=%d), post-decim Nyquist=%.1f kHz",
+                    rbds_aa_taps,
+                    rbds_aa_cutoff / 1000.0,
+                    config.sample_rate,
+                    self._rbds_intermediate_rate,
+                    self._rbds_decim,
+                    post_decim_nyquist / 1000.0,
+                )
+
+            # Create RBDS worker thread - all processing happens there.
+            # CRITICAL: pass the *effective* sample rate the worker will
+            # receive (post early-decimation), NOT the raw SDR rate.  Its
+            # internal filters (bandpass / pilot bandpass / 2.4 kHz post-
+            # mix lowpass) are designed against this value.
+            self._rbds_worker = RBDSWorker(
+                self._rbds_intermediate_rate, self._rbds_intermediate_rate
+            )
             logger.info(
-                "RBDS ENABLED: creating worker thread at %d Hz (input sample_rate=%d Hz)",
+                "RBDS ENABLED: worker at %d Hz (input sample_rate=%d Hz, decim=%d)",
                 self._rbds_intermediate_rate,
-                config.sample_rate
+                config.sample_rate,
+                self._rbds_decim,
             )
         else:
             # Log clearly why RBDS is not enabled
@@ -2397,11 +2637,46 @@ class FMDemodulator:
         # 24/7 RELIABILITY: Wrap in try-except to ensure RBDS issues never affect audio
         if self._rbds_enabled and self._rbds_worker:
             try:
-                # Pass the absolute sample offset so the worker generates the
-                # correct crystal-locked 57 kHz carrier phase even when chunks
-                # are dropped from the queue (queue overflow discards chunks in
-                # the audio thread, so the worker's local counter would lag).
-                self._rbds_worker.submit_samples(multiplex, self._sample_index)
+                # Early-decimate the multiplex from the user-configured SDR
+                # rate down to the worker's intermediate rate (PySDR
+                # architecture).  When _rbds_decim == 1 (low-rate SDR or
+                # already-decimated input) we skip the filter and pass the
+                # multiplex through untouched — same as the legacy code
+                # path.
+                if self._rbds_decim > 1 and self._rbds_aa_filter is not None:
+                    from scipy import signal as scipy_signal
+                    if self._rbds_aa_zi is None:
+                        # Initialize the lfilter delay line so the very
+                        # first chunk doesn't ring up from zero.  Using
+                        # the steady-state response scaled by the first
+                        # input sample matches the convention already
+                        # used in _process_rbds for the bandpass/lowpass.
+                        self._rbds_aa_zi = scipy_signal.lfilter_zi(
+                            self._rbds_aa_filter, 1.0
+                        )
+                        if multiplex.size:
+                            self._rbds_aa_zi = self._rbds_aa_zi * float(multiplex[0])
+                    filtered, self._rbds_aa_zi = scipy_signal.lfilter(
+                        self._rbds_aa_filter, 1.0, multiplex, zi=self._rbds_aa_zi
+                    )
+                    # Decimate by integer factor.  Anti-aliasing was just
+                    # done above so the [::N] is safe — same pattern PySDR
+                    # uses (firwin → np.convolve → x[::10]).
+                    rbds_multiplex = filtered[:: self._rbds_decim].astype(np.float32)
+                else:
+                    rbds_multiplex = multiplex
+
+                # Pass the absolute sample offset *in the worker's domain*
+                # so its crystal-locked 57 kHz / pilot-locked 19 kHz
+                # reference stays phase-coherent across chunks even when
+                # chunks are dropped from the queue (queue overflow
+                # discards chunks in the audio thread).  This counter is
+                # decoupled from self._sample_index, which counts
+                # multiplex samples at the raw SDR rate for any callers
+                # that depend on that semantic (e.g. tests).
+                self._rbds_worker.submit_samples(rbds_multiplex, self._rbds_sample_index)
+                self._rbds_sample_index += len(rbds_multiplex)
+
                 # Get whatever RBDS data is available (may be from previous chunks)
                 rbds_data = self._rbds_worker.get_latest_data()
             except Exception as e:

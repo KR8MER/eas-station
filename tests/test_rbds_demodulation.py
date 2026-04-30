@@ -334,6 +334,465 @@ def test_rbds_presync_two_hits_do_not_lock():
 
 
 # ---------------------------------------------------------------------------
+# Tentative-sync (post-lock quality gate) tests
+#
+# When the presync state machine declares a lock we enter a tentative-sync
+# state.  In that state we suppress process_group() publishing and the
+# sync_acquired_unix / groups_decoded stat updates until the next 50-block
+# sync-quality window confirms enough fully-decoded RBDS groups.  This stops
+# fake-sync events (random syndrome collisions during noise) from injecting
+# corrupt PI / group-type / RT / PS / CT into the UI.
+# ---------------------------------------------------------------------------
+
+
+# Offset words for blocks A, B, C, D, C' per EN 50067.  Used to build
+# CRC-valid 26-bit blocks for synced-mode tests.
+_RBDS_OFFSETS = [252, 408, 360, 436, 848]
+
+
+def _bits_for_valid_block(worker: RBDSWorker, dataword: int, block_number: int) -> list[int]:
+    """Build the 26 MSB-first bits of a CRC-valid RBDS block."""
+    crc = worker._calc_syndrome(dataword, 16)
+    checkword = crc ^ _RBDS_OFFSETS[block_number]
+    block_value = (dataword << 10) | checkword
+    return [(block_value >> i) & 1 for i in range(25, -1, -1)]
+
+
+def _force_synced_tentative(worker: RBDSWorker, *, block_number: int = 0) -> None:
+    """Drive the worker into synced+tentative state without running presync.
+
+    Calls _decode_rbds_groups once with an empty buffer to trigger the lazy
+    state-machine init, then flips the flags directly.  This mirrors the
+    state the worker is in immediately after RBDS TENTATIVELY SYNCED fires.
+    """
+    worker._rbds_bit_buffer = []
+    worker._decode_rbds_groups()
+    worker._rbds_synced = True
+    worker._rbds_sync_tentative = True
+    worker._rbds_tentative_good_groups = 0
+    worker._rbds_block_number = block_number
+    worker._rbds_block_bit_counter = 0
+    worker._rbds_blocks_counter = 0
+    worker._rbds_wrong_blocks_counter = 0
+    worker._rbds_group_assembly_started = False
+    worker._rbds_inverted_polarity = False
+    worker._rbds_reg = 0
+    worker._rbds_group_good_blocks_counter = 0
+    worker._rbds_consecutive_crc_failures = 0
+
+
+def test_rbds_lock_starts_in_tentative_state():
+    """After the presync gate fires, sync should be tentative, not confirmed.
+
+    sync_acquired_unix must remain None until the 50-block confirmation window
+    succeeds — the UI's "synced for N seconds" indicator should not start
+    counting on what may turn out to be a fake lock.
+    """
+    worker = _make_worker()
+    _run_presync_sequence(worker, {100: 383, 126: 14, 152: 303})
+
+    assert worker._rbds_synced is True
+    assert worker._rbds_sync_tentative is True
+    assert worker._rbds_tentative_good_groups == 0
+    assert worker._stats.sync_acquired_unix is None
+    worker.stop()
+
+
+def test_rbds_tentative_sync_confirms_with_enough_good_groups():
+    """≥ _RBDS_TENTATIVE_GOOD_GROUPS fully-decoded groups in 50 blocks → CONFIRMED."""
+    worker = _make_worker()
+    _force_synced_tentative(worker, block_number=0)
+
+    # Capture process_group calls so we can verify gating below.
+    published: list[tuple[int, int, int, int]] = []
+    worker._rbds_decoder.process_group = lambda group: published.append(tuple(group))  # type: ignore[assignment]
+
+    # Drive exactly 50 valid blocks through synced-mode decoding.
+    # 50 blocks = 12 complete groups (A,B,C,D × 12) + 2 leftover blocks (A,B
+    # of the 13th group, which is not yet "complete" so doesn't count).
+    bits: list[int] = []
+    for i in range(50):
+        block_no = i % 4
+        # Distinct datawords keep the test from accidentally relying on any
+        # zero-special-casing in the decoder.
+        bits.extend(_bits_for_valid_block(worker, 0xABCD + i, block_no))
+    worker._rbds_bit_buffer = bits
+    worker._decode_rbds_groups()
+
+    assert worker._rbds_synced is True
+    assert worker._rbds_sync_tentative is False, "sync should have been confirmed"
+    assert worker._stats.sync_acquired_unix is not None
+    # While tentative, process_group must not have been called once: every
+    # one of the 12 complete groups was suppressed.
+    assert published == [], (
+        "process_group must not be called while sync is tentative; got "
+        f"{len(published)} publishes"
+    )
+    # And groups_decoded must not have been bumped during tentative either.
+    assert worker._stats.groups_decoded == 0
+    worker.stop()
+
+
+def test_rbds_tentative_sync_rejected_when_too_few_groups():
+    """50-block window with too few good groups → drop sync silently.
+
+    Crucially this drop must NOT bump sync_lost_count — that counter is
+    reserved for *real* sync drops the operator should see, and a tentative
+    rejection means the lock never reached the UI in the first place.
+    """
+    worker = _make_worker()
+    worker._stats.sync_lost_count = 7  # pre-existing operator-visible drops
+    _force_synced_tentative(worker, block_number=0)
+
+    # Drive 50 blocks where every CRC fails (we use a wrong offset on every
+    # block).  None of them complete a group, so tentative_good_groups stays 0.
+    bits: list[int] = []
+    bad_offset_block_number = 1  # send block-A bits with block-B offset → CRC fails
+    for _ in range(50):
+        bits.extend(_bits_for_valid_block(worker, 0xDEAD, bad_offset_block_number))
+    worker._rbds_bit_buffer = bits
+    worker._decode_rbds_groups()
+
+    assert worker._rbds_synced is False, "tentative sync should have been rejected"
+    assert worker._rbds_sync_tentative is False
+    assert worker._stats.sync_acquired_unix is None
+    # sync_lost_count must NOT have been incremented for a tentative rejection.
+    assert worker._stats.sync_lost_count == 7
+    worker.stop()
+
+
+def test_rbds_tentative_sync_does_not_publish_groups_mid_window():
+    """While tentative, completed groups must not reach RBDSDecoder.process_group.
+
+    This is the primary user-visible benefit of the gate: even if a fake-lock
+    happens to assemble a "valid" group (random bits coincidentally pass CRC),
+    the bogus PI / group-type / RT / PS / CT it carries never reaches the UI.
+    """
+    worker = _make_worker()
+    _force_synced_tentative(worker, block_number=0)
+
+    published: list[tuple[int, int, int, int]] = []
+    worker._rbds_decoder.process_group = lambda group: published.append(tuple(group))  # type: ignore[assignment]
+
+    # Drive exactly 4 valid blocks (one complete group), well below the
+    # 50-block confirmation boundary.  The group is fully assembled and
+    # counted toward the tentative threshold but must not publish.
+    bits: list[int] = []
+    for block_no in range(4):
+        bits.extend(_bits_for_valid_block(worker, 0xCAFE, block_no))
+    worker._rbds_bit_buffer = bits
+    worker._decode_rbds_groups()
+
+    assert worker._rbds_sync_tentative is True
+    assert worker._rbds_tentative_good_groups == 1
+    assert published == []
+    assert worker._stats.groups_decoded == 0
+    worker.stop()
+
+
+# ---------------------------------------------------------------------------
+# Periodic pilot re-measurement tests
+#
+# Cheap-SDR TCXOs drift 1–3 ppm with temperature swings, which translates to
+# ~0.02–0.06 Hz/s at the 19 kHz pilot.  Tripling that for the 57 kHz mix
+# leaves a residual that the Costas loop has to absorb on top of phase noise.
+# Re-measuring every 30 s and EMA-blending the result keeps the carrier
+# reference accurate without yanking it around on a single noisy FFT.
+# ---------------------------------------------------------------------------
+
+
+def test_rbds_pilot_remeasure_blends_small_drift():
+    """A small post-interval re-measurement should EMA-blend into the reference."""
+    sr = 250_000
+    worker = _make_worker(sample_rate=sr)
+    worker._measured_pilot_freq = 19000.500
+    # Park the counter just below the threshold so a single chunk pushes it over.
+    interval_samples = int(worker._PILOT_REMEASURE_INTERVAL_SEC * sr)
+    chunk = np.zeros(sr, dtype=np.float32)  # 1 s of samples
+    worker._pilot_samples_since_remeasure = interval_samples - len(chunk) + 1
+
+    # Stub the FFT-based estimator to return a plausible 0.2 Hz drift.
+    worker._estimate_pilot_frequency = lambda mux: 19000.700  # type: ignore[assignment]
+
+    worker._process_rbds(chunk, sample_offset=0)
+
+    # EMA: new = 0.7 * 19000.500 + 0.3 * 19000.700 = 19000.560
+    expected = (
+        (1.0 - worker._PILOT_REMEASURE_EMA_ALPHA) * 19000.500
+        + worker._PILOT_REMEASURE_EMA_ALPHA * 19000.700
+    )
+    assert abs(worker._measured_pilot_freq - expected) < 1e-6
+    # Counter must be reset so the next remeasure waits another full interval.
+    assert worker._pilot_samples_since_remeasure == 0
+    worker.stop()
+
+
+def test_rbds_pilot_remeasure_rejects_implausible_jump():
+    """An implausibly large jump (>_PILOT_REMEASURE_MAX_DRIFT_HZ) must be ignored."""
+    sr = 250_000
+    worker = _make_worker(sample_rate=sr)
+    worker._measured_pilot_freq = 19000.500
+    interval_samples = int(worker._PILOT_REMEASURE_INTERVAL_SEC * sr)
+    chunk = np.zeros(sr, dtype=np.float32)
+    worker._pilot_samples_since_remeasure = interval_samples - len(chunk) + 1
+
+    # 5 Hz jump would mean the SDR clock changed by >250 ppm in 30 s — not
+    # physically plausible.  Treat as artifact (e.g. brief de-sense, tuner
+    # transient) and keep the previous reference.
+    worker._estimate_pilot_frequency = lambda mux: 19005.500  # type: ignore[assignment]
+
+    worker._process_rbds(chunk, sample_offset=0)
+
+    assert worker._measured_pilot_freq == 19000.500
+    # Counter still resets so we don't re-test the same bad chunk forever.
+    assert worker._pilot_samples_since_remeasure == 0
+    worker.stop()
+
+
+def test_rbds_pilot_remeasure_skips_when_estimator_returns_none():
+    """SNR-fail (None) returns from the estimator must leave the reference alone."""
+    sr = 250_000
+    worker = _make_worker(sample_rate=sr)
+    worker._measured_pilot_freq = 19000.500
+    interval_samples = int(worker._PILOT_REMEASURE_INTERVAL_SEC * sr)
+    chunk = np.zeros(sr, dtype=np.float32)
+    worker._pilot_samples_since_remeasure = interval_samples - len(chunk) + 1
+
+    worker._estimate_pilot_frequency = lambda mux: None  # type: ignore[assignment]
+
+    worker._process_rbds(chunk, sample_offset=0)
+
+    assert worker._measured_pilot_freq == 19000.500
+    worker.stop()
+
+
+def test_rbds_pilot_remeasure_does_not_fire_before_interval():
+    """Below the sample threshold, the estimator must not be invoked at all."""
+    sr = 250_000
+    worker = _make_worker(sample_rate=sr)
+    worker._measured_pilot_freq = 19000.500
+    chunk = np.zeros(1000, dtype=np.float32)  # tiny chunk, well below threshold
+    worker._pilot_samples_since_remeasure = 0
+
+    invocations = {"count": 0}
+
+    def counting_estimator(mux: np.ndarray) -> float:
+        invocations["count"] += 1
+        return 19010.0  # would be rejected anyway, but should not be called
+
+    worker._estimate_pilot_frequency = counting_estimator  # type: ignore[assignment]
+
+    worker._process_rbds(chunk, sample_offset=0)
+
+    assert invocations["count"] == 0
+    assert worker._measured_pilot_freq == 19000.500
+    # Counter advanced by the chunk length.
+    assert worker._pilot_samples_since_remeasure == len(chunk)
+    worker.stop()
+
+
+# ---------------------------------------------------------------------------
+# Early-decimation tests (sample-rate-aware front end).
+#
+# The worker's filter chain (54-60 kHz bandpass, 57 kHz mix, 2.4 kHz post-mix
+# lowpass, downstream decim to 25 kHz) is sized for ~250 kHz inputs — the
+# rate at which both PySDR (https://pysdr.org/content/rds.html) and
+# RdsSurveyor2 (core/signals/mpx.ts: hardcoded `sampleRate = 250000`) run
+# their RDS demodulators.  At higher SDR rates (1 MHz, 2.4 MHz, etc.) the
+# capped 101-tap bandpass becomes essentially all-pass and the 501-tap
+# 2.4 kHz lowpass leaves the 4 kHz stereo artifact in the passband.
+# FMDemodulator must therefore decimate the multiplex from the user's actual
+# SDR rate down to _rbds_intermediate_rate (always 130-280 kHz) BEFORE
+# submitting it to the RBDSWorker, with a proper anti-alias filter ahead of
+# the downsampler.  These tests verify that pipeline at multiple sample
+# rates the user might realistically configure.
+# ---------------------------------------------------------------------------
+
+
+def test_fmdemodulator_creates_worker_at_post_decim_rate_for_1mhz_rtlsdr():
+    """At 1 MHz (typical RTL-SDR), the worker must run at 250 kHz, not 1 MHz.
+
+    This is the critical bug RdsSurveyor2 / PySDR both flag implicitly with
+    their hardcoded 250 kHz: the worker's filters only work at that rate.
+    """
+    demod = _make_demodulator(sample_rate=1_000_000)
+    assert demod._rbds_worker is not None
+    assert demod._rbds_decim == 4
+    assert demod._rbds_intermediate_rate == 250_000
+    # The worker's _sample_rate (used to design every filter) MUST be the
+    # post-decimation rate, not config.sample_rate.
+    assert demod._rbds_worker._sample_rate == 250_000
+    # And an anti-alias filter must have been built.
+    assert demod._rbds_aa_filter is not None
+    demod.stop()
+    time.sleep(0.05)
+
+
+def test_fmdemodulator_creates_worker_at_post_decim_rate_for_2_4mhz_rtlsdr():
+    """At 2.4 MHz (max RTL-SDR), worker also runs near 250 kHz, decim ~9."""
+    demod = _make_demodulator(sample_rate=2_400_000)
+    assert demod._rbds_worker is not None
+    assert demod._rbds_decim >= 8 and demod._rbds_decim <= 10
+    # Post-decim rate stays in the band where the worker's filters are sized.
+    assert 200_000 <= demod._rbds_intermediate_rate <= 300_000
+    assert demod._rbds_worker._sample_rate == demod._rbds_intermediate_rate
+    assert demod._rbds_aa_filter is not None
+    demod.stop()
+    time.sleep(0.05)
+
+
+def test_fmdemodulator_no_decim_when_already_at_target_rate():
+    """At 250 kHz input (e.g. user pre-decimated, Airspy R2 audio), no extra decim."""
+    demod = _make_demodulator(sample_rate=250_000)
+    assert demod._rbds_decim == 1
+    assert demod._rbds_intermediate_rate == 250_000
+    assert demod._rbds_worker is not None
+    assert demod._rbds_worker._sample_rate == 250_000
+    # No decim → no AA filter needed (multiplex passes through).
+    assert demod._rbds_aa_filter is None
+    demod.stop()
+    time.sleep(0.05)
+
+
+def test_fmdemodulator_anti_alias_filter_protects_post_decim_nyquist():
+    """The AA filter must reject content above post-decim Nyquist by ≥40 dB.
+
+    Without this, downstream filters operating at the worker's intermediate
+    rate would see aliases of the FM stereo subcarrier (38 kHz) and pilot
+    harmonics folded into the RBDS band, which is precisely the failure
+    mode the user is observing.
+    """
+    sr = 1_000_000
+    demod = _make_demodulator(sample_rate=sr)
+    assert demod._rbds_aa_filter is not None
+    h = demod._rbds_aa_filter
+    post_decim_rate = demod._rbds_intermediate_rate
+    nyquist = post_decim_rate / 2.0
+
+    def _gain_db(freq_hz: float) -> float:
+        n = np.arange(len(h), dtype=np.float64)
+        mid = (len(h) - 1) / 2.0
+        gain = float(
+            np.abs(np.sum(h * np.exp(-1j * 2.0 * np.pi * freq_hz * (n - mid) / sr)))
+        )
+        return 20.0 * np.log10(max(gain, 1e-12))
+
+    # Passband: the 57 kHz RBDS subcarrier must come through with negligible
+    # attenuation, otherwise the worker's 54-60 kHz bandpass has nothing to
+    # latch onto.
+    rbds_db = _gain_db(57000.0)
+    assert rbds_db > -1.0, f"57 kHz RBDS subcarrier attenuated {rbds_db:.1f} dB"
+
+    # Stopband: with decimation by N, an input tone at f aliases in the
+    # post-decim spectrum to (f mod post_decim_rate).  Worst case for the
+    # RBDS band is an input tone at (post_decim_rate - 57 kHz) which folds
+    # exactly onto the 57 kHz subcarrier after decimation.  For 1 MHz / 4 →
+    # 250 kHz post-decim, that tone is at 250000 - 57000 = 193 kHz, well
+    # below SDR Nyquist (500 kHz) and squarely in our AA filter's stopband.
+    fold_freq = post_decim_rate - 57000.0
+    assert fold_freq < sr / 2.0, "test frequency must be below SDR Nyquist"
+    fold_db = _gain_db(fold_freq)
+    assert fold_db < -40.0, (
+        f"AA filter must reject {fold_freq/1000:.1f} kHz (folds onto 57 kHz "
+        f"RBDS after [::{demod._rbds_decim}]) by ≥40 dB; got {fold_db:.1f} dB"
+    )
+    # And the next fold zone (input tones near post_decim_rate * k + 57 kHz)
+    # must also be rejected, otherwise stereo subcarrier energy at 38 kHz
+    # could fold from the (post_decim_rate, 2*post_decim_rate) zone into
+    # the worker's 0-125 kHz band.
+    next_fold = post_decim_rate + 57000.0
+    if next_fold < sr / 2.0:
+        next_fold_db = _gain_db(next_fold)
+        assert next_fold_db < -40.0, (
+            f"AA filter rejection at {next_fold/1000:.1f} kHz: "
+            f"{next_fold_db:.1f} dB (need < -40 dB)"
+        )
+    demod.stop()
+    time.sleep(0.05)
+
+
+def test_fmdemodulator_decimates_multiplex_before_submitting():
+    """submit_samples must receive multiplex at the worker's intermediate rate.
+
+    The submitted chunk count and sample-offset must be in the worker's
+    domain (post-decimation), not in the raw SDR domain — otherwise the
+    worker's pilot-locked 57 kHz reference (which uses sample_offset /
+    self._sample_rate) drifts immediately.
+    """
+    sr = 1_000_000
+    demod = _make_demodulator(sample_rate=sr)
+
+    # Capture every submit_samples call into a list.
+    calls: list[tuple[int, int]] = []
+
+    def fake_submit(multiplex: np.ndarray, sample_offset: int) -> None:
+        calls.append((len(multiplex), sample_offset))
+
+    assert demod._rbds_worker is not None
+    demod._rbds_worker.submit_samples = fake_submit  # type: ignore[assignment]
+
+    # 8192 IQ samples at 1 MHz → 8191 multiplex on first call (no prepend),
+    # then divided by decim=4 yields ~2047 samples submitted to the worker.
+    chunk = np.exp(
+        1j * 2.0 * np.pi * 0.001 * np.arange(8192)
+    ).astype(np.complex64)
+    demod.process(chunk)
+    demod.process(chunk)
+
+    assert len(calls) == 2
+    decim = demod._rbds_decim
+    assert decim == 4
+
+    # First call: 8191 multiplex / 4 ≈ 2047 (or 2048, depending on lfilter
+    # state initialisation).  Sanity-check it's near 8191/4 and starts at
+    # offset 0.
+    n0, off0 = calls[0]
+    assert abs(n0 - (8191 // decim)) <= 1
+    assert off0 == 0
+
+    # Second call: offset must equal the count submitted in the first call.
+    n1, off1 = calls[1]
+    assert off1 == n0
+    # And the second call should submit ~8192 / 4 = 2048 samples.
+    assert abs(n1 - (8192 // decim)) <= 1
+
+    demod.stop()
+    time.sleep(0.05)
+
+
+def test_fmdemodulator_works_across_realistic_sdr_rates():
+    """Smoke-test construction at every realistic RTL-SDR rate.
+
+    The user can configure any rate the SDR supports (RTL-SDR allows
+    225-300 kHz and 900 kHz - 3.2 MHz; common picks: 1.024, 1.92, 2.048,
+    2.4 MHz).  None of these should crash the demodulator or leave
+    _rbds_intermediate_rate outside the 200-300 kHz comfort band that the
+    worker's filters were designed for.
+    """
+    for sdr_rate in (250_000, 960_000, 1_024_000, 1_000_000, 1_400_000,
+                     1_920_000, 2_048_000, 2_400_000, 2_500_000):
+        demod = _make_demodulator(sample_rate=sdr_rate)
+        try:
+            assert demod._rbds_worker is not None, f"rate {sdr_rate}"
+            worker_rate = demod._rbds_worker._sample_rate
+            # 130 kHz is the floor enforced by the loop in __init__; the
+            # upper bound ~350 kHz is what the existing audio-path
+            # _intermediate_rate produces for awkward integer divisions
+            # like 960k / 3.  Anything above ~350 kHz means the worker's
+            # capped 101-tap bandpass starts to lose selectivity.
+            assert 130_000 <= worker_rate <= 350_000, (
+                f"sdr_rate={sdr_rate} produced worker_rate={worker_rate}, "
+                "outside the 130-350 kHz comfort band"
+            )
+            # And submit_samples must accept zero-length input without crashing
+            # (regression guard for the lfilter_zi initialization path).
+            demod._rbds_worker.submit_samples(np.array([], dtype=np.float32), 0)
+        finally:
+            demod.stop()
+            time.sleep(0.02)
+
+
+# ---------------------------------------------------------------------------
 # RBDSDecoder.process_group tests
 #
 # Block B layout per EN 50067 / NRSC-4:
