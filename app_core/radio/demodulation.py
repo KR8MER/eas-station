@@ -1832,7 +1832,8 @@ class RBDSWorker:
                         burst-trapping then catches the multipath-fade case.
                         Third tuple element labels the path used so the caller
                         can attribute the fix in the FEC stats: 'clean' (no
-                        correction needed), 'single', 'burst', or 'fail'."""
+                        correction needed), 'single', 'burst', 'fail', or
+                        'fail-suppressed' (burst-FEC gate active)."""
                         if _crc_ok_for_block(candidate_word, block_number):
                             return True, candidate_word, 'clean'
                         ok, fixed = _try_correct_single_bit_error(
@@ -1840,6 +1841,16 @@ class RBDSWorker:
                         )
                         if ok:
                             return True, fixed, 'single'
+                        # Suppress burst-FEC during sustained bad streaks: see
+                        # _BURST_FEC_SUPPRESS_AFTER for rationale.  The counter
+                        # we read here was incremented at the end of the
+                        # previous block, so it reflects the *prior* blocks'
+                        # state and is not affected by the current attempt.
+                        if (
+                            self._rbds_consecutive_crc_failures
+                            >= self._BURST_FEC_SUPPRESS_AFTER
+                        ):
+                            return False, candidate_word, 'fail-suppressed'
                         ok, fixed = _try_correct_burst_error(
                             candidate_word, block_number
                         )
@@ -2054,6 +2065,22 @@ class RBDSWorker:
     # the (26,16) RBDS code's 10 parity bits are exactly enough to cover
     # this range unambiguously.
     _BURST_LIMIT_BITS = 5
+
+    # Burst-FEC gate: after this many consecutive uncorrected blocks, we stop
+    # consulting the burst-trapping table for the duration of the bad streak
+    # and accept only `clean` or single-bit repairs.  The burst table covers
+    # ~75 syndromes (~7% of the 1024-entry syndrome space), so when fed a
+    # stream of essentially-random words during fake-sync it produces a
+    # steady ~7% rate of false "corrections" that get passed to group
+    # assembly as plausible-looking datawords.  This produces visibly
+    # corrupt RBDS output (impossible CT timestamps, wrong language codes,
+    # AID-on-15B groups, hashed AF lists).  Single-bit FEC is much safer
+    # under noise because it requires *exactly one* candidate word to pass
+    # CRC and rejects ambiguous cases — false-positive rate is dramatically
+    # lower.  The gate self-clears as soon as a clean or single-bit repair
+    # lands (i.e. real signal returns), so legitimate burst saves on a
+    # healthy channel are unaffected.
+    _BURST_FEC_SUPPRESS_AFTER = 2
 
     @classmethod
     def _burst_correction_table(cls) -> Dict[int, int]:
