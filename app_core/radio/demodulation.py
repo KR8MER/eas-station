@@ -241,8 +241,11 @@ def _mm_timing_loop_numba(
         out_real[i_out] = s_real
         out_imag[i_out] = s_imag
 
-        rail_r = 1.0 if s_real > 0.0 else -1.0
-        rail_i = 1.0 if s_imag > 0.0 else -1.0
+        # Rail values use 0/1 to match the pure-Python fallback which does
+        # int(np.real(out[i_out]) > 0).  Standard M&M typically uses ±1, but
+        # matching the fallback exactly preserves identical mm_val scaling.
+        rail_r = 1.0 if s_real > 0.0 else 0.0
+        rail_i = 1.0 if s_imag > 0.0 else 0.0
         out_rail_real[i_out] = rail_r
         out_rail_imag[i_out] = rail_i
 
@@ -253,13 +256,13 @@ def _mm_timing_loop_numba(
         dr_i = out_rail_imag[i_out] - out_rail_imag[i_out - 2]
         do_r = out_real[i_out] - out_real[i_out - 2]
         do_i = out_imag[i_out] - out_imag[i_out - 2]
-        pr = out_real[i_out - 1]
-        pi_ = out_imag[i_out - 1]
-        qr = out_rail_real[i_out - 1]
-        qi = out_rail_imag[i_out - 1]
+        prev_out_r = out_real[i_out - 1]
+        prev_out_i = out_imag[i_out - 1]
+        prev_rail_r = out_rail_real[i_out - 1]
+        prev_rail_i = out_rail_imag[i_out - 1]
         # real part of complex multiply a*conj(b): re(a)*re(b) + im(a)*im(b)
-        x_real = dr_r * pr + dr_i * pi_
-        y_real = do_r * qr + do_i * qi
+        x_real = dr_r * prev_out_r + dr_i * prev_out_i
+        y_real = do_r * prev_rail_r + do_i * prev_rail_i
         mm_val = y_real - x_real
 
         mu += sps + 0.05 * mm_val
