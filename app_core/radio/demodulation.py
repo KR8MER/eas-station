@@ -346,6 +346,13 @@ class RBDSData:
     clock_time_local: Optional[str] = None  # ISO-8601 local timestamp from Group 4A
     # Group 0A Block C - Alternative Frequencies
     af_list: Optional[List[float]] = None  # list of AF frequencies in MHz
+    # Method-A AF list count (codes 224-249).  None until announced; once
+    # set, len(af_list) == af_method_a_count means the list is complete.
+    af_method_a_count: Optional[int] = None
+    # True if the station has signalled an LF/MF follow-on (code 250),
+    # i.e. the AF list extends to non-VHF frequencies we can't represent
+    # in MHz directly.  Pure indicator — no further data captured.
+    af_follow_on_indicator: Optional[bool] = None
     # Group 1A/1B - Programme Item Number + Slow Labeling Codes
     pin_day: Optional[int] = None
     pin_hour: Optional[int] = None
@@ -356,14 +363,32 @@ class RBDSData:
     linkage_set_number: Optional[int] = None
     linkage_actuator: Optional[bool] = None
     linkage_soft_coupling: Optional[bool] = None
+    # Group 1A variant-1: 12-bit TMC identification provider code.
+    paging_tmc_id: Optional[int] = None
+    # Group 1A variant-2: 12-bit paging operator code.
+    paging_operator_code: Optional[int] = None
+    # Group 1A variant-7: 12-bit EWS slow-labelling channel identifier
+    # (which EWS provider feeds the Group 9A messages on this station).
+    ews_channel_identifier: Optional[int] = None
+    # Raw 16-bit Block-D payload per Group 1A variant (0..7), so the UI
+    # can show every variant byte the station broadcasts even where no
+    # decoder semantics apply.
+    slow_labelling_raw: Optional[Dict[int, int]] = None
     # Group 3A - Open Data Application registration
     oda_apps: Optional[List[int]] = None
     # Full ODA assignment table — list of {group, version, aid, aid_hex,
     # name?} items so the UI can show *which* group type carries each
     # registered application instead of just listing AIDs.
     oda_assignments: Optional[List[dict]] = None
+    # Per-AID raw payload buffer for ODAs we don't have a specific
+    # decoder for.  Each entry: {aid, aid_hex, group, count,
+    # last_b_low, last_c, last_d, last_seen_unix}.
+    oda_payloads: Optional[List[dict]] = None
     # Group 5A/5B - Transparent Data Channel
+    # tdc_data is channel 0 (kept for backwards compat); tdc_channels
+    # exposes every channel TS the station broadcasts.
     tdc_data: Optional[bytes] = None
+    tdc_channels: Optional[Dict[int, bytes]] = None
     # Group 6A/6B - In-House Applications
     in_house_data: Optional[List[int]] = None
     # Group 8A - Traffic Message Channel
@@ -2808,6 +2833,16 @@ class RBDSDecoder:
         # Group 0A AF state
         self._af_buffer: List[float] = []
         self._af_method_a_count: Optional[int] = None
+        # Method B / LF-MF follow-on indicator (code 250).  Doesn't tell
+        # us anything about LF/MF AFs without further decoding, but the
+        # presence of the marker is itself useful information.
+        self._af_follow_on_indicator: bool = False
+        # Slow-labelling raw capture: every Group 1A variant byte we
+        # observe, keyed by variant code (0-7).  Specific decoders for
+        # variants 0/4/5 still produce semantic fields; this dict gives
+        # the UI the raw 16-bit Block-D contents for *all* variants so
+        # nothing the station broadcasts is silently dropped.
+        self._slow_labelling_raw: Dict[int, int] = {}
         # Group 1A/1B PIN and slow labeling state
         self.pin_day: Optional[int] = None
         self.pin_hour: Optional[int] = None
@@ -2818,6 +2853,12 @@ class RBDSDecoder:
         self.linkage_set_number: Optional[int] = None
         self.linkage_actuator: Optional[bool] = None
         self.linkage_soft_coupling: Optional[bool] = None
+        # Group 1A variant-1: TMC identification provider code (12 bits).
+        self.paging_tmc_id: Optional[int] = None
+        # Group 1A variant-2: paging operator code (12 bits).
+        self.paging_operator_code: Optional[int] = None
+        # Group 1A variant-7: EWS slow-labelling channel identifier (12 bits).
+        self.ews_channel_identifier: Optional[int] = None
         # Group 3A ODA state
         self._oda_app_map: Dict[int, int] = {}
         self.oda_apps: List[int] = []
@@ -2827,6 +2868,14 @@ class RBDSDecoder:
         self._rt_plus_item_running: Optional[bool] = None
         self._rt_plus_item_toggle: Optional[int] = None
         self._rt_plus_tags: Optional[List[dict]] = None
+        # Per-AID raw ODA payload buffer.  For every registered AID that
+        # we don't have a specific decoder for, we keep the most recent
+        # (b_low5, c, d) bytes, a count of received groups, and a unix
+        # timestamp.  Lets the UI display "0xC563: 12 groups, last
+        # B-low=0x1A C=0x1234 D=0x5678" so unknown ODA traffic isn't
+        # silently discarded — useful when stations broadcast custom
+        # AIDs (eRT, custom paging, vendor data) we can't yet parse.
+        self._oda_payloads: Dict[int, dict] = {}
         # Per-(group_type+version) traffic histogram populated in
         # process_group.  RBDSWorker.get_stats() merges this with its
         # own block-level counters into a single RBDSDecoderStats.
@@ -2937,7 +2986,15 @@ class RBDSDecoder:
             if self._update_di(address, di_bit):
                 changed = True
 
-            # Group 0A Block C: Alternative Frequencies (Method A, direct codes only)
+            # Group 0A Block C: Alternative Frequencies (Method A).
+            # Codes 1-204     -> direct VHF FM frequency 87.6 + 0.1*code MHz
+            # Codes 205-223   -> filler / not used
+            # Codes 224-249   -> AF list count (224 = "no AF", 225 = 1 AF, ... 249 = 25)
+            # Code 250        -> LF/MF follow-on indicator (Method B)
+            # Codes 251-255   -> reserved
+            # Either byte of Block C may carry a count or follow-on code
+            # paired with a direct code; surface both so the UI can mark
+            # the AF list "complete" once enough direct codes have arrived.
             if not version_b:
                 af1 = (c >> 8) & 0xFF
                 af2 = c & 0xFF
@@ -2945,6 +3002,15 @@ class RBDSDecoder:
                 for code in (af1, af2):
                     if 1 <= code <= 204:
                         new_freqs.append(round(87.6 + 0.1 * code, 1))
+                    elif 224 <= code <= 249:
+                        announced = code - 224  # number of AFs the station says follow
+                        if self._af_method_a_count != announced:
+                            self._af_method_a_count = announced
+                            changed = True
+                    elif code == 250:
+                        if not self._af_follow_on_indicator:
+                            self._af_follow_on_indicator = True
+                            changed = True
                 if new_freqs:
                     prev_len = len(self._af_buffer)
                     for f in new_freqs:
@@ -3127,11 +3193,17 @@ class RBDSDecoder:
                         ps_list[idx] = chr(code) if 32 <= code < 127 else ' '
                 eon['ps'] = ''.join(ps_list)
             elif variant == 4:
-                af_code = (d >> 8) & 0xFF
-                if 1 <= af_code <= 204:
-                    af_mhz = round(87.6 + 0.1 * af_code, 1)
-                    if af_mhz not in eon['af']:
-                        eon['af'].append(af_mhz)
+                # Block D in EON variant 4 carries TWO 8-bit AF codes:
+                # high byte = mapped frequency for the cross-referenced
+                # programme, low byte = matched frequency for the tuned
+                # programme.  Earlier code dropped the low byte, halving
+                # EON AF coverage; capture both as direct codes 1..204.
+                for shift in (8, 0):
+                    af_code = (d >> shift) & 0xFF
+                    if 1 <= af_code <= 204:
+                        af_mhz = round(87.6 + 0.1 * af_code, 1)
+                        if af_mhz not in eon['af']:
+                            eon['af'].append(af_mhz)
             elif variant == 12:
                 eon['linkage'] = d
             elif variant == 13:
@@ -3178,13 +3250,37 @@ class RBDSDecoder:
 
         # ODA payload dispatch.  The Group 3A handler (above) records which
         # (group_type, version) slots a station has assigned to ODA AIDs;
-        # decode any payload group that matches a known AID.  Today only
-        # RT+ (AID 0xCD46) is decoded here; other ODAs fall through silently
-        # so their AID still appears in oda_apps via 3A registration.
+        # decode any payload group that matches a known AID.  RT+
+        # (0xCD46) gets a real decoder; every other AID has its raw
+        # payload captured into _oda_payloads so the UI can show that
+        # something is being broadcast on the slot even when we can't
+        # interpret it.
         oda_key = (group_type, 1 if version_b else 0)
         oda_aid = self._oda_app_map.get(oda_key)
-        if oda_aid == RT_PLUS_AID:
-            if self._handle_rt_plus(b, c, d):
+        if oda_aid is not None:
+            if oda_aid == RT_PLUS_AID:
+                if self._handle_rt_plus(b, c, d):
+                    changed = True
+            else:
+                # Capture the lower 5 bits of B (the payload nibble — the
+                # rest of B is group-type / TP / PTY which we already
+                # decoded) plus all of C and D.  Bump count and stamp
+                # last-seen so the UI can show traffic activity per AID.
+                entry = self._oda_payloads.setdefault(oda_aid, {
+                    'aid': oda_aid,
+                    'aid_hex': f"0x{oda_aid:04X}",
+                    'group': f"{group_type}{'B' if version_b else 'A'}",
+                    'count': 0,
+                    'last_b_low': 0,
+                    'last_c': 0,
+                    'last_d': 0,
+                    'last_seen_unix': 0.0,
+                })
+                entry['count'] += 1
+                entry['last_b_low'] = b & 0x1F
+                entry['last_c'] = c
+                entry['last_d'] = d
+                entry['last_seen_unix'] = time.time()
                 changed = True
 
         return changed
@@ -3326,6 +3422,10 @@ class RBDSDecoder:
             clock_time_utc=self.clock_time_utc,
             clock_time_local=self.clock_time_local,
             af_list=sorted(self._af_buffer) if self._af_buffer else None,
+            af_method_a_count=self._af_method_a_count,
+            af_follow_on_indicator=(
+                True if self._af_follow_on_indicator else None
+            ),
             pin_day=self.pin_day,
             pin_hour=self.pin_hour,
             pin_minute=self.pin_minute,
@@ -3335,9 +3435,24 @@ class RBDSDecoder:
             linkage_set_number=self.linkage_set_number,
             linkage_actuator=self.linkage_actuator,
             linkage_soft_coupling=self.linkage_soft_coupling,
+            paging_tmc_id=self.paging_tmc_id,
+            paging_operator_code=self.paging_operator_code,
+            ews_channel_identifier=self.ews_channel_identifier,
+            slow_labelling_raw=(
+                dict(self._slow_labelling_raw)
+                if self._slow_labelling_raw else None
+            ),
             oda_apps=list(self.oda_apps) if self.oda_apps else None,
             oda_assignments=oda_assignments,
+            oda_payloads=(
+                [dict(v) for v in self._oda_payloads.values()]
+                if self._oda_payloads else None
+            ),
             tdc_data=bytes(self._tdc_channels.get(0, [])) if self._tdc_channels else None,
+            tdc_channels=(
+                {ch: bytes(buf) for ch, buf in self._tdc_channels.items() if buf}
+                if self._tdc_channels else None
+            ),
             in_house_data=list(self.in_house_data) if self.in_house_data else None,
             tmc_present=self.tmc_present,
             ews_channel=self.ews_channel,
@@ -3357,18 +3472,66 @@ class RBDSDecoder:
         )
 
     def _apply_group1_variant(self, variant: int, d: int) -> bool:
-        """Process Group 1A/1B variant payload (language, ECC, linkage). Returns True if changed."""
+        """Process a Group 1A/1B slow-labelling variant payload.
+
+        Variants 0/4/5 produce semantic fields (language code, ECC,
+        linkage); for completeness every variant — including 1/2/3/6/7
+        which the spec leaves loosely defined or assigns to paging /
+        TMC ID / EWS slow-labelling pointer — has its raw 16-bit Block-D
+        contents captured into _slow_labelling_raw, keyed by variant
+        number, so the UI can show "variant N said XXXX" even for codes
+        no decoder understands.
+
+        Returns True if any field changed.
+        """
+        # Always store the raw byte first.  Even when a specific decoder
+        # below picks fields out of d we keep the raw word so the UI can
+        # show low-level diagnostics next to the interpreted value.
+        changed_raw = (
+            self._slow_labelling_raw.get(variant) != d
+        )
+        if changed_raw:
+            self._slow_labelling_raw[variant] = d
+
+        changed_decoded = False
         if variant == 0:
+            # Per the existing implementation: variant 0 has historically
+            # been used for the legacy language code on some installations
+            # (RBDS pre-2005 supplements).  Keep the behaviour but only
+            # consider it a "language" update when the byte is in range.
             lang = d & 0xFF
             if lang != 0 and self.language_code != lang:
                 self.language_code = lang
                 self.language_name = RBDS_LANGUAGE_CODES.get(lang)
-                return True
+                changed_decoded = True
+        elif variant == 1:
+            # Variant 1 is reserved/local in NRSC-4-B; some EU stations
+            # use it for "TMC identification" carrying a 12-bit TMC
+            # provider code in d[11:0].  Capture it as a structured value.
+            tmc_id = d & 0x0FFF
+            if self.paging_tmc_id != tmc_id:
+                self.paging_tmc_id = tmc_id
+                changed_decoded = True
+        elif variant == 2:
+            # Variant 2: Paging Identification (operator code in d[11:0]
+            # plus 4 bits of operator-defined subfield in d[15:12]).
+            paging_op = d & 0x0FFF
+            if self.paging_operator_code != paging_op:
+                self.paging_operator_code = paging_op
+                changed_decoded = True
+        elif variant == 3:
+            # Variant 3: legacy language-code assignment used by some
+            # EU broadcasters in place of variant 0.  Treat identically.
+            lang = d & 0xFF
+            if lang != 0 and self.language_code != lang:
+                self.language_code = lang
+                self.language_name = RBDS_LANGUAGE_CODES.get(lang)
+                changed_decoded = True
         elif variant == 4:
             ecc_val = d & 0xFF
             if ecc_val != 0 and self.ecc != ecc_val:
                 self.ecc = ecc_val
-                return True
+                changed_decoded = True
         elif variant == 5:
             lsn = d & 0x0FFF
             la = bool((d >> 15) & 0x1)
@@ -3377,8 +3540,22 @@ class RBDSDecoder:
                 self.linkage_set_number = lsn
                 self.linkage_actuator = la
                 self.linkage_soft_coupling = sc
-                return True
-        return False
+                changed_decoded = True
+        elif variant == 6:
+            # Variant 6: broadcaster-use 16 bits.  No standard interpretation,
+            # but we expose it raw in the slow-labelling table above; nothing
+            # extra to compute.
+            pass
+        elif variant == 7:
+            # Variant 7: EWS channel identifier slow-labelling pointer.
+            # Carries a 12-bit EWS service identifier in d[11:0] that
+            # tells receivers which EWS provider feeds Group 9A.  Useful
+            # diagnostic alongside the actual EWS messages.
+            ews_id = d & 0x0FFF
+            if self.ews_channel_identifier != ews_id:
+                self.ews_channel_identifier = ews_id
+                changed_decoded = True
+        return changed_raw or changed_decoded
 
     def _accumulate_tdc(self, channel: int, raw: list) -> None:
         """Append TDC bytes to a channel buffer, capped at 256 bytes."""

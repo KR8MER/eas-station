@@ -559,6 +559,20 @@ class SDRSourceAdapter(AudioSourceAdapter):
                             metadata['rbds_pi_area_code'] = rbds_data.pi_area_code
                             metadata['rbds_pi_program_ref'] = rbds_data.pi_program_ref
                             metadata['rbds_oda_assignments'] = rbds_data.oda_assignments
+                            metadata['rbds_oda_payloads'] = rbds_data.oda_payloads
+                            metadata['rbds_af_method_a_count'] = rbds_data.af_method_a_count
+                            metadata['rbds_af_follow_on_indicator'] = rbds_data.af_follow_on_indicator
+                            metadata['rbds_paging_tmc_id'] = rbds_data.paging_tmc_id
+                            metadata['rbds_paging_operator_code'] = rbds_data.paging_operator_code
+                            metadata['rbds_ews_channel_identifier'] = rbds_data.ews_channel_identifier
+                            metadata['rbds_slow_labelling_raw'] = (
+                                {str(k): v for k, v in rbds_data.slow_labelling_raw.items()}
+                                if rbds_data.slow_labelling_raw else None
+                            )
+                            metadata['rbds_tdc_channels'] = (
+                                {str(ch): buf.hex() for ch, buf in rbds_data.tdc_channels.items()}
+                                if rbds_data.tdc_channels else None
+                            )
                             metadata['rbds_program_type_name'] = (
                                 RBDS_PROGRAM_TYPES.get(int(rbds_data.pty))
                                 if rbds_data.pty is not None
@@ -615,6 +629,20 @@ class SDRSourceAdapter(AudioSourceAdapter):
                             metadata['rbds_pi_area_code'] = self._rbds_data.pi_area_code
                             metadata['rbds_pi_program_ref'] = self._rbds_data.pi_program_ref
                             metadata['rbds_oda_assignments'] = self._rbds_data.oda_assignments
+                            metadata['rbds_oda_payloads'] = self._rbds_data.oda_payloads
+                            metadata['rbds_af_method_a_count'] = self._rbds_data.af_method_a_count
+                            metadata['rbds_af_follow_on_indicator'] = self._rbds_data.af_follow_on_indicator
+                            metadata['rbds_paging_tmc_id'] = self._rbds_data.paging_tmc_id
+                            metadata['rbds_paging_operator_code'] = self._rbds_data.paging_operator_code
+                            metadata['rbds_ews_channel_identifier'] = self._rbds_data.ews_channel_identifier
+                            metadata['rbds_slow_labelling_raw'] = (
+                                {str(k): v for k, v in self._rbds_data.slow_labelling_raw.items()}
+                                if self._rbds_data.slow_labelling_raw else None
+                            )
+                            metadata['rbds_tdc_channels'] = (
+                                {str(ch): buf.hex() for ch, buf in self._rbds_data.tdc_channels.items()}
+                                if self._rbds_data.tdc_channels else None
+                            )
                             metadata['rbds_program_type_name'] = (
                                 RBDS_PROGRAM_TYPES.get(int(self._rbds_data.pty))
                                 if self._rbds_data.pty is not None

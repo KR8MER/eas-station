@@ -561,6 +561,20 @@ class RedisSDRSourceAdapter(AudioSourceAdapter):
                     self.metrics.metadata['rbds_pi_area_code'] = rbds.pi_area_code
                     self.metrics.metadata['rbds_pi_program_ref'] = rbds.pi_program_ref
                     self.metrics.metadata['rbds_oda_assignments'] = rbds.oda_assignments
+                    self.metrics.metadata['rbds_oda_payloads'] = rbds.oda_payloads
+                    self.metrics.metadata['rbds_af_method_a_count'] = rbds.af_method_a_count
+                    self.metrics.metadata['rbds_af_follow_on_indicator'] = rbds.af_follow_on_indicator
+                    self.metrics.metadata['rbds_paging_tmc_id'] = rbds.paging_tmc_id
+                    self.metrics.metadata['rbds_paging_operator_code'] = rbds.paging_operator_code
+                    self.metrics.metadata['rbds_ews_channel_identifier'] = rbds.ews_channel_identifier
+                    self.metrics.metadata['rbds_slow_labelling_raw'] = (
+                        {str(k): v for k, v in rbds.slow_labelling_raw.items()}
+                        if rbds.slow_labelling_raw else None
+                    )
+                    self.metrics.metadata['rbds_tdc_channels'] = (
+                        {str(ch): buf.hex() for ch, buf in rbds.tdc_channels.items()}
+                        if rbds.tdc_channels else None
+                    )
                     # rbds_last_seen advances every time we observe a decoded
                     # group, even if the content is identical to the last one.
                     # This is the "decoder is alive" heartbeat: it lets the
@@ -632,6 +646,20 @@ class RedisSDRSourceAdapter(AudioSourceAdapter):
                     self.metrics.metadata['rbds_pi_area_code'] = last.pi_area_code
                     self.metrics.metadata['rbds_pi_program_ref'] = last.pi_program_ref
                     self.metrics.metadata['rbds_oda_assignments'] = last.oda_assignments
+                    self.metrics.metadata['rbds_oda_payloads'] = last.oda_payloads
+                    self.metrics.metadata['rbds_af_method_a_count'] = last.af_method_a_count
+                    self.metrics.metadata['rbds_af_follow_on_indicator'] = last.af_follow_on_indicator
+                    self.metrics.metadata['rbds_paging_tmc_id'] = last.paging_tmc_id
+                    self.metrics.metadata['rbds_paging_operator_code'] = last.paging_operator_code
+                    self.metrics.metadata['rbds_ews_channel_identifier'] = last.ews_channel_identifier
+                    self.metrics.metadata['rbds_slow_labelling_raw'] = (
+                        {str(k): v for k, v in last.slow_labelling_raw.items()}
+                        if last.slow_labelling_raw else None
+                    )
+                    self.metrics.metadata['rbds_tdc_channels'] = (
+                        {str(ch): buf.hex() for ch, buf in last.tdc_channels.items()}
+                        if last.tdc_channels else None
+                    )
                 else:
                     # No cached data and nothing new this cycle — e.g. right
                     # after a frequency change.  Publish explicit nulls so
