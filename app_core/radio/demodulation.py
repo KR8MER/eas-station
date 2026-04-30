@@ -1796,6 +1796,12 @@ class RBDSWorker:
                                     # immediate sync loss for stations broadcasting Group 2B.
                                     self._rbds_block_number = (offset_pos[j] + 1) % 4
                                     self._rbds_group_assembly_started = False
+                                    # Stale failure streak from the previous lock would
+                                    # otherwise trip the burst-FEC suppression gate on
+                                    # the very first blocks of this new lock — silently
+                                    # disabling the corrector that's most useful right
+                                    # when we're trying to ratify a tentative sync.
+                                    self._rbds_consecutive_crc_failures = 0
                                     # Update polarity to match the triggering block so synced-mode
                                     # CRC checks use the correct inversion flag.
                                     self._rbds_inverted_polarity = polarity
@@ -1806,6 +1812,23 @@ class RBDSWorker:
                                     # groups (see _RBDS_TENTATIVE_GOOD_GROUPS).
                                     self._rbds_sync_tentative = True
                                     self._rbds_tentative_good_groups = 0
+                                    # Reset per-lock health stats so BLER and FEC
+                                    # counts reflect the *current* sync window, as
+                                    # the RBDSDecoderStats docstring promises.  The
+                                    # prior behaviour silently violated that contract:
+                                    # blocks_total / blocks_uncorrected accumulated
+                                    # across every marginal lock since boot, so a
+                                    # receiver that had bounced sync 78 times showed
+                                    # 65% BLER even when the live signal was clean.
+                                    # sync_lost_count is preserved (it's documented
+                                    # as the one cumulative counter) so the operator-
+                                    # visible "sync drops since boot" still reflects
+                                    # lifetime drops on this station.
+                                    with self._stats_lock:
+                                        preserved_drops = self._stats.sync_lost_count
+                                        self._stats = RBDSDecoderStats(
+                                            sync_lost_count=preserved_drops,
+                                        )
                         break  # Syndrome found, exit j loop
             
             else:

@@ -398,6 +398,73 @@ def test_rbds_lock_starts_in_tentative_state():
     worker.stop()
 
 
+def test_rbds_lock_resets_per_sync_stats_but_keeps_sync_lost_count():
+    """Per-sync stats must reset on every new lock; sync_lost_count must persist.
+
+    Regression test for the displayed BLER drifting upward over a session: the
+    RBDSDecoderStats docstring promises blocks_total / blocks_uncorrected /
+    blocks_fec_* / groups_decoded / group_type_counts reset on every sync
+    acquisition, leaving only sync_lost_count cumulative.  Before this fix
+    those counters accumulated across every marginal lock since boot, so a
+    receiver that had bounced sync 78 times kept showing 65% net BLER even
+    after the live signal cleaned up.
+    """
+    worker = _make_worker()
+    # Pre-load stats with the kind of accumulated history a long-running
+    # session would have:  thousands of blocks, mostly uncorrected, plus a
+    # handful of operator-visible sync drops.
+    worker._stats.blocks_total = 12876
+    worker._stats.blocks_ok = 3173
+    worker._stats.blocks_fec_single = 538
+    worker._stats.blocks_fec_burst = 734
+    worker._stats.blocks_uncorrected = 8431
+    worker._stats.groups_decoded = 96
+    worker._stats.sync_lost_count = 78
+    worker._stats.group_type_counts = {"0A": 43, "2A": 47, "12A": 6}
+
+    # Drive presync with a buffer that ends *exactly* at the third syndrome
+    # hit, so the sync transition is the last thing the loop does before
+    # returning.  This isolates "the reset that happens on sync acquisition"
+    # from any post-sync block processing the helper would otherwise add.
+    worker._rbds_bit_buffer = [0] * 153
+    call_index = 0
+    hit_map = {100: 383, 126: 14, 152: 303}
+
+    def fake_calc_syndrome(_word: int, message_length: int) -> int:
+        nonlocal call_index
+        bit_index = call_index // 2
+        is_inverted_path = (call_index % 2) == 1
+        call_index += 1
+        if message_length == 26 and not is_inverted_path:
+            return hit_map.get(bit_index, 0)
+        return 0
+
+    worker._calc_syndrome = fake_calc_syndrome  # type: ignore[assignment]
+    worker._decode_rbds_groups()
+
+    assert worker._rbds_synced is True
+    assert worker._rbds_sync_tentative is True
+    # Per-sync counters wiped — BLER now reflects the new lock window only.
+    assert worker._stats.blocks_total == 0
+    assert worker._stats.blocks_ok == 0
+    assert worker._stats.blocks_fec_single == 0
+    assert worker._stats.blocks_fec_burst == 0
+    assert worker._stats.blocks_uncorrected == 0
+    assert worker._stats.groups_decoded == 0
+    assert worker._stats.group_type_counts == {}
+    # Cumulative drop counter survives so the operator-visible "drops since
+    # boot" indicator is unaffected.
+    assert worker._stats.sync_lost_count == 78
+    # And sync_acquired_unix is still None — a tentative lock is not yet a
+    # confirmed lock, regardless of the stats reset.
+    assert worker._stats.sync_acquired_unix is None
+    # The burst-FEC suppression streak from the prior lock must also be
+    # cleared so the corrector is available on the very first blocks of
+    # this fresh lock.
+    assert worker._rbds_consecutive_crc_failures == 0
+    worker.stop()
+
+
 def test_rbds_tentative_sync_confirms_with_enough_good_groups():
     """≥ _RBDS_TENTATIVE_GOOD_GROUPS fully-decoded groups in 50 blocks → CONFIRMED."""
     worker = _make_worker()
