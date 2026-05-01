@@ -6,6 +6,21 @@ tracks releases under the 2.x series.
 
 ## [Unreleased]
 
+### Fixed
+- **RBDS detail rendering regression** in `static/js/rbds_visualization.js`. PR #1975
+  introduced the shared `RBDSViz` helpers but the new helpers only re-implemented a
+  subset of the inline RBDS block previously rendered on the Audio Monitoring page.
+  As a result, the following RBDS fields stopped appearing in the UI even though the
+  API (`/api/audio/sources` → `metrics.metadata`) still emits them: PTYN
+  (`rbds_pty_name`), AF method-B / LF-MF follow-on indicators, linkage actuator and
+  soft-coupling flags, language code (hex), Open Data Applications (`rbds_oda_*` —
+  assignments, app IDs and raw payloads), Slow Labelling (Group 1A variants), Radio
+  Paging (Group 7A) and Enhanced Paging (Group 13A), Transparent Data Channel,
+  In-House Application Data, and Fast Switching (Group 15B). All of these are now
+  rendered again by the shared module, so all three pages that consume it
+  (`templates/admin/radio.html`, `templates/audio_monitoring.html`,
+  `templates/admin/radio_diagnostics.html`) regain parity with the API payload.
+
 ### Added
 - **Statistics dashboard** — new charts (severity-mix-over-time, cumulative alerts, top 5 events trend, hour-of-day × severity, alert duration histogram, year-over-year overlay, EAS forwarding funnel), a one-click **PDF report export** of the dashboard, and a print stylesheet so the browser "Print to PDF" route also produces a clean report. Filtered alerts CSV / dashboard PDF / summary metrics JSON are now grouped under a single **Export ▾** dropdown in the filter panel.
 
