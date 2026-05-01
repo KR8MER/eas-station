@@ -843,15 +843,15 @@
     --critical-color: #ff1744;
     --light-color: #fff9c4;
     --dark-color: #0d1b2a;
-    --bg-color: #0a1128;
-    --surface-color: #132047;
-    --bg-card: #1b2c57;
+    --bg-color: #060d1f;
+    --surface-color: #14224d;
+    --bg-card: #1c2e5e;
     --bg-primary: #1b2a4e;
-    --text-color: #fffde7;
-    --text-secondary: #e6f2ff;
-    --text-muted: #c2cde0;
-    --border-color: #3a4d7a;
-    --shadow-color: rgba(255, 235, 59, 0.25);
+    --text-color: #ffffff;
+    --text-secondary: #eef4ff;
+    --text-muted: #d8e0f0;
+    --border-color: #5973a8;
+    --shadow-color: rgba(0, 0, 0, 0.45);
 }
 
 /* Lightning Theme - Electric glow on bolt icons */
@@ -1124,6 +1124,77 @@
 [data-theme="lightning"] .bg-success {
     color: #0d1b2a !important;
     text-shadow: none;
+}
+
+/* Lightning Theme - Tone down body ambient gradient.
+   The default body uses radial blobs of --primary / --secondary at 10/8%.
+   Against this theme's deep-navy background those blobs read as bright
+   yellow and saturated cyan ovals that dominate the page and wash out
+   foreground content.  Drop them well below the 5% threshold so they
+   register as faint atmosphere instead of competing with content. */
+[data-theme="lightning"] body {
+    background-image:
+        radial-gradient(ellipse at 12% 18%,
+            rgba(255, 235, 59, 0.04) 0%,
+            transparent 45%),
+        radial-gradient(ellipse at 88% 82%,
+            rgba(64, 196, 255, 0.035) 0%,
+            transparent 45%);
+}
+
+/* Lightning Theme - Card surface contrast.
+   .card paints a near-flat surface tint over --surface-color, with a
+   border that mixes --border-color at 50% transparent.  On the deep
+   navy bg that border becomes nearly invisible.  Use a fully opaque
+   border and a subtle inner highlight so card edges are readable. */
+[data-theme="lightning"] .card {
+    border-color: var(--border-color);
+    box-shadow:
+        0 4px 20px rgba(0, 0, 0, 0.45),
+        0 8px 32px rgba(0, 0, 0, 0.25),
+        0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+}
+
+/* Lightning Theme - Form control contrast.
+   Inputs paint with --surface-color which is close to --bg-color in this
+   theme.  Lift the input surface and use a brighter border so fields
+   stand out from the page. */
+[data-theme="lightning"] .form-control,
+[data-theme="lightning"] .form-select,
+[data-theme="lightning"] textarea,
+[data-theme="lightning"] input[type="text"],
+[data-theme="lightning"] input[type="email"],
+[data-theme="lightning"] input[type="password"],
+[data-theme="lightning"] input[type="number"],
+[data-theme="lightning"] input[type="search"],
+[data-theme="lightning"] input[type="tel"],
+[data-theme="lightning"] input[type="url"] {
+    background-color: #1f2f5e;
+    border-color: #6a82b8;
+    color: #ffffff;
+}
+
+[data-theme="lightning"] .form-control::placeholder,
+[data-theme="lightning"] .form-select::placeholder,
+[data-theme="lightning"] textarea::placeholder {
+    color: #aab8d4;
+    opacity: 1;
+}
+
+/* Lightning Theme - Atmospheric storm overlay readability.
+   The default flash layer peaks at opacity 1 with a bright white core
+   and cyan halo, washing out everything behind it.  Cap peak opacity
+   so strikes still illuminate the page without making text unreadable. */
+[data-theme="lightning"] #lightning-overlay .lightning-flash.lightning-flash-on {
+    opacity: 0.55;
+}
+
+[data-theme="lightning"] #lightning-overlay .lightning-flash {
+    background: radial-gradient(ellipse 70% 55% at var(--flash-x) var(--flash-y),
+        rgba(255, 255, 255, 0.35) 0%,
+        rgba(200, 230, 255, 0.18) 18%,
+        rgba(127, 215, 255, 0.08) 38%,
+        transparent 65%);
 }
 
 
