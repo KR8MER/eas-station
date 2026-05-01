@@ -2757,7 +2757,6 @@ class LEDSignSimulator {
         // Click on a canvas row → scroll to and focus that line's editor
         this.canvas.addEventListener('click', (e) => {
             const rect    = this.canvas.getBoundingClientRect();
-            const scaleY  = this.canvas.height / (rect.height * this.dpr);
             const clickY  = (e.clientY - rect.top) / rect.height * (this.NUM_LINES * this.LINE_H + this.PAD * 2);
             const lineIdx = Math.floor((clickY - this.PAD) / this.LINE_H);
             if (lineIdx >= 0 && lineIdx < this.NUM_LINES) {
