@@ -446,54 +446,33 @@
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid mt-3">
-    <!-- Page Header -->
-    <div class="row mb-3">
-        <div class="col-12">
-            <div class="card system-overview">
-                <div class="card-body">
-                    <div class="d-flex align-items-center mb-3">
-                        {% if distro_logo_url %}
-                        <img src="{{ distro_logo_url }}" alt="Distribution Logo" class="distro-logo" onerror="this.style.display='none'">
-                        {% endif %}
-                        <div>
-                            <h2 class="mb-0">
-                                <i class="fas fa-heartbeat me-2"></i> System Health Monitor
-                            </h2>
-                            <p class="mb-0 mt-2 opacity-75">
-                                Comprehensive monitoring of system resources, hardware, and container health
-                            </p>
-                        </div>
-                    </div>
-                    {% if shields_badges %}
-                    <div class="badge-showcase">
-                        {% if shields_badges.os %}
-                        <img src="{{ shields_badges.os }}" alt="OS Badge">
-                        {% endif %}
-                        {% if shields_badges.kernel %}
-                        <img src="{{ shields_badges.kernel }}" alt="Kernel Badge">
-                        {% endif %}
-                        {% if shields_badges.architecture %}
-                        <img src="{{ shields_badges.architecture }}" alt="Architecture Badge">
-                        {% endif %}
-                        {% if shields_badges.cores %}
-                        <img src="{{ shields_badges.cores }}" alt="CPU Cores Badge">
-                        {% endif %}
-                        {% if shields_badges.cpu %}
-                        <img src="{{ shields_badges.cpu }}" alt="CPU Usage Badge" id="cpu-badge">
-                        {% endif %}
-                        {% if shields_badges.memory %}
-                        <img src="{{ shields_badges.memory }}" alt="Memory Usage Badge" id="memory-badge">
-                        {% endif %}
-                        {% if shields_badges.uptime %}
-                        <img src="{{ shields_badges.uptime }}" alt="Uptime Badge" id="uptime-badge">
-                        {% endif %}
-                    </div>
-                    {% endif %}
+<div class="page-header">
+    <div class="container-fluid">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+            <div class="d-flex align-items-center gap-3">
+                {% if distro_logo_url %}
+                <img src="{{ distro_logo_url }}" alt="Distribution Logo" class="distro-logo" style="height:40px;width:auto;filter:brightness(10)" onerror="this.style.display='none'">
+                {% endif %}
+                <div>
+                    <h1 class="page-title mb-0"><i class="fas fa-heartbeat me-2"></i>System Health Monitor</h1>
+                    <p class="page-subtitle mb-0">Comprehensive monitoring of system resources, hardware, and container health</p>
                 </div>
             </div>
         </div>
     </div>
+</div>
+<div class="container-fluid mt-3">
+    {% if shields_badges %}
+    <div class="badge-showcase mb-3">
+        {% if shields_badges.os %}<img src="{{ shields_badges.os }}" alt="OS Badge">{% endif %}
+        {% if shields_badges.kernel %}<img src="{{ shields_badges.kernel }}" alt="Kernel Badge">{% endif %}
+        {% if shields_badges.architecture %}<img src="{{ shields_badges.architecture }}" alt="Architecture Badge">{% endif %}
+        {% if shields_badges.cores %}<img src="{{ shields_badges.cores }}" alt="CPU Cores Badge">{% endif %}
+        {% if shields_badges.cpu %}<img src="{{ shields_badges.cpu }}" alt="CPU Usage Badge" id="cpu-badge">{% endif %}
+        {% if shields_badges.memory %}<img src="{{ shields_badges.memory }}" alt="Memory Usage Badge" id="memory-badge">{% endif %}
+        {% if shields_badges.uptime %}<img src="{{ shields_badges.uptime }}" alt="Uptime Badge" id="uptime-badge">{% endif %}
+    </div>
+    {% endif %}
     
     <div class="alert alert-danger d-none" id="refresh-error" role="alert"></div>
     

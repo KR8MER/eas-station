@@ -152,25 +152,28 @@
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="row">
-        <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <h1 class="h3 text-primary mb-0">
-                    <i class="fas fa-microphone"></i> Audio Sources
-                </h1>
-                <div class="d-flex gap-2">
-                    <button type="button" class="btn btn-primary" onclick="showAddSourceModal()">
-                        <i class="fas fa-plus"></i> Add Source
-                    </button>
-                    <button type="button" class="btn btn-info" onclick="discoverDevices()">
-                        <i class="fas fa-search"></i> Discover Devices
-                    </button>
-                    <a href="/" class="btn btn-outline-secondary">
-                        <i class="fas fa-map"></i> Back to Map
-                    </a>
-                </div>
+<div class="page-header">
+    <div class="container-fluid">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+            <div>
+                <h1 class="page-title mb-0"><i class="fas fa-microphone me-2"></i>Audio Sources</h1>
+                <p class="page-subtitle mb-0">Manage live audio inputs for EAS monitoring</p>
             </div>
+            <div class="page-header-actions">
+                <button type="button" class="btn btn-outline-light" onclick="showAddSourceModal()">
+                    <i class="fas fa-plus me-1"></i>Add Source
+                </button>
+                <button type="button" class="btn btn-outline-light" onclick="discoverDevices()">
+                    <i class="fas fa-search me-1"></i>Discover Devices
+                </button>
+                <a href="/" class="btn btn-outline-light">
+                    <i class="fas fa-map me-1"></i>Back to Map
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="container-fluid">
 
             <div class="d-flex align-items-center gap-3 mb-3 flex-wrap">
                 <span id="backend-status-indicator" class="badge bg-secondary px-3 py-2">
@@ -257,11 +260,7 @@
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
-</div>
-
-<!-- Add Source Modal -->
+</div><!-- /.container-fluid -->
 <div class="modal fade" id="addSourceModal" tabindex="-1" aria-labelledby="addSourceModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">

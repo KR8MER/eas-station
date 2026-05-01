@@ -3,30 +3,33 @@
 {% block title %}Audio Archive - EAS Station{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="row">
-        <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <h1 class="h3 text-primary mb-0">
-                    <i class="fas fa-headphones"></i> Audio Archive
-                </h1>
-                <div class="d-flex gap-2 flex-wrap">
-                    <button type="button" class="btn btn-success" onclick="exportAudioArchive()" title="Export visible audio records to Excel">
-                        <i class="fas fa-file-export"></i> Export to Excel
-                    </button>
-                    {% if current_user %}
-                    <button type="button" class="btn btn-danger" onclick="showPurgeModal()" title="Purge old audio messages">
-                        <i class="fas fa-trash-alt"></i> Purge Old Messages
-                    </button>
-                    {% endif %}
-                    <a href="/" class="btn btn-outline-secondary">
-                        <i class="fas fa-map"></i> Back to Map
-                    </a>
-                    <a href="/admin" class="btn btn-outline-primary">
-                        <i class="fas fa-cog"></i> Admin
-                    </a>
-                </div>
+<div class="page-header">
+    <div class="container-fluid">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+            <div>
+                <h1 class="page-title mb-0"><i class="fas fa-headphones me-2"></i>Audio Archive</h1>
+                <p class="page-subtitle mb-0">Browse and manage EAS broadcast recordings</p>
             </div>
+            <div class="page-header-actions">
+                <button type="button" class="btn btn-outline-light" onclick="exportAudioArchive()" title="Export visible audio records to Excel">
+                    <i class="fas fa-file-export me-1"></i>Export to Excel
+                </button>
+                {% if current_user %}
+                <button type="button" class="btn btn-outline-light" onclick="showPurgeModal()" title="Purge old audio messages">
+                    <i class="fas fa-trash-alt me-1"></i>Purge Old
+                </button>
+                {% endif %}
+                <a href="/" class="btn btn-outline-light">
+                    <i class="fas fa-map me-1"></i>Back to Map
+                </a>
+                <a href="/admin" class="btn btn-outline-light">
+                    <i class="fas fa-cog me-1"></i>Admin
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="container-fluid">
 
             {% if not eas_enabled %}
             <div class="alert alert-warning">
@@ -331,8 +334,6 @@
                 </ul>
             </nav>
             {% endif %}
-        </div>
-    </div>
 
     <!-- Purge Modal -->
     <div class="modal fade" id="purgeModal" tabindex="-1" aria-labelledby="purgeModalLabel" aria-hidden="true">

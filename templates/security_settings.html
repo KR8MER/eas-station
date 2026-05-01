@@ -4,15 +4,6 @@
 
 {% block extra_css %}
 <style>
-    .security-header {
-        background: linear-gradient(135deg, var(--primary-soft), var(--primary-color));
-        color: var(--text-on-color);
-        padding: 2rem 0;
-        margin-bottom: 2rem;
-        box-shadow: 0 4px 20px var(--shadow-color);
-        border-bottom: 1px solid var(--border-color);
-    }
-
     .security-section {
         background: var(--surface-color);
         border-radius: 12px;
@@ -219,13 +210,16 @@
 {% endblock %}
 
 {% block content %}
-<div class="security-header">
-    <div class="container">
-        <h1><i class="fas fa-shield-alt"></i> Security Settings</h1>
-        <p class="mb-0">Manage your account security and two-factor authentication</p>
+<div class="page-header">
+    <div class="container-fluid">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+            <div>
+                <h1 class="page-title mb-0"><i class="fas fa-shield-alt me-2"></i>Security Settings</h1>
+                <p class="page-subtitle mb-0">Manage your account security and two-factor authentication</p>
+            </div>
+        </div>
     </div>
 </div>
-
 <div class="container">
     {% if current_user %}
     <div class="row mb-4">

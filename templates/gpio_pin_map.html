@@ -3,7 +3,6 @@
 {% block title %}GPIO Pin Map - EAS Station{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
 <style>
     .pin-card {
         border-left: 4px solid var(--primary-color);
@@ -71,25 +70,22 @@
 {% endblock %}
 
 {% block content %}
-<div class="admin-page-header header-success">
+<div class="page-header">
     <div class="container-fluid">
-        <div class="d-flex justify-content-between align-items-center">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
             <div>
-                <h1><i class="fas fa-map"></i> GPIO Pin Map</h1>
-                <p class="mb-0">
-                    Assign alert behaviors to GPIO pins. Pin numbers (1-40) refer to physical header positions.
-                    BCM numbers refer to Broadcom GPIO identifiers (e.g., BCM GPIO 17 = Physical Pin 11).
-                </p>
+                <h1 class="page-title mb-0"><i class="fas fa-map me-2"></i>GPIO Pin Map</h1>
+                <p class="page-subtitle mb-0">Assign alert behaviors to GPIO pins (physical pin numbers 1–40, BCM identifiers)</p>
             </div>
-            <div class="d-flex gap-2 flex-wrap justify-content-end">
-                <a class="btn btn-light" href="{{ url_for('gpio_control_panel') }}">
-                    <i class="fas fa-microchip"></i> Control Panel
+            <div class="page-header-actions">
+                <a class="btn btn-outline-light" href="{{ url_for('gpio_control_panel') }}">
+                    <i class="fas fa-microchip me-1"></i>Control Panel
                 </a>
-                <a class="btn btn-light" href="{{ url_for('gpio_statistics_page') }}">
-                    <i class="fas fa-chart-pie"></i> Statistics
+                <a class="btn btn-outline-light" href="{{ url_for('gpio_statistics_page') }}">
+                    <i class="fas fa-chart-pie me-1"></i>Statistics
                 </a>
-                <button class="btn btn-light" id="reloadPinMap">
-                    <i class="fas fa-rotate"></i> Reload
+                <button class="btn btn-outline-light" id="reloadPinMap">
+                    <i class="fas fa-rotate me-1"></i>Reload
                 </button>
             </div>
         </div>

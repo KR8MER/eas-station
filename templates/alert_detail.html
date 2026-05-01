@@ -363,32 +363,34 @@
 {% endblock %}
 
 {% block content %}
+<div class="page-header">
+    <div class="container-fluid">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+            <div>
+                <h1 class="page-title mb-0"><i class="fas fa-exclamation-triangle me-2"></i>Alert Details</h1>
+                <p class="page-subtitle mb-0">{{ alert.event }}</p>
+            </div>
+            <div class="page-header-actions">
+                <a href="/alerts" class="btn btn-outline-light">
+                    <i class="fas fa-arrow-left me-1"></i>Back to Alerts
+                </a>
+                <a href="/" class="btn btn-outline-light">
+                    <i class="fas fa-map me-1"></i>View on Map
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
 <div class="container-fluid">
     <div class="row">
         <div class="col-12">
-            <!-- Header -->
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <div>
-                    <h1 class="h3 text-primary mb-1">
-                        <i class="fas fa-exclamation-triangle"></i> Alert Details
-                    </h1>
-                    <nav aria-label="breadcrumb">
-                        <ol class="breadcrumb">
-                            <li class="breadcrumb-item"><a href="/">Home</a></li>
-                            <li class="breadcrumb-item"><a href="/alerts">Alerts History</a></li>
-                            <li class="breadcrumb-item active">{{ alert.event }}</li>
-                        </ol>
-                    </nav>
-                </div>
-                <div class="d-flex gap-2">
-                    <a href="/alerts" class="btn btn-outline-secondary">
-                        <i class="fas fa-arrow-left"></i> Back to Alerts
-                    </a>
-                    <a href="/" class="btn btn-outline-primary">
-                        <i class="fas fa-map"></i> View on Map
-                    </a>
-                </div>
-            </div>
+            <nav aria-label="breadcrumb" class="my-3">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="/">Home</a></li>
+                    <li class="breadcrumb-item"><a href="/alerts">Alerts History</a></li>
+                    <li class="breadcrumb-item active">{{ alert.event }}</li>
+                </ol>
+            </nav>
 
             <!-- Coverage-Based Alert Banner -->
             {% if coverage_data and coverage_data.get('county') %}

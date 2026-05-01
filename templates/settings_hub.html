@@ -4,22 +4,6 @@
 
 {% block extra_css %}
 <style>
-    .settings-hub-header {
-        background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark, var(--primary-color)) 100%);
-        color: #fff;
-        padding: 2rem 1.5rem 1.5rem;
-        margin-bottom: 2rem;
-        border-radius: 0 0 var(--radius-lg, 12px) var(--radius-lg, 12px);
-    }
-    .settings-hub-header h1 {
-        font-size: 1.75rem;
-        font-weight: 700;
-        margin-bottom: 0.25rem;
-    }
-    .settings-hub-header p {
-        opacity: 0.85;
-        margin: 0;
-    }
     .settings-category-title {
         font-size: 0.75rem;
         font-weight: 700;
@@ -82,10 +66,14 @@
 {% endblock %}
 
 {% block content %}
-<div class="settings-hub-header">
+<div class="page-header">
     <div class="container-fluid">
-        <h1><i class="fas fa-cog"></i> Settings</h1>
-        <p>Configure and manage all aspects of EAS Station from one place.</p>
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+            <div>
+                <h1 class="page-title mb-0"><i class="fas fa-cog me-2"></i>Settings</h1>
+                <p class="page-subtitle mb-0">Configure and manage all aspects of EAS Station from one place</p>
+            </div>
+        </div>
     </div>
 </div>
 
