@@ -35,6 +35,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
+from scipy.signal import oaconvolve
 
 logger = logging.getLogger(__name__)
 
@@ -2745,7 +2746,7 @@ class FMDemodulator:
         # Stereo pilot detection (19 kHz tone indicates stereo broadcast)
         if self._stereo_enabled and self.config.sample_rate >= 38000:
             # Filter for 19 kHz pilot tone
-            pilot_filtered = np.convolve(multiplex, self._pilot_filter, mode="same")
+            pilot_filtered = oaconvolve(multiplex, self._pilot_filter, mode="same")
 
             # Measure pilot strength (RMS of filtered signal)
             pilot_rms = np.sqrt(np.mean(pilot_filtered ** 2))
@@ -2963,7 +2964,7 @@ class FMDemodulator:
         return design_fir_bandpass(low_cut, high_cut, fs, taps=taps)
 
     def _lpr_filter_signal(self, signal: np.ndarray) -> np.ndarray:
-        filtered = np.convolve(signal, self._lpr_filter, mode="same")
+        filtered = oaconvolve(signal, self._lpr_filter, mode="same")
         return filtered
 
     def _decode_stereo(self, multiplex: np.ndarray, sample_indices: np.ndarray) -> Optional[np.ndarray]:
@@ -2991,10 +2992,10 @@ class FMDemodulator:
             return None
 
         # Extract L+R (mono) using lowpass filter
-        lpr = np.convolve(multiplex, self._lpr_filter, mode="same")
+        lpr = oaconvolve(multiplex, self._lpr_filter, mode="same")
 
         # Recover the 19 kHz pilot tone via the pre-designed bandpass.
-        pilot_filtered = np.convolve(multiplex, self._pilot_filter, mode="same")
+        pilot_filtered = oaconvolve(multiplex, self._pilot_filter, mode="same")
 
         # Normalize the pilot to ~unit amplitude so the derived 38 kHz carrier
         # has a stable amplitude and the L-R recovery gain doesn't depend on
@@ -3015,7 +3016,7 @@ class FMDemodulator:
         # compensates for the ½ factor that DSB-SC mixing of unit-amplitude
         # signals introduces (cos(A)·cos(A) = ½(1 + cos(2A))).
         suppressed = 2.0 * multiplex * carrier_38k
-        lmr = np.convolve(suppressed, self._dsb_filter, mode="same")
+        lmr = oaconvolve(suppressed, self._dsb_filter, mode="same")
 
         # Matrix decode: L = ½((L+R) + (L-R)), R = ½((L+R) - (L-R))
         left = 0.5 * (lpr + lmr)
