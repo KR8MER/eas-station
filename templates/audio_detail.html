@@ -13,12 +13,12 @@
             <div class="page-header-actions">
                 {% if audio_url %}
                 <a class="btn btn-outline-light" href="{{ audio_url }}?download=1" rel="noopener">
-                    <i class="fas fa-download me-1"></i>Download
+                    <i class="fas fa-download me-1"></i>Download Composite
                 </a>
                 {% endif %}
                 {% if text_url %}
                 <a class="btn btn-outline-light" href="{{ text_url }}" target="_blank" rel="noopener">
-                    <i class="fas fa-file-alt me-1"></i>JSON
+                    <i class="fas fa-file-alt me-1"></i>Summary JSON
                 </a>
                 {% endif %}
                 <a href="{{ url_for('audio_detail_pdf', message_id=message.id) }}" target="_blank" class="btn btn-outline-light">
