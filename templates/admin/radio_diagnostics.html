@@ -144,6 +144,21 @@
         </div>
     </div>
 
+    <!-- RBDS Decoder Health (per-receiver) -->
+    <div class="card mb-4 shadow-sm border-0">
+        <div class="card-header bg-info text-white">
+            <i class="fas fa-broadcast-tower me-2" aria-hidden="true"></i>
+            <strong>RBDS Decoder Health</strong>
+            <span class="ms-2 small text-white-50">Group-type traffic, sync &amp; BLER</span>
+        </div>
+        <div class="card-body" id="rbdsDecoderContainer" aria-live="polite">
+            <div class="text-center text-muted py-4">
+                <i class="fas fa-spinner fa-spin fa-2x mb-2" aria-hidden="true"></i>
+                <p class="mb-0">Loading RBDS decoder status…</p>
+            </div>
+        </div>
+    </div>
+
     <!-- Troubleshooting Tips -->
     <div class="card shadow-sm border-0">
         <div class="card-header bg-info text-white">
@@ -522,6 +537,94 @@ sudo systemctl restart eas-station</code></pre>
         container.innerHTML = html;
     }
 
+    // ---- RBDS Decoder Health card ---------------------------------------
+    // The /api/radio/diagnostics/status payload doesn't carry the rich RBDS
+    // metadata (group-type counts, BLER, last-seen heartbeat); that
+    // information is published with the audio source metrics. Here we fetch
+    // /api/audio/sources, filter to FM (RBDS-bearing) sources, and render
+    // each one with the shared RBDSViz module so the visualisation matches
+    // the audio monitor and the radio-settings receiver tile.
+    async function loadRBDSDecoder() {
+        const container = document.getElementById('rbdsDecoderContainer');
+        if (!container) return;
+        try {
+            const resp = await fetch('/api/audio/sources', { cache: 'no-store' });
+            if (!resp.ok) {
+                throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+            }
+            const payload = await resp.json();
+            const sources = Array.isArray(payload?.sources) ? payload.sources : [];
+
+            // Pick FM/RBDS-relevant sources: anything that has decoded RBDS,
+            // is currently locking/locked, or has the decoder explicitly
+            // disabled.  We deliberately include DISABLED so operators can
+            // see "RBDS turned off here" and not just an empty card.
+            const candidates = sources.filter(s => {
+                const md = s?.metrics?.metadata || {};
+                if (md.rbds_lock_state &&
+                    ['LOCKING', 'LOCKED', 'DISABLED'].includes(md.rbds_lock_state)) return true;
+                return [
+                    'rbds_ps_name', 'rbds_pi_code', 'rbds_radio_text',
+                    'rbds_program_type_name', 'rbds_blocks_total',
+                    'rbds_group_type_counts', 'rbds_last_seen',
+                ].some(k => md[k] !== undefined && md[k] !== null && md[k] !== '');
+            });
+
+            if (!candidates.length) {
+                container.innerHTML = `
+                    <div class="alert alert-secondary mb-0" role="status">
+                        <i class="fas fa-circle-info me-2" aria-hidden="true"></i>
+                        No RBDS-capable audio sources found. Configure an FM receiver with RBDS
+                        enabled to see decoder health here.
+                    </div>
+                `;
+                return;
+            }
+
+            const escape = (window.RBDSViz && window.RBDSViz.escapeHtml)
+                ? window.RBDSViz.escapeHtml
+                : (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+            const sections = candidates.map(s => {
+                const md = s.metrics.metadata || {};
+                const displayName = md.receiver_display_name || s.name || 'Receiver';
+                const ident = md.receiver_identifier || '';
+                const stationCard = window.RBDSViz?.buildStationCard
+                    ? window.RBDSViz.buildStationCard(md, { compact: false })
+                    : '';
+                const healthCard = window.RBDSViz?.buildDecoderHealthCard
+                    ? window.RBDSViz.buildDecoderHealthCard(md)
+                    : '';
+                if (!stationCard && !healthCard) return '';
+                return `
+                    <article class="mb-4" aria-label="${escape(`RBDS decoder for ${displayName}`)}">
+                        <header class="d-flex align-items-center gap-2 mb-2">
+                            <h5 class="mb-0">${escape(displayName)}</h5>
+                            ${ident ? `<code class="text-muted small">${escape(ident)}</code>` : ''}
+                        </header>
+                        ${stationCard}
+                        ${healthCard}
+                    </article>
+                `;
+            }).filter(Boolean).join('');
+
+            container.innerHTML = sections || `
+                <div class="alert alert-secondary mb-0" role="status">
+                    <i class="fas fa-circle-info me-2" aria-hidden="true"></i>
+                    RBDS decoder is idle on all configured sources.
+                </div>
+            `;
+        } catch (error) {
+            console.error('Failed to load RBDS decoder status:', error);
+            container.innerHTML = `
+                <div class="alert alert-warning mb-0" role="alert">
+                    <i class="fas fa-exclamation-triangle me-2" aria-hidden="true"></i>
+                    <strong>Couldn't load RBDS decoder status:</strong> ${error.message}
+                </div>
+            `;
+        }
+    }
+
     async function loadDiagnostics() {
         try {
             const response = await fetch('/api/radio/diagnostics/status');
@@ -534,6 +637,11 @@ sudo systemctl restart eas-station</code></pre>
             updateStats(data);
             updateRadioManager(data);
             updateReceiverDetails(data);
+            // RBDS decoder health is fetched separately because the diagnostics
+            // payload doesn't carry RBDS metadata (it lives in audio source
+            // metrics).  Errors are isolated so a failed RBDS fetch doesn't
+            // hide the rest of the diagnostics page.
+            loadRBDSDecoder();
         } catch (error) {
             console.error('Failed to load diagnostics:', error);
 
