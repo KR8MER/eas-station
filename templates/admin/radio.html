@@ -17,20 +17,6 @@
         </button>
     </div>
 
-    <div class="alert alert-success" role="alert">
-        <div class="d-flex">
-            <div class="me-3">
-                <i class="fas fa-star fa-lg"></i>
-            </div>
-            <div>
-                <strong>Recommended: SDR++ Server</strong> — Connect to <a href="https://www.sdrpp.org/" target="_blank" rel="noopener" class="alert-link">SDR++</a> running on any machine for professional spectrum visualization, shared SDR access, and remote monitoring. 
-                <button type="button" class="btn btn-success btn-sm ms-2" id="addSdrppServerBtn">
-                    <i class="fas fa-plus"></i> Add SDR++ Server
-                </button>
-            </div>
-        </div>
-    </div>
-
     <div class="alert alert-info" role="alert">
         <div class="d-flex">
             <div class="me-3">
@@ -64,9 +50,6 @@
                     <strong>Quick Setup</strong>
                 </div>
                 <div class="btn-group btn-group-sm" role="group">
-                    <button type="button" class="btn btn-warning" id="addSdrppQuickBtn" title="Recommended: Add SDR++ Server">
-                        <i class="fas fa-star"></i> SDR++ Server
-                    </button>
                     <button type="button" class="btn btn-light" id="discoverDevicesBtn">
                         <i class="fas fa-satellite-dish"></i> Discover USB Devices
                     </button>
@@ -82,7 +65,7 @@
         <div class="card-body">
             <div id="quickSetupContent" class="text-center text-muted py-3">
                 <i class="fas fa-info-circle fa-2x mb-2"></i>
-                <p class="mb-0">Click <strong>SDR++ Server</strong> to connect to a remote SDR, or <strong>Discover USB Devices</strong> for directly connected hardware.</p>
+                <p class="mb-0">Click <strong>Discover USB Devices</strong> to scan for directly connected SDR hardware.</p>
             </div>
         </div>
     </div>
@@ -168,14 +151,14 @@
                 <div class="card-body">
                     <h2 class="h6 text-uppercase text-muted mb-3">Capture Workflow</h2>
                     <ol class="ps-3 small mb-0">
-                        <li class="mb-2">Create receivers using <strong>SDR++ Server</strong> (recommended) or direct USB SDR.</li>
+                        <li class="mb-2">Create receivers using a directly connected USB SDR.</li>
                         <li class="mb-2">Enable <strong>Auto-start</strong> to let the poller launch tuned listeners.</li>
                         <li class="mb-2">When the poller hears SAME bursts it requests captures from every enabled receiver.</li>
                         <li class="mb-0">Monitor signal lock and error states below to diagnose hardware or driver issues.</li>
                     </ol>
                 </div>
                 <div class="card-footer text-muted small">
-                    Supported: <strong>SDR++ Server</strong> (recommended), RTL-SDR, Airspy, SoapyRemote.
+                    Supported: RTL-SDR, Airspy, SoapyRemote.
                 </div>
             </div>
         </div>
@@ -1333,32 +1316,13 @@
             const response = await fetch('/api/radio/devices/simple');
             const data = await response.json();
 
-            // Always include SDR++ Server as first option (recommended)
             deviceSelect.innerHTML = `
                 <option value="">-- Select SDR source --</option>
-                <option value="sdrpp:" data-driver="sdrpp" data-serial="">⭐ SDR++ Server (Network) - Recommended</option>
             `;
 
             let preSelectedDevice = null;
 
-            // Check if pre-selecting SDR++ Server
-            if (preSelectSerial && preSelectSerial.startsWith('tcp://')) {
-                // This is an SDR++ Server connection
-                const sdrppOption = deviceSelect.querySelector('option[value="sdrpp:"]');
-                if (sdrppOption) {
-                    sdrppOption.selected = true;
-                    sdrppOption.dataset.serial = preSelectSerial;
-                    preSelectedDevice = { driver: 'sdrpp', serial: preSelectSerial };
-                }
-            }
-
             if (data.devices && data.devices.length > 0) {
-                // Add separator
-                const separator = document.createElement('option');
-                separator.disabled = true;
-                separator.textContent = '── USB Devices ──';
-                deviceSelect.appendChild(separator);
-
                 data.devices.forEach(device => {
                     const option = document.createElement('option');
                     option.value = device.value;
@@ -1399,7 +1363,6 @@
             console.error('Failed to load SDR devices:', error);
             deviceSelect.innerHTML = `
                 <option value="">-- Error loading devices --</option>
-                <option value="sdrpp:" data-driver="sdrpp" data-serial="">⭐ SDR++ Server (Network) - Still available</option>
             `;
         }
     }
@@ -1410,29 +1373,8 @@
         if (selectedOption && selectedOption.dataset.driver) {
             const driver = selectedOption.dataset.driver;
             document.getElementById('receiverDriver').value = driver;
-            
-            // For SDR++ Server, set a default TCP address, otherwise use serial
-            if (driver === 'sdrpp') {
-                const serialField = document.getElementById('receiverSerial');
-                if (serialField && (!serialField.value || !serialField.value.startsWith('tcp://'))) {
-                    serialField.value = 'tcp://localhost:5259';
-                }
-                // Pre-fill display name if empty
-                const displayNameField = document.getElementById('receiverDisplayName');
-                if (displayNameField && !displayNameField.value) {
-                    displayNameField.value = 'SDR++ Server';
-                }
-                // Show helpful note
-                const notesField = document.getElementById('receiverNotes');
-                const gainField = document.getElementById('receiverGain');
-                const freqHelp = document.getElementById('frequencyHelp');
-                if (notesField) notesField.value = 'Connect to SDR++ Server. Change tcp://localhost:5259 to your server address.';
-                if (gainField) gainField.value = ''; // Gain controlled by SDR++
-                if (freqHelp) freqHelp.textContent = 'SDR++ Server - gain controlled in SDR++ application';
-            } else {
-                const serialField = document.getElementById('receiverSerial');
-                if (serialField) serialField.value = selectedOption.dataset.serial || '';
-            }
+            const serialField = document.getElementById('receiverSerial');
+            if (serialField) serialField.value = selectedOption.dataset.serial || '';
 
             // Auto-generate identifier from display name if creating new
             const receiverIdField = document.getElementById('receiverId');
@@ -2420,79 +2362,6 @@
     refreshButton?.addEventListener('click', () => {
         refreshReceivers({ endpoint: MONITORING_ENDPOINT, silent: false, showSpinner: true });
     });
-
-    // SDR++ Server quick add buttons
-    const addSdrppServerBtn = document.getElementById('addSdrppServerBtn');
-    const addSdrppQuickBtn = document.getElementById('addSdrppQuickBtn');
-    
-    const openSdrppModal = () => {
-        // Open the modal with SDR++ Server preset pre-filled
-        openModal();
-        
-        // Pre-fill with SDR++ Server settings after modal is rendered
-        setTimeout(() => {
-            // Get all elements with null checks
-            const displayNameEl = document.getElementById('receiverDisplayName');
-            const identifierEl = document.getElementById('receiverIdentifier');
-            const driverEl = document.getElementById('receiverDriver');
-            const serialEl = document.getElementById('receiverSerial');
-            const frequencyEl = document.getElementById('receiverFrequency');
-            const frequencyInputEl = document.getElementById('receiverFrequencyInput');
-            const sampleRateSelect = document.getElementById('receiverSampleRate');
-            const gainEl = document.getElementById('receiverGain');
-            const modulationEl = document.getElementById('receiverModulation');
-            const freqDisplay = document.getElementById('frequencyDisplay');
-            const freqHelp = document.getElementById('frequencyHelp');
-            const deviceSelect = document.getElementById('receiverDevice');
-            const notesEl = document.getElementById('receiverNotes');
-            
-            // Safely set values with null checks
-            if (displayNameEl) displayNameEl.value = 'SDR++ Server';
-            if (identifierEl) identifierEl.value = 'sdrpp_server';
-            if (driverEl) driverEl.value = 'sdrpp';
-            if (serialEl) serialEl.value = 'tcp://localhost:5259';
-            if (frequencyEl) frequencyEl.value = '162550000';
-            if (frequencyInputEl) frequencyInputEl.value = '162.550';
-            
-            // Set sample rate dropdown
-            if (sampleRateSelect) {
-                sampleRateSelect.disabled = false;
-                sampleRateSelect.innerHTML = `
-                    <option value="2500000" selected>2.5 MHz (2,500,000 Hz) ⭐ Recommended</option>
-                    <option value="1024000">1.0 MHz (1,024,000 Hz)</option>
-                    <option value="2400000">2.4 MHz (2,400,000 Hz)</option>
-                `;
-            }
-            
-            // Leave gain empty (controlled by SDR++)
-            if (gainEl) gainEl.value = '';
-            
-            // Set modulation to NFM for NOAA
-            if (modulationEl) modulationEl.value = 'NFM';
-            
-            // Update frequency display
-            if (freqDisplay) {
-                freqDisplay.innerHTML = '<i class="fas fa-info-circle"></i> <strong>162.550 MHz</strong> (NOAA WX7)';
-                freqDisplay.className = 'alert alert-info mb-0';
-            }
-            
-            if (freqHelp) freqHelp.textContent = 'SDR++ Server - gain controlled in SDR++ application';
-            
-            // Show device dropdown with SDR++ Server selected
-            if (deviceSelect) {
-                deviceSelect.innerHTML = `
-                    <option value="sdrpp:" selected>SDR++ Server (Network) ⭐ Recommended</option>
-                    <option value="">-- Or select USB device --</option>
-                `;
-            }
-            
-            // Show helpful note
-            if (notesEl) notesEl.value = 'Connect to SDR++ Server. Change tcp://localhost:5259 to your server address.';
-        }, 100);
-    };
-    
-    addSdrppServerBtn?.addEventListener('click', openSdrppModal);
-    addSdrppQuickBtn?.addEventListener('click', openSdrppModal);
 
     document.addEventListener('visibilitychange', () => {
         if (document.hidden) {

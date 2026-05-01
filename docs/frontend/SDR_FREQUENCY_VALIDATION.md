@@ -92,10 +92,6 @@ RTL-SDR supports a wider range of sample rates:
 - 250 kHz - 3.2 MHz typically
 - Common rates: 250 kHz, 1.024 MHz, 2.048 MHz, 2.4 MHz, 2.56 MHz
 
-#### SDR++ Server / Remote
-
-Remote SDRs support rates determined by the remote hardware.
-
 ### Validation Layers
 
 The system has **three layers** of validation:

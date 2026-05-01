@@ -589,8 +589,8 @@ class DemodulatorStatus:
 class RBDSWorker:
     """Threaded RBDS processor - processes RBDS in background without blocking audio.
 
-    Like SDR++, RBDS runs in its own thread. Audio demodulation drops samples
-    into a queue; the worker processes them independently and publishes results.
+    RBDS runs in its own thread. Audio demodulation drops samples into a
+    queue; the worker processes them independently and publishes results.
     This ensures RBDS processing NEVER blocks the audio path.
     """
     
@@ -2517,8 +2517,7 @@ class FMDemodulator:
         self._pilot_freq = 19000.0  # 19 kHz pilot tone
         self._pilot_pll_bandwidth = 50.0  # Hz - narrow bandwidth for stable lock
 
-        # RBDS processing in separate thread (like SDR++)
-        # This ensures RBDS NEVER blocks audio processing
+        # RBDS processing in separate thread so it never blocks audio
         self._rbds_enabled = config.enable_rbds and config.sample_rate >= 114000
         self._rbds_worker: Optional[RBDSWorker] = None
         self._rbds_intermediate_rate = self._intermediate_rate
@@ -2761,8 +2760,9 @@ class FMDemodulator:
             if stereo_pilot_locked:
                 logger.debug(f"Stereo pilot detected: strength={stereo_pilot_strength:.2f}")
 
-        # RBDS extraction in separate thread (like SDR++)
-        # Submit samples to worker (non-blocking) and get latest results
+        # RBDS extraction in a separate worker thread.  Submit samples
+        # (non-blocking) and pick up whatever the worker has decoded since
+        # the last call.
         # 24/7 RELIABILITY: Wrap in try-except to ensure RBDS issues never affect audio
         if self._rbds_enabled and self._rbds_worker:
             try:
