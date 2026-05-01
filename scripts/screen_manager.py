@@ -444,7 +444,8 @@ class ScreenManager:
             from app_core.oled import ensure_oled_button
         except Exception as exc:  # pragma: no cover - optional dependency
             logger.debug("OLED button support unavailable: %s", exc)
-            self._oled_button_initialized = True
+            # Do NOT mark as initialized — allow retry once the module becomes available
+            self._oled_button_retry_after = now_mono + 30.0
             return
 
         button = ensure_oled_button(logger)
@@ -543,18 +544,9 @@ class ScreenManager:
         if not screens:
             return
 
-        current_index = self._oled_current_index
-        if current_index >= len(screens):
-            current_index = 0
-            self._oled_current_index = 0
-
-        screen_config = screens[current_index]
-        self._display_oled_screen(screen_config)
-
-        now = datetime.utcnow()
-        self._last_oled_update = now
-
-        current_index += 1
+        # Advance index first, then display the new screen so the button
+        # visibly moves to the next screen rather than repeating the current one.
+        current_index = self._oled_current_index + 1
         if current_index >= len(screens):
             current_index = 0
             if self._oled_rotation.get('randomize'):
@@ -562,6 +554,11 @@ class ScreenManager:
                 self._oled_rotation['screens'] = screens
 
         self._oled_current_index = current_index
+        screen_config = screens[current_index]
+        self._display_oled_screen(screen_config)
+
+        now = datetime.utcnow()
+        self._last_oled_update = now
         self._update_rotation_state('oled', current_index, now)
 
     def _display_oled_snapshot(self) -> None:

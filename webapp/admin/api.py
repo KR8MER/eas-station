@@ -1607,6 +1607,17 @@ def api_system_status():
         ip_address = _get_primary_ip_address()
         uptime_seconds = max(current_utc.timestamp() - psutil.boot_time(), 0.0)
 
+        # Location settings (county/state) for display screens
+        county_name = ''
+        state_code = ''
+        try:
+            from app_core.location import get_location_settings
+            loc = get_location_settings()
+            county_name = loc.get('county_name', '') or ''
+            state_code = loc.get('state_code', '') or ''
+        except Exception:
+            pass
+
         status = 'healthy'
         status_reasons = []
 
@@ -1777,6 +1788,8 @@ def api_system_status():
                 'timezone': get_location_timezone_name(),
                 'hostname': hostname,
                 'ip_address': ip_address,
+                'county_name': county_name,
+                'state_code': state_code,
                 'boundaries_count': total_boundaries,
                 'active_alerts_count': active_alerts,
                 'database_status': database_status,

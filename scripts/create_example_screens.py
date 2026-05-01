@@ -250,9 +250,9 @@ LED_RECEIVER_STATUS = {
     "template_data": {
         "lines": [
             "RECEIVER STATUS",
-            "{receivers[0].display_name}",
-            "Signal: {receivers[0].latest_status.signal_strength} dBm",
-            "Lock: {receivers[0].latest_status.locked}"
+            "{radio.receivers[0].display_name}",
+            "Signal: {radio.receivers[0].latest_status.signal_strength} dBm",
+            "Lock: {radio.receivers[0].latest_status.locked}"
         ],
         "color": "CYAN",
         "mode": "HOLD",
@@ -262,7 +262,7 @@ LED_RECEIVER_STATUS = {
     "data_sources": [
         {
             "endpoint": "/api/monitoring/radio",
-            "var_name": "receivers"
+            "var_name": "radio"
         }
     ]
 }
@@ -349,7 +349,7 @@ VFD_AUDIO_VU_METER = {
                 "y": 12,
                 "width": 120,
                 "height": 8,
-                "value": "{audio.peak_level_linear}",
+                "value": "{audio.peak_level_percent}",
                 "label": "PEAK"
             },
             {
@@ -358,7 +358,7 @@ VFD_AUDIO_VU_METER = {
                 "y": 23,
                 "width": 120,
                 "height": 8,
-                "value": "{audio.rms_level_linear}",
+                "value": "{audio.rms_level_percent}",
                 "label": "RMS"
             }
         ]
@@ -494,11 +494,11 @@ VFD_NETWORK_STATUS = {
 
 VFD_TEMP_MONITORING = {
     "name": "vfd_temp_monitoring",
-    "description": "Temperature monitoring with visual gauge",
+    "description": "CPU and memory usage monitoring with visual gauges",
     "display_type": "vfd",
     "enabled": True,
     "priority": 2,
-    "refresh_interval": 60,
+    "refresh_interval": 15,
     "duration": 10,
     "template_data": {
         "type": "graphics",
@@ -507,44 +507,39 @@ VFD_TEMP_MONITORING = {
                 "type": "text",
                 "x": 2,
                 "y": 1,
-                "text": "TEMPERATURE"
-            },
-            {
-                "type": "rectangle",
-                "x1": 10,
-                "y1": 10,
-                "x2": 130,
-                "y2": 28,
-                "filled": False
-            },
-            {
-                "type": "text",
-                "x": 15,
-                "y": 14,
-                "text": "CPU Temp: {temp.cpu}°C"
+                "text": "RESOURCE MONITOR"
             },
             {
                 "type": "progress_bar",
-                "x": 15,
-                "y": 21,
-                "width": 110,
+                "x": 10,
+                "y": 10,
+                "width": 120,
                 "height": 6,
-                "value": "{temp.cpu_percent}",
-                "label": ""
+                "value": "{status.system_resources.cpu_usage_percent}",
+                "label": "CPU"
+            },
+            {
+                "type": "progress_bar",
+                "x": 10,
+                "y": 20,
+                "width": 120,
+                "height": 6,
+                "value": "{status.system_resources.memory_usage_percent}",
+                "label": "MEM"
             }
         ]
     },
     "data_sources": [
         {
             "endpoint": "/api/system_status",
-            "var_name": "temp"
+            "var_name": "status"
         }
     ]
 }
 
 VFD_DUAL_VU_METER = {
     "name": "vfd_dual_vu_meter",
-    "description": "Dual audio channel VU meters",
+    "description": "Dual audio source VU meters showing buffer utilization",
     "display_type": "vfd",
     "enabled": True,
     "priority": 2,
@@ -555,65 +550,33 @@ VFD_DUAL_VU_METER = {
         "elements": [
             {
                 "type": "text",
-                "x": 40,
+                "x": 30,
                 "y": 1,
                 "text": "AUDIO VU METERS"
             },
             {
-                "type": "text",
-                "x": 2,
-                "y": 10,
-                "text": "L"
+                "type": "progress_bar",
+                "x": 10,
+                "y": 9,
+                "width": 120,
+                "height": 8,
+                "value": "{audio.live_metrics[0].buffer_utilization}",
+                "label": "L"
             },
             {
-                "type": "rectangle",
-                "x1": 10,
-                "y1": 9,
-                "x2": 135,
-                "y2": 15,
-                "filled": False
-            },
-            {
-                "type": "rectangle",
-                "x1": 11,
-                "y1": 10,
-                "x2": "{audio.left_bar_width}",
-                "y2": 14,
-                "filled": True
-            },
-            {
-                "type": "text",
-                "x": 2,
+                "type": "progress_bar",
+                "x": 10,
                 "y": 20,
-                "text": "R"
-            },
-            {
-                "type": "rectangle",
-                "x1": 10,
-                "y1": 19,
-                "x2": 135,
-                "y2": 25,
-                "filled": False
-            },
-            {
-                "type": "rectangle",
-                "x1": 11,
-                "y1": 20,
-                "x2": "{audio.right_bar_width}",
-                "y2": 24,
-                "filled": True
-            },
-            {
-                "type": "text",
-                "x": 40,
-                "y": 28,
-                "text": "{audio.peak_level_db} dB"
+                "width": 120,
+                "height": 8,
+                "value": "{audio.live_metrics[1].buffer_utilization}",
+                "label": "R"
             }
         ]
     },
     "data_sources": [
         {
-            "endpoint": "/api/audio/metrics/latest",
+            "endpoint": "/api/audio/metrics",
             "var_name": "audio"
         }
     ]
@@ -902,45 +865,201 @@ OLED_AUDIO_HEALTH_MATRIX = {
 
 OLED_AUDIO_TELEMETRY = {
     "name": "oled_audio_telemetry",
-    "description": "Live audio peaks and buffer utilization for leading sources.",
+    "description": "Live audio levels with dual-source VU bars.",
     "display_type": "oled",
     "enabled": True,
     "priority": 2,
-    "refresh_interval": 12,
+    "refresh_interval": 5,
     "duration": 12,
     "template_data": {
         "clear": True,
-        "lines": [
+        "elements": [
+            # Header banner: wave icon + title + source count on right
+            {"type": "rectangle", "x": 0, "y": 0, "width": 128, "height": 12, "filled": True},
+            {"type": "icon", "name": "wave", "x": 2, "y": 2, "size": 9},
+            {"type": "text", "text": "AUDIO LEVELS", "x": 13, "y": 1, "font": "small", "invert": True},
             {
-                "text": "◢ AUDIO TELEMETRY ◣",
-                "font": "medium",
-                "wrap": False,
-                "invert": True,
-                "spacing": 1,
+                "type": "text", "text": "{audio.total_sources}src",
+                "x": 125, "y": 1, "font": "small", "invert": True,
+                "align": "right", "max_width": 25, "overflow": "trim",
             },
-            {"text": "Sources {audio.total_sources}", "font": "small", "wrap": False, "y": 15},
+            # Source 1 row
             {
-                "text": "{audio.live_metrics[0].source_name}: {audio.live_metrics[0].peak_level_db} dB",
-                "y": 27,
-                "allow_empty": True,
-                "max_width": 124,
-            },
-            {
-                "text": "RMS {audio.live_metrics[0].rms_level_db} dB  ·  Silence {audio.live_metrics[0].silence_detected}",
-                "y": 39,
-                "allow_empty": True,
-                "max_width": 124,
+                "type": "text", "text": "{audio.live_metrics[0].source_name}",
+                "x": 2, "y": 14, "font": "small", "max_width": 66, "overflow": "trim",
             },
             {
-                "text": "{audio.live_metrics[1].source_name}: {audio.live_metrics[1].peak_level_db} dB | Buf {audio.live_metrics[1].buffer_utilization}%",
-                "y": 51,
-                "allow_empty": True,
-                "max_width": 124,
+                "type": "text", "text": "{audio.live_metrics[0].peak_level_db}dB",
+                "x": 125, "y": 14, "font": "small", "align": "right",
+                "max_width": 50, "overflow": "trim",
+            },
+            {
+                "type": "bar", "value": "{audio.live_metrics[0].buffer_utilization}",
+                "x": 2, "y": 26, "width": 124, "height": 9, "border": True,
+            },
+            # Source 2 row
+            {
+                "type": "text", "text": "{audio.live_metrics[1].source_name}",
+                "x": 2, "y": 37, "font": "small", "max_width": 66, "overflow": "trim",
+            },
+            {
+                "type": "text", "text": "{audio.live_metrics[1].peak_level_db}dB",
+                "x": 125, "y": 37, "font": "small", "align": "right",
+                "max_width": 50, "overflow": "trim",
+            },
+            {
+                "type": "bar", "value": "{audio.live_metrics[1].buffer_utilization}",
+                "x": 2, "y": 49, "width": 124, "height": 14, "border": True,
             },
         ],
     },
     "data_sources": [
         {"endpoint": "/api/audio/metrics", "var_name": "audio"},
+    ],
+}
+
+# Analog + digital clock with network footer.
+# Fixed: right-side footer fits within 64 px (IP at y=50, ends y=61).
+OLED_CLOCK_FACE = {
+    "name": "oled_clock_face",
+    "description": "Analog clock face with digital time, date, and IP address.",
+    "display_type": "oled",
+    "enabled": True,
+    "priority": 1,
+    "refresh_interval": 10,
+    "duration": 15,
+    "template_data": {
+        "clear": True,
+        "elements": [
+            # Analog clock — left half, centered at (30, 32), radius 28
+            {
+                "type": "clock", "x": 30, "y": 32, "radius": 28,
+                "show_seconds": True, "show_ticks": True,
+            },
+            # Digital time — right side
+            {"type": "text", "text": "{now.time_24}", "x": 90, "y": 2, "font": "xlarge", "align": "center"},
+            # Date below the time
+            {"type": "text", "text": "{now.date}", "x": 90, "y": 32, "font": "small", "align": "center"},
+            # Footer divider (right half only)
+            {"type": "dotted_hline", "x": 64, "y": 44, "width": 60},
+            # Network icon + IP address — y=50 ends at y=61, within 64 px
+            {"type": "icon", "name": "network", "x": 65, "y": 50, "size": 9},
+            {
+                "type": "text", "text": "{status.ip_address}",
+                "x": 76, "y": 50, "font": "small",
+                "max_width": 50, "overflow": "trim",
+            },
+        ],
+    },
+    "data_sources": [
+        {"endpoint": "/api/system_status", "var_name": "status"},
+    ],
+}
+
+# EAS decoder health and detection statistics.
+OLED_EAS_DECODER = {
+    "name": "oled_eas_decoder",
+    "description": "EAS decoder health gauge, sync status, and detection count.",
+    "display_type": "oled",
+    "enabled": True,
+    "priority": 2,
+    "refresh_interval": 15,
+    "duration": 12,
+    "template_data": {
+        "clear": True,
+        "elements": [
+            {"type": "rectangle", "x": 0, "y": 0, "width": 128, "height": 12, "filled": True},
+            {"type": "icon", "name": "antenna", "x": 2, "y": 2, "size": 9},
+            {"type": "text", "text": "EAS DECODER", "x": 13, "y": 1, "font": "small", "invert": True},
+            # Health bar row
+            {"type": "text", "text": "Health", "x": 2, "y": 15, "font": "small"},
+            {
+                "type": "bar", "value": "{eas_monitor.health_percentage}",
+                "x": 40, "y": 15, "width": 58, "height": 10,
+            },
+            {
+                "type": "text", "text": "{eas_monitor.health_percentage}%",
+                "x": 125, "y": 15, "font": "small", "align": "right",
+                "max_width": 24, "overflow": "trim",
+            },
+            # Sync + audio status
+            {"type": "icon", "name": "check", "x": 2, "y": 28, "size": 8},
+            {"type": "text", "text": "Synced", "x": 12, "y": 28, "font": "small"},
+            {
+                "type": "text", "text": "Audio: {eas_monitor.audio_flowing}",
+                "x": 125, "y": 28, "font": "small", "align": "right",
+                "max_width": 70, "overflow": "trim",
+            },
+            # Alerts detected
+            {"type": "icon", "name": "warning", "x": 2, "y": 39, "size": 8},
+            {
+                "type": "text", "text": "Detected: {eas_monitor.alerts_detected} alerts",
+                "x": 12, "y": 39, "font": "small", "max_width": 112, "overflow": "trim",
+            },
+            {"type": "hline", "x": 0, "y": 50, "width": 128},
+            {"type": "icon", "name": "antenna", "x": 2, "y": 53, "size": 8},
+            {"type": "text", "text": "{eas_monitor.active_sources} src", "x": 12, "y": 53, "font": "small"},
+            {
+                "type": "text", "text": "{eas_monitor.scans_performed} scans",
+                "x": 125, "y": 53, "font": "small", "align": "right",
+            },
+        ],
+    },
+    "data_sources": [
+        {"endpoint": "/api/eas/monitor", "var_name": "eas_monitor"},
+    ],
+}
+
+# Radio receiver status — two receivers with lock indicator and signal strength.
+OLED_RECEIVERS = {
+    "name": "oled_receivers",
+    "description": "Radio receiver lock status and signal strength for two receivers.",
+    "display_type": "oled",
+    "enabled": True,
+    "priority": 2,
+    "refresh_interval": 20,
+    "duration": 12,
+    "template_data": {
+        "clear": True,
+        "elements": [
+            {"type": "rectangle", "x": 0, "y": 0, "width": 128, "height": 12, "filled": True},
+            {"type": "icon", "name": "antenna", "x": 2, "y": 2, "size": 9},
+            {"type": "text", "text": "RECEIVERS", "x": 13, "y": 1, "font": "small", "invert": True},
+            {
+                "type": "text", "text": "{radio.count}",
+                "x": 125, "y": 1, "font": "small", "invert": True, "align": "right",
+            },
+            # Receiver 1 name
+            {
+                "type": "text", "text": "{radio.receivers[0].display_name}",
+                "x": 2, "y": 14, "font": "small", "max_width": 124, "overflow": "ellipsis",
+            },
+            # Receiver 1 status
+            {"type": "icon", "name": "check", "x": 2, "y": 25, "size": 8},
+            {"type": "text", "text": "Locked", "x": 12, "y": 25, "font": "small"},
+            {
+                "type": "text", "text": "{radio.receivers[0].latest_status.signal_strength} dBm",
+                "x": 125, "y": 25, "font": "small", "align": "right",
+                "max_width": 60, "overflow": "trim",
+            },
+            {"type": "dotted_hline", "x": 0, "y": 36, "width": 128},
+            # Receiver 2 name
+            {
+                "type": "text", "text": "{radio.receivers[1].display_name}",
+                "x": 2, "y": 39, "font": "small", "max_width": 124, "overflow": "ellipsis",
+            },
+            # Receiver 2 status
+            {"type": "icon", "name": "check", "x": 2, "y": 50, "size": 8},
+            {"type": "text", "text": "Locked", "x": 12, "y": 50, "font": "small"},
+            {
+                "type": "text", "text": "{radio.receivers[1].latest_status.signal_strength} dBm",
+                "x": 125, "y": 50, "font": "small", "align": "right",
+                "max_width": 60, "overflow": "trim",
+            },
+        ],
+    },
+    "data_sources": [
+        {"endpoint": "/api/monitoring/radio", "var_name": "radio"},
     ],
 }
 
@@ -1063,6 +1182,9 @@ def create_example_screens(app, display_types: Optional[Sequence[str]] = None):
                 OLED_IPAWS_POLL_WATCH,
                 OLED_AUDIO_HEALTH_MATRIX,
                 OLED_AUDIO_TELEMETRY,
+                OLED_CLOCK_FACE,
+                OLED_EAS_DECODER,
+                OLED_RECEIVERS,
             ]
 
             oled_screen_ids: List[Dict[str, int]] = []

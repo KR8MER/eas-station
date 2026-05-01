@@ -2025,11 +2025,15 @@ def api_get_audio_metrics_latest():
                     active_source = first_source
 
                 if source_data:
+                    peak_linear = _db_to_linear(_sanitize_float(source_data.get('peak_level_db', -120.0)))
+                    rms_linear = _db_to_linear(_sanitize_float(source_data.get('rms_level_db', -120.0)))
                     response = jsonify({
                         'peak_level_db': _sanitize_float(source_data.get('peak_level_db', -120.0)),
                         'rms_level_db': _sanitize_float(source_data.get('rms_level_db', -120.0)),
-                        'peak_level_linear': _db_to_linear(_sanitize_float(source_data.get('peak_level_db', -120.0))),
-                        'rms_level_linear': _db_to_linear(_sanitize_float(source_data.get('rms_level_db', -120.0))),
+                        'peak_level_linear': peak_linear,
+                        'rms_level_linear': rms_linear,
+                        'peak_level_percent': round(peak_linear * 100.0, 1),
+                        'rms_level_percent': round(rms_linear * 100.0, 1),
                         'silence_detected': source_data.get('silence_detected', False),
                         'active_source': active_source,
                         'source_status': source_data.get('status', 'unknown'),
@@ -2044,6 +2048,8 @@ def api_get_audio_metrics_latest():
             'rms_level_db': -120.0,
             'peak_level_linear': 0.0,
             'rms_level_linear': 0.0,
+            'peak_level_percent': 0.0,
+            'rms_level_percent': 0.0,
             'silence_detected': True,
             'active_source': None,
             'source_status': 'no_data',

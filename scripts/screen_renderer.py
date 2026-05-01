@@ -42,6 +42,8 @@ PREVIEW_SAMPLE_DATA: Dict[str, Any] = {
         "database_status": "connected",
         "hostname": "wx-station",
         "ip_address": "192.168.10.25",
+        "county_name": "Putnam County",
+        "state_code": "OH",
         "active_alerts_count": 0,
         "uptime_human": "12d 5h",
         "uptime_seconds": 1_080_000,
@@ -65,12 +67,10 @@ PREVIEW_SAMPLE_DATA: Dict[str, Any] = {
         "uptime_human": "12d 5h",
     },
     "location": {
-        "county_name": "Configured County",
+        "county_name": "Putnam County",
         "state_code": "OH",
-    },
-    "temp": {
-        "cpu": 54.2,
-        "cpu_percent": 42.0,
+        "ip_address": "192.168.10.25",
+        "hostname": "wx-station",
     },
     "alerts": {
         "type": "FeatureCollection",
@@ -90,21 +90,28 @@ PREVIEW_SAMPLE_DATA: Dict[str, Any] = {
             }
         ],
     },
-    "receivers": [
-        {
-            "display_name": "WXJ-93 Airspy",
-            "latest_status": {
-                "signal_strength": -43.0,
-                "locked": True,
-            },
-        }
-    ],
+    "receivers": {
+        "receivers": [
+            {
+                "display_name": "WXJ-93 Airspy",
+                "latest_status": {
+                    "signal_strength": -43.0,
+                    "locked": True,
+                },
+            }
+        ],
+        "count": 1,
+    },
     "audio": {
         "total_sources": 2,
         "active_source": "WNCI",
-        "left_bar_width": 118,
-        "right_bar_width": 112,
         "peak_level_db": -3.2,
+        "peak_level_linear": 0.69,
+        "rms_level_linear": 0.19,
+        "peak_level_percent": 69.0,
+        "rms_level_percent": 19.0,
+        "silence_detected": False,
+        "source_status": "capturing",
         "live_metrics": [
             {
                 "source_name": "WNCI",
@@ -212,7 +219,7 @@ class ScreenRenderer:
 
     def __init__(
         self,
-        base_url: str = "http://localhost:8888",
+        base_url: str = "http://localhost:5000",
         *,
         allow_preview_samples: bool = False,
     ):
@@ -495,7 +502,7 @@ class ScreenRenderer:
 
             elif elem_type == 'progress_bar':
                 # Progress bar / VU meter
-                value_template = element.get('value', '0')
+                value_template = str(element.get('value') or '0')
                 value_str = self.substitute_variables(value_template, api_data)
 
                 try:
@@ -687,7 +694,7 @@ class ScreenRenderer:
 
             elif elem_type == 'bar':
                 # Bar graph element
-                value_template = element.get('value', '0')
+                value_template = str(element.get('value') or '0')
                 value_str = self.substitute_variables(value_template, api_data)
 
                 try:
@@ -784,7 +791,7 @@ class ScreenRenderer:
 
             elif elem_type == 'gauge':
                 # Semi-circular gauge (speedometer style)
-                value_template = element.get('value', '0')
+                value_template = str(element.get('value') or '0')
                 value_str = self.substitute_variables(value_template, api_data)
                 try:
                     value = float(value_str)

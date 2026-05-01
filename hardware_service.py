@@ -2386,45 +2386,55 @@ def create_api_app():
                     if not oled_controller:
                         return jsonify({'success': False, 'error': 'OLED controller not available'}), 503
 
-                    raw_lines = rendered.get('lines', [])
-                    line_objects = []
-                    for entry in raw_lines:
-                        if not isinstance(entry, dict):
-                            continue
-                        try:
-                            x_val = int(entry.get('x', 0) or 0)
-                        except (TypeError, ValueError):
-                            x_val = 0
-                        y_raw = entry.get('y')
-                        try:
-                            y_val = int(y_raw) if y_raw is not None else None
-                        except (TypeError, ValueError):
-                            y_val = None
-                        mw_raw = entry.get('max_width')
-                        try:
-                            mw_val = int(mw_raw) if mw_raw is not None else None
-                        except (TypeError, ValueError):
-                            mw_val = None
-                        try:
-                            sp_val = int(entry.get('spacing', 2))
-                        except (TypeError, ValueError):
-                            sp_val = 2
-                        line_objects.append(OLEDLine(
-                            text=str(entry.get('text', '')),
-                            x=x_val,
-                            y=y_val,
-                            font=str(entry.get('font', 'small')),
-                            wrap=bool(entry.get('wrap', True)),
-                            max_width=mw_val,
-                            spacing=sp_val,
-                            invert=entry.get('invert'),
-                            allow_empty=bool(entry.get('allow_empty', False)),
-                        ))
-                    oled_controller.display_lines(
-                        line_objects,
-                        clear=rendered.get('clear', True),
-                        invert=rendered.get('invert'),
-                    )
+                    # New elements-based format (bar graphs, shapes, icons, etc.)
+                    raw_elements = rendered.get('elements')
+                    if raw_elements is not None and isinstance(raw_elements, list):
+                        oled_controller.render_frame(
+                            raw_elements,
+                            clear=rendered.get('clear', True),
+                            invert=rendered.get('invert'),
+                        )
+                    else:
+                        # Legacy lines-based format
+                        raw_lines = rendered.get('lines', [])
+                        line_objects = []
+                        for entry in raw_lines:
+                            if not isinstance(entry, dict):
+                                continue
+                            try:
+                                x_val = int(entry.get('x', 0) or 0)
+                            except (TypeError, ValueError):
+                                x_val = 0
+                            y_raw = entry.get('y')
+                            try:
+                                y_val = int(y_raw) if y_raw is not None else None
+                            except (TypeError, ValueError):
+                                y_val = None
+                            mw_raw = entry.get('max_width')
+                            try:
+                                mw_val = int(mw_raw) if mw_raw is not None else None
+                            except (TypeError, ValueError):
+                                mw_val = None
+                            try:
+                                sp_val = int(entry.get('spacing', 2))
+                            except (TypeError, ValueError):
+                                sp_val = 2
+                            line_objects.append(OLEDLine(
+                                text=str(entry.get('text', '')),
+                                x=x_val,
+                                y=y_val,
+                                font=str(entry.get('font', 'small')),
+                                wrap=bool(entry.get('wrap', True)),
+                                max_width=mw_val,
+                                spacing=sp_val,
+                                invert=entry.get('invert'),
+                                allow_empty=bool(entry.get('allow_empty', False)),
+                            ))
+                        oled_controller.display_lines(
+                            line_objects,
+                            clear=rendered.get('clear', True),
+                            invert=rendered.get('invert'),
+                        )
 
                 elif screen.display_type == 'led':
                     import app_core.led as led_module
