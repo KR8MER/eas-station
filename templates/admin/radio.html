@@ -1100,49 +1100,33 @@
             metaLines.push(squelchLine);
         }
 
-        const rbdsParts = [];
-        const rbdsName = metadata.rbds_ps_name ? escapeHtml(String(metadata.rbds_ps_name)) : null;
-        const rbdsText = metadata.rbds_radio_text ? escapeHtml(String(metadata.rbds_radio_text)) : null;
-        const rbdsType = metadata.rbds_program_type_name ? escapeHtml(String(metadata.rbds_program_type_name)) : null;
-        const rbdsPi = metadata.rbds_pi_code ? `<code>${escapeHtml(String(metadata.rbds_pi_code))}</code>` : null;
-        const rbdsCall = metadata.rbds_call_sign ? `<strong>${escapeHtml(String(metadata.rbds_call_sign))}</strong>` : null;
-        if (rbdsCall) {
-            rbdsParts.push(`Call: ${rbdsCall}`);
-        }
-        if (rbdsName) {
-            rbdsParts.push(`Program: ${rbdsName}`);
-        }
-        if (rbdsType) {
-            rbdsParts.push(`Type: ${rbdsType}`);
-        }
-        if (rbdsPi) {
-            rbdsParts.push(`PI: ${rbdsPi}`);
-        }
-        const rbdsFlags = [];
-        if (metadata.rbds_tp) {
-            rbdsFlags.push('TP');
-        }
-        if (metadata.rbds_ta) {
-            rbdsFlags.push('TA');
-        }
-        if (metadata.rbds_ms) {
-            rbdsFlags.push('Music');
-        }
-        if (rbdsFlags.length) {
-            rbdsParts.push(`Flags: ${rbdsFlags.join('/')}`);
-        }
-        if (rbdsParts.length) {
-            metaLines.push(`<div class="mt-2"><span class="badge bg-info text-dark me-2">RBDS</span>${rbdsParts.join(' • ')}</div>`);
-        }
-        if (rbdsText) {
-            metaLines.push(`<div class="mt-1 fst-italic">“${rbdsText}”</div>`);
-        }
-        if (metadata.rbds_last_updated) {
-            const updated = new Date(Number(metadata.rbds_last_updated) * 1000).toLocaleTimeString();
-            metaLines.push(`<div class="text-muted small">RBDS updated ${escapeHtml(updated)}</div>`);
-        }
-
         metaEl.innerHTML = metaLines.join('<br>');
+
+        // Render the structured RBDS station card (heartbeat, PS LCD, PTY,
+        // RT/RT+, flags, AF list, identity table, EWS banner) below the
+        // tile metadata.  All rendering is delegated to the shared
+        // `RBDSViz` module so the radio settings page, audio monitor and
+        // diagnostics pages stay visually consistent.
+        let rbdsContainer = document.getElementById(`audio-monitor-rbds-${receiver.id}`);
+        if (!rbdsContainer) {
+            rbdsContainer = document.createElement('div');
+            rbdsContainer.id = `audio-monitor-rbds-${receiver.id}`;
+            rbdsContainer.className = 'audio-monitor-rbds';
+            // Insert immediately after the meta element so screen readers
+            // encounter the station card right after the tile description.
+            if (metaEl.parentNode) {
+                metaEl.parentNode.insertBefore(rbdsContainer, metaEl.nextSibling);
+            }
+        }
+        if (typeof window.RBDSViz !== 'undefined' && window.RBDSViz.buildStationCard) {
+            // compact: hide the full details accordion in the receiver tile
+            // (the dedicated audio monitor page renders the fully expanded
+            // version).  EWS banners are still emitted because emergencies
+            // must surface on every page.
+            rbdsContainer.innerHTML = window.RBDSViz.buildStationCard(metadata, { compact: true });
+        } else {
+            rbdsContainer.innerHTML = '';
+        }
 
         if (running) {
             playerWrap.innerHTML = `
