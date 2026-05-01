@@ -90,21 +90,28 @@ PREVIEW_SAMPLE_DATA: Dict[str, Any] = {
             }
         ],
     },
-    "receivers": [
-        {
-            "display_name": "WXJ-93 Airspy",
-            "latest_status": {
-                "signal_strength": -43.0,
-                "locked": True,
-            },
-        }
-    ],
+    "receivers": {
+        "receivers": [
+            {
+                "display_name": "WXJ-93 Airspy",
+                "latest_status": {
+                    "signal_strength": -43.0,
+                    "locked": True,
+                },
+            }
+        ],
+        "count": 1,
+    },
     "audio": {
         "total_sources": 2,
         "active_source": "WNCI",
-        "left_bar_width": 118,
-        "right_bar_width": 112,
         "peak_level_db": -3.2,
+        "peak_level_linear": 0.69,
+        "rms_level_linear": 0.19,
+        "peak_level_percent": 69.0,
+        "rms_level_percent": 19.0,
+        "silence_detected": False,
+        "source_status": "capturing",
         "live_metrics": [
             {
                 "source_name": "WNCI",
@@ -212,7 +219,7 @@ class ScreenRenderer:
 
     def __init__(
         self,
-        base_url: str = "http://localhost:8888",
+        base_url: str = "http://localhost:5000",
         *,
         allow_preview_samples: bool = False,
     ):
