@@ -1016,6 +1016,38 @@ function populateEasForm(settings) {
     if (endecFingerprintCheckbox) {
         endecFingerprintCheckbox.checked = settings.endec_fingerprint !== false;
     }
+    const preAlertChimeSelect = document.getElementById('easPreAlertChime');
+    if (preAlertChimeSelect) {
+        preAlertChimeSelect.value = settings.pre_alert_chime || 'none';
+    }
+    const postAlertChimeSelect = document.getElementById('easPostAlertChime');
+    if (postAlertChimeSelect) {
+        postAlertChimeSelect.value = settings.post_alert_chime || 'none';
+    }
+    const preAlertChimeDuration = document.getElementById('easPreAlertChimeDuration');
+    if (preAlertChimeDuration) {
+        const _v = settings.pre_alert_chime_duration;
+        preAlertChimeDuration.value = (_v === null || _v === undefined) ? '2.0' : Number(_v).toFixed(1);
+    }
+    const postAlertChimeDuration = document.getElementById('easPostAlertChimeDuration');
+    if (postAlertChimeDuration) {
+        const _v = settings.post_alert_chime_duration;
+        postAlertChimeDuration.value = (_v === null || _v === undefined) ? '2.0' : Number(_v).toFixed(1);
+    }
+    const qc2ToneAFreq = document.getElementById('easQc2ToneAFreq');
+    if (qc2ToneAFreq) {
+        const _v = settings.qc2_tone_a_freq;
+        qc2ToneAFreq.value = (_v === null || _v === undefined) ? '1000.0' : Number(_v).toFixed(1);
+    }
+    const qc2ToneBFreq = document.getElementById('easQc2ToneBFreq');
+    if (qc2ToneBFreq) {
+        const _v = settings.qc2_tone_b_freq;
+        qc2ToneBFreq.value = (_v === null || _v === undefined) ? '1500.0' : Number(_v).toFixed(1);
+    }
+    const dtmfSequence = document.getElementById('easDtmfSequence');
+    if (dtmfSequence) {
+        dtmfSequence.value = settings.dtmf_sequence || '';
+    }
     if (authorizedEventsTextarea) {
         authorizedEventsTextarea.value = (settings.authorized_event_codes || []).join('\n');
     }
@@ -1156,6 +1188,13 @@ async function handleEasSettingsSubmit(e) {
         audio_player: document.getElementById('easAudioPlayer')?.value?.trim() || 'aplay',
         output_dir: document.getElementById('easOutputDir')?.value?.trim() || 'static/eas_messages',
         endec_fingerprint: document.getElementById('easEndecFingerprint')?.checked ?? true,
+        pre_alert_chime: document.getElementById('easPreAlertChime')?.value || 'none',
+        post_alert_chime: document.getElementById('easPostAlertChime')?.value || 'none',
+        pre_alert_chime_duration: parseFloat(document.getElementById('easPreAlertChimeDuration')?.value) || 2.0,
+        post_alert_chime_duration: parseFloat(document.getElementById('easPostAlertChimeDuration')?.value) || 2.0,
+        qc2_tone_a_freq: parseFloat(document.getElementById('easQc2ToneAFreq')?.value) || 1000.0,
+        qc2_tone_b_freq: parseFloat(document.getElementById('easQc2ToneBFreq')?.value) || 1500.0,
+        dtmf_sequence: (document.getElementById('easDtmfSequence')?.value || '').toUpperCase(),
         authorized_event_codes: parseNewlineValues(document.getElementById('easAuthorizedEvents')?.value || ''),
         forwarded_event_codes: (document.getElementById('easForwardedEventCodes')?.value || '')
             .split(',').map(s => s.trim().toUpperCase()).filter(Boolean),

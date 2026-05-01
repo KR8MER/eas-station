@@ -1426,6 +1426,13 @@ def _ensure_eas_settings_record() -> EASSettings:
     """
     _PENDING_MIGRATIONS = [
         "ALTER TABLE eas_settings ADD COLUMN IF NOT EXISTS endec_fingerprint BOOLEAN NOT NULL DEFAULT TRUE",
+        "ALTER TABLE eas_settings ADD COLUMN IF NOT EXISTS pre_alert_chime VARCHAR(16) NOT NULL DEFAULT 'none'",
+        "ALTER TABLE eas_settings ADD COLUMN IF NOT EXISTS post_alert_chime VARCHAR(16) NOT NULL DEFAULT 'none'",
+        "ALTER TABLE eas_settings ADD COLUMN IF NOT EXISTS pre_alert_chime_duration DOUBLE PRECISION NOT NULL DEFAULT 2.0",
+        "ALTER TABLE eas_settings ADD COLUMN IF NOT EXISTS post_alert_chime_duration DOUBLE PRECISION NOT NULL DEFAULT 2.0",
+        "ALTER TABLE eas_settings ADD COLUMN IF NOT EXISTS qc2_tone_a_freq DOUBLE PRECISION NOT NULL DEFAULT 1000.0",
+        "ALTER TABLE eas_settings ADD COLUMN IF NOT EXISTS qc2_tone_b_freq DOUBLE PRECISION NOT NULL DEFAULT 1500.0",
+        "ALTER TABLE eas_settings ADD COLUMN IF NOT EXISTS dtmf_sequence VARCHAR(32) NOT NULL DEFAULT ''",
     ]
 
     def _query():
@@ -1516,6 +1523,40 @@ def admin_eas_settings():
         # Update station fingerprint toggle
         if "endec_fingerprint" in payload:
             settings.endec_fingerprint = bool(payload["endec_fingerprint"])
+
+        # Update pre/post-alert chime profiles
+        _ALLOWED_CHIMES = {"none", "bell", "beep", "three_tone", "qc2", "dtmf"}
+        for _field in ("pre_alert_chime", "post_alert_chime"):
+            if _field in payload:
+                _value = str(payload[_field] or "none").strip().lower()
+                if _value in _ALLOWED_CHIMES:
+                    setattr(settings, _field, _value)
+
+        # Update pre/post-alert chime durations (clamped 0.1–10.0 seconds)
+        for _field in ("pre_alert_chime_duration", "post_alert_chime_duration"):
+            if _field in payload:
+                try:
+                    _dur = float(payload[_field])
+                except (TypeError, ValueError):
+                    continue
+                if 0.1 <= _dur <= 10.0:
+                    setattr(settings, _field, _dur)
+
+        # Update QC-II Tone A / Tone B frequencies (clamped 50–4000 Hz)
+        for _field in ("qc2_tone_a_freq", "qc2_tone_b_freq"):
+            if _field in payload:
+                try:
+                    _freq = float(payload[_field])
+                except (TypeError, ValueError):
+                    continue
+                if 50.0 <= _freq <= 4000.0:
+                    setattr(settings, _field, _freq)
+
+        # Update DTMF sequence: keep only valid digits (0-9, A-D, *, #).
+        if "dtmf_sequence" in payload:
+            _raw = str(payload["dtmf_sequence"] or "").upper()
+            _filtered = "".join(c for c in _raw if c in "0123456789ABCD*#")
+            settings.dtmf_sequence = _filtered[:32]
 
         # Update authorized FIPS codes
         if "authorized_fips_codes" in payload:

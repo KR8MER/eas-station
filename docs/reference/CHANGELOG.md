@@ -22,6 +22,7 @@ tracks releases under the 2.x series.
   `templates/admin/radio_diagnostics.html`) regain parity with the API payload.
 
 ### Added
+- **Pre/post-alert chimes** — system-level configurable attention sounds played before each SAME header (pre-alert) and/or after the EOM (post-alert). Supported profiles: `none`, `bell` (decaying 880 Hz), `beep` (1 kHz tone), `three_tone` (440 / 880 / 1320 Hz), `qc2` (Motorola Quick Call II two-tone with configurable Tone A / Tone B), and `dtmf` (configurable digit sequence using ITU-T Q.23 / Q.24 100 ms / 50 ms timing). Applies to auto-forwarded CAP/IPAWS, OTA relay, and manual broadcasts; chimes sit outside the SAME signalling so they never affect decoder behaviour. Configured under **Admin → EAS Broadcast Settings → Alert Chimes**, persisted in `eas_settings` (Alembic migration `20260501_add_alert_chime_to_eas_settings`). See [docs/guides/ALERT_CHIMES.md](../guides/ALERT_CHIMES.md).
 - **Statistics dashboard** — new charts (severity-mix-over-time, cumulative alerts, top 5 events trend, hour-of-day × severity, alert duration histogram, year-over-year overlay, EAS forwarding funnel), a one-click **PDF report export** of the dashboard, and a print stylesheet so the browser "Print to PDF" route also produces a clean report. Filtered alerts CSV / dashboard PDF / summary metrics JSON are now grouped under a single **Export ▾** dropdown in the filter panel.
 
 ### Dependencies

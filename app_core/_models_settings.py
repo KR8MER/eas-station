@@ -586,6 +586,35 @@ class EASSettings(db.Model):
     # Append 3 × 0xAA trill bytes after each SAME burst to fingerprint this station
 
     # ========================================================================
+    # Alert Chimes (system-level pre/post-broadcast sounds)
+    # ========================================================================
+    pre_alert_chime = db.Column(db.String(16), nullable=False, default='none')
+    # Chime sound played BEFORE the SAME header.
+    # Allowed values: 'none', 'bell', 'beep', 'three_tone', 'qc2', 'dtmf'.
+
+    post_alert_chime = db.Column(db.String(16), nullable=False, default='none')
+    # Chime sound played AFTER the EOM sequence.
+    # Allowed values: 'none', 'bell', 'beep', 'three_tone', 'qc2', 'dtmf'.
+
+    pre_alert_chime_duration = db.Column(db.Float, nullable=False, default=2.0)
+    # Duration in seconds for the pre-alert chime (0.1–10.0). For QC-II,
+    # split 25%/75% between Tone A and Tone B (standard 1 s / 3 s ratio).
+    # Ignored for DTMF, which uses standard 100 ms tone / 50 ms gap timing.
+
+    post_alert_chime_duration = db.Column(db.Float, nullable=False, default=2.0)
+    # Duration in seconds for the post-alert chime (0.1–10.0). See note above.
+
+    qc2_tone_a_freq = db.Column(db.Float, nullable=False, default=1000.0)
+    # QC-II Tone A frequency in Hz (typical range 288–3000 Hz).
+
+    qc2_tone_b_freq = db.Column(db.Float, nullable=False, default=1500.0)
+    # QC-II Tone B frequency in Hz (typical range 288–3000 Hz).
+
+    dtmf_sequence = db.Column(db.String(32), nullable=False, default='')
+    # DTMF digit sequence to play when the chime profile is 'dtmf'.
+    # Allowed characters: 0-9, A-D, *, #. Length 0–32.
+
+    # ========================================================================
     # Authorized Broadcast Areas
     # ========================================================================
     authorized_fips_codes = db.Column(JSONB, nullable=False, default=list)
@@ -618,6 +647,13 @@ class EASSettings(db.Model):
             "sample_rate": self.sample_rate,
             "audio_player": self.audio_player,
             "endec_fingerprint": self.endec_fingerprint,
+            "pre_alert_chime": self.pre_alert_chime,
+            "post_alert_chime": self.post_alert_chime,
+            "pre_alert_chime_duration": float(self.pre_alert_chime_duration or 0.0),
+            "post_alert_chime_duration": float(self.post_alert_chime_duration or 0.0),
+            "qc2_tone_a_freq": float(self.qc2_tone_a_freq or 0.0),
+            "qc2_tone_b_freq": float(self.qc2_tone_b_freq or 0.0),
+            "dtmf_sequence": self.dtmf_sequence or '',
             "authorized_fips_codes": list(self.authorized_fips_codes or []),
             "authorized_event_codes": list(self.authorized_event_codes or []),
             "forwarded_event_codes": list(self.forwarded_event_codes or []),
