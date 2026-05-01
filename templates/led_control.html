@@ -136,27 +136,40 @@
 }
 
 .line-preview {
-    min-height: 3.5rem;
-    border: 1px dashed rgba(0, 255, 0, 0.4);
-    border-radius: 6px;
-    padding: 0.75rem;
-    background: rgba(0, 0, 0, 0.75);
-    color: var(--terminal-text);
+    min-height: 2.5em;
+    border: 1px solid rgba(0, 200, 0, 0.3);
+    border-radius: 4px;
+    padding: 0.35rem 0.6rem;
+    background: #030303;
+    color: #00ff44;
     font-family: 'Courier New', monospace;
-    letter-spacing: 1px;
-    transition: background 0.2s ease, border-color 0.2s ease;
+    font-weight: bold;
+    letter-spacing: 2px;
+    font-size: 1.05em;
+    text-shadow: 0 0 8px #00ff44;
+    overflow: hidden;
+    white-space: nowrap;
+    position: relative;
+    line-height: 2.2em;
+    cursor: text;
+    transition: border-color 0.2s ease;
 }
 
 .line-preview:focus {
     outline: none;
-    border-color: var(--primary-color);
-    background: rgba(0, 0, 0, 0.85);
+    border-color: rgba(0, 180, 255, 0.6);
+    background: #050505;
+    /* pause any running animation while the user types */
+    animation-play-state: paused !important;
 }
 
 .line-preview:empty:before {
     content: attr(data-placeholder);
-    color: rgba(255, 255, 255, 0.35);
+    color: rgba(255, 255, 255, 0.25);
     pointer-events: none;
+    font-weight: normal;
+    text-shadow: none;
+    letter-spacing: 1px;
 }
 
 .line-controls .form-label {
@@ -553,7 +566,31 @@
         <!-- Custom Message Tab -->
         <div class="tab-pane fade show active" id="custom" role="tabpanel">
             <h4><i class="fas fa-edit text-primary"></i> Custom Message</h4>
-            <p class="text-muted mb-4">Create messages for the LED sign - 4 lines, 20 characters each.</p>
+            <p class="text-muted mb-3">Create messages for the LED sign — 4 lines, 20 characters each.</p>
+
+            <!-- ══ WYSIWYG Live Sign Preview (full-width, top of editor) ══ -->
+            <div class="mb-4" id="wysiwyg-preview-block">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <label class="form-label fw-semibold mb-0">
+                        <i class="fas fa-desktop text-success"></i> Live Sign Preview
+                        <span class="badge bg-success ms-1" style="font-size:.6em">WYSIWYG</span>
+                    </label>
+                    <div class="d-flex align-items-center gap-2">
+                        <small class="text-muted" id="effect-description">Effect: Static display</small>
+                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                style="font-size:.7em;padding:2px 6px"
+                                onclick="toggleSimPause()" id="sim-pause-btn"
+                                title="Pause/Resume animations">⏸</button>
+                    </div>
+                </div>
+                <div class="led-sign-panel p-0" style="padding:0!important;overflow:hidden;border-radius:8px;cursor:pointer;"
+                     id="led-preview-panel" title="Click a line to jump to that editor">
+                    <canvas id="led-sim-canvas" style="display:block;width:100%;image-rendering:auto;border-radius:6px;"></canvas>
+                </div>
+                <small class="text-muted d-block mt-1">
+                    <i class="fas fa-mouse-pointer"></i> Click any row on the preview to jump to that line's editor.
+                </small>
+            </div>
 
             <form id="custom-message-form">
                 <div class="row">
@@ -569,6 +606,7 @@
                                     <div class="line-editor card shadow-sm" data-line-index="{{ idx }}" data-position="{{ positions[idx] }}">
                                         <div class="card-header d-flex justify-content-between align-items-center">
                                             <span class="fw-semibold">Line {{ idx + 1 }}</span>
+                                            <span class="effect-pill ep-hold" id="line{{ idx + 1 }}-effect">HOLD</span>
                                             <span class="char-count" id="line{{ idx + 1 }}-count">0 / 20</span>
                                         </div>
                                         <div class="card-body">
@@ -809,22 +847,7 @@
                             </div>
 
                             <!-- LED Sign Simulator — Canvas -->
-                            <div class="mb-3">
-                                <label class="form-label fw-semibold">
-                                    Sign Simulator
-                                    <span class="badge bg-success ms-1" style="font-size:.6em">LIVE</span>
-                                </label>
-                                <div class="led-sign-panel p-0" style="padding:0!important;overflow:hidden;border-radius:8px;">
-                                    <canvas id="led-sim-canvas" style="display:block;width:100%;image-rendering:auto;border-radius:6px;"></canvas>
-                                </div>
-                                <div class="mt-1 d-flex align-items-center gap-2">
-                                    <small class="text-muted flex-grow-1" id="effect-description">Effect: Static display</small>
-                                    <button type="button" class="btn btn-xs btn-outline-secondary"
-                                            style="font-size:.7em;padding:2px 6px"
-                                            onclick="toggleSimPause()" id="sim-pause-btn"
-                                            title="Pause/Resume animations">⏸</button>
-                                </div>
-                            </div>
+                            <!-- Canvas moved to top of tab as full-width WYSIWYG preview -->
 
                             <div class="d-grid gap-2">
                                 <button type="submit" class="btn btn-primary btn-lg">
@@ -1666,18 +1689,75 @@ function buildLinePayload() {
     });
 }
 
-function applyLineStyle(editor) {
-    const preview = editor.querySelector('.line-preview');
-    const colorValue = resolveLineColor(editor.querySelector('.line-color').value);
-    const modeValue = resolveLineMode(editor.querySelector('.line-mode').value);
+// LED CSS class lookup tables for WYSIWYG line-preview styling
+const LC_COLOR_CLASSES = [
+    'lc-red','lc-green','lc-amber','lc-dim-red','lc-dim-green',
+    'lc-brown','lc-orange','lc-yellow','lc-rainbow-1','lc-rainbow-2',
+    'lc-color-mix','lc-auto-color','lc-white','lc-default'
+];
 
-    preview.style.color = colorMap[colorValue] || '#00ff00';
-    preview.classList.remove('flash-preview', 'rainbow-text');
-    if (colorValue.includes('RAINBOW') || colorValue === 'COLOR_MIX') {
-        preview.classList.add('rainbow-text');
+const colorToLCClass = {
+    'RED': 'lc-red', 'GREEN': 'lc-green', 'AMBER': 'lc-amber',
+    'DIM_RED': 'lc-dim-red', 'DIM_GREEN': 'lc-dim-green',
+    'BROWN': 'lc-brown', 'ORANGE': 'lc-orange', 'YELLOW': 'lc-yellow',
+    'RAINBOW_1': 'lc-rainbow-1', 'RAINBOW_2': 'lc-rainbow-2',
+    'COLOR_MIX': 'lc-color-mix', 'AUTO_COLOR': 'lc-auto-color',
+    'WHITE': 'lc-white', 'DEFAULT': 'lc-default',
+};
+
+// Map display mode → [ effect-pill CSS class, display label ]
+function modeToEffectPill(mode) {
+    if (!mode || mode === 'DEFAULT') return ['ep-hold', 'HOLD'];
+    switch (mode) {
+        case 'HOLD':               return ['ep-hold',   'HOLD'];
+        case 'FLASH':              return ['ep-flash',  'FLASH'];
+        case 'SCROLL':             return ['ep-scroll', 'SCROLL'];
+        case 'ROTATE':             return ['ep-scroll', 'ROTATE'];
+        case 'COMPRESSED_ROTATE':  return ['ep-scroll', 'C.ROTATE'];
+        case 'ROLL_LEFT':          return ['ep-roll',   'ROLL ←'];
+        case 'ROLL_RIGHT':         return ['ep-roll',   'ROLL →'];
+        case 'ROLL_UP':            return ['ep-roll',   'ROLL ↑'];
+        case 'ROLL_DOWN':          return ['ep-roll',   'ROLL ↓'];
+        case 'ROLL_IN':            return ['ep-roll',   'ROLL IN'];
+        case 'ROLL_OUT':           return ['ep-roll',   'ROLL OUT'];
+        case 'WIPE_LEFT':          return ['ep-wipe',   'WIPE ←'];
+        case 'WIPE_RIGHT':         return ['ep-wipe',   'WIPE →'];
+        case 'WIPE_UP':            return ['ep-wipe',   'WIPE ↑'];
+        case 'WIPE_DOWN':          return ['ep-wipe',   'WIPE ↓'];
+        case 'WIPE_IN':            return ['ep-wipe',   'WIPE IN'];
+        case 'WIPE_OUT':           return ['ep-wipe',   'WIPE OUT'];
+        case 'EXPLODE':            return ['ep-explode','EXPLODE'];
+        case 'AUTO_MODE':          return ['ep-auto',   'AUTO'];
+        case 'CLOCK':              return ['ep-clock',  'CLOCK'];
+        default:                   return ['ep-hold',   mode.replace(/_/g,' ')];
     }
-    if (modeValue === 'FLASH') {
-        preview.classList.add('flash-preview');
+}
+
+function applyLineStyle(editor) {
+    const preview    = editor.querySelector('.line-preview');
+    const colorValue = resolveLineColor(editor.querySelector('.line-color').value);
+    const modeValue  = resolveLineMode(editor.querySelector('.line-mode').value);
+    const lineIndex  = parseInt(editor.dataset.lineIndex);
+
+    // Remove old colour classes; add the proper LED colour class (includes glow text-shadow)
+    preview.classList.remove(...LC_COLOR_CLASSES);
+    preview.style.color = '';
+    preview.style.textShadow = '';
+    preview.classList.add(colorToLCClass[colorValue] || 'lc-default');
+
+    // Remove legacy animation helper classes
+    preview.classList.remove('flash-preview', 'rainbow-text');
+
+    // Update the per-line effect pill badge in the card header
+    const pillEl = document.getElementById(`line${lineIndex + 1}-effect`);
+    if (pillEl) {
+        const [pillClass, pillLabel] = modeToEffectPill(modeValue);
+        // Replace only ep-* classes, keep 'effect-pill'
+        Array.from(pillEl.classList)
+            .filter(c => c.startsWith('ep-'))
+            .forEach(c => pillEl.classList.remove(c));
+        pillEl.classList.add(pillClass);
+        pillEl.textContent = pillLabel;
     }
 }
 
@@ -1715,7 +1795,17 @@ function initLineEditors() {
         const index = editor.dataset.lineIndex;
         const preview = editor.querySelector('.line-preview');
         preview.addEventListener('input', () => updateLineState(index));
-        preview.addEventListener('blur', () => updateLineState(index));
+        preview.addEventListener('blur',  () => {
+            updateLineState(index);
+            // Remove the focused-line highlight on the canvas
+            const sim = _getOrCreateSim();
+            if (sim) sim.setFocusedLine(-1);
+        });
+        preview.addEventListener('focus', () => {
+            // Highlight the matching row in the canvas preview
+            const sim = _getOrCreateSim();
+            if (sim) sim.setFocusedLine(parseInt(index));
+        });
         editor.querySelectorAll('.line-color, .line-mode, .line-speed').forEach(select => {
             select.addEventListener('change', () => updateLineState(index));
         });
@@ -2626,7 +2716,8 @@ class LEDSignSimulator {
         this.dpr     = window.devicePixelRatio || 1;
         this.paused  = false;
         this.lastTs  = 0;
-        this.LINE_H  = 34;   // px per sign line (logical)
+        this.focusedLine = -1;
+        this.LINE_H  = 56;   // px per sign line (logical) — larger for full-width WYSIWYG preview
         this.PAD     = 10;   // top/bottom padding
         this.NUM_LINES = 4;
 
@@ -2662,6 +2753,22 @@ class LEDSignSimulator {
         this._resize();
         window.addEventListener('resize', () => this._resize());
         this._raf = requestAnimationFrame(ts => this._tick(ts));
+
+        // Click on a canvas row → scroll to and focus that line's editor
+        this.canvas.addEventListener('click', (e) => {
+            const rect    = this.canvas.getBoundingClientRect();
+            const scaleY  = this.canvas.height / (rect.height * this.dpr);
+            const clickY  = (e.clientY - rect.top) / rect.height * (this.NUM_LINES * this.LINE_H + this.PAD * 2);
+            const lineIdx = Math.floor((clickY - this.PAD) / this.LINE_H);
+            if (lineIdx >= 0 && lineIdx < this.NUM_LINES) {
+                const editor = document.querySelector(`.line-editor[data-line-index="${lineIdx}"]`);
+                if (editor) {
+                    editor.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    const preview = editor.querySelector('.line-preview');
+                    if (preview) setTimeout(() => preview.focus(), 300);
+                }
+            }
+        });
     }
 
     _resize() {
@@ -2689,6 +2796,11 @@ class LEDSignSimulator {
         line.speed = Math.max(1, Math.min(5, sp));
         // Reset per-line timer when mode changes so the new effect starts cleanly
         if (prevMode !== line.mode) line.animT = 0;
+    }
+
+    // Highlight the given row with a focus indicator (-1 = none)
+    setFocusedLine(idx) {
+        this.focusedLine = idx;
     }
 
     togglePause() {
@@ -2726,6 +2838,16 @@ class LEDSignSimulator {
         for (let i = 0; i < this.NUM_LINES; i++) {
             const y  = PAD + i * LINE_H;
             const lh = LINE_H - 1;
+
+            // Focused-line highlight: subtle cyan border on the active row
+            if (i === this.focusedLine) {
+                ctx.fillStyle = 'rgba(0,180,255,0.06)';
+                ctx.fillRect(0, y, W, lh);
+                ctx.strokeStyle = 'rgba(0,180,255,0.55)';
+                ctx.lineWidth = 1.5;
+                ctx.strokeRect(0.75, y + 0.75, W - 1.5, lh - 1.5);
+            }
+
             this._drawLine(i, 0, y, W, lh);
             // Row separator
             if (i < this.NUM_LINES - 1) {
