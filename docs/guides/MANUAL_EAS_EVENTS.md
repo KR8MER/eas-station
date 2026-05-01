@@ -133,7 +133,7 @@ All components have configurable 1-second guard intervals between sections.
 > **Tip:** EAS Station can also play a configurable **pre-alert** and/or
 > **post-alert chime** outside the SAME signalling — useful for station
 > fingerprinting, paging-style call selection (QC-II), or DTMF unit IDs.
-> See the [Alert Chimes guide](ALERT_CHIMES) for details.
+> See the [Alert Chimes guide](ALERT_CHIMES.md) for details.
 
 ---
 
