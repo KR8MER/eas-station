@@ -424,6 +424,35 @@ PUBLIC_API_GET_PATHS = {
     # Hardware diagnostics (used by local monitoring/debugging)
     '/api/smart_diag',
 }
+
+# Pages that do not require authentication.
+# Everything else is protected by the deny-by-default check in before_request.
+_PUBLIC_PAGE_PATHS = frozenset({
+    '/',
+    '/about',
+    '/help',
+    '/terms',
+    '/privacy',
+    '/sms-compliance',
+    '/sitemap.xml',
+    '/robots.txt',
+    '/favicon.ico',
+    '/ping',
+    '/version',
+    '/help/version',
+    '/health',
+    '/health/dependencies',
+    # Auth endpoints
+    '/login',
+    '/logout',
+    '/mfa/verify',
+})
+
+# Path prefixes that are always public (e.g. static assets, setup wizard).
+_PUBLIC_PAGE_PREFIXES = (
+    '/static/',
+    '/setup',
+)
 # CSRF constants are now imported from app_core.flask.csrf
 app.config['CSRF_SESSION_KEY'] = CSRF_SESSION_KEY
 
@@ -971,9 +1000,12 @@ def before_request():
             return
 
     if not setup_mode_active:
-        protected_prefixes = ('/admin', '/logs', '/api', '/eas', '/settings')
-        if any(request.path.startswith(prefix) for prefix in protected_prefixes):
-            if g.current_user is None:
+        if g.current_user is None:
+            is_public = (
+                request.path in _PUBLIC_PAGE_PATHS
+                or any(request.path.startswith(p) for p in _PUBLIC_PAGE_PREFIXES)
+            )
+            if not is_public:
                 if request.path.startswith('/api/'):
                     return jsonify({'error': 'Authentication required'}), 401
                 if g.admin_setup_mode and request.endpoint in {'admin', 'admin_users', 'dashboard.admin', 'dashboard.admin_users'}:
