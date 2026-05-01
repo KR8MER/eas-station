@@ -40,10 +40,39 @@ from pathlib import Path
 from typing import Dict, List, Optional, Union
 
 import numpy as np
-from scipy.signal import resample_poly
+from scipy.signal import firwin, resample_poly
 from .broadcast_queue import BroadcastQueue
 
 logger = logging.getLogger(__name__)
+
+
+# Cache of FIR filter taps used by _resample_for_eas, keyed by (up, down).
+# scipy.signal.resample_poly designs a fresh kaiser FIR on every call when
+# window= is left at the default; for 44100 -> 16000 that's ~8800 taps via
+# firwin+kaiser, which py-spy showed at ~1.7 s OwnTime/30 s sampling under
+# real load. We pre-design once per (up, down) ratio and pass the taps as
+# window=. In practice audio sources only use a handful of rates (8/16/22.05/
+# 32/44.1/48/96 kHz) so the cache stays bounded without an LRU.
+_RESAMPLE_FILTER_CACHE: Dict[tuple, np.ndarray] = {}
+
+
+def _design_resample_filter(up: int, down: int) -> np.ndarray:
+    """Return scipy's default resample_poly FIR for the given up/down ratio.
+
+    Mirrors the design scipy uses internally when window=('kaiser', 5.0):
+    a 2*half_len+1 tap firwin lowpass with cutoff 1/max(up, down) and
+    half_len = 10 * max(up, down). Cached per (up, down) so the cost is
+    paid once instead of per chunk.
+    """
+    cached = _RESAMPLE_FILTER_CACHE.get((up, down))
+    if cached is not None:
+        return cached
+    max_rate = max(up, down)
+    half_len = 10 * max_rate
+    taps = firwin(2 * half_len + 1, 1.0 / max_rate, window=("kaiser", 5.0))
+    taps = taps.astype(np.float32)
+    _RESAMPLE_FILTER_CACHE[(up, down)] = taps
+    return taps
 
 
 class AudioSourceType(Enum):
@@ -467,10 +496,18 @@ class AudioSourceAdapter(ABC):
             # resample_poly applies a properly anti-aliased FIR via FFT convolution,
             # which is both faster than per-sample np.interp and avoids the aliasing
             # artifacts plain linear interpolation produces above Nyquist/2.
+            #
+            # We pass the FIR taps via window= rather than letting scipy redesign
+            # them every call (~1.7 s/30 s of CPU per the py-spy profile). scipy
+            # mutates the array in-place (h *= up) so we pass a copy of the cached
+            # taps; copy of ~35 KB is microseconds vs. milliseconds of firwin work.
             g = gcd(int(source_rate), int(target_rate))
             up = int(target_rate) // g
             down = int(source_rate) // g
-            return resample_poly(audio_chunk, up, down).astype(np.float32)
+            taps = _design_resample_filter(up, down)
+            return resample_poly(
+                audio_chunk, up, down, window=taps.copy()
+            ).astype(np.float32)
 
         except Exception as e:
             logger.error("Error resampling audio for EAS: %s", e)
