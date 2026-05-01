@@ -297,7 +297,11 @@ class SAMEDemodulatorCore:
             low = 1200.0 / nyq
             high = min(2500.0, nyq * 0.95) / nyq
             if 0 < low < high < 1.0:
-                self._bandpass_sos = butter(4, [low, high], btype="bandpass", output="sos")
+                # Keep SOS coefficients in float32 so sosfilt can run on the
+                # incoming float32 audio without per-chunk up/down-casts.
+                self._bandpass_sos = butter(
+                    4, [low, high], btype="bandpass", output="sos"
+                ).astype(np.float32)
                 self._bandpass_available = True
                 logger.debug(
                     "SAMEDemodulatorCore bandpass filter: 1200–2500 Hz, 4th-order "
@@ -356,7 +360,9 @@ class SAMEDemodulatorCore:
 
         # Reset bandpass filter initial conditions
         if self._bandpass_available and self._bandpass_sos is not None:
-            self._bandpass_zi = np.zeros((self._bandpass_sos.shape[0], 2))
+            self._bandpass_zi = np.zeros(
+                (self._bandpass_sos.shape[0], 2), dtype=np.float32
+            )
 
     def process_samples(self, samples: np.ndarray) -> None:
         """Process audio samples through the full demodulation pipeline.
@@ -380,12 +386,11 @@ class SAMEDemodulatorCore:
         if self._bandpass_available and self._bandpass_sos is not None:
             try:
                 from scipy.signal import sosfilt
-                filtered, self._bandpass_zi = sosfilt(
+                samples, self._bandpass_zi = sosfilt(
                     self._bandpass_sos,
-                    samples.astype(np.float64),
+                    samples,
                     zi=self._bandpass_zi,
                 )
-                samples = filtered.astype(np.float32)
             except Exception:
                 pass  # continue with unfiltered samples
 
