@@ -938,6 +938,12 @@ function initEasSettings() {
     // Form submission handler
     form.addEventListener('submit', handleEasSettingsSubmit);
 
+    // Toggle conditional tone fields when chime selection changes
+    const preChimeSelect = document.getElementById('easPreAlertChime');
+    const postChimeSelect = document.getElementById('easPostAlertChime');
+    if (preChimeSelect) preChimeSelect.addEventListener('change', updateToneFieldVisibility);
+    if (postChimeSelect) postChimeSelect.addEventListener('change', updateToneFieldVisibility);
+
     // Reset button handler
     const resetBtn = document.getElementById('resetEasSettings');
     if (resetBtn) {
@@ -950,6 +956,30 @@ function initEasSettings() {
             }
         });
     }
+}
+
+/**
+ * Show/hide tone-specific settings fields based on the selected chime types.
+ * QC-II frequencies appear only when either chime is QC-II; DTMF sequence
+ * appears only when either chime is DTMF; per-side duration appears only
+ * when that side has a chime selected.
+ */
+function updateToneFieldVisibility() {
+    const pre = document.getElementById('easPreAlertChime')?.value || 'none';
+    const post = document.getElementById('easPostAlertChime')?.value || 'none';
+
+    const visibility = {
+        'qc2': pre === 'qc2' || post === 'qc2',
+        'dtmf': pre === 'dtmf' || post === 'dtmf',
+        'pre-duration': pre !== 'none',
+        'post-duration': post !== 'none',
+    };
+
+    document.querySelectorAll('.eas-tone-conditional').forEach(el => {
+        const key = el.dataset.easToneShow;
+        const show = visibility[key];
+        el.style.display = show ? '' : 'none';
+    });
 }
 
 /**
@@ -1058,6 +1088,8 @@ function populateEasForm(settings) {
         cb.checked = forwarded.size === 0 ? false : forwarded.has(cb.value);
     });
     syncForwardedEventCodesHidden();
+
+    updateToneFieldVisibility();
 }
 
 /**

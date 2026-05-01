@@ -6851,7 +6851,8 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 [data-theme="midnight"] .alert-light,
 [data-theme="charcoal"] .alert-light,
 [data-theme="obsidian"] .alert-light,
-[data-theme="slate"] .alert-light {
+[data-theme="slate"] .alert-light,
+[data-theme="lightning"] .alert-light {
     --bs-alert-color: var(--text-color);
     --bs-alert-bg: color-mix(in srgb, var(--surface-color) 90%, var(--border-color));
     --bs-alert-border-color: var(--border-color);
@@ -6867,7 +6868,8 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 [data-theme="midnight"] .alert-secondary,
 [data-theme="charcoal"] .alert-secondary,
 [data-theme="obsidian"] .alert-secondary,
-[data-theme="slate"] .alert-secondary {
+[data-theme="slate"] .alert-secondary,
+[data-theme="lightning"] .alert-secondary {
     --bs-alert-color: var(--text-secondary);
     --bs-alert-bg: color-mix(in srgb, var(--secondary-color) 15%, var(--surface-color));
     --bs-alert-border-color: color-mix(in srgb, var(--secondary-color) 30%, var(--border-color));

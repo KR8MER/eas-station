@@ -877,13 +877,13 @@
                                                     </select>
                                                     <small class="text-muted">Plays before the first SAME header burst.</small>
                                                 </div>
-                                                <div class="col-md-6">
+                                                <div class="col-md-6 eas-tone-conditional" data-eas-tone-show="pre-duration">
                                                     <label for="easPreAlertChimeDuration" class="form-label fw-bold">Pre-Alert Chime Duration</label>
                                                     <div class="input-group">
                                                         <input type="number" class="form-control" id="easPreAlertChimeDuration" name="pre_alert_chime_duration" min="0.1" max="10" step="0.1" value="2.0">
                                                         <span class="input-group-text">seconds</span>
                                                     </div>
-                                                    <small class="text-muted">Total chime duration (0.1–10 seconds). Ignored when chime is None.</small>
+                                                    <small class="text-muted">Total chime duration (0.1–10 seconds).</small>
                                                 </div>
                                                 <div class="col-md-6">
                                                     <label for="easPostAlertChime" class="form-label fw-bold">Post-Alert Chime</label>
@@ -897,15 +897,15 @@
                                                     </select>
                                                     <small class="text-muted">Plays after the EOM sequence.</small>
                                                 </div>
-                                                <div class="col-md-6">
+                                                <div class="col-md-6 eas-tone-conditional" data-eas-tone-show="post-duration">
                                                     <label for="easPostAlertChimeDuration" class="form-label fw-bold">Post-Alert Chime Duration</label>
                                                     <div class="input-group">
                                                         <input type="number" class="form-control" id="easPostAlertChimeDuration" name="post_alert_chime_duration" min="0.1" max="10" step="0.1" value="2.0">
                                                         <span class="input-group-text">seconds</span>
                                                     </div>
-                                                    <small class="text-muted">Total chime duration (0.1–10 seconds). Ignored when chime is None.</small>
+                                                    <small class="text-muted">Total chime duration (0.1–10 seconds).</small>
                                                 </div>
-                                                <div class="col-12">
+                                                <div class="col-12 eas-tone-conditional" data-eas-tone-show="qc2">
                                                     <div class="alert alert-light border small mb-0">
                                                         <i class="fas fa-info-circle me-2 text-info"></i>
                                                         <strong>QC-II (Motorola Quick Call II)</strong> two-tone paging uses Tone&nbsp;A
@@ -913,7 +913,7 @@
                                                         frequencies below to match your dispatch protocol.
                                                     </div>
                                                 </div>
-                                                <div class="col-md-6">
+                                                <div class="col-md-6 eas-tone-conditional" data-eas-tone-show="qc2">
                                                     <label for="easQc2ToneAFreq" class="form-label fw-bold">QC-II Tone&nbsp;A Frequency</label>
                                                     <div class="input-group">
                                                         <input type="number" class="form-control" id="easQc2ToneAFreq" name="qc2_tone_a_freq" min="50" max="4000" step="0.1" value="1000.0">
@@ -921,7 +921,7 @@
                                                     </div>
                                                     <small class="text-muted">First (short) tone, 50–4000 Hz.</small>
                                                 </div>
-                                                <div class="col-md-6">
+                                                <div class="col-md-6 eas-tone-conditional" data-eas-tone-show="qc2">
                                                     <label for="easQc2ToneBFreq" class="form-label fw-bold">QC-II Tone&nbsp;B Frequency</label>
                                                     <div class="input-group">
                                                         <input type="number" class="form-control" id="easQc2ToneBFreq" name="qc2_tone_b_freq" min="50" max="4000" step="0.1" value="1500.0">
@@ -929,7 +929,7 @@
                                                     </div>
                                                     <small class="text-muted">Second (long) tone, 50–4000 Hz.</small>
                                                 </div>
-                                                <div class="col-12">
+                                                <div class="col-12 eas-tone-conditional" data-eas-tone-show="dtmf">
                                                     <div class="alert alert-light border small mb-0">
                                                         <i class="fas fa-info-circle me-2 text-info"></i>
                                                         <strong>DTMF (Dual-Tone Multi-Frequency)</strong> plays each character of the sequence below as
@@ -937,7 +937,7 @@
                                                         <code>*</code>, <code>#</code>. Timing is fixed at 100&nbsp;ms tone / 50&nbsp;ms gap per digit.
                                                     </div>
                                                 </div>
-                                                <div class="col-12">
+                                                <div class="col-12 eas-tone-conditional" data-eas-tone-show="dtmf">
                                                     <label for="easDtmfSequence" class="form-label fw-bold">DTMF Sequence</label>
                                                     <input type="text" class="form-control" id="easDtmfSequence" name="dtmf_sequence" maxlength="32" placeholder="e.g. *1234#" pattern="[0-9A-Da-d*#]*" style="text-transform: uppercase;">
                                                     <small class="text-muted">Up to 32 valid digits; invalid characters are stripped on save.</small>
