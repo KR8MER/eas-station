@@ -1184,11 +1184,8 @@ class RBDSWorker:
                         self._rbds_consecutive_crc_failures
                     )
 
-                # Yield GIL after processing each sample to let audio thread run
-                # Critical when Numba isn't available and RBDS processing is slow
-                time.sleep(0)
             except Exception as e:
-                logger.warning(f"RBDS processing error: {e}", exc_info=True)
+                logger.warning("RBDS processing error: %s", e, exc_info=True)
 
         logger.info("RBDS worker thread exited (samples=%d, groups=%d)", samples_processed, groups_decoded)
 
@@ -1219,7 +1216,6 @@ class RBDSWorker:
         # Start with multiplex at original sample rate (250 kHz for Airspy after early decim)
         x = multiplex.astype(np.float32)
         sample_rate = self._sample_rate
-        time.sleep(0)  # Yield GIL
 
         # Step 1: Generate phase-coherent 57 kHz carrier from crystal-locked 19 kHz reference
         # CRITICAL ARCHITECTURE FIX: FM stations use crystal oscillators
@@ -1302,9 +1298,11 @@ class RBDSWorker:
             pilot_filtered_rms = np.sqrt(np.mean(pilot_filtered_sig ** 2))
             pilot_hz = self._measured_pilot_freq if self._measured_pilot_freq is not None else 19000.0
             expected_phase = 2.0 * np.pi * pilot_hz * n / self._sample_rate
-            logger.info(f"RBDS Pilot (locked at {pilot_hz:.3f} Hz): multiplex_rms={pilot_rms:.3f}, "
-                       f"filtered_rms={pilot_filtered_rms:.3f}, samples={n}, expected_phase={expected_phase:.2f} rad")
-        time.sleep(0)  # Yield GIL
+            logger.info(
+                "RBDS Pilot (locked at %.3f Hz): multiplex_rms=%.3f, "
+                "filtered_rms=%.3f, samples=%d, expected_phase=%.2f rad",
+                pilot_hz, pilot_rms, pilot_filtered_rms, n, expected_phase,
+            )
 
         # Step 2: Bandpass filter to extract 57 kHz RBDS subcarrier (54-60 kHz)
         # CRITICAL: Do this BEFORE decimation that would remove the 57 kHz signal!
@@ -1319,7 +1317,6 @@ class RBDSWorker:
             x, self._rbds_bandpass_zi = scipy_signal.lfilter(
                 self._rbds_bandpass, [1.0], x, zi=self._rbds_bandpass_zi
             )
-            time.sleep(0)  # Yield GIL
 
         # Step 3: Frequency shift to baseband using PILOT-DERIVED carrier
         # Generate 57 kHz = pilot × 3 (third harmonic)
@@ -1336,7 +1333,6 @@ class RBDSWorker:
             phases = self._carrier_phase_57k + phase_increment * np.arange(n, dtype=np.float64)
             x = x * np.exp(-1j * phases)
             self._carrier_phase_57k = (self._carrier_phase_57k + phase_increment * n) % (2.0 * np.pi)
-        time.sleep(0)  # Yield GIL
 
         # Step 3: Lowpass filter (7.5 kHz) to remove mixing artifacts and aliases.
         # After the 57 kHz mix x is complex; lfilter keeps real delay lines per
@@ -1354,7 +1350,6 @@ class RBDSWorker:
             self._rbds_lowpass, [1.0], x.imag, zi=self._rbds_lowpass_zi_imag
         )
         x = real_out + 1j * imag_out
-        time.sleep(0)  # Yield GIL
 
         # Buffer at the high (post-lowpass) sample rate.  Earlier this code
         # decimated and resampled per chunk, then accumulated the resampled
@@ -1393,7 +1388,6 @@ class RBDSWorker:
         if decim > 1:
             x = x[::decim]
             sample_rate = int(sample_rate // decim)  # Keep as int
-        time.sleep(0)  # Yield GIL
 
         # Step 5: Resample to exactly 19 kHz (16 samples per symbol at 1187.5
         # baud).  Done once on the entire batch so the polyphase transient
@@ -1407,7 +1401,6 @@ class RBDSWorker:
                 self._sample_rate, sample_rate, sample_rate, len(x)
             )
         x = self._resample(x, sample_rate, 19000)
-        time.sleep(0)  # Yield GIL
 
         # Do NOT reset M&M / Costas state between batches.
         # Unlike an offline recording processed in one pass, this is a continuous
@@ -1427,7 +1420,6 @@ class RBDSWorker:
         # the effective bandwidth to ~3.5 Hz, which was too narrow to lock reliably.
         # Reference: https://pysdr.org/content/rds.html (Costas before M&M)
         x = self._costas_loop(x)
-        time.sleep(0)  # Yield GIL
 
         # Log Costas frequency offset to check if it's locked
         if hasattr(self, '_costas_log_count'):
@@ -1449,7 +1441,6 @@ class RBDSWorker:
         # corrected by the Costas loop, so timing error estimates are clean.
         n_before = len(x)
         x = self._mm_timing_pysdr(x)
-        time.sleep(0)  # Yield GIL
         # Reduced logging: only log M&M timing every 500th call to avoid log flooding
         if not hasattr(self, '_mm_log_count'):
             self._mm_log_count = 0
@@ -1688,9 +1679,6 @@ class RBDSWorker:
                     if phase >= two_pi or phase < 0:
                         phase = phase % two_pi
 
-                # Yield GIL between batches to let audio thread run
-                time.sleep(0)
-
             self._rbds_costas_phase = phase
             self._rbds_costas_freq = freq
             return out
@@ -1870,7 +1858,7 @@ class RBDSWorker:
                                 # bits.  ±2 caused every near-miss to fail (seen in the field
                                 # as continuous "expected 78, got 75/82" mismatches with 0
                                 # groups decoded).
-                                logger.debug(f"RBDS presync spacing mismatch: expected {expected_spacing}, got {actual_spacing}")
+                                logger.debug("RBDS presync spacing mismatch: expected %s, got %s", expected_spacing, actual_spacing)
                                 self._rbds_lastseen_offset = j
                                 self._rbds_lastseen_offset_counter = global_i
                                 self._rbds_inverted_polarity = polarity
@@ -1889,7 +1877,7 @@ class RBDSWorker:
                                 self._rbds_presync_polarity = polarity
 
                                 if self._rbds_presync_hits >= 2:
-                                    logger.info(f'RBDS TENTATIVELY SYNCED at bit {global_i} (awaiting group confirmation)')
+                                    logger.info("RBDS TENTATIVELY SYNCED at bit %d (awaiting group confirmation)", global_i)
                                     self._rbds_wrong_blocks_counter = 0
                                     self._rbds_blocks_counter = 0
                                     self._rbds_block_bit_counter = 0
@@ -2153,7 +2141,7 @@ class RBDSWorker:
                                     with self._stats_lock:
                                         self._stats.groups_decoded += 1
 
-                                    logger.info(f"RBDS group: PI=0x{program_identification:04X} type={group_type}")
+                                    logger.info("RBDS group: PI=0x%04X type=%s", program_identification, group_type)
                     
                     # Reset for next block
                     self._rbds_block_bit_counter = 0
@@ -2197,14 +2185,14 @@ class RBDSWorker:
                                 self._rbds_sync_tentative = False
                             self._rbds_tentative_good_groups = 0
                         elif self._rbds_wrong_blocks_counter > 35:
-                            logger.info(f"RBDS SYNC LOST ({self._rbds_wrong_blocks_counter} bad blocks on {self._rbds_blocks_counter} total)")
+                            logger.info("RBDS SYNC LOST (%d bad blocks on %d total)", self._rbds_wrong_blocks_counter, self._rbds_blocks_counter)
                             self._rbds_synced = False
                             self._rbds_presync = False
                             with self._stats_lock:
                                 self._stats.sync_lost_count += 1
                                 self._stats.sync_acquired_unix = None
                         else:
-                            logger.info(f"RBDS sync OK ({self._rbds_wrong_blocks_counter} bad blocks on {self._rbds_blocks_counter} total)")
+                            logger.info("RBDS sync OK (%d bad blocks on %d total)", self._rbds_wrong_blocks_counter, self._rbds_blocks_counter)
                         self._rbds_blocks_counter = 0
                         self._rbds_wrong_blocks_counter = 0
 
@@ -2756,7 +2744,7 @@ class FMDemodulator:
             stereo_pilot_locked = stereo_pilot_strength > 0.1  # 10% threshold
 
             if stereo_pilot_locked:
-                logger.debug(f"Stereo pilot detected: strength={stereo_pilot_strength:.2f}")
+                logger.debug("Stereo pilot detected: strength=%.2f", stereo_pilot_strength)
 
         # RBDS extraction in a separate worker thread.  Submit samples
         # (non-blocking) and pick up whatever the worker has decoded since
@@ -2808,7 +2796,7 @@ class FMDemodulator:
                 rbds_data = self._rbds_worker.get_latest_data()
             except Exception as e:
                 # Log but don't let RBDS errors affect audio demodulation
-                logger.warning(f"RBDS error (audio unaffected): {e}")
+                logger.warning("RBDS error (audio unaffected): %s", e)
 
         # Advance the absolute sample index AFTER submitting to ensure the
         # offset is the position of the FIRST sample in this chunk.
@@ -2827,9 +2815,9 @@ class FMDemodulator:
             try:
                 stereo_audio = self._decode_stereo(multiplex, stereo_sample_indices)
                 if stereo_audio is not None:
-                    logger.debug(f"Stereo decoded: {len(stereo_audio)} samples, shape {stereo_audio.shape}")
+                    logger.debug("Stereo decoded: %d samples, shape %s", len(stereo_audio), stereo_audio.shape)
             except Exception as e:
-                logger.warning(f"Stereo decoding error: {e}", exc_info=True)
+                logger.warning("Stereo decoding error: %s", e, exc_info=True)
                 stereo_audio = None
         # CRITICAL FIX: Use proper resampling to exact target rate instead of simple decimation
         # Simple decimation produces wrong sample rate: e.g., 2.5MHz / 52 = 48,077 Hz (not 48,000 Hz)
@@ -2876,7 +2864,7 @@ class FMDemodulator:
             else:
                 audio = multiplex
                 intermediate_rate = self.config.sample_rate
-                logger.debug(f"FM demod: No decimation needed, {intermediate_rate}Hz → {target_rate}Hz")
+                logger.debug("FM demod: No decimation needed, %sHz → %sHz", intermediate_rate, target_rate)
 
             # Scale to audio levels BEFORE resampling (at intermediate rate)
             # For 75 kHz deviation: phase_diff_per_sample = 2π × 75000 / sample_rate
