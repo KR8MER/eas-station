@@ -367,10 +367,34 @@
             const aria = isTuned ? `${f} megahertz, currently tuned` : `${f} megahertz`;
             return `<span class="${cls}" aria-label="${escapeHtml(aria)}">${escapeHtml(f)}<span aria-hidden="true"> MHz</span></span>`;
         }).join('');
+        // Extra AF method indicators (Method B + LF/MF follow-on)
+        const extraChips = [];
+        if (metadata.rbds_af_method_b) {
+            const tunedTxt = isPresent(metadata.rbds_af_tuning_frequency)
+                ? ` @ ${metadata.rbds_af_tuning_frequency} MHz` : '';
+            extraChips.push(
+                `<span class="rbds-flag rbds-flag--info rbds-flag--active" ` +
+                `aria-label="Alternative frequencies signalled using Method B${tunedTxt}">` +
+                `<i class="fas fa-shuffle" aria-hidden="true"></i>` +
+                `<span>Method B${escapeHtml(tunedTxt)}</span></span>`
+            );
+        }
+        if (metadata.rbds_af_follow_on_indicator) {
+            extraChips.push(
+                `<span class="rbds-flag rbds-flag--info rbds-flag--active" ` +
+                `aria-label="LF or MF follow-on frequencies present">` +
+                `<i class="fas fa-tower-broadcast" aria-hidden="true"></i>` +
+                `<span>LF/MF follow-on</span></span>`
+            );
+        }
+        const chipsRow = extraChips.length
+            ? `<div class="rbds-af__flags d-flex flex-wrap gap-1 mt-1">${extraChips.join('')}</div>`
+            : '';
         return (
             `<section class="rbds-af" aria-label="Alternative frequencies">` +
             `<h6 class="rbds-section-h"><i class="fas fa-tower-cell" aria-hidden="true"></i> Alternative Frequencies ${completion}</h6>` +
             `<div class="rbds-af__list">${pills}</div>` +
+            chipsRow +
             `</section>`
         );
     }
@@ -400,10 +424,26 @@
         if (isPresent(metadata.rbds_ecc)) {
             add('Extended country (ECC)', `<code>${escapeHtml(hex(metadata.rbds_ecc, 2))}</code>`);
         }
+        if (isPresent(metadata.rbds_pty_name)) {
+            add('Programme type name (PTYN)', escapeHtml(metadata.rbds_pty_name));
+        }
         add('Language', isPresent(metadata.rbds_language_name)
             ? escapeHtml(metadata.rbds_language_name) : null);
+        if (isPresent(metadata.rbds_language_code)) {
+            add('Language code', `<code>${escapeHtml(hex(metadata.rbds_language_code, 2))}</code>`);
+        }
         if (isPresent(metadata.rbds_linkage_set_number)) {
             add('Linkage set', `<code>${escapeHtml(hex(metadata.rbds_linkage_set_number, 3))}</code>`);
+        }
+        if (isPresent(metadata.rbds_linkage_actuator)) {
+            add('Linkage actuator', metadata.rbds_linkage_actuator
+                ? '<span class="rbds-flag rbds-flag--warning rbds-flag--active"><i class="fas fa-bolt" aria-hidden="true"></i><span>Active</span></span>'
+                : '<span class="rbds-flag rbds-flag--neutral rbds-flag--inactive"><i class="fas fa-circle" aria-hidden="true"></i><span>Inactive</span></span>');
+        }
+        if (isPresent(metadata.rbds_linkage_soft_coupling)) {
+            add('Soft coupling', metadata.rbds_linkage_soft_coupling
+                ? '<span class="rbds-flag rbds-flag--info rbds-flag--active"><i class="fas fa-link" aria-hidden="true"></i><span>Yes</span></span>'
+                : '<span class="rbds-flag rbds-flag--neutral rbds-flag--inactive"><i class="fas fa-link-slash" aria-hidden="true"></i><span>No</span></span>');
         }
         if (isPresent(metadata.rbds_clock_time_local)) {
             add('Broadcast clock', `<span class="font-monospace">${escapeHtml(metadata.rbds_clock_time_local)}</span>`);
@@ -468,6 +508,282 @@
             `<tbody>${rows}</tbody>` +
             `</table></div>` +
             `</details>`
+        );
+    }
+
+    // ---- Open Data Applications (ODA) ------------------------------------
+
+    function buildODA(metadata) {
+        const assignments = metadata.rbds_oda_assignments;
+        const apps = metadata.rbds_oda_apps;
+        const payloads = metadata.rbds_oda_payloads;
+        const hasAssignments = Array.isArray(assignments) && assignments.length > 0;
+        const hasApps = !hasAssignments && Array.isArray(apps) && apps.length > 0;
+        const hasPayloads = Array.isArray(payloads) && payloads.length > 0;
+        if (!hasAssignments && !hasApps && !hasPayloads) return '';
+
+        let body = '';
+        if (hasAssignments) {
+            const rows = assignments.map(a => (
+                `<tr>` +
+                `<td><code>${escapeHtml(a.group || '')}</code></td>` +
+                `<td><code>${escapeHtml(a.aid_hex || '')}</code></td>` +
+                `<td>${escapeHtml(a.name || '')}</td>` +
+                `</tr>`
+            )).join('');
+            body += (
+                `<div class="table-responsive">` +
+                `<table class="table table-sm rbds-oda__table">` +
+                `<caption class="sr-only">ODA application identifier assignments.</caption>` +
+                `<thead><tr><th scope="col">Group</th><th scope="col">AID</th><th scope="col">Name</th></tr></thead>` +
+                `<tbody>${rows}</tbody>` +
+                `</table></div>`
+            );
+        } else if (hasApps) {
+            const pills = apps.map(id =>
+                `<span class="rbds-af-pill"><code>${escapeHtml(hex(id, 4))}</code></span>`
+            ).join('');
+            body += `<div class="rbds-af__list">${pills}</div>`;
+        }
+        if (hasPayloads) {
+            const rows = payloads.map(p => (
+                `<tr>` +
+                `<td><code>${escapeHtml(p.aid_hex || '')}</code></td>` +
+                `<td><code>${escapeHtml(p.group || '')}</code></td>` +
+                `<td class="font-monospace">${escapeHtml(p.count)}</td>` +
+                `<td><code>${escapeHtml(hex(p.last_b_low, 2))}</code></td>` +
+                `<td><code>${escapeHtml(hex(p.last_c, 4))}</code></td>` +
+                `<td><code>${escapeHtml(hex(p.last_d, 4))}</code></td>` +
+                `</tr>`
+            )).join('');
+            body += (
+                `<h6 class="rbds-section-h mt-2"><i class="fas fa-database" aria-hidden="true"></i> Raw ODA payloads (no decoder)</h6>` +
+                `<div class="table-responsive">` +
+                `<table class="table table-sm rbds-oda__table">` +
+                `<caption class="sr-only">Raw ODA payloads observed without a decoder.</caption>` +
+                `<thead><tr>` +
+                `<th scope="col">AID</th><th scope="col">Group</th><th scope="col">Count</th>` +
+                `<th scope="col">Last B[4:0]</th><th scope="col">Last C</th><th scope="col">Last D</th>` +
+                `</tr></thead>` +
+                `<tbody>${rows}</tbody>` +
+                `</table></div>`
+            );
+        }
+
+        return (
+            `<details class="rbds-eon">` +
+            `<summary><i class="fas fa-puzzle-piece" aria-hidden="true"></i> Open Data Applications (ODA)</summary>` +
+            `<div class="rbds-details__body">${body}</div>` +
+            `</details>`
+        );
+    }
+
+    // ---- Slow Labelling (Group 1A variants) -------------------------------
+
+    function buildSlowLabelling(metadata) {
+        const raw = metadata.rbds_slow_labelling_raw;
+        if (!raw || typeof raw !== 'object' || Object.keys(raw).length === 0) return '';
+        const rows = Object.entries(raw)
+            .sort((a, b) => parseInt(a[0], 10) - parseInt(b[0], 10))
+            .map(([variant, value]) => {
+                let decoded = '—';
+                if (variant === '0' && isPresent(metadata.rbds_language_name)) {
+                    decoded = `language ${escapeHtml(metadata.rbds_language_name)}`;
+                } else if (variant === '1' && isPresent(metadata.rbds_paging_tmc_id)) {
+                    decoded = `TMC id <code>${escapeHtml(hex(metadata.rbds_paging_tmc_id, 3))}</code>`;
+                } else if (variant === '2' && isPresent(metadata.rbds_paging_operator_code)) {
+                    decoded = `paging op <code>${escapeHtml(hex(metadata.rbds_paging_operator_code, 3))}</code>`;
+                } else if (variant === '3' && isPresent(metadata.rbds_language_name)) {
+                    decoded = `language ${escapeHtml(metadata.rbds_language_name)}`;
+                } else if (variant === '4' && isPresent(metadata.rbds_ecc)) {
+                    decoded = `ECC <code>${escapeHtml(hex(metadata.rbds_ecc, 2))}</code>`;
+                } else if (variant === '5' && isPresent(metadata.rbds_linkage_set_number)) {
+                    decoded = `LSN <code>${escapeHtml(hex(metadata.rbds_linkage_set_number, 3))}</code>`;
+                } else if (variant === '6') {
+                    decoded = 'broadcaster-use';
+                } else if (variant === '7' && isPresent(metadata.rbds_ews_channel_identifier)) {
+                    decoded = `EWS chan-id <code>${escapeHtml(hex(metadata.rbds_ews_channel_identifier, 3))}</code>`;
+                }
+                return (
+                    `<tr>` +
+                    `<td><code>${escapeHtml(variant)}</code></td>` +
+                    `<td><code>${escapeHtml(hex(value, 4))}</code></td>` +
+                    `<td>${decoded}</td>` +
+                    `</tr>`
+                );
+            }).join('');
+        return (
+            `<details class="rbds-eon">` +
+            `<summary><i class="fas fa-tags" aria-hidden="true"></i> Slow Labelling (Group 1A variants)</summary>` +
+            `<div class="rbds-details__body">` +
+            `<div class="table-responsive">` +
+            `<table class="table table-sm rbds-oda__table">` +
+            `<caption class="sr-only">Slow labelling variants observed in Group 1A.</caption>` +
+            `<thead><tr><th scope="col">Variant</th><th scope="col">Raw Block D</th><th scope="col">Decoded</th></tr></thead>` +
+            `<tbody>${rows}</tbody>` +
+            `</table></div>` +
+            `</div></details>`
+        );
+    }
+
+    // ---- Radio Paging (Group 7A and 13A) ----------------------------------
+
+    function buildPagingTables(metadata) {
+        const basic = metadata.rbds_paging_messages;
+        const enhanced = metadata.rbds_enhanced_paging_messages;
+        const hasBasic = Array.isArray(basic) && basic.length > 0;
+        const hasEnhanced = Array.isArray(enhanced) && enhanced.length > 0;
+        if (!hasBasic && !hasEnhanced) return '';
+        const fmtTime = (ts) => {
+            if (!isPresent(ts)) return '';
+            return new Date(Number(ts) * 1000).toLocaleTimeString();
+        };
+        let body = '';
+        if (hasBasic) {
+            const rows = basic.slice().reverse().map(m => (
+                `<tr>` +
+                `<td class="font-monospace small">${escapeHtml(fmtTime(m.unix_ts))}</td>` +
+                `<td><code>${escapeHtml(m.paging_segment)}</code></td>` +
+                `<td>${m.a_b_flag ? 'B' : 'A'}</td>` +
+                `<td><code>${escapeHtml(hex(m.block_c, 4))}</code></td>` +
+                `<td><code>${escapeHtml(hex(m.block_d, 4))}</code></td>` +
+                `</tr>`
+            )).join('');
+            body += (
+                `<h6 class="rbds-section-h"><i class="fas fa-pager" aria-hidden="true"></i> Radio Paging (Group 7A) — last ${escapeHtml(basic.length)}</h6>` +
+                `<div class="table-responsive">` +
+                `<table class="table table-sm rbds-oda__table">` +
+                `<caption class="sr-only">Recent Group 7A radio paging messages.</caption>` +
+                `<thead><tr>` +
+                `<th scope="col">Time</th><th scope="col">Seg</th><th scope="col">A/B</th>` +
+                `<th scope="col">Block C</th><th scope="col">Block D</th>` +
+                `</tr></thead>` +
+                `<tbody>${rows}</tbody>` +
+                `</table></div>`
+            );
+        }
+        if (hasEnhanced) {
+            const rows = enhanced.slice().reverse().map(m => (
+                `<tr>` +
+                `<td class="font-monospace small">${escapeHtml(fmtTime(m.unix_ts))}</td>` +
+                `<td><code>${escapeHtml(hex(m.block_b_low, 2))}</code></td>` +
+                `<td><code>${escapeHtml(hex(m.block_c, 4))}</code></td>` +
+                `<td><code>${escapeHtml(hex(m.block_d, 4))}</code></td>` +
+                `</tr>`
+            )).join('');
+            body += (
+                `<h6 class="rbds-section-h mt-2"><i class="fas fa-pager" aria-hidden="true"></i> Enhanced Paging (Group 13A) — last ${escapeHtml(enhanced.length)}</h6>` +
+                `<div class="table-responsive">` +
+                `<table class="table table-sm rbds-oda__table">` +
+                `<caption class="sr-only">Recent Group 13A enhanced paging messages.</caption>` +
+                `<thead><tr>` +
+                `<th scope="col">Time</th><th scope="col">B[4:0]</th>` +
+                `<th scope="col">Block C</th><th scope="col">Block D</th>` +
+                `</tr></thead>` +
+                `<tbody>${rows}</tbody>` +
+                `</table></div>`
+            );
+        }
+        return (
+            `<details class="rbds-eon">` +
+            `<summary><i class="fas fa-pager" aria-hidden="true"></i> Radio Paging</summary>` +
+            `<div class="rbds-details__body">${body}</div>` +
+            `</details>`
+        );
+    }
+
+    // ---- Transparent Data Channel (TDC) -----------------------------------
+
+    function buildTDC(metadata) {
+        const channels = metadata.rbds_tdc_channels;
+        const fallback = metadata.rbds_tdc_data;
+        const hasChannels = channels && typeof channels === 'object' && Object.keys(channels).length > 0;
+        if (!hasChannels && !isPresent(fallback)) return '';
+        let body = '';
+        if (hasChannels) {
+            body = Object.entries(channels)
+                .sort((a, b) => parseInt(a[0], 10) - parseInt(b[0], 10))
+                .map(([ch, hexStr]) => (
+                    `<div class="d-flex justify-content-between mb-1 small">` +
+                    `<span class="text-muted">Channel ${escapeHtml(ch)}</span>` +
+                    `<span class="text-muted">${escapeHtml(((hexStr || '').length / 2))} bytes</span>` +
+                    `</div>` +
+                    `<div class="font-monospace small text-break bg-light p-1 rounded mb-1" style="max-height:60px;overflow-y:auto;">${escapeHtml(hexStr)}</div>`
+                )).join('');
+        } else {
+            body = `<div class="font-monospace small text-break bg-light p-1 rounded mb-1" style="max-height:60px;overflow-y:auto;">${escapeHtml(fallback)}</div>`;
+        }
+        return (
+            `<details class="rbds-eon">` +
+            `<summary><i class="fas fa-microchip" aria-hidden="true"></i> Transparent Data Channel (TDC)</summary>` +
+            `<div class="rbds-details__body">${body}</div>` +
+            `</details>`
+        );
+    }
+
+    // ---- In-House Application Data ----------------------------------------
+
+    function buildInHouse(metadata) {
+        const data = metadata.rbds_in_house_data;
+        if (!Array.isArray(data) || data.length === 0) return '';
+        const words = data.map(w => Number(w).toString(16).toUpperCase().padStart(4, '0')).join(' ');
+        return (
+            `<details class="rbds-eon">` +
+            `<summary><i class="fas fa-warehouse" aria-hidden="true"></i> In-House Application Data</summary>` +
+            `<div class="rbds-details__body">` +
+            `<div class="font-monospace small text-break bg-light p-1 rounded mb-1">${escapeHtml(words)}</div>` +
+            `</div></details>`
+        );
+    }
+
+    // ---- Fast Switching (Group 15B) ---------------------------------------
+
+    function buildFastSwitching(metadata) {
+        const tp = metadata.rbds_fast_tp;
+        const ta = metadata.rbds_fast_ta;
+        const ms = metadata.rbds_fast_ms;
+        const di = metadata.rbds_fast_di_bits;
+        if (!isPresent(tp) && !isPresent(ta) && !isPresent(ms) && !isPresent(di)) return '';
+        const chips = [];
+        if (isPresent(tp)) {
+            chips.push(flagChip({
+                variant: 'info',
+                icon: 'fas fa-traffic-light',
+                label: tp ? 'TP' : 'TP off',
+                srLabel: tp ? 'Fast Traffic Programme: yes.' : 'Fast Traffic Programme: no.',
+                active: !!tp,
+            }));
+        }
+        if (isPresent(ta)) {
+            chips.push(flagChip({
+                variant: 'warning',
+                icon: 'fas fa-triangle-exclamation',
+                label: ta ? 'TA active' : 'TA off',
+                srLabel: ta ? 'Fast Traffic Announcement: active.' : 'Fast Traffic Announcement: off.',
+                active: !!ta,
+            }));
+        }
+        if (isPresent(ms)) {
+            chips.push(flagChip({
+                variant: 'neutral',
+                icon: ms ? 'fas fa-music' : 'fas fa-microphone',
+                label: ms ? 'Music' : 'Speech',
+                srLabel: ms ? 'Fast M/S: music.' : 'Fast M/S: speech.',
+                active: !!ms,
+            }));
+        }
+        if (isPresent(di)) {
+            chips.push(
+                `<span class="rbds-flag rbds-flag--neutral" aria-label="Fast DI bits ${escapeHtml(hex(di))}">` +
+                `<i class="fas fa-bars" aria-hidden="true"></i>` +
+                `<span>DI <code>${escapeHtml(hex(di))}</code></span></span>`
+            );
+        }
+        return (
+            `<section class="rbds-fast" aria-label="Fast switching information (Group 15B)">` +
+            `<h6 class="rbds-section-h"><i class="fas fa-bolt" aria-hidden="true"></i> Fast Switching (Group 15B)</h6>` +
+            `<div class="d-flex flex-wrap gap-1">${chips.join('')}</div>` +
+            `</section>`
         );
     }
 
@@ -548,12 +864,20 @@
         if (!compact) {
             const identity = buildIdentityTable(metadata);
             const af = buildAFList(metadata);
+            const fastSw = buildFastSwitching(metadata);
             const eon = buildEON(metadata);
-            if (identity || af || eon) {
+            const oda = buildODA(metadata);
+            const slow = buildSlowLabelling(metadata);
+            const paging = buildPagingTables(metadata);
+            const tdc = buildTDC(metadata);
+            const inHouse = buildInHouse(metadata);
+            if (identity || af || fastSw || eon || oda || slow || paging || tdc || inHouse) {
                 details = (
                     `<details class="rbds-details">` +
                     `<summary><i class="fas fa-list" aria-hidden="true"></i> RBDS Details</summary>` +
-                    `<div class="rbds-details__body">${identity}${af}${eon}</div>` +
+                    `<div class="rbds-details__body">` +
+                    identity + af + fastSw + eon + oda + slow + paging + tdc + inHouse +
+                    `</div>` +
                     `</details>`
                 );
             }
@@ -743,6 +1067,12 @@
         buildAFList,
         buildIdentityTable,
         buildEON,
+        buildODA,
+        buildSlowLabelling,
+        buildPagingTables,
+        buildTDC,
+        buildInHouse,
+        buildFastSwitching,
         buildStationCard,
         buildDecoderHealthCard,
     };
