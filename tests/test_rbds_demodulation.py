@@ -300,20 +300,32 @@ def test_rbds_apply_reset_clears_measured_pilot():
 
 
 def _run_presync_sequence(worker: RBDSWorker, hit_map: dict[int, int]) -> None:
-    """Drive _decode_rbds_groups with synthetic syndrome hits at specific bit indices."""
-    worker._rbds_bit_buffer = [0] * 220
-    call_index = 0
+    """Drive _decode_rbds_groups with valid RBDS blocks at specific bit positions.
 
-    def fake_calc_syndrome(_word: int, message_length: int) -> int:
-        nonlocal call_index
-        bit_index = call_index // 2
-        is_inverted_path = (call_index % 2) == 1
-        call_index += 1
-        if message_length == 26 and not is_inverted_path:
-            return hit_map.get(bit_index, 0)
-        return 0
+    hit_map maps bit_index → RBDS offset syndrome (383=A, 14=B, 303=C, 663=D,
+    748=C').  A CRC-valid 26-bit block whose syndrome equals the given value is
+    embedded in the bit buffer so that the shift register carries that syndrome
+    when the last bit of the block is shifted in at *bit_index*.
 
-    worker._calc_syndrome = fake_calc_syndrome  # type: ignore[assignment]
+    Dataword 0x0000 is used because it produces no spurious intermediate
+    syndrome matches in a zero-filled buffer (unlike other values whose
+    partial-shift register state happens to coincide with an RBDS offset
+    syndrome mid-block).
+
+    This replaces the previous monkey-patching approach for compatibility with
+    the JIT-accelerated presync path (_presync_scan_numba bypasses the Python
+    _calc_syndrome method and computes syndromes natively).
+    """
+    _syndrome_to_offset = {383: 0, 14: 1, 303: 2, 663: 3, 748: 4}
+    buf = [0] * 220
+    for bit_end, syn in hit_map.items():
+        offset_idx = _syndrome_to_offset[syn]
+        block_bits = _bits_for_valid_block(worker, 0x0000, offset_idx)
+        bit_start = bit_end - 25  # 26-bit block ends (inclusive) at bit_end
+        for k, b in enumerate(block_bits):
+            if 0 <= bit_start + k < len(buf):
+                buf[bit_start + k] = b
+    worker._rbds_bit_buffer = buf
     worker._decode_rbds_groups()
 
 
@@ -321,7 +333,10 @@ def test_rbds_presync_requires_three_spaced_hits_before_lock():
     """RBDS lock should only occur after 3 correctly spaced presync detections."""
     worker = _make_worker()
     # A -> B -> C detections with exact 26-bit spacing.
-    _run_presync_sequence(worker, {100: 383, 126: 14, 152: 303})
+    # Positions chosen to start near the beginning of the buffer so the
+    # 26-bit shift register contains mostly the block bits with minimal
+    # zero-prefix influence: block A ends at 25, B at 51, C at 77.
+    _run_presync_sequence(worker, {25: 383, 51: 14, 77: 303})
     assert worker._rbds_synced is True
 
 
@@ -329,7 +344,7 @@ def test_rbds_presync_two_hits_do_not_lock():
     """Two spaced detections are insufficient; avoid false sync in noise."""
     worker = _make_worker()
     # Only A -> B (single spacing confirmation) should not lock.
-    _run_presync_sequence(worker, {100: 383, 126: 14})
+    _run_presync_sequence(worker, {25: 383, 51: 14})
     assert worker._rbds_synced is False
 
 
@@ -426,20 +441,19 @@ def test_rbds_lock_resets_per_sync_stats_but_keeps_sync_lost_count():
     # hit, so the sync transition is the last thing the loop does before
     # returning.  This isolates "the reset that happens on sync acquisition"
     # from any post-sync block processing the helper would otherwise add.
-    worker._rbds_bit_buffer = [0] * 153
-    call_index = 0
-    hit_map = {100: 383, 126: 14, 152: 303}
-
-    def fake_calc_syndrome(_word: int, message_length: int) -> int:
-        nonlocal call_index
-        bit_index = call_index // 2
-        is_inverted_path = (call_index % 2) == 1
-        call_index += 1
-        if message_length == 26 and not is_inverted_path:
-            return hit_map.get(bit_index, 0)
-        return 0
-
-    worker._calc_syndrome = fake_calc_syndrome  # type: ignore[assignment]
+    # Blocks A/B/C end at bits 25/51/77 respectively (26-bit spacing).
+    # Dataword 0x0000 produces no spurious intermediate syndrome matches in
+    # the zero-filled prefix, so only the three intended hits are seen.
+    _hit_map = {25: 383, 51: 14, 77: 303}
+    _buf = [0] * 78  # ends exactly at last block
+    for _bit_end, _syn in _hit_map.items():
+        _offset_idx = {383: 0, 14: 1, 303: 2, 663: 3, 748: 4}[_syn]
+        _block_bits = _bits_for_valid_block(worker, 0x0000, _offset_idx)
+        for _k, _b in enumerate(_block_bits):
+            _idx = _bit_end - 25 + _k
+            if 0 <= _idx < len(_buf):
+                _buf[_idx] = _b
+    worker._rbds_bit_buffer = _buf
     worker._decode_rbds_groups()
 
     assert worker._rbds_synced is True

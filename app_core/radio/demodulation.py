@@ -247,6 +247,110 @@ def _mm_timing_loop_numba(
     return out_real, out_imag, i_out, i_in, mu
 
 
+@jit(nopython=True, cache=True, fastmath=True)
+def _calc_syndrome_numba(x, mlen):
+    """JIT-compiled RDS/RBDS syndrome calculator.
+
+    Evaluates the standard (26,16) RBDS block-code syndrome via the
+    shift-register circuit from IEC 62106 Annex B.  Generator polynomial:
+    g(x) = x^10 + x^8 + x^7 + x^5 + x^4 + x^3 + 1  (= 0x5B9).
+
+    This is called twice per bit during presync scanning and once per
+    block (plus up to 26× per FEC attempt) in synced decode — making it
+    the tightest remaining Python loop after Costas/M&M were JIT'd.
+
+    Args:
+        x:    Integer word to evaluate (≤ 26 bits for a full block,
+              16 bits for a dataword-only parity check).
+        mlen: Bit-length of *x* (26 or 16 in practice).
+
+    Returns:
+        10-bit syndrome value (0–1023).
+    """
+    reg = 0
+    plen = 10
+    mask = 1 << plen
+    poly = 0x5B9
+    for ii in range(mlen, 0, -1):
+        reg = (reg << 1) | ((x >> (ii - 1)) & 1)
+        if reg & mask:
+            reg ^= poly
+    for ii in range(plen, 0, -1):
+        reg = reg << 1
+        if reg & mask:
+            reg ^= poly
+    return reg & (mask - 1)
+
+
+# Precomputed RBDS offset syndromes (IEC 62106 Table 2).
+# Stored as a module-level int64 array so _presync_scan_numba can reference
+# it without allocating on every call.  Values correspond to block offsets
+# A / B / C / D / C' in that order.
+_RBDS_SYNDROMES = np.array([383, 14, 303, 663, 748], dtype=np.int64)
+
+
+@jit(nopython=True, cache=True, fastmath=True)
+def _presync_scan_numba(bits, initial_reg, syndromes):
+    """JIT-compiled RBDS presync bit scanner.
+
+    Scans an int8 bit buffer for RBDS syndrome matches in a single native
+    pass, eliminating the 2× _calc_syndrome Python-loop overhead that
+    dominates the presync hot path.  For each bit the 26-bit shift register
+    is advanced and the resulting syndrome is checked against all five RBDS
+    offset words (normal and bit-inverted).  Only the *first* matching
+    syndrome per bit is recorded, preserving the break-on-first-match
+    semantics of the Python fallback path in _decode_rbds_groups.
+
+    Calling this once per batch replaces len(bits) × 2 Python-level
+    syndrome computations with a single native loop.
+
+    Args:
+        bits:        int8 numpy array of decoded bits (values 0 or 1).
+        initial_reg: 26-bit shift-register state carried over from the
+                     previous batch.
+        syndromes:   int64 array of the 5 RBDS offset syndromes [A,B,C,D,C'].
+
+    Returns:
+        Tuple of three equally-sized arrays (length = number of matches):
+        - match_positions: int32 bit indices where a syndrome was found.
+        - match_j:         int32 syndrome-table index (0–4) that matched.
+        - match_polarity:  bool array; False = normal, True = inverted.
+    """
+    n = len(bits)
+    match_positions = np.empty(n, dtype=np.int32)
+    match_j_arr = np.empty(n, dtype=np.int32)
+    match_polarity = np.empty(n, dtype=np.bool_)
+    n_matches = 0
+
+    reg = np.int64(initial_reg)
+    full_mask = np.int64(0x3FFFFFF)
+
+    for i in range(n):
+        reg = ((reg << np.int64(1)) | np.int64(bits[i])) & full_mask
+        syn = _calc_syndrome_numba(reg, 26)
+        syn_inv = _calc_syndrome_numba(reg ^ full_mask, 26)
+
+        for j in range(5):
+            if syn == syndromes[j]:
+                match_positions[n_matches] = np.int32(i)
+                match_j_arr[n_matches] = np.int32(j)
+                match_polarity[n_matches] = False
+                n_matches += 1
+                break
+            elif syn_inv == syndromes[j]:
+                match_positions[n_matches] = np.int32(i)
+                match_j_arr[n_matches] = np.int32(j)
+                match_polarity[n_matches] = True
+                n_matches += 1
+                break
+
+    return (
+        match_positions[:n_matches],
+        match_j_arr[:n_matches],
+        match_polarity[:n_matches],
+    )
+
+
 def fm_discriminator(iq_samples: np.ndarray) -> np.ndarray:
     """FM phase discriminator - dispatches to JIT or NumPy implementation.
 
@@ -1794,6 +1898,22 @@ class RBDSWorker:
         # Process all bits in buffer (python-radio style)
         bits = self._rbds_bit_buffer
 
+        # JIT-accelerated presync: scan the entire bit buffer for syndrome
+        # matches in one native pass, avoiding per-bit Python overhead on the
+        # presync hot path.  _presync_matches maps bit-index → (syndrome_j,
+        # polarity) for every bit where a syndrome hit was found.  Set to None
+        # when Numba is unavailable or we are already synced (the synced-mode
+        # path processes only ~45 blocks/sec so per-bit overhead is negligible).
+        _presync_matches: Optional[dict] = None
+        if _NUMBA_AVAILABLE and not self._rbds_synced and len(bits) > 0:
+            _bits_arr = np.array(bits, dtype=np.int8)
+            _mp, _mj, _mpol = _presync_scan_numba(
+                _bits_arr, np.int64(self._rbds_reg), _RBDS_SYNDROMES
+            )
+            _presync_matches = {}
+            for _e in range(len(_mp)):
+                _presync_matches[int(_mp[_e])] = (int(_mj[_e]), bool(_mpol[_e]))
+
         for i in range(len(bits)):
             # Use global bit counter for spacing calculations
             global_i = self._rbds_global_bit_counter
@@ -1804,124 +1924,138 @@ class RBDSWorker:
             
             if not self._rbds_synced:
                 # PRESYNC MODE (python-radio logic)
-                reg_syndrome = self._calc_syndrome(self._rbds_reg, 26)
-                reg_syndrome_inverted = self._calc_syndrome(self._rbds_reg ^ 0x3FFFFFF, 26)
-                for j in range(5):
-                    polarity: Optional[bool] = None
-                    if reg_syndrome == syndrome[j]:
-                        polarity = False
-                    elif reg_syndrome_inverted == syndrome[j]:
-                        polarity = True
+                # Resolve the syndrome match for this bit: look it up in the
+                # JIT-precomputed map (fast path, no Python syndrome loops) or
+                # compute the two syndromes now (Python fallback / no-Numba).
+                if _presync_matches is not None:
+                    _match = _presync_matches.get(i)
+                    if _match is None:
+                        continue  # no syndrome match at this bit: advance to next
+                    j, polarity = _match
+                else:
+                    reg_syndrome = self._calc_syndrome(self._rbds_reg, 26)
+                    reg_syndrome_inverted = self._calc_syndrome(self._rbds_reg ^ 0x3FFFFFF, 26)
+                    polarity = None
+                    j = -1
+                    for jj in range(5):
+                        if reg_syndrome == syndrome[jj]:
+                            polarity = False
+                            j = jj
+                            break
+                        elif reg_syndrome_inverted == syndrome[jj]:
+                            polarity = True
+                            j = jj
+                            break
+                    if polarity is None:
+                        continue  # no syndrome match at this bit: advance to next
 
-                    if polarity is not None:
-                        if not self._rbds_presync:
-                            # First valid block found
-                            self._rbds_lastseen_offset = j
-                            self._rbds_lastseen_offset_counter = global_i
+                if not self._rbds_presync:
+                    # First valid block found
+                    self._rbds_lastseen_offset = j
+                    self._rbds_lastseen_offset_counter = global_i
+                    self._rbds_inverted_polarity = polarity
+                    self._rbds_presync_polarity = polarity
+                    self._rbds_presync_hits = 0
+                    self._rbds_presync = True
+                    polarity_text = "inverted" if polarity else "normal"
+                    logger.info(
+                        "RBDS presync: first block type %d at bit %d (%s polarity)",
+                        j,
+                        global_i,
+                        polarity_text,
+                    )
+                else:
+                    # Second valid block - check spacing
+                    if self._rbds_presync_polarity is not None and polarity != self._rbds_presync_polarity:
+                        # Mixed polarity during presync usually indicates a random
+                        # syndrome collision in noise.  Restart presync from this
+                        # block to avoid false "sync then immediate 50/50 CRC fail".
+                        self._rbds_lastseen_offset = j
+                        self._rbds_lastseen_offset_counter = global_i
+                        self._rbds_inverted_polarity = polarity
+                        self._rbds_presync_polarity = polarity
+                        self._rbds_presync_hits = 0
+                        continue  # restart with this block as the new first candidate
+
+                    if offset_pos[self._rbds_lastseen_offset] >= offset_pos[j]:
+                        block_distance = offset_pos[j] + 4 - offset_pos[self._rbds_lastseen_offset]
+                    else:
+                        block_distance = offset_pos[j] - offset_pos[self._rbds_lastseen_offset]
+
+                    expected_spacing = block_distance * 26
+                    actual_spacing = global_i - self._rbds_lastseen_offset_counter
+
+                    if abs(actual_spacing - expected_spacing) > 4:
+                        # Wrong spacing - reset presync and try current block as new first.
+                        # Tolerance is ±4 bits (not 0 as in offline python-radio): M&M
+                        # symbol timing jitter accumulates ~1 bit per 26-bit block so
+                        # over a 78-bit (3-block) span the spacing error reaches ±3-4
+                        # bits.  ±2 caused every near-miss to fail (seen in the field
+                        # as continuous "expected 78, got 75/82" mismatches with 0
+                        # groups decoded).
+                        logger.debug("RBDS presync spacing mismatch: expected %s, got %s", expected_spacing, actual_spacing)
+                        self._rbds_lastseen_offset = j
+                        self._rbds_lastseen_offset_counter = global_i
+                        self._rbds_inverted_polarity = polarity
+                        self._rbds_presync_polarity = polarity
+                        self._rbds_presync_hits = 0
+                        # Keep presync=True with new first block
+                    else:
+                        # Require 3 consecutive correctly spaced presync blocks
+                        # (two spacing confirmations) before declaring lock.
+                        # This materially reduces false-lock events where random
+                        # syndrome hits produce "SYNCED" followed by 50/50 CRC loss.
+                        self._rbds_presync_hits += 1
+                        self._rbds_lastseen_offset = j
+                        self._rbds_lastseen_offset_counter = global_i
+                        self._rbds_inverted_polarity = polarity
+                        self._rbds_presync_polarity = polarity
+
+                        if self._rbds_presync_hits >= 2:
+                            logger.info("RBDS TENTATIVELY SYNCED at bit %d (awaiting group confirmation)", global_i)
+                            self._rbds_wrong_blocks_counter = 0
+                            self._rbds_blocks_counter = 0
+                            self._rbds_block_bit_counter = 0
+                            # CRITICAL FIX: Use offset_pos[j] to determine the next expected
+                            # block number, not j directly.  For C' (j=4), offset_pos[4]=2
+                            # (same slot as C), so the next block is D (3), not B (1).
+                            # Using (j+1)%4 gives 1 for j=4 which is wrong and causes
+                            # immediate sync loss for stations broadcasting Group 2B.
+                            self._rbds_block_number = (offset_pos[j] + 1) % 4
+                            self._rbds_group_assembly_started = False
+                            # Stale failure streak from the previous lock would
+                            # otherwise trip the burst-FEC suppression gate on
+                            # the very first blocks of this new lock — silently
+                            # disabling the corrector that's most useful right
+                            # when we're trying to ratify a tentative sync.
+                            self._rbds_consecutive_crc_failures = 0
+                            # Update polarity to match the triggering block so synced-mode
+                            # CRC checks use the correct inversion flag.
                             self._rbds_inverted_polarity = polarity
-                            self._rbds_presync_polarity = polarity
-                            self._rbds_presync_hits = 0
-                            self._rbds_presync = True
-                            polarity_text = "inverted" if polarity else "normal"
-                            logger.info(
-                                "RBDS presync: first block type %d at bit %d (%s polarity)",
-                                j,
-                                global_i,
-                                polarity_text,
-                            )
-                        else:
-                            # Second valid block - check spacing
-                            if self._rbds_presync_polarity is not None and polarity != self._rbds_presync_polarity:
-                                # Mixed polarity during presync usually indicates a random
-                                # syndrome collision in noise.  Restart presync from this
-                                # block to avoid false "sync then immediate 50/50 CRC fail".
-                                self._rbds_lastseen_offset = j
-                                self._rbds_lastseen_offset_counter = global_i
-                                self._rbds_inverted_polarity = polarity
-                                self._rbds_presync_polarity = polarity
-                                self._rbds_presync_hits = 0
-                                break
-
-                            if offset_pos[self._rbds_lastseen_offset] >= offset_pos[j]:
-                                block_distance = offset_pos[j] + 4 - offset_pos[self._rbds_lastseen_offset]
-                            else:
-                                block_distance = offset_pos[j] - offset_pos[self._rbds_lastseen_offset]
-
-                            expected_spacing = block_distance * 26
-                            actual_spacing = global_i - self._rbds_lastseen_offset_counter
-
-                            if abs(actual_spacing - expected_spacing) > 4:
-                                # Wrong spacing - reset presync and try current block as new first.
-                                # Tolerance is ±4 bits (not 0 as in offline python-radio): M&M
-                                # symbol timing jitter accumulates ~1 bit per 26-bit block so
-                                # over a 78-bit (3-block) span the spacing error reaches ±3-4
-                                # bits.  ±2 caused every near-miss to fail (seen in the field
-                                # as continuous "expected 78, got 75/82" mismatches with 0
-                                # groups decoded).
-                                logger.debug("RBDS presync spacing mismatch: expected %s, got %s", expected_spacing, actual_spacing)
-                                self._rbds_lastseen_offset = j
-                                self._rbds_lastseen_offset_counter = global_i
-                                self._rbds_inverted_polarity = polarity
-                                self._rbds_presync_polarity = polarity
-                                self._rbds_presync_hits = 0
-                                # Keep presync=True with new first block
-                            else:
-                                # Require 3 consecutive correctly spaced presync blocks
-                                # (two spacing confirmations) before declaring lock.
-                                # This materially reduces false-lock events where random
-                                # syndrome hits produce "SYNCED" followed by 50/50 CRC loss.
-                                self._rbds_presync_hits += 1
-                                self._rbds_lastseen_offset = j
-                                self._rbds_lastseen_offset_counter = global_i
-                                self._rbds_inverted_polarity = polarity
-                                self._rbds_presync_polarity = polarity
-
-                                if self._rbds_presync_hits >= 2:
-                                    logger.info("RBDS TENTATIVELY SYNCED at bit %d (awaiting group confirmation)", global_i)
-                                    self._rbds_wrong_blocks_counter = 0
-                                    self._rbds_blocks_counter = 0
-                                    self._rbds_block_bit_counter = 0
-                                    # CRITICAL FIX: Use offset_pos[j] to determine the next expected
-                                    # block number, not j directly.  For C' (j=4), offset_pos[4]=2
-                                    # (same slot as C), so the next block is D (3), not B (1).
-                                    # Using (j+1)%4 gives 1 for j=4 which is wrong and causes
-                                    # immediate sync loss for stations broadcasting Group 2B.
-                                    self._rbds_block_number = (offset_pos[j] + 1) % 4
-                                    self._rbds_group_assembly_started = False
-                                    # Stale failure streak from the previous lock would
-                                    # otherwise trip the burst-FEC suppression gate on
-                                    # the very first blocks of this new lock — silently
-                                    # disabling the corrector that's most useful right
-                                    # when we're trying to ratify a tentative sync.
-                                    self._rbds_consecutive_crc_failures = 0
-                                    # Update polarity to match the triggering block so synced-mode
-                                    # CRC checks use the correct inversion flag.
-                                    self._rbds_inverted_polarity = polarity
-                                    self._rbds_synced = True
-                                    # Enter tentative mode: don't publish or set
-                                    # sync_acquired_unix until the next 50-block
-                                    # window confirms enough fully-decoded
-                                    # groups (see _RBDS_TENTATIVE_GOOD_GROUPS).
-                                    self._rbds_sync_tentative = True
-                                    self._rbds_tentative_good_groups = 0
-                                    # Reset per-lock health stats so BLER and FEC
-                                    # counts reflect the *current* sync window, as
-                                    # the RBDSDecoderStats docstring promises.  The
-                                    # prior behaviour silently violated that contract:
-                                    # blocks_total / blocks_uncorrected accumulated
-                                    # across every marginal lock since boot, so a
-                                    # receiver that had bounced sync 78 times showed
-                                    # 65% BLER even when the live signal was clean.
-                                    # sync_lost_count is preserved (it's documented
-                                    # as the one cumulative counter) so the operator-
-                                    # visible "sync drops since boot" still reflects
-                                    # lifetime drops on this station.
-                                    with self._stats_lock:
-                                        preserved_drops = self._stats.sync_lost_count
-                                        self._stats = RBDSDecoderStats(
-                                            sync_lost_count=preserved_drops,
-                                        )
-                        break  # Syndrome found, exit j loop
+                            self._rbds_synced = True
+                            # Enter tentative mode: don't publish or set
+                            # sync_acquired_unix until the next 50-block
+                            # window confirms enough fully-decoded
+                            # groups (see _RBDS_TENTATIVE_GOOD_GROUPS).
+                            self._rbds_sync_tentative = True
+                            self._rbds_tentative_good_groups = 0
+                            # Reset per-lock health stats so BLER and FEC
+                            # counts reflect the *current* sync window, as
+                            # the RBDSDecoderStats docstring promises.  The
+                            # prior behaviour silently violated that contract:
+                            # blocks_total / blocks_uncorrected accumulated
+                            # across every marginal lock since boot, so a
+                            # receiver that had bounced sync 78 times showed
+                            # 65% BLER even when the live signal was clean.
+                            # sync_lost_count is preserved (it's documented
+                            # as the one cumulative counter) so the operator-
+                            # visible "sync drops since boot" still reflects
+                            # lifetime drops on this station.
+                            with self._stats_lock:
+                                preserved_drops = self._stats.sync_lost_count
+                                self._stats = RBDSDecoderStats(
+                                    sync_lost_count=preserved_drops,
+                                )
             
             else:
                 # SYNCED MODE (python-radio logic)
@@ -2278,9 +2412,14 @@ class RBDSWorker:
     def _calc_syndrome(self, x: int, mlen: int) -> int:
         """Calculate syndrome for RDS block validation.
 
-        This is the standard algorithm from the RDS specification (Annex B).
+        Dispatches to the JIT-compiled free function when Numba is available;
+        falls back to the pure-Python implementation otherwise.
+
         Uses polynomial g(x) = x^10 + x^8 + x^7 + x^5 + x^4 + x^3 + 1 = 0x5B9
+        (IEC 62106 Annex B).
         """
+        if _NUMBA_AVAILABLE:
+            return int(_calc_syndrome_numba(x, mlen))
         reg = 0
         plen = 10
         for ii in range(mlen, 0, -1):
