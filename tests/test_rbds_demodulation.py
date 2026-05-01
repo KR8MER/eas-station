@@ -316,12 +316,12 @@ def _run_presync_sequence(worker: RBDSWorker, hit_map: dict[int, int]) -> None:
     the JIT-accelerated presync path (_presync_scan_numba bypasses the Python
     _calc_syndrome method and computes syndromes natively).
     """
-    _syndrome_to_offset = {383: 0, 14: 1, 303: 2, 663: 3, 748: 4}
+    _syndrome_to_offset = _RBDS_SYNDROME_TO_OFFSET
     buf = [0] * 220
     for bit_end, syn in hit_map.items():
         offset_idx = _syndrome_to_offset[syn]
         block_bits = _bits_for_valid_block(worker, 0x0000, offset_idx)
-        bit_start = bit_end - 25  # 26-bit block ends (inclusive) at bit_end
+        bit_start = bit_end - 25  # 26-bit block with last bit at bit_end
         for k, b in enumerate(block_bits):
             if 0 <= bit_start + k < len(buf):
                 buf[bit_start + k] = b
@@ -363,6 +363,11 @@ def test_rbds_presync_two_hits_do_not_lock():
 # Offset words for blocks A, B, C, D, C' per EN 50067.  Used to build
 # CRC-valid 26-bit blocks for synced-mode tests.
 _RBDS_OFFSETS = [252, 408, 360, 436, 848]
+
+# Maps the standard RBDS offset syndrome value to its block-offset table index
+# (0=A, 1=B, 2=C, 3=D, 4=C').  Used by presync test helpers that construct
+# real bit streams from a hit_map of {bit_position: syndrome_value}.
+_RBDS_SYNDROME_TO_OFFSET = {383: 0, 14: 1, 303: 2, 663: 3, 748: 4}
 
 
 def _bits_for_valid_block(worker: RBDSWorker, dataword: int, block_number: int) -> list[int]:
@@ -447,7 +452,7 @@ def test_rbds_lock_resets_per_sync_stats_but_keeps_sync_lost_count():
     _hit_map = {25: 383, 51: 14, 77: 303}
     _buf = [0] * 78  # ends exactly at last block
     for _bit_end, _syn in _hit_map.items():
-        _offset_idx = {383: 0, 14: 1, 303: 2, 663: 3, 748: 4}[_syn]
+        _offset_idx = _RBDS_SYNDROME_TO_OFFSET[_syn]
         _block_bits = _bits_for_valid_block(worker, 0x0000, _offset_idx)
         for _k, _b in enumerate(_block_bits):
             _idx = _bit_end - 25 + _k

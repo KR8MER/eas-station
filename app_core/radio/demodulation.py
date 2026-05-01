@@ -248,7 +248,7 @@ def _mm_timing_loop_numba(
 
 
 @jit(nopython=True, cache=True, fastmath=True)
-def _calc_syndrome_numba(x, mlen):
+def _calc_syndrome_numba(x: int, mlen: int) -> int:
     """JIT-compiled RDS/RBDS syndrome calculator.
 
     Evaluates the standard (26,16) RBDS block-code syndrome via the
@@ -290,7 +290,11 @@ _RBDS_SYNDROMES = np.array([383, 14, 303, 663, 748], dtype=np.int64)
 
 
 @jit(nopython=True, cache=True, fastmath=True)
-def _presync_scan_numba(bits, initial_reg, syndromes):
+def _presync_scan_numba(
+    bits: np.ndarray,
+    initial_reg: int,
+    syndromes: np.ndarray,
+) -> tuple:
     """JIT-compiled RBDS presync bit scanner.
 
     Scans an int8 bit buffer for RBDS syndrome matches in a single native
@@ -1936,7 +1940,7 @@ class RBDSWorker:
                     reg_syndrome = self._calc_syndrome(self._rbds_reg, 26)
                     reg_syndrome_inverted = self._calc_syndrome(self._rbds_reg ^ 0x3FFFFFF, 26)
                     polarity = None
-                    j = -1
+                    j = -1  # -1 is the "no match yet" sentinel; overwritten on first hit
                     for jj in range(5):
                         if reg_syndrome == syndrome[jj]:
                             polarity = False
