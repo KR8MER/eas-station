@@ -49,21 +49,22 @@
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid mt-4">
-    <div class="row mb-4">
-        <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center">
-                <div>
-                    <h1><i class="fas fa-chart-line me-2"></i>Analytics Dashboard</h1>
-                    <p class="text-muted">System trends and anomaly detection</p>
-                </div>
-                <a href="/stats" class="btn btn-outline-primary">
-                    <i class="fas fa-chart-bar"></i> Alert Statistics
+<div class="page-header">
+    <div class="container-fluid">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+            <div>
+                <h1 class="page-title mb-0"><i class="fas fa-chart-line me-2"></i>Analytics Dashboard</h1>
+                <p class="page-subtitle mb-0">System trends and anomaly detection</p>
+            </div>
+            <div class="page-header-actions">
+                <a href="/stats" class="btn btn-outline-light">
+                    <i class="fas fa-chart-bar me-1"></i>Alert Statistics
                 </a>
             </div>
         </div>
     </div>
-
+</div>
+<div class="container-fluid mt-4">
     <!-- Key Metrics -->
     <div class="row">
         <div class="col-md-3">

@@ -19,33 +19,7 @@
     overflow: hidden;
 }
 
-.page-hero::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: radial-gradient(circle at top right, rgba(255,255,255,0.25), transparent 55%);
-    pointer-events: none;
-}
-
-.page-hero .hero-content {
-    position: relative;
-    z-index: 1;
-}
-
-.page-hero h1 {
-    font-weight: 600;
-    margin-bottom: 0.5rem;
-}
-
-.page-hero p {
-    margin-bottom: 1.25rem;
-    font-size: 1.05rem;
-    opacity: 0.95;
-}
-
-.hero-actions .btn + .btn {
-    margin-left: 0.5rem;
-}
+/* Keep .page-hero styles for backwards-compat with screen editor */
 
 .summary-card {
     background: var(--card-bg);
@@ -471,24 +445,28 @@
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid mt-4 screens-page">
-    <div class="page-hero mb-4 d-flex flex-column flex-lg-row align-items-start align-items-lg-center justify-content-between">
-        <div class="hero-content">
-            <h1><i class="fas fa-display"></i> Custom Display Screens</h1>
-            <p>Curate playlists for every display type, monitor their health at a glance, and push updates with confidence.</p>
-        </div>
-        <div class="hero-actions mt-3 mt-lg-0">
-            <button class="btn btn-light text-primary" onclick="showCreateRotationModal()">
-                <i class="fas fa-sync"></i> New Rotation
-            </button>
-            <a href="/screens/new" class="btn btn-success">
-                <i class="fas fa-paint-brush"></i> Create Screen
-            </a>
-            <button class="btn btn-outline-light btn-sm" onclick="showCreateScreenModal()" title="Advanced: Create screen with JSON">
-                <i class="fas fa-code"></i>
-            </button>
+<div class="page-header">
+    <div class="container-fluid">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+            <div>
+                <h1 class="page-title mb-0"><i class="fas fa-display me-2"></i>Custom Display Screens</h1>
+                <p class="page-subtitle mb-0">Curate playlists for every display type and push updates with confidence</p>
+            </div>
+            <div class="page-header-actions">
+                <button class="btn btn-outline-light" onclick="showCreateRotationModal()">
+                    <i class="fas fa-sync me-1"></i>New Rotation
+                </button>
+                <a href="/screens/new" class="btn btn-outline-light">
+                    <i class="fas fa-paint-brush me-1"></i>Create Screen
+                </a>
+                <button class="btn btn-outline-light btn-sm" onclick="showCreateScreenModal()" title="Advanced: Create screen with JSON">
+                    <i class="fas fa-code"></i>
+                </button>
+            </div>
         </div>
     </div>
+</div>
+<div class="container-fluid mt-4 screens-page">
 
     <div class="row g-3 mb-4">
         <div class="col-xl-3 col-md-6">

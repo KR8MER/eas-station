@@ -7,39 +7,31 @@
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <!-- Admin Header -->
-    <div class="admin-header">
-        <div class="container-fluid">
-            <div class="row align-items-center">
-                <div class="col-md-8">
-                    <h1 class="mb-2">
-                        <i class="fas fa-cogs"></i> Admin Control Panel
-                    </h1>
-                    <p class="mb-0 opacity-75">
-                        EAS Station - Administrative Dashboard
-                    </p>
-                </div>
-                <div class="col-md-4 text-md-end">
-                    <div class="d-flex flex-wrap gap-2 justify-content-md-end">
-                        <a href="/" class="btn btn-light btn-sm">
-                            <i class="fas fa-home"></i> Dashboard
-                        </a>
-                        <a href="/alerts" class="btn btn-light btn-sm">
-                            <i class="fas fa-history"></i> Alerts
-                        </a>
-                        <a href="/stats" class="btn btn-light btn-sm">
-                            <i class="fas fa-chart-bar"></i> Statistics
-                        </a>
-                        <a href="/system_health" class="btn btn-light btn-sm">
-                            <i class="fas fa-heartbeat"></i> Health
-                        </a>
-                    </div>
-                </div>
+<div class="page-header">
+    <div class="container-fluid">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+            <div>
+                <h1 class="page-title mb-0"><i class="fas fa-cogs me-2"></i>Admin Control Panel</h1>
+                <p class="page-subtitle mb-0">EAS Station — Administrative Dashboard</p>
+            </div>
+            <div class="page-header-actions">
+                <a href="/" class="btn btn-outline-light btn-sm">
+                    <i class="fas fa-home me-1"></i>Dashboard
+                </a>
+                <a href="/alerts" class="btn btn-outline-light btn-sm">
+                    <i class="fas fa-history me-1"></i>Alerts
+                </a>
+                <a href="/stats" class="btn btn-outline-light btn-sm">
+                    <i class="fas fa-chart-bar me-1"></i>Statistics
+                </a>
+                <a href="/system_health" class="btn btn-outline-light btn-sm">
+                    <i class="fas fa-heartbeat me-1"></i>Health
+                </a>
             </div>
         </div>
     </div>
-    <div class="container-fluid">
+</div>
+<div class="container-fluid">
         <!-- System Overview -->
         <div class="card shadow-sm">
             <div class="card-header">
@@ -1461,10 +1453,8 @@
             <!-- End of card-body -->
         </div>
         <!-- End of Main Admin Interface card (regular mode) -->
-    </div>
-    <!-- End of inner container-fluid (wrapping cards) -->
 </div>
-<!-- End of outer container-fluid -->
+<!-- End of container-fluid -->
             {% endif %}
 
         <!-- Operation Status -->
@@ -1657,6 +1647,7 @@
         <i class="fas fa-keyboard"></i> Alt+1-8: Switch Tabs | Alt+R: Refresh | Alt+H: Help
     </div>
     {% endif %}
+</div><!-- /.container-fluid -->
 {% endblock %}
 
 {% block scripts %}

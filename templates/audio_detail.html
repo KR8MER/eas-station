@@ -3,54 +3,50 @@
 {% block title %}Audio Detail - {{ event_name }}{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    {# ── Page header ─────────────────────────────────────────────────────── #}
-    <div class="row mb-3">
-        <div class="col-12 d-flex justify-content-between align-items-center flex-wrap gap-2">
+<div class="page-header">
+    <div class="container-fluid">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
             <div>
-                <h1 class="h3 text-primary mb-0">
-                    <i class="fas fa-broadcast-tower me-2"></i>EAS Broadcast Record
-                </h1>
-                <small class="text-muted">
-                    #{{ message.id }} &mdash;
-                    {{ message.created_at | format_local_datetime(false) if message.created_at else 'Unknown time' }}
-                </small>
+                <h1 class="page-title mb-0"><i class="fas fa-broadcast-tower me-2"></i>EAS Broadcast Record</h1>
+                <p class="page-subtitle mb-0">#{{ message.id }} &mdash; {{ message.created_at | format_local_datetime(false) if message.created_at else 'Unknown time' }}</p>
             </div>
-            <div class="d-flex gap-2 flex-wrap">
+            <div class="page-header-actions">
                 {% if audio_url %}
-                <a class="btn btn-primary" href="{{ audio_url }}?download=1" rel="noopener">
+                <a class="btn btn-outline-light" href="{{ audio_url }}?download=1" rel="noopener">
                     <i class="fas fa-download me-1"></i>Download Composite
                 </a>
                 {% endif %}
                 {% if text_url %}
-                <a class="btn btn-outline-info" href="{{ text_url }}" target="_blank" rel="noopener">
+                <a class="btn btn-outline-light" href="{{ text_url }}" target="_blank" rel="noopener">
                     <i class="fas fa-file-alt me-1"></i>Summary JSON
                 </a>
                 {% endif %}
-                <a href="{{ url_for('audio_detail_pdf', message_id=message.id) }}" target="_blank" class="btn btn-outline-secondary">
-                    <i class="fas fa-file-pdf me-1"></i>Export PDF
+                <a href="{{ url_for('audio_detail_pdf', message_id=message.id) }}" target="_blank" class="btn btn-outline-light">
+                    <i class="fas fa-file-pdf me-1"></i>PDF
                 </a>
                 {% if alert %}
-                <a class="btn btn-outline-primary" href="{{ url_for('api.alert_detail', alert_id=alert.id) }}">
-                    <i class="fas fa-bullhorn me-1"></i>View Alert
+                <a class="btn btn-outline-light" href="{{ url_for('api.alert_detail', alert_id=alert.id) }}">
+                    <i class="fas fa-bullhorn me-1"></i>Alert
                 </a>
                 {% endif %}
-                <a class="btn btn-outline-secondary" href="{{ url_for('audio_history') }}">
+                <a class="btn btn-outline-light" href="{{ url_for('audio_history') }}">
                     <i class="fas fa-list me-1"></i>Archive
                 </a>
                 {% if current_user %}
                 {% if message.audio_data %}
-                <button type="button" class="btn btn-warning" onclick="resendAudioMessage()" id="resendBtn">
+                <button type="button" class="btn btn-outline-light" onclick="resendAudioMessage()" id="resendBtn">
                     <i class="fas fa-redo me-1"></i>Resend
                 </button>
                 {% endif %}
-                <button type="button" class="btn btn-danger" onclick="deleteAudioMessage()">
+                <button type="button" class="btn btn-outline-light" onclick="deleteAudioMessage()">
                     <i class="fas fa-trash me-1"></i>Delete
                 </button>
                 {% endif %}
             </div>
         </div>
     </div>
+</div>
+<div class="container-fluid">
 
     {# ── FCC §11.31 Compliance panel ──────────────────────────────────────── #}
     {% set required_missing = broadcast_steps | selectattr('required') | rejectattr('present') | list %}

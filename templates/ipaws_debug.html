@@ -2,29 +2,26 @@
 {% block title %}IPAWS Poller Debug{% endblock %}
 
 {% block content %}
-<div class="container py-4">
-    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
-        <div>
-            <h1 class="h3 mb-1">IPAWS Poller Debug Console</h1>
-            <p class="text-muted mb-0">
-                Review captured IPAWS poll cycles, including filtered alerts, polygon geometry, and raw CAP properties.
-            </p>
-        </div>
-        <div class="d-flex flex-column align-items-md-end gap-2">
-            <div class="text-muted small text-md-end">
-                Displaying most recent debug runs (timezone: {{ timezone_name }}).
+<div class="page-header">
+    <div class="container-fluid">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+            <div>
+                <h1 class="page-title mb-0"><i class="fas fa-bug me-2"></i>IPAWS Poller Debug Console</h1>
+                <p class="page-subtitle mb-0">Review captured IPAWS poll cycles, filtered alerts, and raw CAP data</p>
             </div>
-            <div class="btn-group" role="group" aria-label="IPAWS debug exports">
-                <a href="/debug/ipaws/export.xlsx" class="btn btn-sm btn-outline-success">
-                    <i class="fas fa-file-excel"></i> Export Excel
+            <div class="page-header-actions">
+                <a href="/debug/ipaws/export.xlsx" class="btn btn-outline-light">
+                    <i class="fas fa-file-excel me-1"></i>Export Excel
                 </a>
-                <a href="/debug/ipaws/export.pdf" target="_blank" class="btn btn-sm btn-outline-primary">
-                    <i class="fas fa-file-pdf"></i> Export PDF
+                <a href="/debug/ipaws/export.pdf" target="_blank" class="btn btn-outline-light">
+                    <i class="fas fa-file-pdf me-1"></i>Export PDF
                 </a>
             </div>
         </div>
     </div>
-
+</div>
+<div class="container py-4">
+    <p class="text-muted small mb-3">Displaying most recent debug runs (timezone: {{ timezone_name }}).</p>
     {% if not debug_runs %}
         <div class="alert alert-info shadow-sm">
             No IPAWS poller debug entries have been captured yet. Trigger the poller to populate this view.

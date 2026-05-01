@@ -3,30 +3,27 @@
 {% block title %}Received Alert Detail - EAS Station{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="row mb-3">
-        <div class="col-12 d-flex justify-content-between align-items-center flex-wrap gap-2">
+<div class="page-header">
+    <div class="container-fluid">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
             <div>
-                <h1 class="h3 text-primary mb-0">
-                    <i class="fas fa-radio me-2"></i>Received Alert Detail
-                </h1>
-                <small class="text-muted">
-                    #{{ alert.id }} &mdash;
-                    {{ alert.received_at | format_local_datetime if alert.received_at else 'Unknown time' }}
-                </small>
+                <h1 class="page-title mb-0"><i class="fas fa-radio me-2"></i>Received Alert Detail</h1>
+                <p class="page-subtitle mb-0">#{{ alert.id }} &mdash; {{ alert.received_at | format_local_datetime if alert.received_at else 'Unknown time' }}</p>
             </div>
-            <div class="d-flex gap-2 flex-wrap">
+            <div class="page-header-actions">
                 {% if alert.generated_message %}
-                <a href="{{ url_for('audio_detail', message_id=alert.generated_message.id) }}" class="btn btn-outline-primary">
+                <a href="{{ url_for('audio_detail', message_id=alert.generated_message.id) }}" class="btn btn-outline-light">
                     <i class="fas fa-broadcast-tower me-1"></i>View Broadcast
                 </a>
                 {% endif %}
-                <a href="{{ url_for('received_audio_alerts') }}" class="btn btn-outline-secondary">
+                <a href="{{ url_for('received_audio_alerts') }}" class="btn btn-outline-light">
                     <i class="fas fa-list me-1"></i>Back to List
                 </a>
             </div>
         </div>
     </div>
+</div>
+<div class="container-fluid">
 
     <div class="row g-4">
         {# ── Left column ──────────────────────────────────────────────── #}
