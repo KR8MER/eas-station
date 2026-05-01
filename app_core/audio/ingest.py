@@ -35,10 +35,12 @@ import wave
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
+from math import gcd
 from pathlib import Path
 from typing import Dict, List, Optional, Union
 
 import numpy as np
+from scipy.signal import resample_poly
 from .broadcast_queue import BroadcastQueue
 
 logger = logging.getLogger(__name__)
@@ -461,15 +463,17 @@ class AudioSourceAdapter(ABC):
                 trimmed = audio_chunk[:n - (n % factor)] if n % factor else audio_chunk
                 return trimmed.reshape(-1, factor).mean(axis=1).astype(np.float32)
 
-            # Fallback: linear interpolation for non-integer ratios (e.g. 44100 Hz)
-            ratio = target_rate / source_rate
-            new_length = max(1, int(len(audio_chunk) * ratio))
-            old_indices = np.arange(len(audio_chunk))
-            new_indices = np.linspace(0, len(audio_chunk) - 1, new_length)
-            return np.interp(new_indices, old_indices, audio_chunk).astype(np.float32)
+            # Fallback: polyphase resampling for non-integer ratios (e.g. 44100 → 16000).
+            # resample_poly applies a properly anti-aliased FIR via FFT convolution,
+            # which is both faster than per-sample np.interp and avoids the aliasing
+            # artifacts plain linear interpolation produces above Nyquist/2.
+            g = gcd(int(source_rate), int(target_rate))
+            up = int(target_rate) // g
+            down = int(source_rate) // g
+            return resample_poly(audio_chunk, up, down).astype(np.float32)
 
         except Exception as e:
-            logger.error(f"Error resampling audio for EAS: {e}")
+            logger.error("Error resampling audio for EAS: %s", e)
             return None
 
     def _update_metrics(self, audio_chunk: np.ndarray) -> None:
