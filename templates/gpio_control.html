@@ -4,79 +4,29 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
-<style>
-    .gpio-card { border-left: 4px solid var(--primary-color); }
-    .gpio-card.active { border-left-color: var(--success-color); }
-    .gpio-card.inactive { border-left-color: var(--text-muted); }
-    .gpio-card.error { border-left-color: var(--danger-color); }
-    .activation-timeline { max-height: 400px; overflow-y: auto; }
-    .timeline-item { border-left: 3px solid var(--border-color); padding-left: 1rem; margin-bottom: 1rem; position: relative; }
-    .timeline-item::before { content: ''; position: absolute; left: -7px; width: 11px; height: 11px; border-radius: 50%; background: var(--primary-color); }
-    .timeline-item.success::before { background: var(--success-color); }
-    .timeline-item.error::before { background: var(--danger-color); }
-    .timeline-item.warning::before { background: var(--warning-color); }
-
-    /* LED Status Indicator */
-    .status-led {
-        display: inline-block;
-        width: 16px;
-        height: 16px;
-        border-radius: 50%;
-        margin-right: 8px;
-        position: relative;
-        box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1) inset;
-    }
-    .status-led.active {
-        background: var(--success-color);
-        box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1) inset, 0 0 10px var(--success-color), 0 0 20px color-mix(in srgb, var(--success-color) 50%, transparent);
-        animation: pulse-green 2s infinite;
-    }
-    .status-led.inactive {
-        background: var(--text-muted);
-    }
-    .status-led.error {
-        background: var(--danger-color);
-        box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1) inset, 0 0 10px var(--danger-color);
-    }
-    @keyframes pulse-green {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.7; }
-    }
-
-    /* Auto-refresh indicator */
-    .auto-refresh-indicator {
-        display: inline-block;
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: var(--success-color);
-        margin-right: 6px;
-        animation: blink 2s infinite;
-    }
-    @keyframes blink {
-        0%, 50%, 100% { opacity: 1; }
-        25%, 75% { opacity: 0.3; }
-    }
-</style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid mt-4">
-    <div class="row mb-4 align-items-center">
-        <div class="col-12 col-lg-8">
-            <h2><i class="fas fa-microchip"></i> GPIO Control Panel</h2>
-            <p class="text-muted mb-0">Manage GPIO relays and peripherals with audit logging</p>
-        </div>
-        <div class="col-12 col-lg-4 text-lg-end mt-3 mt-lg-0">
-            <a class="btn btn-outline-primary me-2" href="{{ url_for('gpio_pin_map') }}">
-                <i class="fas fa-map"></i> GPIO Pin Map
-            </a>
-            <a class="btn btn-outline-secondary" href="/admin/gpio/statistics">
-                <i class="fas fa-chart-pie"></i> Statistics
-            </a>
+<div class="admin-page-header header-success">
+    <div class="container-fluid">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h1><i class="fas fa-microchip"></i> GPIO Control Panel</h1>
+                <p class="mb-0">Manage GPIO relays and peripherals with audit logging</p>
+            </div>
+            <div>
+                <a class="btn btn-light me-2" href="{{ url_for('gpio_pin_map') }}">
+                    <i class="fas fa-map"></i> Pin Map
+                </a>
+                <a class="btn btn-light" href="{{ url_for('gpio_statistics_page') }}">
+                    <i class="fas fa-chart-pie"></i> Statistics
+                </a>
+            </div>
         </div>
     </div>
+</div>
 
+<div class="container-fluid">
     <div class="alert alert-warning" role="alert">
         <i class="fas fa-exclamation-triangle"></i>
         <strong>Warning:</strong> GPIO control affects real hardware. Use caution when activating relays.
