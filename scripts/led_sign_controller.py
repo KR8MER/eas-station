@@ -28,10 +28,11 @@ import socket
 import time
 import logging
 import threading
+from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Dict, List, Optional, Sequence, Tuple, TypedDict, Type, TypeVar, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, TypedDict, Type, TypeVar, Union
 
 import json
 import re
@@ -346,6 +347,15 @@ class Alpha9120CController:
         self.connected = False
         self.last_message = None
         self.last_update = None
+
+        # ── Protocol frame debug capture ───────────────────────────────────
+        # Ring buffer of the most recently transmitted M-Protocol frames so
+        # the operator UI can show what was actually put on the wire.  Bounded
+        # so it can never grow unboundedly during long-running operation.
+        self._frame_history_max = 50
+        self._frame_history: "deque[Dict[str, Any]]" = deque(maxlen=self._frame_history_max)
+        self._frame_history_lock = threading.Lock()
+        self._frame_history_seq = 0
 
         # Message storage
         self.current_messages = {}
@@ -949,6 +959,87 @@ class Alpha9120CController:
             + self.EOT.encode("latin-1")
         )
 
+    # ── Protocol frame debug capture helpers ──────────────────────────────
+
+    @staticmethod
+    def _format_frame_ascii(frame: bytes) -> str:
+        """Render a frame as printable ASCII, with control bytes in <NAME> form.
+
+        Used by the debug terminal so operators can spot SOH/STX/ETX/EOT
+        boundaries without having to mentally translate hex.
+        """
+        ctrl_names = {
+            0x00: "<NUL>", 0x01: "<SOH>", 0x02: "<STX>", 0x03: "<ETX>",
+            0x04: "<EOT>", 0x06: "<ACK>", 0x0A: "<LF>",  0x0D: "<CR>",
+            0x13: "<TIME>", 0x15: "<NAK>", 0x1A: "<FONT>", 0x1B: "<MODE>",
+            0x1C: "<COLR>", 0x1E: "<SPEC>", 0x1F: "<POSN>",
+        }
+        out: List[str] = []
+        for b in frame:
+            if b in ctrl_names:
+                out.append(ctrl_names[b])
+            elif 0x20 <= b < 0x7F:
+                out.append(chr(b))
+            else:
+                out.append(f"\\x{b:02X}")
+        return "".join(out)
+
+    def _record_frame_history(
+        self,
+        frame: bytes,
+        kind: str,
+        *,
+        response: Optional[bytes] = None,
+        ok: Optional[bool] = None,
+        error: Optional[str] = None,
+    ) -> None:
+        """Append a transmitted M-Protocol frame to the bounded debug ring.
+
+        Best-effort: any exception while recording is swallowed so capture
+        cannot break the actual transmission.  The buffer is thread-safe.
+        """
+        try:
+            with self._frame_history_lock:
+                self._frame_history_seq += 1
+                entry: Dict[str, Any] = {
+                    "seq": self._frame_history_seq,
+                    "timestamp": datetime.now().isoformat(),
+                    "kind": kind,
+                    "length": len(frame),
+                    "hex": frame.hex(),
+                    "ascii": self._format_frame_ascii(frame),
+                    "transport": "serial" if self.use_serial else "tcp",
+                    "destination": self.serial_port if self.use_serial else f"{self.host}:{self.port}",
+                }
+                if response is not None:
+                    entry["response_hex"] = response.hex()
+                    entry["response"] = (
+                        "ACK" if response == self.ACK
+                        else "NAK" if response == self.NAK
+                        else f"0x{response.hex().upper()}"
+                    )
+                if ok is not None:
+                    entry["ok"] = ok
+                if error is not None:
+                    entry["error"] = error
+                self._frame_history.append(entry)
+        except Exception:  # pragma: no cover - debug capture must never raise
+            pass
+
+    def get_frame_history(self, since_seq: int = 0) -> List[Dict[str, Any]]:
+        """Return debug ring entries with ``seq`` strictly greater than ``since_seq``.
+
+        Allows the UI to long-poll for new frames without re-fetching the
+        entire buffer each time.
+        """
+        with self._frame_history_lock:
+            return [entry for entry in self._frame_history if entry["seq"] > since_seq]
+
+    def clear_frame_history(self) -> None:
+        """Drop all captured frames from the debug ring buffer."""
+        with self._frame_history_lock:
+            self._frame_history.clear()
+
     def _send_raw_message(self, message: bytes) -> bool:
         """Send raw M-Protocol message to Alpha 9120C"""
         if not self.connected or not self.socket:
@@ -975,18 +1066,21 @@ class Alpha9120CController:
                 self.logger.debug("Received ACK from Alpha 9120C")
             elif ack == self.NAK:
                 self.logger.error("Alpha 9120C responded with NAK")
+                self._record_frame_history(message, "message", response=ack, ok=False)
                 return False
             else:
                 self.logger.warning("Unexpected response byte from Alpha 9120C: %s", ack)
 
             self.last_message = message
             self.last_update = datetime.now()
+            self._record_frame_history(message, "message", response=ack, ok=True)
 
             self.logger.info("M-Protocol message sent successfully")
             return True
 
         except Exception as e:
             self.logger.error(f"Error sending M-Protocol message: {e}")
+            self._record_frame_history(message, "message", ok=False, error=str(e))
             self.connected = False
             return False
 
@@ -1043,6 +1137,7 @@ class Alpha9120CController:
             self.socket.sendall(frame)
         except Exception as exc:
             self.logger.error("Error transmitting M-Protocol frame: %s", exc)
+            self._record_frame_history(frame, "command", ok=False, error=str(exc))
             self.connected = False
             return None
 
@@ -1050,7 +1145,13 @@ class Alpha9120CController:
         try:
             if self.socket:
                 self.socket.settimeout(timeout)
-            return self._read_acknowledgement()
+            ack = self._read_acknowledgement()
+            self._record_frame_history(
+                frame, "command",
+                response=ack,
+                ok=(ack == self.ACK) if ack is not None else None,
+            )
+            return ack
         finally:
             if self.socket:
                 self.socket.settimeout(original_timeout or self.timeout)
@@ -1505,6 +1606,7 @@ class Alpha9120CController:
             )
             self._drain_input_buffer()
             self.socket.sendall(frame)
+            self._record_frame_history(frame, "health_check")
 
             # Try to read ACK/NAK with short timeout
             original_timeout = self.socket.gettimeout()
@@ -1566,6 +1668,7 @@ class Alpha9120CController:
 
             # Send command
             self.socket.sendall(frame)
+            self._record_frame_history(frame, "read_command")
             self.logger.debug(f"Sent read command: function=0x{function_code:02X}")
             
             # Read response with timeout
@@ -2108,6 +2211,7 @@ class Alpha9120CController:
 
             # Send command
             self.socket.sendall(frame)
+            self._record_frame_history(frame, "read_text_file")
             self.logger.debug(f"Sent read text file: {file_label}")
             
             # Read response with timeout

@@ -136,27 +136,40 @@
 }
 
 .line-preview {
-    min-height: 3.5rem;
-    border: 1px dashed rgba(0, 255, 0, 0.4);
-    border-radius: 6px;
-    padding: 0.75rem;
-    background: rgba(0, 0, 0, 0.75);
-    color: var(--terminal-text);
+    min-height: 2.5em;
+    border: 1px solid rgba(0, 200, 0, 0.3);
+    border-radius: 4px;
+    padding: 0.35rem 0.6rem;
+    background: #030303;
+    color: #00ff44;
     font-family: 'Courier New', monospace;
-    letter-spacing: 1px;
-    transition: background 0.2s ease, border-color 0.2s ease;
+    font-weight: bold;
+    letter-spacing: 2px;
+    font-size: 1.05em;
+    text-shadow: 0 0 8px #00ff44;
+    overflow: hidden;
+    white-space: nowrap;
+    position: relative;
+    line-height: 2.2em;
+    cursor: text;
+    transition: border-color 0.2s ease;
 }
 
 .line-preview:focus {
     outline: none;
-    border-color: var(--primary-color);
-    background: rgba(0, 0, 0, 0.85);
+    border-color: rgba(0, 180, 255, 0.6);
+    background: #050505;
+    /* pause any running animation while the user types */
+    animation-play-state: paused !important;
 }
 
 .line-preview:empty:before {
     content: attr(data-placeholder);
-    color: rgba(255, 255, 255, 0.35);
+    color: rgba(255, 255, 255, 0.25);
     pointer-events: none;
+    font-weight: normal;
+    text-shadow: none;
+    letter-spacing: 1px;
 }
 
 .line-controls .form-label {
@@ -420,6 +433,64 @@
     background:var(--light-color);margin-bottom:6px;
     font-size:.85em;
 }
+
+/* Protocol Debug Terminal — uses site-wide --terminal-* tokens for theme parity */
+.debug-terminal {
+    background: var(--terminal-bg, #000);
+    color: var(--terminal-text, #00ff00);
+    border: 1px solid var(--terminal-border, #444);
+    border-radius: 6px;
+    font-family: 'Courier New', 'Consolas', monospace;
+    font-size: 12.5px;
+    line-height: 1.45;
+    padding: 8px 10px;
+    height: 280px;
+    overflow-y: auto;
+    box-shadow: inset 0 0 14px rgba(0,0,0,0.55);
+    scrollbar-color: #2a2a2a #000;
+}
+.debug-terminal::-webkit-scrollbar { width: 8px; }
+.debug-terminal::-webkit-scrollbar-track { background: #050505; }
+.debug-terminal::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 4px; }
+.debug-terminal-empty { color: rgba(255,255,255,0.45); }
+.debug-frame {
+    border-bottom: 1px dashed rgba(0,255,0,0.10);
+    padding: 4px 0;
+    margin: 0;
+    word-break: break-all;
+}
+.debug-frame:last-child { border-bottom: none; }
+.debug-frame-header {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    color: #aaa;
+    font-size: 11px;
+}
+.debug-frame-ts { color: #888; }
+.debug-frame-kind {
+    background: rgba(0,255,0,0.10);
+    color: #7fff7f;
+    padding: 0 6px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-size: 10.5px;
+}
+.debug-frame-kind.kind-message      { background: rgba(0,255,0,0.12);  color:#7fff7f; }
+.debug-frame-kind.kind-command      { background: rgba(0,191,255,0.12); color:#7fd0ff; }
+.debug-frame-kind.kind-read_command,
+.debug-frame-kind.kind-read_text_file { background: rgba(255,191,0,0.12); color:#ffd07f; }
+.debug-frame-kind.kind-health_check { background: rgba(150,150,150,0.18); color:#cccccc; }
+.debug-frame-len  { color: #888; }
+.debug-frame-resp.resp-ack { color: #7fff7f; }
+.debug-frame-resp.resp-nak { color: #ff7f7f; }
+.debug-frame-resp.resp-none{ color: #888; }
+.debug-frame-error { color: #ff7f7f; }
+.debug-frame-hex   { color: #ffe07f; word-break: break-all; }
+.debug-frame-ascii { color: #7fff7f; word-break: break-all; }
+.debug-frame-ascii .ctrl { color: #4fa6ff; }
 </style>
 {% endblock %}
 
@@ -553,7 +624,76 @@
         <!-- Custom Message Tab -->
         <div class="tab-pane fade show active" id="custom" role="tabpanel">
             <h4><i class="fas fa-edit text-primary"></i> Custom Message</h4>
-            <p class="text-muted mb-4">Create messages for the LED sign - 4 lines, 20 characters each.</p>
+            <p class="text-muted mb-3">Create messages for the LED sign — 4 lines, 20 characters each.</p>
+
+            <!-- ══ WYSIWYG Live Sign Preview (full-width, top of editor) ══ -->
+            <div class="mb-4" id="wysiwyg-preview-block">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <label class="form-label fw-semibold mb-0">
+                        <i class="fas fa-desktop text-success"></i> Live Sign Preview
+                        <span class="badge bg-success ms-1" style="font-size:.6em">WYSIWYG</span>
+                    </label>
+                    <div class="d-flex align-items-center gap-2">
+                        <small class="text-muted" id="effect-description">Effect: Static display</small>
+                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                style="font-size:.7em;padding:2px 6px"
+                                onclick="toggleSimPause()" id="sim-pause-btn"
+                                title="Pause/Resume animations">⏸</button>
+                    </div>
+                </div>
+                <div class="led-sign-panel p-0" style="padding:0!important;overflow:hidden;border-radius:8px;cursor:pointer;"
+                     id="led-preview-panel" title="Click a line to jump to that editor">
+                    <canvas id="led-sim-canvas" style="display:block;width:100%;image-rendering:auto;border-radius:6px;"></canvas>
+                </div>
+                <small class="text-muted d-block mt-1">
+                    <i class="fas fa-mouse-pointer"></i> Click any row on the preview to jump to that line's editor.
+                </small>
+            </div>
+
+            <!-- ══ Protocol Debug Terminal — what is actually going to the sign ══ -->
+            <div class="mb-4" id="debug-terminal-block">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <label class="form-label fw-semibold mb-0">
+                        <i class="fas fa-terminal text-success"></i> Protocol Debug Terminal
+                        <small class="text-muted ms-1" style="font-weight:normal">M-Protocol bytes sent to the sign</small>
+                    </label>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge bg-secondary" id="debug-frame-count" style="font-size:.7em">0 frames</span>
+                        <div class="form-check form-switch m-0" title="Show hexadecimal byte dump">
+                            <input class="form-check-input" type="checkbox" id="debug-show-hex" checked>
+                            <label class="form-check-label small" for="debug-show-hex">Hex</label>
+                        </div>
+                        <div class="form-check form-switch m-0" title="Show ASCII / control-byte view">
+                            <input class="form-check-input" type="checkbox" id="debug-show-ascii" checked>
+                            <label class="form-check-label small" for="debug-show-ascii">ASCII</label>
+                        </div>
+                        <div class="form-check form-switch m-0" title="Auto-scroll to newest frame">
+                            <input class="form-check-input" type="checkbox" id="debug-auto-scroll" checked>
+                            <label class="form-check-label small" for="debug-auto-scroll">Auto-scroll</label>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                style="font-size:.75em;padding:2px 8px"
+                                id="debug-pause-btn" onclick="toggleDebugPause()"
+                                title="Pause/Resume frame polling">⏸ Pause</button>
+                        <button type="button" class="btn btn-sm btn-outline-danger"
+                                style="font-size:.75em;padding:2px 8px"
+                                onclick="clearDebugTerminal()"
+                                title="Clear the debug ring buffer">
+                            <i class="fas fa-trash"></i> Clear
+                        </button>
+                    </div>
+                </div>
+                <div id="debug-terminal" class="debug-terminal" aria-live="polite">
+                    <div class="debug-terminal-empty text-center py-3">
+                        <i class="fas fa-satellite-dish opacity-50"></i><br>
+                        <small>No frames captured yet — send a message to see the M-Protocol bytes.</small>
+                    </div>
+                </div>
+                <small class="text-muted d-block mt-1">
+                    Frames: <code class="small">&lt;NUL&gt;×5 &lt;SOH&gt; TT AA &lt;STX&gt; payload &lt;ETX&gt; CC &lt;EOT&gt;</code>
+                    — the most recent <span id="debug-buffer-size">50</span> frames are kept.
+                </small>
+            </div>
 
             <form id="custom-message-form">
                 <div class="row">
@@ -569,6 +709,7 @@
                                     <div class="line-editor card shadow-sm" data-line-index="{{ idx }}" data-position="{{ positions[idx] }}">
                                         <div class="card-header d-flex justify-content-between align-items-center">
                                             <span class="fw-semibold">Line {{ idx + 1 }}</span>
+                                            <span class="effect-pill ep-hold" id="line{{ idx + 1 }}-effect">HOLD</span>
                                             <span class="char-count" id="line{{ idx + 1 }}-count">0 / 20</span>
                                         </div>
                                         <div class="card-body">
@@ -809,22 +950,7 @@
                             </div>
 
                             <!-- LED Sign Simulator — Canvas -->
-                            <div class="mb-3">
-                                <label class="form-label fw-semibold">
-                                    Sign Simulator
-                                    <span class="badge bg-success ms-1" style="font-size:.6em">LIVE</span>
-                                </label>
-                                <div class="led-sign-panel p-0" style="padding:0!important;overflow:hidden;border-radius:8px;">
-                                    <canvas id="led-sim-canvas" style="display:block;width:100%;image-rendering:auto;border-radius:6px;"></canvas>
-                                </div>
-                                <div class="mt-1 d-flex align-items-center gap-2">
-                                    <small class="text-muted flex-grow-1" id="effect-description">Effect: Static display</small>
-                                    <button type="button" class="btn btn-xs btn-outline-secondary"
-                                            style="font-size:.7em;padding:2px 6px"
-                                            onclick="toggleSimPause()" id="sim-pause-btn"
-                                            title="Pause/Resume animations">⏸</button>
-                                </div>
-                            </div>
+                            <!-- Canvas moved to top of tab as full-width WYSIWYG preview -->
 
                             <div class="d-grid gap-2">
                                 <button type="submit" class="btn btn-primary btn-lg">
@@ -1666,18 +1792,75 @@ function buildLinePayload() {
     });
 }
 
-function applyLineStyle(editor) {
-    const preview = editor.querySelector('.line-preview');
-    const colorValue = resolveLineColor(editor.querySelector('.line-color').value);
-    const modeValue = resolveLineMode(editor.querySelector('.line-mode').value);
+// LED CSS class lookup tables for WYSIWYG line-preview styling
+const LC_COLOR_CLASSES = [
+    'lc-red','lc-green','lc-amber','lc-dim-red','lc-dim-green',
+    'lc-brown','lc-orange','lc-yellow','lc-rainbow-1','lc-rainbow-2',
+    'lc-color-mix','lc-auto-color','lc-white','lc-default'
+];
 
-    preview.style.color = colorMap[colorValue] || '#00ff00';
-    preview.classList.remove('flash-preview', 'rainbow-text');
-    if (colorValue.includes('RAINBOW') || colorValue === 'COLOR_MIX') {
-        preview.classList.add('rainbow-text');
+const colorToLCClass = {
+    'RED': 'lc-red', 'GREEN': 'lc-green', 'AMBER': 'lc-amber',
+    'DIM_RED': 'lc-dim-red', 'DIM_GREEN': 'lc-dim-green',
+    'BROWN': 'lc-brown', 'ORANGE': 'lc-orange', 'YELLOW': 'lc-yellow',
+    'RAINBOW_1': 'lc-rainbow-1', 'RAINBOW_2': 'lc-rainbow-2',
+    'COLOR_MIX': 'lc-color-mix', 'AUTO_COLOR': 'lc-auto-color',
+    'WHITE': 'lc-white', 'DEFAULT': 'lc-default',
+};
+
+// Map display mode → [ effect-pill CSS class, display label ]
+function modeToEffectPill(mode) {
+    if (!mode || mode === 'DEFAULT') return ['ep-hold', 'HOLD'];
+    switch (mode) {
+        case 'HOLD':               return ['ep-hold',   'HOLD'];
+        case 'FLASH':              return ['ep-flash',  'FLASH'];
+        case 'SCROLL':             return ['ep-scroll', 'SCROLL'];
+        case 'ROTATE':             return ['ep-scroll', 'ROTATE'];
+        case 'COMPRESSED_ROTATE':  return ['ep-scroll', 'C.ROTATE'];
+        case 'ROLL_LEFT':          return ['ep-roll',   'ROLL ←'];
+        case 'ROLL_RIGHT':         return ['ep-roll',   'ROLL →'];
+        case 'ROLL_UP':            return ['ep-roll',   'ROLL ↑'];
+        case 'ROLL_DOWN':          return ['ep-roll',   'ROLL ↓'];
+        case 'ROLL_IN':            return ['ep-roll',   'ROLL IN'];
+        case 'ROLL_OUT':           return ['ep-roll',   'ROLL OUT'];
+        case 'WIPE_LEFT':          return ['ep-wipe',   'WIPE ←'];
+        case 'WIPE_RIGHT':         return ['ep-wipe',   'WIPE →'];
+        case 'WIPE_UP':            return ['ep-wipe',   'WIPE ↑'];
+        case 'WIPE_DOWN':          return ['ep-wipe',   'WIPE ↓'];
+        case 'WIPE_IN':            return ['ep-wipe',   'WIPE IN'];
+        case 'WIPE_OUT':           return ['ep-wipe',   'WIPE OUT'];
+        case 'EXPLODE':            return ['ep-explode','EXPLODE'];
+        case 'AUTO_MODE':          return ['ep-auto',   'AUTO'];
+        case 'CLOCK':              return ['ep-clock',  'CLOCK'];
+        default:                   return ['ep-hold',   mode.replace(/_/g,' ')];
     }
-    if (modeValue === 'FLASH') {
-        preview.classList.add('flash-preview');
+}
+
+function applyLineStyle(editor) {
+    const preview    = editor.querySelector('.line-preview');
+    const colorValue = resolveLineColor(editor.querySelector('.line-color').value);
+    const modeValue  = resolveLineMode(editor.querySelector('.line-mode').value);
+    const lineIndex  = parseInt(editor.dataset.lineIndex);
+
+    // Remove old colour classes; add the proper LED colour class (includes glow text-shadow)
+    preview.classList.remove(...LC_COLOR_CLASSES);
+    preview.style.color = '';
+    preview.style.textShadow = '';
+    preview.classList.add(colorToLCClass[colorValue] || 'lc-default');
+
+    // Remove legacy animation helper classes
+    preview.classList.remove('flash-preview', 'rainbow-text');
+
+    // Update the per-line effect pill badge in the card header
+    const pillEl = document.getElementById(`line${lineIndex + 1}-effect`);
+    if (pillEl) {
+        const [pillClass, pillLabel] = modeToEffectPill(modeValue);
+        // Replace only ep-* classes, keep 'effect-pill'
+        Array.from(pillEl.classList)
+            .filter(c => c.startsWith('ep-'))
+            .forEach(c => pillEl.classList.remove(c));
+        pillEl.classList.add(pillClass);
+        pillEl.textContent = pillLabel;
     }
 }
 
@@ -1715,7 +1898,17 @@ function initLineEditors() {
         const index = editor.dataset.lineIndex;
         const preview = editor.querySelector('.line-preview');
         preview.addEventListener('input', () => updateLineState(index));
-        preview.addEventListener('blur', () => updateLineState(index));
+        preview.addEventListener('blur',  () => {
+            updateLineState(index);
+            // Remove the focused-line highlight on the canvas
+            const sim = _getOrCreateSim();
+            if (sim) sim.setFocusedLine(-1);
+        });
+        preview.addEventListener('focus', () => {
+            // Highlight the matching row in the canvas preview
+            const sim = _getOrCreateSim();
+            if (sim) sim.setFocusedLine(parseInt(index));
+        });
         editor.querySelectorAll('.line-color, .line-mode, .line-speed').forEach(select => {
             select.addEventListener('change', () => updateLineState(index));
         });
@@ -1768,6 +1961,9 @@ function initLEDControl() {
     // Initialize RGB preview
     updateRGBPreview();
     refreshMainPreview();
+
+    // Initialize protocol debug terminal (polls /api/led/debug/frames)
+    initDebugTerminal();
 }
 
 function setupFormHandlers() {
@@ -2613,6 +2809,218 @@ function showToast(message, type = 'info') {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+// Protocol Debug Terminal — polls /api/led/debug/frames and renders captured
+// M-Protocol frames so operators can see exactly what is being sent to the sign.
+// ══════════════════════════════════════════════════════════════════════════════
+
+const DEBUG_TERMINAL_POLL_MS = 2000;
+const DEBUG_TERMINAL_BURST_POLL_MS = 400;
+const DEBUG_TERMINAL_BURST_DURATION_MS = 4000;
+const DEBUG_TERMINAL_MAX_RENDERED = 200;
+
+let debugLastSeq = 0;
+let debugPaused = false;
+let debugPollTimer = null;
+let debugBurstUntil = 0;
+let debugFrameCount = 0;
+
+function escHtml(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function formatHexDump(hex) {
+    // Render contiguous hex string as space-separated byte pairs grouped by 8
+    if (!hex) return '';
+    const bytes = hex.match(/.{1,2}/g) || [];
+    const groups = [];
+    for (let i = 0; i < bytes.length; i += 8) {
+        groups.push(bytes.slice(i, i + 8).join(' '));
+    }
+    return groups.join('  ');
+}
+
+function formatAsciiDump(asciiStr) {
+    // The server-side ASCII view already substitutes <NAME> for control bytes;
+    // wrap those tokens in a span so they render in a different colour without
+    // letting any of the data interfere with HTML.
+    const safe = escHtml(asciiStr);
+    return safe.replace(/&lt;([A-Z0-9 ]{1,8})&gt;/g, '<span class="ctrl">&lt;$1&gt;</span>');
+}
+
+function renderDebugFrame(frame) {
+    const showHex   = document.getElementById('debug-show-hex')?.checked !== false;
+    const showAscii = document.getElementById('debug-show-ascii')?.checked !== false;
+
+    const ts = frame.timestamp ? new Date(frame.timestamp).toLocaleTimeString() : '';
+    const kind = (frame.kind || 'frame').toLowerCase();
+    const respClass = frame.response === 'ACK' ? 'resp-ack'
+                    : frame.response === 'NAK' ? 'resp-nak'
+                    : 'resp-none';
+
+    let respHtml = '';
+    if (frame.error) {
+        respHtml = `<span class="debug-frame-error" title="Transmission error">⚠ ${escHtml(frame.error)}</span>`;
+    } else if (frame.response) {
+        respHtml = `<span class="debug-frame-resp ${respClass}">${escHtml(frame.response)}</span>`;
+    } else if (frame.ok === false) {
+        respHtml = `<span class="debug-frame-resp resp-nak">FAIL</span>`;
+    }
+
+    const dest = frame.destination ? `→ ${escHtml(frame.destination)}` : '';
+
+    let body = '';
+    if (showHex && frame.hex) {
+        body += `<div class="debug-frame-hex">${escHtml(formatHexDump(frame.hex))}</div>`;
+    }
+    if (showAscii && frame.ascii) {
+        body += `<div class="debug-frame-ascii">${formatAsciiDump(frame.ascii)}</div>`;
+    }
+
+    return `
+        <div class="debug-frame" data-seq="${frame.seq}">
+            <div class="debug-frame-header">
+                <span class="debug-frame-ts">${escHtml(ts)}</span>
+                <span class="debug-frame-kind kind-${escHtml(kind)}">${escHtml(kind)}</span>
+                <span class="debug-frame-len">${frame.length || 0} bytes</span>
+                ${respHtml}
+                <span class="text-muted small">${dest}</span>
+            </div>
+            ${body}
+        </div>
+    `;
+}
+
+function appendDebugFrames(frames) {
+    if (!Array.isArray(frames) || frames.length === 0) return;
+    const container = document.getElementById('debug-terminal');
+    if (!container) return;
+
+    // Remove the empty-state placeholder on first arrival
+    const empty = container.querySelector('.debug-terminal-empty');
+    if (empty) empty.remove();
+
+    const html = frames.map(renderDebugFrame).join('');
+    container.insertAdjacentHTML('beforeend', html);
+
+    debugFrameCount += frames.length;
+
+    // Cap rendered DOM nodes to avoid unbounded memory use during long sessions
+    const rendered = container.querySelectorAll('.debug-frame');
+    const overflow = rendered.length - DEBUG_TERMINAL_MAX_RENDERED;
+    for (let i = 0; i < overflow; i++) rendered[i].remove();
+
+    const countEl = document.getElementById('debug-frame-count');
+    if (countEl) countEl.textContent = `${debugFrameCount} frame${debugFrameCount === 1 ? '' : 's'}`;
+
+    if (document.getElementById('debug-auto-scroll')?.checked !== false) {
+        container.scrollTop = container.scrollHeight;
+    }
+}
+
+function pollDebugFrames() {
+    if (debugPaused) return;
+    fetch(`/api/led/debug/frames?since=${debugLastSeq}`, {
+        credentials: 'same-origin',
+    })
+    .then(r => r.ok ? r.json() : null)
+    .then(data => {
+        if (!data || !data.success) return;
+        const frames = Array.isArray(data.frames) ? data.frames : [];
+        if (frames.length) {
+            const maxSeq = frames.reduce((m, f) => (f.seq > m ? f.seq : m), debugLastSeq);
+            debugLastSeq = maxSeq;
+            appendDebugFrames(frames);
+        }
+        if (typeof data.max_buffer === 'number') {
+            const sizeEl = document.getElementById('debug-buffer-size');
+            if (sizeEl) sizeEl.textContent = data.max_buffer;
+        }
+    })
+    .catch(() => { /* network errors are non-fatal for the debug view */ });
+}
+
+function scheduleDebugPoll() {
+    if (debugPollTimer) clearTimeout(debugPollTimer);
+    const interval = (Date.now() < debugBurstUntil)
+        ? DEBUG_TERMINAL_BURST_POLL_MS
+        : DEBUG_TERMINAL_POLL_MS;
+    debugPollTimer = setTimeout(() => {
+        pollDebugFrames();
+        scheduleDebugPoll();
+    }, interval);
+}
+
+// Trigger a brief burst of fast polling — call right after sending anything to
+// the sign so the new frame shows up in the terminal almost immediately.
+function debugBurstPoll() {
+    debugBurstUntil = Date.now() + DEBUG_TERMINAL_BURST_DURATION_MS;
+    // Poll once right away too
+    pollDebugFrames();
+    scheduleDebugPoll();
+}
+
+function toggleDebugPause() {
+    debugPaused = !debugPaused;
+    const btn = document.getElementById('debug-pause-btn');
+    if (btn) btn.innerHTML = debugPaused ? '▶ Resume' : '⏸ Pause';
+}
+
+function clearDebugTerminal() {
+    fetch('/api/led/debug/frames/clear', {
+        method: 'POST',
+        credentials: 'same-origin',
+    }).catch(() => { /* clearing UI even if server call fails */ });
+
+    const container = document.getElementById('debug-terminal');
+    if (container) {
+        container.innerHTML = `
+            <div class="debug-terminal-empty text-center py-3">
+                <i class="fas fa-satellite-dish opacity-50"></i><br>
+                <small>No frames captured yet — send a message to see the M-Protocol bytes.</small>
+            </div>`;
+    }
+    debugFrameCount = 0;
+    const countEl = document.getElementById('debug-frame-count');
+    if (countEl) countEl.textContent = '0 frames';
+}
+
+function initDebugTerminal() {
+    if (!document.getElementById('debug-terminal')) return;
+    pollDebugFrames();
+    scheduleDebugPoll();
+
+    // Wrap fetch so any call to an LED endpoint that may put bytes on the
+    // wire triggers a brief burst-poll afterwards. This avoids having to
+    // manually instrument every send_*/clear/test/reconnect/emergency path.
+    if (!window._debugFetchHooked) {
+        const originalFetch = window.fetch.bind(window);
+        const triggerPaths = [
+            '/api/led/send_message',
+            '/api/led/send_canned',
+            '/api/led/emergency',
+            '/api/led/test',
+            '/api/led/clear',
+            '/api/led/reconnect',
+            '/api/led/brightness',
+            '/api/led/set_time_format',
+            '/api/led/set_date_format',
+        ];
+        window.fetch = function(input, init) {
+            const url = (typeof input === 'string') ? input
+                      : (input && input.url) ? input.url : '';
+            const result = originalFetch(input, init);
+            if (url && triggerPaths.some(p => url.indexOf(p) !== -1)) {
+                result.finally(() => { try { debugBurstPoll(); } catch (e) {} });
+            }
+            return result;
+        };
+        window._debugFetchHooked = true;
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 // LEDSignSimulator — canvas-based accurate M-Protocol display-mode renderer
 // Each line has its own independent animation timer so mixed-mode layouts
 // (e.g. Line 1 static, Line 2 scrolling, Line 3 flashing) render correctly.
@@ -2626,7 +3034,8 @@ class LEDSignSimulator {
         this.dpr     = window.devicePixelRatio || 1;
         this.paused  = false;
         this.lastTs  = 0;
-        this.LINE_H  = 34;   // px per sign line (logical)
+        this.focusedLine = -1;
+        this.LINE_H  = 56;   // px per sign line (logical) — larger for full-width WYSIWYG preview
         this.PAD     = 10;   // top/bottom padding
         this.NUM_LINES = 4;
 
@@ -2662,6 +3071,21 @@ class LEDSignSimulator {
         this._resize();
         window.addEventListener('resize', () => this._resize());
         this._raf = requestAnimationFrame(ts => this._tick(ts));
+
+        // Click on a canvas row → scroll to and focus that line's editor
+        this.canvas.addEventListener('click', (e) => {
+            const rect    = this.canvas.getBoundingClientRect();
+            const clickY  = (e.clientY - rect.top) / rect.height * (this.NUM_LINES * this.LINE_H + this.PAD * 2);
+            const lineIdx = Math.floor((clickY - this.PAD) / this.LINE_H);
+            if (lineIdx >= 0 && lineIdx < this.NUM_LINES) {
+                const editor = document.querySelector(`.line-editor[data-line-index="${lineIdx}"]`);
+                if (editor) {
+                    editor.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    const preview = editor.querySelector('.line-preview');
+                    if (preview) setTimeout(() => preview.focus(), 300);
+                }
+            }
+        });
     }
 
     _resize() {
@@ -2689,6 +3113,11 @@ class LEDSignSimulator {
         line.speed = Math.max(1, Math.min(5, sp));
         // Reset per-line timer when mode changes so the new effect starts cleanly
         if (prevMode !== line.mode) line.animT = 0;
+    }
+
+    // Highlight the given row with a focus indicator (-1 = none)
+    setFocusedLine(idx) {
+        this.focusedLine = idx;
     }
 
     togglePause() {
@@ -2726,6 +3155,16 @@ class LEDSignSimulator {
         for (let i = 0; i < this.NUM_LINES; i++) {
             const y  = PAD + i * LINE_H;
             const lh = LINE_H - 1;
+
+            // Focused-line highlight: subtle cyan border on the active row
+            if (i === this.focusedLine) {
+                ctx.fillStyle = 'rgba(0,180,255,0.06)';
+                ctx.fillRect(0, y, W, lh);
+                ctx.strokeStyle = 'rgba(0,180,255,0.55)';
+                ctx.lineWidth = 1.5;
+                ctx.strokeRect(0.75, y + 0.75, W - 1.5, lh - 1.5);
+            }
+
             this._drawLine(i, 0, y, W, lh);
             // Row separator
             if (i < this.NUM_LINES - 1) {
