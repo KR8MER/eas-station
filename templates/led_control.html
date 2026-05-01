@@ -433,6 +433,64 @@
     background:var(--light-color);margin-bottom:6px;
     font-size:.85em;
 }
+
+/* Protocol Debug Terminal — uses site-wide --terminal-* tokens for theme parity */
+.debug-terminal {
+    background: var(--terminal-bg, #000);
+    color: var(--terminal-text, #00ff00);
+    border: 1px solid var(--terminal-border, #444);
+    border-radius: 6px;
+    font-family: 'Courier New', 'Consolas', monospace;
+    font-size: 12.5px;
+    line-height: 1.45;
+    padding: 8px 10px;
+    height: 280px;
+    overflow-y: auto;
+    box-shadow: inset 0 0 14px rgba(0,0,0,0.55);
+    scrollbar-color: #2a2a2a #000;
+}
+.debug-terminal::-webkit-scrollbar { width: 8px; }
+.debug-terminal::-webkit-scrollbar-track { background: #050505; }
+.debug-terminal::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 4px; }
+.debug-terminal-empty { color: rgba(255,255,255,0.45); }
+.debug-frame {
+    border-bottom: 1px dashed rgba(0,255,0,0.10);
+    padding: 4px 0;
+    margin: 0;
+    word-break: break-all;
+}
+.debug-frame:last-child { border-bottom: none; }
+.debug-frame-header {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    color: #aaa;
+    font-size: 11px;
+}
+.debug-frame-ts { color: #888; }
+.debug-frame-kind {
+    background: rgba(0,255,0,0.10);
+    color: #7fff7f;
+    padding: 0 6px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-size: 10.5px;
+}
+.debug-frame-kind.kind-message      { background: rgba(0,255,0,0.12);  color:#7fff7f; }
+.debug-frame-kind.kind-command      { background: rgba(0,191,255,0.12); color:#7fd0ff; }
+.debug-frame-kind.kind-read_command,
+.debug-frame-kind.kind-read_text_file { background: rgba(255,191,0,0.12); color:#ffd07f; }
+.debug-frame-kind.kind-health_check { background: rgba(150,150,150,0.18); color:#cccccc; }
+.debug-frame-len  { color: #888; }
+.debug-frame-resp.resp-ack { color: #7fff7f; }
+.debug-frame-resp.resp-nak { color: #ff7f7f; }
+.debug-frame-resp.resp-none{ color: #888; }
+.debug-frame-error { color: #ff7f7f; }
+.debug-frame-hex   { color: #ffe07f; word-break: break-all; }
+.debug-frame-ascii { color: #7fff7f; word-break: break-all; }
+.debug-frame-ascii .ctrl { color: #4fa6ff; }
 </style>
 {% endblock %}
 
@@ -589,6 +647,51 @@
                 </div>
                 <small class="text-muted d-block mt-1">
                     <i class="fas fa-mouse-pointer"></i> Click any row on the preview to jump to that line's editor.
+                </small>
+            </div>
+
+            <!-- ══ Protocol Debug Terminal — what is actually going to the sign ══ -->
+            <div class="mb-4" id="debug-terminal-block">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <label class="form-label fw-semibold mb-0">
+                        <i class="fas fa-terminal text-success"></i> Protocol Debug Terminal
+                        <small class="text-muted ms-1" style="font-weight:normal">M-Protocol bytes sent to the sign</small>
+                    </label>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge bg-secondary" id="debug-frame-count" style="font-size:.7em">0 frames</span>
+                        <div class="form-check form-switch m-0" title="Show hexadecimal byte dump">
+                            <input class="form-check-input" type="checkbox" id="debug-show-hex" checked>
+                            <label class="form-check-label small" for="debug-show-hex">Hex</label>
+                        </div>
+                        <div class="form-check form-switch m-0" title="Show ASCII / control-byte view">
+                            <input class="form-check-input" type="checkbox" id="debug-show-ascii" checked>
+                            <label class="form-check-label small" for="debug-show-ascii">ASCII</label>
+                        </div>
+                        <div class="form-check form-switch m-0" title="Auto-scroll to newest frame">
+                            <input class="form-check-input" type="checkbox" id="debug-auto-scroll" checked>
+                            <label class="form-check-label small" for="debug-auto-scroll">Auto-scroll</label>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                style="font-size:.75em;padding:2px 8px"
+                                id="debug-pause-btn" onclick="toggleDebugPause()"
+                                title="Pause/Resume frame polling">⏸ Pause</button>
+                        <button type="button" class="btn btn-sm btn-outline-danger"
+                                style="font-size:.75em;padding:2px 8px"
+                                onclick="clearDebugTerminal()"
+                                title="Clear the debug ring buffer">
+                            <i class="fas fa-trash"></i> Clear
+                        </button>
+                    </div>
+                </div>
+                <div id="debug-terminal" class="debug-terminal" aria-live="polite">
+                    <div class="debug-terminal-empty text-center py-3">
+                        <i class="fas fa-satellite-dish opacity-50"></i><br>
+                        <small>No frames captured yet — send a message to see the M-Protocol bytes.</small>
+                    </div>
+                </div>
+                <small class="text-muted d-block mt-1">
+                    Frames: <code class="small">&lt;NUL&gt;×5 &lt;SOH&gt; TT AA &lt;STX&gt; payload &lt;ETX&gt; CC &lt;EOT&gt;</code>
+                    — the most recent <span id="debug-buffer-size">50</span> frames are kept.
                 </small>
             </div>
 
@@ -1858,6 +1961,9 @@ function initLEDControl() {
     // Initialize RGB preview
     updateRGBPreview();
     refreshMainPreview();
+
+    // Initialize protocol debug terminal (polls /api/led/debug/frames)
+    initDebugTerminal();
 }
 
 function setupFormHandlers() {
@@ -2700,6 +2806,218 @@ function showToast(message, type = 'info') {
             toast.parentNode.removeChild(toast);
         }
     }, 5000);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Protocol Debug Terminal — polls /api/led/debug/frames and renders captured
+// M-Protocol frames so operators can see exactly what is being sent to the sign.
+// ══════════════════════════════════════════════════════════════════════════════
+
+const DEBUG_TERMINAL_POLL_MS = 2000;
+const DEBUG_TERMINAL_BURST_POLL_MS = 400;
+const DEBUG_TERMINAL_BURST_DURATION_MS = 4000;
+const DEBUG_TERMINAL_MAX_RENDERED = 200;
+
+let debugLastSeq = 0;
+let debugPaused = false;
+let debugPollTimer = null;
+let debugBurstUntil = 0;
+let debugFrameCount = 0;
+
+function escHtml(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function formatHexDump(hex) {
+    // Render contiguous hex string as space-separated byte pairs grouped by 8
+    if (!hex) return '';
+    const bytes = hex.match(/.{1,2}/g) || [];
+    const groups = [];
+    for (let i = 0; i < bytes.length; i += 8) {
+        groups.push(bytes.slice(i, i + 8).join(' '));
+    }
+    return groups.join('  ');
+}
+
+function formatAsciiDump(asciiStr) {
+    // The server-side ASCII view already substitutes <NAME> for control bytes;
+    // wrap those tokens in a span so they render in a different colour without
+    // letting any of the data interfere with HTML.
+    const safe = escHtml(asciiStr);
+    return safe.replace(/&lt;([A-Z0-9 ]{1,8})&gt;/g, '<span class="ctrl">&lt;$1&gt;</span>');
+}
+
+function renderDebugFrame(frame) {
+    const showHex   = document.getElementById('debug-show-hex')?.checked !== false;
+    const showAscii = document.getElementById('debug-show-ascii')?.checked !== false;
+
+    const ts = frame.timestamp ? new Date(frame.timestamp).toLocaleTimeString() : '';
+    const kind = (frame.kind || 'frame').toLowerCase();
+    const respClass = frame.response === 'ACK' ? 'resp-ack'
+                    : frame.response === 'NAK' ? 'resp-nak'
+                    : 'resp-none';
+
+    let respHtml = '';
+    if (frame.error) {
+        respHtml = `<span class="debug-frame-error" title="Transmission error">⚠ ${escHtml(frame.error)}</span>`;
+    } else if (frame.response) {
+        respHtml = `<span class="debug-frame-resp ${respClass}">${escHtml(frame.response)}</span>`;
+    } else if (frame.ok === false) {
+        respHtml = `<span class="debug-frame-resp resp-nak">FAIL</span>`;
+    }
+
+    const dest = frame.destination ? `→ ${escHtml(frame.destination)}` : '';
+
+    let body = '';
+    if (showHex && frame.hex) {
+        body += `<div class="debug-frame-hex">${escHtml(formatHexDump(frame.hex))}</div>`;
+    }
+    if (showAscii && frame.ascii) {
+        body += `<div class="debug-frame-ascii">${formatAsciiDump(frame.ascii)}</div>`;
+    }
+
+    return `
+        <div class="debug-frame" data-seq="${frame.seq}">
+            <div class="debug-frame-header">
+                <span class="debug-frame-ts">${escHtml(ts)}</span>
+                <span class="debug-frame-kind kind-${escHtml(kind)}">${escHtml(kind)}</span>
+                <span class="debug-frame-len">${frame.length || 0} bytes</span>
+                ${respHtml}
+                <span class="text-muted small">${dest}</span>
+            </div>
+            ${body}
+        </div>
+    `;
+}
+
+function appendDebugFrames(frames) {
+    if (!Array.isArray(frames) || frames.length === 0) return;
+    const container = document.getElementById('debug-terminal');
+    if (!container) return;
+
+    // Remove the empty-state placeholder on first arrival
+    const empty = container.querySelector('.debug-terminal-empty');
+    if (empty) empty.remove();
+
+    const html = frames.map(renderDebugFrame).join('');
+    container.insertAdjacentHTML('beforeend', html);
+
+    debugFrameCount += frames.length;
+
+    // Cap rendered DOM nodes to avoid unbounded memory use during long sessions
+    const rendered = container.querySelectorAll('.debug-frame');
+    const overflow = rendered.length - DEBUG_TERMINAL_MAX_RENDERED;
+    for (let i = 0; i < overflow; i++) rendered[i].remove();
+
+    const countEl = document.getElementById('debug-frame-count');
+    if (countEl) countEl.textContent = `${debugFrameCount} frame${debugFrameCount === 1 ? '' : 's'}`;
+
+    if (document.getElementById('debug-auto-scroll')?.checked !== false) {
+        container.scrollTop = container.scrollHeight;
+    }
+}
+
+function pollDebugFrames() {
+    if (debugPaused) return;
+    fetch(`/api/led/debug/frames?since=${debugLastSeq}`, {
+        credentials: 'same-origin',
+    })
+    .then(r => r.ok ? r.json() : null)
+    .then(data => {
+        if (!data || !data.success) return;
+        const frames = Array.isArray(data.frames) ? data.frames : [];
+        if (frames.length) {
+            const maxSeq = frames.reduce((m, f) => (f.seq > m ? f.seq : m), debugLastSeq);
+            debugLastSeq = maxSeq;
+            appendDebugFrames(frames);
+        }
+        if (typeof data.max_buffer === 'number') {
+            const sizeEl = document.getElementById('debug-buffer-size');
+            if (sizeEl) sizeEl.textContent = data.max_buffer;
+        }
+    })
+    .catch(() => { /* network errors are non-fatal for the debug view */ });
+}
+
+function scheduleDebugPoll() {
+    if (debugPollTimer) clearTimeout(debugPollTimer);
+    const interval = (Date.now() < debugBurstUntil)
+        ? DEBUG_TERMINAL_BURST_POLL_MS
+        : DEBUG_TERMINAL_POLL_MS;
+    debugPollTimer = setTimeout(() => {
+        pollDebugFrames();
+        scheduleDebugPoll();
+    }, interval);
+}
+
+// Trigger a brief burst of fast polling — call right after sending anything to
+// the sign so the new frame shows up in the terminal almost immediately.
+function debugBurstPoll() {
+    debugBurstUntil = Date.now() + DEBUG_TERMINAL_BURST_DURATION_MS;
+    // Poll once right away too
+    pollDebugFrames();
+    scheduleDebugPoll();
+}
+
+function toggleDebugPause() {
+    debugPaused = !debugPaused;
+    const btn = document.getElementById('debug-pause-btn');
+    if (btn) btn.innerHTML = debugPaused ? '▶ Resume' : '⏸ Pause';
+}
+
+function clearDebugTerminal() {
+    fetch('/api/led/debug/frames/clear', {
+        method: 'POST',
+        credentials: 'same-origin',
+    }).catch(() => { /* clearing UI even if server call fails */ });
+
+    const container = document.getElementById('debug-terminal');
+    if (container) {
+        container.innerHTML = `
+            <div class="debug-terminal-empty text-center py-3">
+                <i class="fas fa-satellite-dish opacity-50"></i><br>
+                <small>No frames captured yet — send a message to see the M-Protocol bytes.</small>
+            </div>`;
+    }
+    debugFrameCount = 0;
+    const countEl = document.getElementById('debug-frame-count');
+    if (countEl) countEl.textContent = '0 frames';
+}
+
+function initDebugTerminal() {
+    if (!document.getElementById('debug-terminal')) return;
+    pollDebugFrames();
+    scheduleDebugPoll();
+
+    // Wrap fetch so any call to an LED endpoint that may put bytes on the
+    // wire triggers a brief burst-poll afterwards. This avoids having to
+    // manually instrument every send_*/clear/test/reconnect/emergency path.
+    if (!window._debugFetchHooked) {
+        const originalFetch = window.fetch.bind(window);
+        const triggerPaths = [
+            '/api/led/send_message',
+            '/api/led/send_canned',
+            '/api/led/emergency',
+            '/api/led/test',
+            '/api/led/clear',
+            '/api/led/reconnect',
+            '/api/led/brightness',
+            '/api/led/set_time_format',
+            '/api/led/set_date_format',
+        ];
+        window.fetch = function(input, init) {
+            const url = (typeof input === 'string') ? input
+                      : (input && input.url) ? input.url : '';
+            const result = originalFetch(input, init);
+            if (url && triggerPaths.some(p => url.indexOf(p) !== -1)) {
+                result.finally(() => { try { debugBurstPoll(); } catch (e) {} });
+            }
+            return result;
+        };
+        window._debugFetchHooked = true;
+    }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════

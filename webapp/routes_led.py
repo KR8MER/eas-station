@@ -505,6 +505,59 @@ def register(app: Flask, logger) -> None:
             route_logger.error("Error running LED test: %s", exc)
             return jsonify({"success": False, "error": str(exc)})
 
+    @app.route("/api/led/debug/frames", methods=["GET"])
+    @require_auth
+    @require_role("Admin", "Operator")
+    def api_led_debug_frames():
+        """Return recent M-Protocol frames sent to the sign for debugging.
+
+        Query string ``since`` (int) limits the response to entries with
+        ``seq`` strictly greater than the supplied value, so the UI can
+        long-poll efficiently.
+        """
+        controller = led_module.led_controller
+        if not controller:
+            return jsonify({
+                "success": False,
+                "error": "LED controller not available",
+                "frames": [],
+            })
+
+        try:
+            since = int(request.args.get("since", "0") or "0")
+        except (TypeError, ValueError):
+            since = 0
+
+        getter = getattr(controller, "get_frame_history", None)
+        if not callable(getter):
+            return jsonify({
+                "success": True,
+                "frames": [],
+                "supported": False,
+            })
+
+        frames = getter(since_seq=since)
+        return jsonify({
+            "success": True,
+            "supported": True,
+            "frames": frames,
+            "max_buffer": getattr(controller, "_frame_history_max", len(frames)),
+        })
+
+    @app.route("/api/led/debug/frames/clear", methods=["POST"])
+    @require_auth
+    @require_role("Admin", "Operator")
+    def api_led_debug_frames_clear():
+        """Drop all entries from the controller's debug ring buffer."""
+        controller = led_module.led_controller
+        if not controller:
+            return jsonify({"success": False, "error": "LED controller not available"})
+        clearer = getattr(controller, "clear_frame_history", None)
+        if callable(clearer):
+            clearer()
+            return jsonify({"success": True})
+        return jsonify({"success": False, "error": "Frame history not supported"})
+
     @app.route("/api/led/emergency", methods=["POST"])
     @require_auth
     @require_role("Admin", "Operator")
