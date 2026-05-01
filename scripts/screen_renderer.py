@@ -42,6 +42,8 @@ PREVIEW_SAMPLE_DATA: Dict[str, Any] = {
         "database_status": "connected",
         "hostname": "wx-station",
         "ip_address": "192.168.10.25",
+        "county_name": "Putnam County",
+        "state_code": "OH",
         "active_alerts_count": 0,
         "uptime_human": "12d 5h",
         "uptime_seconds": 1_080_000,
@@ -65,12 +67,10 @@ PREVIEW_SAMPLE_DATA: Dict[str, Any] = {
         "uptime_human": "12d 5h",
     },
     "location": {
-        "county_name": "Configured County",
+        "county_name": "Putnam County",
         "state_code": "OH",
-    },
-    "temp": {
-        "cpu": 54.2,
-        "cpu_percent": 42.0,
+        "ip_address": "192.168.10.25",
+        "hostname": "wx-station",
     },
     "alerts": {
         "type": "FeatureCollection",
@@ -502,7 +502,7 @@ class ScreenRenderer:
 
             elif elem_type == 'progress_bar':
                 # Progress bar / VU meter
-                value_template = element.get('value', '0')
+                value_template = str(element.get('value') or '0')
                 value_str = self.substitute_variables(value_template, api_data)
 
                 try:
@@ -694,7 +694,7 @@ class ScreenRenderer:
 
             elif elem_type == 'bar':
                 # Bar graph element
-                value_template = element.get('value', '0')
+                value_template = str(element.get('value') or '0')
                 value_str = self.substitute_variables(value_template, api_data)
 
                 try:
@@ -791,7 +791,7 @@ class ScreenRenderer:
 
             elif elem_type == 'gauge':
                 # Semi-circular gauge (speedometer style)
-                value_template = element.get('value', '0')
+                value_template = str(element.get('value') or '0')
                 value_str = self.substitute_variables(value_template, api_data)
                 try:
                     value = float(value_str)

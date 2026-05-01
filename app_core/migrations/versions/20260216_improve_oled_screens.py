@@ -103,16 +103,10 @@ CLOCK_FACE_TEMPLATE = {
         # Dotted divider on the right side
         {"type": "dotted_hline", "x": 64, "y": 44, "width": 60},
 
-        # Station hostname
-        {"type": "icon", "name": "network", "x": 65, "y": 48, "size": 9},
+        # Network icon + IP address — y=50 ends at y=61, safely within 64 px
+        {"type": "icon", "name": "network", "x": 65, "y": 50, "size": 9},
         {
-            "type": "text", "text": "{status.hostname}", "x": 76, "y": 48, "font": "small",
-            "max_width": 50, "overflow": "trim",
-        },
-
-        # IP address
-        {
-            "type": "text", "text": "{status.ip_address}", "x": 76, "y": 57, "font": "small",
+            "type": "text", "text": "{status.ip_address}", "x": 76, "y": 50, "font": "small",
             "max_width": 50, "overflow": "trim",
         },
     ],
@@ -443,52 +437,45 @@ AUDIO_HEALTH_TEMPLATE = {
 AUDIO_LEVELS_TEMPLATE = {
     "clear": True,
     "elements": [
-        # Header banner with wave icon
+        # Header banner with wave icon + source count on right
         {"type": "rectangle", "x": 0, "y": 0, "width": 128, "height": 12, "filled": True},
         {"type": "icon", "name": "wave", "x": 2, "y": 2, "size": 9},
         {"type": "text", "text": "AUDIO LEVELS", "x": 13, "y": 1, "font": "small", "invert": True},
+        {
+            "type": "text", "text": "{audio.total_sources}src",
+            "x": 125, "y": 1, "font": "small", "invert": True,
+            "align": "right", "max_width": 25, "overflow": "trim",
+        },
 
-        # Source 1 name
+        # Source 1 name + dB level (same row)
         {
             "type": "text", "text": "{audio.live_metrics[0].source_name}",
             "x": 2, "y": 14, "font": "small",
-            "max_width": 60, "overflow": "trim",
+            "max_width": 66, "overflow": "trim",
         },
         {
-            "type": "text", "text": "{audio.live_metrics[0].peak_level_db} dB",
+            "type": "text", "text": "{audio.live_metrics[0].peak_level_db}dB",
             "x": 125, "y": 14, "font": "small", "align": "right",
-            "max_width": 52, "overflow": "trim",
+            "max_width": 50, "overflow": "trim",
         },
 
-        # Source 1 VU bar (map buffer_utilization 0-100 to bar)
-        {"type": "bar", "value": "{audio.live_metrics[0].buffer_utilization}", "x": 2, "y": 26, "width": 124, "height": 7, "border": True},
+        # Source 1 VU bar — y=26, height=9 → bottom at y=34
+        {"type": "bar", "value": "{audio.live_metrics[0].buffer_utilization}", "x": 2, "y": 26, "width": 124, "height": 9, "border": True},
 
-        # Source 2 name
+        # Source 2 name + dB level
         {
             "type": "text", "text": "{audio.live_metrics[1].source_name}",
-            "x": 2, "y": 35, "font": "small",
-            "max_width": 60, "overflow": "trim",
+            "x": 2, "y": 37, "font": "small",
+            "max_width": 66, "overflow": "trim",
         },
         {
-            "type": "text", "text": "{audio.live_metrics[1].peak_level_db} dB",
-            "x": 125, "y": 35, "font": "small", "align": "right",
-            "max_width": 52, "overflow": "trim",
+            "type": "text", "text": "{audio.live_metrics[1].peak_level_db}dB",
+            "x": 125, "y": 37, "font": "small", "align": "right",
+            "max_width": 50, "overflow": "trim",
         },
 
-        # Source 2 VU bar
-        {"type": "bar", "value": "{audio.live_metrics[1].buffer_utilization}", "x": 2, "y": 47, "width": 124, "height": 7, "border": True},
-
-        # Footer with source count and active source
-        {"type": "icon", "name": "speaker", "x": 2, "y": 56, "size": 8},
-        {
-            "type": "text", "text": "{audio.total_sources} src",
-            "x": 12, "y": 56, "font": "small",
-        },
-        {
-            "type": "text", "text": "{audio.active_source}",
-            "x": 125, "y": 56, "font": "small", "align": "right",
-            "max_width": 80, "overflow": "trim",
-        },
+        # Source 2 VU bar — y=49, height=14 → bottom at y=62 (within 64 px)
+        {"type": "bar", "value": "{audio.live_metrics[1].buffer_utilization}", "x": 2, "y": 49, "width": 124, "height": 14, "border": True},
     ],
 }
 
