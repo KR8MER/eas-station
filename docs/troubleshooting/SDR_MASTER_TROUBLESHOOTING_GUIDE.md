@@ -296,7 +296,7 @@ This was caused by incorrect use of FFmpeg `-re` flag for live hardware capture.
    # Linux: Check for other processes using the device
    lsof /dev/bus/usb/*/*
    
-   # Stop other SDR software (SDR++, GQRX, etc.)
+   # Stop other SDR software (GQRX, CubicSDR, etc.)
    ```
 
    ```yaml

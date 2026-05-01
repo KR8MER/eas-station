@@ -40,17 +40,10 @@ NOAA_WEATHER_FREQUENCIES = {
 }
 
 
-# Common SDR presets - SDR++ Server is the default/recommended option
+# Common SDR presets for direct-USB receivers.  RTL-SDR is marked as the
+# default — it's the cheapest hardware that decodes the NOAA WX bands
+# adequately and is what most operators reach for first.
 SDR_PRESETS = {
-    "noaa_weather_sdrpp": {
-        "name": "NOAA Weather Radio (SDR++ Server) - Recommended",
-        "driver": "sdrpp",
-        "frequency_hz": 162_550_000,  # WX7 - adjust based on your area
-        "sample_rate": 2_500_000,
-        "gain": None,  # Gain controlled in SDR++ application
-        "notes": "Default: Connect to SDR++ Server for NOAA Weather Radio. Set serial to tcp://hostname:5259",
-        "default": True,
-    },
     "noaa_weather_rtlsdr": {
         "name": "NOAA Weather Radio (RTL-SDR Direct)",
         "driver": "rtlsdr",
@@ -58,6 +51,7 @@ SDR_PRESETS = {
         "sample_rate": 2_400_000,
         "gain": 49.6,
         "notes": "Direct USB connection for RTL-SDR dongles (requires USB passthrough)",
+        "default": True,
     },
     "noaa_weather_airspy": {
         "name": "NOAA Weather Radio (Airspy Direct)",

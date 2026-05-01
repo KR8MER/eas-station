@@ -7,7 +7,6 @@
 - [Hardware Guide](#hardware-requirements) - Choosing the right SDR
 - [Setup Flowchart](#visual-setup-guide) - Visual overview
 - [Web UI Setup](#web-ui-configuration) - Easiest configuration method
-- [SDR++ Server](#sdr-server-network-sdr) - **NEW**: Network/remote SDR via SDR++
 - [Troubleshooting](#troubleshooting) - Fix common issues
 
 ---
@@ -76,7 +75,6 @@ SoapySDR, RTL-SDR, and Airspy drivers are **pre-installed** in the installation:
 | **RTL-SDR V3** | 24 MHz - 1.7 GHz | Up to 2.4 MSPS | $20-40 | NOAA Weather Radio, budget builds |
 | **Airspy Mini** | 24 MHz - 1.7 GHz | Up to 6 MSPS | $100+ | Better sensitivity, professional use |
 | **Airspy R2** | 24 MHz - 1.7 GHz | Up to 10 MSPS | $200+ | Maximum performance |
-| **SDR++ Server** | Any (depends on backend) | Varies | Free | Network SDR, shared receivers, remote monitoring |
 
 **Recommended starter**: RTL-SDR Blog V3 ($30) with bias-tee for powered antennas
 
@@ -224,10 +222,7 @@ If diagnostics fail → [Troubleshooting](#troubleshooting)
 2. Choose:
    - **NOAA Weather Radio (RTL-SDR)** - For RTL-SDR dongles
    - **NOAA Weather Radio (Airspy)** - For Airspy receivers
-   - **NOAA Weather Radio (SDR++ Server)** - For network SDR via SDR++
 3. Click **Use This Preset**
-
-> **Note**: For SDR++ Server, you'll need to set the **Serial** field to your server address (e.g., `tcp://192.168.1.100:5259`). See [SDR++ Server section](#sdr-server-network-sdr) for setup details.
 
 ### 5. Set Your Local Frequency
 
@@ -260,18 +255,18 @@ Example: 162.550 MHz = 162550000 Hz
 
 ### Configuration Fields
 
-| Field | RTL-SDR Example | Airspy Example | SDR++ Server Example | Description |
-|-------|----------------|----------------|---------------------|-------------|
-| **Display Name** | `Main NOAA Receiver` | `Backup NOAA` | `Remote SDR` | Friendly name |
-| **Identifier** | `rtlsdr_main` | `airspy_backup` | `sdrpp_remote` | Unique ID (no spaces) |
-| **Driver** | `rtlsdr` | `airspy` | `remote` or `sdrpp` | SoapySDR driver name |
-| **Serial** | _(empty)_ | _(empty)_ | `tcp://192.168.1.100:5259` | SDR++ server address |
-| **Frequency (Hz)** | `162550000` | `162550000` | `162550000` | 162.55 MHz |
-| **Sample Rate** | `2400000` | `2500000` | `2500000` | Match SDR++ setting |
-| **Gain (dB)** | `49.6` | `21` | _(empty)_ | See gain guide below |
-| **Channel** | `0` or empty | `0` or empty | `0` or empty | Multi-channel SDRs only |
-| **Enabled** | ✓ | ✓ | ✓ | Start on boot |
-| **Auto-start** | ✓ | ✓ | ✓ | Restart if crashes |
+| Field | RTL-SDR Example | Airspy Example | Description |
+|-------|----------------|----------------|-------------|
+| **Display Name** | `Main NOAA Receiver` | `Backup NOAA` | Friendly name |
+| **Identifier** | `rtlsdr_main` | `airspy_backup` | Unique ID (no spaces) |
+| **Driver** | `rtlsdr` | `airspy` | SoapySDR driver name |
+| **Serial** | _(empty)_ | _(empty)_ | Device serial; leave empty for first match |
+| **Frequency (Hz)** | `162550000` | `162550000` | 162.55 MHz |
+| **Sample Rate** | `2400000` | `2500000` | Hardware-supported rate |
+| **Gain (dB)** | `49.6` | `21` | See gain guide below |
+| **Channel** | `0` or empty | `0` or empty | Multi-channel SDRs only |
+| **Enabled** | ✓ | ✓ | Start on boot |
+| **Auto-start** | ✓ | ✓ | Restart if crashes |
 
 ### Gain Settings Guide
 
@@ -285,154 +280,8 @@ Example: 162.550 MHz = 162550000 Hz
 - **Start with**: 21 dB
 - Airspy has automatic gain control (AGC) option
 
-**SDR++ Server:**
-- Gain is controlled in SDR++ application, not EAS Station
-- Leave the Gain field empty in EAS Station
-- Adjust gain in SDR++'s GUI for best signal
-
 **Too much gain** = Overload, distortion
 **Too little gain** = Weak signal, poor decoding
-
----
-
-## SDR++ Server (Network SDR)
-
-**Use SDR++ as a remote SDR source for EAS Station**
-
-SDR++ is a professional-grade SDR application with excellent visualization and can act as a network SDR server. This allows:
-- **Remote SDR Access**: SDR hardware on one machine, EAS Station on another
-- **Shared SDR**: Multiple clients sharing the same SDR device
-- **Better Visualization**: Use SDR++'s advanced waterfall/spectrum display for tuning
-- **Hardware Isolation**: Keep sensitive SDR hardware separate from the EAS Station container
-
-### Why Use SDR++ Server?
-
-| Feature | Direct SDR (RTL-SDR/Airspy) | SDR++ Server |
-|---------|---------------------------|--------------|
-| **Setup Complexity** | Simple (plug & play) | Moderate (requires SDR++ setup) |
-| **Visualization** | Basic (EAS Station waterfall) | Advanced (SDR++ GUI) |
-| **Hardware Location** | Same machine as EAS Station | Can be on different machine |
-| **Sharing** | One application only | Multiple clients supported |
-| **USB Access** | Required in container | Not needed (network only) |
-| **Best For** | Simple deployments | Remote/distributed setups |
-
-### SDR++ Server Setup
-
-#### 1. Install SDR++ on the SDR Host Machine
-
-Download SDR++ from: https://www.sdrpp.org/
-
-**Linux (Debian/Ubuntu)**:
-```bash
-# Visit https://github.com/AlexandreRouworxx/SDRPlusPlus/releases for the latest version
-# Download the appropriate package for your distribution (AppImage, .deb, or tar.gz)
-# Example for Ubuntu 22.04:
-wget https://github.com/AlexandreRouworxx/SDRPlusPlus/releases/latest/download/sdrpp_ubuntu_jammy_amd64.deb
-sudo dpkg -i sdrpp_ubuntu_jammy_amd64.deb
-```
-
-**Windows**: Download the installer from the [SDR++ releases page](https://github.com/AlexandreRouworxx/SDRPlusPlus/releases)
-
-**Raspberry Pi**: Use the ARM64 build from the releases page or compile from source
-
-#### 2. Enable the SDR++ Server Module
-
-1. Launch SDR++
-2. Click **Module Manager** (in the left panel)
-3. Click **Add** and select `sdrpp_server`
-4. Configure the server:
-   - **Listen Address**: `0.0.0.0` (to accept connections from any IP)
-   - **Port**: `5259` (default)
-   - Click **Start Server**
-
-![SDR++ Server Module Setup](../assets/diagrams/sdrpp-server-module.png)
-
-#### 3. Configure Your SDR in SDR++
-
-1. Select your SDR source (RTL-SDR, Airspy, etc.)
-2. Set the frequency (e.g., 162.550 MHz for NOAA WX7)
-3. Adjust gain for optimal signal
-4. Verify you can hear/see the signal in SDR++
-
-#### 4. Configure EAS Station to Connect
-
-In EAS Station Web UI:
-
-1. Navigate to **Settings → Radio Receivers**
-2. Click **Add Receiver**
-3. Configure:
-
-| Field | Value | Notes |
-|-------|-------|-------|
-| **Display Name** | `SDR++ Server` | Any descriptive name |
-| **Identifier** | `sdrpp_main` | Unique ID (no spaces) |
-| **Driver** | `remote` or `sdrpp` | Either works |
-| **Serial** | `tcp://192.168.1.100:5259` | IP/hostname of SDR++ machine |
-| **Frequency** | `162550000` | 162.55 MHz (match SDR++) |
-| **Sample Rate** | `2500000` | Match SDR++ sample rate |
-| **Gain** | Leave empty | Controlled by SDR++ |
-
-4. Click **Save Receiver**
-5. Enable the receiver
-
-### Configuration Example
-
-**In `.env` (optional, for environment-based config)**:
-```env
-# SDR++ Server connection (alternative to Web UI)
-SDR_DRIVER=remote
-SDR_SERIAL=tcp://192.168.1.100:5259
-SDR_FREQUENCY=162550000
-SDR_SAMPLE_RATE=2500000
-```
-
-### Network Considerations
-
-**Firewall**: Ensure port 5259 (or your chosen port) is open between machines
-
-**Bandwidth**: SDR++ streams raw IQ data:
-- 2.5 MSPS × 8 bytes (CF32) = ~20 MB/s
-- Use on LAN or fast network connections
-
-**Latency**: Negligible for EAS decoding (typically < 100ms)
-
-### SDR++ Server Troubleshooting
-
-#### "Unable to connect to remote SDR"
-
-**Check connectivity**:
-```bash
-# Test if port is reachable
-nc -zv 192.168.1.100 5259
-
-# Ping the SDR++ host
-ping 192.168.1.100
-```
-
-**Verify SDR++ server is running**:
-- Check SDR++ Module Manager shows server as "Running"
-- Look for connection count indicator
-
-#### "Connection drops frequently"
-
-1. **Network stability** - Use wired Ethernet instead of WiFi
-2. **SDR++ CPU usage** - Reduce sample rate if server is overloaded
-3. **Firewall** - Ensure persistent connections aren't being timed out
-
-#### "No audio from SDR++ receiver"
-
-1. **Frequency mismatch** - Ensure EAS Station frequency matches SDR++
-2. **Sample rate mismatch** - Both must use the same sample rate
-3. **SDR++ source** - Verify SDR++ is receiving signal from the SDR hardware
-
-### Using SDR++ Preset
-
-In the Web UI, you can use the built-in preset:
-
-1. Click **Use Preset**
-2. Select **NOAA Weather Radio (SDR++ Server)**
-3. Update the **Serial** field with your SDR++ server address
-4. Click **Use This Preset**
 
 ---
 
@@ -629,7 +478,6 @@ If you're still having issues:
 - **SoapySDR Documentation**: https://github.com/pothosware/SoapySDR/wiki
 - **RTL-SDR Guide**: https://www.rtl-sdr.com/about-rtl-sdr/
 - **Airspy Documentation**: https://airspy.com/
-- **SDR++ Software**: https://www.sdrpp.org/
 - **NOAA Weather Radio**: https://www.weather.gov/nwr/
 - **EAS/SAME Protocol**: https://en.wikipedia.org/wiki/Specific_Area_Message_Encoding
 
