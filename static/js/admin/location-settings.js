@@ -962,17 +962,20 @@ function initEasSettings() {
  * Show/hide tone-specific settings fields based on the selected chime types.
  * QC-II frequencies appear only when either chime is QC-II; DTMF sequence
  * appears only when either chime is DTMF; per-side duration appears only
- * when that side has a chime selected.
+ * for free-form profiles (bell/beep/three_tone) — DTMF and QC-II have
+ * standardized timings and ignore the duration field.
  */
 function updateToneFieldVisibility() {
     const pre = document.getElementById('easPreAlertChime')?.value || 'none';
     const post = document.getElementById('easPostAlertChime')?.value || 'none';
 
+    const isFreeform = (v) => v !== 'none' && v !== 'dtmf' && v !== 'qc2';
+
     const visibility = {
         'qc2': pre === 'qc2' || post === 'qc2',
         'dtmf': pre === 'dtmf' || post === 'dtmf',
-        'pre-duration': pre !== 'none',
-        'post-duration': post !== 'none',
+        'pre-duration': isFreeform(pre),
+        'post-duration': isFreeform(post),
     };
 
     document.querySelectorAll('.eas-tone-conditional').forEach(el => {
