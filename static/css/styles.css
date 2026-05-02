@@ -1106,6 +1106,21 @@
     text-shadow: none;
 }
 
+/* Lightning Theme - Dropdown / pagination / nav-pills active state readability
+   The shared component rules paint these "active" states with
+   background-color: var(--primary-color) and color: white.  In this theme
+   --primary-color is bright yellow (#ffeb3b), so white-on-yellow drops to
+   ~1.1:1 contrast and the active selection becomes invisible.  Force dark
+   ink so the active item is clearly distinguishable. */
+[data-theme="lightning"] .dropdown-item.active,
+[data-theme="lightning"] .dropdown-item:active,
+[data-theme="lightning"] .page-item.active .page-link,
+[data-theme="lightning"] .nav-pills .nav-link.active,
+[data-theme="lightning"] .nav-pills .show > .nav-link {
+    color: #0d1b2a !important;
+    text-shadow: none;
+}
+
 /* Lightning Theme - Progress bar readability
    .progress-bar fills with --primary-color (yellow); any embedded text label
    would be white-on-yellow.  Force dark text so percentage labels are legible. */
@@ -6558,7 +6573,8 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 [data-theme="midnight"] .btn-close,
 [data-theme="charcoal"] .btn-close,
 [data-theme="obsidian"] .btn-close,
-[data-theme="slate"] .btn-close {
+[data-theme="slate"] .btn-close,
+[data-theme="lightning"] .btn-close {
     filter: invert(1) grayscale(100%) brightness(200%);
 }
 
