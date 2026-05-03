@@ -719,19 +719,46 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    function _applyBroadcastState(data) {
+        _broadcastActive = !!(data && data.active);
+        if (data && typeof data.active_alert_count === 'number') {
+            _activeAlerts = data.active_alert_count;
+        }
+        _render();
+    }
+
+    // Fetch broadcast state immediately so the red light reflects an
+    // in-progress broadcast on the very first paint, instead of waiting
+    // up to one second for the next WebSocket push.  This also covers the
+    // case where the WebSocket fails to establish at all.
+    function _fetchBroadcastStateOnce() {
+        fetch('/api/broadcast/state', { cache: 'no-store' })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (data) { if (data) _applyBroadcastState(data); })
+            .catch(function () { /* non-fatal */ });
+    }
+
     // Subscribe to WebSocket events.  websocket.js loads after navbar.html is
     // parsed, so window.EASWebSocket is not yet defined when this IIFE runs.
     // Defer until DOMContentLoaded, by which point all <script> tags in
     // base.html have been evaluated and EASWebSocket is guaranteed to exist.
     document.addEventListener('DOMContentLoaded', function () {
+        // Always fire one HTTP fetch at load — independent of WebSocket state.
+        _fetchBroadcastStateOnce();
+
         if (window.EASWebSocket && window.EASWebSocket.subscribe) {
-            window.EASWebSocket.subscribe('broadcast_state_update', function (data) {
-                _broadcastActive = !!(data && data.active);
-                if (data && typeof data.active_alert_count === 'number') {
-                    _activeAlerts = data.active_alert_count;
+            // Pass a fallbackFn so the red light keeps tracking the airchain
+            // even when the WebSocket connection drops (polls /api/broadcast/state).
+            window.EASWebSocket.subscribe(
+                'broadcast_state_update',
+                _applyBroadcastState,
+                {
+                    fallbackFn: window.EASWebSocket.createPollingFallback(
+                        '/api/broadcast/state', _applyBroadcastState
+                    ),
+                    fallbackInterval: 1500,
                 }
-                _render();
-            });
+            );
 
             // Subscribe to system health (60 s)
             window.EASWebSocket.subscribe('system_health_update', function (data) {

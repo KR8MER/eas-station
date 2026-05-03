@@ -75,6 +75,7 @@
         'alert_verification_update': '/api/alerts/verification/status',
         'alerts_update': '/api/alerts',
         'logs_update': '/api/logs/recent',
+        'broadcast_state_update': '/api/broadcast/state',
     };
 
     /**

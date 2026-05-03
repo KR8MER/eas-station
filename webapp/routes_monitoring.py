@@ -269,6 +269,39 @@ def register(app: Flask, logger) -> None:
             }
         ), http_status
 
+    @app.route("/api/broadcast/state")
+    def api_broadcast_state():
+        """Current air-chain broadcast state.
+
+        Returns the same payload pushed via the broadcast_state_update
+        WebSocket event so clients can:
+          1. Read the state immediately on page load (no waiting up to 1s
+             for the next push), and
+          2. Fall back to polling when the WebSocket connection drops.
+        """
+        try:
+            from app_utils.eas import get_broadcast_state
+            state = get_broadcast_state()
+        except Exception as exc:  # pragma: no cover - defensive
+            route_logger.debug("get_broadcast_state failed: %s", exc)
+            state = {"active": False}
+
+        active_alert_count = 0
+        try:
+            from datetime import datetime, timezone as _tz
+            from app_core.models import CAPAlert
+            now_utc = datetime.now(_tz.utc)
+            active_alert_count = (
+                CAPAlert.query.filter(CAPAlert.expires > now_utc).count()
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            route_logger.debug("active alert count failed: %s", exc)
+
+        payload = dict(state)
+        payload["active_alert_count"] = active_alert_count
+        payload["timestamp"] = utc_now().timestamp()
+        return jsonify(payload)
+
     @app.route("/ping")
     def ping():
         """Simple ping endpoint."""

@@ -309,10 +309,37 @@
     <!-- 3. Page-specific scripts -->
     {% block scripts %}{% endblock %}
 
-    <!-- Global EAS Broadcast Timer Overlay
-         Shown on ALL pages whenever the station is broadcasting (manual or
-         forwarded).  Driven by the broadcast_state_update WebSocket event
-         pushed by websocket_push.py reading the eas:broadcast_active Redis key. -->
+    <!-- Global EAS Broadcasting Modal Overlay
+         Shown on ALL pages whenever the station is in control of the air-chain
+         (manual send, message resend, or auto-forwarded alert).  Driven by the
+         same broadcast_state_update WebSocket event as the corner badge. -->
+    <div id="globalBroadcastingOverlay"
+         style="display:none;position:fixed;inset:0;z-index:9995;background:rgba(0,0,0,0.78);backdrop-filter:blur(2px);align-items:center;justify-content:center;flex-direction:column;color:#fff;text-align:center;padding:2rem;">
+        <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1.25rem;">
+            <span style="width:18px;height:18px;border-radius:50%;background:#ff4d4d;box-shadow:0 0 18px #ff4d4d;animation:gbcPulse 1s infinite;"></span>
+            <span style="font-size:1.1rem;font-weight:700;letter-spacing:.18em;color:#ff4d4d;text-transform:uppercase;">EAS Alert Broadcasting</span>
+            <span style="width:18px;height:18px;border-radius:50%;background:#ff4d4d;box-shadow:0 0 18px #ff4d4d;animation:gbcPulse 1s infinite;"></span>
+        </div>
+        <div id="gboSource" style="font-size:.78rem;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:rgba(255,255,255,.55);margin-bottom:.75rem;">On Air</div>
+        <div id="gboEventName" style="font-size:1.6rem;font-weight:600;color:#fff;max-width:80vw;overflow:hidden;text-overflow:ellipsis;margin-bottom:1.5rem;"></div>
+        <div id="gboRemaining" style="font-size:5.5rem;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.03em;line-height:1;color:#fff;">—</div>
+        <div style="margin-top:1rem;width:min(420px,80vw);background:rgba(255,255,255,.12);border-radius:6px;height:8px;overflow:hidden;">
+            <div id="gboBar" style="height:100%;background:#ff4d4d;border-radius:6px;width:100%;transition:width 1s linear;"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;width:min(420px,80vw);font-size:.78rem;color:rgba(255,255,255,.55);margin-top:.4rem;">
+            <span id="gboElapsed">0:00</span>
+            <span id="gboTotal"></span>
+        </div>
+        <div id="gboEom" style="display:none;margin-top:1.25rem;font-size:1rem;font-weight:700;letter-spacing:.15em;color:#28a745;text-transform:uppercase;">
+            <i class="fas fa-flag-checkered me-2"></i>End of Message
+        </div>
+        <div style="margin-top:1.5rem;font-size:.75rem;color:rgba(255,255,255,.45);max-width:560px;">
+            Air-chain is under EAS Station control.  Do not initiate another alert until this transmission completes.
+        </div>
+    </div>
+
+    <!-- Global EAS Broadcast Timer Overlay (corner badge)
+         Persistent ambient indicator that mirrors the modal overlay above. -->
     <div id="globalBroadcastTimer" style="display:none;position:fixed;bottom:1.5rem;right:1.5rem;z-index:9990;width:320px;pointer-events:none;animation:gbcSlideIn .3s ease-out;">
         <div id="globalBroadcastTimerInner" style="background:#0a0a14;border:2px solid #ff4d4d;border-radius:12px;padding:1rem 1.25rem;color:#fff;box-shadow:0 0 24px rgba(255,77,77,.4);">
             <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem;">
@@ -350,6 +377,16 @@
             return m + ':' + String(Math.floor(s % 60)).padStart(2, '0');
         }
 
+        function _sourceLabel(src) {
+            switch ((src || '').toLowerCase()) {
+                case 'manual':    return 'Manual Activation';
+                case 'forwarded': return 'Forwarded Alert';
+                case 'auto':      return 'Automatic Forward';
+                case 'resend':    return 'Re-Transmission';
+                default:          return 'On Air';
+            }
+        }
+
         function _startGbc(state) {
             _stopGbc();
             var overlay  = document.getElementById('globalBroadcastTimer');
@@ -361,32 +398,71 @@
             var eomEl     = document.getElementById('gbcEom');
             var nameEl    = document.getElementById('gbcEventName');
 
-            if (!overlay) return;
+            // Modal overlay elements
+            var modal     = document.getElementById('globalBroadcastingOverlay');
+            var modSource = document.getElementById('gboSource');
+            var modName   = document.getElementById('gboEventName');
+            var modRem    = document.getElementById('gboRemaining');
+            var modBar    = document.getElementById('gboBar');
+            var modElap   = document.getElementById('gboElapsed');
+            var modTot    = document.getElementById('gboTotal');
+            var modEom    = document.getElementById('gboEom');
+
+            if (!overlay && !modal) return;
 
             _gbcStart    = state.start_ts * 1000;   // server gives Unix seconds
             _gbcDuration = state.duration_seconds || 0;
 
-            nameEl.textContent = state.label || state.event_code || 'EAS Alert';
-            totalEl.textContent = _fmt(_gbcDuration);
-            eomEl.style.display = 'none';
-            inner.style.borderColor = '#ff4d4d';
-            barEl.style.background  = '#ff4d4d';
-            overlay.style.display   = 'block';
+            var labelText = state.label || state.event_code || 'EAS Alert';
+            var srcText   = _sourceLabel(state.source);
+
+            if (overlay) {
+                nameEl.textContent = labelText;
+                totalEl.textContent = _fmt(_gbcDuration);
+                eomEl.style.display = 'none';
+                inner.style.borderColor = '#ff4d4d';
+                barEl.style.background  = '#ff4d4d';
+                overlay.style.display   = 'block';
+            }
+
+            if (modal) {
+                modSource.textContent = srcText;
+                modName.textContent   = labelText;
+                modTot.textContent    = _fmt(_gbcDuration);
+                modEom.style.display  = 'none';
+                modBar.style.background = '#ff4d4d';
+                modal.style.display   = 'flex';
+            }
 
             _gbcInterval = setInterval(function () {
                 var elapsed   = (Date.now() - _gbcStart) / 1000;
                 var remaining = Math.max(0, _gbcDuration - elapsed);
                 var pct       = _gbcDuration > 0 ? Math.max(0, (remaining / _gbcDuration) * 100) : 0;
 
-                elapsedEl.textContent = _fmt(elapsed);
-                remEl.textContent     = _fmt(remaining);
-                barEl.style.width     = pct + '%';
-                remEl.style.color     = remaining <= 10 ? '#ff4d4d' : '#fff';
+                if (overlay) {
+                    elapsedEl.textContent = _fmt(elapsed);
+                    remEl.textContent     = _fmt(remaining);
+                    barEl.style.width     = pct + '%';
+                    remEl.style.color     = remaining <= 10 ? '#ff4d4d' : '#fff';
+                }
+
+                if (modal) {
+                    modElap.textContent = _fmt(elapsed);
+                    modRem.textContent  = _fmt(remaining);
+                    modBar.style.width  = pct + '%';
+                    modRem.style.color  = remaining <= 10 ? '#ff4d4d' : '#fff';
+                }
 
                 if (remaining <= 0) {
-                    eomEl.style.display    = 'block';
-                    inner.style.borderColor = '#28a745';
-                    barEl.style.background  = '#28a745';
+                    if (overlay) {
+                        eomEl.style.display    = 'block';
+                        inner.style.borderColor = '#28a745';
+                        barEl.style.background  = '#28a745';
+                    }
+                    if (modal) {
+                        modEom.style.display = 'block';
+                        modBar.style.background = '#28a745';
+                    }
                     clearInterval(_gbcInterval);
                     _gbcInterval = null;
                 }
@@ -397,6 +473,9 @@
             if (_gbcInterval) { clearInterval(_gbcInterval); _gbcInterval = null; }
             var overlay = document.getElementById('globalBroadcastTimer');
             if (overlay) overlay.style.display = 'none';
+            var modal = document.getElementById('globalBroadcastingOverlay');
+            if (modal) modal.style.display = 'none';
+            _gbcStart = null;
         }
 
         // Subscribe to broadcast_state_update via the shared WebSocket module.
@@ -413,8 +492,30 @@
             }
         }
 
+        // Immediate HTTP fetch so the overlay appears on the first paint of
+        // every page load, even if a broadcast is already in progress and the
+        // next WebSocket push hasn't arrived yet.
+        function _fetchBroadcastStateOnce() {
+            fetch('/api/broadcast/state', { cache: 'no-store' })
+                .then(function (r) { return r.ok ? r.json() : null; })
+                .then(function (data) { if (data) _handleBroadcastState(data); })
+                .catch(function () { /* non-fatal */ });
+        }
+        _fetchBroadcastStateOnce();
+
         if (window.EASWebSocket && window.EASWebSocket.subscribe) {
-            window.EASWebSocket.subscribe('broadcast_state_update', _handleBroadcastState);
+            // Pass a polling fallback so the overlay keeps tracking the airchain
+            // when the WebSocket drops or never connects.
+            window.EASWebSocket.subscribe(
+                'broadcast_state_update',
+                _handleBroadcastState,
+                {
+                    fallbackFn: window.EASWebSocket.createPollingFallback(
+                        '/api/broadcast/state', _handleBroadcastState
+                    ),
+                    fallbackInterval: 1500,
+                }
+            );
         }
     }());
     </script>
