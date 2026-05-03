@@ -597,9 +597,9 @@ class EASSettings(db.Model):
     # Allowed values: 'none', 'bell', 'beep', 'three_tone', 'qc2', 'dtmf'.
 
     pre_alert_chime_duration = db.Column(db.Float, nullable=False, default=2.0)
-    # Duration in seconds for the pre-alert chime (0.1–10.0). For QC-II,
-    # split 25%/75% between Tone A and Tone B (standard 1 s / 3 s ratio).
-    # Ignored for DTMF, which uses standard 100 ms tone / 50 ms gap timing.
+    # Duration in seconds for the pre-alert chime (0.1–10.0). Applies only
+    # to free-form profiles (bell, beep, three_tone). Ignored for DTMF
+    # (fixed 100 ms tone / 50 ms gap per digit) and QC-II (fixed 1 s + 3 s).
 
     post_alert_chime_duration = db.Column(db.Float, nullable=False, default=2.0)
     # Duration in seconds for the post-alert chime (0.1–10.0). See note above.

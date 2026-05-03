@@ -1622,10 +1622,10 @@ def _generate_chime(
         - 'beep':       sustained 1000 Hz sine for the full duration.
         - 'three_tone': three ascending tones (440, 880, 1320 Hz),
                         each occupying ~1/3 of the duration.
-        - 'qc2':        Motorola Quick Call II two-tone paging — Tone A
-                        (``qc2_tone_a_freq``) for ~25% of the duration,
-                        followed by Tone B (``qc2_tone_b_freq``) for ~75%.
-                        The 25/75 split matches the standard 1 s / 3 s ratio.
+        - 'qc2':        Motorola Quick Call II two-tone paging — fixed
+                        1 s Tone A (``qc2_tone_a_freq``) followed by
+                        3 s Tone B (``qc2_tone_b_freq``), 4 s total.
+                        ``duration`` is ignored to keep timing on-spec.
         - 'dtmf':       Plays each character of ``dtmf_sequence`` (digits
                         0-9, letters A-D, * or #) as its standard DTMF
                         low+high tone pair, using ITU-T Q.24 timing
@@ -1634,7 +1634,8 @@ def _generate_chime(
     Args:
         profile: Chime profile name (case-insensitive).
         duration: Total duration in seconds (clamped to 0.1–10.0).
-            Ignored when ``profile == 'dtmf'``.
+            Ignored when ``profile`` is ``'dtmf'`` or ``'qc2'`` — both use
+            standardized fixed timings.
         sample_rate: Output sample rate in Hz.
         amplitude: Peak signed-int amplitude (e.g. 0.7 * 32767).
         qc2_tone_a_freq: Tone A frequency in Hz when ``profile == 'qc2'``.
@@ -1719,8 +1720,11 @@ def _generate_chime(
         return samples
 
     if name in ('qc2', 'qcii', 'quickcall', 'quick_call', 'two_tone'):
-        # Standard QC-II split: Tone A occupies 25% (≈1 s of a 4 s chime),
-        # Tone B occupies the remaining 75% (≈3 s of a 4 s chime).
+        # Motorola Quick Call II is a standardized two-tone paging protocol
+        # with fixed timing: 1 s Tone A followed by 3 s Tone B (4 s total).
+        # `duration` is intentionally ignored — pagers time against the
+        # absolute 1 s / 3 s segments, so any other ratio produces a
+        # non-spec signal that real receivers may refuse to decode.
         try:
             freq_a = float(qc2_tone_a_freq)
         except (TypeError, ValueError):
@@ -1729,19 +1733,19 @@ def _generate_chime(
             freq_b = float(qc2_tone_b_freq)
         except (TypeError, ValueError):
             freq_b = 1500.0
-        # Clamp frequencies to the audible-but-paging-realistic range.
         freq_a = max(50.0, min(4000.0, freq_a))
         freq_b = max(50.0, min(4000.0, freq_b))
 
-        a_samples = max(1, total_samples // 4)
-        b_samples = max(1, total_samples - a_samples)
+        a_samples = max(1, int(1.0 * sample_rate))
+        b_samples = max(1, int(3.0 * sample_rate))
+        out: List[int] = []
         for n in range(a_samples):
             t = n / sample_rate
-            samples.append(int(math.sin(2 * math.pi * freq_a * t) * amplitude))
+            out.append(int(math.sin(2 * math.pi * freq_a * t) * amplitude))
         for n in range(b_samples):
             t = n / sample_rate
-            samples.append(int(math.sin(2 * math.pi * freq_b * t) * amplitude))
-        return samples
+            out.append(int(math.sin(2 * math.pi * freq_b * t) * amplitude))
+        return out
 
     # Unknown profile: be safe and emit no chime rather than raise.
     return []
