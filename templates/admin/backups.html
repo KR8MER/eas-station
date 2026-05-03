@@ -124,6 +124,83 @@
         </div>
     </div>
 
+    <!-- Auto-Backup Schedule Section -->
+    <div class="row mb-4">
+        <div class="col">
+            <div class="card">
+                <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-clock"></i> Automatic Backup Schedule</h5>
+                    <span id="auto-backup-status-badge" class="badge bg-secondary">Loading...</span>
+                </div>
+                <div class="card-body">
+                    <form id="auto-backup-form">
+                        <div class="row g-3">
+                            <div class="col-md-12">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="auto-backup-enabled" role="switch">
+                                    <label class="form-check-label fw-bold" for="auto-backup-enabled">
+                                        Enable automatic scheduled backups
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="auto-backup-options">
+                                <div class="row g-3">
+                                    <div class="col-md-3">
+                                        <label for="auto-backup-interval" class="form-label">Run every (hours)</label>
+                                        <input type="number" class="form-control" id="auto-backup-interval"
+                                               min="1" max="168" value="24">
+                                        <small class="text-muted">1–168 hours (e.g. 24 = daily)</small>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="auto-backup-hour" class="form-label">Preferred start hour (UTC)</label>
+                                        <select class="form-select" id="auto-backup-hour">
+                                            {% for h in range(24) %}
+                                            <option value="{{ h }}">{{ '%02d:00 UTC' % h }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        <small class="text-muted">First run aligned to this hour</small>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="auto-backup-keep" class="form-label">Keep last N auto-backups</label>
+                                        <input type="number" class="form-control" id="auto-backup-keep"
+                                               min="1" max="30" value="7">
+                                        <small class="text-muted">Older ones are deleted automatically</small>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label">Include in backup</label>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="auto-backup-media">
+                                            <label class="form-check-label" for="auto-backup-media">Media files</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="auto-backup-volumes">
+                                            <label class="form-check-label" for="auto-backup-volumes">System volumes</label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row mt-3">
+                                    <div class="col-md-6">
+                                        <div id="auto-backup-next" class="text-muted small"></div>
+                                        <div id="auto-backup-last" class="text-muted small"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mt-3 d-flex gap-2">
+                            <button type="submit" class="btn btn-dark">
+                                <i class="fas fa-save"></i> Save Schedule
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary" onclick="triggerAutoBackup()">
+                                <i class="fas fa-play"></i> Run Now
+                            </button>
+                        </div>
+                    </form>
+                    <div id="auto-backup-result" class="mt-3" style="display:none;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- System Validation Section -->
     <div class="row mb-4">
         <div class="col">
@@ -426,14 +503,13 @@ document.getElementById('create-backup-form').addEventListener('submit', async f
             // Reload page to show new backup
             setTimeout(() => window.location.reload(), 2000);
         } else {
+            const errMsg = data.error?.message || 'Backup failed';
+            const errDetail = data.error?.detail || '';
             resultDiv.innerHTML = `
                 <div class="alert alert-danger">
                     <h6><i class="fas fa-exclamation-circle"></i> Backup Failed</h6>
-                    <p class="mb-0">${data.message}</p>
-                    <details class="mt-2">
-                        <summary>Error Details</summary>
-                        <pre class="mb-0 mt-2">${data.error}</pre>
-                    </details>
+                    <p class="mb-0">${escapeHtml(errMsg)}</p>
+                    ${errDetail ? `<details class="mt-2"><summary>Error Details</summary><pre class="mb-0 mt-2">${escapeHtml(errDetail)}</pre></details>` : ''}
                 </div>
             `;
         }
@@ -497,16 +573,14 @@ async function executeRestore() {
                     </button>
                 </div>
             `;
-            // Don't auto-reload, let user choose to validate or manually reload
         } else {
+            const errMsg = data.error?.message || 'Restore failed';
+            const errDetail = data.error?.detail || '';
             resultDiv.innerHTML = `
                 <div class="alert alert-danger">
                     <h6><i class="fas fa-exclamation-circle"></i> Restore Failed</h6>
-                    <p class="mb-0">${data.message}</p>
-                    <details class="mt-2">
-                        <summary>Error Details</summary>
-                        <pre class="mb-0 mt-2">${data.error}</pre>
-                    </details>
+                    <p class="mb-0">${escapeHtml(errMsg)}</p>
+                    ${errDetail ? `<details class="mt-2"><summary>Error Details</summary><pre class="mb-0 mt-2">${escapeHtml(errDetail)}</pre></details>` : ''}
                 </div>
             `;
         }
@@ -728,5 +802,94 @@ function escapeHtml(text) {
     div.textContent = text;
     return div.innerHTML;
 }
+
+// ── Auto-backup ──────────────────────────────────────────────────────────────
+
+async function loadAutoBackupConfig() {
+    try {
+        const resp = await fetch('/api/backups/auto-backup/config');
+        const data = await resp.json();
+        if (!data.success) return;
+        const cfg = data.config;
+
+        document.getElementById('auto-backup-enabled').checked = cfg.enabled;
+        document.getElementById('auto-backup-interval').value = cfg.interval_hours ?? 24;
+        document.getElementById('auto-backup-hour').value = cfg.hour ?? 2;
+        document.getElementById('auto-backup-keep').value = cfg.keep_count ?? 7;
+        document.getElementById('auto-backup-media').checked = cfg.include_media ?? true;
+        document.getElementById('auto-backup-volumes').checked = cfg.include_volumes ?? false;
+
+        const badge = document.getElementById('auto-backup-status-badge');
+        badge.textContent = cfg.enabled ? 'Enabled' : 'Disabled';
+        badge.className = 'badge ' + (cfg.enabled ? 'bg-success' : 'bg-secondary');
+
+        const nextEl = document.getElementById('auto-backup-next');
+        const lastEl = document.getElementById('auto-backup-last');
+        nextEl.textContent = cfg.next_run ? 'Next run: ' + new Date(cfg.next_run).toLocaleString() : '';
+        if (cfg.last_run) {
+            const ok = cfg.last_run_success;
+            lastEl.textContent = 'Last run: ' + new Date(cfg.last_run).toLocaleString()
+                               + (ok === true ? ' ✓' : ok === false ? ' ✗ failed' : '');
+        } else {
+            lastEl.textContent = 'No previous auto-backup run';
+        }
+    } catch (e) {
+        console.warn('Could not load auto-backup config:', e);
+    }
+}
+
+document.getElementById('auto-backup-form').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const resultDiv = document.getElementById('auto-backup-result');
+    const payload = {
+        enabled: document.getElementById('auto-backup-enabled').checked,
+        interval_hours: parseInt(document.getElementById('auto-backup-interval').value, 10),
+        hour: parseInt(document.getElementById('auto-backup-hour').value, 10),
+        keep_count: parseInt(document.getElementById('auto-backup-keep').value, 10),
+        include_media: document.getElementById('auto-backup-media').checked,
+        include_volumes: document.getElementById('auto-backup-volumes').checked,
+    };
+    try {
+        const resp = await fetch('/api/backups/auto-backup/config', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload),
+        });
+        const data = await resp.json();
+        if (data.success) {
+            resultDiv.innerHTML = '<div class="alert alert-success"><i class="fas fa-check-circle"></i> Schedule saved successfully.</div>';
+            await loadAutoBackupConfig();
+        } else {
+            resultDiv.innerHTML = `<div class="alert alert-danger"><i class="fas fa-exclamation-circle"></i> ${escapeHtml(data.error?.message || 'Failed to save')}</div>`;
+        }
+    } catch (err) {
+        resultDiv.innerHTML = `<div class="alert alert-danger">${escapeHtml(err.message)}</div>`;
+    }
+    resultDiv.style.display = 'block';
+    setTimeout(() => { resultDiv.style.display = 'none'; }, 4000);
+});
+
+async function triggerAutoBackup() {
+    const resultDiv = document.getElementById('auto-backup-result');
+    resultDiv.innerHTML = '<div class="alert alert-info"><div class="spinner-border spinner-border-sm me-2"></div> Running backup...</div>';
+    resultDiv.style.display = 'block';
+    try {
+        const resp = await fetch('/api/backups/auto-backup/trigger', {method: 'POST'});
+        const data = await resp.json();
+        if (data.success) {
+            resultDiv.innerHTML = '<div class="alert alert-success"><i class="fas fa-check-circle"></i> Backup completed. Reloading...</div>';
+            setTimeout(() => window.location.reload(), 2000);
+        } else {
+            const errMsg = data.error?.message || 'Backup failed';
+            const errDetail = data.error?.detail || '';
+            resultDiv.innerHTML = `<div class="alert alert-danger"><i class="fas fa-exclamation-circle"></i> ${escapeHtml(errMsg)}${errDetail ? '<br><small>' + escapeHtml(errDetail) + '</small>' : ''}</div>`;
+        }
+    } catch (err) {
+        resultDiv.innerHTML = `<div class="alert alert-danger">${escapeHtml(err.message)}</div>`;
+    }
+}
+
+// Load auto-backup config on page load
+loadAutoBackupConfig();
 </script>
 {% endblock %}
