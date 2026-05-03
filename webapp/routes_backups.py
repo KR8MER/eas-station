@@ -432,6 +432,43 @@ def register(app: Flask, logger) -> None:
             "missing_files": missing_files,
         })
 
+    @app.route("/api/backups/auto-backup/config")
+    @require_auth
+    @require_role("Admin", "Operator")
+    def api_get_auto_backup_config():
+        """Return current auto-backup configuration and scheduler status."""
+        from app_core.backup_scheduler import get_scheduler
+        scheduler = get_scheduler(get_backup_dir())
+        return jsonify({"success": True, "config": scheduler.get_config()})
+
+    @app.route("/api/backups/auto-backup/config", methods=["POST"])
+    @require_auth
+    @require_role("Admin")
+    def api_set_auto_backup_config():
+        """Update auto-backup configuration."""
+        data = request.get_json() or {}
+        from app_core.backup_scheduler import get_scheduler
+        scheduler = get_scheduler(get_backup_dir())
+        try:
+            new_config = scheduler.update_config(data)
+            return jsonify({"success": True, "config": new_config})
+        except Exception as exc:
+            return error_response(HTTPStatus.BAD_REQUEST, "Invalid configuration", detail=str(exc))
+
+    @app.route("/api/backups/auto-backup/trigger", methods=["POST"])
+    @require_auth
+    @require_role("Admin", "Operator")
+    def api_trigger_auto_backup():
+        """Trigger an immediate auto-backup."""
+        from app_core.backup_scheduler import get_scheduler
+        scheduler = get_scheduler(get_backup_dir())
+        route_logger.info("Manual auto-backup trigger requested")
+        success = scheduler.trigger_now()
+        if success:
+            return jsonify({"success": True, "message": "Auto-backup completed successfully"})
+        return error_response(HTTPStatus.INTERNAL_SERVER_ERROR, "Auto-backup failed",
+                              detail="Check application logs for details")
+
     @app.route("/api/backups/validate-system", methods=["POST"])
     @require_auth
     @require_role("Admin", "Operator")

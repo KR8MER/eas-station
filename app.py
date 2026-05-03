@@ -749,6 +749,16 @@ if not skip_background_services:
         logger.warning('RWT scheduler could not be started: %s', rwt_scheduler_error)
         print(f"[PID {os.getpid()}] RWT scheduler failed: {rwt_scheduler_error}", file=sys.stderr, flush=True)
 
+# Start auto-backup scheduler
+if not skip_background_services:
+    try:
+        from app_core.backup_scheduler import start_scheduler as start_backup_scheduler
+        if not app.config.get('SETUP_MODE'):
+            start_backup_scheduler(app)
+            logger.info('Auto-backup scheduler started')
+    except Exception as _backup_sched_err:
+        logger.warning('Auto-backup scheduler could not be started: %s', _backup_sched_err)
+
 print(f"[PID {os.getpid()}] app.py module initialization COMPLETE", file=sys.stderr, flush=True)
 
 # =============================================================================

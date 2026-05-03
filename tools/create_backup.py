@@ -136,7 +136,7 @@ def run_pg_dump(env: Dict[str, str], output_path: Path) -> str:
     Raises:
         RuntimeError: If DATABASE_URL is not set or pg_dump fails
     """
-    database_url = env.get("DATABASE_URL")
+    database_url = env.get("DATABASE_URL") or os.environ.get("DATABASE_URL")
     if not database_url:
         raise RuntimeError("DATABASE_URL environment variable is required for backup")
     
