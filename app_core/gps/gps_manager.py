@@ -114,7 +114,7 @@ class GPSManager:
                 "Check hardware connection and settings.",
                 port_path,
             )
-            self._publish_status("port_not_found")
+            self._set_error_status("port_not_found")
             return False
 
         try:
@@ -130,11 +130,11 @@ class GPSManager:
                 "pyserial not installed — GPS reader unavailable. "
                 "Install with: pip install pyserial"
             )
-            self._publish_status("pyserial_missing")
+            self._set_error_status("pyserial_missing")
             return False
         except Exception as exc:
             self._logger.warning("Cannot open GPS serial port %s: %s", port_path, exc)
-            self._publish_status("port_open_failed")
+            self._set_error_status("port_open_failed")
             return False
 
         self._running = True
@@ -204,7 +204,7 @@ class GPSManager:
                 "pynmea2 not installed — GPS NMEA parsing unavailable. "
                 "Install with: pip install pynmea2"
             )
-            self._publish_status("pynmea2_missing")
+            self._set_error_status("pynmea2_missing")
             return
 
         self._logger.info("GPS reader loop started")
@@ -334,6 +334,19 @@ class GPSManager:
             self._redis.setex(REDIS_KEY, REDIS_TTL, json.dumps(data))
         except Exception as exc:
             self._logger.debug("Failed to publish GPS status to Redis: %s", exc)
+
+    def _set_error_status(self, status: str) -> None:
+        """Update the local fix dict and Redis with an error status.
+
+        Keeps the manager alive so callers can retrieve the error reason via
+        get_status() even after the Redis TTL expires.
+        """
+        with self._lock:
+            self._fix["running"] = False
+            self._fix["has_fix"] = False
+            self._fix["status"] = status
+            self._fix["timestamp"] = datetime.now(timezone.utc).isoformat()
+        self._publish_status(status)
 
     def _publish_status(self, status: str) -> None:
         """Write a minimal status entry to Redis."""

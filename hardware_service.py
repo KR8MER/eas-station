@@ -655,9 +655,9 @@ def initialize_gps_manager():
             redis_client=_redis_client,
             logger=logger.getChild("gps"),
         )
-        success = _gps_manager.start()
-        if not success:
-            _gps_manager = None
+        _gps_manager.start()
+        # Keep manager alive even on start() failure so get_status() can
+        # return the specific error reason (port_not_found, pyserial_missing, etc.)
 
     except Exception as e:
         logger.warning(f"⚠️  GPS manager not available: {e}")

@@ -729,15 +729,48 @@ function refreshGpsStatus() {
     fetch('/api/hardware/gps/status')
         .then(function(r) { return r.json(); })
         .then(function(d) {
-            var badge = d.has_fix
-                ? '<span class="badge bg-success">Fix Acquired</span>'
-                : (d.status === 'acquiring'
-                    ? '<span class="badge bg-warning text-dark">Acquiring</span>'
-                    : '<span class="badge bg-secondary">' + (d.status || 'No Fix') + '</span>');
+            var statusLabels = {
+                'fix': 'Fix Acquired',
+                'acquiring': 'Acquiring',
+                'no_fix': 'No Fix',
+                'port_not_found': 'Port Not Found',
+                'port_open_failed': 'Port Open Failed',
+                'pyserial_missing': 'pyserial Not Installed',
+                'pynmea2_missing': 'pynmea2 Not Installed',
+                'not_started': 'Not Started',
+                'disabled': 'Disabled',
+                'stopped': 'Stopped',
+                'reading': 'Reading…'
+            };
+            var errorStatuses = ['port_not_found', 'port_open_failed', 'pyserial_missing', 'pynmea2_missing'];
+            var label = statusLabels[d.status] || d.status || 'No Fix';
+            var badge;
+            if (d.has_fix) {
+                badge = '<span class="badge bg-success">Fix Acquired</span>';
+            } else if (d.status === 'acquiring') {
+                badge = '<span class="badge bg-warning text-dark">Acquiring</span>';
+            } else if (d.status === 'reading') {
+                badge = '<span class="badge bg-info text-dark">Reading…</span>';
+            } else if (errorStatuses.indexOf(d.status) !== -1) {
+                badge = '<span class="badge bg-danger">' + label + '</span>';
+            } else {
+                badge = '<span class="badge bg-secondary">' + label + '</span>';
+            }
+            var hint = '';
+            if (d.status === 'port_not_found') {
+                hint = '<div class="col-12 mt-1"><span class="text-danger small"><i class="fas fa-exclamation-triangle"></i> Serial port <code>' + (d.serial_port || '/dev/serial0') + '</code> not found. Check that the GPS HAT is connected and the port is correct. On Raspberry Pi, enable UART via <code>raspi-config</code>.</span></div>';
+            } else if (d.status === 'pyserial_missing') {
+                hint = '<div class="col-12 mt-1"><span class="text-danger small"><i class="fas fa-exclamation-triangle"></i> <code>pyserial</code> is not installed. Run: <code>pip install pyserial</code></span></div>';
+            } else if (d.status === 'pynmea2_missing') {
+                hint = '<div class="col-12 mt-1"><span class="text-danger small"><i class="fas fa-exclamation-triangle"></i> <code>pynmea2</code> is not installed. Run: <code>pip install pynmea2</code></span></div>';
+            } else if (d.status === 'port_open_failed') {
+                hint = '<div class="col-12 mt-1"><span class="text-danger small"><i class="fas fa-exclamation-triangle"></i> Could not open serial port. Check permissions and that the port is not in use.</span></div>';
+            }
             var html = '<div class="row g-2 small">'
                 + '<div class="col-sm-4"><strong>Status:</strong> ' + badge + '</div>'
                 + '<div class="col-sm-4"><strong>Port:</strong> <code>' + (d.serial_port || '—') + '</code></div>'
-                + '<div class="col-sm-4"><strong>Satellites:</strong> ' + (d.satellites !== null && d.satellites !== undefined ? d.satellites : '—') + '</div>';
+                + '<div class="col-sm-4"><strong>Satellites:</strong> ' + (d.satellites !== null && d.satellites !== undefined ? d.satellites : '—') + '</div>'
+                + hint;
             if (d.has_fix) {
                 html += '<div class="col-sm-4"><strong>Latitude:</strong> ' + (d.latitude !== null ? d.latitude.toFixed(6) + '°' : '—') + '</div>'
                     + '<div class="col-sm-4"><strong>Longitude:</strong> ' + (d.longitude !== null ? d.longitude.toFixed(6) + '°' : '—') + '</div>'
