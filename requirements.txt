@@ -114,8 +114,8 @@ gpiozero==2.0.1
 # the modern `lgpio` kernel API under the hood. Required so gpiozero can
 # arm a rising-edge interrupt on the GPS HAT's PPS pin on Raspberry Pi 5
 # / Bookworm, where the original RPi.GPIO library no longer works
-# (/dev/mem is locked down). Ships prebuilt wheels — no swig/compiler
-# needed during install. Conflicts with the original RPi.GPIO package
+# (/dev/mem is locked down). Its lgpio dependency requires swig to build
+# from source (install.sh/update.sh install swig via apt). Conflicts with the original RPi.GPIO package
 # (`pip install RPi.GPIO` must NOT be used alongside this).
 rpi-lgpio>=0.6
 rpi-ws281x>=0.0.5  # NeoPixel/WS2812B addressable LED strip control (requires DMA/root on Pi)
