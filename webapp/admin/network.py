@@ -386,16 +386,6 @@ def configure_gps():
     return jsonify(call_hardware_service('/api/hardware/gps/configure', method='POST', data=data))
 
 
-@network_bp.route('/api/hardware/gps/nmea')
-@require_permission('system.configure')
-def get_gps_nmea():
-    """Return raw NMEA sentence log via hardware-service."""
-    limit = request.args.get('limit', default=50, type=int)
-    return jsonify(call_hardware_service(
-        f'/api/hardware/gps/nmea?limit={limit}', method='GET'
-    ))
-
-
 def register_network_routes(app, logger):
     """Register network management routes with the Flask app."""
     app.register_blueprint(network_bp)
