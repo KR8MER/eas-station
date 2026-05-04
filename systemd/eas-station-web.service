@@ -97,7 +97,11 @@ CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_AUDIT_WRITE CAP_SYS_ADMIN
 
 # Resource limits
 LimitNOFILE=65536
-MemoryMax=512M
+# 1500M: the web service imports numpy/scipy/numba plus all Flask/GeoAlchemy
+# dependencies, which easily exceeds 512M on Pi-class hardware.  512M caused
+# gunicorn workers to be silently OOM-killed by the cgroup before wsgi.py
+# could finish its import, leaving no workers alive and nginx returning 502.
+MemoryMax=1500M
 
 [Install]
 WantedBy=multi-user.target eas-station.target
