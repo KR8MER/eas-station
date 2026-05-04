@@ -460,6 +460,7 @@ class GPSManager:
                             continue
                         bucket[prn] = {
                             "prn": prn,
+                            "constellation": talker,
                             "elevation": _safe_int(
                                 getattr(msg, "elevation_deg_%d" % i, None)
                             ),
