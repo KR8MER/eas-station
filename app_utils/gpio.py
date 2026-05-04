@@ -77,10 +77,15 @@ try:  # pragma: no cover - allow fallback to a mock pin factory when hardware is
 except Exception:  # pragma: no cover - mock factory may be unavailable in minimal installs
     MockFactory = None  # type: ignore[assignment]
 
-try:  # pragma: no cover - Pi 5 prefers lgpio backend
-    import lgpio as LGPIO  # type: ignore
-except Exception:  # pragma: no cover - not all environments ship with lgpio
-    LGPIO = None
+# NOTE: lgpio is intentionally NOT imported here at module level.
+# Importing lgpio starts a native background notification thread immediately,
+# which deadlocks gunicorn gevent workers (the thread blocks gevent's
+# monkey-patched I/O loop for the full worker timeout).  The web process
+# imports this module eagerly via webapp/eas/workflow.py and
+# webapp/routes/system_controls.py, so any top-level lgpio import poisons
+# every gunicorn worker even though the web process never touches GPIO.
+# lgpio is imported lazily inside _LGPIOBackend.__init__ so it is only loaded
+# in processes that actually instantiate the backend (hardware_service.py).
 
 # NOTE: The legacy RPi.GPIO library is deprecated upstream and no longer
 # supported by this project. We rely on gpiozero's abstractions (with optional
@@ -115,20 +120,26 @@ class _LGPIOBackend:
     """Adapter for the modern lgpio library used on Raspberry Pi 5."""
 
     def __init__(self) -> None:
-        if LGPIO is None:  # pragma: no cover - guard in case import fails later
-            raise RuntimeError("lgpio module unavailable")
+        # Import lazily: lgpio starts a native background thread on import,
+        # which deadlocks gevent workers.  Only import when the backend is
+        # actually instantiated (i.e., in hardware_service, not in the web app).
+        try:  # pragma: no cover - only present on Raspberry Pi
+            import lgpio as _lgpio  # type: ignore
+        except Exception as exc:  # pragma: no cover
+            raise RuntimeError("lgpio module unavailable") from exc
+        self._lgpio = _lgpio
         self.BCM = "BCM"  # Pin numbering hint for logging purposes
         self.OUT = "out"
         self.HIGH = 1
         self.LOW = 0
         self._claimed_pins: set[int] = set()
         self._chip: Optional[int] = None
-        self._free = getattr(LGPIO, "gpio_free", getattr(LGPIO, "gpio_release", None))
+        self._free = getattr(_lgpio, "gpio_free", getattr(_lgpio, "gpio_release", None))
 
     def _ensure_chip(self) -> None:
         if self._chip is None:
             # Open the primary gpiochip (0). On Pi boards BCM numbering maps here.
-            self._chip = LGPIO.gpiochip_open(0)
+            self._chip = self._lgpio.gpiochip_open(0)
 
     def setmode(self, mode: object) -> None:  # pragma: no cover - lgpio ignores modes
         self._ensure_chip()
@@ -136,18 +147,18 @@ class _LGPIOBackend:
     def setup(self, pin: int, mode: object, *, initial: int) -> None:
         self._ensure_chip()
         # Claim the line for output and drive it to the requested resting level.
-        LGPIO.gpio_claim_output(self._chip, pin, initial)
+        self._lgpio.gpio_claim_output(self._chip, pin, initial)
         self._claimed_pins.add(pin)
 
     def output(self, pin: int, value: int) -> None:
         if self._chip is None:
             raise RuntimeError("lgpio chip handle not initialized")
-        LGPIO.gpio_write(self._chip, pin, value)
+        self._lgpio.gpio_write(self._chip, pin, value)
 
     def read(self, pin: int) -> int:
         if self._chip is None:
             raise RuntimeError("lgpio chip handle not initialized")
-        return int(LGPIO.gpio_read(self._chip, pin))
+        return int(self._lgpio.gpio_read(self._chip, pin))
 
     def cleanup(self, pin: Optional[int] = None) -> None:
         if self._chip is None:
@@ -161,7 +172,7 @@ class _LGPIOBackend:
         for line in pins:
             try:
                 # Drive the line low before releasing for predictable state.
-                LGPIO.gpio_write(self._chip, line, self.LOW)
+                self._lgpio.gpio_write(self._chip, line, self.LOW)
             except Exception:
                 # Ignore failures when releasing (e.g., already freed)
                 pass
@@ -173,7 +184,7 @@ class _LGPIOBackend:
             self._claimed_pins.discard(line)
 
         if pin is None or not self._claimed_pins:
-            LGPIO.gpiochip_close(self._chip)
+            self._lgpio.gpiochip_close(self._chip)
             self._chip = None
 
 
@@ -403,8 +414,9 @@ def _create_gpio_backend(exclude: Optional[Set[type]] = None) -> Optional[GPIOBa
     exclude_set = exclude if exclude is not None else set()
 
     candidates: List[tuple[type, Callable[[], GPIOBackend]]] = []
-    if LGPIO is not None:
-        candidates.append((_LGPIOBackend, _LGPIOBackend))
+    # _LGPIOBackend imports lgpio lazily in __init__; if lgpio is unavailable
+    # the constructor raises RuntimeError and the factory try/except skips it.
+    candidates.append((_LGPIOBackend, _LGPIOBackend))
     candidates.append((_SysfsGPIOBackend, _SysfsGPIOBackend))
     candidates.append((_NullGPIOBackend, _NullGPIOBackend))
 
