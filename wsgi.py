@@ -61,7 +61,28 @@ print(f"\n{'=' * 80}", file=sys.stderr, flush=True)
 print(f"WSGI PRE-IMPORT: Worker PID {os.getpid()} about to import app module...", file=sys.stderr, flush=True)
 print(f"{'=' * 80}\n", file=sys.stderr, flush=True)
 
+# DIAGNOSTIC: Arm faulthandler to dump a Python stack trace after 60s of no
+# progress.  If the import hangs (e.g. a network/DB/GPIO call at module load),
+# the journal will show the exact frame the worker is stuck on.  The handler
+# is cancelled the moment the import returns successfully.
+import faulthandler  # noqa: E402
+try:
+    faulthandler.dump_traceback_later(
+        60,
+        repeat=True,
+        file=sys.stderr,
+        exit=False,
+    )
+except Exception as _fh_err:
+    print(f"WSGI: faulthandler not armed: {_fh_err}", file=sys.stderr, flush=True)
+
 from app import app as application, socketio, initialize_database  # noqa: E402
+
+# Import returned — cancel the watchdog before it fires again.
+try:
+    faulthandler.cancel_dump_traceback_later()
+except Exception:
+    pass
 
 # DIAGNOSTIC: Print immediately after import completes
 print(f"\n{'=' * 80}", file=sys.stderr, flush=True)
