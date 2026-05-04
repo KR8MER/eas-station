@@ -936,6 +936,27 @@ function snrClass(snr) {
 var SNR_COLORS = { 'snr-s0':'#484f58','snr-s1':'#f85149','snr-s2':'#f97316','snr-s3':'#d29922','snr-s4':'#84cc16','snr-s5':'#3fb950' };
 function snrHex(snr) { return SNR_COLORS[snrClass(snr)] || '#484f58'; }
 
+/* Per-constellation colours for sky plot dots and the table PRN badge.
+   Keys are NMEA talker IDs (msg.talker on the backend); unknowns fall
+   back to neutral grey. */
+var CONSTELLATION_INFO = {
+    'GP': { color: '#58a6ff', label: 'GPS' },
+    'GL': { color: '#f85149', label: 'GLONASS' },
+    'GA': { color: '#bc8cff', label: 'Galileo' },
+    'GB': { color: '#ffa657', label: 'BeiDou' },
+    'GQ': { color: '#79c0ff', label: 'QZSS' },
+    'GI': { color: '#84cc16', label: 'NavIC' }
+};
+function constellationInfo(code) {
+    return CONSTELLATION_INFO[code] || { color: '#8b949e', label: code || 'Unknown' };
+}
+/* Map SNR to dot opacity so strong sats glow and weak ones fade,
+   while colour stays locked to constellation. */
+function snrAlpha(snr) {
+    if (snr === null || snr === undefined) return 0.55;
+    return Math.max(0.45, Math.min(0.95, 0.4 + snr / 60));
+}
+
 /* Draw the polar sky plot onto a <canvas> element */
 function drawSkyPlot(canvas, satsInView, activePrns) {
     var ctx = canvas.getContext('2d');
@@ -995,7 +1016,7 @@ function drawSkyPlot(canvas, satsInView, activePrns) {
         var x = cx + r * Math.sin(azRad);
         var y = cy - r * Math.cos(azRad);
         var isUsed = activePrns.indexOf(sat.prn) !== -1;
-        var color = snrHex(sat.snr);
+        var color = constellationInfo(sat.constellation).color;
 
         // Glow for used-in-fix sats
         if (isUsed && sat.snr !== null) {
@@ -1005,11 +1026,11 @@ function drawSkyPlot(canvas, satsInView, activePrns) {
             ctx.fill();
         }
 
-        // Satellite circle
+        // Satellite circle — colour by constellation, alpha by SNR
         ctx.beginPath();
         ctx.arc(x, y, 8, 0, Math.PI * 2);
         ctx.fillStyle = color;
-        ctx.globalAlpha = 0.88;
+        ctx.globalAlpha = snrAlpha(sat.snr);
         ctx.fill();
         ctx.globalAlpha = 1;
         ctx.strokeStyle = isUsed ? '#ffffff' : '#444c56';
@@ -1072,11 +1093,13 @@ function buildSatTable(satsInView, activePrns) {
         var snr = sat.snr;
         var barW = snr !== null ? Math.min(100, Math.round(snr / 50 * 100)) : 0;
         var barColor = snrHex(snr);
+        var info = constellationInfo(sat.constellation);
+        var constDot = '<span title="' + info.label + '" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:' + info.color + ';margin-right:5px;vertical-align:middle"></span>';
         var usedMark = used
             ? '<span style="color:#3fb950">&#10003;</span>'
             : '<span style="color:#30363d">&#183;</span>';
         return '<tr class="' + cls + '">'
-            + '<td style="text-align:right;padding-right:8px">' + sat.prn + '</td>'
+            + '<td style="text-align:right;padding-right:8px;white-space:nowrap">' + constDot + sat.prn + '</td>'
             + '<td style="text-align:right;padding-right:8px">' + (sat.elevation !== null ? sat.elevation : '&mdash;') + '</td>'
             + '<td style="text-align:right;padding-right:10px">' + (sat.azimuth !== null ? sat.azimuth : '&mdash;') + '</td>'
             + '<td><span class="gps-snr-track"><span class="gps-snr-fill" style="width:' + barW + '%;background:' + barColor + '"></span></span></td>'
@@ -1084,6 +1107,17 @@ function buildSatTable(satsInView, activePrns) {
             + '<td style="padding-left:6px;text-align:center">' + usedMark + '</td>'
             + '</tr>';
     }).join('');
+
+    // Constellation legend — only shows the talkers actually present in this view
+    var presentConsts = {};
+    allSats.forEach(function (s) { if (s.constellation) presentConsts[s.constellation] = true; });
+    var constLegend = Object.keys(presentConsts).sort().map(function (code) {
+        var info = constellationInfo(code);
+        return '<span><span class="snr-dot" style="background:' + info.color + '"></span>' + info.label + '</span>';
+    }).join('');
+    var constLegendHtml = constLegend
+        ? '<div class="snr-legend" style="margin-top:2px">' + constLegend + '</div>'
+        : '';
 
     return almanacNote
         + '<table class="gps-sat-table">'
@@ -1103,7 +1137,8 @@ function buildSatTable(satsInView, activePrns) {
         + '<span><span class="snr-dot snr-s2"></span>15&ndash;24</span>'
         + '<span><span class="snr-dot snr-s1"></span>&lt;15</span>'
         + '<span><span class="snr-dot snr-s0"></span>no sig</span>'
-        + '</div>';
+        + '</div>'
+        + constLegendHtml;
 }
 
 /* Build the scrollable NMEA sentence log */

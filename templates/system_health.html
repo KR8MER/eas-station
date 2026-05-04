@@ -3608,6 +3608,24 @@
         const _GPS_SNR_COLORS = { 'snr-s0':'#484f58','snr-s1':'#f85149','snr-s2':'#f97316','snr-s3':'#d29922','snr-s4':'#84cc16','snr-s5':'#3fb950' };
         function gpsSnrHex(snr) { return _GPS_SNR_COLORS[gpsSnrClass(snr)] || '#484f58'; }
 
+        /* Per-constellation colours for sky plot dots and the table PRN badge.
+           Keys are NMEA talker IDs from msg.talker; unknowns fall back to grey. */
+        const _GPS_CONST_INFO = {
+            'GP': { color: '#58a6ff', label: 'GPS' },
+            'GL': { color: '#f85149', label: 'GLONASS' },
+            'GA': { color: '#bc8cff', label: 'Galileo' },
+            'GB': { color: '#ffa657', label: 'BeiDou' },
+            'GQ': { color: '#79c0ff', label: 'QZSS' },
+            'GI': { color: '#84cc16', label: 'NavIC' }
+        };
+        function gpsConstInfo(code) {
+            return _GPS_CONST_INFO[code] || { color: '#8b949e', label: code || 'Unknown' };
+        }
+        function gpsSnrAlpha(snr) {
+            if (snr === null || snr === undefined) return 0.55;
+            return Math.max(0.45, Math.min(0.95, 0.4 + snr / 60));
+        }
+
         function drawGpsSkyPlot(canvas, satsInView, activePrns) {
             const ctx = canvas.getContext('2d');
             const W = canvas.width, H = canvas.height;
@@ -3652,14 +3670,14 @@
                 const x = cx + r * Math.sin(azRad);
                 const y = cy - r * Math.cos(azRad);
                 const isUsed = (activePrns || []).indexOf(sat.prn) !== -1;
-                const color = gpsSnrHex(sat.snr);
+                const color = gpsConstInfo(sat.constellation).color;
 
                 if (isUsed && sat.snr !== null) {
                     ctx.beginPath(); ctx.arc(x, y, 11, 0, Math.PI * 2);
                     ctx.fillStyle = color + '28'; ctx.fill();
                 }
                 ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI * 2);
-                ctx.fillStyle = color; ctx.globalAlpha = 0.88; ctx.fill();
+                ctx.fillStyle = color; ctx.globalAlpha = gpsSnrAlpha(sat.snr); ctx.fill();
                 ctx.globalAlpha = 1;
                 ctx.strokeStyle = isUsed ? '#ffffff' : '#444c56';
                 ctx.lineWidth = isUsed ? 1.5 : 0.8; ctx.stroke();
@@ -3694,11 +3712,13 @@
                 const snr  = sat.snr;
                 const barW = snr !== null ? Math.min(100, Math.round(snr / 50 * 100)) : 0;
                 const barColor = gpsSnrHex(snr);
+                const info = gpsConstInfo(sat.constellation);
+                const constDot = `<span title="${info.label}" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${info.color};margin-right:5px;vertical-align:middle"></span>`;
                 const mark = used
                     ? '<span style="color:#3fb950">&#10003;</span>'
                     : '<span style="color:#30363d">&#183;</span>';
                 return `<tr class="${used ? 'sat-used' : 'sat-unused'}">
-                    <td style="text-align:right;padding-right:8px">${sat.prn}</td>
+                    <td style="text-align:right;padding-right:8px;white-space:nowrap">${constDot}${sat.prn}</td>
                     <td style="text-align:right;padding-right:8px">${sat.elevation !== null ? sat.elevation : '&mdash;'}</td>
                     <td style="text-align:right;padding-right:10px">${sat.azimuth !== null ? sat.azimuth : '&mdash;'}</td>
                     <td><span class="gps-snr-track"><span class="gps-snr-fill" style="width:${barW}%;background:${barColor}"></span></span></td>
@@ -3706,6 +3726,17 @@
                     <td style="padding-left:6px;text-align:center">${mark}</td>
                 </tr>`;
             }).join('');
+
+            // Constellation legend — only the talkers actually present in this view
+            const presentConsts = {};
+            allSats.forEach(s => { if (s.constellation) presentConsts[s.constellation] = true; });
+            const constLegend = Object.keys(presentConsts).sort().map(code => {
+                const info = gpsConstInfo(code);
+                return `<span><span class="snr-dot" style="background:${info.color}"></span>${info.label}</span>`;
+            }).join('');
+            const constLegendHtml = constLegend
+                ? `<div class="snr-legend" style="margin-top:2px">${constLegend}</div>`
+                : '';
 
             return `<table class="gps-sat-table">
                 <thead><tr>
@@ -3724,7 +3755,7 @@
                 <span><span class="snr-dot snr-s2"></span>15&ndash;24</span>
                 <span><span class="snr-dot snr-s1"></span>&lt;15</span>
                 <span><span class="snr-dot snr-s0"></span>no sig</span>
-            </div>`;
+            </div>${constLegendHtml}`;
         }
         /* ── end GPS sky-plot helpers ── */
 
