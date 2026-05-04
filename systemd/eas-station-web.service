@@ -42,7 +42,7 @@ ExecStartPre=/opt/eas-station/venv/bin/python3 /opt/eas-station/scripts/check_ge
 # System packages (numpy, scipy, SoapySDR) may conflict with gevent C extensions
 ExecStart=/opt/eas-station/venv/bin/gunicorn \
     --bind 0.0.0.0:5000 \
-    --workers 2 \
+    --workers 1 \
     --timeout 300 \
     --worker-class gevent \
     --worker-connections 1000 \
