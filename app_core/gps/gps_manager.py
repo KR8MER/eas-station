@@ -64,6 +64,19 @@ _FIX_QUALITY = {
 }
 
 
+def _safe_int(val) -> Optional[int]:
+    """Convert a value to int, returning None for empty/None/invalid values."""
+    if val is None:
+        return None
+    s = str(val).strip()
+    if not s:
+        return None
+    try:
+        return int(float(s))
+    except (ValueError, TypeError):
+        return None
+
+
 class GPSManager:
     """Background thread that reads NMEA sentences from a GPS serial port
     and publishes position/time data to Redis.
@@ -96,6 +109,11 @@ class GPSManager:
         # Most-recently parsed fix data (protected by _lock)
         self._lock = threading.Lock()
         self._fix: Dict[str, Any] = self._empty_fix()
+
+        # GSV accumulation buffer — reader thread only, no lock needed
+        self._gsv_buffer: Dict[int, Dict[str, Any]] = {}
+        # PPS GPIO interrupt state
+        self._pps_gpio_active: bool = False
 
     # ------------------------------------------------------------------
     # Public API
@@ -144,6 +162,7 @@ class GPSManager:
             daemon=True,
         )
         self._thread.start()
+        self._start_pps_monitor()
         self._logger.info(
             "✅ GPS reader started on %s @ %d baud (PPS GPIO %d)",
             port_path,
@@ -157,6 +176,13 @@ class GPSManager:
         self._running = False
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=3)
+        if self._pps_gpio_active:
+            try:
+                import RPi.GPIO as GPIO  # type: ignore[import]
+                GPIO.remove_event_detect(self._pps_pin)
+            except Exception:
+                pass
+            self._pps_gpio_active = False
         if self._ser:
             try:
                 self._ser.close()
@@ -168,7 +194,19 @@ class GPSManager:
     def get_status(self) -> Dict[str, Any]:
         """Return the most-recently parsed GPS fix as a dictionary."""
         with self._lock:
-            return dict(self._fix)
+            data = dict(self._fix)
+        # Compute age of the last PPS pulse so the UI can colour the blinkenlite
+        last_pulse = data.get("pps_last_pulse_at")
+        if last_pulse:
+            try:
+                pulse_dt = datetime.fromisoformat(last_pulse)
+                age = (datetime.now(timezone.utc) - pulse_dt).total_seconds()
+                data["pps_pulse_age_s"] = round(age, 2)
+            except Exception:
+                data["pps_pulse_age_s"] = None
+        else:
+            data["pps_pulse_age_s"] = None
+        return data
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -193,6 +231,12 @@ class GPSManager:
             "pps_gpio_pin": self._pps_pin,
             "status": "stopped",
             "timestamp": datetime.now(timezone.utc).isoformat(),
+            # Per-satellite view data (from GSV / GSA)
+            "satellites_in_view": [],
+            "active_satellite_prns": [],
+            # PPS pulse tracking
+            "pps_last_pulse_at": None,
+            "pps_pulse_count": 0,
         }
 
     def _reader_loop(self) -> None:
@@ -318,8 +362,54 @@ class GPSManager:
                             self._fix["gps_utc_time"] = str(msg.timestamp)
 
             elif sentence_type == "GSV":
-                # Satellites in View — update satellite count if GGA not recent
-                pass  # Satellite count is taken from GGA
+                # Satellites in View — parse per-satellite PRN/elevation/azimuth/SNR
+                try:
+                    total_msgs = int(msg.num_messages) if msg.num_messages else 1
+                    msg_num = int(msg.msg_num) if msg.msg_num else 1
+                    if msg_num == 1:
+                        self._gsv_buffer.clear()
+                    for i in range(1, 5):
+                        prn_raw = getattr(msg, "sv_prn_num_%d" % i, None)
+                        if not prn_raw:
+                            break
+                        try:
+                            prn = int(prn_raw)
+                        except (ValueError, TypeError):
+                            continue
+                        self._gsv_buffer[prn] = {
+                            "prn": prn,
+                            "elevation": _safe_int(
+                                getattr(msg, "elevation_deg_%d" % i, None)
+                            ),
+                            "azimuth": _safe_int(
+                                getattr(msg, "azimuth_%d" % i, None)
+                            ),
+                            "snr": _safe_int(
+                                getattr(msg, "snr_%d" % i, None)
+                            ),
+                        }
+                    if msg_num >= total_msgs:
+                        self._fix["satellites_in_view"] = sorted(
+                            list(self._gsv_buffer.values()),
+                            key=lambda s: s["prn"],
+                        )
+                except Exception:
+                    pass
+
+            elif sentence_type == "GSA":
+                # GPS DOP and Active Satellites
+                try:
+                    active = []
+                    for i in range(1, 13):
+                        prn_raw = getattr(msg, "sv_id%02d" % i, None)
+                        if prn_raw and str(prn_raw).strip():
+                            try:
+                                active.append(int(prn_raw))
+                            except (ValueError, TypeError):
+                                pass
+                    self._fix["active_satellite_prns"] = active
+                except Exception:
+                    pass
 
         # Publish to Redis after releasing lock
         self._publish_current_fix()
@@ -334,6 +424,44 @@ class GPSManager:
             self._redis.setex(REDIS_KEY, REDIS_TTL, json.dumps(data))
         except Exception as exc:
             self._logger.debug("Failed to publish GPS status to Redis: %s", exc)
+
+    def _start_pps_monitor(self) -> None:
+        """Set up an RPi.GPIO rising-edge interrupt to detect PPS pulses.
+
+        Silently no-ops if RPi.GPIO is unavailable (e.g. development host)
+        or if the GPIO pin cannot be configured.
+        """
+        if not self._pps_pin:
+            return
+        try:
+            import RPi.GPIO as GPIO  # type: ignore[import]
+
+            GPIO.setmode(GPIO.BCM)
+            GPIO.setup(self._pps_pin, GPIO.IN, pull_up_down=GPIO.PUD_OFF)
+            GPIO.add_event_detect(
+                self._pps_pin,
+                GPIO.RISING,
+                callback=self._pps_pulse_callback,
+            )
+            self._pps_gpio_active = True
+            self._logger.info(
+                "PPS blinkenlite armed on GPIO BCM %d", self._pps_pin
+            )
+        except ImportError:
+            self._logger.debug(
+                "RPi.GPIO not available — PPS blinkenlite disabled"
+            )
+        except Exception as exc:
+            self._logger.debug(
+                "PPS GPIO setup failed on BCM %d: %s", self._pps_pin, exc
+            )
+
+    def _pps_pulse_callback(self, channel: int) -> None:
+        """Called by the RPi.GPIO interrupt thread on each PPS rising edge."""
+        now = datetime.now(timezone.utc).isoformat()
+        with self._lock:
+            self._fix["pps_last_pulse_at"] = now
+            self._fix["pps_pulse_count"] = self._fix.get("pps_pulse_count", 0) + 1
 
     def _set_error_status(self, status: str) -> None:
         """Update the local fix dict and Redis with an error status.

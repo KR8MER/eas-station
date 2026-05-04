@@ -107,9 +107,7 @@ PIN_ROWS: List[Tuple[PinDefinition, PinDefinition]] = [
             "GPIO 4",
             "gpio",
             bcm=4,
-            description="GPCLK0 / General I/O",
-            reserved_for="Argon OLED module",
-            reserved_detail="Front-panel button",
+            description="GPCLK0 / GPS HAT PPS (default)",
         ),
         PinDefinition(
             8,
