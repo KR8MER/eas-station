@@ -427,7 +427,7 @@
 }
 </style>
 
-<script src="https://cdn.socket.io/4.5.4/socket.io.min.js" crossorigin="anonymous"></script>
+<script src="{{ url_for('static', filename='vendor/socketio/socket.io.min.js') }}"></script>
 <script>
 let audioSources = [];
 let audioMonitoringSocket = null;
@@ -2483,11 +2483,6 @@ window.addEventListener('beforeunload', function() {
     }
 });
 </script>
-
-<!-- Socket.IO for real-time updates -->
-<script src="https://cdn.socket.io/4.5.4/socket.io.min.js"
-        integrity="sha384-/KNQL8Nu5gCHLqwqfQjA689Hhoqgi2S84SNUxC3roTe4EhJ9AfLkp8QiQcU8AMzI"
-        crossorigin="anonymous"></script>
 
 <!-- Real-time VU Meters (60Hz updates using Web Audio API) -->
 <script src="{{ url_for('static', filename='js/realtime-vu-meters.js') }}"></script>

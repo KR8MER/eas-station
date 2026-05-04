@@ -233,34 +233,34 @@
                 <div class="tech-stack-card">
                 <div class="tech-stack-badges">
                     <a href="https://github.com/KR8MER/eas-station" target="_blank" rel="noopener noreferrer" class="tech-badge">
-                        <img src="https://img.shields.io/badge/Git%20Commit-{{ commit_badge_encoded }}-181717?style=for-the-badge&logo=github&logoColor=white" alt="Git commit {{ commit_badge_text }}">
+                        <img src="https://img.shields.io/badge/Git%20Commit-{{ commit_badge_encoded }}-181717?style=for-the-badge&logo=github&logoColor=white" alt="Git commit {{ commit_badge_text }}" loading="lazy">
                     </a>
                     <a href="https://www.python.org/" target="_blank" rel="noopener noreferrer" class="tech-badge">
-                        <img src="https://img.shields.io/badge/Python-3.13-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.13">
+                        <img src="https://img.shields.io/badge/Python-3.13-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.13" loading="lazy">
                     </a>
                     <a href="https://flask.palletsprojects.com/" target="_blank" rel="noopener noreferrer" class="tech-badge">
-                        <img src="https://img.shields.io/badge/Flask-3.1.2-000000?style=for-the-badge&logo=flask&logoColor=white" alt="Flask 3.1.2">
+                        <img src="https://img.shields.io/badge/Flask-3.1.2-000000?style=for-the-badge&logo=flask&logoColor=white" alt="Flask 3.1.2" loading="lazy">
                     </a>
                     <a href="https://www.postgresql.org/" target="_blank" rel="noopener noreferrer" class="tech-badge">
-                        <img src="https://img.shields.io/badge/PostgreSQL-17%20%2B%20PostGIS-0093D0?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL + PostGIS">
+                        <img src="https://img.shields.io/badge/PostgreSQL-17%20%2B%20PostGIS-0093D0?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL + PostGIS" loading="lazy">
                     </a>
                     <a href="https://gunicorn.org/" target="_blank" rel="noopener noreferrer" class="tech-badge">
-                        <img src="https://img.shields.io/badge/Gunicorn-23.0.0-499848?style=for-the-badge&logo=gunicorn&logoColor=white" alt="Gunicorn">
+                        <img src="https://img.shields.io/badge/Gunicorn-23.0.0-499848?style=for-the-badge&logo=gunicorn&logoColor=white" alt="Gunicorn" loading="lazy">
                     </a>
                     <a href="https://nginx.org/" target="_blank" rel="noopener noreferrer" class="tech-badge">
-                        <img src="https://img.shields.io/badge/Nginx-Alpine-009639?style=for-the-badge&logo=nginx&logoColor=white" alt="Nginx">
+                        <img src="https://img.shields.io/badge/Nginx-Alpine-009639?style=for-the-badge&logo=nginx&logoColor=white" alt="Nginx" loading="lazy">
                     </a>
                     <a href="https://icecast.org/" target="_blank" rel="noopener noreferrer" class="tech-badge">
-                        <img src="https://img.shields.io/badge/Icecast-2.4.4-1F3B73?style=for-the-badge{% if icecast_logo %}&logo={{ icecast_logo | urlencode }}{% endif %}" alt="Icecast">
+                        <img src="https://img.shields.io/badge/Icecast-2.4.4-1F3B73?style=for-the-badge{% if icecast_logo %}&logo={{ icecast_logo | urlencode }}{% endif %}" alt="Icecast" loading="lazy">
                     </a>
                     <a href="https://getbootstrap.com/" target="_blank" rel="noopener noreferrer" class="tech-badge">
-                        <img src="https://img.shields.io/badge/Bootstrap-5.3.0-7952B3?style=for-the-badge&logo=bootstrap&logoColor=white" alt="Bootstrap">
+                        <img src="https://img.shields.io/badge/Bootstrap-5.3.0-7952B3?style=for-the-badge&logo=bootstrap&logoColor=white" alt="Bootstrap" loading="lazy">
                     </a>
                     <a href="https://leafletjs.com/" target="_blank" rel="noopener noreferrer" class="tech-badge">
-                        <img src="https://img.shields.io/badge/Leaflet-1.9.4-199900?style=for-the-badge&logo=leaflet&logoColor=white" alt="Leaflet">
+                        <img src="https://img.shields.io/badge/Leaflet-1.9.4-199900?style=for-the-badge&logo=leaflet&logoColor=white" alt="Leaflet" loading="lazy">
                     </a>
                     <a href="https://github.com/pothosware/SoapySDR" target="_blank" rel="noopener noreferrer" class="tech-badge">
-                        <img src="https://img.shields.io/badge/SoapySDR-enabled-FF6600?style=for-the-badge{% if soapysdr_logo %}&logo={{ soapysdr_logo | urlencode }}{% endif %}" alt="SoapySDR">
+                        <img src="https://img.shields.io/badge/SoapySDR-enabled-FF6600?style=for-the-badge{% if soapysdr_logo %}&logo={{ soapysdr_logo | urlencode }}{% endif %}" alt="SoapySDR" loading="lazy">
                     </a>
                 </div>
                 </div>
@@ -282,10 +282,8 @@
     <!-- 1. Bootstrap first -->
     <script src="{{ url_for('static', filename='vendor/bootstrap/bootstrap.bundle.min.js') }}"></script>
 
-    <!-- 2. Socket.IO for real-time WebSocket updates -->
-    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"
-            integrity="sha384-/KNQL8Nu5gCHLqwqfQjA689Hhoqgi2S84SNUxC3roTe4EhJ9AfLkp8QiQcU8AMzI"
-            crossorigin="anonymous"></script>
+    <!-- 2. Socket.IO for real-time WebSocket updates (vendored locally to avoid CDN dependency) -->
+    <script src="{{ url_for('static', filename='vendor/socketio/socket.io.min.js') }}"></script>
 
     <!-- 3. EAS Station Core JavaScript Modules -->
     <!-- CRITICAL: Load cache.js FIRST to intercept all fetch calls and prevent server overload -->
