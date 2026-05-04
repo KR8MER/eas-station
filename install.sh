@@ -1153,6 +1153,7 @@ BASE_PACKAGES=(
     gcc
     g++
     make
+    swig
     libpq-dev
     libev-dev
     libevent-dev

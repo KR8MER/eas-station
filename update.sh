@@ -648,6 +648,7 @@ echo ""
 BASE_PACKAGES=(
     python3-dev
     build-essential
+    swig
     libpq-dev
     libev-dev
     libevent-dev
