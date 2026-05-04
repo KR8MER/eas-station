@@ -150,6 +150,57 @@
             border-top: 1px solid color-mix(in srgb, #f85149 30%, var(--border-color));
             font-size: 0.75rem;
         }
+        /* GPS time-series charts */
+        .gps-charts-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0;
+            border-top: 1px solid var(--border-color);
+            background: var(--surface-color);
+        }
+        .gps-chart-panel {
+            flex: 1 1 260px;
+            padding: 8px 12px 6px;
+            border-right: 1px solid var(--border-color);
+        }
+        .gps-chart-panel:last-child { border-right: none; }
+        .gps-chart-title {
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+        .gps-chart-canvas {
+            display: block;
+            width: 100%;
+            height: 110px;
+            border-radius: 3px;
+        }
+        .gps-chart-legend {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 4px;
+            font-size: 0.68rem;
+            color: var(--text-muted);
+        }
+        .gps-chart-legend span { display: inline-flex; align-items: center; gap: 4px; }
+        .gps-chart-legend-line {
+            display: inline-block;
+            width: 16px;
+            height: 2px;
+            border-radius: 1px;
+            flex-shrink: 0;
+        }
+        .gps-chart-legend-dash {
+            display: inline-block;
+            width: 16px;
+            height: 0;
+            border-top: 2px dashed currentColor;
+            flex-shrink: 0;
+        }
     </style>
 {% endblock %}
 
@@ -876,7 +927,33 @@
 })();
 
 // ── GPS Live Panel ────────────────────────────────────────────────────
-var _gpsPollTimer = null;
+var _gpsPollTimer  = null;
+var _gpsHistory    = [];        // rolling ring: max 150 samples ≈ 5 min
+var _GPS_HIST_MAX  = 150;
+
+/* Qualitative signal strength (matches Verizon / industry thresholds) */
+function snrQuality(snr) {
+    if (snr === null || snr === undefined) return { label: '—',      color: null };
+    if (snr >= 31)  return { label: 'Strong', color: '#3fb950' };
+    if (snr >= 20)  return { label: 'Fair',   color: '#d29922' };
+    return               { label: 'Weak',   color: '#f85149' };
+}
+
+/* Append one data point to the rolling history buffer */
+function updateGpsHistory(d) {
+    var sats = d.satellites_in_view || [];
+    var snrs = sats.map(function(s) { return s.snr; })
+                   .filter(function(v) { return v !== null && v !== undefined && v > 0; });
+    _gpsHistory.push({
+        t:       Date.now(),
+        visible: sats.length || (d.satellites != null ? d.satellites : 0),
+        used:    (d.active_satellite_prns || []).length,
+        maxSnr:  snrs.length ? Math.max.apply(null, snrs) : null,
+        avgSnr:  snrs.length ? Math.round(snrs.reduce(function(a,b){return a+b;},0) / snrs.length * 10) / 10 : null,
+        minSnr:  snrs.length ? Math.min.apply(null, snrs) : null
+    });
+    if (_gpsHistory.length > _GPS_HIST_MAX) _gpsHistory.shift();
+}
 
 function startGpsPolling() {
     stopGpsPolling();
@@ -903,6 +980,126 @@ function snrHex(snr) { return SNR_COLORS[snrClass(snr)] || '#484f58'; }
 /* Read a CSS custom property from :root */
 function gpsCssVar(name) {
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+/* Generic themed line chart drawn onto a canvas element.
+   series: [{label, color, data:[number|null, ...]}]
+   opts:   {yMin, yMax, threshold, thresholdLabel, thresholdColor} */
+function drawLineChart(canvas, series, opts) {
+    canvas.width  = canvas.offsetWidth  || 300;
+    canvas.height = canvas.offsetHeight || 110;
+    var ctx = canvas.getContext('2d');
+    var W = canvas.width, H = canvas.height;
+    var PAD = { top: 8, right: 8, bottom: 22, left: 32 };
+    var cW = W - PAD.left - PAD.right;
+    var cH = H - PAD.top  - PAD.bottom;
+
+    var bgColor     = gpsCssVar('--surface-color') || '#ffffff';
+    var borderColor = gpsCssVar('--border-color')  || '#e2e8f0';
+    var mutedColor  = gpsCssVar('--text-muted')    || '#94a3b8';
+
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = bgColor;
+    ctx.fillRect(0, 0, W, H);
+
+    // Collect all values to determine y range
+    var allVals = [];
+    series.forEach(function(s) {
+        s.data.forEach(function(v) { if (v !== null) allVals.push(v); });
+    });
+    if (opts && opts.threshold !== undefined) allVals.push(opts.threshold);
+    var yMin = (opts && opts.yMin !== undefined) ? opts.yMin
+             : (allVals.length ? Math.floor(Math.min.apply(null, allVals)) : 0);
+    var yMax = (opts && opts.yMax !== undefined) ? opts.yMax
+             : (allVals.length ? Math.ceil(Math.max.apply(null, allVals))  : 10);
+    if (yMax <= yMin) yMax = yMin + 1;
+    var yRange = yMax - yMin;
+
+    function mapY(v)    { return PAD.top + cH * (1 - (v - yMin) / yRange); }
+    function mapX(i, n) { return PAD.left + (n > 1 ? (i / (n - 1)) : 0.5) * cW; }
+
+    // Horizontal grid lines + Y-axis labels
+    var gridSteps = 4;
+    for (var gi = 0; gi <= gridSteps; gi++) {
+        var gv = yMin + yRange * gi / gridSteps;
+        var gy = mapY(gv);
+        ctx.strokeStyle = borderColor;
+        ctx.lineWidth = 0.5;
+        ctx.beginPath(); ctx.moveTo(PAD.left, gy); ctx.lineTo(PAD.left + cW, gy); ctx.stroke();
+        ctx.fillStyle = mutedColor;
+        ctx.font = '9px sans-serif';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(Math.round(gv), PAD.left - 3, gy);
+    }
+
+    // Threshold dashed line
+    if (opts && opts.threshold !== undefined) {
+        var ty = mapY(opts.threshold);
+        ctx.save();
+        ctx.setLineDash([4, 3]);
+        ctx.strokeStyle = opts.thresholdColor || '#f85149';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(PAD.left, ty); ctx.lineTo(PAD.left + cW, ty); ctx.stroke();
+        ctx.restore();
+        if (opts.thresholdLabel) {
+            ctx.fillStyle = opts.thresholdColor || '#f85149';
+            ctx.font = '8px sans-serif';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'bottom';
+            ctx.fillText(opts.thresholdLabel, PAD.left + 2, ty - 1);
+        }
+    }
+
+    // Series lines
+    series.forEach(function(s) {
+        var n = s.data.length;
+        if (!n) return;
+        ctx.beginPath();
+        var started = false;
+        for (var i = 0; i < n; i++) {
+            if (s.data[i] === null) { started = false; continue; }
+            var x = mapX(i, n), y = mapY(s.data[i]);
+            if (!started) { ctx.moveTo(x, y); started = true; }
+            else ctx.lineTo(x, y);
+        }
+        ctx.strokeStyle = s.color;
+        ctx.lineWidth = 1.5;
+        ctx.lineJoin = 'round';
+        ctx.stroke();
+    });
+
+    // Time axis labels
+    if (_gpsHistory.length >= 2) {
+        function fmtT(ts) {
+            var d = new Date(ts);
+            return d.getHours().toString().padStart(2,'0') + ':'
+                 + d.getMinutes().toString().padStart(2,'0') + ':'
+                 + d.getSeconds().toString().padStart(2,'0');
+        }
+        ctx.fillStyle = mutedColor;
+        ctx.font = '9px sans-serif';
+        ctx.textBaseline = 'top';
+        ctx.textAlign = 'left';
+        ctx.fillText(fmtT(_gpsHistory[0].t), PAD.left, H - PAD.bottom + 4);
+        ctx.textAlign = 'right';
+        ctx.fillText(fmtT(_gpsHistory[_gpsHistory.length - 1].t), PAD.left + cW, H - PAD.bottom + 4);
+    }
+}
+
+function drawCountChart(canvas) {
+    drawLineChart(canvas, [
+        { label: 'Visible', color: '#5aaee8', data: _gpsHistory.map(function(h){return h.visible;}) },
+        { label: 'Used',    color: '#3fb950', data: _gpsHistory.map(function(h){return h.used;})    }
+    ], { yMin: 0, threshold: 4, thresholdLabel: 'min 4', thresholdColor: '#f85149' });
+}
+
+function drawSnrChart(canvas) {
+    drawLineChart(canvas, [
+        { label: 'Max', color: '#3fb950', data: _gpsHistory.map(function(h){return h.maxSnr;}) },
+        { label: 'Avg', color: '#5aaee8', data: _gpsHistory.map(function(h){return h.avgSnr;}) },
+        { label: 'Min', color: '#f97316', data: _gpsHistory.map(function(h){return h.minSnr;}) }
+    ], { yMin: 0, threshold: 25, thresholdLabel: 'good', thresholdColor: '#d29922' });
 }
 
 /* Draw the polar sky plot onto a <canvas> element */
@@ -1041,6 +1238,12 @@ function buildSatTable(satsInView, activePrns) {
         var usedMark = used
             ? '<span style="color:#3fb950">&#10003;</span>'
             : '<span class="gps-muted">&#183;</span>';
+        var q = snrQuality(snr);
+        var qualHtml = q.color
+            ? '<span style="color:' + q.color + '">'
+              + '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:' + q.color + ';margin-right:3px;vertical-align:middle"></span>'
+              + q.label + '</span>'
+            : '<span class="gps-muted">' + q.label + '</span>';
         return '<tr class="' + cls + '">'
             + '<td style="text-align:right;padding-right:8px">' + sat.prn + '</td>'
             + '<td style="text-align:right;padding-right:8px">' + (sat.elevation !== null ? sat.elevation : '&mdash;') + '</td>'
@@ -1048,6 +1251,7 @@ function buildSatTable(satsInView, activePrns) {
             + '<td><span class="gps-snr-track"><span class="gps-snr-fill" style="width:' + barW + '%;background:' + barColor + '"></span></span></td>'
             + '<td style="padding-left:5px;text-align:right">' + (snr !== null ? snr : '&mdash;') + '</td>'
             + '<td style="padding-left:6px;text-align:center">' + usedMark + '</td>'
+            + '<td style="padding-left:8px;white-space:nowrap">' + qualHtml + '</td>'
             + '</tr>';
     }).join('');
 
@@ -1058,16 +1262,14 @@ function buildSatTable(satsInView, activePrns) {
         + '<th style="text-align:right">Az&deg;</th>'
         + '<th colspan="2">C/N&#x2080; (dBHz)</th>'
         + '<th style="text-align:center">Fix</th>'
+        + '<th>Quality</th>'
         + '</tr></thead>'
         + '<tbody>' + rows + '</tbody>'
         + '</table>'
         + '<div class="snr-legend">'
-        + '<span><span class="snr-dot snr-s5"></span>&ge;45</span>'
-        + '<span><span class="snr-dot snr-s4"></span>35&ndash;44</span>'
-        + '<span><span class="snr-dot snr-s3"></span>25&ndash;34</span>'
-        + '<span><span class="snr-dot snr-s2"></span>15&ndash;24</span>'
-        + '<span><span class="snr-dot snr-s1"></span>&lt;15</span>'
-        + '<span><span class="snr-dot snr-s0"></span>no sig</span>'
+        + '<span><span class="snr-dot" style="background:#3fb950"></span>Strong &ge;31</span>'
+        + '<span><span class="snr-dot" style="background:#d29922"></span>Fair 20&ndash;30</span>'
+        + '<span><span class="snr-dot" style="background:#f85149"></span>Weak &lt;20</span>'
         + '</div>';
 }
 
@@ -1138,6 +1340,9 @@ function refreshGpsStatus() {
             var usedCount   = activePrns.length;
             var viewCount   = satsInView.length || (d.satellites != null ? d.satellites : 0);
 
+            // Accumulate history for time-series charts
+            updateGpsHistory(d);
+
             // ── Header bar ──────────────────────────────────────────
             var headerHtml =
                 '<div class="gps-live-header">'
@@ -1187,17 +1392,48 @@ function refreshGpsStatus() {
             }
             footerHtml += '</div>';
 
+            // ── Time-series charts ───────────────────────────────────
+            var chartsHtml =
+                '<div class="gps-charts-row">'
+                + '<div class="gps-chart-panel">'
+                + '<div class="gps-chart-title">Satellite Count</div>'
+                + '<canvas id="gps-count-chart" class="gps-chart-canvas"></canvas>'
+                + '<div class="gps-chart-legend">'
+                + '<span><span class="gps-chart-legend-line" style="background:#5aaee8"></span>Visible</span>'
+                + '<span><span class="gps-chart-legend-line" style="background:#3fb950"></span>Used</span>'
+                + '<span><span class="gps-chart-legend-dash" style="color:#f85149"></span>Min (4)</span>'
+                + '</div>'
+                + '</div>'
+                + '<div class="gps-chart-panel">'
+                + '<div class="gps-chart-title">Signal Quality (dBHz)</div>'
+                + '<canvas id="gps-snr-chart" class="gps-chart-canvas"></canvas>'
+                + '<div class="gps-chart-legend">'
+                + '<span><span class="gps-chart-legend-line" style="background:#3fb950"></span>Max</span>'
+                + '<span><span class="gps-chart-legend-line" style="background:#5aaee8"></span>Avg</span>'
+                + '<span><span class="gps-chart-legend-line" style="background:#f97316"></span>Min</span>'
+                + '<span><span class="gps-chart-legend-dash" style="color:#d29922"></span>Good</span>'
+                + '</div>'
+                + '</div>'
+                + '</div>';
+
             container.innerHTML =
                 '<div class="gps-live-panel">'
                 + headerHtml
                 + errorHtml
                 + bodyHtml
                 + footerHtml
+                + chartsHtml
                 + '</div>';
 
             // Draw sky plot onto the freshly-inserted canvas
-            var canvas = document.getElementById('gps-sky-canvas');
-            if (canvas) drawSkyPlot(canvas, satsInView, activePrns);
+            var skyCanvas = document.getElementById('gps-sky-canvas');
+            if (skyCanvas) drawSkyPlot(skyCanvas, satsInView, activePrns);
+
+            // Draw time-series charts
+            var countCanvas = document.getElementById('gps-count-chart');
+            if (countCanvas) drawCountChart(countCanvas);
+            var snrCanvas = document.getElementById('gps-snr-chart');
+            if (snrCanvas) drawSnrChart(snrCanvas);
         })
         .catch(function (err) {
             var c = document.getElementById('gps-status-card');
