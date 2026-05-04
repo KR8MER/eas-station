@@ -2300,6 +2300,31 @@ def create_api_app():
             logger.error(f"Error getting GPS status: {e}", exc_info=True)
             return jsonify({'success': False, 'error': str(e)}), 500
 
+    @api_app.route('/api/hardware/gps/nmea', methods=['GET'])
+    def get_gps_nmea():
+        """Return the rolling NMEA sentence log + per-type counters."""
+        try:
+            limit = request.args.get('limit', default=50, type=int)
+            limit = max(1, min(limit, 200))
+            if _gps_manager is not None:
+                return jsonify(_gps_manager.get_nmea_log(limit=limit))
+            from app_core.hardware_settings import get_gps_settings
+            gps_settings = get_gps_settings()
+            return jsonify({
+                'running': False,
+                'serial_port': gps_settings.get('serial_port', '/dev/serial0'),
+                'baudrate': gps_settings.get('baudrate', 9600),
+                'total_sentences': 0,
+                'parse_errors': 0,
+                'counts_by_type': {},
+                'sentences': [],
+                'status': 'disabled' if not gps_settings.get('enabled') else 'not_started',
+                'timestamp': datetime.now(timezone.utc).isoformat(),
+            })
+        except Exception as e:
+            logger.error(f"Error getting GPS NMEA log: {e}", exc_info=True)
+            return jsonify({'success': False, 'error': str(e)}), 500
+
     @api_app.route('/api/hardware/gps/configure', methods=['POST'])
     def configure_gps():
         """Save GPS configuration and restart the GPS manager."""
