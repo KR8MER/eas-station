@@ -1226,10 +1226,10 @@ function refreshGpsStatus() {
             if (d.has_fix) {
                 var lat  = d.latitude  != null ? d.latitude.toFixed(6)  + '&deg;' : '&mdash;';
                 var lon  = d.longitude != null ? d.longitude.toFixed(6) + '&deg;' : '&mdash;';
-                var alt  = d.altitude_m != null ? d.altitude_m.toFixed(1) + ' m' : '&mdash;';
+                var alt  = d.altitude_m != null ? (d.altitude_m * 3.28084).toFixed(0) + ' ft' : '&mdash;';
                 var hdop = d.hdop != null ? d.hdop : '&mdash;';
                 var utc  = d.gps_utc_time || '&mdash;';
-                var spd  = d.speed_knots != null ? d.speed_knots.toFixed(1) + ' kn' : null;
+                var spd  = d.speed_knots != null ? (d.speed_knots * 1.15078).toFixed(1) + ' mph' : null;
                 footerHtml +=
                     '<span><span class="gps-lbl">Lat&nbsp;</span>' + lat + '</span>'
                     + '<span><span class="gps-lbl">Lon&nbsp;</span>' + lon + '</span>'

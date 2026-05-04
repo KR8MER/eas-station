@@ -1890,7 +1890,7 @@
                                         <span class="metric-value">
                                             {{ "%.6f"|format(gps.latitude) ~ '°' if gps.get('latitude') is not none else '—' }},
                                             {{ "%.6f"|format(gps.longitude) ~ '°' if gps.get('longitude') is not none else '—' }}
-                                            <span class="ms-2">Alt {{ "%.1f"|format(gps.altitude_m) ~ ' m' if gps.get('altitude_m') is not none else '—' }}</span>
+                                            <span class="ms-2">Alt {{ "%.0f"|format(gps.altitude_m * 3.28084) ~ ' ft' if gps.get('altitude_m') is not none else '—' }}</span>
                                             <span class="ms-2">HDOP {{ gps.get('hdop') or '—' }}</span>
                                         </span>
                                     </div>
@@ -3761,7 +3761,7 @@
             if (hasFix) {
                 const lat = gps.latitude  != null ? gps.latitude.toFixed(6)  + '°' : '—';
                 const lon = gps.longitude != null ? gps.longitude.toFixed(6) + '°' : '—';
-                const alt = gps.altitude_m != null ? gps.altitude_m.toFixed(1) + ' m' : '—';
+                const alt = gps.altitude_m != null ? (gps.altitude_m * 3.28084).toFixed(0) + ' ft' : '—';
                 posHtml = `<div class="metric-row"><span class="metric-label">Position:</span>
                     <span class="metric-value d-inline-flex flex-wrap gap-2">${escapeHtml(lat)}, ${escapeHtml(lon)}<span>Alt ${escapeHtml(alt)}</span><span>HDOP ${gps.hdop != null ? escapeHtml(String(gps.hdop)) : '—'}</span></span></div>`;
             }
