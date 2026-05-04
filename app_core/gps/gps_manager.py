@@ -33,7 +33,7 @@ Hardware:
 Dependencies:
 - pyserial: Serial port I/O
 - pynmea2: NMEA-0183 sentence parser
-- RPi.GPIO (optional): PPS pulse reading
+- gpiozero (optional): PPS pulse reading via GPIO interrupt
 """
 
 import json
@@ -41,14 +41,38 @@ import logging
 import os
 import threading
 import time
+from collections import Counter, deque
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Deque, Dict, List, Optional
 
 
 # Redis key used for GPS status storage
 REDIS_KEY = "gps:status"
+# Redis key used for the rolling NMEA sentence log
+REDIS_NMEA_KEY = "gps:nmea"
 # TTL in seconds for the Redis key (refreshed every poll cycle)
 REDIS_TTL = 15
+# Maximum number of raw NMEA sentences kept in the rolling log
+NMEA_LOG_SIZE = 50
+
+def _nmea_checksum(payload: str) -> str:
+    """Return the two-character XOR checksum used in NMEA / PMTK sentences."""
+    cs = 0
+    for ch in payload:
+        cs ^= ord(ch)
+    return f"{cs:02X}"
+
+
+# MTK3339 PMTK command to enable RMC, GGA, GSA, GSV, VTG NMEA output.
+#   RMC=1Hz, VTG=1Hz, GGA=1Hz, GSA=1Hz, GSV every 5 fixes (≈5s @1Hz),
+#   all other sentences disabled.
+# Adafruit's Ultimate GPS HAT (#2324) ships emitting RMC+GGA only — without
+# this command the sky-view (GSV) and active-satellite (GSA) data never
+# arrive, so the UI shows "No satellite data yet…" indefinitely.
+_PMTK_SET_NMEA_OUTPUT_BODY = "PMTK314,0,1,1,1,1,5,0,0,0,0,0,0,0,0,0,0,0,0,0"
+PMTK_SET_NMEA_OUTPUT = (
+    f"${_PMTK_SET_NMEA_OUTPUT_BODY}*{_nmea_checksum(_PMTK_SET_NMEA_OUTPUT_BODY)}\r\n"
+)
 
 # NMEA fix quality codes
 _FIX_QUALITY = {
@@ -114,6 +138,17 @@ class GPSManager:
         self._gsv_buffer: Dict[int, Dict[str, Any]] = {}
         # PPS GPIO interrupt state
         self._pps_gpio_active: bool = False
+        self._pps_device = None  # gpiozero.DigitalInputDevice instance
+        self._pps_backend: Optional[str] = None  # 'gpiozero', 'rpi.gpio', or None
+        self._pps_error: Optional[str] = None    # human-readable failure reason
+
+        # Rolling raw NMEA sentence log (newest last) — protected by _lock
+        self._nmea_log: Deque[Dict[str, Any]] = deque(maxlen=NMEA_LOG_SIZE)
+        # Per-sentence-type counters (e.g. {"GGA": 17, "GSV": 4, ...})
+        self._nmea_counts: Counter = Counter()
+        # Counters for parse errors / sentence read errors
+        self._nmea_parse_errors: int = 0
+        self._nmea_total: int = 0
 
     # ------------------------------------------------------------------
     # Public API
@@ -155,6 +190,11 @@ class GPSManager:
             self._set_error_status("port_open_failed")
             return False
 
+        # Send the PMTK command to enable GGA/GSA/GSV/RMC/VTG output. The
+        # Adafruit GPS HAT only emits RMC+GGA out of the box, so without this
+        # nudge the sky view and active-satellite list stay empty.
+        self._configure_mtk3339()
+
         self._running = True
         self._thread = threading.Thread(
             target=self._reader_loop,
@@ -176,13 +216,19 @@ class GPSManager:
         self._running = False
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=3)
-        if self._pps_gpio_active:
+        if self._pps_device is not None:
+            try:
+                self._pps_device.close()
+            except Exception:
+                pass
+            self._pps_device = None
+        if self._pps_gpio_active and self._pps_backend == "rpi.gpio":
             try:
                 import RPi.GPIO as GPIO  # type: ignore[import]
                 GPIO.remove_event_detect(self._pps_pin)
             except Exception:
                 pass
-            self._pps_gpio_active = False
+        self._pps_gpio_active = False
         if self._ser:
             try:
                 self._ser.close()
@@ -195,6 +241,10 @@ class GPSManager:
         """Return the most-recently parsed GPS fix as a dictionary."""
         with self._lock:
             data = dict(self._fix)
+            data["nmea_counts"] = dict(self._nmea_counts)
+            data["nmea_total"] = self._nmea_total
+            data["nmea_parse_errors"] = self._nmea_parse_errors
+            data["nmea_recent"] = list(self._nmea_log)[-10:]
         # Compute age of the last PPS pulse so the UI can colour the blinkenlite
         last_pulse = data.get("pps_last_pulse_at")
         if last_pulse:
@@ -206,7 +256,30 @@ class GPSManager:
                 data["pps_pulse_age_s"] = None
         else:
             data["pps_pulse_age_s"] = None
+        data["pps_backend"] = self._pps_backend
+        data["pps_error"] = self._pps_error
+        data["pps_gpio_active"] = self._pps_gpio_active
         return data
+
+    def get_nmea_log(self, limit: int = NMEA_LOG_SIZE) -> Dict[str, Any]:
+        """Return the rolling NMEA sentence log + per-type counters."""
+        with self._lock:
+            log_items = list(self._nmea_log)
+            counts = dict(self._nmea_counts)
+            total = self._nmea_total
+            parse_errors = self._nmea_parse_errors
+        if limit > 0:
+            log_items = log_items[-limit:]
+        return {
+            "running": self._running,
+            "serial_port": self._serial_port,
+            "baudrate": self._baudrate,
+            "total_sentences": total,
+            "parse_errors": parse_errors,
+            "counts_by_type": counts,
+            "sentences": log_items,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -237,6 +310,9 @@ class GPSManager:
             # PPS pulse tracking
             "pps_last_pulse_at": None,
             "pps_pulse_count": 0,
+            "pps_backend": None,
+            "pps_error": None,
+            "pps_gpio_active": False,
         }
 
     def _reader_loop(self) -> None:
@@ -273,12 +349,20 @@ class GPSManager:
 
                 consecutive_errors = 0
 
+                # Log the raw sentence regardless of whether it parses cleanly
+                # so the diagnostics page can show the actual bytes coming
+                # off the serial port (talker IDs, checksums, missing fields).
+                parse_ok = True
                 try:
                     msg = pynmea2.parse(line)
                 except pynmea2.ParseError:
-                    continue
+                    parse_ok = False
+                    msg = None
 
-                self._handle_sentence(msg)
+                self._record_raw_sentence(line, parse_ok=parse_ok)
+
+                if parse_ok and msg is not None:
+                    self._handle_sentence(msg)
 
             except Exception as exc:
                 consecutive_errors += 1
@@ -425,14 +509,101 @@ class GPSManager:
         except Exception as exc:
             self._logger.debug("Failed to publish GPS status to Redis: %s", exc)
 
-    def _start_pps_monitor(self) -> None:
-        """Set up an RPi.GPIO rising-edge interrupt to detect PPS pulses.
+    def _record_raw_sentence(self, line: str, parse_ok: bool = True) -> None:
+        """Append a raw NMEA sentence to the rolling log and update counters."""
+        # Type code is the 3 chars after the talker (e.g. $GPGSV → GSV).
+        # If the line is malformed we still record it as 'UNKNOWN' so the
+        # diagnostics page can flag the operator to the bad bytes.
+        sentence_type = "UNKNOWN"
+        if parse_ok and line.startswith("$") and "," in line:
+            head = line.split(",", 1)[0]  # $GPGSV
+            if len(head) >= 6:
+                sentence_type = head[3:6]
+        now_iso = datetime.now(timezone.utc).isoformat()
+        with self._lock:
+            self._nmea_total += 1
+            if not parse_ok:
+                self._nmea_parse_errors += 1
+            self._nmea_counts[sentence_type] += 1
+            # Trim very long sentences so the JSON payload stays small
+            text = line if len(line) <= 200 else (line[:197] + "...")
+            self._nmea_log.append({
+                "ts": now_iso,
+                "type": sentence_type,
+                "ok": parse_ok,
+                "text": text,
+            })
 
-        Silently no-ops if RPi.GPIO is unavailable (e.g. development host)
-        or if the GPIO pin cannot be configured.
+    def _configure_mtk3339(self) -> None:
+        """Send the PMTK314 command to enable RMC/GGA/GSA/GSV/VTG output.
+
+        The Adafruit Ultimate GPS HAT (#2324) ships emitting only RMC + GGA.
+        Without this command the GSV (sky view) and GSA (active satellites)
+        sentences never arrive, so the polar plot on the hardware page sits
+        on "No satellite data yet…" forever even with a healthy 3D fix.
+
+        Failures are logged and ignored — a non-MTK receiver may simply not
+        understand the command.
+        """
+        if not self._ser:
+            return
+        try:
+            self._ser.reset_input_buffer()
+            self._ser.write(PMTK_SET_NMEA_OUTPUT.encode("ascii"))
+            self._ser.flush()
+            self._logger.info(
+                "Sent PMTK314 to GPS (enable RMC/GGA/GSA/GSV/VTG output)"
+            )
+        except Exception as exc:
+            self._logger.debug("Could not send PMTK314 command: %s", exc)
+
+    def _start_pps_monitor(self) -> None:
+        """Wire up a rising-edge GPIO callback so we can show PPS pulses.
+
+        Tries gpiozero first (uses lgpio/rpi-lgpio, works on Pi 5 + Bookworm
+        kernels). Falls back to the legacy RPi.GPIO library on older systems.
+        Silently no-ops if neither library is available — the rest of the GPS
+        manager keeps working, the UI just paints the PPS LED grey and shows
+        "No PPS signal detected" on hover.
         """
         if not self._pps_pin:
+            self._pps_error = "PPS GPIO pin not configured"
             return
+
+        # Preferred path: gpiozero. It auto-selects the best pin factory
+        # (LGPIOFactory on Pi 5, RPiGPIOFactory on older Pis) so we don't
+        # have to deal with /dev/mem deprecation by hand.
+        try:
+            from gpiozero import DigitalInputDevice  # type: ignore[import]
+
+            self._pps_device = DigitalInputDevice(
+                self._pps_pin,
+                pull_up=False,
+                bounce_time=None,
+            )
+            self._pps_device.when_activated = self._pps_pulse_callback
+            self._pps_gpio_active = True
+            self._pps_backend = "gpiozero"
+            self._pps_error = None
+            self._logger.info(
+                "PPS blinkenlite armed on GPIO BCM %d via gpiozero",
+                self._pps_pin,
+            )
+            return
+        except ImportError as exc:
+            self._logger.debug("gpiozero not available: %s", exc)
+            self._pps_error = "gpiozero not installed"
+        except Exception as exc:
+            self._logger.warning(
+                "gpiozero PPS setup failed on BCM %d: %s — trying RPi.GPIO",
+                self._pps_pin,
+                exc,
+            )
+            self._pps_error = f"gpiozero: {exc}"
+            self._pps_device = None
+
+        # Legacy fallback for systems where gpiozero is unavailable but the
+        # old RPi.GPIO module still works (e.g. Pi 4 on Bullseye).
         try:
             import RPi.GPIO as GPIO  # type: ignore[import]
 
@@ -441,27 +612,39 @@ class GPSManager:
             GPIO.add_event_detect(
                 self._pps_pin,
                 GPIO.RISING,
-                callback=self._pps_pulse_callback,
+                callback=self._pps_pulse_callback_legacy,
             )
             self._pps_gpio_active = True
+            self._pps_backend = "rpi.gpio"
+            self._pps_error = None
             self._logger.info(
-                "PPS blinkenlite armed on GPIO BCM %d", self._pps_pin
+                "PPS blinkenlite armed on GPIO BCM %d via RPi.GPIO",
+                self._pps_pin,
             )
         except ImportError:
-            self._logger.debug(
-                "RPi.GPIO not available — PPS blinkenlite disabled"
+            self._logger.warning(
+                "Neither gpiozero nor RPi.GPIO available — PPS LED disabled. "
+                "Install with: pip install gpiozero lgpio"
             )
+            self._pps_error = self._pps_error or "no GPIO library available"
         except Exception as exc:
-            self._logger.debug(
-                "PPS GPIO setup failed on BCM %d: %s", self._pps_pin, exc
+            self._logger.warning(
+                "RPi.GPIO PPS setup failed on BCM %d: %s",
+                self._pps_pin,
+                exc,
             )
+            self._pps_error = f"rpi.gpio: {exc}"
 
-    def _pps_pulse_callback(self, channel: int) -> None:
-        """Called by the RPi.GPIO interrupt thread on each PPS rising edge."""
+    def _pps_pulse_callback(self, *_args, **_kwargs) -> None:
+        """Called by the gpiozero callback thread on each PPS rising edge."""
         now = datetime.now(timezone.utc).isoformat()
         with self._lock:
             self._fix["pps_last_pulse_at"] = now
             self._fix["pps_pulse_count"] = self._fix.get("pps_pulse_count", 0) + 1
+
+    def _pps_pulse_callback_legacy(self, channel: int) -> None:
+        """Called by the RPi.GPIO interrupt thread on each PPS rising edge."""
+        self._pps_pulse_callback()
 
     def _set_error_status(self, status: str) -> None:
         """Update the local fix dict and Redis with an error status.

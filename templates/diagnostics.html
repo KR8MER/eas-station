@@ -47,6 +47,17 @@
     .progress-container {
         margin: 2rem 0;
     }
+
+    /* Render raw NMEA sentences and other monospace lines from the
+       diagnostics output (`$GPGGA,...`, `  ✓ $GPRMC,...`) in a fixed-width
+       font so the operator can scan for missing fields / bad checksums. */
+    .check-item.mono-line {
+        font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+        font-size: 0.8125rem;
+        padding: 0.25rem 0.75rem;
+        white-space: pre;
+        overflow-x: auto;
+    }
 </style>
 {% endblock %}
 
@@ -373,7 +384,10 @@
     function addCheckItem(containerId, message, status) {
         const container = document.getElementById(containerId);
         const item = document.createElement('div');
-        item.className = 'check-item';
+        // Indented or dollar-prefixed lines are raw NMEA samples /
+        // command output — render them in monospace so they line up.
+        const isMono = /^\s*[✓✗]?\s*\$/.test(message) || /^\s{2,}/.test(message);
+        item.className = isMono ? 'check-item mono-line' : 'check-item';
 
         let icon = '';
         let statusClass = '';
