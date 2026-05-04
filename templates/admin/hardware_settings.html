@@ -1277,29 +1277,16 @@ function buildSatTable(satsInView, activePrns) {
 function buildPpsHtml(d) {
     var age = d.pps_pulse_age_s;
     var pin = d.pps_gpio_pin !== undefined ? d.pps_gpio_pin : '?';
-    var backend = d.pps_backend || 'none';
-    var armed = !!d.pps_gpio_active;
-    var err   = d.pps_error;
     var active = age !== null && age < 2.5;
     var ever   = age !== null && age >= 2.5;
     var cls = active ? 'pps-active' : (ever ? 'pps-lost' : 'pps-inactive');
     var txt = active
         ? ('PPS \u00b7 ' + age.toFixed(1) + 's')
         : 'PPS';
-    var tip;
-    if (active) {
-        tip = 'PPS active on GPIO ' + pin + ' via ' + backend
-            + ' \u2014 last pulse ' + age.toFixed(1) + 's ago';
-    } else if (ever) {
-        tip = 'PPS lost on GPIO ' + pin + ' via ' + backend
-            + ' \u2014 last pulse ' + age.toFixed(1) + 's ago';
-    } else if (!armed && err) {
-        tip = 'PPS GPIO not armed on BCM ' + pin + ': ' + err;
-    } else if (!armed) {
-        tip = 'PPS monitoring disabled (BCM ' + pin + ')';
-    } else {
-        tip = 'No PPS signal detected on GPIO ' + pin + ' (' + backend + ')';
-    }
+    var tip = active
+        ? ('PPS active on GPIO ' + pin + ' \u2014 last pulse ' + age.toFixed(1) + 's ago')
+        : (ever ? ('PPS lost on GPIO ' + pin + ' \u2014 last pulse ' + age.toFixed(1) + 's ago')
+               : ('No PPS signal detected on GPIO ' + pin));
     return '<span class="pps-led ' + cls + '" title="' + tip + '">'
         + '<span class="pps-dot"></span>' + txt + '</span>';
 }
