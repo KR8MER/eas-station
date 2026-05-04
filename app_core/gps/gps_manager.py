@@ -39,10 +39,12 @@ Dependencies:
 import json
 import logging
 import os
+import subprocess
 import threading
 import time
+from collections import deque
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Deque, Dict, Optional
 
 
 # Redis key used for GPS status storage
@@ -77,6 +79,10 @@ def _safe_int(val) -> Optional[int]:
         return None
 
 
+# How often (seconds) to update the system clock from GPS when use_for_time=True.
+_TIME_SYNC_INTERVAL_S: int = 3600
+
+
 class GPSManager:
     """Background thread that reads NMEA sentences from a GPS serial port
     and publishes position/time data to Redis.
@@ -102,6 +108,8 @@ class GPSManager:
         self._pps_pin: int = int(config.get("pps_gpio_pin", 4))
         self._min_satellites: int = int(config.get("min_satellites", 4))
 
+        self._use_for_time: bool = bool(config.get("use_for_time", False))
+
         self._running = False
         self._thread: Optional[threading.Thread] = None
         self._ser = None  # serial.Serial instance
@@ -114,6 +122,15 @@ class GPSManager:
         self._gsv_buffer: Dict[int, Dict[str, Any]] = {}
         # PPS GPIO interrupt state
         self._pps_gpio_active: bool = False
+
+        # Recent raw NMEA sentences (protected by _lock)
+        self._recent_sentences: Deque[str] = deque(maxlen=20)
+
+        # Time-sync state — reader thread only, no lock needed
+        self._time_synced: bool = False
+        self._last_time_sync_mono: float = 0.0
+        # Set by _handle_sentence (under _lock), cleared and acted on by _reader_loop
+        self._pending_time_sync: Optional[datetime] = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -195,6 +212,7 @@ class GPSManager:
         """Return the most-recently parsed GPS fix as a dictionary."""
         with self._lock:
             data = dict(self._fix)
+            data["recent_sentences"] = list(self._recent_sentences)
         # Compute age of the last PPS pulse so the UI can colour the blinkenlite
         last_pulse = data.get("pps_last_pulse_at")
         if last_pulse:
@@ -237,6 +255,8 @@ class GPSManager:
             # PPS pulse tracking
             "pps_last_pulse_at": None,
             "pps_pulse_count": 0,
+            # Raw NMEA sentences (populated separately, not stored in _fix)
+            "recent_sentences": [],
         }
 
     def _reader_loop(self) -> None:
@@ -271,6 +291,10 @@ class GPSManager:
                 if not line.startswith("$"):
                     continue
 
+                # Store raw sentence for UI display
+                with self._lock:
+                    self._recent_sentences.append(line)
+
                 consecutive_errors = 0
 
                 try:
@@ -279,6 +303,12 @@ class GPSManager:
                     continue
 
                 self._handle_sentence(msg)
+
+                # Apply system time if a sync was queued (outside lock)
+                if self._pending_time_sync is not None:
+                    pending = self._pending_time_sync
+                    self._pending_time_sync = None
+                    self._apply_system_time(pending)
 
             except Exception as exc:
                 consecutive_errors += 1
@@ -358,6 +388,16 @@ class GPSManager:
                         try:
                             dt = datetime.combine(msg.datestamp, msg.timestamp)
                             self._fix["gps_utc_time"] = dt.isoformat() + "Z"
+                            # Queue a system-clock sync if enabled and due
+                            if self._use_for_time and self._pending_time_sync is None:
+                                now_mono = time.monotonic()
+                                if (
+                                    not self._time_synced
+                                    or (now_mono - self._last_time_sync_mono) >= _TIME_SYNC_INTERVAL_S
+                                ):
+                                    self._pending_time_sync = dt.replace(
+                                        tzinfo=timezone.utc
+                                    )
                         except Exception:
                             self._fix["gps_utc_time"] = str(msg.timestamp)
 
@@ -421,6 +461,7 @@ class GPSManager:
         try:
             with self._lock:
                 data = dict(self._fix)
+                data["recent_sentences"] = list(self._recent_sentences)
             self._redis.setex(REDIS_KEY, REDIS_TTL, json.dumps(data))
         except Exception as exc:
             self._logger.debug("Failed to publish GPS status to Redis: %s", exc)
@@ -462,6 +503,46 @@ class GPSManager:
         with self._lock:
             self._fix["pps_last_pulse_at"] = now
             self._fix["pps_pulse_count"] = self._fix.get("pps_pulse_count", 0) + 1
+
+    def _apply_system_time(self, dt_utc: datetime) -> None:
+        """Set the system clock to the GPS-provided UTC time.
+
+        Called from the reader thread (outside any lock) so subprocess.run()
+        does not block other threads waiting on _lock.  Only executed when
+        ``use_for_time`` is True and the throttle has elapsed.
+        """
+        import re as _re
+
+        time_str = dt_utc.strftime("%Y-%m-%d %H:%M:%S")
+        # Sanity-check the formatted string before handing it to the shell
+        if not _re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", time_str):
+            self._logger.warning(
+                "GPS time sync skipped — unexpected strftime output: %r", time_str
+            )
+            return
+        try:
+            result = subprocess.run(
+                ["sudo", "date", "-s", time_str + " UTC"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode == 0:
+                self._time_synced = True
+                self._last_time_sync_mono = time.monotonic()
+                self._logger.info(
+                    "System time synced to GPS UTC: %s", time_str
+                )
+            else:
+                self._logger.warning(
+                    "GPS time sync failed (date -s returned %d): %s",
+                    result.returncode,
+                    result.stderr.strip(),
+                )
+        except subprocess.TimeoutExpired:
+            self._logger.warning("GPS time sync timed out")
+        except Exception as exc:
+            self._logger.warning("GPS time sync error: %s", exc)
 
     def _set_error_status(self, status: str) -> None:
         """Update the local fix dict and Redis with an error status.

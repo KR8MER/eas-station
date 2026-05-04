@@ -1819,6 +1819,96 @@
             </div>
         </div>
 
+        <!-- GPS Receiver (shown only when GPS is enabled/running) -->
+        <div class="row mt-4" id="gps-section">
+            <div class="col-12">
+                <div class="card health-card" id="gps-card">
+                    <div class="card-body" id="gps-card-body">
+                        <h5><i class="fas fa-satellite section-icon"></i> GPS Receiver</h5>
+                        {% set gps = gps if gps is defined else {} %}
+                        {% if gps and gps.get('running') %}
+                            {% set fix_quality = gps.get('fix_quality', 'no_fix') %}
+                            {% set has_fix = gps.get('has_fix', False) %}
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <div class="metric-row">
+                                        <span class="metric-label">Status:</span>
+                                        <span class="metric-value">
+                                            {% if has_fix %}
+                                                <span class="badge bg-success">{{ gps.get('status','fix')|title }}</span>
+                                            {% elif gps.get('status') in ('acquiring', 'reading') %}
+                                                <span class="badge bg-warning text-dark">Acquiring</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary">No Fix</span>
+                                            {% endif %}
+                                        </span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Fix Quality:</span>
+                                        <span class="metric-value">{{ fix_quality|replace('_',' ')|title }}</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Satellites:</span>
+                                        <span class="metric-value">
+                                            {{ gps.get('active_satellite_prns', [])|length }} used
+                                            / {{ gps.get('satellites_in_view', [])|length }} visible
+                                        </span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">HDOP:</span>
+                                        <span class="metric-value">{{ gps.get('hdop') or '—' }}</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    {% if has_fix %}
+                                    <div class="metric-row">
+                                        <span class="metric-label">Latitude:</span>
+                                        <span class="metric-value">{{ "%.6f"|format(gps.latitude) ~ '°' if gps.get('latitude') is not none else '—' }}</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Longitude:</span>
+                                        <span class="metric-value">{{ "%.6f"|format(gps.longitude) ~ '°' if gps.get('longitude') is not none else '—' }}</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">Altitude:</span>
+                                        <span class="metric-value">{{ "%.1f"|format(gps.altitude_m) ~ ' m' if gps.get('altitude_m') is not none else '—' }}</span>
+                                    </div>
+                                    {% endif %}
+                                    <div class="metric-row">
+                                        <span class="metric-label">GPS UTC:</span>
+                                        <span class="metric-value">{{ gps.get('gps_utc_time') or '—' }}</span>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="metric-row">
+                                        <span class="metric-label">Port:</span>
+                                        <span class="metric-value"><code>{{ gps.get('serial_port','—') }}</code> @ {{ gps.get('baudrate', 9600) }} baud</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-label">PPS GPIO:</span>
+                                        <span class="metric-value">BCM {{ gps.get('pps_gpio_pin', '—') }}</span>
+                                    </div>
+                                    {% if gps.get('pps_pulse_count') %}
+                                    <div class="metric-row">
+                                        <span class="metric-label">PPS Pulses:</span>
+                                        <span class="metric-value">{{ gps.pps_pulse_count }}</span>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        {% elif gps and not gps.get('running') and gps.get('status') not in ('not_started', 'disabled', 'redis_unavailable', 'error') %}
+                            <p class="text-muted mb-0"><i class="fas fa-exclamation-triangle me-1 text-warning"></i>
+                                GPS receiver error: <code>{{ gps.get('status','unknown') }}</code></p>
+                        {% else %}
+                            <p class="text-muted mb-0"><i class="fas fa-satellite me-1"></i>
+                                GPS receiver not enabled. Configure it under
+                                <a href="{{ url_for('hardware.hardware_settings_page') }}#gps">Admin &rsaquo; Hardware Settings &rsaquo; GPS</a>.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Temperature Sensors (if available) -->
         <div class="row mt-4 {% if not temperature %}d-none{% endif %}" id="temperature-section">
             {% if temperature %}
@@ -3467,6 +3557,76 @@
             `;
         }
 
+        function renderGpsCard(gps) {
+            if (!gps || typeof gps !== 'object') {
+                return null;
+            }
+            const running = gps.running;
+            const hasFix  = gps.has_fix;
+            const status  = gps.status || 'unknown';
+
+            // Don't show the card if GPS is not configured at all
+            if (!running && ['not_started', 'disabled', 'redis_unavailable', 'error'].includes(status)) {
+                return null;
+            }
+
+            let statusBadge;
+            if (hasFix) {
+                statusBadge = `<span class="badge bg-success">${escapeHtml(status.replace(/_/g,' '))}</span>`;
+            } else if (status === 'acquiring' || status === 'reading') {
+                statusBadge = `<span class="badge bg-warning text-dark">Acquiring</span>`;
+            } else if (['port_not_found','port_open_failed','pyserial_missing','pynmea2_missing'].includes(status)) {
+                statusBadge = `<span class="badge bg-danger">${escapeHtml(status.replace(/_/g,' '))}</span>`;
+            } else {
+                statusBadge = `<span class="badge bg-secondary">No Fix</span>`;
+            }
+
+            const activePrns   = Array.isArray(gps.active_satellite_prns) ? gps.active_satellite_prns : [];
+            const satsInView   = Array.isArray(gps.satellites_in_view)    ? gps.satellites_in_view    : [];
+            const fixQuality   = (gps.fix_quality || 'no_fix').replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase());
+
+            let posHtml = '';
+            if (hasFix) {
+                const lat  = gps.latitude  != null ? gps.latitude.toFixed(6)  + '°' : '—';
+                const lon  = gps.longitude != null ? gps.longitude.toFixed(6) + '°' : '—';
+                const alt  = gps.altitude_m != null ? gps.altitude_m.toFixed(1) + ' m' : '—';
+                posHtml = `
+                    <div class="metric-row"><span class="metric-label">Latitude:</span>
+                        <span class="metric-value">${escapeHtml(lat)}</span></div>
+                    <div class="metric-row"><span class="metric-label">Longitude:</span>
+                        <span class="metric-value">${escapeHtml(lon)}</span></div>
+                    <div class="metric-row"><span class="metric-label">Altitude:</span>
+                        <span class="metric-value">${escapeHtml(alt)}</span></div>`;
+            }
+
+            return `
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="metric-row"><span class="metric-label">Status:</span>
+                            <span class="metric-value">${statusBadge}</span></div>
+                        <div class="metric-row"><span class="metric-label">Fix Quality:</span>
+                            <span class="metric-value">${escapeHtml(fixQuality)}</span></div>
+                        <div class="metric-row"><span class="metric-label">Satellites:</span>
+                            <span class="metric-value">${activePrns.length} used / ${satsInView.length} visible</span></div>
+                        <div class="metric-row"><span class="metric-label">HDOP:</span>
+                            <span class="metric-value">${gps.hdop != null ? escapeHtml(String(gps.hdop)) : '—'}</span></div>
+                    </div>
+                    <div class="col-md-4">
+                        ${posHtml}
+                        <div class="metric-row"><span class="metric-label">GPS UTC:</span>
+                            <span class="metric-value">${escapeHtml(gps.gps_utc_time || '—')}</span></div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="metric-row"><span class="metric-label">Port:</span>
+                            <span class="metric-value"><code>${escapeHtml(gps.serial_port || '—')}</code> @ ${escapeHtml(String(gps.baudrate || 9600))} baud</span></div>
+                        <div class="metric-row"><span class="metric-label">PPS GPIO:</span>
+                            <span class="metric-value">BCM ${escapeHtml(String(gps.pps_gpio_pin != null ? gps.pps_gpio_pin : '—'))}</span></div>
+                        ${gps.pps_pulse_count ? `<div class="metric-row"><span class="metric-label">PPS Pulses:</span>
+                            <span class="metric-value">${escapeHtml(String(gps.pps_pulse_count))}</span></div>` : ''}
+                    </div>
+                </div>`;
+        }
+
         function applyHealthData(data) {
             if (!data || typeof data !== 'object') {
                 return;
@@ -3554,6 +3714,20 @@
                 } else {
                     temperatureSection.classList.add('d-none');
                     temperatureSection.innerHTML = '';
+                }
+            }
+
+            const gpsSection    = document.getElementById('gps-section');
+            const gpsCardBody   = document.getElementById('gps-card-body');
+            if (gpsSection && gpsCardBody) {
+                const gpsHtml = renderGpsCard(data.gps || {});
+                if (gpsHtml) {
+                    gpsSection.classList.remove('d-none');
+                    gpsCardBody.innerHTML =
+                        '<h5><i class="fas fa-satellite section-icon"></i> GPS Receiver</h5>'
+                        + gpsHtml;
+                } else {
+                    gpsSection.classList.add('d-none');
                 }
             }
 

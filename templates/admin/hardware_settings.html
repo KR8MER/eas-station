@@ -877,6 +877,14 @@ function stopGpsPolling() {
     if (_gpsPollTimer) { clearInterval(_gpsPollTimer); _gpsPollTimer = null; }
 }
 
+/* Simple HTML escaper for raw NMEA strings */
+function gpsEscapeHtml(s) {
+    return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
 /* Map SNR (dBHz) to a CSS class and hex colour for bars / sky plot */
 function snrClass(snr) {
     if (snr === null || snr === undefined) return 'snr-s0';
@@ -1042,6 +1050,28 @@ function buildSatTable(satsInView, activePrns) {
         + '</div>';
 }
 
+/* Build the scrollable NMEA sentence log */
+function buildNmeaSection(sentences) {
+    var SENT_COLORS = {
+        GGA: '#3fb950', RMC: '#58a6ff', GSV: '#bc8cff',
+        GSA: '#e3b341', GLL: '#79c0ff', VTG: '#ffa657',
+    };
+    if (!sentences || sentences.length === 0) {
+        return '<div style="padding:6px 10px;color:#484f58;font-family:\'Courier New\',monospace;font-size:0.7rem;border-top:1px solid #21262d">'
+            + 'No NMEA sentences received yet&hellip;</div>';
+    }
+    var rows = sentences.slice().reverse().map(function(s) {
+        var color = '#8b949e';
+        var m = s.match(/^\$[A-Z]{2}([A-Z]{3})/);
+        if (m) { color = SENT_COLORS[m[1]] || '#8b949e'; }
+        return '<div style="color:' + color + ';white-space:pre;line-height:1.4">'
+            + gpsEscapeHtml(s) + '</div>';
+    }).join('');
+    return '<div style="padding:6px 10px;border-top:1px solid #21262d;max-height:110px;overflow-y:auto;font-family:\'Courier New\',monospace;font-size:0.7rem">'
+        + '<div style="color:#484f58;font-size:0.65rem;margin-bottom:3px;text-transform:uppercase;letter-spacing:.05em">Recent NMEA</div>'
+        + rows + '</div>';
+}
+
 /* Build the PPS blinkenlite badge */
 function buildPpsHtml(d) {
     var age = d.pps_pulse_age_s;
@@ -1104,10 +1134,11 @@ function refreshGpsStatus() {
     fetch('/api/hardware/gps/status')
         .then(function (r) { return r.json(); })
         .then(function (d) {
-            var satsInView  = d.satellites_in_view  || [];
-            var activePrns  = d.active_satellite_prns || [];
-            var usedCount   = activePrns.length;
-            var viewCount   = satsInView.length || (d.satellites != null ? d.satellites : 0);
+            var satsInView       = d.satellites_in_view   || [];
+            var activePrns       = d.active_satellite_prns || [];
+            var recentSentences  = d.recent_sentences      || [];
+            var usedCount        = activePrns.length;
+            var viewCount        = satsInView.length || (d.satellites != null ? d.satellites : 0);
 
             // ── Header bar ──────────────────────────────────────────
             var headerHtml =
@@ -1135,7 +1166,8 @@ function refreshGpsStatus() {
                 + '<div class="gps-sat-col">'
                 + buildSatTable(satsInView, activePrns)
                 + '</div>'
-                + '</div>';
+                + '</div>'
+                + buildNmeaSection(recentSentences);
 
             // ── Fix details footer ───────────────────────────────────
             var footerHtml = '<div class="gps-fix-footer">';

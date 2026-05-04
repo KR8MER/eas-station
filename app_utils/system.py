@@ -441,6 +441,7 @@ def build_system_health_snapshot(db, logger) -> SystemHealth:
             "hardware": hardware_info,
             "smart": smart_info,
             "dependencies": _collect_dependency_versions(logger),
+            "gps": _collect_gps_status(logger),
         }
         
         # Add shields.io badges and distro logo
@@ -2257,3 +2258,33 @@ def _to_bool(value: Any) -> Optional[bool]:
         if lowered in {"n", "no", "false"}:
             return False
     return None
+
+
+def _collect_gps_status(logger) -> Dict[str, Any]:
+    """Read GPS fix status from Redis (published by the hardware service).
+
+    Returns a best-effort dict that is always safe to serialise.  When the
+    hardware service is not running or GPS is disabled the dict will contain
+    ``enabled=False`` / ``running=False`` so the health page can render a
+    graceful "not configured" state.
+    """
+    try:
+        from app_core.redis_client import get_redis_client
+
+        client = get_redis_client(max_retries=1)
+        if client is None:
+            return {"enabled": False, "running": False, "status": "redis_unavailable"}
+
+        raw = client.get("gps:status")
+        if not raw:
+            # No key means GPS either disabled or hardware service not running
+            return {"enabled": False, "running": False, "status": "not_started"}
+
+        data: Dict[str, Any] = json.loads(raw)
+        # Strip the large recent_sentences list — not needed in health snapshot
+        data.pop("recent_sentences", None)
+        return data
+    except Exception as exc:
+        if logger:
+            logger.debug("Failed to read GPS status from Redis: %s", exc)
+        return {"enabled": False, "running": False, "status": "error", "error": str(exc)}
