@@ -1013,6 +1013,14 @@ function buildSatTable(satsInView, activePrns) {
     if (allSats.length === 0) {
         return '<div class="text-muted" style="padding:16px 4px;font-size:0.75rem">No satellite data yet&hellip;</div>';
     }
+    // Check if we have any sky-position data at all
+    var hasPos = allSats.some(function(s) { return s.elevation !== null || s.azimuth !== null; });
+    var almanacNote = (!hasPos && allSats.length > 0)
+        ? '<div style="padding:4px 4px 8px;font-size:0.7rem;color:#d29922">'
+          + '<i class="fas fa-satellite-dish fa-fw"></i> '
+          + 'Sky positions pending &mdash; receiver is downloading almanac&sol;ephemeris data.'
+          + '</div>'
+        : '';
     var sorted = allSats.slice().sort(function (a, b) {
         var sa = a.snr !== null ? a.snr : -1;
         var sb = b.snr !== null ? b.snr : -1;
@@ -1102,7 +1110,7 @@ function buildPpsHtml(d) {
 function buildStatusBadge(d) {
     var errorStatuses = ['port_not_found','port_open_failed','pyserial_missing','pynmea2_missing'];
     var labels = {
-        'fix':'3D Fix','acquiring':'Acquiring','no_fix':'No Fix',
+        'fix':'3D Fix','acquiring':'Acquiring\u2026','no_fix':'No Fix',
         'port_not_found':'Port Not Found','port_open_failed':'Port Error',
         'pyserial_missing':'pyserial Missing','pynmea2_missing':'pynmea2 Missing',
         'not_started':'Not Started','disabled':'Disabled','stopped':'Stopped','reading':'Reading\u2026'
@@ -1131,9 +1139,24 @@ function buildErrorHint(d) {
             'Could not open serial port. Check permissions and that the port is not in use by another process.'
     };
     var msg = hints[d.status];
-    if (!msg) return '';
-    return '<div style="margin:0;padding:6px 12px;background:#2d1215;color:#f85149;border-top:1px solid #442020;font-size:0.75rem">'
-        + '<i class="fas fa-exclamation-triangle me-1"></i>' + msg + '</div>';
+    if (msg) {
+        return '<div style="margin:0;padding:6px 12px;background:#2d1215;color:#f85149;border-top:1px solid #442020;font-size:0.75rem">'
+            + '<i class="fas fa-exclamation-triangle me-1"></i>' + msg + '</div>';
+    }
+    // Acquiring hint: visible satellites but no position fix yet
+    if (!d.has_fix && d.status === 'acquiring') {
+        var satsVisible = (d.satellites_in_view || []).length;
+        var haveSkyPos  = (d.satellites_in_view || []).some(function(s) { return s.elevation !== null && s.azimuth !== null; });
+        var detail = haveSkyPos
+            ? 'Waiting for enough satellites to compute a 3D fix.'
+            : 'Downloading satellite almanac &amp; ephemeris data \u2014 this provides orbital positions needed to compute a fix. '
+              + 'A cold start typically takes 1&ndash;3 minutes; warm start 30&ndash;60 seconds.';
+        return '<div style="margin:0;padding:6px 12px;background:#1c1f0e;color:#d29922;border-top:1px solid #3a3500;font-size:0.75rem">'
+            + '<i class="fas fa-satellite-dish me-1"></i>'
+            + '<strong>' + satsVisible + ' satellite' + (satsVisible !== 1 ? 's' : '') + ' in view &mdash;</strong> ' + detail
+            + '</div>';
+    }
+    return '';
 }
 
 function refreshGpsStatus() {
@@ -1147,6 +1170,10 @@ function refreshGpsStatus() {
             var recentSentences  = d.recent_sentences      || [];
             var usedCount        = activePrns.length;
             var viewCount        = satsInView.length || (d.satellites != null ? d.satellites : 0);
+
+            // Satellites that have azimuth/elevation for sky plotting
+            var plottableSats = satsInView.filter(function(s) { return s.elevation !== null && s.azimuth !== null; });
+            var pendingAlmanac = satsInView.length > 0 && plottableSats.length === 0;
 
             // ── Header bar ──────────────────────────────────────────
             var headerHtml =
@@ -1165,11 +1192,19 @@ function refreshGpsStatus() {
             // ── Error hint (if any) ──────────────────────────────────
             var errorHtml = buildErrorHint(d);
 
+            // ── Sky plot overlay when positions not yet available ────
+            var skyOverlay = pendingAlmanac
+                ? '<div style="margin-top:4px;font-size:0.7rem;color:#d29922;text-align:center">'
+                  + '<i class="fas fa-satellite-dish fa-fw"></i> Downloading sky positions&hellip;'
+                  + '</div>'
+                : '';
+
             // ── Body: sky plot + satellite table ────────────────────
             var bodyHtml =
                 '<div class="gps-live-body">'
                 + '<div class="gps-sky-col">'
                 + '<canvas id="gps-sky-canvas" width="240" height="240" style="display:block"></canvas>'
+                + skyOverlay
                 + '</div>'
                 + '<div class="gps-sat-col">'
                 + buildSatTable(satsInView, activePrns)

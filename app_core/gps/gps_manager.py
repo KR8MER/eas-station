@@ -253,6 +253,10 @@ class GPSManager:
             # Per-satellite view data (from GSV / GSA)
             "satellites_in_view": [],
             "active_satellite_prns": [],
+            # GSA fix mode: 1=no fix, 2=2D, 3=3D (None until first GSA)
+            "fix_mode": None,
+            "pdop": None,
+            "vdop": None,
             # PPS pulse tracking
             "pps_last_pulse_at": None,
             "pps_pulse_count": 0,
@@ -350,9 +354,17 @@ class GPSManager:
                 self._fix["has_fix"] = has_fix
                 self._fix["fix_quality"] = _FIX_QUALITY.get(fix_qual, "unknown")
                 self._fix["satellites"] = num_sats
-                self._fix["status"] = "fix" if (
-                    has_fix and num_sats >= self._min_satellites
-                ) else ("acquiring" if has_fix else "no_fix")
+                if has_fix and num_sats >= self._min_satellites:
+                    new_status = "fix"
+                elif has_fix:
+                    new_status = "acquiring"
+                else:
+                    # No fix yet — show "acquiring" when we already have satellites
+                    # in view from the previous GSV cycle (typical NMEA order is
+                    # GGA → GSA → GSV, so satellites_in_view reflects last cycle).
+                    sats_tracked = len(self._fix.get("satellites_in_view", []))
+                    new_status = "acquiring" if sats_tracked > 0 else "no_fix"
+                self._fix["status"] = new_status
 
                 if has_fix and msg.latitude and msg.longitude:
                     self._fix["latitude"] = msg.latitude
@@ -453,6 +465,26 @@ class GPSManager:
                             except (ValueError, TypeError):
                                 pass
                     self._fix["active_satellite_prns"] = active
+                    # Fix mode: 1=no fix, 2=2D, 3=3D
+                    fix_mode_raw = getattr(msg, "mode_fix_type", None)
+                    if fix_mode_raw is not None:
+                        try:
+                            self._fix["fix_mode"] = int(fix_mode_raw)
+                        except (ValueError, TypeError):
+                            pass
+                    # Position dilution of precision
+                    pdop_raw = getattr(msg, "pdop", None)
+                    if pdop_raw:
+                        try:
+                            self._fix["pdop"] = float(pdop_raw)
+                        except (ValueError, TypeError):
+                            pass
+                    vdop_raw = getattr(msg, "vdop", None)
+                    if vdop_raw:
+                        try:
+                            self._fix["vdop"] = float(vdop_raw)
+                        except (ValueError, TypeError):
+                            pass
                 except Exception:
                     pass
 
