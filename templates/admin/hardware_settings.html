@@ -11,17 +11,17 @@
 
         /* ── cgps-style GPS Live Panel ─────────────────────────────── */
         .gps-live-panel {
-            background: #0d1117;
-            color: #c9d1d9;
+            background: var(--bg-color);
+            color: var(--text-color);
             font-family: 'Courier New', Courier, monospace;
             border-radius: 6px;
-            border: 1px solid #30363d;
+            border: 1px solid var(--border-color);
             overflow: hidden;
             font-size: 0.8rem;
         }
         .gps-live-header {
-            background: #161b22;
-            border-bottom: 1px solid #30363d;
+            background: var(--surface-color);
+            border-bottom: 1px solid var(--border-color);
             padding: 6px 12px;
             display: flex;
             align-items: center;
@@ -41,7 +41,7 @@
             padding: 8px 10px;
             overflow-y: auto;
             max-height: 260px;
-            border-left: 1px solid #21262d;
+            border-left: 1px solid var(--border-color);
         }
         .gps-sat-table {
             width: 100%;
@@ -50,22 +50,22 @@
             white-space: nowrap;
         }
         .gps-sat-table th {
-            color: #8b949e;
+            color: var(--text-muted);
             font-weight: normal;
             padding: 2px 5px 4px;
-            border-bottom: 1px solid #30363d;
+            border-bottom: 1px solid var(--border-color);
             text-align: left;
         }
         .gps-sat-table td {
             padding: 2px 5px;
-            color: #c9d1d9;
+            color: var(--text-color);
             vertical-align: middle;
         }
         .gps-sat-table tr.sat-used td { color: #3fb950; }
-        .gps-sat-table tr.sat-unused td { color: #8b949e; }
+        .gps-sat-table tr.sat-unused td { color: var(--text-muted); }
         .gps-snr-track {
             display: inline-block;
-            background: #21262d;
+            background: var(--border-color);
             height: 9px;
             border-radius: 2px;
             width: 80px;
@@ -78,16 +78,16 @@
             border-radius: 2px;
         }
         .gps-fix-footer {
-            background: #161b22;
-            border-top: 1px solid #30363d;
+            background: var(--surface-color);
+            border-top: 1px solid var(--border-color);
             padding: 7px 12px;
             display: flex;
             flex-wrap: wrap;
             gap: 0 24px;
             font-size: 0.75rem;
-            color: #c9d1d9;
+            color: var(--text-color);
         }
-        .gps-fix-footer .gps-lbl { color: #8b949e; }
+        .gps-fix-footer .gps-lbl { color: var(--text-muted); }
         /* PPS blinkenlite */
         .pps-led {
             display: inline-flex;
@@ -120,10 +120,10 @@
         }
         .pps-led.pps-lost .pps-dot { background: #d29922; }
         .pps-led.pps-inactive {
-            background: #1c2128;
-            color: #484f58;
+            background: color-mix(in srgb, var(--text-color) 8%, var(--bg-color));
+            color: var(--text-muted);
         }
-        .pps-led.pps-inactive .pps-dot { background: #30363d; }
+        .pps-led.pps-inactive .pps-dot { background: var(--text-muted); }
         @keyframes ppsPulse {
             0%, 100% { opacity: 1; transform: scale(1); }
             50%       { opacity: 0.25; transform: scale(0.65); }
@@ -136,9 +136,20 @@
         .snr-s4 { background: #84cc16; }   /* 35–44      */
         .snr-s5 { background: #3fb950; }   /* ≥ 45       */
         /* SNR legend dots */
-        .snr-legend { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; color: #6e7681; font-size: 0.68rem; }
+        .snr-legend { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; color: var(--text-muted); font-size: 0.68rem; }
         .snr-legend span { display: inline-flex; align-items: center; gap: 3px; }
         .snr-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+        /* Theme-aware helper classes used by JS-built GPS HTML */
+        .gps-muted { color: var(--text-muted); }
+        .gps-port  { color: var(--primary-soft); }
+        .gps-error-banner {
+            margin: 0;
+            padding: 6px 12px;
+            background: color-mix(in srgb, #f85149 12%, var(--surface-color));
+            color: #f85149;
+            border-top: 1px solid color-mix(in srgb, #f85149 30%, var(--border-color));
+            font-size: 0.75rem;
+        }
     </style>
 {% endblock %}
 
@@ -889,12 +900,22 @@ function snrClass(snr) {
 var SNR_COLORS = { 'snr-s0':'#484f58','snr-s1':'#f85149','snr-s2':'#f97316','snr-s3':'#d29922','snr-s4':'#84cc16','snr-s5':'#3fb950' };
 function snrHex(snr) { return SNR_COLORS[snrClass(snr)] || '#484f58'; }
 
+/* Read a CSS custom property from :root */
+function gpsCssVar(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
 /* Draw the polar sky plot onto a <canvas> element */
 function drawSkyPlot(canvas, satsInView, activePrns) {
     var ctx = canvas.getContext('2d');
     var W = canvas.width, H = canvas.height;
     var cx = W / 2, cy = H / 2;
     var MAX_R = Math.min(W, H) / 2 - 16;   // leave room for N/S/E/W labels
+
+    // Read theme-aware colors at draw time
+    var bgColor      = gpsCssVar('--bg-color')      || '#0d1117';
+    var borderColor  = gpsCssVar('--border-color')  || '#1c2128';
+    var mutedColor   = gpsCssVar('--text-muted')    || '#6e7681';
 
     ctx.clearRect(0, 0, W, H);
 
@@ -904,8 +925,8 @@ function drawSkyPlot(canvas, satsInView, activePrns) {
     ctx.arc(cx, cy, MAX_R, 0, Math.PI * 2);
     ctx.clip();
 
-    // Dark background fill
-    ctx.fillStyle = '#0d1117';
+    // Background fill
+    ctx.fillStyle = bgColor;
     ctx.fill();
 
     // Elevation rings: horizon (0°), 30°, 60°
@@ -913,13 +934,13 @@ function drawSkyPlot(canvas, satsInView, activePrns) {
         var r = MAX_R * (90 - el) / 90;
         ctx.beginPath();
         ctx.arc(cx, cy, r, 0, Math.PI * 2);
-        ctx.strokeStyle = '#1c2128';
+        ctx.strokeStyle = borderColor;
         ctx.lineWidth = 1;
         ctx.stroke();
     });
 
     // Crosshairs
-    ctx.strokeStyle = '#1c2128';
+    ctx.strokeStyle = borderColor;
     ctx.lineWidth = 0.8;
     ctx.beginPath();
     ctx.moveTo(cx, cy - MAX_R); ctx.lineTo(cx, cy + MAX_R);
@@ -927,7 +948,7 @@ function drawSkyPlot(canvas, satsInView, activePrns) {
     ctx.stroke();
 
     // Elevation labels inside the plot
-    ctx.fillStyle = '#2d3748';
+    ctx.fillStyle = mutedColor;
     ctx.font = '8px monospace';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
@@ -937,7 +958,7 @@ function drawSkyPlot(canvas, satsInView, activePrns) {
     // Zenith dot
     ctx.beginPath();
     ctx.arc(cx, cy, 2, 0, Math.PI * 2);
-    ctx.fillStyle = '#2d3748';
+    ctx.fillStyle = mutedColor;
     ctx.fill();
 
     // Satellites
@@ -980,7 +1001,7 @@ function drawSkyPlot(canvas, satsInView, activePrns) {
     ctx.restore();
 
     // Cardinal labels (outside the clip)
-    ctx.fillStyle = '#4a6080';
+    ctx.fillStyle = mutedColor;
     ctx.font = 'bold 11px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -1011,7 +1032,7 @@ function buildSatTable(satsInView, activePrns) {
         var barColor = snrHex(snr);
         var usedMark = used
             ? '<span style="color:#3fb950">&#10003;</span>'
-            : '<span style="color:#30363d">&#183;</span>';
+            : '<span class="gps-muted">&#183;</span>';
         return '<tr class="' + cls + '">'
             + '<td style="text-align:right;padding-right:8px">' + sat.prn + '</td>'
             + '<td style="text-align:right;padding-right:8px">' + (sat.elevation !== null ? sat.elevation : '&mdash;') + '</td>'
@@ -1076,7 +1097,7 @@ function buildStatusBadge(d) {
         return '<span style="color:#d29922;font-weight:bold">[' + lbl + ']</span>';
     if (errorStatuses.indexOf(d.status) !== -1)
         return '<span style="color:#f85149;font-weight:bold">[' + lbl + ']</span>';
-    return '<span style="color:#8b949e">[' + lbl + ']</span>';
+    return '<span class="gps-muted">[' + lbl + ']</span>';
 }
 
 /* Error hint banners */
@@ -1094,7 +1115,7 @@ function buildErrorHint(d) {
     };
     var msg = hints[d.status];
     if (!msg) return '';
-    return '<div style="margin:0;padding:6px 12px;background:#2d1215;color:#f85149;border-top:1px solid #442020;font-size:0.75rem">'
+    return '<div class="gps-error-banner">'
         + '<i class="fas fa-exclamation-triangle me-1"></i>' + msg + '</div>';
 }
 
@@ -1113,11 +1134,11 @@ function refreshGpsStatus() {
             var headerHtml =
                 '<div class="gps-live-header">'
                 + buildStatusBadge(d)
-                + '<span style="color:#8b949e">'
+                + '<span class="gps-muted">'
                 + viewCount + ' visible &bull; ' + usedCount + ' used'
                 + '</span>'
-                + '<span style="color:#8b949e">'
-                + '<code style="color:#58a6ff">' + (d.serial_port||'—') + '</code>'
+                + '<span class="gps-muted">'
+                + '<code class="gps-port">' + (d.serial_port||'—') + '</code>'
                 + ' &bull; ' + (d.baudrate||'9600') + 'bd'
                 + '</span>'
                 + '<span class="ms-auto">' + buildPpsHtml(d) + '</span>'
@@ -1154,7 +1175,7 @@ function refreshGpsStatus() {
                     + '<span><span class="gps-lbl">UTC&nbsp;</span>' + utc + '</span>'
                     + (spd ? '<span><span class="gps-lbl">Speed&nbsp;</span>' + spd + '</span>' : '');
             } else {
-                footerHtml += '<span style="color:#484f58">Waiting for fix&hellip;</span>';
+                footerHtml += '<span class="gps-muted">Waiting for fix&hellip;</span>';
             }
             footerHtml += '</div>';
 

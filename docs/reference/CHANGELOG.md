@@ -7,6 +7,7 @@ tracks releases under the 2.x series.
 ## [Unreleased]
 
 ### Fixed
+- **GPS Live Status panel now adapts to the active theme** — all hardcoded GitHub dark-mode hex colors in the GPS panel CSS and inline JavaScript have been replaced with CSS custom properties (`var(--bg-color)`, `var(--surface-color)`, `var(--text-color)`, `var(--border-color)`, `var(--text-muted)`, `var(--primary-soft)`). The sky-plot canvas also reads theme colors at draw-time so rings, crosshairs, labels, and cardinal marks match the current theme instead of always rendering in dark mode.
 - **GPIO control panel and pin-map pages returning 500 errors** — `url_for('gpio_statistics_page')` in `templates/gpio_control.html` and `templates/gpio_pin_map.html` raised a `BuildError` at render time because the endpoint lives in the `dashboard` Blueprint and must be referenced as `dashboard.gpio_statistics_page`. Both templates now use the correct qualified name.
 - **RBDS detail rendering regression** in `static/js/rbds_visualization.js`. PR #1975
   introduced the shared `RBDSViz` helpers but the new helpers only re-implemented a
