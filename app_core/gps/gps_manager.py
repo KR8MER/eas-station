@@ -118,8 +118,12 @@ class GPSManager:
         self._lock = threading.Lock()
         self._fix: Dict[str, Any] = self._empty_fix()
 
-        # GSV accumulation buffer — reader thread only, no lock needed
-        self._gsv_buffer: Dict[int, Dict[str, Any]] = {}
+        # GSV accumulation buffers, one bucket per talker (GP, GL, GA, GB, …).
+        # Multi-GNSS receivers emit one GSV group per constellation; if we
+        # shared a single buffer, the start of GLGSV (msg_num==1) would wipe
+        # the GPGSV satellites we just accumulated, leaving the published
+        # satellites_in_view empty — reader thread only, no lock needed.
+        self._gsv_buffer: Dict[str, Dict[int, Dict[str, Any]]] = {}
         # GSA per-cycle accumulator. Multi-GNSS receivers emit one GSA per
         # constellation (e.g. $GPGSA, $GLGSA, $GAGSA, or several $GNGSA in a
         # row). We union active PRNs across all GSA sentences within a single
@@ -433,12 +437,19 @@ class GPSManager:
                             self._fix["gps_utc_time"] = str(msg.timestamp)
 
             elif sentence_type == "GSV":
-                # Satellites in View — parse per-satellite PRN/elevation/azimuth/SNR
+                # Satellites in View — parse per-satellite PRN/elevation/azimuth/SNR.
+                # Multi-GNSS receivers send one GSV group per constellation
+                # (e.g. $GPGSV,3,1.. → 3,2 → 3,3 then $GLGSV,1,1..). We must
+                # bucket per-talker so the start of one constellation's group
+                # doesn't wipe another's — and union the buckets when
+                # publishing so satellites_in_view reflects all visible sats.
                 try:
+                    talker = getattr(msg, "talker", None) or "GN"
                     total_msgs = int(msg.num_messages) if msg.num_messages else 1
                     msg_num = int(msg.msg_num) if msg.msg_num else 1
                     if msg_num == 1:
-                        self._gsv_buffer.clear()
+                        self._gsv_buffer[talker] = {}
+                    bucket = self._gsv_buffer.setdefault(talker, {})
                     for i in range(1, 5):
                         prn_raw = getattr(msg, "sv_prn_num_%d" % i, None)
                         if not prn_raw:
@@ -447,7 +458,7 @@ class GPSManager:
                             prn = int(prn_raw)
                         except (ValueError, TypeError):
                             continue
-                        self._gsv_buffer[prn] = {
+                        bucket[prn] = {
                             "prn": prn,
                             "elevation": _safe_int(
                                 getattr(msg, "elevation_deg_%d" % i, None)
@@ -460,8 +471,11 @@ class GPSManager:
                             ),
                         }
                     if msg_num >= total_msgs:
+                        merged: Dict[int, Dict[str, Any]] = {}
+                        for tbucket in self._gsv_buffer.values():
+                            merged.update(tbucket)
                         self._fix["satellites_in_view"] = sorted(
-                            list(self._gsv_buffer.values()),
+                            merged.values(),
                             key=lambda s: s["prn"],
                         )
                 except Exception:
