@@ -971,7 +971,7 @@ function drawSkyPlot(canvas, satsInView, activePrns) {
 
     // Read theme colors at paint time so we always match the active theme
     var themeBg      = _getThemeColor('--bg-color')       || '#0d1117';
-    var themeRing    = _getThemeColor('--border-color')   || '#1c2128';
+    var themeBorder  = _getThemeColor('--border-color')   || '#1c2128';
     var themeMuted   = _getThemeColor('--text-muted')     || '#2d3748';
     var themeLabel   = _getThemeColor('--text-secondary') || '#4a6080';
 
@@ -992,13 +992,13 @@ function drawSkyPlot(canvas, satsInView, activePrns) {
         var r = MAX_R * (90 - el) / 90;
         ctx.beginPath();
         ctx.arc(cx, cy, r, 0, Math.PI * 2);
-        ctx.strokeStyle = themeRing;
+        ctx.strokeStyle = themeBorder;
         ctx.lineWidth = 1;
         ctx.stroke();
     });
 
     // Crosshairs
-    ctx.strokeStyle = themeRing;
+    ctx.strokeStyle = themeBorder;
     ctx.lineWidth = 0.8;
     ctx.beginPath();
     ctx.moveTo(cx, cy - MAX_R); ctx.lineTo(cx, cy + MAX_R);
@@ -1044,7 +1044,7 @@ function drawSkyPlot(canvas, satsInView, activePrns) {
         ctx.globalAlpha = snrAlpha(sat.snr);
         ctx.fill();
         ctx.globalAlpha = 1;
-        ctx.strokeStyle = isUsed ? '#ffffff' : themeRing;
+        ctx.strokeStyle = isUsed ? '#ffffff' : themeBorder;
         ctx.lineWidth = isUsed ? 1.5 : 0.8;
         ctx.stroke();
 
