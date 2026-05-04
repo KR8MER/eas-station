@@ -128,6 +128,7 @@ class GPSManager:
 
         # Time-sync state — reader thread only, no lock needed
         self._time_synced: bool = False
+        self._ntp_disabled: bool = False
         self._last_time_sync_mono: float = 0.0
         # Set by _handle_sentence (under _lock), cleared and acted on by _reader_loop
         self._pending_time_sync: Optional[datetime] = None
@@ -255,6 +256,10 @@ class GPSManager:
             # PPS pulse tracking
             "pps_last_pulse_at": None,
             "pps_pulse_count": 0,
+            # Time sync status
+            "use_for_time": self._use_for_time,
+            "time_synced": False,
+            "ntp_disabled": False,
             # Raw NMEA sentences (populated separately, not stored in _fix)
             "recent_sentences": [],
         }
@@ -510,6 +515,11 @@ class GPSManager:
         Called from the reader thread (outside any lock) so subprocess.run()
         does not block other threads waiting on _lock.  Only executed when
         ``use_for_time`` is True and the throttle has elapsed.
+
+        When a PPS signal is active, NTP synchronisation (systemd-timesyncd or
+        chrony) is disabled first so the kernel's NTP discipline does not
+        immediately override the GPS-derived time.  NTP is only disabled once
+        per manager lifetime to avoid churning the service state.
         """
         import re as _re
 
@@ -520,6 +530,13 @@ class GPSManager:
                 "GPS time sync skipped — unexpected strftime output: %r", time_str
             )
             return
+
+        # Disable NTP the first time we have a PPS-backed sync so it does not
+        # fight with the GPS clock.
+        pps_active = self._fix.get("pps_pulse_count", 0) > 0
+        if pps_active and not self._ntp_disabled:
+            self._disable_ntp()
+
         try:
             result = subprocess.run(
                 ["sudo", "date", "-s", time_str + " UTC"],
@@ -530,6 +547,8 @@ class GPSManager:
             if result.returncode == 0:
                 self._time_synced = True
                 self._last_time_sync_mono = time.monotonic()
+                with self._lock:
+                    self._fix["time_synced"] = True
                 self._logger.info(
                     "System time synced to GPS UTC: %s", time_str
                 )
@@ -543,6 +562,68 @@ class GPSManager:
             self._logger.warning("GPS time sync timed out")
         except Exception as exc:
             self._logger.warning("GPS time sync error: %s", exc)
+
+    def _disable_ntp(self) -> None:
+        """Disable the system NTP client so GPS can own the clock.
+
+        Tries ``timedatectl set-ntp false`` first (systemd-timesyncd / chrony
+        managed by systemd).  Falls back to stopping systemd-timesyncd directly
+        if timedatectl is unavailable.  Errors are logged but never propagated.
+        """
+        try:
+            result = subprocess.run(
+                ["sudo", "timedatectl", "set-ntp", "false"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode == 0:
+                self._ntp_disabled = True
+                with self._lock:
+                    self._fix["ntp_disabled"] = True
+                self._logger.info("NTP disabled via timedatectl — GPS owns the clock")
+                return
+            self._logger.debug(
+                "timedatectl set-ntp false returned %d: %s",
+                result.returncode,
+                result.stderr.strip(),
+            )
+        except FileNotFoundError:
+            self._logger.debug("timedatectl not found; trying systemctl stop")
+        except subprocess.TimeoutExpired:
+            self._logger.warning("timedatectl set-ntp false timed out")
+            return
+        except Exception as exc:
+            self._logger.warning("Failed to disable NTP via timedatectl: %s", exc)
+            return
+
+        # Fallback: stop systemd-timesyncd directly
+        try:
+            result = subprocess.run(
+                ["sudo", "systemctl", "stop", "systemd-timesyncd"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode == 0:
+                self._ntp_disabled = True
+                with self._lock:
+                    self._fix["ntp_disabled"] = True
+                self._logger.info(
+                    "systemd-timesyncd stopped — GPS owns the clock"
+                )
+            else:
+                self._logger.warning(
+                    "Failed to stop systemd-timesyncd (returned %d): %s",
+                    result.returncode,
+                    result.stderr.strip(),
+                )
+        except subprocess.TimeoutExpired:
+            self._logger.warning("systemctl stop systemd-timesyncd timed out")
+        except Exception as exc:
+            self._logger.warning(
+                "Failed to stop systemd-timesyncd: %s", exc
+            )
 
     def _set_error_status(self, status: str) -> None:
         """Update the local fix dict and Redis with an error status.

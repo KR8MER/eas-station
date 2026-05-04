@@ -1002,10 +1002,18 @@ function drawSkyPlot(canvas, satsInView, activePrns) {
 
 /* Build the satellite table HTML (cgps-style) */
 function buildSatTable(satsInView, activePrns) {
-    if (!satsInView || satsInView.length === 0) {
+    // Merge active PRNs that have no GSV entry so used satellites always appear
+    var gsv_prns = (satsInView || []).map(function (s) { return s.prn; });
+    var extraActive = (activePrns || []).filter(function (p) { return gsv_prns.indexOf(p) === -1; });
+    var allSats = (satsInView || []).slice();
+    extraActive.forEach(function (prn) {
+        allSats.push({ prn: prn, elevation: null, azimuth: null, snr: null });
+    });
+
+    if (allSats.length === 0) {
         return '<div class="text-muted" style="padding:16px 4px;font-size:0.75rem">No satellite data yet&hellip;</div>';
     }
-    var sorted = satsInView.slice().sort(function (a, b) {
+    var sorted = allSats.slice().sort(function (a, b) {
         var sa = a.snr !== null ? a.snr : -1;
         var sb = b.snr !== null ? b.snr : -1;
         return sb - sa;

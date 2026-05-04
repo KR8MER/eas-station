@@ -25,6 +25,45 @@
         border-left-color: var(--success-color);
         box-shadow: 0 0 0 2px color-mix(in srgb, var(--success-color) 15%, transparent);
     }
+    /* Live pin-state indicator */
+    .pin-live-state {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        font-size: 0.72rem;
+        font-family: 'Courier New', monospace;
+        padding: 0.15rem 0.45rem;
+        border-radius: 999px;
+        border: 1px solid transparent;
+        transition: background 0.2s, color 0.2s, border-color 0.2s;
+    }
+    .pin-live-state.state-high {
+        background: rgba(63,185,80,0.15);
+        color: #3fb950;
+        border-color: rgba(63,185,80,0.35);
+    }
+    .pin-live-state.state-low {
+        background: rgba(100,110,120,0.10);
+        color: var(--text-muted);
+        border-color: var(--border-color);
+    }
+    .pin-live-state .state-dot {
+        width: 7px; height: 7px;
+        border-radius: 50%;
+        display: inline-block;
+    }
+    .state-high .state-dot { background: #3fb950; box-shadow: 0 0 5px #3fb950; }
+    .state-low  .state-dot { background: var(--text-muted); }
+    /* PPS-specific pulsing animation */
+    @keyframes pps-pulse {
+        0%,100% { opacity: 1; box-shadow: 0 0 4px #3fb950; }
+        50%      { opacity: 0.4; box-shadow: none; }
+    }
+    .pin-live-state.pps-pulsing .state-dot { animation: pps-pulse 1s infinite; }
+    .live-states-banner {
+        font-size: 0.78rem;
+        color: var(--text-muted);
+    }
     .behavior-grid {
         display: grid;
         gap: 0.75rem;
@@ -94,6 +133,13 @@
 
 <div class="container-fluid">
     <div id="pinMapAlert" class="alert d-none" role="alert"></div>
+
+    <!-- Live pin state banner -->
+    <div class="d-flex align-items-center gap-2 mb-2 live-states-banner">
+        <span id="live-state-indicator" class="text-muted">
+            <i class="fas fa-circle-notch fa-spin me-1"></i>Loading live pin states&hellip;
+        </span>
+    </div>
     
     <!-- Success toast notification -->
     <div class="position-fixed top-0 end-0 p-3" style="z-index: 9999;">
@@ -156,6 +202,9 @@
                         </div>
                         {% if pin.is_gpio and pin.bcm is not none %}
                         <span class="badge bg-dark">BCM {{ pin.bcm }}</span>
+                        <span id="live-pin-{{ pin.bcm }}" class="pin-live-state state-low ms-2" title="Live electrical state">
+                            <span class="state-dot"></span><span class="state-label">LOW</span>
+                        </span>
                         {% endif %}
                     </div>
 
@@ -550,6 +599,73 @@
             e.returnValue = '';
         }
     });
+})();
+
+/* ── Live GPIO pin state polling ── */
+(function () {
+    const POLL_INTERVAL_MS = 800;
+    const banner = document.getElementById('live-state-indicator');
+
+    function updateLivePinStates(pins) {
+        let highCount = 0;
+
+        Object.values(pins).forEach(function (info) {
+            const bcm = info.bcm;
+            const el  = document.getElementById('live-pin-' + bcm);
+            if (!el) return;
+
+            const isHigh = !!info.is_active;
+            const isPps  = info.source === 'gps_pps';
+            const label  = el.querySelector('.state-label');
+            const dot    = el.querySelector('.state-dot');
+
+            if (isHigh) {
+                highCount++;
+                el.className = 'pin-live-state state-high ms-2' + (isPps ? ' pps-pulsing' : '');
+                if (label) label.textContent = isPps ? 'PPS ✓' : 'HIGH';
+                const age = info.pps_pulse_age_s;
+                if (isPps && age != null) {
+                    el.title = 'PPS — last pulse ' + age.toFixed(1) + 's ago';
+                } else {
+                    el.title = 'Live electrical state: HIGH';
+                }
+            } else {
+                el.className = 'pin-live-state state-low ms-2';
+                if (label) label.textContent = isPps ? 'PPS' : 'LOW';
+                el.title = isPps
+                    ? 'PPS input — no recent pulse'
+                    : 'Live electrical state: LOW';
+            }
+        });
+
+        if (banner) {
+            if (highCount > 0) {
+                banner.innerHTML = '<span style="color:var(--success-color)"><i class="fas fa-bolt me-1"></i>'
+                    + highCount + ' pin' + (highCount !== 1 ? 's' : '') + ' HIGH</span>'
+                    + ' <span class="text-muted">&mdash; live states auto-refresh</span>';
+            } else {
+                banner.innerHTML = '<i class="fas fa-circle text-muted me-1" style="font-size:0.6rem"></i>'
+                    + '<span class="text-muted">All pins LOW &mdash; live states auto-refresh</span>';
+            }
+        }
+    }
+
+    async function pollLivePinStates() {
+        try {
+            const resp = await fetch('/api/gpio/live-pin-states');
+            if (!resp.ok) return;
+            const data = await resp.json();
+            if (data && data.pins) {
+                updateLivePinStates(data.pins);
+            }
+        } catch (_) {
+            // Silently ignore network errors during polling
+        }
+    }
+
+    // Initial load + periodic refresh
+    pollLivePinStates();
+    setInterval(pollLivePinStates, POLL_INTERVAL_MS);
 })();
 </script>
 {% endblock %}
