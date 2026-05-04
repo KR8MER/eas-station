@@ -1141,6 +1141,32 @@
     text-shadow: none;
 }
 
+/* Lightning Theme - Danger colour readability
+   --danger-color resolves to #ff5252 (bright red) in this theme.
+   White text on that background falls to 3.19:1, failing WCAG AA for normal
+   text.  Force dark ink so danger badges and card-headers remain legible. */
+[data-theme="lightning"] .bg-danger,
+[data-theme="lightning"] .text-bg-danger,
+[data-theme="lightning"] .badge.bg-danger,
+[data-theme="lightning"] .card-header.bg-danger,
+[data-theme="lightning"] .card-header.bg-danger * {
+    color: #0d1b2a !important;
+    text-shadow: none;
+}
+
+/* Lightning Theme - Warning colour readability
+   --warning-color resolves to #ffab40 (bright orange) in this theme.
+   White text on that background is only 1.88:1 — a hard WCAG fail.
+   Force dark ink so warning badges and card-headers remain legible. */
+[data-theme="lightning"] .bg-warning,
+[data-theme="lightning"] .text-bg-warning,
+[data-theme="lightning"] .badge.bg-warning,
+[data-theme="lightning"] .card-header.bg-warning,
+[data-theme="lightning"] .card-header.bg-warning * {
+    color: #0d1b2a !important;
+    text-shadow: none;
+}
+
 /* Lightning Theme - Tone down body ambient gradient.
    The default body uses radial blobs of --primary / --secondary at 10/8%.
    Against this theme's deep-navy background those blobs read as bright
@@ -6280,7 +6306,8 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 [data-theme="midnight"] .alert-success,
 [data-theme="charcoal"] .alert-success,
 [data-theme="obsidian"] .alert-success,
-[data-theme="slate"] .alert-success {
+[data-theme="slate"] .alert-success,
+[data-theme="lightning"] .alert-success {
     color: #6ee7b7;
     background-color: color-mix(in srgb, var(--success-color) 20%, var(--surface-color));
 }
@@ -6292,7 +6319,8 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 [data-theme="midnight"] .alert-danger,
 [data-theme="charcoal"] .alert-danger,
 [data-theme="obsidian"] .alert-danger,
-[data-theme="slate"] .alert-danger {
+[data-theme="slate"] .alert-danger,
+[data-theme="lightning"] .alert-danger {
     color: #fca5a5;
     background-color: color-mix(in srgb, var(--danger-color) 20%, var(--surface-color));
 }
@@ -6304,7 +6332,8 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 [data-theme="midnight"] .alert-warning,
 [data-theme="charcoal"] .alert-warning,
 [data-theme="obsidian"] .alert-warning,
-[data-theme="slate"] .alert-warning {
+[data-theme="slate"] .alert-warning,
+[data-theme="lightning"] .alert-warning {
     color: #fcd34d;
     background-color: color-mix(in srgb, var(--warning-color) 20%, var(--surface-color));
 }
@@ -6316,7 +6345,8 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 [data-theme="midnight"] .alert-info,
 [data-theme="charcoal"] .alert-info,
 [data-theme="obsidian"] .alert-info,
-[data-theme="slate"] .alert-info {
+[data-theme="slate"] .alert-info,
+[data-theme="lightning"] .alert-info {
     color: #93c5fd;
     background-color: color-mix(in srgb, var(--info-color) 20%, var(--surface-color));
 }
