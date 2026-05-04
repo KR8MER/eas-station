@@ -1198,11 +1198,14 @@ BASE_PACKAGES=(
 # i2c-tools: Command-line I2C bus utilities (for sensors, displays)
 # python3-smbus: Python bindings for SMBus/I2C communication
 # python3-lgpio: Raspberry Pi 5-compatible GPIO library (replaces deprecated RPi.GPIO)
+# liblgpio-dev: lgpio C library development headers/shared lib; required so pip
+#               can link the lgpio Python extension when building rpi-lgpio from source
 if [ "$HAS_GPIO" = true ]; then
     BASE_PACKAGES+=(
         i2c-tools
         python3-smbus
         python3-lgpio
+        liblgpio-dev
     )
 fi
 
