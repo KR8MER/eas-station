@@ -1209,6 +1209,12 @@ function refreshGpsStatus() {
             var activePrns      = d.active_satellite_prns || [];
             var recentSentences = d.recent_sentences      || [];
             var usedCount       = activePrns.length;
+            // Fallback: when the receiver doesn't emit GSA at all (some chips
+            // need PMTK314 to enable it) but GGA reports a fix with N sats,
+            // surface that count instead of misleadingly showing "0 used".
+            if (usedCount === 0 && d.has_fix && d.satellites) {
+                usedCount = d.satellites;
+            }
             var viewCount       = satsInView.length || (d.satellites != null ? d.satellites : 0);
             var plottableSats   = satsInView.filter(function(s) { return s.elevation !== null && s.azimuth !== null; });
             var pendingAlmanac  = satsInView.length > 0 && plottableSats.length === 0;

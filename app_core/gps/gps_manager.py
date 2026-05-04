@@ -44,7 +44,7 @@ import threading
 import time
 from collections import deque
 from datetime import datetime, timezone
-from typing import Any, Deque, Dict, Optional
+from typing import Any, Deque, Dict, Optional, Set
 
 
 # Redis key used for GPS status storage
@@ -120,6 +120,14 @@ class GPSManager:
 
         # GSV accumulation buffer — reader thread only, no lock needed
         self._gsv_buffer: Dict[int, Dict[str, Any]] = {}
+        # GSA per-cycle accumulator. Multi-GNSS receivers emit one GSA per
+        # constellation (e.g. $GPGSA, $GLGSA, $GAGSA, or several $GNGSA in a
+        # row). We union active PRNs across all GSA sentences within a single
+        # NMEA cycle so the "used" count reflects the full multi-constellation
+        # solution. The accumulator is reset on the next GGA (which marks the
+        # start of a new cycle) — reader thread only, no lock needed.
+        self._gsa_accumulator: Set[int] = set()
+        self._gsa_cycle_started: bool = False
         # PPS GPIO interrupt state
         self._pps_gpio_active: bool = False
 
@@ -346,6 +354,12 @@ class GPSManager:
             sentence_type = msg.sentence_type
 
             if sentence_type == "GGA":
+                # GGA marks the start of a new NMEA cycle. The next GSA we see
+                # will start a fresh accumulation; we keep the previously
+                # published active_satellite_prns until that GSA arrives so
+                # the UI doesn't briefly flicker to "0 used" on every cycle.
+                self._gsa_cycle_started = False
+
                 # Global Positioning System Fix Data
                 fix_qual = int(msg.gps_qual) if msg.gps_qual else 0
                 has_fix = fix_qual > 0
@@ -454,17 +468,30 @@ class GPSManager:
                     pass
 
             elif sentence_type == "GSA":
-                # GPS DOP and Active Satellites
+                # GPS DOP and Active Satellites. Multi-GNSS receivers emit one
+                # GSA per constellation per cycle, so we accumulate PRNs across
+                # all GSAs in the current cycle (reset on each GGA) and publish
+                # the union as active_satellite_prns. Without this, the last
+                # GSA of the cycle silently overwrites the earlier ones — and
+                # if it happens to carry no active sats (e.g. an empty GLGSA
+                # with no GLONASS lock), the UI shows "0 used" even though
+                # GPGSA reported 8+ active sats moments earlier.
                 try:
-                    active = []
+                    this_gsa = []
                     for i in range(1, 13):
                         prn_raw = getattr(msg, "sv_id%02d" % i, None)
                         if prn_raw and str(prn_raw).strip():
                             try:
-                                active.append(int(prn_raw))
+                                this_gsa.append(int(prn_raw))
                             except (ValueError, TypeError):
                                 pass
-                    self._fix["active_satellite_prns"] = active
+                    if not self._gsa_cycle_started:
+                        self._gsa_accumulator = set()
+                        self._gsa_cycle_started = True
+                    self._gsa_accumulator.update(this_gsa)
+                    self._fix["active_satellite_prns"] = sorted(
+                        self._gsa_accumulator
+                    )
                     # Fix mode: 1=no fix, 2=2D, 3=3D
                     fix_mode_raw = getattr(msg, "mode_fix_type", None)
                     if fix_mode_raw is not None:
