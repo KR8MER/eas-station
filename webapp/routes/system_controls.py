@@ -21,7 +21,8 @@ from __future__ import annotations
 
 """Routes for system-level controls including GPIO relay management."""
 
-from datetime import datetime, timedelta
+import json
+from datetime import datetime, timedelta, timezone
 
 from flask import (
     Flask,
@@ -232,6 +233,73 @@ def register(app: Flask, logger) -> None:
                 jsonify({"success": False, "error": str(exc)}),
                 500,
             )
+
+    @app.route("/api/gpio/live-pin-states")
+    @require_permission('gpio.view')
+    def gpio_live_pin_states():
+        """Return live electrical state for all GPIO pins plus PPS data from GPS.
+
+        Combines:
+        - Software-managed output-pin states from GPIOController
+        - PPS pulse data from the GPS Redis key (for the configured PPS input pin)
+
+        Returns a dict keyed by BCM pin number so the GPIO pin map page can
+        annotate each pin card with a live HIGH/LOW indicator.
+        """
+        result: dict = {}
+
+        # --- Output pins from GPIOController ---
+        try:
+            controller = _get_gpio_controller()
+            for pin, info in controller.get_all_states().items():
+                bcm = str(pin)
+                result[bcm] = {
+                    "bcm": pin,
+                    "source": "gpio_controller",
+                    "is_active": info.get("is_active", False),
+                    "state": "HIGH" if info.get("is_active") else "LOW",
+                    "name": info.get("name", f"GPIO {pin}"),
+                }
+        except Exception as exc:
+            route_logger.debug("live-pin-states: GPIOController unavailable: %s", exc)
+
+        # --- PPS input pin from GPS Redis key ---
+        try:
+            from app_core.redis_client import get_redis_client
+            redis = get_redis_client(max_retries=1)
+            if redis:
+                raw = redis.get("gps:status")
+                if raw:
+                    gps_data = json.loads(raw)
+                    pps_pin = gps_data.get("pps_gpio_pin")
+                    pps_count = gps_data.get("pps_pulse_count", 0)
+                    pps_last = gps_data.get("pps_last_pulse_at")
+                    pps_age = None
+                    if pps_last:
+                        try:
+                            pulse_dt = datetime.fromisoformat(pps_last)
+                            pps_age = round(
+                                (datetime.now(timezone.utc) - pulse_dt).total_seconds(), 2
+                            )
+                        except Exception:
+                            pass
+                    if pps_pin is not None:
+                        bcm_key = str(pps_pin)
+                        # PPS is "HIGH" if we have seen a pulse in the last 2s
+                        pps_high = pps_age is not None and pps_age < 2.0
+                        result[bcm_key] = {
+                            "bcm": pps_pin,
+                            "source": "gps_pps",
+                            "is_active": pps_high,
+                            "state": "HIGH" if pps_high else "LOW",
+                            "name": f"PPS (BCM {pps_pin})",
+                            "pps_pulse_count": pps_count,
+                            "pps_pulse_age_s": pps_age,
+                        }
+        except Exception as exc:
+            route_logger.debug("live-pin-states: GPS Redis unavailable: %s", exc)
+
+        return jsonify({"success": True, "pins": result})
 
     @app.route("/api/gpio/activate/<int:pin>", methods=["POST"])
     @require_permission('gpio.control')

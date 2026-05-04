@@ -442,6 +442,31 @@
         .health-card:nth-child(3) { animation-delay: 0.2s; }
         .health-card:nth-child(4) { animation-delay: 0.3s; }
         .health-card:nth-child(5) { animation-delay: 0.4s; }
+
+        /* GPS sky view — matches hardware settings panel style */
+        .gps-live-body { display: flex; flex-wrap: wrap; gap: 0.75rem; padding: 0.75rem 0; }
+        .gps-sky-col   { flex: 0 0 auto; }
+        .gps-sat-col   { flex: 1 1 220px; overflow-x: auto; }
+        .gps-sat-table { border-collapse: collapse; font-family: 'Courier New', monospace; font-size: 0.78rem; color: var(--text-color); }
+        .gps-sat-table th { color: var(--text-secondary); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; padding: 0 6px 4px; }
+        .gps-sat-table td { padding: 2px 0; vertical-align: middle; }
+        .gps-sat-table .sat-used   { color: var(--text-color); }
+        .gps-sat-table .sat-unused { color: var(--text-muted); }
+        .gps-snr-track { display: inline-block; width: 60px; height: 7px; background: var(--border-color); border-radius: 3px; vertical-align: middle; }
+        .gps-snr-fill  { display: block; height: 100%; border-radius: 3px; }
+        .snr-legend    { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.4rem; font-size: 0.7rem; color: var(--text-muted); }
+        .snr-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 3px; vertical-align: middle; }
+        .snr-s5 { background: #3fb950; } .snr-s4 { background: #84cc16; } .snr-s3 { background: #d29922; }
+        .snr-s2 { background: #f97316; } .snr-s1 { background: #f85149; } .snr-s0 { background: #484f58; }
+        .gps-timecode { font-family: 'Courier New', monospace; font-size: 0.95rem; font-weight: 700;
+                        color: #3fb950; letter-spacing: 0.04em; }
+        .gps-timecode-row { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem;
+                            padding: 0.4rem 0.6rem; background: rgba(63,185,80,0.08);
+                            border-radius: var(--radius-sm); border: 1px solid rgba(63,185,80,0.2); }
+        .gps-ntp-badge { font-size: 0.75rem; padding: 0.25em 0.6em; }
+        .gps-nmea-log  { font-family: 'Courier New', monospace; font-size: 0.7rem; max-height: 90px;
+                         overflow-y: auto; background: rgba(0,0,0,0.15); border-radius: var(--radius-sm);
+                         padding: 0.4rem 0.6rem; margin-top: 0.5rem; }
     </style>
 {% endblock %}
 
@@ -1829,8 +1854,12 @@
                         {% if gps and gps.get('running') %}
                             {% set fix_quality = gps.get('fix_quality', 'no_fix') %}
                             {% set has_fix = gps.get('has_fix', False) %}
-                            <div class="row">
-                                <div class="col-md-4">
+                            {% set active_prns = gps.get('active_satellite_prns', []) %}
+                            {% set sats_in_view = gps.get('satellites_in_view', []) %}
+
+                            <!-- Status row -->
+                            <div class="row mb-2">
+                                <div class="col-md-6">
                                     <div class="metric-row">
                                         <span class="metric-label">Status:</span>
                                         <span class="metric-value">
@@ -1841,61 +1870,71 @@
                                             {% else %}
                                                 <span class="badge bg-secondary">No Fix</span>
                                             {% endif %}
+                                            <span class="badge bg-secondary ms-1">{{ fix_quality|replace('_',' ')|title }}</span>
+                                            <span class="ms-1">{{ active_prns|length }} used / {{ sats_in_view|length }} visible</span>
                                         </span>
                                     </div>
-                                    <div class="metric-row">
-                                        <span class="metric-label">Fix Quality:</span>
-                                        <span class="metric-value">{{ fix_quality|replace('_',' ')|title }}</span>
-                                    </div>
-                                    <div class="metric-row">
-                                        <span class="metric-label">Satellites:</span>
-                                        <span class="metric-value">
-                                            {{ gps.get('active_satellite_prns', [])|length }} used
-                                            / {{ gps.get('satellites_in_view', [])|length }} visible
-                                        </span>
-                                    </div>
-                                    <div class="metric-row">
-                                        <span class="metric-label">HDOP:</span>
-                                        <span class="metric-value">{{ gps.get('hdop') or '—' }}</span>
-                                    </div>
-                                </div>
-                                <div class="col-md-4">
-                                    {% if has_fix %}
-                                    <div class="metric-row">
-                                        <span class="metric-label">Latitude:</span>
-                                        <span class="metric-value">{{ "%.6f"|format(gps.latitude) ~ '°' if gps.get('latitude') is not none else '—' }}</span>
-                                    </div>
-                                    <div class="metric-row">
-                                        <span class="metric-label">Longitude:</span>
-                                        <span class="metric-value">{{ "%.6f"|format(gps.longitude) ~ '°' if gps.get('longitude') is not none else '—' }}</span>
-                                    </div>
-                                    <div class="metric-row">
-                                        <span class="metric-label">Altitude:</span>
-                                        <span class="metric-value">{{ "%.1f"|format(gps.altitude_m) ~ ' m' if gps.get('altitude_m') is not none else '—' }}</span>
-                                    </div>
-                                    {% endif %}
-                                    <div class="metric-row">
-                                        <span class="metric-label">GPS UTC:</span>
-                                        <span class="metric-value">{{ gps.get('gps_utc_time') or '—' }}</span>
-                                    </div>
-                                </div>
-                                <div class="col-md-4">
                                     <div class="metric-row">
                                         <span class="metric-label">Port:</span>
                                         <span class="metric-value"><code>{{ gps.get('serial_port','—') }}</code> @ {{ gps.get('baudrate', 9600) }} baud</span>
                                     </div>
-                                    <div class="metric-row">
-                                        <span class="metric-label">PPS GPIO:</span>
-                                        <span class="metric-value">BCM {{ gps.get('pps_gpio_pin', '—') }}</span>
-                                    </div>
                                     {% if gps.get('pps_pulse_count') %}
                                     <div class="metric-row">
-                                        <span class="metric-label">PPS Pulses:</span>
-                                        <span class="metric-value">{{ gps.pps_pulse_count }}</span>
+                                        <span class="metric-label">PPS GPIO:</span>
+                                        <span class="metric-value">BCM {{ gps.get('pps_gpio_pin', '—') }} &mdash; {{ gps.pps_pulse_count }} pulse{% if gps.pps_pulse_count != 1 %}s{% endif %}</span>
+                                    </div>
+                                    {% endif %}
+                                    {% if has_fix %}
+                                    <div class="metric-row">
+                                        <span class="metric-label">Position:</span>
+                                        <span class="metric-value">
+                                            {{ "%.6f"|format(gps.latitude) ~ '°' if gps.get('latitude') is not none else '—' }},
+                                            {{ "%.6f"|format(gps.longitude) ~ '°' if gps.get('longitude') is not none else '—' }}
+                                            <span class="ms-2">Alt {{ "%.1f"|format(gps.altitude_m) ~ ' m' if gps.get('altitude_m') is not none else '—' }}</span>
+                                            <span class="ms-2">HDOP {{ gps.get('hdop') or '—' }}</span>
+                                        </span>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                                <div class="col-md-6">
+                                    <!-- GPS UTC time code -->
+                                    {% if gps.get('gps_utc_time') %}
+                                    <div class="gps-timecode-row">
+                                        <i class="fas fa-clock" style="color:#3fb950"></i>
+                                        <span class="metric-label">GPS UTC:</span>
+                                        <span class="gps-timecode">{{ gps.get('gps_utc_time') }}</span>
+                                    </div>
+                                    {% endif %}
+                                    {% if gps.get('use_for_time') %}
+                                    <div class="metric-row">
+                                        <span class="metric-label">Time Sync:</span>
+                                        <span class="metric-value">
+                                            {% if gps.get('time_synced') %}
+                                                <span class="badge bg-success gps-ntp-badge">Synced</span>
+                                            {% else %}
+                                                <span class="badge bg-warning text-dark gps-ntp-badge">Pending</span>
+                                            {% endif %}
+                                            {% if gps.get('ntp_disabled') %}
+                                                <span class="badge bg-info gps-ntp-badge">NTP Disabled</span>
+                                            {% endif %}
+                                        </span>
                                     </div>
                                     {% endif %}
                                 </div>
                             </div>
+
+                            <!-- Sky view + satellite table -->
+                            <div class="gps-live-body">
+                                <div class="gps-sky-col">
+                                    <canvas id="gps-sky-canvas-health" width="220" height="220" style="display:block"></canvas>
+                                </div>
+                                <div class="gps-sat-col">
+                                    <div id="gps-sat-table-health">
+                                        <!-- populated by JS after page render -->
+                                    </div>
+                                </div>
+                            </div>
+
                         {% elif gps and not gps.get('running') and gps.get('status') not in ('not_started', 'disabled', 'redis_unavailable', 'error') %}
                             <p class="text-muted mb-0"><i class="fas fa-exclamation-triangle me-1 text-warning"></i>
                                 GPS receiver error: <code>{{ gps.get('status','unknown') }}</code></p>
@@ -3557,6 +3596,138 @@
             `;
         }
 
+        /* ── GPS sky-plot helpers (mirrored from hardware_settings panel) ── */
+        function gpsSnrClass(snr) {
+            if (snr === null || snr === undefined) return 'snr-s0';
+            if (snr >= 45) return 'snr-s5';
+            if (snr >= 35) return 'snr-s4';
+            if (snr >= 25) return 'snr-s3';
+            if (snr >= 15) return 'snr-s2';
+            return 'snr-s1';
+        }
+        const _GPS_SNR_COLORS = { 'snr-s0':'#484f58','snr-s1':'#f85149','snr-s2':'#f97316','snr-s3':'#d29922','snr-s4':'#84cc16','snr-s5':'#3fb950' };
+        function gpsSnrHex(snr) { return _GPS_SNR_COLORS[gpsSnrClass(snr)] || '#484f58'; }
+
+        function drawGpsSkyPlot(canvas, satsInView, activePrns) {
+            const ctx = canvas.getContext('2d');
+            const W = canvas.width, H = canvas.height;
+            const cx = W / 2, cy = H / 2;
+            const MAX_R = Math.min(W, H) / 2 - 14;
+
+            ctx.clearRect(0, 0, W, H);
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(cx, cy, MAX_R, 0, Math.PI * 2);
+            ctx.clip();
+
+            ctx.fillStyle = '#0d1117';
+            ctx.fill();
+
+            [0, 30, 60].forEach(el => {
+                const r = MAX_R * (90 - el) / 90;
+                ctx.beginPath();
+                ctx.arc(cx, cy, r, 0, Math.PI * 2);
+                ctx.strokeStyle = '#1c2128';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            });
+            ctx.strokeStyle = '#1c2128'; ctx.lineWidth = 0.8;
+            ctx.beginPath();
+            ctx.moveTo(cx, cy - MAX_R); ctx.lineTo(cx, cy + MAX_R);
+            ctx.moveTo(cx - MAX_R, cy); ctx.lineTo(cx + MAX_R, cy);
+            ctx.stroke();
+
+            ctx.fillStyle = '#2d3748'; ctx.font = '8px monospace';
+            ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+            ctx.fillText('30°', cx + 2, cy - MAX_R * 60 / 90);
+            ctx.fillText('60°', cx + 2, cy - MAX_R * 30 / 90);
+
+            ctx.beginPath(); ctx.arc(cx, cy, 2, 0, Math.PI * 2);
+            ctx.fillStyle = '#2d3748'; ctx.fill();
+
+            (satsInView || []).forEach(sat => {
+                if (sat.elevation === null || sat.azimuth === null) return;
+                const r = MAX_R * (90 - Math.max(0, sat.elevation)) / 90;
+                const azRad = sat.azimuth * Math.PI / 180;
+                const x = cx + r * Math.sin(azRad);
+                const y = cy - r * Math.cos(azRad);
+                const isUsed = (activePrns || []).indexOf(sat.prn) !== -1;
+                const color = gpsSnrHex(sat.snr);
+
+                if (isUsed && sat.snr !== null) {
+                    ctx.beginPath(); ctx.arc(x, y, 11, 0, Math.PI * 2);
+                    ctx.fillStyle = color + '28'; ctx.fill();
+                }
+                ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI * 2);
+                ctx.fillStyle = color; ctx.globalAlpha = 0.88; ctx.fill();
+                ctx.globalAlpha = 1;
+                ctx.strokeStyle = isUsed ? '#ffffff' : '#444c56';
+                ctx.lineWidth = isUsed ? 1.5 : 0.8; ctx.stroke();
+
+                ctx.fillStyle = '#ffffff'; ctx.font = 'bold 6px monospace';
+                ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.fillText(sat.prn.toString(), x, y);
+            });
+            ctx.restore();
+
+            ctx.fillStyle = '#4a6080'; ctx.font = 'bold 10px sans-serif';
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText('N', cx, cy - MAX_R - 8);
+            ctx.fillText('S', cx, cy + MAX_R + 8);
+            ctx.textAlign = 'left';  ctx.fillText('E', cx + MAX_R + 4, cy);
+            ctx.textAlign = 'right'; ctx.fillText('W', cx - MAX_R - 4, cy);
+        }
+
+        function buildGpsSatTable(satsInView, activePrns) {
+            // Merge active PRNs that have no GSV entry so used satellites always show
+            const gsvPrns = (satsInView || []).map(s => s.prn);
+            const extra = (activePrns || []).filter(p => gsvPrns.indexOf(p) === -1);
+            const allSats = (satsInView || []).slice();
+            extra.forEach(prn => allSats.push({ prn, elevation: null, azimuth: null, snr: null }));
+
+            if (!allSats.length) {
+                return '<div class="text-muted" style="font-size:0.78rem;padding:8px 0">No satellite data yet&hellip;</div>';
+            }
+            const sorted = allSats.slice().sort((a, b) => (b.snr ?? -1) - (a.snr ?? -1));
+            const rows = sorted.map(sat => {
+                const used = (activePrns || []).indexOf(sat.prn) !== -1;
+                const snr  = sat.snr;
+                const barW = snr !== null ? Math.min(100, Math.round(snr / 50 * 100)) : 0;
+                const barColor = gpsSnrHex(snr);
+                const mark = used
+                    ? '<span style="color:#3fb950">&#10003;</span>'
+                    : '<span style="color:#30363d">&#183;</span>';
+                return `<tr class="${used ? 'sat-used' : 'sat-unused'}">
+                    <td style="text-align:right;padding-right:8px">${sat.prn}</td>
+                    <td style="text-align:right;padding-right:8px">${sat.elevation !== null ? sat.elevation : '&mdash;'}</td>
+                    <td style="text-align:right;padding-right:10px">${sat.azimuth !== null ? sat.azimuth : '&mdash;'}</td>
+                    <td><span class="gps-snr-track"><span class="gps-snr-fill" style="width:${barW}%;background:${barColor}"></span></span></td>
+                    <td style="padding-left:5px;text-align:right">${snr !== null ? snr : '&mdash;'}</td>
+                    <td style="padding-left:6px;text-align:center">${mark}</td>
+                </tr>`;
+            }).join('');
+
+            return `<table class="gps-sat-table">
+                <thead><tr>
+                    <th style="text-align:right">Sv</th>
+                    <th style="text-align:right">El&deg;</th>
+                    <th style="text-align:right">Az&deg;</th>
+                    <th colspan="2">C/N&#x2080; (dBHz)</th>
+                    <th style="text-align:center">Fix</th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+            </table>
+            <div class="snr-legend">
+                <span><span class="snr-dot snr-s5"></span>&ge;45</span>
+                <span><span class="snr-dot snr-s4"></span>35&ndash;44</span>
+                <span><span class="snr-dot snr-s3"></span>25&ndash;34</span>
+                <span><span class="snr-dot snr-s2"></span>15&ndash;24</span>
+                <span><span class="snr-dot snr-s1"></span>&lt;15</span>
+                <span><span class="snr-dot snr-s0"></span>no sig</span>
+            </div>`;
+        }
+        /* ── end GPS sky-plot helpers ── */
+
         function renderGpsCard(gps) {
             if (!gps || typeof gps !== 'object') {
                 return null;
@@ -3581,48 +3752,70 @@
                 statusBadge = `<span class="badge bg-secondary">No Fix</span>`;
             }
 
-            const activePrns   = Array.isArray(gps.active_satellite_prns) ? gps.active_satellite_prns : [];
-            const satsInView   = Array.isArray(gps.satellites_in_view)    ? gps.satellites_in_view    : [];
-            const fixQuality   = (gps.fix_quality || 'no_fix').replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase());
+            const activePrns = Array.isArray(gps.active_satellite_prns) ? gps.active_satellite_prns : [];
+            const satsInView = Array.isArray(gps.satellites_in_view)    ? gps.satellites_in_view    : [];
+            const fixQuality = (gps.fix_quality || 'no_fix').replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase());
 
+            // Position row (when fix available)
             let posHtml = '';
             if (hasFix) {
-                const lat  = gps.latitude  != null ? gps.latitude.toFixed(6)  + '°' : '—';
-                const lon  = gps.longitude != null ? gps.longitude.toFixed(6) + '°' : '—';
-                const alt  = gps.altitude_m != null ? gps.altitude_m.toFixed(1) + ' m' : '—';
-                posHtml = `
-                    <div class="metric-row"><span class="metric-label">Latitude:</span>
-                        <span class="metric-value">${escapeHtml(lat)}</span></div>
-                    <div class="metric-row"><span class="metric-label">Longitude:</span>
-                        <span class="metric-value">${escapeHtml(lon)}</span></div>
-                    <div class="metric-row"><span class="metric-label">Altitude:</span>
-                        <span class="metric-value">${escapeHtml(alt)}</span></div>`;
+                const lat = gps.latitude  != null ? gps.latitude.toFixed(6)  + '°' : '—';
+                const lon = gps.longitude != null ? gps.longitude.toFixed(6) + '°' : '—';
+                const alt = gps.altitude_m != null ? gps.altitude_m.toFixed(1) + ' m' : '—';
+                posHtml = `<div class="metric-row"><span class="metric-label">Position:</span>
+                    <span class="metric-value d-inline-flex flex-wrap gap-2">${escapeHtml(lat)}, ${escapeHtml(lon)}<span>Alt ${escapeHtml(alt)}</span><span>HDOP ${gps.hdop != null ? escapeHtml(String(gps.hdop)) : '—'}</span></span></div>`;
             }
 
+            // GPS UTC time code
+            const utcCode = gps.gps_utc_time
+                ? `<div class="gps-timecode-row"><i class="fas fa-clock" style="color:#3fb950"></i>
+                    <span class="metric-label">GPS UTC:</span>
+                    <span class="gps-timecode">${escapeHtml(gps.gps_utc_time)}</span></div>`
+                : '';
+
+            // Time sync / NTP status
+            let timeSyncHtml = '';
+            if (gps.use_for_time) {
+                const syncBadge = gps.time_synced
+                    ? '<span class="badge bg-success gps-ntp-badge">Synced</span>'
+                    : '<span class="badge bg-warning text-dark gps-ntp-badge">Pending</span>';
+                const ntpBadge = gps.ntp_disabled
+                    ? '<span class="badge bg-info gps-ntp-badge ms-1">NTP Disabled</span>'
+                    : '';
+                timeSyncHtml = `<div class="metric-row"><span class="metric-label">Time Sync:</span>
+                    <span class="metric-value">${syncBadge}${ntpBadge}</span></div>`;
+            }
+
+            // PPS info
+            const ppsHtml = gps.pps_pulse_count
+                ? `<div class="metric-row"><span class="metric-label">PPS GPIO:</span>
+                    <span class="metric-value">BCM ${escapeHtml(String(gps.pps_gpio_pin ?? '—'))} &mdash; ${escapeHtml(String(gps.pps_pulse_count))} pulse${gps.pps_pulse_count !== 1 ? 's' : ''}</span></div>`
+                : `<div class="metric-row"><span class="metric-label">PPS GPIO:</span>
+                    <span class="metric-value">BCM ${escapeHtml(String(gps.pps_gpio_pin ?? '—'))}</span></div>`;
+
             return `
-                <div class="row">
-                    <div class="col-md-4">
+                <div class="row mb-2">
+                    <div class="col-md-6">
                         <div class="metric-row"><span class="metric-label">Status:</span>
-                            <span class="metric-value">${statusBadge}</span></div>
-                        <div class="metric-row"><span class="metric-label">Fix Quality:</span>
-                            <span class="metric-value">${escapeHtml(fixQuality)}</span></div>
-                        <div class="metric-row"><span class="metric-label">Satellites:</span>
-                            <span class="metric-value">${activePrns.length} used / ${satsInView.length} visible</span></div>
-                        <div class="metric-row"><span class="metric-label">HDOP:</span>
-                            <span class="metric-value">${gps.hdop != null ? escapeHtml(String(gps.hdop)) : '—'}</span></div>
-                    </div>
-                    <div class="col-md-4">
-                        ${posHtml}
-                        <div class="metric-row"><span class="metric-label">GPS UTC:</span>
-                            <span class="metric-value">${escapeHtml(gps.gps_utc_time || '—')}</span></div>
-                    </div>
-                    <div class="col-md-4">
+                            <span class="metric-value d-inline-flex align-items-center gap-1">${statusBadge}
+                                <span class="badge bg-secondary">${escapeHtml(fixQuality)}</span>
+                                <span>${activePrns.length} used / ${satsInView.length} visible</span></span></div>
                         <div class="metric-row"><span class="metric-label">Port:</span>
                             <span class="metric-value"><code>${escapeHtml(gps.serial_port || '—')}</code> @ ${escapeHtml(String(gps.baudrate || 9600))} baud</span></div>
-                        <div class="metric-row"><span class="metric-label">PPS GPIO:</span>
-                            <span class="metric-value">BCM ${escapeHtml(String(gps.pps_gpio_pin != null ? gps.pps_gpio_pin : '—'))}</span></div>
-                        ${gps.pps_pulse_count ? `<div class="metric-row"><span class="metric-label">PPS Pulses:</span>
-                            <span class="metric-value">${escapeHtml(String(gps.pps_pulse_count))}</span></div>` : ''}
+                        ${ppsHtml}
+                        ${posHtml}
+                    </div>
+                    <div class="col-md-6">
+                        ${utcCode}
+                        ${timeSyncHtml}
+                    </div>
+                </div>
+                <div class="gps-live-body">
+                    <div class="gps-sky-col">
+                        <canvas id="gps-sky-canvas-health" width="220" height="220" style="display:block"></canvas>
+                    </div>
+                    <div class="gps-sat-col">
+                        ${buildGpsSatTable(satsInView, activePrns)}
                     </div>
                 </div>`;
         }
@@ -3720,12 +3913,20 @@
             const gpsSection    = document.getElementById('gps-section');
             const gpsCardBody   = document.getElementById('gps-card-body');
             if (gpsSection && gpsCardBody) {
-                const gpsHtml = renderGpsCard(data.gps || {});
+                const gpsData = data.gps || {};
+                const gpsHtml = renderGpsCard(gpsData);
                 if (gpsHtml) {
                     gpsSection.classList.remove('d-none');
                     gpsCardBody.innerHTML =
                         '<h5><i class="fas fa-satellite section-icon"></i> GPS Receiver</h5>'
                         + gpsHtml;
+                    // Draw sky plot onto the freshly-inserted canvas
+                    const skyCanvas = document.getElementById('gps-sky-canvas-health');
+                    if (skyCanvas) {
+                        const satsInView = Array.isArray(gpsData.satellites_in_view) ? gpsData.satellites_in_view : [];
+                        const activePrns = Array.isArray(gpsData.active_satellite_prns) ? gpsData.active_satellite_prns : [];
+                        drawGpsSkyPlot(skyCanvas, satsInView, activePrns);
+                    }
                 } else {
                     gpsSection.classList.add('d-none');
                 }
