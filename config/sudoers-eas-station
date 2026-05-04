@@ -126,12 +126,3 @@ eas-station ALL=(ALL) NOPASSWD: /usr/bin/tee /etc/postfix/main.cf
 
 # Postfix installation via apt-get (non-interactive, suppresses debconf prompts)
 eas-station ALL=(ALL) NOPASSWD: /usr/bin/env DEBIAN_FRONTEND=noninteractive apt-get install -y postfix libsasl2-modules
-
-# GPS time synchronisation (required by app_core/gps/gps_manager.py)
-# When use_for_time is enabled, the GPS manager sets the system clock from the
-# GPS UTC timestamp and disables the system NTP client so it does not fight
-# the GPS-disciplined clock. Without these entries the sync silently fails
-# and the dashboard "Time Sync" badge stays on "Pending" forever.
-eas-station ALL=(ALL) NOPASSWD: /usr/bin/date -s *
-eas-station ALL=(ALL) NOPASSWD: /usr/bin/timedatectl set-ntp false
-eas-station ALL=(ALL) NOPASSWD: /usr/bin/systemctl stop systemd-timesyncd

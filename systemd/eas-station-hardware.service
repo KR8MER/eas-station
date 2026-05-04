@@ -34,6 +34,9 @@ TimeoutStopSec=30
 
 # Security settings (needs GPIO/I2C/SPI access)
 NoNewPrivileges=true
+# CAP_SYS_TIME lets the process call clock_settime(2) directly so the GPS
+# manager can sync the system clock without sudo (which NoNewPrivileges blocks).
+AmbientCapabilities=CAP_SYS_TIME
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
