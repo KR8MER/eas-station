@@ -3730,6 +3730,7 @@
 
         /* ── GPS health-card helpers ─────────────────────────────────── */
         let _gpsHealthRendered = false;
+        const METERS_TO_FEET = 3.28084;
 
         function _gpsHealthSet(id, html) {
             const el = document.getElementById(id);
@@ -3820,7 +3821,7 @@
             if (hasFix) {
                 const lat = gps.latitude  != null ? gps.latitude.toFixed(6)  + '°' : '—';
                 const lon = gps.longitude != null ? gps.longitude.toFixed(6) + '°' : '—';
-                const alt = gps.altitude_m != null ? (gps.altitude_m * 3.28084).toFixed(0) + ' ft' : '—';
+                const alt = gps.altitude_m != null ? (gps.altitude_m * METERS_TO_FEET).toFixed(0) + ' ft' : '—';
                 _gpsHealthSet('gps-h-pos-row',
                     `<div class="metric-row"><span class="metric-label">Position:</span>
                     <span class="metric-value d-inline-flex flex-wrap gap-2">${escapeHtml(lat)}, ${escapeHtml(lon)}<span>Alt ${escapeHtml(alt)}</span><span>HDOP ${gps.hdop != null ? escapeHtml(String(gps.hdop)) : '—'}</span></span></div>`);

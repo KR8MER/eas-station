@@ -871,6 +871,8 @@
 // ── GPS Live Panel ────────────────────────────────────────────────────
 var _gpsPollTimer  = null;
 var _gpsRendered   = false;   // true once the panel shell has been inserted
+var METERS_TO_FEET = 3.28084;
+var KNOTS_TO_MPH   = 1.15078;
 
 function startGpsPolling() {
     stopGpsPolling();
@@ -1238,10 +1240,10 @@ function refreshGpsStatus() {
             if (d.has_fix) {
                 var lat  = d.latitude  != null ? d.latitude.toFixed(6)  + '&deg;' : '&mdash;';
                 var lon  = d.longitude != null ? d.longitude.toFixed(6) + '&deg;' : '&mdash;';
-                var alt  = d.altitude_m != null ? (d.altitude_m * 3.28084).toFixed(0) + ' ft' : '&mdash;';
+                var alt  = d.altitude_m != null ? (d.altitude_m * METERS_TO_FEET).toFixed(0) + ' ft' : '&mdash;';
                 var hdop = d.hdop != null ? d.hdop : '&mdash;';
                 var utc  = d.gps_utc_time || '&mdash;';
-                var spd  = d.speed_knots != null ? (d.speed_knots * 1.15078).toFixed(1) + ' mph' : null;
+                var spd  = d.speed_knots != null ? (d.speed_knots * KNOTS_TO_MPH).toFixed(1) + ' mph' : null;
                 footerHtml =
                     '<span><span class="gps-lbl">Lat&nbsp;</span>' + lat + '</span>'
                     + '<span><span class="gps-lbl">Lon&nbsp;</span>' + lon + '</span>'
