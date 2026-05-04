@@ -1864,14 +1864,13 @@
                                         <span class="metric-label">Status:</span>
                                         <span class="metric-value">
                                             {% if has_fix %}
-                                                <span class="badge bg-success">{{ gps.get('status','fix')|title }}</span>
+                                                <span class="badge bg-success">Fix</span>
                                             {% elif gps.get('status') in ('acquiring', 'reading') %}
                                                 <span class="badge bg-warning text-dark">Acquiring</span>
                                             {% else %}
                                                 <span class="badge bg-secondary">No Fix</span>
                                             {% endif %}
-                                            <span class="badge bg-secondary ms-1">{{ fix_quality|replace('_',' ')|title }}</span>
-                                            <span class="ms-1">{{ active_prns|length }} used / {{ sats_in_view|length }} visible</span>
+                                            <span class="ms-1" id="gps-h-counts-init">{{ active_prns|length }} used / {{ sats_in_view|length }} visible</span>
                                         </span>
                                     </div>
                                     <div class="metric-row">
@@ -1890,7 +1889,7 @@
                                         <span class="metric-value">
                                             {{ "%.6f"|format(gps.latitude) ~ '°' if gps.get('latitude') is not none else '—' }},
                                             {{ "%.6f"|format(gps.longitude) ~ '°' if gps.get('longitude') is not none else '—' }}
-                                            <span class="ms-2">Alt {{ "%.1f"|format(gps.altitude_m) ~ ' m' if gps.get('altitude_m') is not none else '—' }}</span>
+                                            <span class="ms-2">Alt {{ "%.0f"|format(gps.altitude_m * 3.28084) ~ ' ft' if gps.get('altitude_m') is not none else '—' }}</span>
                                             <span class="ms-2">HDOP {{ gps.get('hdop') or '—' }}</span>
                                         </span>
                                     </div>
@@ -1927,9 +1926,10 @@
                             <div class="gps-live-body">
                                 <div class="gps-sky-col">
                                     <canvas id="gps-sky-canvas-health" width="220" height="220" style="display:block"></canvas>
+                                    <div id="gps-h-sky-overlay"></div>
                                 </div>
                                 <div class="gps-sat-col">
-                                    <div id="gps-sat-table-health">
+                                    <div id="gps-h-sat-table">
                                         <!-- populated by JS after page render -->
                                     </div>
                                 </div>
@@ -3728,96 +3728,150 @@
         }
         /* ── end GPS sky-plot helpers ── */
 
-        function renderGpsCard(gps) {
-            if (!gps || typeof gps !== 'object') {
-                return null;
-            }
-            const running = gps.running;
-            const hasFix  = gps.has_fix;
-            const status  = gps.status || 'unknown';
+        /* ── GPS health-card helpers ─────────────────────────────────── */
+        let _gpsHealthRendered = false;
+        const METERS_TO_FEET = 3.28084;
 
-            // Don't show the card if GPS is not configured at all
-            if (!running && ['not_started', 'disabled', 'redis_unavailable', 'error'].includes(status)) {
-                return null;
-            }
+        function _gpsHealthSet(id, html) {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = html;
+        }
 
-            let statusBadge;
+        function _buildGpsStatusBadge(gps) {
+            const hasFix = gps.has_fix;
+            const status = gps.status || 'unknown';
             if (hasFix) {
-                statusBadge = `<span class="badge bg-success">${escapeHtml(status.replace(/_/g,' '))}</span>`;
+                return `<span class="badge bg-success">Fix</span>`;
             } else if (status === 'acquiring' || status === 'reading') {
-                statusBadge = `<span class="badge bg-warning text-dark">Acquiring</span>`;
+                return `<span class="badge bg-warning text-dark">Acquiring</span>`;
             } else if (['port_not_found','port_open_failed','pyserial_missing','pynmea2_missing'].includes(status)) {
-                statusBadge = `<span class="badge bg-danger">${escapeHtml(status.replace(/_/g,' '))}</span>`;
-            } else {
-                statusBadge = `<span class="badge bg-secondary">No Fix</span>`;
+                return `<span class="badge bg-danger">${escapeHtml(status.replace(/_/g,' '))}</span>`;
             }
+            return `<span class="badge bg-secondary">No Fix</span>`;
+        }
 
-            const activePrns = Array.isArray(gps.active_satellite_prns) ? gps.active_satellite_prns : [];
-            const satsInView = Array.isArray(gps.satellites_in_view)    ? gps.satellites_in_view    : [];
-            const fixQuality = (gps.fix_quality || 'no_fix').replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase());
-
-            // Position row (when fix available)
-            let posHtml = '';
-            if (hasFix) {
-                const lat = gps.latitude  != null ? gps.latitude.toFixed(6)  + '°' : '—';
-                const lon = gps.longitude != null ? gps.longitude.toFixed(6) + '°' : '—';
-                const alt = gps.altitude_m != null ? gps.altitude_m.toFixed(1) + ' m' : '—';
-                posHtml = `<div class="metric-row"><span class="metric-label">Position:</span>
-                    <span class="metric-value d-inline-flex flex-wrap gap-2">${escapeHtml(lat)}, ${escapeHtml(lon)}<span>Alt ${escapeHtml(alt)}</span><span>HDOP ${gps.hdop != null ? escapeHtml(String(gps.hdop)) : '—'}</span></span></div>`;
-            }
-
-            // GPS UTC time code
-            const utcCode = gps.gps_utc_time
-                ? `<div class="gps-timecode-row"><i class="fas fa-clock" style="color:#3fb950"></i>
-                    <span class="metric-label">GPS UTC:</span>
-                    <span class="gps-timecode">${escapeHtml(gps.gps_utc_time)}</span></div>`
-                : '';
-
-            // Time sync / NTP status
-            let timeSyncHtml = '';
-            if (gps.use_for_time) {
-                const syncBadge = gps.time_synced
-                    ? '<span class="badge bg-success gps-ntp-badge">Synced</span>'
-                    : '<span class="badge bg-warning text-dark gps-ntp-badge">Pending</span>';
-                const ntpBadge = gps.ntp_disabled
-                    ? '<span class="badge bg-info gps-ntp-badge ms-1">NTP Disabled</span>'
-                    : '';
-                timeSyncHtml = `<div class="metric-row"><span class="metric-label">Time Sync:</span>
-                    <span class="metric-value">${syncBadge}${ntpBadge}</span></div>`;
-            }
-
-            // PPS info
-            const ppsHtml = gps.pps_pulse_count
-                ? `<div class="metric-row"><span class="metric-label">PPS GPIO:</span>
-                    <span class="metric-value">BCM ${escapeHtml(String(gps.pps_gpio_pin ?? '—'))} &mdash; ${escapeHtml(String(gps.pps_pulse_count))} pulse${gps.pps_pulse_count !== 1 ? 's' : ''}</span></div>`
-                : `<div class="metric-row"><span class="metric-label">PPS GPIO:</span>
-                    <span class="metric-value">BCM ${escapeHtml(String(gps.pps_gpio_pin ?? '—'))}</span></div>`;
-
-            return `
+        function _buildGpsCardShell() {
+            return `<h5><i class="fas fa-satellite section-icon"></i> GPS Receiver</h5>
                 <div class="row mb-2">
                     <div class="col-md-6">
                         <div class="metric-row"><span class="metric-label">Status:</span>
-                            <span class="metric-value d-inline-flex align-items-center gap-1">${statusBadge}
-                                <span class="badge bg-secondary">${escapeHtml(fixQuality)}</span>
-                                <span>${activePrns.length} used / ${satsInView.length} visible</span></span></div>
-                        <div class="metric-row"><span class="metric-label">Port:</span>
-                            <span class="metric-value"><code>${escapeHtml(gps.serial_port || '—')}</code> @ ${escapeHtml(String(gps.baudrate || 9600))} baud</span></div>
-                        ${ppsHtml}
-                        ${posHtml}
+                            <span class="metric-value d-inline-flex align-items-center gap-1">
+                                <span id="gps-h-badge"></span>
+                                <span id="gps-h-counts"></span>
+                            </span>
+                        </div>
+                        <div id="gps-h-port-row"></div>
+                        <div id="gps-h-pps-row"></div>
+                        <div id="gps-h-pos-row"></div>
                     </div>
                     <div class="col-md-6">
-                        ${utcCode}
-                        ${timeSyncHtml}
+                        <div id="gps-h-utc-row"></div>
+                        <div id="gps-h-sync-row"></div>
                     </div>
                 </div>
                 <div class="gps-live-body">
                     <div class="gps-sky-col">
                         <canvas id="gps-sky-canvas-health" width="220" height="220" style="display:block"></canvas>
+                        <div id="gps-h-sky-overlay"></div>
                     </div>
-                    <div class="gps-sat-col">
-                        ${buildGpsSatTable(satsInView, activePrns)}
-                    </div>
+                    <div class="gps-sat-col"><div id="gps-h-sat-table"></div></div>
                 </div>`;
+        }
+
+        function updateGpsCard(gps) {
+            if (!gps || typeof gps !== 'object') return;
+            const running = gps.running;
+            const status  = gps.status || 'unknown';
+            if (!running && ['not_started', 'disabled', 'redis_unavailable', 'error'].includes(status)) return;
+
+            const gpsSection  = document.getElementById('gps-section');
+            const gpsCardBody = document.getElementById('gps-card-body');
+            if (!gpsSection || !gpsCardBody) return;
+
+            // Show section
+            gpsSection.classList.remove('d-none');
+
+            // Build shell once — never tear it down
+            if (!_gpsHealthRendered) {
+                gpsCardBody.innerHTML = _buildGpsCardShell();
+                _gpsHealthRendered = true;
+            }
+
+            const activePrns = Array.isArray(gps.active_satellite_prns) ? gps.active_satellite_prns : [];
+            const satsInView = Array.isArray(gps.satellites_in_view)    ? gps.satellites_in_view    : [];
+            const hasFix     = gps.has_fix;
+
+            // Status badge + counts
+            _gpsHealthSet('gps-h-badge',  _buildGpsStatusBadge(gps));
+            _gpsHealthSet('gps-h-counts', `${activePrns.length} used / ${satsInView.length} visible`);
+
+            // Port row
+            _gpsHealthSet('gps-h-port-row',
+                `<div class="metric-row"><span class="metric-label">Port:</span>
+                <span class="metric-value"><code>${escapeHtml(gps.serial_port || '—')}</code> @ ${escapeHtml(String(gps.baudrate || 9600))} baud</span></div>`);
+
+            // PPS row
+            _gpsHealthSet('gps-h-pps-row', gps.pps_pulse_count
+                ? `<div class="metric-row"><span class="metric-label">PPS GPIO:</span>
+                    <span class="metric-value">BCM ${escapeHtml(String(gps.pps_gpio_pin ?? '—'))} &mdash; ${escapeHtml(String(gps.pps_pulse_count))} pulse${gps.pps_pulse_count !== 1 ? 's' : ''}</span></div>`
+                : `<div class="metric-row"><span class="metric-label">PPS GPIO:</span>
+                    <span class="metric-value">BCM ${escapeHtml(String(gps.pps_gpio_pin ?? '—'))}</span></div>`);
+
+            // Position row
+            if (hasFix) {
+                const lat = gps.latitude  != null ? gps.latitude.toFixed(6)  + '°' : '—';
+                const lon = gps.longitude != null ? gps.longitude.toFixed(6) + '°' : '—';
+                const alt = gps.altitude_m != null ? (gps.altitude_m * METERS_TO_FEET).toFixed(0) + ' ft' : '—';
+                _gpsHealthSet('gps-h-pos-row',
+                    `<div class="metric-row"><span class="metric-label">Position:</span>
+                    <span class="metric-value d-inline-flex flex-wrap gap-2">${escapeHtml(lat)}, ${escapeHtml(lon)}<span>Alt ${escapeHtml(alt)}</span><span>HDOP ${gps.hdop != null ? escapeHtml(String(gps.hdop)) : '—'}</span></span></div>`);
+            } else {
+                _gpsHealthSet('gps-h-pos-row', '');
+            }
+
+            // UTC row
+            _gpsHealthSet('gps-h-utc-row', gps.gps_utc_time
+                ? `<div class="gps-timecode-row"><i class="fas fa-clock" style="color:#3fb950"></i>
+                    <span class="metric-label">GPS UTC:</span>
+                    <span class="gps-timecode">${escapeHtml(gps.gps_utc_time)}</span></div>`
+                : '');
+
+            // Time sync row
+            if (gps.use_for_time) {
+                const syncBadge = gps.time_synced
+                    ? '<span class="badge bg-success gps-ntp-badge">Synced</span>'
+                    : '<span class="badge bg-warning text-dark gps-ntp-badge">Pending</span>';
+                const ntpBadge = gps.ntp_disabled
+                    ? '<span class="badge bg-info gps-ntp-badge ms-1">NTP Disabled</span>' : '';
+                _gpsHealthSet('gps-h-sync-row',
+                    `<div class="metric-row"><span class="metric-label">Time Sync:</span>
+                    <span class="metric-value">${syncBadge}${ntpBadge}</span></div>`);
+            } else {
+                _gpsHealthSet('gps-h-sync-row', '');
+            }
+
+            // Sky overlay
+            const plottable = satsInView.filter(s => s.elevation !== null && s.azimuth !== null);
+            _gpsHealthSet('gps-h-sky-overlay',
+                (satsInView.length > 0 && plottable.length === 0)
+                    ? '<div style="margin-top:4px;font-size:0.7rem;color:#d29922;text-align:center">'
+                      + '<i class="fas fa-satellite-dish fa-fw"></i> Downloading sky positions&hellip;</div>'
+                    : '');
+
+            // Satellite table
+            _gpsHealthSet('gps-h-sat-table', buildGpsSatTable(satsInView, activePrns));
+
+            // Redraw sky plot onto the persistent canvas — never recreated
+            const skyCanvas = document.getElementById('gps-sky-canvas-health');
+            if (skyCanvas) drawGpsSkyPlot(skyCanvas, satsInView, activePrns);
+        }
+
+        function renderGpsCard(gps) {
+            // Kept for backward compatibility — delegates to updateGpsCard
+            if (!gps || typeof gps !== 'object') return null;
+            const status = gps.status || 'unknown';
+            if (!gps.running && ['not_started', 'disabled', 'redis_unavailable', 'error'].includes(status)) return null;
+            return true; // signal: card should be visible (actual rendering done by updateGpsCard)
         }
 
         function applyHealthData(data) {
@@ -3910,27 +3964,7 @@
                 }
             }
 
-            const gpsSection    = document.getElementById('gps-section');
-            const gpsCardBody   = document.getElementById('gps-card-body');
-            if (gpsSection && gpsCardBody) {
-                const gpsData = data.gps || {};
-                const gpsHtml = renderGpsCard(gpsData);
-                if (gpsHtml) {
-                    gpsSection.classList.remove('d-none');
-                    gpsCardBody.innerHTML =
-                        '<h5><i class="fas fa-satellite section-icon"></i> GPS Receiver</h5>'
-                        + gpsHtml;
-                    // Draw sky plot onto the freshly-inserted canvas
-                    const skyCanvas = document.getElementById('gps-sky-canvas-health');
-                    if (skyCanvas) {
-                        const satsInView = Array.isArray(gpsData.satellites_in_view) ? gpsData.satellites_in_view : [];
-                        const activePrns = Array.isArray(gpsData.active_satellite_prns) ? gpsData.active_satellite_prns : [];
-                        drawGpsSkyPlot(skyCanvas, satsInView, activePrns);
-                    }
-                } else {
-                    gpsSection.classList.add('d-none');
-                }
-            }
+            updateGpsCard(data.gps || {});
 
             const timestamp = data.local_timestamp || data.timestamp;
             const parsedDate = timestamp ? new Date(timestamp) : new Date();

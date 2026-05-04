@@ -128,6 +128,10 @@
             0%, 100% { opacity: 1; transform: scale(1); }
             50%       { opacity: 0.25; transform: scale(0.65); }
         }
+        @keyframes gpsPulse {
+            0%, 100% { opacity: 1; }
+            50%       { opacity: 0.25; }
+        }
         /* SNR color helper classes */
         .snr-s0 { background: #484f58; }   /* no signal  */
         .snr-s1 { background: #f85149; }   /* < 15 dBHz  */
@@ -769,7 +773,7 @@
                     <div class="card mb-3">
                         <div class="card-body">
                             <h5 class="card-title d-flex align-items-center justify-content-between flex-wrap gap-2">
-                                <span>Live GPS Status</span>
+                                <span>Live GPS Status <span id="gps-live-badge" style="display:none;font-size:0.6rem;font-weight:normal;color:#3fb950;vertical-align:middle;margin-left:6px"><span id="gps-live-dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#3fb950;animation:gpsPulse 1.4s ease-in-out infinite;vertical-align:middle;margin-right:3px"></span>auto-refreshing</span></span>
                                 <button type="button" class="btn btn-sm btn-outline-secondary" onclick="refreshGpsStatus()">
                                     <i class="fas fa-sync-alt"></i> Refresh
                                 </button>
@@ -865,16 +869,51 @@
 })();
 
 // ── GPS Live Panel ────────────────────────────────────────────────────
-var _gpsPollTimer = null;
+var _gpsPollTimer  = null;
+var _gpsRendered   = false;   // true once the panel shell has been inserted
+var METERS_TO_FEET = 3.28084;
+var KNOTS_TO_MPH   = 1.15078;
 
 function startGpsPolling() {
     stopGpsPolling();
     refreshGpsStatus();
     _gpsPollTimer = setInterval(refreshGpsStatus, 2000);
+    var badge = document.getElementById('gps-live-badge');
+    if (badge) badge.style.display = '';
 }
 
 function stopGpsPolling() {
     if (_gpsPollTimer) { clearInterval(_gpsPollTimer); _gpsPollTimer = null; }
+    var badge = document.getElementById('gps-live-badge');
+    if (badge) badge.style.display = 'none';
+}
+
+/* One-time panel shell — all dynamic content sits behind stable element IDs. */
+function _buildGpsPanelShell() {
+    return '<div class="gps-live-panel">'
+        + '<div class="gps-live-header">'
+        +   '<span id="gps-hdr-badge"></span>'
+        +   '<span id="gps-hdr-vis-used" style="color:#8b949e"></span>'
+        +   '<span id="gps-hdr-port"     style="color:#8b949e"></span>'
+        +   '<span class="ms-auto"><span id="gps-hdr-pps"></span></span>'
+        + '</div>'
+        + '<div id="gps-error-hint"></div>'
+        + '<div class="gps-live-body">'
+        +   '<div class="gps-sky-col">'
+        +     '<canvas id="gps-sky-canvas" width="240" height="240" style="display:block"></canvas>'
+        +     '<div id="gps-sky-overlay"></div>'
+        +   '</div>'
+        +   '<div class="gps-sat-col"><div id="gps-sat-table-wrap"></div></div>'
+        + '</div>'
+        + '<div id="gps-nmea-wrap"></div>'
+        + '<div class="gps-fix-footer" id="gps-footer"></div>'
+        + '</div>';
+}
+
+/* Patch a single element's innerHTML without touching any other element. */
+function _gpsSet(id, html) {
+    var el = document.getElementById(id);
+    if (el) el.innerHTML = html;
 }
 
 /* Simple HTML escaper for raw NMEA strings */
@@ -1013,6 +1052,14 @@ function buildSatTable(satsInView, activePrns) {
     if (allSats.length === 0) {
         return '<div class="text-muted" style="padding:16px 4px;font-size:0.75rem">No satellite data yet&hellip;</div>';
     }
+    // Check if we have any sky-position data at all
+    var hasPos = allSats.some(function(s) { return s.elevation !== null || s.azimuth !== null; });
+    var almanacNote = (!hasPos && allSats.length > 0)
+        ? '<div style="padding:4px 4px 8px;font-size:0.7rem;color:#d29922">'
+          + '<i class="fas fa-satellite-dish fa-fw"></i> '
+          + 'Sky positions pending &mdash; receiver is downloading almanac&sol;ephemeris data.'
+          + '</div>'
+        : '';
     var sorted = allSats.slice().sort(function (a, b) {
         var sa = a.snr !== null ? a.snr : -1;
         var sb = b.snr !== null ? b.snr : -1;
@@ -1038,7 +1085,8 @@ function buildSatTable(satsInView, activePrns) {
             + '</tr>';
     }).join('');
 
-    return '<table class="gps-sat-table">'
+    return almanacNote
+        + '<table class="gps-sat-table">'
         + '<thead><tr>'
         + '<th style="text-align:right">Sv</th>'
         + '<th style="text-align:right">El&deg;</th>'
@@ -1102,7 +1150,7 @@ function buildPpsHtml(d) {
 function buildStatusBadge(d) {
     var errorStatuses = ['port_not_found','port_open_failed','pyserial_missing','pynmea2_missing'];
     var labels = {
-        'fix':'3D Fix','acquiring':'Acquiring','no_fix':'No Fix',
+        'fix':'3D Fix','acquiring':'Acquiring\u2026','no_fix':'No Fix',
         'port_not_found':'Port Not Found','port_open_failed':'Port Error',
         'pyserial_missing':'pyserial Missing','pynmea2_missing':'pynmea2 Missing',
         'not_started':'Not Started','disabled':'Disabled','stopped':'Stopped','reading':'Reading\u2026'
@@ -1131,9 +1179,24 @@ function buildErrorHint(d) {
             'Could not open serial port. Check permissions and that the port is not in use by another process.'
     };
     var msg = hints[d.status];
-    if (!msg) return '';
-    return '<div style="margin:0;padding:6px 12px;background:#2d1215;color:#f85149;border-top:1px solid #442020;font-size:0.75rem">'
-        + '<i class="fas fa-exclamation-triangle me-1"></i>' + msg + '</div>';
+    if (msg) {
+        return '<div style="margin:0;padding:6px 12px;background:#2d1215;color:#f85149;border-top:1px solid #442020;font-size:0.75rem">'
+            + '<i class="fas fa-exclamation-triangle me-1"></i>' + msg + '</div>';
+    }
+    // Acquiring hint: visible satellites but no position fix yet
+    if (!d.has_fix && d.status === 'acquiring') {
+        var satsVisible = (d.satellites_in_view || []).length;
+        var haveSkyPos  = (d.satellites_in_view || []).some(function(s) { return s.elevation !== null && s.azimuth !== null; });
+        var detail = haveSkyPos
+            ? 'Waiting for enough satellites to compute a 3D fix.'
+            : 'Downloading satellite almanac &amp; ephemeris data \u2014 this provides orbital positions needed to compute a fix. '
+              + 'A cold start typically takes 1&ndash;3 minutes; warm start 30&ndash;60 seconds.';
+        return '<div style="margin:0;padding:6px 12px;background:#1c1f0e;color:#d29922;border-top:1px solid #3a3500;font-size:0.75rem">'
+            + '<i class="fas fa-satellite-dish me-1"></i>'
+            + '<strong>' + satsVisible + ' satellite' + (satsVisible !== 1 ? 's' : '') + ' in view &mdash;</strong> ' + detail
+            + '</div>';
+    }
+    return '';
 }
 
 function refreshGpsStatus() {
@@ -1142,51 +1205,46 @@ function refreshGpsStatus() {
     fetch('/api/hardware/gps/status')
         .then(function (r) { return r.json(); })
         .then(function (d) {
-            var satsInView       = d.satellites_in_view   || [];
-            var activePrns       = d.active_satellite_prns || [];
-            var recentSentences  = d.recent_sentences      || [];
-            var usedCount        = activePrns.length;
-            var viewCount        = satsInView.length || (d.satellites != null ? d.satellites : 0);
+            var satsInView      = d.satellites_in_view    || [];
+            var activePrns      = d.active_satellite_prns || [];
+            var recentSentences = d.recent_sentences      || [];
+            var usedCount       = activePrns.length;
+            var viewCount       = satsInView.length || (d.satellites != null ? d.satellites : 0);
+            var plottableSats   = satsInView.filter(function(s) { return s.elevation !== null && s.azimuth !== null; });
+            var pendingAlmanac  = satsInView.length > 0 && plottableSats.length === 0;
 
-            // ── Header bar ──────────────────────────────────────────
-            var headerHtml =
-                '<div class="gps-live-header">'
-                + buildStatusBadge(d)
-                + '<span style="color:#8b949e">'
-                + viewCount + ' visible &bull; ' + usedCount + ' used'
-                + '</span>'
-                + '<span style="color:#8b949e">'
-                + '<code style="color:#58a6ff">' + (d.serial_port||'—') + '</code>'
-                + ' &bull; ' + (d.baudrate||'9600') + 'bd'
-                + '</span>'
-                + '<span class="ms-auto">' + buildPpsHtml(d) + '</span>'
-                + '</div>';
+            // Build the panel shell only once — never tear it down again.
+            if (!_gpsRendered) {
+                container.innerHTML = _buildGpsPanelShell();
+                _gpsRendered = true;
+            }
 
-            // ── Error hint (if any) ──────────────────────────────────
-            var errorHtml = buildErrorHint(d);
+            // ── Patch each element in-place ──────────────────────────
+            _gpsSet('gps-hdr-badge',    buildStatusBadge(d));
+            _gpsSet('gps-hdr-vis-used', viewCount + ' visible &bull; ' + usedCount + ' used');
+            _gpsSet('gps-hdr-port',
+                '<code style="color:#58a6ff">' + (d.serial_port||'—') + '</code>'
+                + ' &bull; ' + (d.baudrate||'9600') + 'bd');
+            _gpsSet('gps-hdr-pps',      buildPpsHtml(d));
+            _gpsSet('gps-error-hint',   buildErrorHint(d));
+            _gpsSet('gps-sky-overlay',
+                pendingAlmanac
+                    ? '<div style="margin-top:4px;font-size:0.7rem;color:#d29922;text-align:center">'
+                      + '<i class="fas fa-satellite-dish fa-fw"></i> Downloading sky positions&hellip;</div>'
+                    : '');
+            _gpsSet('gps-sat-table-wrap', buildSatTable(satsInView, activePrns));
+            _gpsSet('gps-nmea-wrap',      buildNmeaSection(recentSentences));
 
-            // ── Body: sky plot + satellite table ────────────────────
-            var bodyHtml =
-                '<div class="gps-live-body">'
-                + '<div class="gps-sky-col">'
-                + '<canvas id="gps-sky-canvas" width="240" height="240" style="display:block"></canvas>'
-                + '</div>'
-                + '<div class="gps-sat-col">'
-                + buildSatTable(satsInView, activePrns)
-                + '</div>'
-                + '</div>'
-                + buildNmeaSection(recentSentences);
-
-            // ── Fix details footer ───────────────────────────────────
-            var footerHtml = '<div class="gps-fix-footer">';
+            // ── Footer ───────────────────────────────────────────────
+            var footerHtml;
             if (d.has_fix) {
                 var lat  = d.latitude  != null ? d.latitude.toFixed(6)  + '&deg;' : '&mdash;';
                 var lon  = d.longitude != null ? d.longitude.toFixed(6) + '&deg;' : '&mdash;';
-                var alt  = d.altitude_m != null ? d.altitude_m.toFixed(1) + ' m' : '&mdash;';
+                var alt  = d.altitude_m != null ? (d.altitude_m * METERS_TO_FEET).toFixed(0) + ' ft' : '&mdash;';
                 var hdop = d.hdop != null ? d.hdop : '&mdash;';
                 var utc  = d.gps_utc_time || '&mdash;';
-                var spd  = d.speed_knots != null ? d.speed_knots.toFixed(1) + ' kn' : null;
-                footerHtml +=
+                var spd  = d.speed_knots != null ? (d.speed_knots * KNOTS_TO_MPH).toFixed(1) + ' mph' : null;
+                footerHtml =
                     '<span><span class="gps-lbl">Lat&nbsp;</span>' + lat + '</span>'
                     + '<span><span class="gps-lbl">Lon&nbsp;</span>' + lon + '</span>'
                     + '<span><span class="gps-lbl">Alt&nbsp;</span>' + alt + '</span>'
@@ -1194,23 +1252,25 @@ function refreshGpsStatus() {
                     + '<span><span class="gps-lbl">UTC&nbsp;</span>' + utc + '</span>'
                     + (spd ? '<span><span class="gps-lbl">Speed&nbsp;</span>' + spd + '</span>' : '');
             } else {
-                footerHtml += '<span style="color:#484f58">Waiting for fix&hellip;</span>';
+                var noFixUtc = d.gps_utc_time
+                    ? '<span><span class="gps-lbl">GPS UTC&nbsp;</span><span style="color:#58a6ff">' + d.gps_utc_time + '</span></span>'
+                    : '';
+                var noFixHdop = d.hdop != null
+                    ? '<span><span class="gps-lbl">HDOP&nbsp;</span>' + d.hdop + '</span>' : '';
+                var noFixPdop = d.pdop != null
+                    ? '<span><span class="gps-lbl">PDOP&nbsp;</span>' + d.pdop + '</span>' : '';
+                footerHtml =
+                    '<span style="color:#484f58">No position fix yet&hellip;</span>'
+                    + noFixUtc + noFixHdop + noFixPdop;
             }
-            footerHtml += '</div>';
+            _gpsSet('gps-footer', footerHtml);
 
-            container.innerHTML =
-                '<div class="gps-live-panel">'
-                + headerHtml
-                + errorHtml
-                + bodyHtml
-                + footerHtml
-                + '</div>';
-
-            // Draw sky plot onto the freshly-inserted canvas
+            // Redraw sky plot onto the persistent canvas — never recreated.
             var canvas = document.getElementById('gps-sky-canvas');
             if (canvas) drawSkyPlot(canvas, satsInView, activePrns);
         })
         .catch(function (err) {
+            _gpsRendered = false;   // allow shell rebuild after an error clears
             var c = document.getElementById('gps-status-card');
             if (c) c.innerHTML =
                 '<span class="text-danger small">'
