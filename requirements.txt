@@ -110,10 +110,14 @@ luma.oled==3.14.0  # I2C SSD1306/SH1106 driver used by the Argon OLED
 
 # GPIO control for Raspberry Pi hardware
 gpiozero==2.0.1
-# lgpio: pin-factory backend used by gpiozero on Raspberry Pi 5 / Bookworm
-# (the legacy RPi.GPIO library no longer works on Pi 5 because /dev/mem is
-# locked down). Required for the GPS PPS pulse detector to function.
-lgpio>=0.2.2.0
+# rpi-lgpio: drop-in replacement for the legacy RPi.GPIO module that uses
+# the modern `lgpio` kernel API under the hood. Required so gpiozero can
+# arm a rising-edge interrupt on the GPS HAT's PPS pin on Raspberry Pi 5
+# / Bookworm, where the original RPi.GPIO library no longer works
+# (/dev/mem is locked down). Ships prebuilt wheels — no swig/compiler
+# needed during install. Conflicts with the original RPi.GPIO package
+# (`pip install RPi.GPIO` must NOT be used alongside this).
+rpi-lgpio>=0.6
 rpi-ws281x>=0.0.5  # NeoPixel/WS2812B addressable LED strip control (requires DMA/root on Pi)
 
 # Multi-Factor Authentication (MFA) support
