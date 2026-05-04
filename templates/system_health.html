@@ -1870,10 +1870,8 @@
                                             {% else %}
                                                 <span class="badge bg-secondary">No Fix</span>
                                             {% endif %}
-                                            &nbsp;
-                                            <span class="badge bg-secondary">{{ fix_quality|replace('_',' ')|title }}</span>
-                                            &nbsp;
-                                            {{ active_prns|length }} used / {{ sats_in_view|length }} visible
+                                            <span class="badge bg-secondary ms-1">{{ fix_quality|replace('_',' ')|title }}</span>
+                                            <span class="ms-1">{{ active_prns|length }} used / {{ sats_in_view|length }} visible</span>
                                         </span>
                                     </div>
                                     <div class="metric-row">
@@ -1892,8 +1890,8 @@
                                         <span class="metric-value">
                                             {{ "%.6f"|format(gps.latitude) ~ '°' if gps.get('latitude') is not none else '—' }},
                                             {{ "%.6f"|format(gps.longitude) ~ '°' if gps.get('longitude') is not none else '—' }}
-                                            &nbsp; Alt {{ "%.1f"|format(gps.altitude_m) ~ ' m' if gps.get('altitude_m') is not none else '—' }}
-                                            &nbsp; HDOP {{ gps.get('hdop') or '—' }}
+                                            <span class="ms-2">Alt {{ "%.1f"|format(gps.altitude_m) ~ ' m' if gps.get('altitude_m') is not none else '—' }}</span>
+                                            <span class="ms-2">HDOP {{ gps.get('hdop') or '—' }}</span>
                                         </span>
                                     </div>
                                     {% endif %}
@@ -3765,7 +3763,7 @@
                 const lon = gps.longitude != null ? gps.longitude.toFixed(6) + '°' : '—';
                 const alt = gps.altitude_m != null ? gps.altitude_m.toFixed(1) + ' m' : '—';
                 posHtml = `<div class="metric-row"><span class="metric-label">Position:</span>
-                    <span class="metric-value">${escapeHtml(lat)}, ${escapeHtml(lon)} &nbsp; Alt ${escapeHtml(alt)} &nbsp; HDOP ${gps.hdop != null ? escapeHtml(String(gps.hdop)) : '—'}</span></div>`;
+                    <span class="metric-value d-inline-flex flex-wrap gap-2">${escapeHtml(lat)}, ${escapeHtml(lon)}<span>Alt ${escapeHtml(alt)}</span><span>HDOP ${gps.hdop != null ? escapeHtml(String(gps.hdop)) : '—'}</span></span></div>`;
             }
 
             // GPS UTC time code
@@ -3799,9 +3797,9 @@
                 <div class="row mb-2">
                     <div class="col-md-6">
                         <div class="metric-row"><span class="metric-label">Status:</span>
-                            <span class="metric-value">${statusBadge} &nbsp;
-                                <span class="badge bg-secondary">${escapeHtml(fixQuality)}</span> &nbsp;
-                                ${activePrns.length} used / ${satsInView.length} visible</span></div>
+                            <span class="metric-value d-inline-flex align-items-center gap-1">${statusBadge}
+                                <span class="badge bg-secondary">${escapeHtml(fixQuality)}</span>
+                                <span>${activePrns.length} used / ${satsInView.length} visible</span></span></div>
                         <div class="metric-row"><span class="metric-label">Port:</span>
                             <span class="metric-value"><code>${escapeHtml(gps.serial_port || '—')}</code> @ ${escapeHtml(String(gps.baudrate || 9600))} baud</span></div>
                         ${ppsHtml}

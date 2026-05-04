@@ -21,7 +21,8 @@ from __future__ import annotations
 
 """Routes for system-level controls including GPIO relay management."""
 
-from datetime import datetime, timedelta
+import json
+from datetime import datetime, timedelta, timezone
 
 from flask import (
     Flask,
@@ -245,8 +246,6 @@ def register(app: Flask, logger) -> None:
         Returns a dict keyed by BCM pin number so the GPIO pin map page can
         annotate each pin card with a live HIGH/LOW indicator.
         """
-        import json as _json
-
         result: dict = {}
 
         # --- Output pins from GPIOController ---
@@ -271,18 +270,16 @@ def register(app: Flask, logger) -> None:
             if redis:
                 raw = redis.get("gps:status")
                 if raw:
-                    gps_data = _json.loads(raw)
+                    gps_data = json.loads(raw)
                     pps_pin = gps_data.get("pps_gpio_pin")
                     pps_count = gps_data.get("pps_pulse_count", 0)
                     pps_last = gps_data.get("pps_last_pulse_at")
                     pps_age = None
                     if pps_last:
-                        from datetime import timezone as _tz
-                        from datetime import datetime as _dt
                         try:
-                            pulse_dt = _dt.fromisoformat(pps_last)
+                            pulse_dt = datetime.fromisoformat(pps_last)
                             pps_age = round(
-                                (_dt.now(_tz.utc) - pulse_dt).total_seconds(), 2
+                                (datetime.now(timezone.utc) - pulse_dt).total_seconds(), 2
                             )
                         except Exception:
                             pass
