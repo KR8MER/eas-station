@@ -912,56 +912,64 @@ function drawSkyPlot(canvas, satsInView, activePrns) {
     var cx = W / 2, cy = H / 2;
     var MAX_R = Math.min(W, H) / 2 - 16;   // leave room for N/S/E/W labels
 
-    // Read theme-aware colors at draw time
-    var bgColor      = gpsCssVar('--bg-color')      || '#0d1117';
-    var borderColor  = gpsCssVar('--border-color')  || '#1c2128';
-    var mutedColor   = gpsCssVar('--text-muted')    || '#6e7681';
-
     ctx.clearRect(0, 0, W, H);
 
-    // Clip everything inside the horizon circle
+    // ── Globe-style sky background ───────────────────────────────────
+    // The canvas always represents the sky/atmosphere, so it uses a
+    // fixed sky-blue radial gradient regardless of the page theme.
     ctx.save();
     ctx.beginPath();
     ctx.arc(cx, cy, MAX_R, 0, Math.PI * 2);
     ctx.clip();
 
-    // Background fill
-    ctx.fillStyle = bgColor;
+    var skyGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, MAX_R);
+    skyGrad.addColorStop(0,    '#c8e8ff');   // zenith  – pale sky blue
+    skyGrad.addColorStop(0.45, '#5aaee8');   // mid-sky – clear blue
+    skyGrad.addColorStop(0.80, '#2272c3');   // upper horizon – deep blue
+    skyGrad.addColorStop(1,    '#0d4f8b');   // horizon rim – dark navy
+    ctx.fillStyle = skyGrad;
     ctx.fill();
 
-    // Elevation rings: horizon (0°), 30°, 60°
+    // Subtle horizon haze band
+    var hazeGrad = ctx.createRadialGradient(cx, cy, MAX_R * 0.75, cx, cy, MAX_R);
+    hazeGrad.addColorStop(0, 'rgba(255,255,255,0)');
+    hazeGrad.addColorStop(1, 'rgba(180,220,255,0.18)');
+    ctx.fillStyle = hazeGrad;
+    ctx.fill();
+
+    // ── Elevation rings: horizon (0°), 30°, 60° ──────────────────────
     [0, 30, 60].forEach(function (el) {
         var r = MAX_R * (90 - el) / 90;
         ctx.beginPath();
         ctx.arc(cx, cy, r, 0, Math.PI * 2);
-        ctx.strokeStyle = borderColor;
-        ctx.lineWidth = 1;
+        ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+        ctx.lineWidth = el === 0 ? 1.5 : 1;
         ctx.stroke();
     });
 
-    // Crosshairs
-    ctx.strokeStyle = borderColor;
+    // ── Azimuth crosshairs ───────────────────────────────────────────
+    ctx.strokeStyle = 'rgba(255,255,255,0.25)';
     ctx.lineWidth = 0.8;
     ctx.beginPath();
     ctx.moveTo(cx, cy - MAX_R); ctx.lineTo(cx, cy + MAX_R);
     ctx.moveTo(cx - MAX_R, cy); ctx.lineTo(cx + MAX_R, cy);
     ctx.stroke();
 
-    // Elevation labels inside the plot
-    ctx.fillStyle = mutedColor;
+    // ── Elevation labels ─────────────────────────────────────────────
+    ctx.fillStyle = 'rgba(255,255,255,0.70)';
     ctx.font = '8px monospace';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText('30°', cx + 2, cy - MAX_R * 60 / 90);
-    ctx.fillText('60°', cx + 2, cy - MAX_R * 30 / 90);
+    ctx.fillText('30°', cx + 3, cy - MAX_R * 60 / 90);
+    ctx.fillText('60°', cx + 3, cy - MAX_R * 30 / 90);
 
-    // Zenith dot
+    // ── Zenith marker ────────────────────────────────────────────────
     ctx.beginPath();
-    ctx.arc(cx, cy, 2, 0, Math.PI * 2);
-    ctx.fillStyle = mutedColor;
+    ctx.arc(cx, cy, 3, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.60)';
     ctx.fill();
 
-    // Satellites
+    // ── Satellites ───────────────────────────────────────────────────
     (satsInView || []).forEach(function (sat) {
         if (sat.elevation === null || sat.azimuth === null) return;
         var r = MAX_R * (90 - Math.max(0, sat.elevation)) / 90;
@@ -971,11 +979,11 @@ function drawSkyPlot(canvas, satsInView, activePrns) {
         var isUsed = activePrns.indexOf(sat.prn) !== -1;
         var color = snrHex(sat.snr);
 
-        // Glow for used-in-fix sats
+        // Glow for used-in-fix satellites
         if (isUsed && sat.snr !== null) {
             ctx.beginPath();
-            ctx.arc(x, y, 12, 0, Math.PI * 2);
-            ctx.fillStyle = color + '28';
+            ctx.arc(x, y, 13, 0, Math.PI * 2);
+            ctx.fillStyle = color + '38';
             ctx.fill();
         }
 
@@ -983,11 +991,11 @@ function drawSkyPlot(canvas, satsInView, activePrns) {
         ctx.beginPath();
         ctx.arc(x, y, 8, 0, Math.PI * 2);
         ctx.fillStyle = color;
-        ctx.globalAlpha = 0.88;
+        ctx.globalAlpha = 0.92;
         ctx.fill();
         ctx.globalAlpha = 1;
-        ctx.strokeStyle = isUsed ? '#ffffff' : '#444c56';
-        ctx.lineWidth = isUsed ? 1.5 : 0.8;
+        ctx.strokeStyle = isUsed ? '#ffffff' : 'rgba(255,255,255,0.45)';
+        ctx.lineWidth = isUsed ? 1.8 : 0.8;
         ctx.stroke();
 
         // PRN label
@@ -1000,8 +1008,8 @@ function drawSkyPlot(canvas, satsInView, activePrns) {
 
     ctx.restore();
 
-    // Cardinal labels (outside the clip)
-    ctx.fillStyle = mutedColor;
+    // ── Cardinal labels (outside the clipped sky circle) ────────────
+    ctx.fillStyle = gpsCssVar('--text-color') || '#0f172a';
     ctx.font = 'bold 11px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
