@@ -199,7 +199,7 @@ class GPSManager:
         last_pulse = data.get("pps_last_pulse_at")
         if last_pulse:
             try:
-                pulse_dt = datetime.fromisoformat(last_pulse.replace("Z", "+00:00"))
+                pulse_dt = datetime.fromisoformat(last_pulse)
                 age = (datetime.now(timezone.utc) - pulse_dt).total_seconds()
                 data["pps_pulse_age_s"] = round(age, 2)
             except Exception:

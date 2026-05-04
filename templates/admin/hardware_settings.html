@@ -1050,11 +1050,11 @@ function buildPpsHtml(d) {
     var ever   = age !== null && age >= 2.5;
     var cls = active ? 'pps-active' : (ever ? 'pps-lost' : 'pps-inactive');
     var txt = active
-        ? ('PPS &bull; ' + age.toFixed(1) + 's')
+        ? ('PPS \u00b7 ' + age.toFixed(1) + 's')
         : 'PPS';
     var tip = active
-        ? ('PPS active on GPIO ' + pin + ' \u2014 last pulse ' + age.toFixed(2) + 's ago')
-        : (ever ? ('PPS lost on GPIO ' + pin + ' \u2014 last pulse ' + age.toFixed(0) + 's ago')
+        ? ('PPS active on GPIO ' + pin + ' \u2014 last pulse ' + age.toFixed(1) + 's ago')
+        : (ever ? ('PPS lost on GPIO ' + pin + ' \u2014 last pulse ' + age.toFixed(1) + 's ago')
                : ('No PPS signal detected on GPIO ' + pin));
     return '<span class="pps-led ' + cls + '" title="' + tip + '">'
         + '<span class="pps-dot"></span>' + txt + '</span>';
