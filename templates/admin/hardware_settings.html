@@ -128,6 +128,10 @@
             0%, 100% { opacity: 1; transform: scale(1); }
             50%       { opacity: 0.25; transform: scale(0.65); }
         }
+        @keyframes gpsPulse {
+            0%, 100% { opacity: 1; }
+            50%       { opacity: 0.25; }
+        }
         /* SNR color helper classes */
         .snr-s0 { background: #484f58; }   /* no signal  */
         .snr-s1 { background: #f85149; }   /* < 15 dBHz  */
@@ -769,7 +773,7 @@
                     <div class="card mb-3">
                         <div class="card-body">
                             <h5 class="card-title d-flex align-items-center justify-content-between flex-wrap gap-2">
-                                <span>Live GPS Status</span>
+                                <span>Live GPS Status <span id="gps-live-badge" style="display:none;font-size:0.6rem;font-weight:normal;color:#3fb950;vertical-align:middle;margin-left:6px"><span id="gps-live-dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#3fb950;animation:gpsPulse 1.4s ease-in-out infinite;vertical-align:middle;margin-right:3px"></span>auto-refreshing</span></span>
                                 <button type="button" class="btn btn-sm btn-outline-secondary" onclick="refreshGpsStatus()">
                                     <i class="fas fa-sync-alt"></i> Refresh
                                 </button>
@@ -871,10 +875,14 @@ function startGpsPolling() {
     stopGpsPolling();
     refreshGpsStatus();
     _gpsPollTimer = setInterval(refreshGpsStatus, 2000);
+    var badge = document.getElementById('gps-live-badge');
+    if (badge) badge.style.display = '';
 }
 
 function stopGpsPolling() {
     if (_gpsPollTimer) { clearInterval(_gpsPollTimer); _gpsPollTimer = null; }
+    var badge = document.getElementById('gps-live-badge');
+    if (badge) badge.style.display = 'none';
 }
 
 /* Simple HTML escaper for raw NMEA strings */
@@ -1046,7 +1054,8 @@ function buildSatTable(satsInView, activePrns) {
             + '</tr>';
     }).join('');
 
-    return '<table class="gps-sat-table">'
+    return almanacNote
+        + '<table class="gps-sat-table">'
         + '<thead><tr>'
         + '<th style="text-align:right">Sv</th>'
         + '<th style="text-align:right">El&deg;</th>'
@@ -1229,7 +1238,20 @@ function refreshGpsStatus() {
                     + '<span><span class="gps-lbl">UTC&nbsp;</span>' + utc + '</span>'
                     + (spd ? '<span><span class="gps-lbl">Speed&nbsp;</span>' + spd + '</span>' : '');
             } else {
-                footerHtml += '<span style="color:#484f58">Waiting for fix&hellip;</span>';
+                // No position fix yet — show whatever partial data the receiver IS reporting
+                // so the user can see the panel is live and updating.
+                var noFixUtc = d.gps_utc_time
+                    ? '<span><span class="gps-lbl">GPS UTC&nbsp;</span><span style="color:#58a6ff">' + d.gps_utc_time + '</span></span>'
+                    : '';
+                var noFixHdop = d.hdop != null
+                    ? '<span><span class="gps-lbl">HDOP&nbsp;</span>' + d.hdop + '</span>'
+                    : '';
+                var noFixPdop = d.pdop != null
+                    ? '<span><span class="gps-lbl">PDOP&nbsp;</span>' + d.pdop + '</span>'
+                    : '';
+                footerHtml +=
+                    '<span style="color:#484f58">No position fix yet&hellip;</span>'
+                    + noFixUtc + noFixHdop + noFixPdop;
             }
             footerHtml += '</div>';
 
