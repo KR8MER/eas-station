@@ -79,6 +79,10 @@ def _safe_int(val) -> Optional[int]:
         return None
 
 
+# How often (seconds) to update the system clock from GPS when use_for_time=True.
+_TIME_SYNC_INTERVAL_S: int = 3600
+
+
 class GPSManager:
     """Background thread that reads NMEA sentences from a GPS serial port
     and publishes position/time data to Redis.
@@ -389,7 +393,7 @@ class GPSManager:
                                 now_mono = time.monotonic()
                                 if (
                                     not self._time_synced
-                                    or (now_mono - self._last_time_sync_mono) >= 3600
+                                    or (now_mono - self._last_time_sync_mono) >= _TIME_SYNC_INTERVAL_S
                                 ):
                                     self._pending_time_sync = dt.replace(
                                         tzinfo=timezone.utc
@@ -505,9 +509,17 @@ class GPSManager:
 
         Called from the reader thread (outside any lock) so subprocess.run()
         does not block other threads waiting on _lock.  Only executed when
-        ``use_for_time`` is True and the 1-hour throttle has elapsed.
+        ``use_for_time`` is True and the throttle has elapsed.
         """
+        import re as _re
+
         time_str = dt_utc.strftime("%Y-%m-%d %H:%M:%S")
+        # Sanity-check the formatted string before handing it to the shell
+        if not _re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", time_str):
+            self._logger.warning(
+                "GPS time sync skipped — unexpected strftime output: %r", time_str
+            )
+            return
         try:
             result = subprocess.run(
                 ["sudo", "date", "-s", time_str + " UTC"],

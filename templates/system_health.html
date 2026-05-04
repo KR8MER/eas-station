@@ -1836,7 +1836,7 @@
                                         <span class="metric-value">
                                             {% if has_fix %}
                                                 <span class="badge bg-success">{{ gps.get('status','fix')|title }}</span>
-                                            {% elif gps.get('status') == 'acquiring' %}
+                                            {% elif gps.get('status') in ('acquiring', 'reading') %}
                                                 <span class="badge bg-warning text-dark">Acquiring</span>
                                             {% else %}
                                                 <span class="badge bg-secondary">No Fix</span>
