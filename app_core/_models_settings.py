@@ -622,6 +622,27 @@ class EASSettings(db.Model):
     # DTMF digit sequence to play when the chime profile is 'dtmf'.
     # Allowed characters: 0-9, A-D, *, #. Length 0–32.
 
+    # ------------------------------------------------------------------
+    # MDC1200 selective-calling settings (used when chime profile = 'mdc1200')
+    # ------------------------------------------------------------------
+    mdc1200_unit_id = db.Column(db.Integer, nullable=False, default=1)
+    # 16-bit MDC1200 subscriber unit ID (1..65535).  This is the ID a
+    # receiving Motorola radio displays as the "from" unit.
+
+    mdc1200_op_code = db.Column(db.String(32), nullable=False, default='ptt_id_pre')
+    # Symbolic preset name for the MDC1200 op-code/argument pair.
+    # Recognised values: 'ptt_id_pre', 'ptt_id_post', 'emergency',
+    # 'request_to_talk', 'remote_monitor', 'custom'.  When set to
+    # 'custom', the raw fields below are used.
+
+    mdc1200_op_code_raw = db.Column(db.SmallInteger, nullable=True)
+    # Raw 8-bit op-code (0..255) used when mdc1200_op_code == 'custom'.
+    # NULL means "use the symbolic preset".
+
+    mdc1200_arg_raw = db.Column(db.SmallInteger, nullable=True)
+    # Raw 8-bit argument byte (0..255) used when mdc1200_op_code == 'custom'.
+    # NULL means "use the symbolic preset".
+
     # ========================================================================
     # Authorized Broadcast Areas
     # ========================================================================
@@ -664,6 +685,16 @@ class EASSettings(db.Model):
             "qc2_long_tone_enabled": bool(self.qc2_long_tone_enabled),
             "qc2_long_tone_seconds": float(self.qc2_long_tone_seconds or 10.0),
             "dtmf_sequence": self.dtmf_sequence or '',
+            "mdc1200_unit_id": int(self.mdc1200_unit_id or 1),
+            "mdc1200_op_code": self.mdc1200_op_code or 'ptt_id_pre',
+            "mdc1200_op_code_raw": (
+                int(self.mdc1200_op_code_raw)
+                if self.mdc1200_op_code_raw is not None else None
+            ),
+            "mdc1200_arg_raw": (
+                int(self.mdc1200_arg_raw)
+                if self.mdc1200_arg_raw is not None else None
+            ),
             "authorized_fips_codes": list(self.authorized_fips_codes or []),
             "authorized_event_codes": list(self.authorized_event_codes or []),
             "forwarded_event_codes": list(self.forwarded_event_codes or []),

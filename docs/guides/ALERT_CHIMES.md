@@ -33,6 +33,10 @@ Chimes** card. Settings persist in the `eas_settings` table.
 | QC-II Enable Long Tone | boolean | `false` | Append a sustained tone after the A+B sequence. |
 | QC-II Long Tone Duration | seconds (1–120) | `10.0` | Duration of the appended long tone. |
 | DTMF Sequence | string (0–32 chars) | `""` | Digits dialed for DTMF profile. |
+| MDC1200 Unit ID | integer (1–65535, decimal **or** `0x0001`–`0xFFFF` hex) | `1` | Subscriber unit ID for the MDC1200 profile. |
+| MDC1200 Op-Code | dropdown | `ptt_id_pre` | Symbolic preset (or `custom` for raw bytes). |
+| MDC1200 Raw Op-Code | byte (0x00–0xFF, optional) | *(unset)* | Used only when preset = `custom`. |
+| MDC1200 Raw Argument | byte (0x00–0xFF, optional) | *(unset)* | Used only when preset = `custom`. |
 
 The pre-alert and post-alert profiles are configured independently, so you can
 e.g. play a single `bell` before each broadcast and leave the post-alert
@@ -87,6 +91,76 @@ ITU-T Q.23 / Q.24 tone pair (low-group + high-group sine sum).
 * The two tones are summed and the combined waveform is scaled to half
   amplitude so the peak signal level matches single-tone profiles.
 
+### `mdc1200` — Motorola Selective Calling
+
+A 1200-baud FFSK packet (mark = 1200 Hz, space = 1800 Hz) carrying this
+station's *Unit ID* and an op-code that tells receiving Motorola subscribers
+what kind of call this is (PTT-ID, Emergency, Request to Talk, etc.).
+
+* Packet duration is fixed by the protocol at ~147 ms; the chime-duration
+  field is **ignored**.
+* **Unit ID** is a 16-bit subscriber identifier (1–65535). Accepts both
+  decimal (`1234`) and hex (`0x04D2`) input — Motorola CPS commonly
+  displays unit IDs as 4-digit hex.
+* **Op-Code preset** chooses what packet to emit:
+
+  | Preset | `op` | `arg` | Meaning |
+  |---|---|---|---|
+  | `ptt_id_pre` | `0x01` | `0x80` | PTT-ID at the start of a transmission (default) |
+  | `ptt_id_post` | `0x00` | `0x80` | PTT-ID at the end of a transmission |
+  | `emergency` | `0x40` | `0x80` | Emergency alarm |
+  | `request_to_talk` | `0x35` | `0x89` | Request-to-talk paging |
+  | `remote_monitor` | `0x11` | `0x80` | Remote-monitor command |
+  | `custom` | any | any | Operator-supplied raw op/arg bytes (decimal or `0x..` hex) |
+
+* **Smart pre/post pairing.** When *both* the pre and post chimes are set
+  to `mdc1200` and the op-code preset is `ptt_id_pre` (the default), EAS
+  Station automatically substitutes `ptt_id_post` on the post-alert
+  position so receiving Motorola radios see a complete bookend pair and
+  close the call cleanly. All other presets pass through unchanged.
+
+> **Verifying generated packets.** Render any test alert and decode the
+> generated WAV with [multimon-ng](https://github.com/EliasOenal/multimon-ng):
+> `multimon-ng -a MDC -t wav <file>.wav` will print one line per packet,
+> e.g. `MDC: 0180 1234 PTT ID PRE`. Use this on the bench before going on
+> the air with a real fleet.
+
+#### Two-way LMR forwarding (the canonical use case)
+
+The driving design goal of MDC1200 support is **forwarding EAS audio over
+an existing Motorola-style two-way radio system**. With MDC1200 chimes
+enabled and the audio output wired into a base-station radio's auxiliary
+input (PTT keying handled by an external GPIO / VOX / COR loop), each
+broadcast goes on-air as:
+
+```
+[radio PTT keys up by GPIO/VOX]
+  Pre  MDC1200 PTT-ID-Pre   ← "from unit 1234"
+  500 ms silence
+  SAME header burst × 3     ← decoded by ENDECs and SAME-aware radios
+  Attention tone (8 s)
+  Voice narration
+  SAME EOM × 3
+  500 ms silence
+  Post MDC1200 PTT-ID-Post  ← "1234 clear"
+[PTT releases]
+```
+
+Receiving subscribers display the calling unit ID, optionally selectively
+unmute for that ID, log the call in their dispatch console, trigger any
+configured alarms, and cleanly close the call on the post-ID. Common
+fleets where this fits naturally: county EM dispatch repeaters,
+volunteer fire / EMS / Skywarn / RACES nets, school and utility radio
+systems, industrial site-wide LMR. The full technical reference,
+including frame format, FEC, and op-code table, lives in
+[`docs/reference/protocols/MDC1200.md`](../reference/protocols/MDC1200.md).
+
+> **PTT keying is not part of this feature.** EAS Station produces audio.
+> Putting the radio into transmit is the responsibility of the radio
+> interface (GPIO output, COR loop, VOX, VOIP gateway, …) and must be
+> configured separately, keyed off the same trigger that starts EAS
+> Station audio playback.
+
 ---
 
 ## Ordering Inside the Composite Broadcast
@@ -135,6 +209,10 @@ database values when set:
 | `EAS_QC2_LONG_TONE_ENABLED` | QC-II Long Tone enabled (`1`, `true`, or `yes`) |
 | `EAS_QC2_LONG_TONE_SECONDS` | QC-II Long Tone Duration (seconds) |
 | `EAS_DTMF_SEQUENCE` | DTMF Sequence |
+| `EAS_MDC1200_UNIT_ID` | MDC1200 Unit ID (decimal or `0x..` hex) |
+| `EAS_MDC1200_OP_CODE` | MDC1200 Op-Code preset name |
+| `EAS_MDC1200_OP_CODE_RAW` | MDC1200 Raw Op-Code byte (decimal or `0x..` hex) |
+| `EAS_MDC1200_ARG_RAW` | MDC1200 Raw Argument byte (decimal or `0x..` hex) |
 
 Internally the chime is rendered by `app_utils.eas._generate_chime()`; profiles
 are listed in `app_utils.eas.ALERT_CHIME_PROFILES`. Adding new profiles is a
@@ -164,27 +242,39 @@ PUT /admin/eas_settings    Content-Type: application/json
   "qc2_tone_b_freq": 1530.0,
   "qc2_long_tone_enabled": true,
   "qc2_long_tone_seconds": 10.0,
-  "dtmf_sequence": "*911#"
+  "dtmf_sequence": "*911#",
+  "mdc1200_unit_id": "0x04D2",
+  "mdc1200_op_code": "ptt_id_pre",
+  "mdc1200_op_code_raw": null,
+  "mdc1200_arg_raw": null
 }
 ```
 
 Server-side validation:
 
-* `*_chime` must be one of `none`, `bell`, `beep`, `three_tone`, `qc2`, `dtmf`
+* `*_chime` must be one of `none`, `bell`, `beep`, `three_tone`, `qc2`, `dtmf`, `mdc1200`
   (case-insensitive). Unknown values are silently rejected.
 * `*_chime_duration` must be a number in `[0.1, 10.0]`.
 * `qc2_tone_*_freq` must be a number in `[50.0, 4000.0]` Hz.
 * `qc2_long_tone_enabled` must be a boolean.
 * `qc2_long_tone_seconds` must be a number in `[1.0, 120.0]`.
 * `dtmf_sequence` is filtered to `0-9 A-D * #` and truncated to 32 characters.
+* `mdc1200_unit_id` must be an integer in `[1, 65535]`. Strings are parsed
+  with `int(value, 0)`, so `"1234"` and `"0x04D2"` are both accepted.
+* `mdc1200_op_code` must be one of `ptt_id_pre`, `ptt_id_post`, `emergency`,
+  `request_to_talk`, `remote_monitor`, `custom` (case-insensitive).
+* `mdc1200_op_code_raw` and `mdc1200_arg_raw` must each be an integer in
+  `[0, 255]` (or `null`/`""` to clear). Strings are parsed with
+  `int(value, 0)`, so both decimal and `0x..` hex are accepted.
 
 ---
 
 ## Database Schema
 
 Schema additions are applied by Alembic migrations
-`20260501_add_alert_chime_to_eas_settings` and
-`20260505_add_qc2_long_tone_to_eas_settings`:
+`20260501_add_alert_chime_to_eas_settings`,
+`20260505_add_qc2_long_tone_to_eas_settings`, and
+`20260505_add_mdc1200_to_eas_settings`:
 
 | Column | Type | Default |
 |--------|------|---------|
@@ -197,6 +287,10 @@ Schema additions are applied by Alembic migrations
 | `qc2_long_tone_enabled` | `BOOLEAN NOT NULL` | `FALSE` |
 | `qc2_long_tone_seconds` | `DOUBLE PRECISION NOT NULL` | `10.0` |
 | `dtmf_sequence` | `VARCHAR(32) NOT NULL` | `''` |
+| `mdc1200_unit_id` | `INTEGER NOT NULL` | `1` |
+| `mdc1200_op_code` | `VARCHAR(32) NOT NULL` | `'ptt_id_pre'` |
+| `mdc1200_op_code_raw` | `SMALLINT NULL` | `NULL` |
+| `mdc1200_arg_raw` | `SMALLINT NULL` | `NULL` |
 
 The migration uses `ADD COLUMN IF NOT EXISTS` and the application also
 self-heals these columns on first read via `_PENDING_MIGRATIONS` in

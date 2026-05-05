@@ -341,6 +341,10 @@ def load_eas_config(base_path: Optional[str] = None, db_session=None) -> Dict[st
     db_qc2_long_tone_enabled = None
     db_qc2_long_tone_seconds = None
     db_dtmf_sequence = None
+    db_mdc1200_unit_id = None
+    db_mdc1200_op_code = None
+    db_mdc1200_op_code_raw = None
+    db_mdc1200_arg_raw = None
     db_forwarded_event_codes: List[str] = []
     try:
         from app_core.models import EASSettings
@@ -363,6 +367,10 @@ def load_eas_config(base_path: Optional[str] = None, db_session=None) -> Dict[st
             db_qc2_long_tone_enabled = getattr(eas_settings, 'qc2_long_tone_enabled', None)
             db_qc2_long_tone_seconds = getattr(eas_settings, 'qc2_long_tone_seconds', None)
             db_dtmf_sequence = getattr(eas_settings, 'dtmf_sequence', None)
+            db_mdc1200_unit_id = getattr(eas_settings, 'mdc1200_unit_id', None)
+            db_mdc1200_op_code = getattr(eas_settings, 'mdc1200_op_code', None)
+            db_mdc1200_op_code_raw = getattr(eas_settings, 'mdc1200_op_code_raw', None)
+            db_mdc1200_arg_raw = getattr(eas_settings, 'mdc1200_arg_raw', None)
             db_forwarded_event_codes = list(eas_settings.forwarded_event_codes or [])
             load_logger.info(
                 'EASSettings loaded from DB: originator=%s station_id=%s broadcast_enabled=%s',
@@ -396,6 +404,10 @@ def load_eas_config(base_path: Optional[str] = None, db_session=None) -> Dict[st
                 db_qc2_long_tone_enabled = getattr(eas_settings, 'qc2_long_tone_enabled', None)
                 db_qc2_long_tone_seconds = getattr(eas_settings, 'qc2_long_tone_seconds', None)
                 db_dtmf_sequence = getattr(eas_settings, 'dtmf_sequence', None)
+                db_mdc1200_unit_id = getattr(eas_settings, 'mdc1200_unit_id', None)
+                db_mdc1200_op_code = getattr(eas_settings, 'mdc1200_op_code', None)
+                db_mdc1200_op_code_raw = getattr(eas_settings, 'mdc1200_op_code_raw', None)
+                db_mdc1200_arg_raw = getattr(eas_settings, 'mdc1200_arg_raw', None)
                 db_forwarded_event_codes = list(eas_settings.forwarded_event_codes or [])
                 load_logger.info(
                     'EASSettings loaded from DB (direct session): originator=%s station_id=%s broadcast_enabled=%s',
@@ -463,6 +475,25 @@ def load_eas_config(base_path: Optional[str] = None, db_session=None) -> Dict[st
         'dtmf_sequence': (
             os.getenv('EAS_DTMF_SEQUENCE')
             or (db_dtmf_sequence if db_dtmf_sequence is not None else '')
+        ),
+        'mdc1200_unit_id': (
+            int(os.getenv('EAS_MDC1200_UNIT_ID'), 0)
+            if os.getenv('EAS_MDC1200_UNIT_ID')
+            else int(db_mdc1200_unit_id if db_mdc1200_unit_id is not None else 1)
+        ),
+        'mdc1200_op_code': (
+            os.getenv('EAS_MDC1200_OP_CODE')
+            or (db_mdc1200_op_code if db_mdc1200_op_code else 'ptt_id_pre')
+        ),
+        'mdc1200_op_code_raw': (
+            int(os.getenv('EAS_MDC1200_OP_CODE_RAW'), 0)
+            if os.getenv('EAS_MDC1200_OP_CODE_RAW')
+            else (db_mdc1200_op_code_raw if db_mdc1200_op_code_raw is not None else None)
+        ),
+        'mdc1200_arg_raw': (
+            int(os.getenv('EAS_MDC1200_ARG_RAW'), 0)
+            if os.getenv('EAS_MDC1200_ARG_RAW')
+            else (db_mdc1200_arg_raw if db_mdc1200_arg_raw is not None else None)
         ),
         'attention_tone_seconds': float(
             os.getenv('EAS_ATTENTION_TONE_SECONDS')
@@ -1603,7 +1634,32 @@ def _generate_silence(duration: float, sample_rate: int) -> List[int]:
 
 
 # Allowed chime profile values for pre/post-alert chimes.
-ALERT_CHIME_PROFILES = ('none', 'bell', 'beep', 'three_tone', 'qc2', 'dtmf')
+ALERT_CHIME_PROFILES = ('none', 'bell', 'beep', 'three_tone', 'qc2', 'dtmf', 'mdc1200')
+
+
+def _resolve_mdc1200_op_for_position(op_code: str, position: str) -> str:
+    """Auto-pair MDC1200 PTT-ID Pre/Post when used as bookend chimes.
+
+    When an operator selects ``ptt_id_pre`` (the default) for both pre- and
+    post-alert MDC1200 chimes, a real Motorola subscriber radio expects the
+    post-side packet to be ``ptt_id_post`` — the bookend pair is what closes
+    the call cleanly on the receiver's display.  This helper substitutes the
+    matching post-side preset automatically so operators don't have to think
+    about it.
+
+    The substitution is intentionally narrow:
+
+    * ``position='post'`` AND ``op_code == 'ptt_id_pre'``  →  ``'ptt_id_post'``
+
+    All other presets (``emergency``, ``request_to_talk``, ``remote_monitor``,
+    ``ptt_id_post`` already chosen, or ``custom``) pass through unchanged so
+    operators who deliberately want the same op-code on both sides — for
+    example sandwiching a broadcast in two emergency-alarm packets — keep
+    that behaviour.
+    """
+    if (position or '').strip().lower() == 'post' and (op_code or '').strip().lower() == 'ptt_id_pre':
+        return 'ptt_id_post'
+    return op_code
 
 
 # Standard DTMF tone-pair frequency map: digit -> (low Hz, high Hz).
@@ -1626,6 +1682,10 @@ def _generate_chime(
     dtmf_sequence: str = '',
     qc2_long_tone_enabled: bool = False,
     qc2_long_tone_seconds: float = 10.0,
+    mdc1200_op_code: str = 'ptt_id_pre',
+    mdc1200_op_code_raw: Optional[int] = None,
+    mdc1200_arg_raw: Optional[int] = None,
+    mdc1200_unit_id: int = 1,
 ) -> List[int]:
     """Generate a short attention chime to play before/after an EAS broadcast.
 
@@ -1650,6 +1710,13 @@ def _generate_chime(
                         0-9, letters A-D, * or #) as its standard DTMF
                         low+high tone pair, using ITU-T Q.24 timing
                         (100 ms tone, 50 ms gap).  ``duration`` is ignored.
+        - 'mdc1200':    Motorola MDC1200 selective-calling FFSK packet at
+                        1200 baud (mark = 1200 Hz, space = 1800 Hz).
+                        Encodes ``mdc1200_unit_id`` with the op-code
+                        derived from ``mdc1200_op_code`` (or the explicit
+                        ``mdc1200_op_code_raw`` / ``mdc1200_arg_raw``
+                        overrides).  ``duration`` is ignored — packet
+                        timing is fixed by the protocol (~147 ms).
 
     Args:
         profile: Chime profile name (case-insensitive).
@@ -1786,6 +1853,36 @@ def _generate_chime(
                 out.append(int(math.sin(2 * math.pi * freq_b * t) * amplitude))
 
         return out
+
+    if name in ('mdc1200', 'mdc-1200', 'mdc'):
+        # Motorola MDC1200 selective-calling FFSK packet (1200 baud,
+        # 1200 Hz mark / 1800 Hz space).  Packet timing is fixed by the
+        # protocol so `duration` is intentionally ignored.
+        from app_utils.mdc1200 import (
+            generate_mdc1200_samples,
+            resolve_op_preset,
+        )
+        try:
+            unit_id_int = int(mdc1200_unit_id)
+        except (TypeError, ValueError):
+            unit_id_int = 1
+        unit_id_int = max(1, min(0xFFFF, unit_id_int))
+
+        if mdc1200_op_code_raw is not None and mdc1200_arg_raw is not None:
+            try:
+                op = int(mdc1200_op_code_raw) & 0xFF
+                arg = int(mdc1200_arg_raw) & 0xFF
+            except (TypeError, ValueError):
+                op, arg = resolve_op_preset(mdc1200_op_code or '')
+        else:
+            op, arg = resolve_op_preset(mdc1200_op_code or '')
+        return generate_mdc1200_samples(
+            opcode=op,
+            arg=arg,
+            unit_id=unit_id_int,
+            sample_rate=sample_rate,
+            amplitude=amplitude,
+        )
 
     # Unknown profile: be safe and emit no chime rather than raise.
     return []
@@ -2284,11 +2381,19 @@ class EASAudioGenerator:
         qc2_long_tone = bool(self.config.get('qc2_long_tone_enabled', False))
         qc2_long_secs = float(self.config.get('qc2_long_tone_seconds', 10.0) or 10.0)
         dtmf_seq = str(self.config.get('dtmf_sequence', '') or '')
+        mdc1200_unit_id = int(self.config.get('mdc1200_unit_id', 1) or 1)
+        mdc1200_op_code = str(self.config.get('mdc1200_op_code', 'ptt_id_pre') or 'ptt_id_pre')
+        mdc1200_op_code_raw = self.config.get('mdc1200_op_code_raw', None)
+        mdc1200_arg_raw = self.config.get('mdc1200_arg_raw', None)
         pre_chime_samples = _generate_chime(
             pre_chime_profile, pre_chime_duration, self.sample_rate, amplitude,
             qc2_tone_a_freq=qc2_freq_a, qc2_tone_b_freq=qc2_freq_b,
             dtmf_sequence=dtmf_seq,
             qc2_long_tone_enabled=qc2_long_tone, qc2_long_tone_seconds=qc2_long_secs,
+            mdc1200_op_code=_resolve_mdc1200_op_for_position(mdc1200_op_code, 'pre'),
+            mdc1200_op_code_raw=mdc1200_op_code_raw,
+            mdc1200_arg_raw=mdc1200_arg_raw,
+            mdc1200_unit_id=mdc1200_unit_id,
         )
         if pre_chime_samples:
             samples.extend(pre_chime_samples)
@@ -2500,6 +2605,10 @@ class EASAudioGenerator:
             qc2_tone_a_freq=qc2_freq_a, qc2_tone_b_freq=qc2_freq_b,
             dtmf_sequence=dtmf_seq,
             qc2_long_tone_enabled=qc2_long_tone, qc2_long_tone_seconds=qc2_long_secs,
+            mdc1200_op_code=_resolve_mdc1200_op_for_position(mdc1200_op_code, 'post'),
+            mdc1200_op_code_raw=mdc1200_op_code_raw,
+            mdc1200_arg_raw=mdc1200_arg_raw,
+            mdc1200_unit_id=mdc1200_unit_id,
         )
         if post_chime_samples:
             samples.extend(_generate_silence(0.5, self.sample_rate))
@@ -2813,11 +2922,19 @@ class EASAudioGenerator:
         qc2_long_tone = bool(self.config.get('qc2_long_tone_enabled', False))
         qc2_long_secs = float(self.config.get('qc2_long_tone_seconds', 10.0) or 10.0)
         dtmf_seq = str(self.config.get('dtmf_sequence', '') or '')
+        mdc1200_unit_id = int(self.config.get('mdc1200_unit_id', 1) or 1)
+        mdc1200_op_code = str(self.config.get('mdc1200_op_code', 'ptt_id_pre') or 'ptt_id_pre')
+        mdc1200_op_code_raw = self.config.get('mdc1200_op_code_raw', None)
+        mdc1200_arg_raw = self.config.get('mdc1200_arg_raw', None)
         pre_chime_samples_list = _generate_chime(
             pre_chime_profile, pre_chime_duration, self.sample_rate, amplitude,
             qc2_tone_a_freq=qc2_freq_a, qc2_tone_b_freq=qc2_freq_b,
             dtmf_sequence=dtmf_seq,
             qc2_long_tone_enabled=qc2_long_tone, qc2_long_tone_seconds=qc2_long_secs,
+            mdc1200_op_code=_resolve_mdc1200_op_for_position(mdc1200_op_code, 'pre'),
+            mdc1200_op_code_raw=mdc1200_op_code_raw,
+            mdc1200_arg_raw=mdc1200_arg_raw,
+            mdc1200_unit_id=mdc1200_unit_id,
         )
         post_chime_profile = self.config.get('post_alert_chime', 'none')
         post_chime_duration = float(self.config.get('post_alert_chime_duration', 2.0) or 2.0)
@@ -2826,6 +2943,10 @@ class EASAudioGenerator:
             qc2_tone_a_freq=qc2_freq_a, qc2_tone_b_freq=qc2_freq_b,
             dtmf_sequence=dtmf_seq,
             qc2_long_tone_enabled=qc2_long_tone, qc2_long_tone_seconds=qc2_long_secs,
+            mdc1200_op_code=_resolve_mdc1200_op_for_position(mdc1200_op_code, 'post'),
+            mdc1200_op_code_raw=mdc1200_op_code_raw,
+            mdc1200_arg_raw=mdc1200_arg_raw,
+            mdc1200_unit_id=mdc1200_unit_id,
         )
         chime_separator = _generate_silence(0.5, self.sample_rate)
 
