@@ -131,7 +131,7 @@ This uses the existing county-to-zone mapping logic to save you from manual look
 The setup wizard validates your input:
 
 - **SECRET_KEY**: Minimum 32 characters
-- **EAS_STATION_ID**: Maximum 8 characters, no dashes
+- **Station ID** (configured at the Broadcast admin tab, persisted in `eas_settings.station_id`): Maximum 8 characters, no dashes
 - **DEFAULT_STATE_CODE**: Must be valid 2-letter state abbreviation
 - **Timezone**: Must be valid IANA timezone
 - **Port Numbers**: Must be 1-65535

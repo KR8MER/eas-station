@@ -113,19 +113,23 @@ sudo systemctl restart eas-station-poller.service
 ```
 
 **C. No Endpoints Configured**
+```
+Error: "No endpoints configured"
+Cause: Missing IPAWS feed URLs and/or zone codes
+```
+
+Polling endpoints, the NOAA user-agent string, and location/zone codes are now
+configured through the admin UI, not `.env`:
+
+- **Poll interval, CAP timeout, NOAA user-agent, IPAWS feed URLs, lookback hours** —
+  Settings → **Poller** (`/admin/poller`, persisted in the `poller_settings` table).
+- **County, state, FIPS codes, NWS zone codes** —
+  Settings → **Location** and Settings → **Alert Filtering**
+  (`/admin/location_settings` and `/admin/alert_filtering`).
+
+After saving, restart the poller so it picks up the new values:
+
 ```bash
-# Error: "No endpoints configured"
-# Cause: Missing IPAWS_CAP_FEED_URLS and zone codes
-
-# Check configuration
-sudo nano /opt/eas-station/.env
-
-# Ensure these are set:
-IPAWS_CAP_FEED_URLS=https://apps.fema.gov/IPAWSOPEN_EAS_SERVICE/rest/public/recent/{timestamp}
-LOCATION_CONFIG={"timezone": "America/New_York", "county_name": "Your County", "state_code": "OH", "zone_codes": "OHZ016", ...}
-NOAA_USER_AGENT=EAS Station/2.2 (+https://yoursite.com; contact@yoursite.com)
-
-# Restart service
 sudo systemctl restart eas-station-poller.service
 ```
 
@@ -174,16 +178,24 @@ sudo journalctl -u eas-station-poller.service -f
 
 **Solutions:**
 
-**A. Check POLL_INTERVAL_SEC**
-```bash
-# Default is 120 seconds (2 minutes)
-# If set too high, you'll wait a long time to see activity
-
-grep "POLL_INTERVAL_SEC" /opt/eas-station/.env
-# Should show: POLL_INTERVAL_SEC=120
-
-# If it's like 3600 (1 hour), that's why you're not seeing polls
+**A. Check the poll interval**
 ```
+Default is 120 seconds (2 minutes).
+If set too high, you'll wait a long time to see activity.
+```
+
+The poll interval is now stored in the database (`poller_settings.poll_interval_sec`)
+and configured at Settings → **Poller** (`/admin/poller`). To inspect it from the
+command line:
+
+```bash
+sudo -u easstation psql -h localhost -U eas_station -d alerts \
+  -c "SELECT poll_interval_sec FROM poller_settings;"
+# Should show 120 (or your configured value)
+```
+
+If the value is something like `3600` (1 hour), that's why you're not seeing
+polls — lower it via the Poller settings page.
 
 **B. Force Manual Poll**
 ```bash
@@ -285,7 +297,7 @@ After fixing the issue, verify polling is working:
 # 1. Check service is running and healthy
 sudo systemctl status eas-station-poller.service
 
-# 2. Watch logs in real-time (wait at least POLL_INTERVAL_SEC)
+# 2. Watch logs in real-time (wait at least one poll interval; default 120s)
 sudo journalctl -u eas-station-poller.service -f
 
 # You should see:

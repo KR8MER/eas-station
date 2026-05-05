@@ -141,7 +141,7 @@ sequenceDiagram
     participant DB as PostgreSQL + PostGIS
     participant REDIS as Redis
 
-    loop Every POLL_INTERVAL_SEC (default 120s)
+    loop Every poll interval (default 120s)
         NP->>NOAA: GET /alerts (CAP XML)
         NOAA-->>NP: CAP 1.2 Feed
         NP->>NP: Parse & Validate XML
@@ -154,7 +154,7 @@ sequenceDiagram
         end
     end
 
-    loop Every POLL_INTERVAL_SEC (default 120s)
+    loop Every poll interval (default 120s)
         IP->>IPAWS: GET /recent/{timestamp}
         IPAWS-->>IP: CAP 1.2 Feed
         IP->>IP: Parse & Validate XML
@@ -162,10 +162,10 @@ sequenceDiagram
     end
 ```
 
-- **Pollers (`poller/cap_poller.py`)** fetch CAP 1.2 feeds from NOAA Weather Service and FEMA IPAWS on configurable intervals (default 120 seconds via `POLL_INTERVAL_SEC`)
+- **Pollers (`poller/cap_poller.py`)** fetch CAP 1.2 feeds from NOAA Weather Service and FEMA IPAWS on configurable intervals (default 120 seconds, configured at Settings → Poller and persisted in `poller_settings.poll_interval_sec`)
 - **Schema Enforcement** validates XML against CAP schema and normalises polygons, circles, and SAME location codes
 - **Deduplication (`app_core/alerts.py`)** compares CAP identifiers, message types, and sent timestamps
-- **Configuration** is read from the persistent `/app-config/.env` file, accessible via Settings → Environment
+- **Configuration** for runtime settings (polling, EAS broadcast, notifications, application logging) lives in dedicated database tables editable from the admin UI; only boot-time infrastructure (`SECRET_KEY`, `DATABASE_URL`, hostnames, paths) is read from the persistent `/app-config/.env` file
 
 ### 2. Persistence & Spatial Context
 
