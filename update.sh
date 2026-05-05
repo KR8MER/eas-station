@@ -956,7 +956,8 @@ echo_info "Press Ctrl+C to cancel if needed (changes will be rolled back)"
 if [ -f "$INSTALL_DIR/venv/bin/alembic" ]; then
     echo ""
 
-    # Check current database revision before migration
+    # Check current database revision and target head BEFORE migration so the
+    # operator can see exactly what's about to happen.
     echo_info "Checking current database state..."
     CURRENT_REV=$(sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR' && '$INSTALL_DIR/venv/bin/alembic' current" 2>/dev/null | tail -1 | awk '{print $1}' || echo "none")
     if [ -n "$CURRENT_REV" ] && [ "$CURRENT_REV" != "none" ] && [ "$CURRENT_REV" != "" ]; then
@@ -964,8 +965,12 @@ if [ -f "$INSTALL_DIR/venv/bin/alembic" ]; then
     else
         echo_info "Database is at an unknown or initial state"
     fi
+    TARGET_HEADS=$(sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR' && '$INSTALL_DIR/venv/bin/alembic' heads" 2>/dev/null | awk '{print $1}' | grep -v '^$' | tr '\n' ' ' || echo "")
+    if [ -n "$TARGET_HEADS" ]; then
+        echo_info "Target head(s):    $TARGET_HEADS"
+    fi
     echo ""
-    
+
     # Disable exit-on-error for migrations
     set +e
     # Run Alembic directly (no output capture) so user sees real-time feedback
@@ -974,15 +979,20 @@ if [ -f "$INSTALL_DIR/venv/bin/alembic" ]; then
     sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR' && '$INSTALL_DIR/venv/bin/alembic' upgrade head"
     ALEMBIC_EXIT_CODE=$?
     set -e
-    
+
     echo ""
+    # Always re-read the current revision after the upgrade attempt so we can
+    # report accurately whether it advanced (regardless of exit code).
+    POST_REV=$(sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR' && '$INSTALL_DIR/venv/bin/alembic' current" 2>/dev/null | tail -1 | awk '{print $1}' || echo "")
+    if [ -n "$POST_REV" ]; then
+        echo_info "Database revision after upgrade attempt: $POST_REV"
+    fi
+
     MIGRATION_FAILED=false
     if [ $ALEMBIC_EXIT_CODE -eq 0 ]; then
         echo_success "Database migrations completed successfully"
-        # Show what revision we're at now
-        NEW_REV=$(sudo -u "$SERVICE_USER" bash -c "cd '$INSTALL_DIR' && '$INSTALL_DIR/venv/bin/alembic' current" 2>/dev/null | tail -1 | awk '{print $1}' || echo "")
-        if [ -n "$NEW_REV" ] && [ "$NEW_REV" != "" ]; then
-            echo_info "Database is now at: $NEW_REV"
+        if [ -n "$POST_REV" ]; then
+            echo_info "Database is now at: $POST_REV"
         fi
     elif [ $ALEMBIC_EXIT_CODE -eq 130 ]; then
         MIGRATION_FAILED=true
@@ -991,7 +1001,7 @@ if [ -f "$INSTALL_DIR/venv/bin/alembic" ]; then
         echo_info "To retry: sudo -u $SERVICE_USER bash -c 'cd $INSTALL_DIR && $INSTALL_DIR/venv/bin/alembic upgrade head'"
     else
         MIGRATION_FAILED=true
-        echo_warning "Alembic migrations encountered errors (exit code: $ALEMBIC_EXIT_CODE)"
+        echo_error "Alembic migrations encountered errors (exit code: $ALEMBIC_EXIT_CODE)"
         echo ""
         echo_info "Common causes:"
         echo_info "  • Database connection failed (check DATABASE_URL in .env)"
@@ -999,63 +1009,84 @@ if [ -f "$INSTALL_DIR/venv/bin/alembic" ]; then
         echo_info "  • Migration script has errors (check output above)"
         echo_info "  • Conflicting schema changes (may need manual resolution)"
         echo ""
-        echo_info "Attempting to create any missing tables with db.create_all() as fallback..."
-        
-        set +e
-        sudo -u "$SERVICE_USER" "$INSTALL_DIR/venv/bin/python" -c "
-from app import app, db
-with app.app_context():
-    db.create_all()
-    print('Missing tables created')
-"
-        set -e
-        
-        echo ""
-        echo_warning "Database upgrade may be incomplete - check logs after update"
-        echo_info "You can manually run migrations:"
+        # IMPORTANT: We deliberately do NOT run db.create_all() here as a
+        # fallback. create_all() only adds missing tables/columns; it never
+        # drops, renames, or copies data. For migrations that move data
+        # between tables (e.g. 20260506_split_location_settings), running
+        # create_all() after a failed alembic upgrade silently leaves the
+        # database in a half-migrated state: the new tables exist but are
+        # empty, the old columns still hold the real data, and
+        # alembic_version is never advanced. That is *worse* than a clean
+        # alembic failure because it hides the breakage. Surface the error
+        # loudly instead and let the operator re-run alembic (or the
+        # recovery script under scripts/database/) once the underlying
+        # cause is fixed.
+        echo_warning "Schema upgrade has NOT been applied. The database is in its previous state."
+        echo_info "To retry migrations once the cause is fixed:"
         echo_info "  sudo -u $SERVICE_USER bash -c 'cd $INSTALL_DIR && $INSTALL_DIR/venv/bin/alembic upgrade head'"
-        
+        echo_info "If a previous run left the DB half-migrated (e.g. tables exist but data is missing), run:"
+        echo_info "  sudo -u $SERVICE_USER $INSTALL_DIR/venv/bin/python $INSTALL_DIR/scripts/database/recover_split_location_settings.py"
+
         # Give user time to read the error before continuing.
         MIGRATION_ERR_MSG="Database migration errors were detected."
         MIGRATION_ERR_MSG+="\n\nAlembic exited with code: $ALEMBIC_EXIT_CODE"
+        MIGRATION_ERR_MSG+="\nCurrent revision: ${POST_REV:-unknown}"
+        MIGRATION_ERR_MSG+="\nTarget head(s):   ${TARGET_HEADS:-unknown}"
+        MIGRATION_ERR_MSG+="\n\nNo schema changes were applied as a fallback;"
+        MIGRATION_ERR_MSG+="\nthe database is in its previous state."
         MIGRATION_ERR_MSG+="\n\nCommon causes:"
         MIGRATION_ERR_MSG+="\n  \u2022 Database connection failed (check DATABASE_URL in .env)"
         MIGRATION_ERR_MSG+="\n  \u2022 PostgreSQL/PostGIS not running"
         MIGRATION_ERR_MSG+="\n  \u2022 Migration script has errors"
         MIGRATION_ERR_MSG+="\n  \u2022 Conflicting schema changes"
-        MIGRATION_ERR_MSG+="\n\nThe update will continue."
+        MIGRATION_ERR_MSG+="\n\nThe update will continue, but the application may"
+        MIGRATION_ERR_MSG+="\nfail to start until migrations are applied."
         MIGRATION_ERR_MSG+="\nCheck the log for details: $LOG_FILE"
         MIGRATION_ERR_MSG+="\n\nTo retry migrations manually:"
         MIGRATION_ERR_MSG+="\n  sudo -u $SERVICE_USER bash -c"
         MIGRATION_ERR_MSG+="\n    'cd $INSTALL_DIR && $INSTALL_DIR/venv/bin/alembic upgrade head'"
+        MIGRATION_ERR_MSG+="\n\nIf the previous update left the DB half-migrated:"
+        MIGRATION_ERR_MSG+="\n  sudo -u $SERVICE_USER \\\\"
+        MIGRATION_ERR_MSG+="\n    $INSTALL_DIR/venv/bin/python \\\\"
+        MIGRATION_ERR_MSG+="\n    $INSTALL_DIR/scripts/database/recover_split_location_settings.py"
         whiptail --title "Migration Warning" \
             --backtitle "$(whiptail_footer)" \
             --msgbox "$MIGRATION_ERR_MSG" \
-            22 75
+            26 78
+    fi
+
+    # Independent recovery pass: even if alembic itself succeeded, a previous
+    # run of update.sh may have left the database in a half-migrated state
+    # for 20260506_split_location_settings (new tables present but empty,
+    # old columns still on location_settings). The recovery script is a
+    # no-op when the schema is already healthy, so it's safe to run
+    # unconditionally on every update.
+    if [ -f "$INSTALL_DIR/scripts/database/recover_split_location_settings.py" ]; then
+        echo ""
+        echo_info "Checking for any half-migrated location_settings split state..."
+        set +e
+        sudo -u "$SERVICE_USER" "$INSTALL_DIR/venv/bin/python" \
+            "$INSTALL_DIR/scripts/database/recover_split_location_settings.py" --quiet
+        RECOVERY_EXIT_CODE=$?
+        set -e
+        if [ $RECOVERY_EXIT_CODE -eq 0 ]; then
+            echo_success "Location-split recovery check completed"
+        else
+            echo_warning "Location-split recovery check reported issues (exit $RECOVERY_EXIT_CODE) - see log"
+        fi
     fi
 elif [ -f "$INSTALL_DIR/venv/bin/python" ]; then
-    echo_warning "Alembic not found - using db.create_all() fallback"
-    echo_progress "Creating any missing database tables..."
-    echo ""
-
-    set +e
-    sudo -u "$SERVICE_USER" "$INSTALL_DIR/venv/bin/python" -c "
-from app import app, db
-with app.app_context():
-    db.create_all()
-    print('Database schema updated')
-"
-    DB_EXIT_CODE=$?
-    set -e
-
-    echo ""
-    if [ $DB_EXIT_CODE -eq 0 ]; then
-        echo_success "Database tables created"
-    else
-        echo_warning "Database operation failed (non-critical)"
-    fi
+    # No alembic binary found. We do NOT run db.create_all() here either:
+    # for any release that introduces a destructive/data-moving migration,
+    # create_all() would silently leave the DB in an inconsistent state.
+    # Surface this loudly instead.
+    echo_error "Alembic not found in venv - cannot apply database migrations"
+    echo_info "Install Python dependencies and re-run the update:"
+    echo_info "  sudo -u $SERVICE_USER $INSTALL_DIR/venv/bin/pip install -r $INSTALL_DIR/requirements.txt"
+    MIGRATION_FAILED=true
 else
     echo_warning "Python environment not found - skipping database migrations"
+    MIGRATION_FAILED=true
 fi
 
 # Add any new columns that may not be in Alembic migrations yet
