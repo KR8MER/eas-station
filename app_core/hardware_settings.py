@@ -239,7 +239,12 @@ def get_neopixel_settings() -> Dict[str, Any]:
 
 
 def get_gps_settings() -> Dict[str, Any]:
-    """Get GPS HAT / receiver settings (Adafruit Ultimate GPS HAT #2324).
+    """Get GPS HAT / receiver settings.
+
+    Defaults target the Uputronics Raspberry Pi GPS/RTC Expansion Board
+    (u-blox MAX-M8Q, PPS on BCM 18, DS3231 RTC). The Adafruit Ultimate
+    GPS HAT (#2324, PPS on BCM 4) is also supported by changing the PPS
+    GPIO pin in Admin → Hardware Settings.
 
     Returns:
         Dictionary with GPS configuration

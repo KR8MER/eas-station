@@ -107,7 +107,7 @@ PIN_ROWS: List[Tuple[PinDefinition, PinDefinition]] = [
             "GPIO 4",
             "gpio",
             bcm=4,
-            description="GPCLK0 / GPS HAT PPS (default)",
+            description="GPCLK0 / Adafruit GPS HAT #2324 PPS",
         ),
         PinDefinition(
             8,
@@ -125,7 +125,7 @@ PIN_ROWS: List[Tuple[PinDefinition, PinDefinition]] = [
     ),
     (
         PinDefinition(11, "GPIO 17", "gpio", bcm=17, description="General purpose I/O"),
-        PinDefinition(12, "GPIO 18", "gpio", bcm=18, description="PWM0 / I2S CLK"),
+        PinDefinition(12, "GPIO 18", "gpio", bcm=18, description="PWM0 / I2S CLK / Uputronics GPS HAT PPS (default)"),
     ),
     (
         PinDefinition(13, "GPIO 27", "gpio", bcm=27, description="General purpose I/O"),

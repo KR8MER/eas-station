@@ -638,7 +638,7 @@ def initialize_zigbee_coordinator():
 
 
 def initialize_gps_manager():
-    """Initialize GPS receiver manager (Adafruit Ultimate GPS HAT #2324) if enabled."""
+    """Initialize GPS receiver manager (Uputronics GPS/RTC HAT or Adafruit #2324) if enabled."""
     global _gps_manager
 
     try:
@@ -2293,7 +2293,7 @@ def create_api_app():
                 'status': 'disabled' if not gps_settings.get('enabled') else 'not_started',
                 'serial_port': gps_settings.get('serial_port', '/dev/serial0'),
                 'baudrate': gps_settings.get('baudrate', 9600),
-                'pps_gpio_pin': gps_settings.get('pps_gpio_pin', 4),
+                'pps_gpio_pin': gps_settings.get('pps_gpio_pin', 18),
                 'timestamp': datetime.now(timezone.utc).isoformat(),
             })
         except Exception as e:

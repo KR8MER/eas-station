@@ -1948,6 +1948,82 @@
             </div>
         </div>
 
+        <!-- Hardware Clock (DS3231 RTC, shown only when an RTC device is present) -->
+        <div class="row mt-4 {% if not (rtc and rtc.get('available')) %}d-none{% endif %}" id="rtc-section">
+            <div class="col-12">
+                <div class="card health-card" id="rtc-card">
+                    <div class="card-body" id="rtc-card-body">
+                        <h5><i class="fas fa-clock section-icon"></i> Hardware Clock</h5>
+                        {% set rtc = rtc if rtc is defined else {} %}
+                        {% if rtc and rtc.get('available') %}
+                            {% set drift = rtc.get('drift_seconds') %}
+                            {% set drift_status = rtc.get('drift_status', 'unreadable') %}
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="metric-row">
+                                        <span class="metric-label">Device:</span>
+                                        <span class="metric-value">
+                                            <code>{{ rtc.get('device','/dev/rtc0') }}</code>
+                                            {% if rtc.get('name') %}
+                                                <span class="ms-1 text-muted small">({{ rtc.get('name') }})</span>
+                                            {% endif %}
+                                            {% if rtc.get('is_ds3231') %}
+                                                <span class="badge bg-info ms-1">DS3231</span>
+                                            {% endif %}
+                                            {% if rtc.get('is_battery_backed') %}
+                                                <span class="badge bg-success ms-1" title="Battery-backed"><i class="fas fa-battery-three-quarters me-1"></i>Battery-backed</span>
+                                            {% endif %}
+                                        </span>
+                                    </div>
+                                    {% if rtc.get('rtc_time_iso') %}
+                                    <div class="metric-row">
+                                        <span class="metric-label">RTC UTC:</span>
+                                        <span class="metric-value"><code>{{ rtc.get('rtc_time_iso') }}</code></span>
+                                    </div>
+                                    {% endif %}
+                                    {% if rtc.get('temperature_c') is not none %}
+                                    <div class="metric-row">
+                                        <span class="metric-label">Die Temp:</span>
+                                        <span class="metric-value">{{ "%.1f"|format(rtc.get('temperature_c')) }} °C</span>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="metric-row">
+                                        <span class="metric-label">Drift vs system:</span>
+                                        <span class="metric-value">
+                                            {% if drift_status == 'in_sync' %}
+                                                <span class="badge bg-success">In Sync</span>
+                                            {% elif drift_status == 'minor' %}
+                                                <span class="badge bg-success">Minor</span>
+                                            {% elif drift_status == 'moderate' %}
+                                                <span class="badge bg-warning text-dark">Moderate</span>
+                                            {% elif drift_status == 'severe' %}
+                                                <span class="badge bg-danger" title="Battery may be exhausted">Severe</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary">Unknown</span>
+                                            {% endif %}
+                                            {% if drift is not none %}
+                                                <span class="ms-2"><code>{{ "%+.3f"|format(drift) }} s</code></span>
+                                            {% endif %}
+                                        </span>
+                                    </div>
+                                    {% if drift_status == 'severe' or drift_status == 'unreadable' %}
+                                    <p class="text-muted small mb-0 mt-2">
+                                        <i class="fas fa-exclamation-triangle me-1 text-warning"></i>
+                                        Large drift after a power cycle usually means the RTC backup battery is
+                                        exhausted. Replace the coin cell, then run <code>sudo hwclock -w</code>
+                                        once after the system clock is synced.
+                                    </p>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Temperature Sensors (if available) -->
         <div class="row mt-4 {% if not temperature %}d-none{% endif %}" id="temperature-section">
             {% if temperature %}
@@ -3905,6 +3981,94 @@
             return true; // signal: card should be visible (actual rendering done by updateGpsCard)
         }
 
+        /* ── RTC (DS3231 / hardware clock) helpers ───────────────────── */
+        function _rtcDriftBadge(driftStatus) {
+            switch (driftStatus) {
+                case 'in_sync': return '<span class="badge bg-success">In Sync</span>';
+                case 'minor':   return '<span class="badge bg-success">Minor</span>';
+                case 'moderate':return '<span class="badge bg-warning text-dark">Moderate</span>';
+                case 'severe':  return '<span class="badge bg-danger" title="Battery may be exhausted">Severe</span>';
+                default:        return '<span class="badge bg-secondary">Unknown</span>';
+            }
+        }
+
+        function _buildRtcCardShell() {
+            return `<h5><i class="fas fa-clock section-icon"></i> Hardware Clock</h5>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div id="rtc-h-device-row"></div>
+                        <div id="rtc-h-time-row"></div>
+                        <div id="rtc-h-temp-row"></div>
+                    </div>
+                    <div class="col-md-6">
+                        <div id="rtc-h-drift-row"></div>
+                        <div id="rtc-h-warning-row"></div>
+                    </div>
+                </div>`;
+        }
+
+        let _rtcHealthRendered = false;
+        function updateRtcCard(rtc) {
+            const section = document.getElementById('rtc-section');
+            const body = document.getElementById('rtc-card-body');
+            if (!section || !body) return;
+
+            if (!rtc || typeof rtc !== 'object' || !rtc.available) {
+                section.classList.add('d-none');
+                return;
+            }
+            section.classList.remove('d-none');
+
+            if (!_rtcHealthRendered) {
+                body.innerHTML = _buildRtcCardShell();
+                _rtcHealthRendered = true;
+            }
+
+            const setHtml = (id, html) => {
+                const el = document.getElementById(id);
+                if (el) el.innerHTML = html;
+            };
+
+            const device = rtc.device || '/dev/rtc0';
+            const nameSuffix = rtc.name ? `<span class="ms-1 text-muted small">(${escapeHtml(rtc.name)})</span>` : '';
+            const ds3231Badge = rtc.is_ds3231 ? '<span class="badge bg-info ms-1">DS3231</span>' : '';
+            const batteryBadge = rtc.is_battery_backed
+                ? '<span class="badge bg-success ms-1" title="Battery-backed"><i class="fas fa-battery-three-quarters me-1"></i>Battery-backed</span>'
+                : '';
+            setHtml('rtc-h-device-row',
+                `<div class="metric-row"><span class="metric-label">Device:</span>
+                    <span class="metric-value"><code>${escapeHtml(device)}</code>${nameSuffix}${ds3231Badge}${batteryBadge}</span></div>`);
+
+            setHtml('rtc-h-time-row', rtc.rtc_time_iso
+                ? `<div class="metric-row"><span class="metric-label">RTC UTC:</span>
+                    <span class="metric-value"><code>${escapeHtml(rtc.rtc_time_iso)}</code></span></div>`
+                : '');
+
+            setHtml('rtc-h-temp-row', (rtc.temperature_c != null)
+                ? `<div class="metric-row"><span class="metric-label">Die Temp:</span>
+                    <span class="metric-value">${escapeHtml(Number(rtc.temperature_c).toFixed(1))} °C</span></div>`
+                : '');
+
+            const driftStatus = rtc.drift_status || 'unreadable';
+            const driftSecs = (typeof rtc.drift_seconds === 'number')
+                ? `<span class="ms-2"><code>${(rtc.drift_seconds >= 0 ? '+' : '')}${rtc.drift_seconds.toFixed(3)} s</code></span>`
+                : '';
+            setHtml('rtc-h-drift-row',
+                `<div class="metric-row"><span class="metric-label">Drift vs system:</span>
+                    <span class="metric-value">${_rtcDriftBadge(driftStatus)}${driftSecs}</span></div>`);
+
+            setHtml('rtc-h-warning-row',
+                (driftStatus === 'severe' || driftStatus === 'unreadable')
+                    ? `<p class="text-muted small mb-0 mt-2">
+                            <i class="fas fa-exclamation-triangle me-1 text-warning"></i>
+                            Large drift after a power cycle usually means the RTC backup battery is
+                            exhausted. Replace the coin cell, then run <code>sudo hwclock -w</code>
+                            once after the system clock is synced.
+                       </p>`
+                    : '');
+        }
+        /* ── end RTC helpers ─────────────────────────────────────────── */
+
         function applyHealthData(data) {
             if (!data || typeof data !== 'object') {
                 return;
@@ -3996,6 +4160,7 @@
             }
 
             updateGpsCard(data.gps || {});
+            updateRtcCard(data.rtc || {});
 
             const timestamp = data.local_timestamp || data.timestamp;
             const parsedDate = timestamp ? new Date(timestamp) : new Date();
