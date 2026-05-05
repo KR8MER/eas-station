@@ -926,6 +926,167 @@
     color: #3a4d7a !important;
 }
 
+/* ----------------------------------------------------------------------------
+   Page-local backgrounds that use var(--light-color) directly
+   ----------------------------------------------------------------------------
+   Several template-local stylesheets (templates/eas/workflow.html,
+   templates/index.html, templates/led_control.html) set
+   `background: var(--light-color)` on their own components without also
+   pinning a text color. On the seven dark themes whose --light-color
+   resolves to a near-white tint (pale yellow / lavender / cyan), the
+   inherited light body text becomes invisible on those backgrounds
+   (e.g. white-on-pale-yellow on the lightning theme). The `.bg-light`
+   utility class already has its own dark-text override above; this block
+   does the equivalent for the named selectors that use --light-color
+   directly.
+
+   We set `color` only on the affected ancestors so unclassed inner text
+   inherits the dark color, while inner elements that declare their own
+   color (".same-chip button { color: var(--danger-color) }", ".text-success"
+   icons, etc.) retain their explicit colors via the cascade. The lone
+   exception is `.text-muted`, whose own rule below uses !important and
+   would otherwise re-light subtitles inside the chip — a matching
+   !important descendant rule below restores readable contrast there. */
+[data-theme="lightning"] :is(
+        .workflow-card > .card-header,
+        .same-chip,
+        #date-filters,
+        .alert-summary-panel,
+        .feature-group,
+        .layout-preset-btn:hover,
+        .rss-item-row),
+[data-theme="aurora"] :is(
+        .workflow-card > .card-header,
+        .same-chip,
+        #date-filters,
+        .alert-summary-panel,
+        .feature-group,
+        .layout-preset-btn:hover,
+        .rss-item-row),
+[data-theme="nebula"] :is(
+        .workflow-card > .card-header,
+        .same-chip,
+        #date-filters,
+        .alert-summary-panel,
+        .feature-group,
+        .layout-preset-btn:hover,
+        .rss-item-row),
+[data-theme="midnight"] :is(
+        .workflow-card > .card-header,
+        .same-chip,
+        #date-filters,
+        .alert-summary-panel,
+        .feature-group,
+        .layout-preset-btn:hover,
+        .rss-item-row),
+[data-theme="charcoal"] :is(
+        .workflow-card > .card-header,
+        .same-chip,
+        #date-filters,
+        .alert-summary-panel,
+        .feature-group,
+        .layout-preset-btn:hover,
+        .rss-item-row),
+[data-theme="obsidian"] :is(
+        .workflow-card > .card-header,
+        .same-chip,
+        #date-filters,
+        .alert-summary-panel,
+        .feature-group,
+        .layout-preset-btn:hover,
+        .rss-item-row),
+[data-theme="slate"] :is(
+        .workflow-card > .card-header,
+        .same-chip,
+        #date-filters,
+        .alert-summary-panel,
+        .feature-group,
+        .layout-preset-btn:hover,
+        .rss-item-row) {
+    color: #0d1b2a;
+    text-shadow: none;
+}
+
+/* Re-tone .text-muted descendants of the same regions: their own rule
+   (line ~3570) declares `.text-muted { color: var(--text-muted) !important }`,
+   which on dark themes resolves to a light gray — invisible on a pale
+   --light-color background. Pick a darker muted color so the subtitle
+   ("Ohio · FIPS 003 · Entire area" inside .same-chip, etc.) reads. */
+[data-theme="lightning"] :is(
+        .workflow-card > .card-header,
+        .same-chip,
+        #date-filters,
+        .alert-summary-panel,
+        .feature-group,
+        .layout-preset-btn:hover,
+        .rss-item-row) .text-muted,
+[data-theme="aurora"] :is(
+        .workflow-card > .card-header,
+        .same-chip,
+        #date-filters,
+        .alert-summary-panel,
+        .feature-group,
+        .layout-preset-btn:hover,
+        .rss-item-row) .text-muted,
+[data-theme="nebula"] :is(
+        .workflow-card > .card-header,
+        .same-chip,
+        #date-filters,
+        .alert-summary-panel,
+        .feature-group,
+        .layout-preset-btn:hover,
+        .rss-item-row) .text-muted,
+[data-theme="midnight"] :is(
+        .workflow-card > .card-header,
+        .same-chip,
+        #date-filters,
+        .alert-summary-panel,
+        .feature-group,
+        .layout-preset-btn:hover,
+        .rss-item-row) .text-muted,
+[data-theme="charcoal"] :is(
+        .workflow-card > .card-header,
+        .same-chip,
+        #date-filters,
+        .alert-summary-panel,
+        .feature-group,
+        .layout-preset-btn:hover,
+        .rss-item-row) .text-muted,
+[data-theme="obsidian"] :is(
+        .workflow-card > .card-header,
+        .same-chip,
+        #date-filters,
+        .alert-summary-panel,
+        .feature-group,
+        .layout-preset-btn:hover,
+        .rss-item-row) .text-muted,
+[data-theme="slate"] :is(
+        .workflow-card > .card-header,
+        .same-chip,
+        #date-filters,
+        .alert-summary-panel,
+        .feature-group,
+        .layout-preset-btn:hover,
+        .rss-item-row) .text-muted {
+    color: #3a4d7a !important;
+}
+
+/* ----------------------------------------------------------------------------
+   Bootstrap .form-text helper text
+   ----------------------------------------------------------------------------
+   Bootstrap 5's default sets .form-text to a hardcoded muted gray
+   (~#6c757d) which has poor contrast on dark themes — the helper text
+   under inputs is invisible on `--bg-color: #060d1f` (lightning),
+   `#0a0e27` (midnight), `#000000` (obsidian), etc. admin.css already
+   ships an equivalent rule, but only admin pages link admin.css; the
+   broadcast workflow, dashboard, and LED control pages don't. Promoting
+   it to the global stylesheet fixes helper text everywhere by tying it
+   to the per-theme --text-muted token (calibrated for readable contrast
+   against --bg-color on every theme). */
+.form-text {
+    color: var(--text-muted);
+}
+
 /* Lightning Theme - Navbar opacity
    The default navbar mixes its gradient with 15-20% transparency. Combined
    with the bright yellow body gradient of this theme, page content scrolls
