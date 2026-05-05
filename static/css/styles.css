@@ -4066,16 +4066,18 @@ textarea:focus {
 /* High-contrast dark themes amplify orbs via screen blend on a near-black
    background — combined with bright soft-color variants this produces
    luminous shapes that dominate the page. Cap opacities so they read as
-   subtle atmosphere rather than competing surfaces. */
-[data-theme="lightning"] .page-shell .orb,
-[data-theme="midnight"] .page-shell .orb,
-[data-theme="obsidian"] .page-shell .orb,
-[data-theme="charcoal"] .page-shell .orb,
-[data-theme="slate"] .page-shell .orb,
-[data-theme="nebula"] .page-shell .orb,
-[data-theme="aurora"] .page-shell .orb,
-[data-theme="dark"] .page-shell .orb {
-    opacity: 0.08 !important;
+   subtle atmosphere rather than competing surfaces.
+   The :nth-child(n) suffix bumps specificity above the per-orb
+   .page-shell .orb:nth-child(N) rules so these caps win without !important. */
+[data-theme="lightning"] .page-shell .orb:nth-child(n),
+[data-theme="midnight"] .page-shell .orb:nth-child(n),
+[data-theme="obsidian"] .page-shell .orb:nth-child(n),
+[data-theme="charcoal"] .page-shell .orb:nth-child(n),
+[data-theme="slate"] .page-shell .orb:nth-child(n),
+[data-theme="nebula"] .page-shell .orb:nth-child(n),
+[data-theme="aurora"] .page-shell .orb:nth-child(n),
+[data-theme="dark"] .page-shell .orb:nth-child(n) {
+    opacity: 0.08;
     filter: blur(100px);
 }
 
@@ -4087,7 +4089,7 @@ textarea:focus {
 [data-theme="nebula"] .page-shell .orb:nth-child(3),
 [data-theme="aurora"] .page-shell .orb:nth-child(3),
 [data-theme="dark"] .page-shell .orb:nth-child(3) {
-    opacity: 0.05 !important;
+    opacity: 0.05;
 }
 
 /* 3D Card Transforms */
