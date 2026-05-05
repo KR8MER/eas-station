@@ -1105,15 +1105,16 @@ function populateEasForm(settings) {
     if (mdcOpCode) {
         mdcOpCode.value = settings.mdc1200_op_code || 'ptt_id_pre';
     }
+    const _formatHexByte = (v) => (v === null || v === undefined)
+        ? ''
+        : `0x${Number(v).toString(16).toUpperCase().padStart(2, '0')}`;
     const mdcOpRaw = document.getElementById('easMdc1200OpCodeRaw');
     if (mdcOpRaw) {
-        const _v = settings.mdc1200_op_code_raw;
-        mdcOpRaw.value = (_v === null || _v === undefined) ? '' : `0x${Number(_v).toString(16).toUpperCase().padStart(2, '0')}`;
+        mdcOpRaw.value = _formatHexByte(settings.mdc1200_op_code_raw);
     }
     const mdcArgRaw = document.getElementById('easMdc1200ArgRaw');
     if (mdcArgRaw) {
-        const _v = settings.mdc1200_arg_raw;
-        mdcArgRaw.value = (_v === null || _v === undefined) ? '' : `0x${Number(_v).toString(16).toUpperCase().padStart(2, '0')}`;
+        mdcArgRaw.value = _formatHexByte(settings.mdc1200_arg_raw);
     }
     if (authorizedEventsTextarea) {
         authorizedEventsTextarea.value = (settings.authorized_event_codes || []).join('\n');

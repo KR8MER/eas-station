@@ -1854,8 +1854,6 @@ def _generate_chime(
 
         return out
 
-        return out
-
     if name in ('mdc1200', 'mdc-1200', 'mdc'):
         # Motorola MDC1200 selective-calling FFSK packet (1200 baud,
         # 1200 Hz mark / 1800 Hz space).  Packet timing is fixed by the
