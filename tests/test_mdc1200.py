@@ -155,9 +155,9 @@ def test_xor_modulate_round_trip():
 # ---------------------------------------------------------------------------
 
 def test_encode_packet_length_and_prefix_structure():
-    """Frame must be 22 bytes: 3 preamble + 5 sync + 14 payload."""
+    """Frame must be 26 bytes: 3 preamble + 5 sync + 14 payload + 4 post-preamble."""
     frame = encode_packet(0x01, 0x80, 0x1234)
-    assert len(frame) == 3 + 5 + 14 == 22
+    assert len(frame) == 3 + 5 + 14 + 4 == 26
 
     # The preamble + sync prefix passes through differential modulation as
     # well, but their *decoded* values must still match the canonical
@@ -175,6 +175,26 @@ def test_encode_packet_length_and_prefix_structure():
         decoded.append(out)
     assert decoded[:3] == list(MDC1200_PREAMBLE)
     assert decoded[3:8] == list(MDC1200_SYNC)
+
+
+def test_encode_packet_includes_trailing_post_preamble():
+    """The last 4 bytes of a single packet are the post-preamble: under
+    differential modulation they decode to 0x00 0x00 0x00 0x00, which
+    is what real Motorola subscribers expect as a clean tail-of-frame
+    marker before they commit a decoded ID to their call list."""
+    frame = encode_packet(0x01, 0x80, 0x1234)
+    decoded = []
+    prev_bit = 0
+    for byte in frame:
+        b = byte ^ 0xFF
+        out = 0
+        for bit_num in range(7, -1, -1):
+            transitioned = (b >> bit_num) & 1
+            new_bit = prev_bit ^ transitioned
+            out |= new_bit << bit_num
+            prev_bit = new_bit
+        decoded.append(out)
+    assert decoded[-4:] == [0x00, 0x00, 0x00, 0x00]
 
 
 def test_encode_packet_validates_inputs():
@@ -200,6 +220,106 @@ def test_resolve_op_preset_unknown_falls_back_to_ptt_id_pre():
     assert resolve_op_preset("") == MDC1200_OP_PRESETS["ptt_id_pre"]
 
 
+def test_call_alert_and_selective_call_presets_match_multimon_ng():
+    """Call Alert and Selective Call use op/arg pairs widely attested in
+    multimon-ng's MDC decoder source and Motorola CPS programming sheets.
+    Pin them so a future refactor cannot silently change the on-air bytes."""
+    assert resolve_op_preset("call_alert") == (0x63, 0x85)
+    assert resolve_op_preset("selective_call") == (0x35, 0x80)
+
+
+def test_call_alert_and_selective_call_encode_to_valid_frames():
+    """Both new presets must produce a valid 26-byte single-packet frame
+    when called via :func:`encode_packet` (target ID carried in the
+    unit_id field — receivers tolerate this fallback when no separate
+    target is configured)."""
+    for preset in ("call_alert", "selective_call"):
+        op, arg = resolve_op_preset(preset)
+        frame = encode_packet(op, arg, 0x1234)
+        assert len(frame) == 26, preset
+
+
+def test_double_packet_frame_length_and_structure():
+    """``encode_double_packet`` must emit a 40-byte frame: 3 preamble +
+    5 sync + 14 payload-1 + 4 inter-packet preamble + 14 payload-2.
+    At 1200 baud that is exactly 266.67 ms of audio."""
+    from app_utils.mdc1200 import encode_double_packet
+    frame = encode_double_packet(0x63, 0x85, 0x1111, 0x2222)
+    assert len(frame) == 3 + 5 + 14 + 4 + 14 == 40
+
+    # Decode the prefix to verify preamble + sync round-trip
+    decoded = []
+    prev_bit = 0
+    for byte in frame:
+        b = byte ^ 0xFF
+        out = 0
+        for bit_num in range(7, -1, -1):
+            transitioned = (b >> bit_num) & 1
+            new_bit = prev_bit ^ transitioned
+            out |= new_bit << bit_num
+            prev_bit = new_bit
+        decoded.append(out)
+    assert decoded[:3] == list(MDC1200_PREAMBLE)
+    assert decoded[3:8] == list(MDC1200_SYNC)
+    # 4-byte inter-packet preamble after payload 1 (offsets 22..25)
+    assert decoded[22:26] == [0x00, 0x00, 0x00, 0x00]
+
+
+def test_double_packet_validates_inputs():
+    from app_utils.mdc1200 import encode_double_packet
+    with pytest.raises(ValueError):
+        encode_double_packet(-1, 0, 0, 0)
+    with pytest.raises(ValueError):
+        encode_double_packet(0, 0x100, 0, 0)
+    with pytest.raises(ValueError):
+        encode_double_packet(0, 0, 0x10000, 0)
+    with pytest.raises(ValueError):
+        encode_double_packet(0, 0, 0, 0x10000)
+    with pytest.raises(ValueError):
+        encode_double_packet(0, 0, 0, 0, status=-1)
+
+
+def test_is_double_packet_op_recognises_call_alert_and_selective_call():
+    from app_utils.mdc1200 import is_double_packet_op
+    assert is_double_packet_op(0x63, 0x85) is True   # Call Alert
+    assert is_double_packet_op(0x35, 0x80) is True   # Selective Call
+    # PTT-ID, Emergency, etc. stay single-packet
+    assert is_double_packet_op(0x01, 0x80) is False
+    assert is_double_packet_op(0x00, 0x80) is False
+    assert is_double_packet_op(0x40, 0x80) is False
+
+
+def test_generate_mdc1200_samples_dispatches_to_double_packet_when_target_set():
+    """Audio waveform length must match double-packet timing when the
+    operator picks Call Alert / Selective Call AND configures a
+    target unit ID; otherwise it falls back to single-packet timing."""
+    sr = 16000
+    amp = 0.7 * 32767
+
+    # Call Alert with target -> double packet (40 bytes)
+    samples_double = generate_mdc1200_samples(
+        0x63, 0x85, unit_id=0x1111, sample_rate=sr, amplitude=amp,
+        target_unit_id=0x2222,
+    )
+    expected_double = 40 * 8 * sr / MDC1200_BAUD
+    assert abs(len(samples_double) - expected_double) <= 2
+
+    # Call Alert without target -> falls back to single packet (26 bytes)
+    samples_single_fallback = generate_mdc1200_samples(
+        0x63, 0x85, unit_id=0x1111, sample_rate=sr, amplitude=amp,
+        target_unit_id=None,
+    )
+    expected_single = 26 * 8 * sr / MDC1200_BAUD
+    assert abs(len(samples_single_fallback) - expected_single) <= 2
+
+    # PTT-ID Pre with target set -> still single packet (op is not double-packet-eligible)
+    samples_pttid = generate_mdc1200_samples(
+        0x01, 0x80, unit_id=0x1111, sample_rate=sr, amplitude=amp,
+        target_unit_id=0x2222,
+    )
+    assert abs(len(samples_pttid) - expected_single) <= 2
+
+
 # ---------------------------------------------------------------------------
 # Smart pre/post PTT-ID pairing
 # ---------------------------------------------------------------------------
@@ -215,9 +335,19 @@ def test_smart_pairing_substitutes_post_for_ptt_id_pre():
 
 def test_smart_pairing_passes_other_presets_through():
     """Non-PTT presets must NOT be rewritten — operators sandwich a broadcast
-    in two emergency-alarm packets on purpose."""
+    in two emergency-alarm packets on purpose, and Call Alert / Selective
+    Call have no natural pre/post pair so the operator's exact choice must
+    survive on both sides."""
     from app_utils.eas import _resolve_mdc1200_op_for_position
-    for preset in ("emergency", "request_to_talk", "remote_monitor", "ptt_id_post", "custom"):
+    for preset in (
+        "emergency",
+        "request_to_talk",
+        "remote_monitor",
+        "ptt_id_post",
+        "call_alert",
+        "selective_call",
+        "custom",
+    ):
         assert _resolve_mdc1200_op_for_position(preset, "pre") == preset
         assert _resolve_mdc1200_op_for_position(preset, "post") == preset
 
@@ -237,7 +367,7 @@ def test_encode_packet_accepts_full_hex_byte_range():
     """Op-code, arg, and unit ID must each accept the full 8-/16-bit
     hex range — including A–F digits — without raising."""
     frame = encode_packet(0xAB, 0xCD, 0xDEAD, status=0xEF)
-    assert len(frame) == 22
+    assert len(frame) == 26
 
 
 def test_encode_packet_unit_id_round_trips_hex_value():
@@ -288,10 +418,10 @@ def test_bytes_to_bits_msb():
 # ---------------------------------------------------------------------------
 
 def test_generate_mdc1200_samples_length_at_16khz():
-    """22 bytes * 8 bits / 1200 baud * 16000 Hz ≈ 2346.67 samples; the
+    """26 bytes * 8 bits / 1200 baud * 16000 Hz ≈ 2773.33 samples; the
     fractional-bit timing means we expect within ±2 samples of that."""
     samples = generate_mdc1200_samples(0x01, 0x80, 0x1234, 16000, 0.7 * 32767)
-    expected = 22 * 8 * 16000 / MDC1200_BAUD
+    expected = 26 * 8 * 16000 / MDC1200_BAUD
     assert abs(len(samples) - expected) <= 2
     assert all(-32768 <= s <= 32767 for s in samples)
 

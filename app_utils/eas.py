@@ -345,6 +345,7 @@ def load_eas_config(base_path: Optional[str] = None, db_session=None) -> Dict[st
     db_mdc1200_op_code = None
     db_mdc1200_op_code_raw = None
     db_mdc1200_arg_raw = None
+    db_mdc1200_target_unit_id = None
     db_forwarded_event_codes: List[str] = []
     try:
         from app_core.models import EASSettings
@@ -371,6 +372,7 @@ def load_eas_config(base_path: Optional[str] = None, db_session=None) -> Dict[st
             db_mdc1200_op_code = getattr(eas_settings, 'mdc1200_op_code', None)
             db_mdc1200_op_code_raw = getattr(eas_settings, 'mdc1200_op_code_raw', None)
             db_mdc1200_arg_raw = getattr(eas_settings, 'mdc1200_arg_raw', None)
+            db_mdc1200_target_unit_id = getattr(eas_settings, 'mdc1200_target_unit_id', None)
             db_forwarded_event_codes = list(eas_settings.forwarded_event_codes or [])
             load_logger.info(
                 'EASSettings loaded from DB: originator=%s station_id=%s broadcast_enabled=%s',
@@ -408,6 +410,7 @@ def load_eas_config(base_path: Optional[str] = None, db_session=None) -> Dict[st
                 db_mdc1200_op_code = getattr(eas_settings, 'mdc1200_op_code', None)
                 db_mdc1200_op_code_raw = getattr(eas_settings, 'mdc1200_op_code_raw', None)
                 db_mdc1200_arg_raw = getattr(eas_settings, 'mdc1200_arg_raw', None)
+                db_mdc1200_target_unit_id = getattr(eas_settings, 'mdc1200_target_unit_id', None)
                 db_forwarded_event_codes = list(eas_settings.forwarded_event_codes or [])
                 load_logger.info(
                     'EASSettings loaded from DB (direct session): originator=%s station_id=%s broadcast_enabled=%s',
@@ -494,6 +497,14 @@ def load_eas_config(base_path: Optional[str] = None, db_session=None) -> Dict[st
             int(os.getenv('EAS_MDC1200_ARG_RAW'), 0)
             if os.getenv('EAS_MDC1200_ARG_RAW')
             else (db_mdc1200_arg_raw if db_mdc1200_arg_raw is not None else None)
+        ),
+        'mdc1200_target_unit_id': (
+            int(os.getenv('EAS_MDC1200_TARGET_UNIT_ID'), 0)
+            if os.getenv('EAS_MDC1200_TARGET_UNIT_ID')
+            else (
+                int(db_mdc1200_target_unit_id)
+                if db_mdc1200_target_unit_id is not None else None
+            )
         ),
         'attention_tone_seconds': float(
             os.getenv('EAS_ATTENTION_TONE_SECONDS')
@@ -1686,6 +1697,7 @@ def _generate_chime(
     mdc1200_op_code_raw: Optional[int] = None,
     mdc1200_arg_raw: Optional[int] = None,
     mdc1200_unit_id: int = 1,
+    mdc1200_target_unit_id: Optional[int] = None,
 ) -> List[int]:
     """Generate a short attention chime to play before/after an EAS broadcast.
 
@@ -1876,12 +1888,26 @@ def _generate_chime(
                 op, arg = resolve_op_preset(mdc1200_op_code or '')
         else:
             op, arg = resolve_op_preset(mdc1200_op_code or '')
+
+        # Coerce the target unit ID; ``None``, blank string, or out-of-range
+        # values force single-packet emission (the encoder treats 0/None as
+        # "no target configured").
+        target_int: Optional[int] = None
+        if mdc1200_target_unit_id not in (None, ''):
+            try:
+                _t = int(mdc1200_target_unit_id)
+            except (TypeError, ValueError):
+                _t = 0
+            if 1 <= _t <= 0xFFFF:
+                target_int = _t
+
         return generate_mdc1200_samples(
             opcode=op,
             arg=arg,
             unit_id=unit_id_int,
             sample_rate=sample_rate,
             amplitude=amplitude,
+            target_unit_id=target_int,
         )
 
     # Unknown profile: be safe and emit no chime rather than raise.
@@ -2385,6 +2411,7 @@ class EASAudioGenerator:
         mdc1200_op_code = str(self.config.get('mdc1200_op_code', 'ptt_id_pre') or 'ptt_id_pre')
         mdc1200_op_code_raw = self.config.get('mdc1200_op_code_raw', None)
         mdc1200_arg_raw = self.config.get('mdc1200_arg_raw', None)
+        mdc1200_target_unit_id = self.config.get('mdc1200_target_unit_id', None)
         pre_chime_samples = _generate_chime(
             pre_chime_profile, pre_chime_duration, self.sample_rate, amplitude,
             qc2_tone_a_freq=qc2_freq_a, qc2_tone_b_freq=qc2_freq_b,
@@ -2394,6 +2421,7 @@ class EASAudioGenerator:
             mdc1200_op_code_raw=mdc1200_op_code_raw,
             mdc1200_arg_raw=mdc1200_arg_raw,
             mdc1200_unit_id=mdc1200_unit_id,
+            mdc1200_target_unit_id=mdc1200_target_unit_id,
         )
         if pre_chime_samples:
             samples.extend(pre_chime_samples)
@@ -2609,6 +2637,7 @@ class EASAudioGenerator:
             mdc1200_op_code_raw=mdc1200_op_code_raw,
             mdc1200_arg_raw=mdc1200_arg_raw,
             mdc1200_unit_id=mdc1200_unit_id,
+            mdc1200_target_unit_id=mdc1200_target_unit_id,
         )
         if post_chime_samples:
             samples.extend(_generate_silence(0.5, self.sample_rate))
@@ -2926,6 +2955,7 @@ class EASAudioGenerator:
         mdc1200_op_code = str(self.config.get('mdc1200_op_code', 'ptt_id_pre') or 'ptt_id_pre')
         mdc1200_op_code_raw = self.config.get('mdc1200_op_code_raw', None)
         mdc1200_arg_raw = self.config.get('mdc1200_arg_raw', None)
+        mdc1200_target_unit_id = self.config.get('mdc1200_target_unit_id', None)
         pre_chime_samples_list = _generate_chime(
             pre_chime_profile, pre_chime_duration, self.sample_rate, amplitude,
             qc2_tone_a_freq=qc2_freq_a, qc2_tone_b_freq=qc2_freq_b,
@@ -2935,6 +2965,7 @@ class EASAudioGenerator:
             mdc1200_op_code_raw=mdc1200_op_code_raw,
             mdc1200_arg_raw=mdc1200_arg_raw,
             mdc1200_unit_id=mdc1200_unit_id,
+            mdc1200_target_unit_id=mdc1200_target_unit_id,
         )
         post_chime_profile = self.config.get('post_alert_chime', 'none')
         post_chime_duration = float(self.config.get('post_alert_chime_duration', 2.0) or 2.0)
@@ -2947,6 +2978,7 @@ class EASAudioGenerator:
             mdc1200_op_code_raw=mdc1200_op_code_raw,
             mdc1200_arg_raw=mdc1200_arg_raw,
             mdc1200_unit_id=mdc1200_unit_id,
+            mdc1200_target_unit_id=mdc1200_target_unit_id,
         )
         chime_separator = _generate_silence(0.5, self.sample_rate)
 

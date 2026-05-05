@@ -28,27 +28,68 @@ operations.  This module produces the audio waveform a station can transmit
 so that a receiving Motorola (or compatible) radio displays the originating
 unit ID and any associated event (PTT-ID start / stop, emergency, etc.).
 
-Frame format (single packet, the only variant we emit):
+Frame format — single packet (PTT-ID, Emergency, Request-to-Talk, Remote
+Monitor, …):
 
     [3 byte preamble = 0x00 0x00 0x00]
     [5 byte frame sync = 0x07 0x09 0x2A 0x44 0x6F]
     [14 byte payload]
+    [4 byte post-preamble = 0x00 0x00 0x00 0x00]   -> 26 bytes total
+
+The trailing 4-byte post-preamble continues the mark tone for one extra
+symbol time (~26.67 ms) so a receiving Motorola subscriber sees a clean
+transition back to idle after the CRC passes — without it, some
+CPS-programmed radios refuse to commit the decoded ID to their call
+list.  At 1200 baud the full single frame is 26 × 8 / 1200 ≈ **173.33 ms**
+of audio.
+
+Frame format — double packet (Call Alert, Selective Call, Status messages,
+GPS, …) — the 4-byte tail is reused as an *inter-packet* preamble that
+gives the receiver's symbol tracker a re-sync window before a second
+14-byte payload arrives, giving a 40-byte frame:
+
+    [3 byte preamble]
+    [5 byte frame sync]
+    [14 byte payload #1 — source ID + op/arg/CRC/status]
+    [4 byte inter-packet preamble = 0x00 0x00 0x00 0x00]
+    [14 byte payload #2 — target ID + reserved + CRC + status]
+
+Under differential modulation an all-zero input continues the current
+logical level (no transitions → mark tone after inversion), so the
+receiver's PLL stays locked to the 1200 Hz mark while its symbol
+tracker resets in time for the second 14-byte interleaved payload.  At
+1200 baud the full double frame is 40 × 8 / 1200 ≈ **266.67 ms** of audio.
 
 The 14-byte payload is built from a 7-byte information block:
 
     payload[0] = opcode
     payload[1] = argument
-    payload[2] = unit_id high byte
-    payload[3] = unit_id low byte
+    payload[2] = unit_id high byte           (source ID in packet 1,
+    payload[3] = unit_id low byte             target ID in packet 2)
     payload[4] = CRC low byte    (CRC-16 of bytes 0..3, reverse poly 0x8408)
     payload[5] = CRC high byte
     payload[6] = status byte     (0x00 for PTT-ID, 0x76 for STS / MSG, ...)
 
-A K=7 rate-1/2 convolutional encoder appends 7 FEC bytes derived from those
-7 information bytes, giving 14 bytes (112 bits) of data.  Those 112 bits
-are then run through a 16-row × 7-column bit interleaver, after which the
-**entire** frame (preamble + sync + interleaved payload) is differentially
-modulated (each output bit signals "input bit changed?", then inverted).
+For a packet 2 in double-packet mode the layout is the same shape, but
+``opcode`` and ``argument`` are repurposed as the high/low bytes of the
+target unit ID, and ``unit_id`` slots are zeroed:
+
+    payload2[0] = target_id high byte
+    payload2[1] = target_id low byte
+    payload2[2] = 0x00  (reserved)
+    payload2[3] = 0x00  (reserved)
+    payload2[4] = CRC low byte    (CRC-16 of bytes 0..3 of packet 2)
+    payload2[5] = CRC high byte
+    payload2[6] = 0x00  (status)
+
+A K=7 rate-1/2 convolutional encoder appends 7 FEC bytes derived from each
+7-byte information block, giving 14 bytes (112 bits) of data per block.
+Those bits are then run through a 16-row × 7-column bit interleaver
+(per block), after which the **entire** frame (preamble + sync +
+interleaved payload(s)) is differentially modulated (each output bit
+signals "input bit changed?", then inverted) as one contiguous stream so
+the receiver's transition tracker stays in sync across the boundary
+between the two payloads.
 
 The result is finally rendered as 1200-baud FFSK audio:
 
@@ -72,9 +113,17 @@ Common opcodes (verified against multiple receiver implementations):
     0x40 0x80   Emergency alarm
     0x35 0x89   Request to talk
     0x11 0x80   Remote monitor
+    0x63 0x85   Call Alert  (page a specific target unit ID)
+    0x35 0x80   Selective Call (voice selective call to a target unit ID)
 
 For unit-only paging without an operational meaning, ``PTT_ID_PRE`` is the
 standard choice — virtually every Motorola subscriber decodes it.
+
+For Call Alert and Selective Call, the ``unit_id`` field carries the
+**target** subscriber's ID (the radio to wake), not the transmitting
+station.  Receiving radios programmed with that ID will alert the user
+(Call Alert: beep + display) or unmute their speaker (Selective Call: open
+audio path) when the packet is received.
 
 References
 ----------
@@ -86,7 +135,7 @@ References
 """
 
 import math
-from typing import Dict, List, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 
 # ---------------------------------------------------------------------------
@@ -111,6 +160,20 @@ MDC1200_PREAMBLE: Tuple[int, ...] = (0x00, 0x00, 0x00)
 #: This is the canonical Motorola pattern recognised by every MDC decoder.
 MDC1200_SYNC: Tuple[int, ...] = (0x07, 0x09, 0x2A, 0x44, 0x6F)
 
+#: 4-byte post-preamble appended after every payload.  In a *single*
+#: packet it sits at the end of the frame so the receiver sees a clean
+#: trailing mark-tone segment after the CRC; in a *double* packet the
+#: same 4-byte sequence sits between payload #1 and payload #2 as an
+#: inter-packet re-sync window.  Under differential modulation an
+#: all-zero input emits a continuous mark tone (no transitions → all
+#: 0xFF after inversion), giving the receiver's symbol tracker a 32-bit
+#: window to settle.
+MDC1200_POST_PREAMBLE: Tuple[int, ...] = (0x00, 0x00, 0x00, 0x00)
+
+#: Backwards-compatible alias for callers that only care about the
+#: double-packet semantics of :data:`MDC1200_POST_PREAMBLE`.
+MDC1200_INTER_PACKET_PREAMBLE: Tuple[int, ...] = MDC1200_POST_PREAMBLE
+
 #: Number of information bytes per packet half (op + arg + 2 ID + 2 CRC + 1 status).
 _FEC_K: int = 7
 
@@ -128,10 +191,39 @@ MDC1200_OP_PRESETS: Dict[str, Tuple[int, int]] = {
     "emergency":      (0x40, 0x80),  # Emergency alarm
     "request_to_talk": (0x35, 0x89),  # Request-to-talk paging
     "remote_monitor": (0x11, 0x80),  # Remote-monitor command
+    "call_alert":     (0x63, 0x85),  # Call Alert (page target subscriber)
+    "selective_call": (0x35, 0x80),  # Voice Selective Call (unmute target)
 }
 
 #: Default preset when the operator hasn't picked one explicitly.
 MDC1200_DEFAULT_PRESET: str = "ptt_id_pre"
+
+#: ``(opcode, arg)`` pairs that traditionally use the **double-packet**
+#: variant on real Motorola subscribers — a second 7-byte info block is
+#: appended carrying the **target** unit ID (the radio being paged or
+#: addressed).  The first info block still carries the transmitting
+#: station's own (source) ID, so a receiver can both unmute for the right
+#: target and display who originated the call.
+#:
+#: When an operator picks one of these op-codes via a preset *and* a
+#: target unit ID is configured, ``generate_mdc1200_samples`` emits the
+#: 36-byte double-packet frame.  When no target is configured, it falls
+#: back to a single-packet frame whose ``unit_id`` field acts as the
+#: target — some receivers tolerate this, but Motorola CPS-programmed
+#: subscribers usually expect the double form.
+MDC1200_DOUBLE_PACKET_OPS: frozenset = frozenset({
+    (0x63, 0x85),  # Call Alert (page target)
+    (0x35, 0x80),  # Voice Selective Call (unmute target)
+})
+
+
+def is_double_packet_op(opcode: int, arg: int) -> bool:
+    """Return ``True`` if ``(opcode, arg)`` is a known double-packet op.
+
+    Used by :func:`generate_mdc1200_samples` to decide whether to emit
+    the 22-byte single packet or the 36-byte double packet variant.
+    """
+    return (opcode & 0xFF, arg & 0xFF) in MDC1200_DOUBLE_PACKET_OPS
 
 
 # ---------------------------------------------------------------------------
@@ -317,9 +409,10 @@ def encode_packet(
             ``0x00`` for PTT-ID variants, ``0x76`` for STS / MSG variants.
 
     Returns:
-        List of 22 bytes — the on-air frame (3 preamble + 5 sync + 14
-        differentially-modulated interleaved payload).  Each byte is
-        transmitted MSB-first at 1200 baud.
+        List of 26 bytes — the on-air frame (3 preamble + 5 sync + 14
+        differentially-modulated interleaved payload + 4 post-preamble).
+        Each byte is transmitted MSB-first at 1200 baud, giving a total
+        airtime of 26 × 8 / 1200 ≈ 173.33 ms.
 
     Raises:
         ValueError: If any input is out of its allowed range.
@@ -350,8 +443,113 @@ def encode_packet(
     payload = _interleave(payload)
 
     # Assemble full frame and apply differential modulation across the
-    # entire transmission (preamble + sync + payload).
-    frame = list(MDC1200_PREAMBLE) + list(MDC1200_SYNC) + payload
+    # entire transmission (preamble + sync + payload + post-preamble).
+    # The 4-byte trailing post-preamble continues the mark tone for an
+    # extra ~26.67 ms so receivers see a clean idle transition after the
+    # CRC passes — without it some Motorola subscribers refuse to commit
+    # the decoded ID to their call list.
+    frame = (
+        list(MDC1200_PREAMBLE)
+        + list(MDC1200_SYNC)
+        + payload
+        + list(MDC1200_POST_PREAMBLE)
+    )
+    return _xor_modulate(frame)
+
+
+def encode_double_packet(
+    opcode: int,
+    arg: int,
+    src_unit_id: int,
+    target_unit_id: int,
+    *,
+    status: int = 0x00,
+) -> List[int]:
+    """Build a 40-byte MDC1200 double packet (Call Alert / Selective Call).
+
+    The double packet appends a 4-byte inter-packet preamble plus a
+    second 14-byte interleaved payload (built from a 7-byte info block
+    carrying the target subscriber's ID).  The two info blocks go
+    through the K=7 FEC and 16×7 interleaver independently and the
+    **entire** 40-byte buffer (preamble + sync + payload1 +
+    inter-packet preamble + payload2) is then differentially modulated
+    as a single stream so the receiver's transition tracker carries
+    cleanly across the payload-1 → preamble → payload-2 boundary.
+
+    At 1200 baud the resulting waveform is 40 × 8 / 1200 ≈ 266.67 ms.
+
+    Second info block layout (7 bytes):
+
+        ``[target_id_high, target_id_low, 0x00, 0x00, crc_lo, crc_hi, 0x00]``
+
+    Args:
+        opcode: 8-bit op-code for packet 1 (e.g. 0x63 for Call Alert).
+        arg: 8-bit op-code argument for packet 1 (e.g. 0x85).
+        src_unit_id: 16-bit transmitting station's unit ID (1..65535).
+        target_unit_id: 16-bit target subscriber's unit ID (1..65535) —
+            the radio that should be paged or unmuted.
+        status: Status byte for packet 1 (defaults to 0x00).
+
+    Returns:
+        List of 40 bytes (3 preamble + 5 sync + 14 payload-1 + 4
+        inter-packet preamble + 14 payload-2) ready for FFSK modulation.
+
+    Raises:
+        ValueError: If any input is out of its allowed range.
+    """
+    if not 0 <= opcode <= 0xFF:
+        raise ValueError("opcode must be in 0..255")
+    if not 0 <= arg <= 0xFF:
+        raise ValueError("arg must be in 0..255")
+    if not 0 <= src_unit_id <= 0xFFFF:
+        raise ValueError("src_unit_id must be in 0..65535")
+    if not 0 <= target_unit_id <= 0xFFFF:
+        raise ValueError("target_unit_id must be in 0..65535")
+    if not 0 <= status <= 0xFF:
+        raise ValueError("status must be in 0..255")
+
+    # Packet 1: source ID + op/arg
+    info1 = [
+        opcode & 0xFF,
+        arg & 0xFF,
+        (src_unit_id >> 8) & 0xFF,
+        src_unit_id & 0xFF,
+    ]
+    crc1 = compute_crc(info1)
+    info1.append(crc1 & 0xFF)
+    info1.append((crc1 >> 8) & 0xFF)
+    info1.append(status & 0xFF)
+    payload1 = _interleave(_apply_fec(info1))
+
+    # Packet 2: target ID + reserved + CRC + status.  The Motorola wire
+    # format puts the target ID in bytes 0..1 of the second info block,
+    # leaves bytes 2..3 zero, and protects bytes 0..3 with an independent
+    # CRC-16 computed exactly the same way as packet 1's CRC.
+    info2 = [
+        (target_unit_id >> 8) & 0xFF,
+        target_unit_id & 0xFF,
+        0x00,
+        0x00,
+    ]
+    crc2 = compute_crc(info2)
+    info2.append(crc2 & 0xFF)
+    info2.append((crc2 >> 8) & 0xFF)
+    info2.append(0x00)  # status byte 2 — always 0x00 for the known double-packet ops
+    payload2 = _interleave(_apply_fec(info2))
+
+    # Differential modulation runs across the entire 40-byte buffer in
+    # one pass — splitting it would corrupt the inter-payload transition
+    # bit and break the receiver's tracker at the boundary.  The 4-byte
+    # inter-packet preamble (all 0x00) becomes a 32-bit mark-tone window
+    # under differential modulation, giving the receiver's symbol tracker
+    # time to re-lock before the second interleaved payload starts.
+    frame = (
+        list(MDC1200_PREAMBLE)
+        + list(MDC1200_SYNC)
+        + payload1
+        + list(MDC1200_POST_PREAMBLE)
+        + payload2
+    )
     return _xor_modulate(frame)
 
 
@@ -377,6 +575,7 @@ def generate_mdc1200_samples(
     amplitude: float,
     *,
     status: int = 0x00,
+    target_unit_id: Optional[int] = None,
 ) -> List[int]:
     """Generate the FFSK PCM samples for a complete MDC1200 packet.
 
@@ -386,24 +585,55 @@ def generate_mdc1200_samples(
     decodable at the cost of some quantisation noise on the 1800 Hz
     space tone).
 
+    Single vs. double packet selection:
+
+    * If ``(opcode, arg)`` is in :data:`MDC1200_DOUBLE_PACKET_OPS` (Call
+      Alert, Selective Call) **and** ``target_unit_id`` is provided and
+      non-zero, a 36-byte double packet is emitted with the source ID in
+      packet 1 and ``target_unit_id`` in packet 2.
+    * Otherwise the classic 22-byte single packet is emitted (and
+      ``target_unit_id`` is ignored).
+
     Args:
         opcode: 8-bit op-code (see ``MDC1200_OP_PRESETS``).
         arg: 8-bit op-code argument.
-        unit_id: 16-bit subscriber unit ID.
+        unit_id: 16-bit subscriber unit ID.  Acts as the *source* ID in
+            double-packet mode and as the only ID in single-packet mode.
         sample_rate: Output sample rate in Hz.
         amplitude: Peak signed-int amplitude (e.g. ``0.7 * 32767``).
         status: Status byte (defaults to 0x00 for PTT-ID variants).
+        target_unit_id: 16-bit target subscriber ID for double-packet
+            ops (Call Alert / Selective Call).  ``None`` or 0 forces
+            single-packet emission.
 
     Returns:
         Phase-continuous int16-range PCM samples for the entire packet.
-        At 16 kHz this is approximately 22 bytes × 8 bits / 1200 baud
-        × 16000 = 2347 samples (≈ 147 ms).
+        At 16 kHz this is approximately:
+
+        * single packet: 26 bytes × 8 bits / 1200 baud × 16000
+          ≈ 2773 samples (≈ 173.33 ms)
+        * double packet: 40 bytes × 8 bits / 1200 baud × 16000
+          ≈ 4267 samples (≈ 266.67 ms)
     """
     # Re-use the shared phase-continuous FFSK renderer that is already
     # tested for the SAME modem (8333.5 / 8333.5 Hz at 520.83 baud).
     from app_utils.eas_fsk import generate_fsk_samples
 
-    frame_bytes = encode_packet(opcode, arg, unit_id, status=status)
+    if (
+        target_unit_id is not None
+        and int(target_unit_id) != 0
+        and is_double_packet_op(opcode, arg)
+    ):
+        frame_bytes = encode_double_packet(
+            opcode,
+            arg,
+            src_unit_id=unit_id,
+            target_unit_id=int(target_unit_id),
+            status=status,
+        )
+    else:
+        frame_bytes = encode_packet(opcode, arg, unit_id, status=status)
+
     bits = bytes_to_bits_msb(frame_bytes)
     return generate_fsk_samples(
         bits,
@@ -432,10 +662,15 @@ __all__ = [
     "MDC1200_SPACE_FREQ",
     "MDC1200_PREAMBLE",
     "MDC1200_SYNC",
+    "MDC1200_POST_PREAMBLE",
+    "MDC1200_INTER_PACKET_PREAMBLE",
     "MDC1200_OP_PRESETS",
     "MDC1200_DEFAULT_PRESET",
+    "MDC1200_DOUBLE_PACKET_OPS",
     "compute_crc",
     "encode_packet",
+    "encode_double_packet",
+    "is_double_packet_op",
     "bytes_to_bits_msb",
     "generate_mdc1200_samples",
     "resolve_op_preset",

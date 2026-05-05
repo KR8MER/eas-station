@@ -1088,9 +1088,13 @@
                                                         FFSK packet (mark = 1200&nbsp;Hz, space = 1800&nbsp;Hz) carrying this
                                                         station's <em>Unit ID</em> and an op-code. Receiving Motorola
                                                         radios display the unit ID and execute the op-code (PTT-ID,
-                                                        Emergency, etc.). Packet duration is fixed at ~147&nbsp;ms; the
-                                                        chime duration field is ignored. Verify on the bench with
-                                                        <code>multimon-ng -a MDC -t wav file.wav</code> before going on the air.
+                                                        Emergency, etc.). Single-packet ops (PTT-ID, Emergency,
+                                                        Request to Talk, Remote Monitor) are <strong>~173&nbsp;ms</strong>;
+                                                        double-packet ops (Call Alert, Selective Call) carry a
+                                                        target unit ID in a second info block and are
+                                                        <strong>~267&nbsp;ms</strong>. Chime-duration field is ignored.
+                                                        Verify on the bench with <code>multimon-ng -a MDC -t wav file.wav</code>
+                                                        before going on the air.
                                                     </div>
                                                 </div>
                                                 <div class="col-md-6 eas-tone-conditional" data-eas-tone-show="mdc1200">
@@ -1106,9 +1110,11 @@
                                                         <option value="emergency">Emergency (op 0x40 / arg 0x80)</option>
                                                         <option value="request_to_talk">Request to Talk (op 0x35 / arg 0x89)</option>
                                                         <option value="remote_monitor">Remote Monitor (op 0x11 / arg 0x80)</option>
+                                                        <option value="call_alert">Call Alert (op 0x63 / arg 0x85) — pages target unit</option>
+                                                        <option value="selective_call">Selective Call (op 0x35 / arg 0x80) — unmutes target unit</option>
                                                         <option value="custom">Custom (use raw values below)</option>
                                                     </select>
-                                                    <small class="text-muted">Pick a preset, or choose <em>Custom</em> to set raw bytes.</small>
+                                                    <small class="text-muted">Pick a preset, or choose <em>Custom</em> to set raw bytes. For <em>Call Alert</em> and <em>Selective Call</em> the Unit ID above is the <strong>target</strong> radio's ID.</small>
                                                 </div>
                                                 <div class="col-md-6 eas-tone-conditional" data-eas-tone-show="mdc1200-custom">
                                                     <label for="easMdc1200OpCodeRaw" class="form-label fw-bold">Raw Op-Code</label>
@@ -1119,6 +1125,11 @@
                                                     <label for="easMdc1200ArgRaw" class="form-label fw-bold">Raw Argument</label>
                                                     <input type="text" class="form-control" id="easMdc1200ArgRaw" name="mdc1200_arg_raw" maxlength="6" placeholder="0x80" pattern="(0[xX][0-9A-Fa-f]{1,2}|\d{1,3})">
                                                     <small class="text-muted">8-bit argument byte (decimal 0–255 or 0x00–0xFF). Used only when op-code preset is <em>Custom</em>.</small>
+                                                </div>
+                                                <div class="col-md-6 eas-tone-conditional" data-eas-tone-show="mdc1200-double">
+                                                    <label for="easMdc1200TargetUnitId" class="form-label fw-bold">MDC1200 Target Unit ID</label>
+                                                    <input type="text" class="form-control" id="easMdc1200TargetUnitId" name="mdc1200_target_unit_id" maxlength="8" placeholder="e.g. 0x04D2 (leave blank for single packet)" pattern="(0[xX][0-9A-Fa-f]{1,4}|\d{1,5})">
+                                                    <small class="text-muted">16-bit ID of the <strong>destination</strong> radio (1–65535 decimal or 0x0001–0xFFFF). Used by <em>Call Alert</em> and <em>Selective Call</em> double-packet ops; the encoder appends a second 14-byte info block carrying this ID, making the on-air frame ~267&nbsp;ms instead of ~173&nbsp;ms. Leave blank to fall back to a single-packet frame where the source Unit ID also acts as the target.</small>
                                                 </div>
                                             </div>
                                         </div>
