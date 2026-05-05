@@ -741,7 +741,64 @@ def get_shields_io_badges(health_data: Dict[str, Any]) -> Dict[str, str]:
     physical_cores = cpu.get("physical_cores", 0)
     total_cores = cpu.get("total_cores", 0)
     badges["cores"] = f"https://img.shields.io/badge/Cores-{physical_cores}p/{total_cores}t-informational?style=flat-square"
-    
+
+    # Disk Usage Badge (root partition)
+    disk_list = health_data.get("disk") or []
+    root_disk = next(
+        (d for d in disk_list if isinstance(d, dict) and d.get("mountpoint") == "/"),
+        disk_list[0] if disk_list else None,
+    )
+    if root_disk and isinstance(root_disk, dict):
+        disk_pct = root_disk.get("percentage", 0) or 0
+        disk_color = "critical" if disk_pct > 90 else "yellow" if disk_pct > 75 else "success"
+        badges["disk"] = (
+            f"https://img.shields.io/badge/Disk-{disk_pct:.0f}%25-{disk_color}?style=flat-square&logo=databricks&logoColor=white"
+        )
+
+    # Load Average Badge (1-minute load)
+    load_avgs = health_data.get("load_averages") or {}
+    load_1m = load_avgs.get("1m") if isinstance(load_avgs, dict) else None
+    if load_1m is not None:
+        load_label = f"{load_1m:.2f}"
+        load_color = "critical" if load_1m > (total_cores or 4) else "yellow" if load_1m > ((total_cores or 4) * 0.7) else "success"
+        badges["load"] = (
+            f"https://img.shields.io/badge/Load%20Avg-{_escape_shields_io_text(load_label)}-{load_color}?style=flat-square"
+        )
+
+    # Temperature Badge (highest sensor reading)
+    temp_data = health_data.get("temperature") or {}
+    sensors = temp_data.get("sensors") if isinstance(temp_data, dict) else None
+    highest_temp: Optional[float] = None
+    if isinstance(sensors, dict):
+        for sensor_entries in sensors.values():
+            if not isinstance(sensor_entries, list):
+                continue
+            for entry in sensor_entries:
+                current = entry.get("current") if isinstance(entry, dict) else None
+                if isinstance(current, (int, float)) and (highest_temp is None or current > highest_temp):
+                    highest_temp = current
+    if highest_temp is not None:
+        temp_color = "critical" if highest_temp > 80 else "yellow" if highest_temp > 65 else "success"
+        badges["temperature"] = (
+            f"https://img.shields.io/badge/Temp-{highest_temp:.0f}%C2%B0C-{temp_color}?style=flat-square&logo=thermal&logoColor=white"
+        )
+
+    # Database Status Badge
+    db_info = health_data.get("database") or {}
+    db_status = db_info.get("status", "unknown") if isinstance(db_info, dict) else "unknown"
+    if db_status == "connected":
+        db_color = "success"
+        db_label = "connected"
+    elif db_status and db_status != "unknown":
+        db_color = "critical"
+        db_label = "error"
+    else:
+        db_color = "lightgrey"
+        db_label = "unknown"
+    badges["database"] = (
+        f"https://img.shields.io/badge/Database-{db_label}-{db_color}?style=flat-square&logo=postgresql&logoColor=white"
+    )
+
     return badges
 
 
