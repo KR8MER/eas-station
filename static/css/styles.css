@@ -947,55 +947,13 @@
    exception is `.text-muted`, whose own rule below uses !important and
    would otherwise re-light subtitles inside the chip — a matching
    !important descendant rule below restores readable contrast there. */
-[data-theme="lightning"] :is(
-        .workflow-card > .card-header,
-        .same-chip,
-        #date-filters,
-        .alert-summary-panel,
-        .feature-group,
-        .layout-preset-btn:hover,
-        .rss-item-row),
-[data-theme="aurora"] :is(
-        .workflow-card > .card-header,
-        .same-chip,
-        #date-filters,
-        .alert-summary-panel,
-        .feature-group,
-        .layout-preset-btn:hover,
-        .rss-item-row),
-[data-theme="nebula"] :is(
-        .workflow-card > .card-header,
-        .same-chip,
-        #date-filters,
-        .alert-summary-panel,
-        .feature-group,
-        .layout-preset-btn:hover,
-        .rss-item-row),
-[data-theme="midnight"] :is(
-        .workflow-card > .card-header,
-        .same-chip,
-        #date-filters,
-        .alert-summary-panel,
-        .feature-group,
-        .layout-preset-btn:hover,
-        .rss-item-row),
-[data-theme="charcoal"] :is(
-        .workflow-card > .card-header,
-        .same-chip,
-        #date-filters,
-        .alert-summary-panel,
-        .feature-group,
-        .layout-preset-btn:hover,
-        .rss-item-row),
-[data-theme="obsidian"] :is(
-        .workflow-card > .card-header,
-        .same-chip,
-        #date-filters,
-        .alert-summary-panel,
-        .feature-group,
-        .layout-preset-btn:hover,
-        .rss-item-row),
-[data-theme="slate"] :is(
+:is([data-theme="lightning"],
+    [data-theme="aurora"],
+    [data-theme="nebula"],
+    [data-theme="midnight"],
+    [data-theme="charcoal"],
+    [data-theme="obsidian"],
+    [data-theme="slate"]) :is(
         .workflow-card > .card-header,
         .same-chip,
         #date-filters,
@@ -1012,55 +970,13 @@
    which on dark themes resolves to a light gray — invisible on a pale
    --light-color background. Pick a darker muted color so the subtitle
    ("Ohio · FIPS 003 · Entire area" inside .same-chip, etc.) reads. */
-[data-theme="lightning"] :is(
-        .workflow-card > .card-header,
-        .same-chip,
-        #date-filters,
-        .alert-summary-panel,
-        .feature-group,
-        .layout-preset-btn:hover,
-        .rss-item-row) .text-muted,
-[data-theme="aurora"] :is(
-        .workflow-card > .card-header,
-        .same-chip,
-        #date-filters,
-        .alert-summary-panel,
-        .feature-group,
-        .layout-preset-btn:hover,
-        .rss-item-row) .text-muted,
-[data-theme="nebula"] :is(
-        .workflow-card > .card-header,
-        .same-chip,
-        #date-filters,
-        .alert-summary-panel,
-        .feature-group,
-        .layout-preset-btn:hover,
-        .rss-item-row) .text-muted,
-[data-theme="midnight"] :is(
-        .workflow-card > .card-header,
-        .same-chip,
-        #date-filters,
-        .alert-summary-panel,
-        .feature-group,
-        .layout-preset-btn:hover,
-        .rss-item-row) .text-muted,
-[data-theme="charcoal"] :is(
-        .workflow-card > .card-header,
-        .same-chip,
-        #date-filters,
-        .alert-summary-panel,
-        .feature-group,
-        .layout-preset-btn:hover,
-        .rss-item-row) .text-muted,
-[data-theme="obsidian"] :is(
-        .workflow-card > .card-header,
-        .same-chip,
-        #date-filters,
-        .alert-summary-panel,
-        .feature-group,
-        .layout-preset-btn:hover,
-        .rss-item-row) .text-muted,
-[data-theme="slate"] :is(
+:is([data-theme="lightning"],
+    [data-theme="aurora"],
+    [data-theme="nebula"],
+    [data-theme="midnight"],
+    [data-theme="charcoal"],
+    [data-theme="obsidian"],
+    [data-theme="slate"]) :is(
         .workflow-card > .card-header,
         .same-chip,
         #date-filters,
@@ -4230,26 +4146,26 @@ textarea:focus {
    subtle atmosphere rather than competing surfaces.
    The :nth-child(n) suffix bumps specificity above the per-orb
    .page-shell .orb:nth-child(N) rules so these caps win without !important. */
-[data-theme="lightning"] .page-shell .orb:nth-child(n),
-[data-theme="midnight"] .page-shell .orb:nth-child(n),
-[data-theme="obsidian"] .page-shell .orb:nth-child(n),
-[data-theme="charcoal"] .page-shell .orb:nth-child(n),
-[data-theme="slate"] .page-shell .orb:nth-child(n),
-[data-theme="nebula"] .page-shell .orb:nth-child(n),
-[data-theme="aurora"] .page-shell .orb:nth-child(n),
-[data-theme="dark"] .page-shell .orb:nth-child(n) {
+:is([data-theme="lightning"],
+    [data-theme="midnight"],
+    [data-theme="obsidian"],
+    [data-theme="charcoal"],
+    [data-theme="slate"],
+    [data-theme="nebula"],
+    [data-theme="aurora"],
+    [data-theme="dark"]) .page-shell .orb:nth-child(n) {
     opacity: 0.08;
     filter: blur(100px);
 }
 
-[data-theme="lightning"] .page-shell .orb:nth-child(3),
-[data-theme="midnight"] .page-shell .orb:nth-child(3),
-[data-theme="obsidian"] .page-shell .orb:nth-child(3),
-[data-theme="charcoal"] .page-shell .orb:nth-child(3),
-[data-theme="slate"] .page-shell .orb:nth-child(3),
-[data-theme="nebula"] .page-shell .orb:nth-child(3),
-[data-theme="aurora"] .page-shell .orb:nth-child(3),
-[data-theme="dark"] .page-shell .orb:nth-child(3) {
+:is([data-theme="lightning"],
+    [data-theme="midnight"],
+    [data-theme="obsidian"],
+    [data-theme="charcoal"],
+    [data-theme="slate"],
+    [data-theme="nebula"],
+    [data-theme="aurora"],
+    [data-theme="dark"]) .page-shell .orb:nth-child(3) {
     opacity: 0.05;
 }
 
