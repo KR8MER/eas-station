@@ -495,6 +495,10 @@
         {% if shields_badges.cores %}<img src="{{ shields_badges.cores }}" alt="CPU Cores Badge">{% endif %}
         {% if shields_badges.cpu %}<img src="{{ shields_badges.cpu }}" alt="CPU Usage Badge" id="cpu-badge">{% endif %}
         {% if shields_badges.memory %}<img src="{{ shields_badges.memory }}" alt="Memory Usage Badge" id="memory-badge">{% endif %}
+        {% if shields_badges.disk %}<img src="{{ shields_badges.disk }}" alt="Disk Usage Badge" id="disk-badge">{% endif %}
+        {% if shields_badges.load %}<img src="{{ shields_badges.load }}" alt="Load Average Badge" id="load-badge">{% endif %}
+        {% if shields_badges.temperature %}<img src="{{ shields_badges.temperature }}" alt="Temperature Badge" id="temp-badge">{% endif %}
+        {% if shields_badges.database %}<img src="{{ shields_badges.database }}" alt="Database Status Badge" id="db-badge">{% endif %}
         {% if shields_badges.uptime %}<img src="{{ shields_badges.uptime }}" alt="Uptime Badge" id="uptime-badge">{% endif %}
     </div>
     {% endif %}
