@@ -589,6 +589,11 @@
                                 </button>
                             </li>
                             <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="eas-broadcast-subtab" data-bs-toggle="pill" data-bs-target="#eas-broadcast" type="button" role="tab">
+                                    <i class="fas fa-broadcast-tower"></i> EAS Broadcast
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
                                 <button class="nav-link" id="alerts-subtab" data-bs-toggle="pill" data-bs-target="#alerts-mgmt" type="button" role="tab">
                                     <i class="fas fa-bell"></i> Alerts
                                 </button>
@@ -801,10 +806,14 @@
                         </div>
                     </form>
 
-                    <!-- EAS Broadcast Settings Section -->
-                    <div class="mt-5 pt-4 border-top">
-                        <h4 class="mb-3"><i class="fas fa-broadcast-tower text-warning"></i> EAS Broadcast Settings</h4>
-                        <p class="text-muted mb-4">Configure the Emergency Alert System encoder settings for SAME/EAS audio generation.</p>
+                </div>
+
+                <!-- EAS Broadcast Tab -->
+                <div class="tab-pane fade" id="eas-broadcast" role="tabpanel">
+                    <div class="mb-4">
+                        <h4 class="mb-2"><i class="fas fa-broadcast-tower text-warning"></i> EAS Broadcast Settings</h4>
+                        <p class="text-muted">Configure the Emergency Alert System encoder settings for SAME/EAS audio generation.</p>
+                    </div>
 
                         <form id="easSettingsForm">
                             <div class="row g-3">
@@ -1080,7 +1089,6 @@
                                 </div>
                             </div>
                         </form>
-                    </div>
                 </div>
 
                 <!-- Alert Management Tab -->
