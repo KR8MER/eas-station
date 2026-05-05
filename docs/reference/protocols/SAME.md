@@ -60,16 +60,29 @@ each repeated for redundancy. A receiver decodes each burst independently
 and accepts the message if any one (or, for stricter implementations,
 two of three) decodes cleanly with a valid checksum-equivalent comparison.
 
-```
-┌──────────┬─────────┬───────────┬──────────┬─────────┬───────────┬──────────┬─────────┬───────────┐
-│ Burst 1  │ 1 s gap │ Burst 2   │ 1 s gap  │ Burst 3 │ ~9 s gap  │  Tone    │ Voice   │ EOM × 3   │
-│ ZCZC-…   │         │ ZCZC-…    │          │ ZCZC-…  │  (atten.) │ 853+960  │ message │ NNNN-…    │
-└──────────┴─────────┴───────────┴──────────┴─────────┴───────────┴──────────┴─────────┴───────────┘
-   ^                                                                                    ^
-   └── 3 SAME header bursts, identical content ──┘                                      └── EOM phase
+```mermaid
+flowchart LR
+    B1["Burst 1<br/>ZCZC-…"]
+    G1[" 1 s gap "]
+    B2["Burst 2<br/>ZCZC-…"]
+    G2[" 1 s gap "]
+    B3["Burst 3<br/>ZCZC-…"]
+    G3["~9 s gap"]
+    T["Attention tone<br/>853 + 960 Hz"]
+    V["Voice message"]
+    E["EOM × 3<br/>NNNN-…"]
+
+    B1 --> G1 --> B2 --> G2 --> B3 --> G3 --> T --> V --> E
+
+    classDef same fill:#dbeafe,stroke:#1e40af,color:#1e3a8a;
+    classDef gap fill:#f1f5f9,stroke:#64748b,color:#334155;
+    classDef voice fill:#dcfce7,stroke:#166534,color:#14532d;
+    class B1,B2,B3,E same;
+    class G1,G2,G3 gap;
+    class T,V voice;
 ```
 
-Each burst contains, in order:
+Each burst is a continuous bit stream made of three concatenated parts:
 
 ```
 ┌──────────────────────────────┬────────────────────────────────┬──────────────────┐
@@ -160,11 +173,20 @@ window for the EOM-or-tone classifier.
 
 Three identical EOM bursts terminate the broadcast:
 
-```
-┌──────────┬─────────┬──────────┬─────────┬──────────┐
-│ EOM 1    │ 1 s gap │ EOM 2    │ 1 s gap │ EOM 3    │
-│ NNNN     │         │ NNNN     │         │ NNNN     │
-└──────────┴─────────┴──────────┴─────────┴──────────┘
+```mermaid
+flowchart LR
+    E1["EOM 1<br/>NNNN"]
+    G1[" 1 s gap "]
+    E2["EOM 2<br/>NNNN"]
+    G2[" 1 s gap "]
+    E3["EOM 3<br/>NNNN"]
+
+    E1 --> G1 --> E2 --> G2 --> E3
+
+    classDef same fill:#dbeafe,stroke:#1e40af,color:#1e3a8a;
+    classDef gap fill:#f1f5f9,stroke:#64748b,color:#334155;
+    class E1,E2,E3 same;
+    class G1,G2 gap;
 ```
 
 Each EOM burst has the same 16-byte `0xAB` preamble as the header bursts,
@@ -183,13 +205,35 @@ post-alert chime (if any) is rendered.
 Putting it all together, every EAS Station broadcast follows this exact
 audio timeline, assembled in `EASAudioGenerator.build_files`:
 
-```
-┌──────────────┬──────────┬─────────┬──────────┬─────────┬──────────┬──────────┬──────────────┬──────────┬─────────┬──────────┬─────────┬──────────┬───────────────┐
-│ Pre-alert    │ 0.5 s    │ SAME    │ 1 s gap  │ SAME    │ 1 s gap  │ SAME     │ ~9 s         │ Atten.   │ Voice   │ EOM      │ 1 s gap │ EOM × 2  │ Post-alert    │
-│ chime        │ silence  │ Header  │          │ Header  │          │ Header   │ silence      │ Tone     │ message │          │         │ + gaps   │ chime         │
-│ (optional)   │          │ #1      │          │ #2      │          │ #3       │              │ 853+960  │         │ #1       │         │          │ (optional)    │
-└──────────────┴──────────┴─────────┴──────────┴─────────┴──────────┴──────────┴──────────────┴──────────┴─────────┴──────────┴─────────┴──────────┴───────────────┘
-                          └────────────────── 3 identical SAME bursts ──────────────────┘                                     └────── 3 identical EOM bursts ──────┘
+```mermaid
+flowchart LR
+    PRE["Pre-alert chime<br/>(optional)"]
+    S1["SAME header #1"]
+    S2["SAME header #2"]
+    S3["SAME header #3"]
+    TONE["Attention tone<br/>853 + 960 Hz · 8 s"]
+    VOICE["Voice message"]
+    E1["EOM #1"]
+    E2["EOM #2"]
+    E3["EOM #3"]
+    POST["Post-alert chime<br/>(optional)"]
+
+    PRE -->|0.5 s silence| S1
+    S1 -->|1 s gap| S2
+    S2 -->|1 s gap| S3
+    S3 -->|~9 s silence| TONE
+    TONE --> VOICE
+    VOICE --> E1
+    E1 -->|1 s gap| E2
+    E2 -->|1 s gap| E3
+    E3 -->|1 s silence| POST
+
+    classDef chime fill:#fef3c7,stroke:#92400e,color:#78350f;
+    classDef same fill:#dbeafe,stroke:#1e40af,color:#1e3a8a;
+    classDef voice fill:#dcfce7,stroke:#166534,color:#14532d;
+    class PRE,POST chime;
+    class S1,S2,S3,E1,E2,E3 same;
+    class TONE,VOICE voice;
 ```
 
 The "voice message" segment can include per-broadcast `pre_alert_samples`
@@ -228,20 +272,20 @@ station ID populated from `EASSettings` plus the alert-specific fields.
 
 Live SAME demodulation lives in `app_utils/eas_demod.py`. The pipeline is:
 
-```
-SDR / line-in PCM
-   │
-   ▼  Goertzel-based mark/space tone correlator (2083.33 / 1562.5 Hz)
-   │
-   ▼  Bit-clock recovery (PLL locked to 520.83 baud during preamble)
-   │
-   ▼  Sliding-window ASCII frame search (look for "ZCZC-" and "NNNN")
-   │
-   ▼  Header field parser → SAMEHeader dataclass
-   │
-   ▼  Three-burst majority voter / single-burst CRC-equivalent acceptance
-   │
-   ▼  Persist to received_alerts table, fan out to UI / Notifications
+```mermaid
+flowchart TD
+    A[SDR / line-in PCM] --> B
+    B["Goertzel mark/space tone correlator<br/>2083.33 Hz / 1562.5 Hz"] --> C
+    C["Bit-clock recovery<br/>PLL locked to 520.83 baud during preamble"] --> D
+    D["Sliding-window ASCII frame search<br/>look for ZCZC- and NNNN"] --> E
+    E["Header field parser<br/>→ SAMEHeader dataclass"] --> F
+    F["Three-burst majority voter<br/>or single-burst CRC-equivalent acceptance"] --> G
+    G[("received_alerts table<br/>+ UI / Notifications fanout")]
+
+    classDef pipe fill:#eef2ff,stroke:#4338ca,color:#1e1b4b;
+    classDef sink fill:#dcfce7,stroke:#166534,color:#14532d;
+    class B,C,D,E,F pipe;
+    class A,G sink;
 ```
 
 Field parsing and validation share code with `app_utils/eas_decode.py` —

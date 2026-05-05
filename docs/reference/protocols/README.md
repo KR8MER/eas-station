@@ -26,17 +26,23 @@ manually-authored alert — passes through the same composite-audio assembly
 in `EASAudioGenerator.build_files` (and `build_manual_components` for
 operator-authored events). The on-air timeline is:
 
-```
-┌─────────────┬──────────────┬──────────────┬──────────────┬──────────────┬─────────────┐
-│ Pre-alert   │  3 × SAME    │ Attention    │  Voice       │ 3 × SAME     │ Post-alert  │
-│ chime       │  header      │ tone (8 s,   │  narration   │ EOM (NNNN)   │ chime       │
-│ (optional)  │  (ZCZC-…)    │ 853+960 Hz)  │  (TTS / mp3) │              │ (optional)  │
-└─────────────┴──────────────┴──────────────┴──────────────┴──────────────┴─────────────┘
-   ^                                                                            ^
-   └── MDC1200 PTT-ID Pre fits here                  MDC1200 PTT-ID Post fits ──┘
-        (so a Motorola subscriber                   (so the subscriber closes
-         decodes "from unit 1234" before              the call cleanly with
-         the SAME header begins)                      "1234 clear")
+```mermaid
+flowchart LR
+    PRE["Pre-alert chime<br/>(optional)<br/><i>MDC1200 PTT-ID Pre fits here</i>"]
+    SAME["3 × SAME header<br/>ZCZC-…"]
+    TONE["Attention tone<br/>8 s · 853 + 960 Hz"]
+    VOICE["Voice narration<br/>TTS / mp3"]
+    EOM["3 × SAME EOM<br/>NNNN"]
+    POST["Post-alert chime<br/>(optional)<br/><i>MDC1200 PTT-ID Post fits here</i>"]
+
+    PRE --> SAME --> TONE --> VOICE --> EOM --> POST
+
+    classDef chime fill:#fef3c7,stroke:#92400e,color:#78350f;
+    classDef same fill:#dbeafe,stroke:#1e40af,color:#1e3a8a;
+    classDef voice fill:#dcfce7,stroke:#166534,color:#14532d;
+    class PRE,POST chime;
+    class SAME,EOM same;
+    class TONE,VOICE voice;
 ```
 
 The chime slots are protocol-agnostic — they accept any of the profiles
