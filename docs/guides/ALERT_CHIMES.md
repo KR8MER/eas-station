@@ -30,6 +30,8 @@ Chimes** card. Settings persist in the `eas_settings` table.
 | Post-Alert Chime Duration | seconds (0.1–10.0) | `2.0` | Total length of the post-alert chime. Ignored for DTMF. |
 | QC-II Tone A Frequency | Hz (50–4000) | `1000.0` | First tone for QC-II profile. |
 | QC-II Tone B Frequency | Hz (50–4000) | `1500.0` | Second tone for QC-II profile. |
+| QC-II Enable Long Tone | boolean | `false` | Append a sustained tone after the A+B sequence. |
+| QC-II Long Tone Duration | seconds (1–120) | `10.0` | Duration of the appended long tone. |
 | DTMF Sequence | string (0–32 chars) | `""` | Digits dialed for DTMF profile. |
 
 The pre-alert and post-alert profiles are configured independently, so you can
@@ -59,11 +61,18 @@ one third of the duration. Reminiscent of pager / paging-system call tones.
 ### `qc2` — Motorola Quick Call II
 Two-tone paging used by fire, EMS, and dispatch radio systems.
 
-* Tone A plays for **25 %** of the duration (≈ 1 s for a 4 s chime).
-* Tone B plays for **75 %** of the duration (≈ 3 s for a 4 s chime).
-* The 25 / 75 split mirrors the QC-II standard 1 s / 3 s ratio.
+* Tone A plays for **1 s**.
+* Tone B plays for **4 s**.
+* Total duration is **5 s** (duration field is ignored).
 * Set Tone A and Tone B frequencies to the values published by the receiving
   agency / department (typical range 288–3000 Hz).
+* Optionally enable the **Long Tone** to append a sustained tone at Tone B
+  frequency after the A+B sequence. Configure its duration (1–120 s) with
+  the **Long Tone Duration** field.
+
+> **Note for existing deployments:** Prior to this change, Tone B was 3 s
+> (4 s total). Existing QC-II configurations will automatically use the new
+> 4 s Tone B (5 s total) without any settings change.
 
 ### `dtmf` — Dual-Tone Multi-Frequency
 Plays each character of the configured **DTMF Sequence** as its standard
@@ -123,6 +132,8 @@ database values when set:
 | `EAS_POST_ALERT_CHIME_DURATION` | Post-Alert Chime Duration (seconds) |
 | `EAS_QC2_TONE_A_FREQ` | QC-II Tone A Frequency (Hz) |
 | `EAS_QC2_TONE_B_FREQ` | QC-II Tone B Frequency (Hz) |
+| `EAS_QC2_LONG_TONE_ENABLED` | QC-II Long Tone enabled (`1`, `true`, or `yes`) |
+| `EAS_QC2_LONG_TONE_SECONDS` | QC-II Long Tone Duration (seconds) |
 | `EAS_DTMF_SEQUENCE` | DTMF Sequence |
 
 Internally the chime is rendered by `app_utils.eas._generate_chime()`; profiles
@@ -151,6 +162,8 @@ PUT /admin/eas_settings    Content-Type: application/json
   "post_alert_chime_duration": 2.0,
   "qc2_tone_a_freq": 1387.5,
   "qc2_tone_b_freq": 1530.0,
+  "qc2_long_tone_enabled": true,
+  "qc2_long_tone_seconds": 10.0,
   "dtmf_sequence": "*911#"
 }
 ```
@@ -161,14 +174,17 @@ Server-side validation:
   (case-insensitive). Unknown values are silently rejected.
 * `*_chime_duration` must be a number in `[0.1, 10.0]`.
 * `qc2_tone_*_freq` must be a number in `[50.0, 4000.0]` Hz.
+* `qc2_long_tone_enabled` must be a boolean.
+* `qc2_long_tone_seconds` must be a number in `[1.0, 120.0]`.
 * `dtmf_sequence` is filtered to `0-9 A-D * #` and truncated to 32 characters.
 
 ---
 
 ## Database Schema
 
-Schema additions are applied by Alembic migration
-`20260501_add_alert_chime_to_eas_settings`:
+Schema additions are applied by Alembic migrations
+`20260501_add_alert_chime_to_eas_settings` and
+`20260505_add_qc2_long_tone_to_eas_settings`:
 
 | Column | Type | Default |
 |--------|------|---------|
@@ -178,6 +194,8 @@ Schema additions are applied by Alembic migration
 | `post_alert_chime_duration` | `DOUBLE PRECISION NOT NULL` | `2.0` |
 | `qc2_tone_a_freq` | `DOUBLE PRECISION NOT NULL` | `1000.0` |
 | `qc2_tone_b_freq` | `DOUBLE PRECISION NOT NULL` | `1500.0` |
+| `qc2_long_tone_enabled` | `BOOLEAN NOT NULL` | `FALSE` |
+| `qc2_long_tone_seconds` | `DOUBLE PRECISION NOT NULL` | `10.0` |
 | `dtmf_sequence` | `VARCHAR(32) NOT NULL` | `''` |
 
 The migration uses `ADD COLUMN IF NOT EXISTS` and the application also

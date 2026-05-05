@@ -1077,6 +1077,15 @@ function populateEasForm(settings) {
         const _v = settings.qc2_tone_b_freq;
         qc2ToneBFreq.value = (_v === null || _v === undefined) ? '1500.0' : Number(_v).toFixed(1);
     }
+    const qc2LongToneEnabled = document.getElementById('easQc2LongToneEnabled');
+    if (qc2LongToneEnabled) {
+        qc2LongToneEnabled.checked = !!settings.qc2_long_tone_enabled;
+    }
+    const qc2LongToneSeconds = document.getElementById('easQc2LongToneSeconds');
+    if (qc2LongToneSeconds) {
+        const _v = settings.qc2_long_tone_seconds;
+        qc2LongToneSeconds.value = (_v === null || _v === undefined) ? '10.0' : Number(_v).toFixed(1);
+    }
     const dtmfSequence = document.getElementById('easDtmfSequence');
     if (dtmfSequence) {
         dtmfSequence.value = settings.dtmf_sequence || '';
@@ -1229,6 +1238,8 @@ async function handleEasSettingsSubmit(e) {
         post_alert_chime_duration: parseFloat(document.getElementById('easPostAlertChimeDuration')?.value) || 2.0,
         qc2_tone_a_freq: parseFloat(document.getElementById('easQc2ToneAFreq')?.value) || 1000.0,
         qc2_tone_b_freq: parseFloat(document.getElementById('easQc2ToneBFreq')?.value) || 1500.0,
+        qc2_long_tone_enabled: document.getElementById('easQc2LongToneEnabled')?.checked ?? false,
+        qc2_long_tone_seconds: parseFloat(document.getElementById('easQc2LongToneSeconds')?.value) || 10.0,
         dtmf_sequence: (document.getElementById('easDtmfSequence')?.value || '').toUpperCase(),
         authorized_event_codes: parseNewlineValues(document.getElementById('easAuthorizedEvents')?.value || ''),
         forwarded_event_codes: (document.getElementById('easForwardedEventCodes')?.value || '')

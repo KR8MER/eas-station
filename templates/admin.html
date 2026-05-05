@@ -909,8 +909,8 @@
                                                     <div class="alert alert-light border small mb-0">
                                                         <i class="fas fa-info-circle me-2 text-info"></i>
                                                         <strong>QC-II (Motorola Quick Call II)</strong> two-tone paging uses a fixed
-                                                        1&nbsp;s Tone&nbsp;A followed by a 3&nbsp;s Tone&nbsp;B (4&nbsp;s total). Timing is
-                                                        standardized — only the tone-pair frequencies below are configurable.
+                                                        1&nbsp;s Tone&nbsp;A followed by a 4&nbsp;s Tone&nbsp;B (5&nbsp;s total). Timing is
+                                                        standardized — only the tone-pair frequencies and optional long tone below are configurable.
                                                     </div>
                                                 </div>
                                                 <div class="col-md-6 eas-tone-conditional" data-eas-tone-show="qc2">
@@ -928,6 +928,21 @@
                                                         <span class="input-group-text">Hz</span>
                                                     </div>
                                                     <small class="text-muted">Second (long) tone, 50–4000 Hz.</small>
+                                                </div>
+                                                <div class="col-md-6 eas-tone-conditional" data-eas-tone-show="qc2">
+                                                    <div class="form-check mt-2">
+                                                        <input class="form-check-input" type="checkbox" id="easQc2LongToneEnabled" name="qc2_long_tone_enabled">
+                                                        <label class="form-check-label fw-bold" for="easQc2LongToneEnabled">Enable Long Tone</label>
+                                                    </div>
+                                                    <small class="text-muted">Append a sustained tone at Tone&nbsp;B frequency after the A+B sequence.</small>
+                                                </div>
+                                                <div class="col-md-6 eas-tone-conditional" data-eas-tone-show="qc2">
+                                                    <label for="easQc2LongToneSeconds" class="form-label fw-bold">Long Tone Duration</label>
+                                                    <div class="input-group">
+                                                        <input type="number" class="form-control" id="easQc2LongToneSeconds" name="qc2_long_tone_seconds" min="1" max="120" step="0.5" value="10.0">
+                                                        <span class="input-group-text">seconds</span>
+                                                    </div>
+                                                    <small class="text-muted">Duration of the long tone (1–120 s). Only used when enabled.</small>
                                                 </div>
                                                 <div class="col-12 eas-tone-conditional" data-eas-tone-show="dtmf">
                                                     <div class="alert alert-light border small mb-0">

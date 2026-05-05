@@ -1433,6 +1433,8 @@ def _ensure_eas_settings_record() -> EASSettings:
         "ALTER TABLE eas_settings ADD COLUMN IF NOT EXISTS qc2_tone_a_freq DOUBLE PRECISION NOT NULL DEFAULT 1000.0",
         "ALTER TABLE eas_settings ADD COLUMN IF NOT EXISTS qc2_tone_b_freq DOUBLE PRECISION NOT NULL DEFAULT 1500.0",
         "ALTER TABLE eas_settings ADD COLUMN IF NOT EXISTS dtmf_sequence VARCHAR(32) NOT NULL DEFAULT ''",
+        "ALTER TABLE eas_settings ADD COLUMN IF NOT EXISTS qc2_long_tone_enabled BOOLEAN NOT NULL DEFAULT FALSE",
+        "ALTER TABLE eas_settings ADD COLUMN IF NOT EXISTS qc2_long_tone_seconds DOUBLE PRECISION NOT NULL DEFAULT 10.0",
     ]
 
     def _query():
@@ -1557,6 +1559,17 @@ def admin_eas_settings():
             _raw = str(payload["dtmf_sequence"] or "").upper()
             _filtered = "".join(c for c in _raw if c in "0123456789ABCD*#")
             settings.dtmf_sequence = _filtered[:32]
+
+        # Update QC-II long-tone settings
+        if "qc2_long_tone_enabled" in payload:
+            settings.qc2_long_tone_enabled = bool(payload["qc2_long_tone_enabled"])
+        if "qc2_long_tone_seconds" in payload:
+            try:
+                _lt_secs = float(payload["qc2_long_tone_seconds"])
+            except (TypeError, ValueError):
+                _lt_secs = None
+            if _lt_secs is not None and 1.0 <= _lt_secs <= 120.0:
+                settings.qc2_long_tone_seconds = _lt_secs
 
         # Update authorized FIPS codes
         if "authorized_fips_codes" in payload:
