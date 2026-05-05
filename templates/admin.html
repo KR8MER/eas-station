@@ -973,8 +973,8 @@
                                                 </div>
                                                 <div class="col-md-6 eas-tone-conditional" data-eas-tone-show="mdc1200">
                                                     <label for="easMdc1200UnitId" class="form-label fw-bold">MDC1200 Unit ID</label>
-                                                    <input type="number" class="form-control" id="easMdc1200UnitId" name="mdc1200_unit_id" min="1" max="65535" step="1" value="1">
-                                                    <small class="text-muted">16-bit subscriber ID (1–65535). Shown as 4-digit hex on Motorola displays.</small>
+                                                    <input type="text" class="form-control" id="easMdc1200UnitId" name="mdc1200_unit_id" maxlength="8" placeholder="1234 or 0x04D2" pattern="(0[xX][0-9A-Fa-f]{1,4}|\d{1,5})" value="1">
+                                                    <small class="text-muted">16-bit subscriber ID (1–65535 decimal, or <code>0x0001</code>–<code>0xFFFF</code> hex). Motorola CPS often shows unit IDs in 4-digit hex.</small>
                                                 </div>
                                                 <div class="col-md-6 eas-tone-conditional" data-eas-tone-show="mdc1200">
                                                     <label for="easMdc1200OpCode" class="form-label fw-bold">MDC1200 Op-Code</label>

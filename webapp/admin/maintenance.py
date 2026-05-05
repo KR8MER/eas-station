@@ -1577,8 +1577,14 @@ def admin_eas_settings():
 
         # Update MDC1200 selective-calling settings
         if "mdc1200_unit_id" in payload:
+            _raw_uid = payload["mdc1200_unit_id"]
             try:
-                _uid = int(payload["mdc1200_unit_id"])
+                # Accept either decimal or "0x.." prefixed hex (Motorola CPS
+                # commonly displays unit IDs in 4-digit hex).
+                if isinstance(_raw_uid, str):
+                    _uid = int(_raw_uid.strip(), 0)
+                else:
+                    _uid = int(_raw_uid)
             except (TypeError, ValueError):
                 _uid = None
             if _uid is not None and 1 <= _uid <= 0xFFFF:

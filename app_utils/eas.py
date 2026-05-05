@@ -476,9 +476,10 @@ def load_eas_config(base_path: Optional[str] = None, db_session=None) -> Dict[st
             os.getenv('EAS_DTMF_SEQUENCE')
             or (db_dtmf_sequence if db_dtmf_sequence is not None else '')
         ),
-        'mdc1200_unit_id': int(
-            os.getenv('EAS_MDC1200_UNIT_ID')
-            or (db_mdc1200_unit_id if db_mdc1200_unit_id is not None else 1)
+        'mdc1200_unit_id': (
+            int(os.getenv('EAS_MDC1200_UNIT_ID'), 0)
+            if os.getenv('EAS_MDC1200_UNIT_ID')
+            else int(db_mdc1200_unit_id if db_mdc1200_unit_id is not None else 1)
         ),
         'mdc1200_op_code': (
             os.getenv('EAS_MDC1200_OP_CODE')
@@ -1636,6 +1637,31 @@ def _generate_silence(duration: float, sample_rate: int) -> List[int]:
 ALERT_CHIME_PROFILES = ('none', 'bell', 'beep', 'three_tone', 'qc2', 'dtmf', 'mdc1200')
 
 
+def _resolve_mdc1200_op_for_position(op_code: str, position: str) -> str:
+    """Auto-pair MDC1200 PTT-ID Pre/Post when used as bookend chimes.
+
+    When an operator selects ``ptt_id_pre`` (the default) for both pre- and
+    post-alert MDC1200 chimes, a real Motorola subscriber radio expects the
+    post-side packet to be ``ptt_id_post`` — the bookend pair is what closes
+    the call cleanly on the receiver's display.  This helper substitutes the
+    matching post-side preset automatically so operators don't have to think
+    about it.
+
+    The substitution is intentionally narrow:
+
+    * ``position='post'`` AND ``op_code == 'ptt_id_pre'``  →  ``'ptt_id_post'``
+
+    All other presets (``emergency``, ``request_to_talk``, ``remote_monitor``,
+    ``ptt_id_post`` already chosen, or ``custom``) pass through unchanged so
+    operators who deliberately want the same op-code on both sides — for
+    example sandwiching a broadcast in two emergency-alarm packets — keep
+    that behaviour.
+    """
+    if (position or '').strip().lower() == 'post' and (op_code or '').strip().lower() == 'ptt_id_pre':
+        return 'ptt_id_post'
+    return op_code
+
+
 # Standard DTMF tone-pair frequency map: digit -> (low Hz, high Hz).
 # Source: ITU-T Recommendation Q.23 / Q.24.
 _DTMF_FREQUENCIES: Dict[str, Tuple[float, float]] = {
@@ -2366,7 +2392,7 @@ class EASAudioGenerator:
             qc2_tone_a_freq=qc2_freq_a, qc2_tone_b_freq=qc2_freq_b,
             dtmf_sequence=dtmf_seq,
             qc2_long_tone_enabled=qc2_long_tone, qc2_long_tone_seconds=qc2_long_secs,
-            mdc1200_op_code=mdc1200_op_code,
+            mdc1200_op_code=_resolve_mdc1200_op_for_position(mdc1200_op_code, 'pre'),
             mdc1200_op_code_raw=mdc1200_op_code_raw,
             mdc1200_arg_raw=mdc1200_arg_raw,
             mdc1200_unit_id=mdc1200_unit_id,
@@ -2581,7 +2607,7 @@ class EASAudioGenerator:
             qc2_tone_a_freq=qc2_freq_a, qc2_tone_b_freq=qc2_freq_b,
             dtmf_sequence=dtmf_seq,
             qc2_long_tone_enabled=qc2_long_tone, qc2_long_tone_seconds=qc2_long_secs,
-            mdc1200_op_code=mdc1200_op_code,
+            mdc1200_op_code=_resolve_mdc1200_op_for_position(mdc1200_op_code, 'post'),
             mdc1200_op_code_raw=mdc1200_op_code_raw,
             mdc1200_arg_raw=mdc1200_arg_raw,
             mdc1200_unit_id=mdc1200_unit_id,
@@ -2907,7 +2933,7 @@ class EASAudioGenerator:
             qc2_tone_a_freq=qc2_freq_a, qc2_tone_b_freq=qc2_freq_b,
             dtmf_sequence=dtmf_seq,
             qc2_long_tone_enabled=qc2_long_tone, qc2_long_tone_seconds=qc2_long_secs,
-            mdc1200_op_code=mdc1200_op_code,
+            mdc1200_op_code=_resolve_mdc1200_op_for_position(mdc1200_op_code, 'pre'),
             mdc1200_op_code_raw=mdc1200_op_code_raw,
             mdc1200_arg_raw=mdc1200_arg_raw,
             mdc1200_unit_id=mdc1200_unit_id,
@@ -2919,7 +2945,7 @@ class EASAudioGenerator:
             qc2_tone_a_freq=qc2_freq_a, qc2_tone_b_freq=qc2_freq_b,
             dtmf_sequence=dtmf_seq,
             qc2_long_tone_enabled=qc2_long_tone, qc2_long_tone_seconds=qc2_long_secs,
-            mdc1200_op_code=mdc1200_op_code,
+            mdc1200_op_code=_resolve_mdc1200_op_for_position(mdc1200_op_code, 'post'),
             mdc1200_op_code_raw=mdc1200_op_code_raw,
             mdc1200_arg_raw=mdc1200_arg_raw,
             mdc1200_unit_id=mdc1200_unit_id,

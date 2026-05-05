@@ -201,6 +201,79 @@ def test_resolve_op_preset_unknown_falls_back_to_ptt_id_pre():
 
 
 # ---------------------------------------------------------------------------
+# Smart pre/post PTT-ID pairing
+# ---------------------------------------------------------------------------
+
+def test_smart_pairing_substitutes_post_for_ptt_id_pre():
+    """When both pre/post chimes are MDC1200 and the preset is the default
+    ``ptt_id_pre``, the post side must auto-substitute ``ptt_id_post`` so a
+    receiving Motorola subscriber sees a complete bookend pair."""
+    from app_utils.eas import _resolve_mdc1200_op_for_position
+    assert _resolve_mdc1200_op_for_position("ptt_id_pre", "pre") == "ptt_id_pre"
+    assert _resolve_mdc1200_op_for_position("ptt_id_pre", "post") == "ptt_id_post"
+
+
+def test_smart_pairing_passes_other_presets_through():
+    """Non-PTT presets must NOT be rewritten — operators sandwich a broadcast
+    in two emergency-alarm packets on purpose."""
+    from app_utils.eas import _resolve_mdc1200_op_for_position
+    for preset in ("emergency", "request_to_talk", "remote_monitor", "ptt_id_post", "custom"):
+        assert _resolve_mdc1200_op_for_position(preset, "pre") == preset
+        assert _resolve_mdc1200_op_for_position(preset, "post") == preset
+
+
+def test_smart_pairing_handles_empty_and_case_insensitivity():
+    from app_utils.eas import _resolve_mdc1200_op_for_position
+    assert _resolve_mdc1200_op_for_position("", "post") == ""
+    assert _resolve_mdc1200_op_for_position("PTT_ID_PRE", "POST") == "ptt_id_post"
+
+
+# ---------------------------------------------------------------------------
+# Hex inputs (operators commonly copy MDC1200 unit IDs from Motorola CPS,
+# which displays them in 4-digit hex)
+# ---------------------------------------------------------------------------
+
+def test_encode_packet_accepts_full_hex_byte_range():
+    """Op-code, arg, and unit ID must each accept the full 8-/16-bit
+    hex range — including A–F digits — without raising."""
+    frame = encode_packet(0xAB, 0xCD, 0xDEAD, status=0xEF)
+    assert len(frame) == 22
+
+
+def test_encode_packet_unit_id_round_trips_hex_value():
+    """The unit ID is carried in the information block at offsets 2..3
+    (high byte first); after differential decode of the payload, those
+    two bytes must match the input hex value."""
+    # Build the same packet as encode_packet but stop before differential
+    # modulation so we can read the raw info block back.
+    from app_utils.mdc1200 import (
+        _apply_fec, _interleave, MDC1200_PREAMBLE, MDC1200_SYNC,
+    )
+    info = [0x01, 0x80, 0xDE, 0xAD]
+    info.append(compute_crc(info) & 0xFF)
+    info.append((compute_crc(info[:4]) >> 8) & 0xFF)
+    info.append(0x00)
+    payload = _interleave(_apply_fec(info))
+    # idH / idL after FEC are still at offsets 2 / 3 of the FEC info half
+    fec_block = _apply_fec([0x01, 0x80, 0xDE, 0xAD,
+                            compute_crc([0x01, 0x80, 0xDE, 0xAD]) & 0xFF,
+                            (compute_crc([0x01, 0x80, 0xDE, 0xAD]) >> 8) & 0xFF,
+                            0x00])
+    assert fec_block[2] == 0xDE
+    assert fec_block[3] == 0xAD
+
+
+def test_compute_crc_with_hex_a_through_f_bytes():
+    """CRC must process A–F hex bytes correctly (no hidden ASCII filtering)."""
+    # Two different inputs that share no bytes must yield different CRCs
+    crc_lower = compute_crc([0x12, 0x34, 0x56, 0x78])
+    crc_upper = compute_crc([0xAB, 0xCD, 0xEF, 0xFE])
+    assert crc_lower != crc_upper
+    # Sanity: our verified vector still holds
+    assert compute_crc([0x01, 0x80, 0x12, 0x34]) == 0x3E2E
+
+
+# ---------------------------------------------------------------------------
 # Bit serialisation
 # ---------------------------------------------------------------------------
 

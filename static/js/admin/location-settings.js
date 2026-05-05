@@ -1266,7 +1266,7 @@ async function handleEasSettingsSubmit(e) {
         qc2_long_tone_enabled: document.getElementById('easQc2LongToneEnabled')?.checked ?? false,
         qc2_long_tone_seconds: parseFloat(document.getElementById('easQc2LongToneSeconds')?.value) || 10.0,
         dtmf_sequence: (document.getElementById('easDtmfSequence')?.value || '').toUpperCase(),
-        mdc1200_unit_id: parseInt(document.getElementById('easMdc1200UnitId')?.value, 10) || 1,
+        mdc1200_unit_id: (document.getElementById('easMdc1200UnitId')?.value || '1').trim(),
         mdc1200_op_code: document.getElementById('easMdc1200OpCode')?.value || 'ptt_id_pre',
         mdc1200_op_code_raw: (document.getElementById('easMdc1200OpCodeRaw')?.value || '').trim() || null,
         mdc1200_arg_raw: (document.getElementById('easMdc1200ArgRaw')?.value || '').trim() || null,
