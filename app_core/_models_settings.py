@@ -603,7 +603,7 @@ class EASSettings(db.Model):
     # Append 3 × 0xAA trill bytes after each SAME burst to fingerprint this station
 
     # ========================================================================
-    # Alert Chimes (system-level pre/post-broadcast sounds)
+    # Pre/Post-Alert Signals (system-level pre/post-broadcast signals)
     # ========================================================================
     pre_alert_chime = db.Column(db.String(16), nullable=False, default='none')
     # Chime sound played BEFORE the SAME header.

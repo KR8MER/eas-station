@@ -1032,7 +1032,7 @@ function initEasSettings() {
     // Form submission handler
     form.addEventListener('submit', handleEasSettingsSubmit);
 
-    // Toggle conditional tone fields when chime selection changes
+    // Toggle conditional tone fields when signal selection changes
     const preChimeSelect = document.getElementById('easPreAlertChime');
     const postChimeSelect = document.getElementById('easPostAlertChime');
     if (preChimeSelect) preChimeSelect.addEventListener('change', updateToneFieldVisibility);
@@ -1055,9 +1055,9 @@ function initEasSettings() {
 }
 
 /**
- * Show/hide tone-specific settings fields based on the selected chime types.
- * QC-II frequencies appear only when either chime is QC-II; DTMF sequence
- * appears only when either chime is DTMF; per-side duration appears only
+ * Show/hide tone-specific settings fields based on the selected signal types.
+ * QC-II frequencies appear only when either signal is QC-II; DTMF sequence
+ * appears only when either signal is DTMF; per-side duration appears only
  * for free-form profiles (bell/beep/three_tone) — DTMF and QC-II have
  * standardized timings and ignore the duration field.
  */

@@ -23,7 +23,7 @@ Welcome to the documentation for EAS Station - an Emergency Alert System platfor
 | [User Guide](guides/HELP) | Dashboard, alerts, monitoring |
 | [Setup Instructions](guides/SETUP_INSTRUCTIONS) | First-time configuration |
 | [HTTPS Setup](guides/HTTPS_SETUP) | Secure access configuration |
-| [Alert Chimes](guides/ALERT_CHIMES) | Configure pre/post-broadcast attention sounds (bell, beep, three-tone, QC-II, DTMF) |
+| [Pre/Post-Alert Signaling](guides/ALERT_SIGNALS) | Configure pre/post-broadcast signals (bell, beep, three-tone, QC-II, DTMF, MDC1200) |
 
 ### For Administrators
 

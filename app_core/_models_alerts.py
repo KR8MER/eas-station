@@ -340,6 +340,9 @@ class ManualEASActivation(db.Model):
     narration_upload_audio_data = db.Column(db.LargeBinary)
     pre_alert_audio_data = db.Column(db.LargeBinary)
     post_alert_audio_data = db.Column(db.LargeBinary)
+    # System-level pre/post-alert signal audio (bell, beep, QC-II, DTMF, MDC1200)
+    pre_chime_audio_data = db.Column(db.LargeBinary)
+    post_chime_audio_data = db.Column(db.LargeBinary)
 
     def to_dict(self) -> Dict[str, Any]:
         return {

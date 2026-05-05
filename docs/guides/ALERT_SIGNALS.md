@@ -1,33 +1,33 @@
-# Alert Chimes (Pre / Post-Broadcast Sounds)
+# Pre/Post-Alert Signaling
 
-EAS Station can prepend or append a short attention sound to **every** outgoing
+EAS Station can prepend or append a short attention signal to **every** outgoing
 SAME broadcast — auto-forwarded CAP/IPAWS alerts, OTA relays from upstream
-EAS sources, and operator-authored manual broadcasts. The chime plays:
+EAS sources, and operator-authored manual broadcasts. The signal plays:
 
-- **Pre-alert chime:** before the very first SAME header burst.
-- **Post-alert chime:** after the final EOM (End-of-Message) burst.
+- **Pre-alert signal:** before the very first SAME header burst.
+- **Post-alert signal:** after the final EOM (End-of-Message) burst.
 
-Chimes are purely cosmetic — they are **not** part of the SAME / FSK signaling
+Signals are purely cosmetic — they are **not** part of the SAME / FSK signaling
 and decoders such as ENDECs and SAME-aware receivers will simply treat them as
 ambient audio. They are useful for station fingerprinting, paging-style call
 selection, and operator/listener attention before the official tones begin.
 
-> **Important:** chimes are inserted at the broadcast boundaries. They never
+> **Important:** signals are inserted at the broadcast boundaries. They never
 > replace, mask, or modify the SAME headers, attention tone, narration, or EOM.
 
 ---
 
 ## Where to Configure
 
-The chime settings live in the **Admin → Broadcast → EAS Encoder Settings →
-Alert Chimes** card. Settings persist in the `eas_settings` table.
+The signal settings live in the **Admin → Broadcast → EAS Encoder Settings →
+Pre/Post-Alert Signaling** card. Settings persist in the `eas_settings` table.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| Pre-Alert Chime | dropdown | `none` | Profile played before the SAME header. |
-| Pre-Alert Chime Duration | seconds (0.1–10.0) | `2.0` | Total length of the pre-alert chime. Ignored for DTMF. |
-| Post-Alert Chime | dropdown | `none` | Profile played after the EOM. |
-| Post-Alert Chime Duration | seconds (0.1–10.0) | `2.0` | Total length of the post-alert chime. Ignored for DTMF. |
+| Pre-Alert Signal | dropdown | `none` | Profile played before the SAME header. |
+| Pre-Alert Signal Duration | seconds (0.1–10.0) | `2.0` | Total length of the pre-alert signal. Ignored for DTMF, QC-II, and MDC1200. |
+| Post-Alert Signal | dropdown | `none` | Profile played after the EOM. |
+| Post-Alert Signal Duration | seconds (0.1–10.0) | `2.0` | Total length of the post-alert signal. Ignored for DTMF, QC-II, and MDC1200. |
 | QC-II Tone A Frequency | Hz (50–4000) | `1000.0` | First tone for QC-II profile. |
 | QC-II Tone B Frequency | Hz (50–4000) | `1500.0` | Second tone for QC-II profile. |
 | QC-II Enable Long Tone | boolean | `false` | Append a sustained tone after the A+B sequence. |
@@ -45,15 +45,15 @@ position disabled.
 
 ---
 
-## Available Chime Profiles
+## Available Signal Profiles
 
 ### `none`
-No chime is generated. This is the default for both positions.
+No signal is generated. This is the default for both positions.
 
 ### `bell`
 A single 880 Hz sine tone with an exponential amplitude decay (≈ 5 % of peak
 amplitude after 2 s). Sounds like a struck bell or chime. Duration controlled
-by the chime-duration field.
+by the signal-duration field.
 
 ### `beep`
 A sustained 1000 Hz sine tone for the full configured duration. Useful as a
@@ -86,7 +86,7 @@ ITU-T Q.23 / Q.24 tone pair (low-group + high-group sine sum).
 * Allowed characters: `0–9`, `A–D`, `*`, `#`. Lower-case is accepted and
   upper-cased. Any other characters are stripped on save.
 * Maximum length: 32 valid digits (extra digits are dropped).
-* Timing is fixed at **100 ms tone / 50 ms gap** per digit (the chime-duration
+* Timing is fixed at **100 ms tone / 50 ms gap** per digit (the signal-duration
   field is **ignored** for DTMF). Total length therefore depends only on the
   number of digits.
 * The two tones are summed and the combined waveform is scaled to half
@@ -99,7 +99,7 @@ station's *Unit ID* and an op-code that tells receiving Motorola subscribers
 what kind of call this is (PTT-ID, Emergency, Request to Talk, Call
 Alert, Selective Call, etc.).
 
-* Packet duration is fixed by the protocol — the chime-duration field is
+* Packet duration is fixed by the protocol — the signal-duration field is
   **ignored**:
   * **Single-packet ops** (PTT-ID, Emergency, Request to Talk, Remote
     Monitor, Custom): 26 bytes / 208 bits → **~173 ms**.
@@ -133,7 +133,7 @@ Alert, Selective Call, etc.).
   | `selective_call` | `0x35` | `0x80` | double | Voice Selective Call — unmute target subscriber |
   | `custom` | any | any | single | Operator-supplied raw op/arg bytes (decimal or `0x..` hex) |
 
-* **Smart pre/post pairing.** When *both* the pre and post chimes are set
+* **Smart pre/post pairing.** When *both* the pre and post signals are set
   to `mdc1200` and the op-code preset is `ptt_id_pre` (the default), EAS
   Station automatically substitutes `ptt_id_post` on the post-alert
   position so receiving Motorola radios see a complete bookend pair and
@@ -149,7 +149,7 @@ Alert, Selective Call, etc.).
 #### Two-way LMR forwarding (the canonical use case)
 
 The driving design goal of MDC1200 support is **forwarding EAS audio over
-an existing Motorola-style two-way radio system**. With MDC1200 chimes
+an existing Motorola-style two-way radio system**. With MDC1200 signals
 enabled and the audio output wired into a base-station radio's auxiliary
 input (PTT keying handled by an external GPIO / VOX / COR loop), each
 broadcast goes on-air as:
@@ -157,12 +157,12 @@ broadcast goes on-air as:
 ```
 [radio PTT keys up by GPIO/VOX]
   Pre  MDC1200 PTT-ID-Pre   ← "from unit 1234"
-  500 ms silence
+  1 s silence
   SAME header burst × 3     ← decoded by ENDECs and SAME-aware radios
   Attention tone (8 s)
   Voice narration
   SAME EOM × 3
-  500 ms silence
+  1 s silence
   Post MDC1200 PTT-ID-Post  ← "1234 clear"
 [PTT releases]
 ```
@@ -187,29 +187,29 @@ including frame format, FEC, and op-code table, lives in
 ## Ordering Inside the Composite Broadcast
 
 ```
-[ pre-alert chime ]   ← system-level chime, configured in EAS settings
-   0.5 s silence
+[ pre-alert signal ]   ← system-level signal, configured in EAS settings
+   1 s silence
 [ SAME header burst ] × 3
    ...                ← attention tone (1050 Hz), narration, end-of-message
 [ EOM burst ] × 3
-   0.5 s silence
-[ post-alert chime ]  ← system-level chime, configured in EAS settings
+   1 s silence
+[ post-alert signal ]  ← system-level signal, configured in EAS settings
 ```
 
 For manual broadcasts the existing per-broadcast **pre-alert audio** /
 **post-alert audio** uploads continue to bracket the **narration** segment
-(between the attention tone and the EOM). The system-level chimes always sit
+(between the attention tone and the EOM). The system-level signals always sit
 **outside** the SAME signalling, so the two features are complementary:
 
 ```
-[ pre-alert CHIME ]
+[ pre-alert SIGNAL ]
 [ SAME header ]
 [ attention tone ]
 [ pre-alert AUDIO upload ]    ← per-broadcast, optional
 [ TTS narration ]
 [ post-alert AUDIO upload ]   ← per-broadcast, optional
 [ EOM ]
-[ post-alert CHIME ]
+[ post-alert SIGNAL ]
 ```
 
 ---
@@ -221,10 +221,10 @@ database values when set:
 
 | Variable | Equivalent setting |
 |----------|--------------------|
-| `EAS_PRE_ALERT_CHIME` | Pre-Alert Chime profile |
-| `EAS_POST_ALERT_CHIME` | Post-Alert Chime profile |
-| `EAS_PRE_ALERT_CHIME_DURATION` | Pre-Alert Chime Duration (seconds) |
-| `EAS_POST_ALERT_CHIME_DURATION` | Post-Alert Chime Duration (seconds) |
+| `EAS_PRE_ALERT_CHIME` | Pre-Alert Signal profile |
+| `EAS_POST_ALERT_CHIME` | Post-Alert Signal profile |
+| `EAS_PRE_ALERT_CHIME_DURATION` | Pre-Alert Signal Duration (seconds) |
+| `EAS_POST_ALERT_CHIME_DURATION` | Post-Alert Signal Duration (seconds) |
 | `EAS_QC2_TONE_A_FREQ` | QC-II Tone A Frequency (Hz) |
 | `EAS_QC2_TONE_B_FREQ` | QC-II Tone B Frequency (Hz) |
 | `EAS_QC2_LONG_TONE_ENABLED` | QC-II Long Tone enabled (`1`, `true`, or `yes`) |
@@ -236,7 +236,7 @@ database values when set:
 | `EAS_MDC1200_ARG_RAW` | MDC1200 Raw Argument byte (decimal or `0x..` hex) |
 | `EAS_MDC1200_TARGET_UNIT_ID` | MDC1200 Target Unit ID for Call Alert / Selective Call double-packet ops (decimal or `0x..` hex; empty/0 → single packet) |
 
-Internally the chime is rendered by `app_utils.eas._generate_chime()`; profiles
+Internally the signal is rendered by `app_utils.eas._generate_chime()`; profiles
 are listed in `app_utils.eas.ALERT_CHIME_PROFILES`. Adding new profiles is a
 matter of extending that helper and the validation set in
 `webapp/admin/maintenance.py`.
@@ -245,7 +245,7 @@ matter of extending that helper and the validation set in
 
 ## REST API
 
-The chime settings are exposed via the standard EAS settings endpoint:
+The signal settings are exposed via the standard EAS settings endpoint:
 
 ```http
 GET /admin/eas_settings

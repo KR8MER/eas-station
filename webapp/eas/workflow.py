@@ -605,6 +605,8 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
         post_alert_component = _package_audio(components.get('post_alert_samples') or [], 'post_alert')
         eom_component = _package_audio(components.get('eom_samples') or [], 'eom')
         composite_component = _package_audio(components.get('composite_samples') or [], 'full')
+        pre_chime_component = _package_audio(components.get('pre_chime_samples') or [], 'pre_chime')
+        post_chime_component = _package_audio(components.get('post_chime_samples') or [], 'post_chime')
 
         stored_components = {
             'same': same_component,
@@ -614,6 +616,8 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
             'post_alert': post_alert_component,
             'eom': eom_component,
             'composite': composite_component,
+            'pre_chime': pre_chime_component,
+            'post_chime': post_chime_component,
         }
 
         response_components = {
@@ -692,16 +696,22 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
             {'archived_at': archive_time}, synchronize_session=False
         )
 
-        db_components = {
-            key: {
+        db_components = {}
+        for key, value in stored_components.items():
+            if not value:
+                continue
+            entry = {
                 'filename': value['filename'],
                 'duration_seconds': value['duration_seconds'],
                 'size_bytes': value['size_bytes'],
                 'storage_subpath': value['storage_subpath'],
             }
-            for key, value in stored_components.items()
-            if value
-        }
+            # Attach signal profile metadata so the print page can display it
+            if key == 'pre_chime' and components.get('pre_chime_profile'):
+                entry['profile'] = components['pre_chime_profile']
+            elif key == 'post_chime' and components.get('post_chime_profile'):
+                entry['profile'] = components['post_chime_profile']
+            db_components[key] = entry
 
         generated_by_user = getattr(g.current_user, 'username', 'system')
         client_ip = request.headers.get('X-Forwarded-For', request.remote_addr) or ''
@@ -746,6 +756,8 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
             narration_upload_audio_data=tts_component.get('wav_bytes') if (tts_component and uploaded_narration) else None,
             pre_alert_audio_data=pre_alert_component.get('wav_bytes') if pre_alert_component else None,
             post_alert_audio_data=post_alert_component.get('wav_bytes') if post_alert_component else None,
+            pre_chime_audio_data=pre_chime_component.get('wav_bytes') if pre_chime_component else None,
+            post_chime_audio_data=post_chime_component.get('wav_bytes') if post_chime_component else None,
             created_by=generated_by_user,
             created_by_ip=client_ip,
         )

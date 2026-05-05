@@ -116,6 +116,8 @@ def register_file_routes(app, logger) -> None:
             'tts': 'tts_audio_data',
             'narration': 'tts_audio_data',
             'eom': 'eom_audio_data',
+            'pre_chime': 'pre_chime_audio_data',
+            'post_chime': 'post_chime_audio_data',
         }
 
         attr_name = component_map.get(component_key)

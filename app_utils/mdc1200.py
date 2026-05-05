@@ -476,7 +476,9 @@ def encode_double_packet(
     as a single stream so the receiver's transition tracker carries
     cleanly across the payload-1 → preamble → payload-2 boundary.
 
-    At 1200 baud the resulting waveform is 40 × 8 / 1200 ≈ 266.67 ms.
+    At 1200 baud the resulting waveform is 40 × 8 / 1200 ≈ 266.67 ms,
+    matching the Motorola-specified on-air duration for Call Alert and
+    Selective Call messages.
 
     Second info block layout (7 bytes):
 
