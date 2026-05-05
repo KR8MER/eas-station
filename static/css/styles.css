@@ -926,6 +926,84 @@
     color: #3a4d7a !important;
 }
 
+/* ----------------------------------------------------------------------------
+   Page-local backgrounds that use var(--light-color) directly
+   ----------------------------------------------------------------------------
+   Several template-local stylesheets (templates/eas/workflow.html,
+   templates/index.html, templates/led_control.html) set
+   `background: var(--light-color)` on their own components without also
+   pinning a text color. On the seven dark themes whose --light-color
+   resolves to a near-white tint (pale yellow / lavender / cyan), the
+   inherited light body text becomes invisible on those backgrounds
+   (e.g. white-on-pale-yellow on the lightning theme). The `.bg-light`
+   utility class already has its own dark-text override above; this block
+   does the equivalent for the named selectors that use --light-color
+   directly.
+
+   We set `color` only on the affected ancestors so unclassed inner text
+   inherits the dark color, while inner elements that declare their own
+   color (".same-chip button { color: var(--danger-color) }", ".text-success"
+   icons, etc.) retain their explicit colors via the cascade. The lone
+   exception is `.text-muted`, whose own rule below uses !important and
+   would otherwise re-light subtitles inside the chip — a matching
+   !important descendant rule below restores readable contrast there. */
+:is([data-theme="lightning"],
+    [data-theme="aurora"],
+    [data-theme="nebula"],
+    [data-theme="midnight"],
+    [data-theme="charcoal"],
+    [data-theme="obsidian"],
+    [data-theme="slate"]) :is(
+        .workflow-card > .card-header,
+        .same-chip,
+        #date-filters,
+        .alert-summary-panel,
+        .feature-group,
+        .layout-preset-btn:hover,
+        .rss-item-row) {
+    color: #0d1b2a;
+    text-shadow: none;
+}
+
+/* Re-tone .text-muted descendants of the same regions: the global
+   `.text-muted { color: var(--text-muted) !important }` rule (in the
+   "Bootstrap Color Utilities" section) resolves to a light gray on
+   dark themes, which is invisible on a pale --light-color background.
+   Pick a darker muted color so the subtitle ("Ohio · FIPS 003 · Entire
+   area" inside .same-chip, etc.) reads. */
+:is([data-theme="lightning"],
+    [data-theme="aurora"],
+    [data-theme="nebula"],
+    [data-theme="midnight"],
+    [data-theme="charcoal"],
+    [data-theme="obsidian"],
+    [data-theme="slate"]) :is(
+        .workflow-card > .card-header,
+        .same-chip,
+        #date-filters,
+        .alert-summary-panel,
+        .feature-group,
+        .layout-preset-btn:hover,
+        .rss-item-row) .text-muted {
+    color: #3a4d7a !important;
+}
+
+/* ----------------------------------------------------------------------------
+   Bootstrap .form-text helper text
+   ----------------------------------------------------------------------------
+   Bootstrap 5's default sets .form-text to a hardcoded muted gray
+   (~#6c757d) which has poor contrast on dark themes — the helper text
+   under inputs is invisible on `--bg-color: #060d1f` (lightning),
+   `#0a0e27` (midnight), `#000000` (obsidian), etc. admin.css already
+   ships an equivalent rule, but only admin pages link admin.css; the
+   broadcast workflow, dashboard, and LED control pages don't. Promoting
+   it to the global stylesheet fixes helper text everywhere by tying it
+   to the per-theme --text-muted token (calibrated for readable contrast
+   against --bg-color on every theme). */
+.form-text {
+    color: var(--text-muted);
+}
+
 /* Lightning Theme - Navbar opacity
    The default navbar mixes its gradient with 15-20% transparency. Combined
    with the bright yellow body gradient of this theme, page content scrolls
@@ -2542,7 +2620,8 @@ footer a:hover {
     z-index: 1;
 }
 
-/* Shimmer effect on card header */
+/* Shimmer effect on card header — softened so it doesn't desaturate
+   light/dark header variants when sweeping past their right edge. */
 .card-header::before {
     content: "";
     position: absolute;
@@ -2553,7 +2632,7 @@ footer a:hover {
     background: linear-gradient(
         90deg,
         transparent,
-        rgba(255, 255, 255, 0.15),
+        rgba(255, 255, 255, 0.06),
         transparent
     );
     animation: cardHeaderShimmer 3s ease-in-out infinite;
@@ -2572,10 +2651,24 @@ footer a:hover {
     width: 120%;
     height: 200%;
     background: radial-gradient(ellipse at top right,
-        rgba(255, 255, 255, 0.2),
-        rgba(255, 255, 255, 0.08) 40%,
+        rgba(255, 255, 255, 0.08),
+        rgba(255, 255, 255, 0.03) 40%,
         transparent 70%);
     pointer-events: none;
+}
+
+/* Suppress the white radial halo and shimmer on .bg-light / .bg-dark header
+   variants. On bg-light surfaces the halo bleached the right half of the
+   header to near-white (visible most acutely on the lightning theme over
+   pale-yellow --light-color); on bg-dark surfaces the halo created a stark
+   light corner that broke the deep navy gradient. The colored bg-primary /
+   bg-info / bg-success / etc. variants keep the subtle shimmer for visual
+   interest. */
+.card-header.bg-light::before,
+.card-header.bg-light::after,
+.card-header.bg-dark::before,
+.card-header.bg-dark::after {
+    display: none;
 }
 
 /* Override bg-* classes on card-header to use gradients */
@@ -3980,74 +4073,102 @@ textarea:focus {
     }
 }
 
-/* Page Shell Orbs - Ambient Background Accent for Content Pages */
+/* Page Shell Orbs - Ambient Background Accent for Content Pages
+   Sized and tinted to provide a faint atmospheric glow without competing
+   with foreground content. Earlier values (opacity 0.35–0.55, color-mix
+   55%/35% with screen blend) produced enormous bright shapes that washed
+   out text on every page — especially noticeable on high-contrast dark
+   themes (lightning, midnight, obsidian) where bright soft-color variants
+   blended onto a near-black background became dominant page features.
+   Per-theme caps below further tame these on dark themes. */
 .page-shell .orb {
     position: fixed;
     border-radius: 50%;
     pointer-events: none;
-    /* Changed from soft-light: screen blend mode creates visible glowing orbs on both
-       light and dark themes. Soft-light with dark colors on a dark background is
-       mathematically invisible (near-zero contrast change). */
     mix-blend-mode: screen;
     animation: floatOrb 30s ease-in-out infinite;
     z-index: 0;
-    /* Use the softer/lighter color variants so the screen blend produces a warm glow.
-       Increased percentages from 18%/10% — the old values combined with opacity: 0.12
-       gave a net opacity of ~2%, which is invisible. */
     background: radial-gradient(circle at 30% 30%,
-        color-mix(in srgb, var(--primary-soft, var(--primary-color)) 55%, transparent),
-        color-mix(in srgb, var(--secondary-soft, var(--secondary-color)) 35%, transparent),
+        color-mix(in srgb, var(--primary-soft, var(--primary-color)) 30%, transparent),
+        color-mix(in srgb, var(--secondary-soft, var(--secondary-color)) 18%, transparent),
         transparent 70%);
-    filter: blur(60px);
-    /* Was 0.12 (and per-child values as low as 0.06). Combined with the color-mix
-       transparency that was already applied, orbs were 0.6–2% visible — invisible.
-       These values are now set to produce a subtle but actually visible glow. */
-    opacity: 0.55;
+    filter: blur(80px);
+    opacity: 0.18;
 }
 
 .page-shell .orb:nth-child(1) {
-    width: 500px;
-    height: 500px;
+    width: 420px;
+    height: 420px;
     top: 5%;
     left: -8%;
     animation-delay: 0s;
-    opacity: 0.50;
+    opacity: 0.16;
 }
 
 .page-shell .orb:nth-child(2) {
-    width: 400px;
-    height: 400px;
+    width: 340px;
+    height: 340px;
     top: 10%;
     right: -5%;
     animation-delay: -6s;
-    opacity: 0.40;
+    opacity: 0.13;
 }
 
 .page-shell .orb:nth-child(3) {
-    width: 600px;
-    height: 600px;
+    width: 480px;
+    height: 480px;
     top: 40%;
     left: 30%;
     animation-delay: -12s;
-    opacity: 0.35;
+    opacity: 0.10;
 }
 
 .page-shell .orb:nth-child(4) {
-    width: 350px;
-    height: 350px;
+    width: 300px;
+    height: 300px;
     bottom: 15%;
     left: 5%;
     animation-delay: -18s;
-    opacity: 0.45;
+    opacity: 0.14;
 }
 
 .page-shell .orb:nth-child(5) {
-    width: 450px;
-    height: 450px;
+    width: 380px;
+    height: 380px;
     bottom: 5%;
     right: 8%;
     animation-delay: -24s;
-    opacity: 0.38;
+    opacity: 0.12;
+}
+
+/* High-contrast dark themes amplify orbs via screen blend on a near-black
+   background — combined with bright soft-color variants this produces
+   luminous shapes that dominate the page. Cap opacities so they read as
+   subtle atmosphere rather than competing surfaces.
+   The `:nth-child(n)` suffix (literal lowercase n — matches every child)
+   bumps specificity above the per-orb `.page-shell .orb:nth-child(1)` …
+   `:nth-child(5)` rules so these caps win without !important. */
+:is([data-theme="lightning"],
+    [data-theme="midnight"],
+    [data-theme="obsidian"],
+    [data-theme="charcoal"],
+    [data-theme="slate"],
+    [data-theme="nebula"],
+    [data-theme="aurora"],
+    [data-theme="dark"]) .page-shell .orb:nth-child(n) {
+    opacity: 0.08;
+    filter: blur(100px);
+}
+
+:is([data-theme="lightning"],
+    [data-theme="midnight"],
+    [data-theme="obsidian"],
+    [data-theme="charcoal"],
+    [data-theme="slate"],
+    [data-theme="nebula"],
+    [data-theme="aurora"],
+    [data-theme="dark"]) .page-shell .orb:nth-child(3) {
+    opacity: 0.05;
 }
 
 /* 3D Card Transforms */
