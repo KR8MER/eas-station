@@ -4145,9 +4145,9 @@ textarea:focus {
    background — combined with bright soft-color variants this produces
    luminous shapes that dominate the page. Cap opacities so they read as
    subtle atmosphere rather than competing surfaces.
-   The `:nth-child(n)` suffix (literal lowercase n, not a placeholder for an
-   index) bumps specificity above the per-orb `.page-shell .orb:nth-child(<index>)`
-   rules so these caps win without !important. */
+   The `:nth-child(n)` suffix (literal lowercase n — matches every child)
+   bumps specificity above the per-orb `.page-shell .orb:nth-child(1)` …
+   `:nth-child(5)` rules so these caps win without !important. */
 :is([data-theme="lightning"],
     [data-theme="midnight"],
     [data-theme="obsidian"],
