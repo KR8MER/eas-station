@@ -943,6 +943,8 @@ function initEasSettings() {
     const postChimeSelect = document.getElementById('easPostAlertChime');
     if (preChimeSelect) preChimeSelect.addEventListener('change', updateToneFieldVisibility);
     if (postChimeSelect) postChimeSelect.addEventListener('change', updateToneFieldVisibility);
+    const mdcOpCodeSelect = document.getElementById('easMdc1200OpCode');
+    if (mdcOpCodeSelect) mdcOpCodeSelect.addEventListener('change', updateToneFieldVisibility);
 
     // Reset button handler
     const resetBtn = document.getElementById('resetEasSettings');
@@ -969,11 +971,15 @@ function updateToneFieldVisibility() {
     const pre = document.getElementById('easPreAlertChime')?.value || 'none';
     const post = document.getElementById('easPostAlertChime')?.value || 'none';
 
-    const isFreeform = (v) => v !== 'none' && v !== 'dtmf' && v !== 'qc2';
+    const isFreeform = (v) => v !== 'none' && v !== 'dtmf' && v !== 'qc2' && v !== 'mdc1200';
+    const opCode = document.getElementById('easMdc1200OpCode')?.value || 'ptt_id_pre';
+    const mdcVisible = pre === 'mdc1200' || post === 'mdc1200';
 
     const visibility = {
         'qc2': pre === 'qc2' || post === 'qc2',
         'dtmf': pre === 'dtmf' || post === 'dtmf',
+        'mdc1200': mdcVisible,
+        'mdc1200-custom': mdcVisible && opCode === 'custom',
         'pre-duration': isFreeform(pre),
         'post-duration': isFreeform(post),
     };
@@ -1089,6 +1095,25 @@ function populateEasForm(settings) {
     const dtmfSequence = document.getElementById('easDtmfSequence');
     if (dtmfSequence) {
         dtmfSequence.value = settings.dtmf_sequence || '';
+    }
+    const mdcUnitId = document.getElementById('easMdc1200UnitId');
+    if (mdcUnitId) {
+        const _v = settings.mdc1200_unit_id;
+        mdcUnitId.value = (_v === null || _v === undefined) ? '1' : String(_v);
+    }
+    const mdcOpCode = document.getElementById('easMdc1200OpCode');
+    if (mdcOpCode) {
+        mdcOpCode.value = settings.mdc1200_op_code || 'ptt_id_pre';
+    }
+    const mdcOpRaw = document.getElementById('easMdc1200OpCodeRaw');
+    if (mdcOpRaw) {
+        const _v = settings.mdc1200_op_code_raw;
+        mdcOpRaw.value = (_v === null || _v === undefined) ? '' : `0x${Number(_v).toString(16).toUpperCase().padStart(2, '0')}`;
+    }
+    const mdcArgRaw = document.getElementById('easMdc1200ArgRaw');
+    if (mdcArgRaw) {
+        const _v = settings.mdc1200_arg_raw;
+        mdcArgRaw.value = (_v === null || _v === undefined) ? '' : `0x${Number(_v).toString(16).toUpperCase().padStart(2, '0')}`;
     }
     if (authorizedEventsTextarea) {
         authorizedEventsTextarea.value = (settings.authorized_event_codes || []).join('\n');
@@ -1241,6 +1266,10 @@ async function handleEasSettingsSubmit(e) {
         qc2_long_tone_enabled: document.getElementById('easQc2LongToneEnabled')?.checked ?? false,
         qc2_long_tone_seconds: parseFloat(document.getElementById('easQc2LongToneSeconds')?.value) || 10.0,
         dtmf_sequence: (document.getElementById('easDtmfSequence')?.value || '').toUpperCase(),
+        mdc1200_unit_id: parseInt(document.getElementById('easMdc1200UnitId')?.value, 10) || 1,
+        mdc1200_op_code: document.getElementById('easMdc1200OpCode')?.value || 'ptt_id_pre',
+        mdc1200_op_code_raw: (document.getElementById('easMdc1200OpCodeRaw')?.value || '').trim() || null,
+        mdc1200_arg_raw: (document.getElementById('easMdc1200ArgRaw')?.value || '').trim() || null,
         authorized_event_codes: parseNewlineValues(document.getElementById('easAuthorizedEvents')?.value || ''),
         forwarded_event_codes: (document.getElementById('easForwardedEventCodes')?.value || '')
             .split(',').map(s => s.trim().toUpperCase()).filter(Boolean),

@@ -1435,6 +1435,10 @@ def _ensure_eas_settings_record() -> EASSettings:
         "ALTER TABLE eas_settings ADD COLUMN IF NOT EXISTS dtmf_sequence VARCHAR(32) NOT NULL DEFAULT ''",
         "ALTER TABLE eas_settings ADD COLUMN IF NOT EXISTS qc2_long_tone_enabled BOOLEAN NOT NULL DEFAULT FALSE",
         "ALTER TABLE eas_settings ADD COLUMN IF NOT EXISTS qc2_long_tone_seconds DOUBLE PRECISION NOT NULL DEFAULT 10.0",
+        "ALTER TABLE eas_settings ADD COLUMN IF NOT EXISTS mdc1200_unit_id INTEGER NOT NULL DEFAULT 1",
+        "ALTER TABLE eas_settings ADD COLUMN IF NOT EXISTS mdc1200_op_code VARCHAR(32) NOT NULL DEFAULT 'ptt_id_pre'",
+        "ALTER TABLE eas_settings ADD COLUMN IF NOT EXISTS mdc1200_op_code_raw SMALLINT",
+        "ALTER TABLE eas_settings ADD COLUMN IF NOT EXISTS mdc1200_arg_raw SMALLINT",
     ]
 
     def _query():
@@ -1527,7 +1531,7 @@ def admin_eas_settings():
             settings.endec_fingerprint = bool(payload["endec_fingerprint"])
 
         # Update pre/post-alert chime profiles
-        _ALLOWED_CHIMES = {"none", "bell", "beep", "three_tone", "qc2", "dtmf"}
+        _ALLOWED_CHIMES = {"none", "bell", "beep", "three_tone", "qc2", "dtmf", "mdc1200"}
         for _field in ("pre_alert_chime", "post_alert_chime"):
             if _field in payload:
                 _value = str(payload[_field] or "none").strip().lower()
@@ -1570,6 +1574,39 @@ def admin_eas_settings():
                 _lt_secs = None
             if _lt_secs is not None and 1.0 <= _lt_secs <= 120.0:
                 settings.qc2_long_tone_seconds = _lt_secs
+
+        # Update MDC1200 selective-calling settings
+        if "mdc1200_unit_id" in payload:
+            try:
+                _uid = int(payload["mdc1200_unit_id"])
+            except (TypeError, ValueError):
+                _uid = None
+            if _uid is not None and 1 <= _uid <= 0xFFFF:
+                settings.mdc1200_unit_id = _uid
+        if "mdc1200_op_code" in payload:
+            _allowed_ops = {
+                "ptt_id_pre", "ptt_id_post", "emergency",
+                "request_to_talk", "remote_monitor", "custom",
+            }
+            _op = str(payload["mdc1200_op_code"] or "ptt_id_pre").strip().lower()
+            if _op in _allowed_ops:
+                settings.mdc1200_op_code = _op
+        for _byte_field in ("mdc1200_op_code_raw", "mdc1200_arg_raw"):
+            if _byte_field in payload:
+                _val = payload[_byte_field]
+                if _val is None or _val == "":
+                    setattr(settings, _byte_field, None)
+                else:
+                    try:
+                        # Accept either decimal or "0x.." prefixed hex.
+                        if isinstance(_val, str):
+                            _byte = int(_val, 0)
+                        else:
+                            _byte = int(_val)
+                    except (TypeError, ValueError):
+                        _byte = None
+                    if _byte is not None and 0 <= _byte <= 0xFF:
+                        setattr(settings, _byte_field, _byte)
 
         # Update authorized FIPS codes
         if "authorized_fips_codes" in payload:
