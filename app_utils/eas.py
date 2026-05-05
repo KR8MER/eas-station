@@ -338,6 +338,8 @@ def load_eas_config(base_path: Optional[str] = None, db_session=None) -> Dict[st
     db_post_alert_chime_duration = None
     db_qc2_tone_a_freq = None
     db_qc2_tone_b_freq = None
+    db_qc2_long_tone_enabled = None
+    db_qc2_long_tone_seconds = None
     db_dtmf_sequence = None
     db_forwarded_event_codes: List[str] = []
     try:
@@ -358,6 +360,8 @@ def load_eas_config(base_path: Optional[str] = None, db_session=None) -> Dict[st
             db_post_alert_chime_duration = getattr(eas_settings, 'post_alert_chime_duration', None)
             db_qc2_tone_a_freq = getattr(eas_settings, 'qc2_tone_a_freq', None)
             db_qc2_tone_b_freq = getattr(eas_settings, 'qc2_tone_b_freq', None)
+            db_qc2_long_tone_enabled = getattr(eas_settings, 'qc2_long_tone_enabled', None)
+            db_qc2_long_tone_seconds = getattr(eas_settings, 'qc2_long_tone_seconds', None)
             db_dtmf_sequence = getattr(eas_settings, 'dtmf_sequence', None)
             db_forwarded_event_codes = list(eas_settings.forwarded_event_codes or [])
             load_logger.info(
@@ -389,6 +393,8 @@ def load_eas_config(base_path: Optional[str] = None, db_session=None) -> Dict[st
                 db_post_alert_chime_duration = getattr(eas_settings, 'post_alert_chime_duration', None)
                 db_qc2_tone_a_freq = getattr(eas_settings, 'qc2_tone_a_freq', None)
                 db_qc2_tone_b_freq = getattr(eas_settings, 'qc2_tone_b_freq', None)
+                db_qc2_long_tone_enabled = getattr(eas_settings, 'qc2_long_tone_enabled', None)
+                db_qc2_long_tone_seconds = getattr(eas_settings, 'qc2_long_tone_seconds', None)
                 db_dtmf_sequence = getattr(eas_settings, 'dtmf_sequence', None)
                 db_forwarded_event_codes = list(eas_settings.forwarded_event_codes or [])
                 load_logger.info(
@@ -444,6 +450,15 @@ def load_eas_config(base_path: Optional[str] = None, db_session=None) -> Dict[st
         'qc2_tone_b_freq': float(
             os.getenv('EAS_QC2_TONE_B_FREQ')
             or (db_qc2_tone_b_freq if db_qc2_tone_b_freq is not None else 1500.0)
+        ),
+        'qc2_long_tone_enabled': (
+            os.getenv('EAS_QC2_LONG_TONE_ENABLED', '').lower() in ('1', 'true', 'yes')
+            if os.getenv('EAS_QC2_LONG_TONE_ENABLED') is not None
+            else bool(db_qc2_long_tone_enabled) if db_qc2_long_tone_enabled is not None else False
+        ),
+        'qc2_long_tone_seconds': float(
+            os.getenv('EAS_QC2_LONG_TONE_SECONDS')
+            or (db_qc2_long_tone_seconds if db_qc2_long_tone_seconds is not None else 10.0)
         ),
         'dtmf_sequence': (
             os.getenv('EAS_DTMF_SEQUENCE')
@@ -1609,6 +1624,8 @@ def _generate_chime(
     qc2_tone_a_freq: float = 1000.0,
     qc2_tone_b_freq: float = 1500.0,
     dtmf_sequence: str = '',
+    qc2_long_tone_enabled: bool = False,
+    qc2_long_tone_seconds: float = 10.0,
 ) -> List[int]:
     """Generate a short attention chime to play before/after an EAS broadcast.
 
@@ -1624,8 +1641,11 @@ def _generate_chime(
                         each occupying ~1/3 of the duration.
         - 'qc2':        Motorola Quick Call II two-tone paging — fixed
                         1 s Tone A (``qc2_tone_a_freq``) followed by
-                        3 s Tone B (``qc2_tone_b_freq``), 4 s total.
+                        4 s Tone B (``qc2_tone_b_freq``), 5 s total.
                         ``duration`` is ignored to keep timing on-spec.
+                        When ``qc2_long_tone_enabled`` is ``True``, an
+                        additional steady tone at ``qc2_tone_b_freq`` is
+                        appended for ``qc2_long_tone_seconds`` seconds.
         - 'dtmf':       Plays each character of ``dtmf_sequence`` (digits
                         0-9, letters A-D, * or #) as its standard DTMF
                         low+high tone pair, using ITU-T Q.24 timing
@@ -1642,6 +1662,12 @@ def _generate_chime(
         qc2_tone_b_freq: Tone B frequency in Hz when ``profile == 'qc2'``.
         dtmf_sequence: Digit string when ``profile == 'dtmf'``.  Unrecognised
             characters are ignored.  Limited to the first 32 valid digits.
+        qc2_long_tone_enabled: When ``True`` and ``profile == 'qc2'``, a
+            sustained tone at ``qc2_tone_b_freq`` is appended after the
+            standard A + B sequence.
+        qc2_long_tone_seconds: Duration in seconds for the optional QC-II
+            long tone (clamped to 1.0–120.0).  Ignored when
+            ``qc2_long_tone_enabled`` is ``False``.
 
     Returns:
         A list of int16-range PCM samples, or an empty list when disabled.
@@ -1721,9 +1747,9 @@ def _generate_chime(
 
     if name in ('qc2', 'qcii', 'quickcall', 'quick_call', 'two_tone'):
         # Motorola Quick Call II is a standardized two-tone paging protocol
-        # with fixed timing: 1 s Tone A followed by 3 s Tone B (4 s total).
+        # with fixed timing: 1 s Tone A followed by 4 s Tone B (5 s total).
         # `duration` is intentionally ignored — pagers time against the
-        # absolute 1 s / 3 s segments, so any other ratio produces a
+        # absolute 1 s / 4 s segments, so any other ratio produces a
         # non-spec signal that real receivers may refuse to decode.
         try:
             freq_a = float(qc2_tone_a_freq)
@@ -1737,7 +1763,7 @@ def _generate_chime(
         freq_b = max(50.0, min(4000.0, freq_b))
 
         a_samples = max(1, int(1.0 * sample_rate))
-        b_samples = max(1, int(3.0 * sample_rate))
+        b_samples = max(1, int(4.0 * sample_rate))
         out: List[int] = []
         for n in range(a_samples):
             t = n / sample_rate
@@ -1745,6 +1771,20 @@ def _generate_chime(
         for n in range(b_samples):
             t = n / sample_rate
             out.append(int(math.sin(2 * math.pi * freq_b * t) * amplitude))
+
+        # Optional long tone: a sustained steady tone at Tone B frequency
+        # appended after the standard A + B sequence.
+        if qc2_long_tone_enabled:
+            try:
+                long_secs = float(qc2_long_tone_seconds)
+            except (TypeError, ValueError):
+                long_secs = 10.0
+            long_secs = max(1.0, min(120.0, long_secs))
+            long_samples = max(1, int(long_secs * sample_rate))
+            for n in range(long_samples):
+                t = n / sample_rate
+                out.append(int(math.sin(2 * math.pi * freq_b * t) * amplitude))
+
         return out
 
     # Unknown profile: be safe and emit no chime rather than raise.
@@ -2241,11 +2281,14 @@ class EASAudioGenerator:
         pre_chime_duration = float(self.config.get('pre_alert_chime_duration', 2.0) or 2.0)
         qc2_freq_a = float(self.config.get('qc2_tone_a_freq', 1000.0) or 1000.0)
         qc2_freq_b = float(self.config.get('qc2_tone_b_freq', 1500.0) or 1500.0)
+        qc2_long_tone = bool(self.config.get('qc2_long_tone_enabled', False))
+        qc2_long_secs = float(self.config.get('qc2_long_tone_seconds', 10.0) or 10.0)
         dtmf_seq = str(self.config.get('dtmf_sequence', '') or '')
         pre_chime_samples = _generate_chime(
             pre_chime_profile, pre_chime_duration, self.sample_rate, amplitude,
             qc2_tone_a_freq=qc2_freq_a, qc2_tone_b_freq=qc2_freq_b,
             dtmf_sequence=dtmf_seq,
+            qc2_long_tone_enabled=qc2_long_tone, qc2_long_tone_seconds=qc2_long_secs,
         )
         if pre_chime_samples:
             samples.extend(pre_chime_samples)
@@ -2456,6 +2499,7 @@ class EASAudioGenerator:
             post_chime_profile, post_chime_duration, self.sample_rate, amplitude,
             qc2_tone_a_freq=qc2_freq_a, qc2_tone_b_freq=qc2_freq_b,
             dtmf_sequence=dtmf_seq,
+            qc2_long_tone_enabled=qc2_long_tone, qc2_long_tone_seconds=qc2_long_secs,
         )
         if post_chime_samples:
             samples.extend(_generate_silence(0.5, self.sample_rate))
@@ -2766,11 +2810,14 @@ class EASAudioGenerator:
         pre_chime_duration = float(self.config.get('pre_alert_chime_duration', 2.0) or 2.0)
         qc2_freq_a = float(self.config.get('qc2_tone_a_freq', 1000.0) or 1000.0)
         qc2_freq_b = float(self.config.get('qc2_tone_b_freq', 1500.0) or 1500.0)
+        qc2_long_tone = bool(self.config.get('qc2_long_tone_enabled', False))
+        qc2_long_secs = float(self.config.get('qc2_long_tone_seconds', 10.0) or 10.0)
         dtmf_seq = str(self.config.get('dtmf_sequence', '') or '')
         pre_chime_samples_list = _generate_chime(
             pre_chime_profile, pre_chime_duration, self.sample_rate, amplitude,
             qc2_tone_a_freq=qc2_freq_a, qc2_tone_b_freq=qc2_freq_b,
             dtmf_sequence=dtmf_seq,
+            qc2_long_tone_enabled=qc2_long_tone, qc2_long_tone_seconds=qc2_long_secs,
         )
         post_chime_profile = self.config.get('post_alert_chime', 'none')
         post_chime_duration = float(self.config.get('post_alert_chime_duration', 2.0) or 2.0)
@@ -2778,6 +2825,7 @@ class EASAudioGenerator:
             post_chime_profile, post_chime_duration, self.sample_rate, amplitude,
             qc2_tone_a_freq=qc2_freq_a, qc2_tone_b_freq=qc2_freq_b,
             dtmf_sequence=dtmf_seq,
+            qc2_long_tone_enabled=qc2_long_tone, qc2_long_tone_seconds=qc2_long_secs,
         )
         chime_separator = _generate_silence(0.5, self.sample_rate)
 

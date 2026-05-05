@@ -610,6 +610,14 @@ class EASSettings(db.Model):
     qc2_tone_b_freq = db.Column(db.Float, nullable=False, default=1500.0)
     # QC-II Tone B frequency in Hz (typical range 288–3000 Hz).
 
+    qc2_long_tone_enabled = db.Column(db.Boolean, nullable=False, default=False)
+    # When True, a sustained tone at qc2_tone_b_freq is appended after the
+    # standard QC-II A + B sequence.
+
+    qc2_long_tone_seconds = db.Column(db.Float, nullable=False, default=10.0)
+    # Duration in seconds for the optional QC-II long tone (1–120 s).
+    # Ignored when qc2_long_tone_enabled is False.
+
     dtmf_sequence = db.Column(db.String(32), nullable=False, default='')
     # DTMF digit sequence to play when the chime profile is 'dtmf'.
     # Allowed characters: 0-9, A-D, *, #. Length 0–32.
@@ -653,6 +661,8 @@ class EASSettings(db.Model):
             "post_alert_chime_duration": float(self.post_alert_chime_duration or 0.0),
             "qc2_tone_a_freq": float(self.qc2_tone_a_freq or 0.0),
             "qc2_tone_b_freq": float(self.qc2_tone_b_freq or 0.0),
+            "qc2_long_tone_enabled": bool(self.qc2_long_tone_enabled),
+            "qc2_long_tone_seconds": float(self.qc2_long_tone_seconds or 10.0),
             "dtmf_sequence": self.dtmf_sequence or '',
             "authorized_fips_codes": list(self.authorized_fips_codes or []),
             "authorized_event_codes": list(self.authorized_event_codes or []),
