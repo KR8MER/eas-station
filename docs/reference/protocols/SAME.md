@@ -196,7 +196,7 @@ Station handles this distinction via the `include_cr` parameter to
 `encode_same_bits` (default `True`; set `False` for EOM).
 
 After EOM 3, ~1 second of trailing silence is appended before the
-post-alert chime (if any) is rendered.
+post-alert signal (if any) is rendered.
 
 ---
 
@@ -207,7 +207,7 @@ audio timeline, assembled in `EASAudioGenerator.build_files`:
 
 ```mermaid
 flowchart LR
-    PRE["Pre-alert chime<br/>(optional)"]
+    PRE["Pre-alert signal<br/>(optional)"]
     S1["SAME header #1"]
     S2["SAME header #2"]
     S3["SAME header #3"]
@@ -216,7 +216,7 @@ flowchart LR
     E1["EOM #1"]
     E2["EOM #2"]
     E3["EOM #3"]
-    POST["Post-alert chime<br/>(optional)"]
+    POST["Post-alert signal<br/>(optional)"]
 
     PRE -->|0.5 s silence| S1
     S1 -->|1 s gap| S2
@@ -228,18 +228,18 @@ flowchart LR
     E2 -->|1 s gap| E3
     E3 -->|1 s silence| POST
 
-    classDef chime fill:#fef3c7,stroke:#92400e,color:#78350f;
+    classDef signal fill:#fef3c7,stroke:#92400e,color:#78350f;
     classDef same fill:#dbeafe,stroke:#1e40af,color:#1e3a8a;
     classDef voice fill:#dcfce7,stroke:#166534,color:#14532d;
-    class PRE,POST chime;
+    class PRE,POST signal;
     class S1,S2,S3,E1,E2,E3 same;
     class TONE,VOICE voice;
 ```
 
 The "voice message" segment can include per-broadcast `pre_alert_samples`
 and `post_alert_samples` operator uploads bracketing the narration —
-distinct from the system-level pre/post-alert *chimes* described in
-[`ALERT_CHIMES.md`](../../guides/ALERT_CHIMES.md). All audio is finally
+distinct from the system-level pre/post-alert *signals* described in
+[`ALERT_SIGNALS.md`](../../guides/ALERT_SIGNALS.md). All audio is finally
 serialised to a 16 kHz (default) signed-int16 mono WAV by
 `samples_to_wav_bytes`.
 

@@ -978,56 +978,56 @@
                                     <small class="text-muted">Appends a distinctive trill after each SAME burst to identify this station</small>
                                 </div>
 
-                                <!-- Alert Chimes -->
+                                <!-- Pre/Post-Alert Signaling -->
                                 <div class="col-12">
                                     <div class="card border-info-subtle">
                                         <div class="card-header bg-info-subtle">
-                                            <h6 class="mb-0"><i class="fas fa-music me-2"></i> Alert Chimes</h6>
-                                            <small class="text-muted">Optional chime sounds played before the SAME header and after the EOM. Applies to every broadcast (CAP, OTA relay, and manual).</small>
+                                            <h6 class="mb-0"><i class="fas fa-signal me-2"></i> Pre/Post-Alert Signaling</h6>
+                                            <small class="text-muted">Optional signals played before the SAME header and after the EOM. Applies to every broadcast (CAP, OTA relay, and manual).</small>
                                         </div>
                                         <div class="card-body">
                                             <div class="row g-3">
                                                 <div class="col-md-6">
-                                                    <label for="easPreAlertChime" class="form-label fw-bold">Pre-Alert Chime</label>
+                                                    <label for="easPreAlertChime" class="form-label fw-bold">Pre-Alert Signal</label>
                                                     <select class="form-select" id="easPreAlertChime" name="pre_alert_chime">
                                                         <option value="none">None (disabled)</option>
                                                         <option value="bell">Bell (decaying 880 Hz)</option>
                                                         <option value="beep">Beep (1000 Hz tone)</option>
                                                         <option value="three_tone">Three-Tone (440 / 880 / 1320 Hz)</option>
-                                                        <option value="qc2">QC-II (Quick Call II two-tone)</option>
-                                                        <option value="dtmf">DTMF (digit sequence)</option>
-                                                        <option value="mdc1200">MDC1200 (Motorola selective calling)</option>
+                                                        <option value="qc2">QC-II (Quick Call II two-tone paging)</option>
+                                                        <option value="dtmf">DTMF (dialing sequence)</option>
+                                                        <option value="mdc1200">MDC1200 (digital selective calling)</option>
                                                     </select>
                                                     <small class="text-muted">Plays before the first SAME header burst.</small>
                                                 </div>
                                                 <div class="col-md-6 eas-tone-conditional" data-eas-tone-show="pre-duration">
-                                                    <label for="easPreAlertChimeDuration" class="form-label fw-bold">Pre-Alert Chime Duration</label>
+                                                    <label for="easPreAlertChimeDuration" class="form-label fw-bold">Pre-Alert Signal Duration</label>
                                                     <div class="input-group">
                                                         <input type="number" class="form-control" id="easPreAlertChimeDuration" name="pre_alert_chime_duration" min="0.1" max="10" step="0.1" value="2.0">
                                                         <span class="input-group-text">seconds</span>
                                                     </div>
-                                                    <small class="text-muted">Total chime duration (0.1–10 seconds).</small>
+                                                    <small class="text-muted">Total signal duration (0.1–10 seconds).</small>
                                                 </div>
                                                 <div class="col-md-6">
-                                                    <label for="easPostAlertChime" class="form-label fw-bold">Post-Alert Chime</label>
+                                                    <label for="easPostAlertChime" class="form-label fw-bold">Post-Alert Signal</label>
                                                     <select class="form-select" id="easPostAlertChime" name="post_alert_chime">
                                                         <option value="none">None (disabled)</option>
                                                         <option value="bell">Bell (decaying 880 Hz)</option>
                                                         <option value="beep">Beep (1000 Hz tone)</option>
                                                         <option value="three_tone">Three-Tone (440 / 880 / 1320 Hz)</option>
-                                                        <option value="qc2">QC-II (Quick Call II two-tone)</option>
-                                                        <option value="dtmf">DTMF (digit sequence)</option>
-                                                        <option value="mdc1200">MDC1200 (Motorola selective calling)</option>
+                                                        <option value="qc2">QC-II (Quick Call II two-tone paging)</option>
+                                                        <option value="dtmf">DTMF (dialing sequence)</option>
+                                                        <option value="mdc1200">MDC1200 (digital selective calling)</option>
                                                     </select>
                                                     <small class="text-muted">Plays after the EOM sequence.</small>
                                                 </div>
                                                 <div class="col-md-6 eas-tone-conditional" data-eas-tone-show="post-duration">
-                                                    <label for="easPostAlertChimeDuration" class="form-label fw-bold">Post-Alert Chime Duration</label>
+                                                    <label for="easPostAlertChimeDuration" class="form-label fw-bold">Post-Alert Signal Duration</label>
                                                     <div class="input-group">
                                                         <input type="number" class="form-control" id="easPostAlertChimeDuration" name="post_alert_chime_duration" min="0.1" max="10" step="0.1" value="2.0">
                                                         <span class="input-group-text">seconds</span>
                                                     </div>
-                                                    <small class="text-muted">Total chime duration (0.1–10 seconds).</small>
+                                                    <small class="text-muted">Total signal duration (0.1–10 seconds).</small>
                                                 </div>
                                                 <div class="col-12 eas-tone-conditional" data-eas-tone-show="qc2">
                                                     <div class="alert alert-light border small mb-0">
@@ -1092,7 +1092,7 @@
                                                         Request to Talk, Remote Monitor) are <strong>~173&nbsp;ms</strong>;
                                                         double-packet ops (Call Alert, Selective Call) carry a
                                                         target unit ID in a second info block and are
-                                                        <strong>~267&nbsp;ms</strong>. Chime-duration field is ignored.
+                                                        <strong>~267&nbsp;ms</strong>. Signal-duration field is ignored.
                                                         Verify on the bench with <code>multimon-ng -a MDC -t wav file.wav</code>
                                                         before going on the air.
                                                     </div>

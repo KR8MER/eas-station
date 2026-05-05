@@ -242,7 +242,8 @@ def test_call_alert_and_selective_call_encode_to_valid_frames():
 def test_double_packet_frame_length_and_structure():
     """``encode_double_packet`` must emit a 40-byte frame: 3 preamble +
     5 sync + 14 payload-1 + 4 inter-packet preamble + 14 payload-2.
-    At 1200 baud that is exactly 266.67 ms of audio."""
+    At 1200 baud that is exactly 266.67 ms of audio — the Motorola-
+    specified on-air duration for Call Alert and Selective Call."""
     from app_utils.mdc1200 import encode_double_packet
     frame = encode_double_packet(0x63, 0x85, 0x1111, 0x2222)
     assert len(frame) == 3 + 5 + 14 + 4 + 14 == 40

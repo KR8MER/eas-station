@@ -2425,7 +2425,7 @@ class EASAudioGenerator:
         )
         if pre_chime_samples:
             samples.extend(pre_chime_samples)
-            samples.extend(_generate_silence(0.5, self.sample_rate))
+            samples.extend(_generate_silence(1.0, self.sample_rate))
 
         for burst_index in range(3):
             samples.extend(header_samples)
@@ -2640,7 +2640,7 @@ class EASAudioGenerator:
             mdc1200_target_unit_id=mdc1200_target_unit_id,
         )
         if post_chime_samples:
-            samples.extend(_generate_silence(0.5, self.sample_rate))
+            samples.extend(_generate_silence(1.0, self.sample_rate))
             samples.extend(post_chime_samples)
 
         wav_bytes = samples_to_wav_bytes(samples, self.sample_rate)
@@ -2980,7 +2980,7 @@ class EASAudioGenerator:
             mdc1200_unit_id=mdc1200_unit_id,
             mdc1200_target_unit_id=mdc1200_target_unit_id,
         )
-        chime_separator = _generate_silence(0.5, self.sample_rate)
+        chime_separator = _generate_silence(1.0, self.sample_rate)
 
         composite_samples: List[int] = []
         if pre_chime_samples_list:
