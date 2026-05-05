@@ -19,8 +19,8 @@ selection, and operator/listener attention before the official tones begin.
 
 ## Where to Configure
 
-The chime settings live in the **Admin → EAS Broadcast Settings → Alert
-Chimes** card. Settings persist in the `eas_settings` table.
+The chime settings live in the **Admin → Broadcast → EAS Encoder Settings →
+Alert Chimes** card. Settings persist in the `eas_settings` table.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
