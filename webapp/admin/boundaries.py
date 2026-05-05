@@ -150,14 +150,38 @@ def ensure_alert_source_columns(logger) -> bool:
 
 
 def ensure_storage_zone_codes_column(logger) -> bool:
-    """Ensure location_settings.storage_zone_codes column exists."""
+    """Ensure storage_zone_codes is available for selective alert storage.
+
+    Historically this column lived on ``location_settings`` and was backfilled
+    from the sibling ``zone_codes`` column. The 20260506 migration split
+    alert-filtering fields out into ``alert_filter_settings`` and dropped them
+    from ``location_settings``. On databases where that migration has run, the
+    legacy backfill (``UPDATE location_settings SET storage_zone_codes = ...
+    zone_codes``) references columns that no longer exist, so we skip it.
+    """
 
     engine = db.engine
     if engine.dialect.name != "postgresql":
         return True
 
     try:
-        # Check if storage_zone_codes column exists
+        # If the split migration has already run, alert_filter_settings owns
+        # storage_zone_codes and the legacy column is gone from
+        # location_settings. Nothing to do here.
+        alert_filter_table_exists = db.session.execute(
+            text(
+                """
+                SELECT 1
+                FROM information_schema.tables
+                WHERE table_name = 'alert_filter_settings'
+                  AND table_schema = current_schema()
+                """
+            )
+        ).scalar()
+        if alert_filter_table_exists:
+            return True
+
+        # Check if storage_zone_codes column exists on location_settings
         column_exists = db.session.execute(
             text(
                 """
@@ -169,38 +193,47 @@ def ensure_storage_zone_codes_column(logger) -> bool:
                 """
             )
         ).scalar()
+        if column_exists:
+            return True
 
-        if not column_exists:
-            logger.info(
-                "Adding location_settings.storage_zone_codes column for selective alert storage"
+        # Only attempt the legacy backfill from zone_codes if that column is
+        # still present. On split-migrated databases it is not, and we should
+        # leave the schema alone.
+        zone_codes_exists = db.session.execute(
+            text(
+                """
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_name = 'location_settings'
+                  AND column_name = 'zone_codes'
+                  AND table_schema = current_schema()
+                """
             )
-            # Add the column with JSONB type
-            # Default: copy from zone_codes (all local county zones trigger storage)
-            # Rationale: If alert mentions our county at all, store it
-            db.session.execute(
-                text(
-                    """
-                    ALTER TABLE location_settings
-                    ADD COLUMN storage_zone_codes JSONB
-                    """
-                )
+        ).scalar()
+        if not zone_codes_exists:
+            return True
+
+        logger.info(
+            "Adding location_settings.storage_zone_codes column for selective alert storage"
+        )
+        db.session.execute(
+            text(
+                """
+                ALTER TABLE location_settings
+                ADD COLUMN storage_zone_codes JSONB
+                """
             )
-
-            # Initialize storage_zone_codes to match zone_codes
-            # This means: if alert is relevant enough to broadcast, it's relevant enough to store
-            # Users can later customize this via UI if they want different behavior
-            db.session.execute(
-                text(
-                    """
-                    UPDATE location_settings
-                    SET storage_zone_codes = COALESCE(zone_codes, '[]'::jsonb)
-                    """
-                )
+        )
+        db.session.execute(
+            text(
+                """
+                UPDATE location_settings
+                SET storage_zone_codes = COALESCE(zone_codes, '[]'::jsonb)
+                """
             )
-
-            db.session.commit()
-            logger.info("Successfully added storage_zone_codes column")
-
+        )
+        db.session.commit()
+        logger.info("Successfully added storage_zone_codes column")
         return True
     except Exception as exc:
         logger.warning("Could not ensure storage_zone_codes column: %s", exc)
