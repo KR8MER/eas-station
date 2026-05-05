@@ -965,11 +965,12 @@
     text-shadow: none;
 }
 
-/* Re-tone .text-muted descendants of the same regions: their own rule
-   (line ~3570) declares `.text-muted { color: var(--text-muted) !important }`,
-   which on dark themes resolves to a light gray — invisible on a pale
-   --light-color background. Pick a darker muted color so the subtitle
-   ("Ohio · FIPS 003 · Entire area" inside .same-chip, etc.) reads. */
+/* Re-tone .text-muted descendants of the same regions: the global
+   `.text-muted { color: var(--text-muted) !important }` rule (in the
+   "Bootstrap Color Utilities" section) resolves to a light gray on
+   dark themes, which is invisible on a pale --light-color background.
+   Pick a darker muted color so the subtitle ("Ohio · FIPS 003 · Entire
+   area" inside .same-chip, etc.) reads. */
 :is([data-theme="lightning"],
     [data-theme="aurora"],
     [data-theme="nebula"],
@@ -4144,8 +4145,9 @@ textarea:focus {
    background — combined with bright soft-color variants this produces
    luminous shapes that dominate the page. Cap opacities so they read as
    subtle atmosphere rather than competing surfaces.
-   The :nth-child(n) suffix bumps specificity above the per-orb
-   .page-shell .orb:nth-child(N) rules so these caps win without !important. */
+   The `:nth-child(n)` suffix (literal lowercase n, not a placeholder for an
+   index) bumps specificity above the per-orb `.page-shell .orb:nth-child(<index>)`
+   rules so these caps win without !important. */
 :is([data-theme="lightning"],
     [data-theme="midnight"],
     [data-theme="obsidian"],
