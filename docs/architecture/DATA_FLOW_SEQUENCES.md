@@ -816,7 +816,7 @@ sequenceDiagram
 
 **Originator Substitution:**
 - Original alert originator (e.g., `WXR` from NWS, `PEP` from FEMA) is replaced with the station's configured originator
-- Station originator set via `EAS_ORIGINATOR` env var or database `eas_settings.originator`
+- Station originator set in the database (`eas_settings.originator`) via the Broadcast admin tab
 - Substitution occurs in `build_same_header()` at `app_utils/eas.py:647`
 
 **Files:** `app_core/audio/auto_forward.py`, `poller/cap_poller.py:2412`, `app_core/audio/alert_forwarding.py`, `app_utils/eas.py:1535`

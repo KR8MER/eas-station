@@ -37,11 +37,13 @@ Use the **STAGING** environment during development and QA. These feeds contain t
 | **PUBLIC_NON_EAS** | `https://tdl.apps.fema.gov/IPAWSOPEN_EAS_SERVICE/rest/public_non_eas/recent/{timestamp}` |
 
 **Configuration:**
-```bash
-# In .env file:
-IPAWS_CAP_FEED_URLS=https://tdl.apps.fema.gov/IPAWSOPEN_EAS_SERVICE/rest/public/recent/{timestamp}
-POLL_INTERVAL_SEC=120  # 2 minutes (FEMA recommended)
-```
+
+In the admin UI, navigate to **Settings → Poller** (`/admin/poller`) and set:
+
+- **CAP feed URLs**: `https://tdl.apps.fema.gov/IPAWSOPEN_EAS_SERVICE/rest/public/recent/{timestamp}`
+- **Poll interval**: `120` seconds (FEMA recommended)
+
+These values persist in the `poller_settings` table.
 
 ### 2. Transition to Production (Live Alerts)
 
@@ -56,20 +58,20 @@ After thorough testing in staging, switch to **PRODUCTION** endpoints for real a
 | **PUBLIC_NON_EAS** | `https://apps.fema.gov/IPAWSOPEN_EAS_SERVICE/rest/public_non_eas/recent/{timestamp}` |
 
 **Configuration:**
-```bash
-# In .env file:
-IPAWS_CAP_FEED_URLS=https://apps.fema.gov/IPAWSOPEN_EAS_SERVICE/rest/public/recent/{timestamp}
-POLL_INTERVAL_SEC=120  # 2 minutes (FEMA recommended)
-```
+
+In the admin UI at **Settings → Poller** (`/admin/poller`), update:
+
+- **CAP feed URLs**: `https://apps.fema.gov/IPAWSOPEN_EAS_SERVICE/rest/public/recent/{timestamp}`
+- **Poll interval**: `120` seconds (FEMA recommended)
 
 **Note:** The `{timestamp}` placeholder is automatically replaced by the poller using ISO-8601 format
-based on `IPAWS_DEFAULT_LOOKBACK_HOURS` (default: 12 hours) or the most recent alert processed.
+based on the **default lookback hours** poller setting (default: 12 hours) or the most recent alert processed.
 
 ### 3. Polling and Caching (Already Implemented)
 
 EAS Station implements FEMA's best practices:
 
-- ✅ **2-Minute Polling**: Default interval is 120 seconds (configurable via `POLL_INTERVAL_SEC`)
+- ✅ **2-Minute Polling**: Default interval is 120 seconds (configurable at Settings → Poller)
 - ✅ **Automatic Caching**: PostgreSQL + PostGIS for persistent storage, Redis for runtime cache
 - ✅ **Deduplication**: Alerts are deduplicated by `identifier` + `sent` timestamp automatically
 - ✅ **Source Tracking**: All alerts are stamped with source (NOAA/IPAWS/MANUAL) in database
@@ -109,16 +111,16 @@ Alerts are automatically distributed through:
 
 ### 1. Configure IPAWS Feed
 
-Edit your `.env` file (or `/app-config/.env` in persistent environments):
+Open the admin UI and go to **Settings → Poller** (`/admin/poller`):
 
-```bash
-# Start with STAGING for testing
-IPAWS_CAP_FEED_URLS=https://tdl.apps.fema.gov/IPAWSOPEN_EAS_SERVICE/rest/public/recent/{timestamp}
-POLL_INTERVAL_SEC=120  # 2 minutes (FEMA recommended)
+- Start with the **STAGING** URL for testing:
+  `https://tdl.apps.fema.gov/IPAWSOPEN_EAS_SERVICE/rest/public/recent/{timestamp}`
+- Set the poll interval to `120` seconds (FEMA recommended).
+- After testing, switch to the **PRODUCTION** URL:
+  `https://apps.fema.gov/IPAWSOPEN_EAS_SERVICE/rest/public/recent/{timestamp}`
 
-# After testing, switch to PRODUCTION
-# IPAWS_CAP_FEED_URLS=https://apps.fema.gov/IPAWSOPEN_EAS_SERVICE/rest/public/recent/{timestamp}
-```
+Click **Save**; values persist in the `poller_settings` table — no service
+restart is required for the values to be picked up on the next poll cycle.
 
 ### 2. Restart the IPAWS Poller
 
