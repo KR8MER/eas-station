@@ -820,7 +820,7 @@ def admin_alert_filtering():
         return jsonify({"success": "Alert filtering settings updated", "settings": updated})
     except Exception as exc:
         current_app.logger.error("Error processing alert filtering update: %s", exc)
-        return jsonify({"error": f"Failed to process alert filtering settings: {exc}"}), 500
+        return jsonify({"error": "Failed to process alert filtering settings"}), 500
 
 
 @maintenance_bp.route("/admin/location_reference", methods=["GET"])
