@@ -120,12 +120,27 @@
                     <span class="badge bg-secondary">{{ components|length }} files</span>
                 </div>
                 <div class="card-body">
+                    {% set component_labels = {
+                        'same': 'SAME',
+                        'eom': 'EOM',
+                        'composite': 'COMPOSITE',
+                        'attention': 'ATTENTION TONE',
+                        'tts': 'NARRATION',
+                        'pre_alert': 'PRE-ALERT AUDIO',
+                        'post_alert': 'POST-ALERT AUDIO',
+                        'pre_chime': 'PRE-ALERT SIGNAL',
+                        'post_chime': 'POST-ALERT SIGNAL'
+                    } %}
                     {% if components %}
                         {% for key, comp in components.items() %}
                         <div class="mb-3">
                             <div class="d-flex justify-content-between align-items-start">
                                 <div>
-                                    <h6 class="mb-1 text-uppercase">{{ key }}</h6>
+                                    <h6 class="mb-1">{{ component_labels.get(key, key.replace('_', ' ').upper()) }}
+                                        {%- if comp.profile and comp.profile != 'none' %}
+                                        <span class="badge bg-secondary fw-normal ms-1 text-lowercase">{{ comp.profile }}</span>
+                                        {%- endif %}
+                                    </h6>
                                     <small class="text-muted">{{ comp.duration_seconds|default(0)|round(2) }} s · {{ comp.size_bytes|default(0) }} bytes</small>
                                 </div>
                                 {% if comp.download_url %}
