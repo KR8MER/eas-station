@@ -83,6 +83,7 @@ from ._models_alerts import (
 from ._models_admin import AdminSession, AdminUser, SystemLog
 from ._models_polling import PollDebugRecord, PollHistory, PollerSettings
 from ._models_settings import (
+    AlertFilterSettings,
     ApplicationSettings,
     CertbotSettings,
     EASDecoderMonitorSettings,
@@ -124,6 +125,7 @@ from ._models_displays import (
 __all__ = [
     "db",
     "AlertDeliveryReport",
+    "AlertFilterSettings",
     "ApplicationSettings",
     "AudioAlert",
     "AudioHealthStatus",

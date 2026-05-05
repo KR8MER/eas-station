@@ -27,7 +27,7 @@ from sqlalchemy.ext.compiler import compiles
 
 from app_core.extensions import db
 from app_core.location import describe_location_reference, update_location_settings
-from app_core.models import LocationSettings, NWSZone
+from app_core.models import LocationSettings, AlertFilterSettings, NWSZone
 from app_core.zones import clear_zone_lookup_cache
 from app_utils.fips_codes import get_same_lookup, get_us_state_county_tree
 from app_utils.location_settings import sanitize_fips_codes
@@ -51,10 +51,12 @@ def app_context(tmp_path):
         engine = db.engine
         NWSZone.__table__.create(bind=engine)
         LocationSettings.__table__.create(bind=engine)
+        AlertFilterSettings.__table__.create(bind=engine)
         clear_zone_lookup_cache()
         yield app
         db.session.remove()
         NWSZone.__table__.drop(bind=engine)
+        AlertFilterSettings.__table__.drop(bind=engine)
         LocationSettings.__table__.drop(bind=engine)
     clear_zone_lookup_cache()
 
@@ -175,12 +177,12 @@ def test_update_location_settings_infers_county_zones(app_context):
         assert "OHC137" in result["zone_codes"]
         assert result["zone_codes"].count("OHC137") == 1
 
-        stored = LocationSettings.query.first()
-        assert stored is not None
-        assert "OHZ025" in stored.zone_codes
-        assert "OHZ016" in stored.zone_codes
-        assert "OHC003" in stored.zone_codes
-        assert "OHC137" in stored.zone_codes
+        stored_filter = AlertFilterSettings.query.first()
+        assert stored_filter is not None
+        assert "OHZ025" in stored_filter.zone_codes
+        assert "OHZ016" in stored_filter.zone_codes
+        assert "OHC003" in stored_filter.zone_codes
+        assert "OHC137" in stored_filter.zone_codes
 
 
 def test_update_location_settings_accepts_statewide_same_code(app_context):
@@ -200,9 +202,9 @@ def test_update_location_settings_accepts_statewide_same_code(app_context):
 
         assert "039000" in result["fips_codes"]
 
-        stored = LocationSettings.query.first()
-        assert stored is not None
-        assert "039000" in stored.fips_codes
+        stored_filter = AlertFilterSettings.query.first()
+        assert stored_filter is not None
+        assert "039000" in stored_filter.fips_codes
 
         snapshot = describe_location_reference(result)
         statewide_entry = {
