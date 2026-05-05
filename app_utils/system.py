@@ -760,7 +760,8 @@ def get_shields_io_badges(health_data: Dict[str, Any]) -> Dict[str, str]:
     load_1m = load_avgs.get("1m") if isinstance(load_avgs, dict) else None
     if load_1m is not None:
         load_label = f"{load_1m:.2f}"
-        load_color = "critical" if load_1m > (total_cores or 4) else "yellow" if load_1m > ((total_cores or 4) * 0.7) else "success"
+        core_count = total_cores or 4
+        load_color = "critical" if load_1m > core_count else "yellow" if load_1m > core_count * 0.7 else "success"
         badges["load"] = (
             f"https://img.shields.io/badge/Load%20Avg-{_escape_shields_io_text(load_label)}-{load_color}?style=flat-square"
         )
