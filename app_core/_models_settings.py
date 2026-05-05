@@ -51,6 +51,44 @@ class LocationSettings(db.Model):
         nullable=False,
         default=DEFAULT_LOCATION_SETTINGS["timezone"],
     )
+    map_center_lat = db.Column(
+        db.Float,
+        nullable=False,
+        default=DEFAULT_LOCATION_SETTINGS["map_center_lat"],
+    )
+    map_center_lng = db.Column(
+        db.Float,
+        nullable=False,
+        default=DEFAULT_LOCATION_SETTINGS["map_center_lng"],
+    )
+    map_default_zoom = db.Column(
+        db.Integer,
+        nullable=False,
+        default=DEFAULT_LOCATION_SETTINGS["map_default_zoom"],
+    )
+    updated_at = db.Column(
+        db.DateTime(timezone=True),
+        default=utc_now,
+        onupdate=utc_now,
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "county_name": self.county_name,
+            "state_code": self.state_code,
+            "timezone": self.timezone,
+            "map_center_lat": self.map_center_lat,
+            "map_center_lng": self.map_center_lng,
+            "map_default_zoom": self.map_default_zoom,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class AlertFilterSettings(db.Model):
+    __tablename__ = "alert_filter_settings"
+
+    id = db.Column(db.Integer, primary_key=True)
     fips_codes = db.Column(
         JSONB,
         nullable=False,
@@ -71,26 +109,6 @@ class LocationSettings(db.Model):
         nullable=False,
         default=lambda: list(DEFAULT_LOCATION_SETTINGS["area_terms"]),
     )
-    map_center_lat = db.Column(
-        db.Float,
-        nullable=False,
-        default=DEFAULT_LOCATION_SETTINGS["map_center_lat"],
-    )
-    map_center_lng = db.Column(
-        db.Float,
-        nullable=False,
-        default=DEFAULT_LOCATION_SETTINGS["map_center_lng"],
-    )
-    map_default_zoom = db.Column(
-        db.Integer,
-        nullable=False,
-        default=DEFAULT_LOCATION_SETTINGS["map_default_zoom"],
-    )
-    led_default_lines = db.Column(
-        JSONB,
-        nullable=False,
-        default=lambda: list(DEFAULT_LOCATION_SETTINGS["led_default_lines"]),
-    )
     updated_at = db.Column(
         db.DateTime(timezone=True),
         default=utc_now,
@@ -100,17 +118,10 @@ class LocationSettings(db.Model):
     def to_dict(self) -> Dict[str, Any]:
         return {
             "id": self.id,
-            "county_name": self.county_name,
-            "state_code": self.state_code,
-            "timezone": self.timezone,
             "fips_codes": list(self.fips_codes or []),
             "zone_codes": list(self.zone_codes or []),
             "storage_zone_codes": list(self.storage_zone_codes or []),
             "area_terms": list(self.area_terms or []),
-            "map_center_lat": self.map_center_lat,
-            "map_center_lng": self.map_center_lng,
-            "map_default_zoom": self.map_default_zoom,
-            "led_default_lines": list(self.led_default_lines or []),
             "same_codes": list(self.fips_codes or []),
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
@@ -187,6 +198,11 @@ class HardwareSettings(db.Model):
     led_baudrate = db.Column(db.Integer, nullable=False, default=9600)
     led_serial_mode = db.Column(db.String(20), nullable=False, default='RS232')
     led_default_text = db.Column(db.Text, nullable=True)
+    led_default_lines = db.Column(
+        JSONB,
+        nullable=False,
+        default=lambda: list(DEFAULT_LOCATION_SETTINGS["led_default_lines"]),
+    )
 
     # ========================================================================
     # VFD Display Settings (Noritake GU140x32F-7000B)
@@ -276,6 +292,7 @@ class HardwareSettings(db.Model):
             "led_baudrate": self.led_baudrate,
             "led_serial_mode": self.led_serial_mode,
             "led_default_text": self.led_default_text,
+            "led_default_lines": list(self.led_default_lines or []),
             # VFD
             "vfd_enabled": self.vfd_enabled,
             "vfd_port": self.vfd_port,

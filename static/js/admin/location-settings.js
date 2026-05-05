@@ -23,7 +23,8 @@ function parseNewlineValues(value) {
  */
 function initLocationSettings() {
     const form = document.getElementById('locationSettingsForm');
-    if (!form) {
+    const filterForm = document.getElementById('alertFilteringForm');
+    if (!form && !filterForm) {
         return;
     }
 
@@ -42,8 +43,13 @@ function initLocationSettings() {
     // Initialize reset button
     initResetButton();
 
-    // Form submission handler
-    form.addEventListener('submit', handleLocationSettingsSubmit);
+    // Form submission handlers
+    if (form) {
+        form.addEventListener('submit', handleLocationSettingsSubmit);
+    }
+    if (filterForm) {
+        filterForm.addEventListener('submit', handleAlertFilteringSubmit);
+    }
 
     // Load initial FIPS codes from hidden input
     loadInitialFipsCodes();
@@ -53,7 +59,9 @@ function initLocationSettings() {
 }
 
 /**
- * Handle location settings form submission
+ * Handle location settings form submission (county / state / timezone / map only).
+ * Posts to /admin/location_settings (PUT). Alert filtering fields are saved
+ * via the separate alertFilteringForm.
  * @param {Event} e - Submit event
  */
 async function handleLocationSettingsSubmit(e) {
@@ -74,34 +82,18 @@ async function handleLocationSettingsSubmit(e) {
         statusEl.className = 'text-muted small ms-3';
     }
 
-    // Collect form data
+    // Collect form data (location-only fields)
     const countyName = document.getElementById('locationCountyName')?.value?.trim() || '';
     const stateCode = document.getElementById('locationStateCode')?.value?.trim().toUpperCase() || '';
     const timezone = document.getElementById('locationTimezone')?.value?.trim() || '';
-    const fipsCodesHidden = document.getElementById('locationFipsCodes')?.value || '';
-    const zoneCodesText = document.getElementById('locationZoneCodes')?.value || '';
-    const storageZoneCodesText = document.getElementById('locationStorageZoneCodes')?.value || '';
     const mapCenterLat = parseFloat(document.getElementById('locationMapLat')?.value) || 0;
     const mapCenterLng = parseFloat(document.getElementById('locationMapLng')?.value) || 0;
     const mapDefaultZoom = parseInt(document.getElementById('locationMapZoom')?.value, 10) || 9;
-
-    // Parse FIPS codes from hidden input (comma-separated)
-    const fipsCodes = fipsCodesHidden
-        .split(',')
-        .map(code => code.trim())
-        .filter(code => code.length > 0);
-
-    // Parse zone codes from textareas (newline-separated)
-    const zoneCodes = parseNewlineValues(zoneCodesText);
-    const storageZoneCodes = parseNewlineValues(storageZoneCodesText);
 
     const payload = {
         county_name: countyName,
         state_code: stateCode,
         timezone: timezone,
-        fips_codes: fipsCodes,
-        zone_codes: zoneCodes,
-        storage_zone_codes: storageZoneCodes,
         map_center_lat: mapCenterLat,
         map_center_lng: mapCenterLng,
         map_default_zoom: mapDefaultZoom
@@ -127,8 +119,6 @@ async function handleLocationSettingsSubmit(e) {
             if (typeof showToast === 'function') {
                 showToast('Location settings saved successfully', 'success');
             }
-            // Reload location reference after save
-            loadLocationReference();
             // Update cache
             if (result.settings) {
                 window.locationSettingsCache = result.settings;
@@ -157,6 +147,110 @@ async function handleLocationSettingsSubmit(e) {
         if (submitBtn) {
             submitBtn.disabled = false;
             submitBtn.innerHTML = '<i class="fas fa-save"></i> Save Location Settings';
+        }
+    }
+}
+
+/**
+ * Handle Alert Filtering form submission (FIPS codes, zone codes, storage zones).
+ * Posts to /admin/alert_filtering (POST).
+ * @param {Event} e - Submit event
+ */
+async function handleAlertFilteringSubmit(e) {
+    e.preventDefault();
+
+    const form = e.target;
+    const statusEl = document.getElementById('alertFilteringStatus');
+    const submitBtn = form.querySelector('button[type="submit"]');
+
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+    }
+
+    if (statusEl) {
+        statusEl.textContent = 'Saving...';
+        statusEl.className = 'text-muted small ms-3';
+    }
+
+    const fipsCodesHidden = document.getElementById('locationFipsCodes')?.value || '';
+    const zoneCodesText = document.getElementById('locationZoneCodes')?.value || '';
+    const storageZoneCodesText = document.getElementById('locationStorageZoneCodes')?.value || '';
+
+    const fipsCodes = fipsCodesHidden
+        .split(',')
+        .map(code => code.trim())
+        .filter(code => code.length > 0);
+
+    const zoneCodes = parseNewlineValues(zoneCodesText);
+    const storageZoneCodes = parseNewlineValues(storageZoneCodesText);
+
+    const payload = {
+        fips_codes: fipsCodes,
+        zone_codes: zoneCodes,
+        storage_zone_codes: storageZoneCodes
+    };
+
+    try {
+        const response = await fetch('/admin/alert_filtering', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': window.CSRF_TOKEN || ''
+            },
+            body: JSON.stringify(payload)
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            if (statusEl) {
+                statusEl.textContent = '✓ Alert filtering saved successfully';
+                statusEl.className = 'text-success small ms-3';
+            }
+            if (typeof showToast === 'function') {
+                showToast('Alert filtering saved successfully', 'success');
+            }
+            // Reload location reference after save (zone-derivation may have added entries)
+            loadLocationReference();
+            // Update cache + reflect server-normalized values back into the form
+            if (result.settings) {
+                window.locationSettingsCache = Object.assign(
+                    window.locationSettingsCache || {},
+                    result.settings
+                );
+                const zonesEl = document.getElementById('locationZoneCodes');
+                const storageEl = document.getElementById('locationStorageZoneCodes');
+                if (zonesEl && Array.isArray(result.settings.zone_codes)) {
+                    zonesEl.value = result.settings.zone_codes.join('\n');
+                }
+                if (storageEl && Array.isArray(result.settings.storage_zone_codes)) {
+                    storageEl.value = result.settings.storage_zone_codes.join('\n');
+                }
+            }
+        } else {
+            const errorMsg = result.error || 'Failed to save alert filtering';
+            if (statusEl) {
+                statusEl.textContent = '✗ ' + errorMsg;
+                statusEl.className = 'text-danger small ms-3';
+            }
+            if (typeof showToast === 'function') {
+                showToast(errorMsg, 'danger');
+            }
+        }
+    } catch (error) {
+        console.error('Error saving alert filtering:', error);
+        if (statusEl) {
+            statusEl.textContent = '✗ Network error: ' + error.message;
+            statusEl.className = 'text-danger small ms-3';
+        }
+        if (typeof showToast === 'function') {
+            showToast('Network error: ' + error.message, 'danger');
+        }
+    } finally {
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="fas fa-save"></i> Save Alert Filtering';
         }
     }
 }

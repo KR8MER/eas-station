@@ -584,6 +584,11 @@
                                 </button>
                             </li>
                             <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="alert-filtering-subtab" data-bs-toggle="pill" data-bs-target="#alert-filtering" type="button" role="tab">
+                                    <i class="fas fa-filter"></i> Alert Filtering
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
                                 <button class="nav-link" id="alerts-subtab" data-bs-toggle="pill" data-bs-target="#alerts-mgmt" type="button" role="tab">
                                     <i class="fas fa-bell"></i> Alerts
                                 </button>
@@ -597,7 +602,7 @@
                     <!-- Page Header -->
                     <div class="mb-4">
                         <h4 class="mb-2"><i class="fas fa-map-marker-alt text-primary"></i> Location Configuration</h4>
-                        <p class="text-muted">Configure your jurisdiction, timezone, monitored counties, and zone codes for alert processing.</p>
+                        <p class="text-muted">Configure your jurisdiction, timezone, and map defaults. Alert filtering (FIPS / zone codes) is configured on the <strong>Alert Filtering</strong> tab.</p>
                     </div>
                     <form id="locationSettingsForm" class="mt-4">
                         <div class="row g-3">
@@ -614,6 +619,41 @@
                                 <input type="text" class="form-control" id="locationTimezone" name="timezone" value="{{ location_settings.timezone | default('America/New_York') }}" required>
                                 <small class="text-muted">Example: America/New_York, America/Chicago</small>
                             </div>
+                            <div class="col-md-4">
+                                <label for="locationMapLat" class="form-label fw-bold">Map Center Latitude</label>
+                                <input type="number" step="0.0001" class="form-control" id="locationMapLat" name="map_center_lat" value="{{ location_settings.map_center_lat | default('0') }}">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="locationMapLng" class="form-label fw-bold">Map Center Longitude</label>
+                                <input type="number" step="0.0001" class="form-control" id="locationMapLng" name="map_center_lng" value="{{ location_settings.map_center_lng | default('0') }}">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="locationMapZoom" class="form-label fw-bold">Map Default Zoom</label>
+                                <input type="number" class="form-control" id="locationMapZoom" name="map_default_zoom" value="{{ location_settings.map_default_zoom | default('9') }}">
+                            </div>
+
+                            <div class="col-12 d-flex align-items-center">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-save"></i> Save Location Settings
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary ms-2" id="resetLocationSettings">
+                                    <i class="fas fa-undo"></i> Reset Changes
+                                </button>
+                                <span class="text-muted small ms-3" id="locationSettingsStatus"></span>
+                            </div>
+                        </div>
+                    </form>
+
+                </div>
+
+                <!-- Alert Filtering Tab -->
+                <div class="tab-pane fade" id="alert-filtering" role="tabpanel">
+                    <div class="mb-4">
+                        <h4 class="mb-2"><i class="fas fa-filter text-primary"></i> Alert Filtering</h4>
+                        <p class="text-muted">Configure which counties (SAME / FIPS codes) and NOAA zones to monitor for CAP alerts and EAS broadcasts.</p>
+                    </div>
+                    <form id="alertFilteringForm" class="mt-4">
+                        <div class="row g-3">
                             <div class="col-12">
                                 <label class="form-label fw-bold">
                                     <i class="fas fa-broadcast-tower text-primary me-1"></i> Monitored Counties (SAME/FIPS Codes)
@@ -641,7 +681,7 @@
                                 <div class="mt-3" id="locationSelectedFips">
                                     <p class="text-muted small mb-0">No counties selected yet.</p>
                                 </div>
-                                <input type="hidden" id="locationFipsCodes" name="fips_codes" value="{{ (location_settings.fips_codes or []) | join(',') }}">
+                                <input type="hidden" id="locationFipsCodes" name="fips_codes" value="{{ location_settings.fips_codes | default([]) | join(',') }}">
                             </div>
                             <!-- Help section - collapsed by default -->
                             <div class="col-12">
@@ -699,7 +739,7 @@
                                         <label for="locationZoneCodes" class="form-label small text-muted">
                                             All zones to monitor for EAS broadcasting (your county + adjoining)
                                         </label>
-                                        <textarea class="form-control" id="locationZoneCodes" name="zone_codes" rows="4" placeholder="OHZ003&#10;OHC137&#10;OHZ009&#10;OHC063">{{ (location_settings.zone_codes or []) | join('\n') }}</textarea>
+                                        <textarea class="form-control" id="locationZoneCodes" name="zone_codes" rows="4" placeholder="OHZ003&#10;OHC137&#10;OHZ009&#10;OHC063">{{ location_settings.zone_codes | default([]) | join('\n') }}</textarea>
                                         <small class="text-muted">
                                             Alerts matching these zones trigger EAS broadcast.
                                             <a href="#alertProcessingHelp" data-bs-toggle="collapse" class="text-decoration-none">Learn more</a>
@@ -719,7 +759,7 @@
                                         <label for="locationStorageZoneCodes" class="form-label small text-muted">
                                             Only your local county zones (determines what gets saved)
                                         </label>
-                                        <textarea class="form-control" id="locationStorageZoneCodes" name="storage_zone_codes" rows="4" placeholder="OHZ003&#10;OHC137">{{ (location_settings.storage_zone_codes or []) | join('\n') }}</textarea>
+                                        <textarea class="form-control" id="locationStorageZoneCodes" name="storage_zone_codes" rows="4" placeholder="OHZ003&#10;OHC137">{{ location_settings.storage_zone_codes | default([]) | join('\n') }}</textarea>
                                         <small class="text-muted">
                                             Alerts matching these zones are stored with boundary calculations.
                                             <a href="#alertProcessingHelp" data-bs-toggle="collapse" class="text-decoration-none">Learn more</a>
@@ -751,27 +791,12 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="col-md-4">
-                                <label for="locationMapLat" class="form-label fw-bold">Map Center Latitude</label>
-                                <input type="number" step="0.0001" class="form-control" id="locationMapLat" name="map_center_lat" value="{{ location_settings.map_center_lat | default('0') }}">
-                            </div>
-                            <div class="col-md-4">
-                                <label for="locationMapLng" class="form-label fw-bold">Map Center Longitude</label>
-                                <input type="number" step="0.0001" class="form-control" id="locationMapLng" name="map_center_lng" value="{{ location_settings.map_center_lng | default('0') }}">
-                            </div>
-                            <div class="col-md-4">
-                                <label for="locationMapZoom" class="form-label fw-bold">Map Default Zoom</label>
-                                <input type="number" class="form-control" id="locationMapZoom" name="map_default_zoom" value="{{ location_settings.map_default_zoom | default('9') }}">
-                            </div>
 
                             <div class="col-12 d-flex align-items-center">
                                 <button type="submit" class="btn btn-primary">
-                                    <i class="fas fa-save"></i> Save Location Settings
+                                    <i class="fas fa-save"></i> Save Alert Filtering
                                 </button>
-                                <button type="button" class="btn btn-outline-secondary ms-2" id="resetLocationSettings">
-                                    <i class="fas fa-undo"></i> Reset Changes
-                                </button>
-                                <span class="text-muted small ms-3" id="locationSettingsStatus"></span>
+                                <span class="text-muted small ms-3" id="alertFilteringStatus"></span>
                             </div>
                         </div>
                     </form>

@@ -162,27 +162,70 @@ def _coerce_int(value: Any, fallback: int) -> int:
         return fallback
 
 
+def _load_merged_settings() -> Dict[str, Any]:
+    """Build the merged location settings dict from all three tables.
+
+    Caller is responsible for any locking. This function does not touch the cache.
+    """
+    location_record = _ensure_location_settings_record()
+    merged = location_record.to_dict()
+
+    # Merge alert filter settings (fips_codes/zone_codes/storage_zone_codes/area_terms/same_codes)
+    from .alert_filtering import get_alert_filter_settings
+    filter_settings = get_alert_filter_settings()
+    merged.update({
+        "fips_codes": filter_settings.get("fips_codes", []),
+        "zone_codes": filter_settings.get("zone_codes", []),
+        "storage_zone_codes": filter_settings.get("storage_zone_codes", []),
+        "area_terms": filter_settings.get("area_terms", []),
+        "same_codes": filter_settings.get("same_codes", []),
+    })
+
+    # Merge led_default_lines from hardware settings (defensive — table may
+    # not exist in lightweight test fixtures or before migrations have run).
+    try:
+        from .models import HardwareSettings
+        hw_record = HardwareSettings.query.first()
+        if hw_record and getattr(hw_record, "led_default_lines", None):
+            merged["led_default_lines"] = list(hw_record.led_default_lines or [])
+        else:
+            merged["led_default_lines"] = list(DEFAULT_LOCATION_SETTINGS["led_default_lines"])
+    except Exception:  # pragma: no cover - defensive
+        db.session.rollback()
+        merged["led_default_lines"] = list(DEFAULT_LOCATION_SETTINGS["led_default_lines"])
+
+    return _prepare_settings_dict(merged)
+
+
 def get_location_settings(force_reload: bool = False) -> Dict[str, Any]:
+    """Get merged location settings from location, alert filter, and hardware tables.
+
+    Returns a dictionary with the same shape as before the refactoring for backwards compatibility.
+    """
     global _location_settings_cache
 
-    # Move force_reload check inside lock to prevent race condition
     with _location_settings_lock:
         if force_reload:
             _location_settings_cache = None
 
         if _location_settings_cache is None:
-            record = _ensure_location_settings_record()
-            _location_settings_cache = _prepare_settings_dict(record.to_dict())
+            _location_settings_cache = _load_merged_settings()
             set_location_timezone(_location_settings_cache["timezone"])
         return _prepare_settings_dict(_location_settings_cache)
 
 
 def update_location_settings(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Update location settings, dispatching to appropriate tables.
+    
+    For backwards compatibility, accepts a flat dict with all fields and
+    dispatches them to location_settings, alert_filter_settings, and hardware_settings.
+    """
     global _location_settings_cache
 
     with _location_settings_lock:
         record = _ensure_location_settings_record()
 
+        # Handle location-specific fields
         county_name = str(
             data.get("county_name")
             or record.county_name
@@ -198,114 +241,6 @@ def update_location_settings(data: Dict[str, Any]) -> Dict[str, Any]:
             or record.timezone
             or DEFAULT_LOCATION_SETTINGS["timezone"]
         ).strip()
-
-        existing_fips_source = record.fips_codes or DEFAULT_LOCATION_SETTINGS.get("fips_codes")
-        requested_fips = data.get("fips_codes")
-        if requested_fips is None:
-            fips_codes, invalid_fips = _resolve_fips_codes(
-                existing_fips_source or _DEFAULT_FIPS_CODES,
-                _DEFAULT_FIPS_CODES,
-            )
-            log_invalid = False
-        else:
-            fips_codes, invalid_fips = _resolve_fips_codes(
-                requested_fips,
-                existing_fips_source or _DEFAULT_FIPS_CODES,
-            )
-            log_invalid = True
-
-        if log_invalid and invalid_fips:
-            ignored = sorted({str(item).strip() for item in invalid_fips if str(item).strip()})
-            if ignored:
-                _log_warning(
-                    "Ignoring unrecognized location FIPS codes: %s" % ", ".join(ignored)
-                )
-
-        zone_input = data.get("zone_codes")
-        raw_zone_codes = normalise_upper(
-            zone_input
-            or record.zone_codes
-            or DEFAULT_LOCATION_SETTINGS["zone_codes"]
-        )
-        zone_lookup = get_zone_lookup()
-        zone_codes, invalid_zone_codes = normalise_zone_codes(raw_zone_codes)
-        if zone_input is not None and invalid_zone_codes:
-            ignored = sorted(
-                {code for code in invalid_zone_codes if code}
-            )
-            if ignored:
-                _log_warning(
-                    "Ignoring malformed NOAA zone identifiers: %s"
-                    % ", ".join(ignored)
-                )
-        if not zone_codes:
-            defaults = DEFAULT_LOCATION_SETTINGS["zone_codes"]
-            zone_codes, _ = normalise_zone_codes(defaults)
-            if not zone_codes:
-                zone_codes = list(defaults)
-
-        if zone_input is not None and zone_lookup:
-            unknown_zones = sorted(
-                {code for code in zone_codes if code not in zone_lookup}
-            )
-            if unknown_zones:
-                _log_warning(
-                    "Zone catalog does not include: %s; keeping provided values"
-                    % ", ".join(unknown_zones)
-                )
-
-        derived_zone_codes = _derive_county_zone_codes_from_fips(
-            fips_codes, zone_lookup
-        )
-        if derived_zone_codes:
-            existing = set(zone_codes)
-            appended = False
-            for code in derived_zone_codes:
-                if code not in existing:
-                    zone_codes.append(code)
-                    existing.add(code)
-                    appended = True
-            if appended and zone_input is None:
-                zone_codes = normalise_upper(zone_codes)
-
-        # Storage zone codes: subset of zone_codes for local county only
-        storage_zone_input = data.get("storage_zone_codes")
-        raw_storage_zone_codes = normalise_upper(
-            storage_zone_input
-            or getattr(record, 'storage_zone_codes', None)
-            or DEFAULT_LOCATION_SETTINGS["storage_zone_codes"]
-        )
-        storage_zone_codes, invalid_storage_zone_codes = normalise_zone_codes(raw_storage_zone_codes)
-        if storage_zone_input is not None and invalid_storage_zone_codes:
-            ignored = sorted(
-                {code for code in invalid_storage_zone_codes if code}
-            )
-            if ignored:
-                _log_warning(
-                    "Ignoring malformed storage zone identifiers: %s"
-                    % ", ".join(ignored)
-                )
-        if not storage_zone_codes:
-            defaults = DEFAULT_LOCATION_SETTINGS["storage_zone_codes"]
-            storage_zone_codes, _ = normalise_zone_codes(defaults)
-            if not storage_zone_codes:
-                storage_zone_codes = list(defaults)
-
-        area_terms = normalise_upper(
-            data.get("area_terms")
-            or record.area_terms
-            or DEFAULT_LOCATION_SETTINGS["area_terms"]
-        )
-        if not area_terms:
-            area_terms = list(DEFAULT_LOCATION_SETTINGS["area_terms"])
-
-        led_lines = ensure_list(
-            data.get("led_default_lines")
-            or record.led_default_lines
-            or DEFAULT_LOCATION_SETTINGS["led_default_lines"]
-        )
-        if not led_lines:
-            led_lines = list(DEFAULT_LOCATION_SETTINGS["led_default_lines"])
 
         map_center_lat = _coerce_float(
             data.get("map_center_lat"),
@@ -331,11 +266,6 @@ def update_location_settings(data: Dict[str, Any]) -> Dict[str, Any]:
         record.county_name = county_name
         record.state_code = state_code
         record.timezone = timezone_name
-        record.fips_codes = fips_codes
-        record.zone_codes = zone_codes
-        record.storage_zone_codes = storage_zone_codes
-        record.area_terms = area_terms
-        record.led_default_lines = led_lines
         record.map_center_lat = map_center_lat
         record.map_center_lng = map_center_lng
         record.map_default_zoom = map_default_zoom
@@ -343,10 +273,49 @@ def update_location_settings(data: Dict[str, Any]) -> Dict[str, Any]:
         db.session.add(record)
         db.session.commit()
 
-        _location_settings_cache = _prepare_settings_dict(record.to_dict())
-        set_location_timezone(_location_settings_cache["timezone"])
+        # Handle alert filter fields if any are present
+        has_filter_fields = any(
+            key in data
+            for key in ["fips_codes", "zone_codes", "storage_zone_codes", "area_terms"]
+        )
+        if has_filter_fields:
+            from .alert_filtering import update_alert_filter_settings
+            filter_data = {
+                k: v for k, v in data.items()
+                if k in ["fips_codes", "zone_codes", "storage_zone_codes", "area_terms"]
+            }
+            update_alert_filter_settings(filter_data)
 
-        return _prepare_settings_dict(_location_settings_cache)
+        # Handle led_default_lines if present
+        if "led_default_lines" in data:
+            try:
+                from app_utils.location_settings import ensure_list
+                from .models import HardwareSettings
+
+                led_lines = ensure_list(
+                    data.get("led_default_lines") or DEFAULT_LOCATION_SETTINGS["led_default_lines"]
+                )
+                if not led_lines:
+                    led_lines = list(DEFAULT_LOCATION_SETTINGS["led_default_lines"])
+
+                hw_record = HardwareSettings.query.first()
+                if not hw_record:
+                    hw_record = HardwareSettings(id=1)
+                hw_record.led_default_lines = led_lines
+                db.session.add(hw_record)
+                db.session.commit()
+            except Exception as exc:  # pragma: no cover - defensive
+                db.session.rollback()
+                _log_warning(f"Could not persist led_default_lines to hardware_settings: {exc}")
+
+        _location_settings_cache = None
+        # Compute the fresh merged dict inline; we still hold the location lock
+        # so we cannot call get_location_settings() (non-reentrant lock).
+        result = _load_merged_settings()
+        _location_settings_cache = result
+        set_location_timezone(result["timezone"])
+
+        return _prepare_settings_dict(result)
 
 
 def describe_location_reference(

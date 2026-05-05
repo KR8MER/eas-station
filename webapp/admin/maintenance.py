@@ -777,6 +777,7 @@ def trigger_poll():
 
 @maintenance_bp.route("/admin/location_settings", methods=["GET", "PUT"])
 def admin_location_settings():
+    """GET or update location settings."""
     try:
         if request.method == "GET":
             settings = get_location_settings()
@@ -802,6 +803,25 @@ def admin_location_settings():
     except Exception as exc:
         current_app.logger.error("Error processing location settings update: %s", exc)
         return jsonify({"error": f"Failed to process location settings: {exc}"}), 500
+
+
+@maintenance_bp.route("/admin/alert_filtering", methods=["GET", "POST"])
+def admin_alert_filtering():
+    """GET or update alert filtering settings."""
+    try:
+        from app_core.alert_filtering import get_alert_filter_settings, update_alert_filter_settings
+        
+        if request.method == "GET":
+            settings = get_alert_filter_settings()
+            return jsonify({"settings": settings})
+
+        payload = request.get_json(silent=True) or {}
+        updated = update_alert_filter_settings(payload)
+        return jsonify({"success": "Alert filtering settings updated", "settings": updated})
+    except Exception as exc:
+        current_app.logger.error("Error processing alert filtering update: %s", exc)
+        return jsonify({"error": "Failed to process alert filtering settings"}), 500
+
 
 @maintenance_bp.route("/admin/location_reference", methods=["GET"])
 def admin_location_reference():
