@@ -19,16 +19,19 @@ Repository: https://github.com/KR8MER/eas-station
 
 from __future__ import annotations
 
-"""GPS receiver manager for the Adafruit Ultimate GPS HAT (#2324).
+"""GPS receiver manager for UART NMEA-0183 GPS HATs.
 
 Reads NMEA-0183 sentences from the serial port, parses position and time
 data, and publishes it to Redis for consumption by the web UI and other
 services.
 
-Hardware:
-- Adafruit Ultimate GPS HAT for Raspberry Pi (#2324)
+Hardware (supported by default; any NMEA-0183 UART GPS module will work):
+- Uputronics Raspberry Pi GPS/RTC Expansion Board (u-blox MAX-M8Q,
+  multi-GNSS GPS+GLONASS+Galileo+BeiDou, PPS on BCM 18, DS3231 RTC)
+- Adafruit Ultimate GPS HAT for Raspberry Pi (#2324, MTK3339 GPS,
+  PPS on BCM 4)
 - UART interface: /dev/serial0 (BCM UART), 9600 baud
-- PPS output: GPIO BCM 4 (configurable)
+- PPS output: configurable GPIO BCM pin (default 18 for Uputronics)
 
 Dependencies:
 - pyserial: Serial port I/O

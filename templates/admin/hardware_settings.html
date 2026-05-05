@@ -708,8 +708,10 @@
                                 <label class="form-check-label" for="gps_enabled">Enable GPS Receiver</label>
                             </div>
                             <p class="text-muted small mb-0">
-                                Compatible with the <a href="https://www.adafruit.com/product/2324" target="_blank" rel="noopener">Adafruit Ultimate GPS HAT (#2324)</a>
-                                and other NMEA-0183 serial GPS modules. Provides location data and precision time via PPS.
+                                Compatible with the <a href="https://store.uputronics.com/index.php?route=product/product&amp;product_id=81" target="_blank" rel="noopener">Uputronics Raspberry Pi GPS/RTC Expansion Board</a>
+                                (u-blox MAX-M8Q multi-GNSS, PPS on BCM 18, DS3231 RTC, low-profile stacking header — coexists with I²C OLED) and the
+                                <a href="https://www.adafruit.com/product/2324" target="_blank" rel="noopener">Adafruit Ultimate GPS HAT (#2324)</a>
+                                (PPS on BCM 4). Provides location data and precision time via PPS.
                             </p>
                         </div>
                     </div>
@@ -745,7 +747,7 @@
                                 <div class="col-md-6">
                                     <label for="gps_pps_gpio_pin" class="form-label">PPS GPIO Pin (BCM)</label>
                                     <input type="number" class="form-control" id="gps_pps_gpio_pin" name="gps_pps_gpio_pin" value="{{ settings.gps_pps_gpio_pin }}" min="1" max="27">
-                                    <small class="form-text text-muted">GPIO 4 (BCM) on Adafruit GPS HAT #2324</small>
+                                    <small class="form-text text-muted">BCM 18 on Uputronics GPS/RTC HAT (default); BCM 4 on Adafruit GPS HAT #2324</small>
                                 </div>
                                 <div class="col-md-6">
                                     <label for="gps_min_satellites" class="form-label">Minimum Satellites for Fix</label>
