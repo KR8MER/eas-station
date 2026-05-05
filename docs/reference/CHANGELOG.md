@@ -11,7 +11,7 @@ tracks releases under the 2.x series.
   - `location_settings`: Retains geographic identity (county, state, timezone, map coordinates)
   - `alert_filter_settings`: New table for alert filtering criteria (FIPS codes, zone codes, storage zone codes, area terms)
   - `hardware_settings`: Now includes `led_default_lines` (moved from location_settings)
-- **Admin UI Reorganization**: Split location settings form into separate sections for Location, Alert Filtering, and Hardware (LED Sign)
+- **Admin UI Reorganization**: The admin **Location** subtab has been split into two subtabs: **Location** (county / state / timezone / map defaults) and **Alert Filtering** (FIPS codes, broadcast zones, storage zones, zone lookup, location reference card). The two forms now save independently to `/admin/location_settings` (PUT) and `/admin/alert_filtering` (POST) respectively.
 - **API Changes**: Added new `/admin/alert_filtering` endpoint; existing `/admin/location_settings` endpoint remains backwards compatible
 
 ### Technical Details

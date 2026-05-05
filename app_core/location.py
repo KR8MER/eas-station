@@ -162,9 +162,44 @@ def _coerce_int(value: Any, fallback: int) -> int:
         return fallback
 
 
+def _load_merged_settings() -> Dict[str, Any]:
+    """Build the merged location settings dict from all three tables.
+
+    Caller is responsible for any locking. This function does not touch the cache.
+    """
+    location_record = _ensure_location_settings_record()
+    merged = location_record.to_dict()
+
+    # Merge alert filter settings (fips_codes/zone_codes/storage_zone_codes/area_terms/same_codes)
+    from .alert_filtering import get_alert_filter_settings
+    filter_settings = get_alert_filter_settings()
+    merged.update({
+        "fips_codes": filter_settings.get("fips_codes", []),
+        "zone_codes": filter_settings.get("zone_codes", []),
+        "storage_zone_codes": filter_settings.get("storage_zone_codes", []),
+        "area_terms": filter_settings.get("area_terms", []),
+        "same_codes": filter_settings.get("same_codes", []),
+    })
+
+    # Merge led_default_lines from hardware settings (defensive — table may
+    # not exist in lightweight test fixtures or before migrations have run).
+    try:
+        from .models import HardwareSettings
+        hw_record = HardwareSettings.query.first()
+        if hw_record and getattr(hw_record, "led_default_lines", None):
+            merged["led_default_lines"] = list(hw_record.led_default_lines or [])
+        else:
+            merged["led_default_lines"] = list(DEFAULT_LOCATION_SETTINGS["led_default_lines"])
+    except Exception:  # pragma: no cover - defensive
+        db.session.rollback()
+        merged["led_default_lines"] = list(DEFAULT_LOCATION_SETTINGS["led_default_lines"])
+
+    return _prepare_settings_dict(merged)
+
+
 def get_location_settings(force_reload: bool = False) -> Dict[str, Any]:
     """Get merged location settings from location, alert filter, and hardware tables.
-    
+
     Returns a dictionary with the same shape as before the refactoring for backwards compatibility.
     """
     global _location_settings_cache
@@ -174,30 +209,7 @@ def get_location_settings(force_reload: bool = False) -> Dict[str, Any]:
             _location_settings_cache = None
 
         if _location_settings_cache is None:
-            # Get location record (county, state, timezone, map)
-            location_record = _ensure_location_settings_record()
-            merged = location_record.to_dict()
-            
-            # Merge alert filter settings (fips_codes, zone_codes, storage_zone_codes, area_terms, same_codes)
-            from .alert_filtering import get_alert_filter_settings
-            filter_settings = get_alert_filter_settings()
-            merged.update({
-                "fips_codes": filter_settings.get("fips_codes", []),
-                "zone_codes": filter_settings.get("zone_codes", []),
-                "storage_zone_codes": filter_settings.get("storage_zone_codes", []),
-                "area_terms": filter_settings.get("area_terms", []),
-                "same_codes": filter_settings.get("same_codes", []),
-            })
-            
-            # Merge led_default_lines from hardware settings
-            from .models import HardwareSettings
-            hw_record = HardwareSettings.query.first()
-            if hw_record:
-                merged["led_default_lines"] = list(hw_record.led_default_lines or [])
-            else:
-                merged["led_default_lines"] = list(DEFAULT_LOCATION_SETTINGS["led_default_lines"])
-            
-            _location_settings_cache = _prepare_settings_dict(merged)
+            _location_settings_cache = _load_merged_settings()
             set_location_timezone(_location_settings_cache["timezone"])
         return _prepare_settings_dict(_location_settings_cache)
 
@@ -276,27 +288,34 @@ def update_location_settings(data: Dict[str, Any]) -> Dict[str, Any]:
 
         # Handle led_default_lines if present
         if "led_default_lines" in data:
-            from app_utils.location_settings import ensure_list
-            from .models import HardwareSettings
-            
-            led_lines = ensure_list(
-                data.get("led_default_lines") or DEFAULT_LOCATION_SETTINGS["led_default_lines"]
-            )
-            if not led_lines:
-                led_lines = list(DEFAULT_LOCATION_SETTINGS["led_default_lines"])
-            
-            hw_record = HardwareSettings.query.first()
-            if not hw_record:
-                hw_record = HardwareSettings(id=1)
-            hw_record.led_default_lines = led_lines
-            db.session.add(hw_record)
-            db.session.commit()
+            try:
+                from app_utils.location_settings import ensure_list
+                from .models import HardwareSettings
+
+                led_lines = ensure_list(
+                    data.get("led_default_lines") or DEFAULT_LOCATION_SETTINGS["led_default_lines"]
+                )
+                if not led_lines:
+                    led_lines = list(DEFAULT_LOCATION_SETTINGS["led_default_lines"])
+
+                hw_record = HardwareSettings.query.first()
+                if not hw_record:
+                    hw_record = HardwareSettings(id=1)
+                hw_record.led_default_lines = led_lines
+                db.session.add(hw_record)
+                db.session.commit()
+            except Exception as exc:  # pragma: no cover - defensive
+                db.session.rollback()
+                _log_warning(f"Could not persist led_default_lines to hardware_settings: {exc}")
 
         _location_settings_cache = None
-        result = get_location_settings(force_reload=True)
+        # Compute the fresh merged dict inline; we still hold the location lock
+        # so we cannot call get_location_settings() (non-reentrant lock).
+        result = _load_merged_settings()
+        _location_settings_cache = result
         set_location_timezone(result["timezone"])
 
-        return result
+        return _prepare_settings_dict(result)
 
 
 def describe_location_reference(
