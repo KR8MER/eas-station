@@ -1068,12 +1068,14 @@ function updateToneFieldVisibility() {
     const isFreeform = (v) => v !== 'none' && v !== 'dtmf' && v !== 'qc2' && v !== 'mdc1200';
     const opCode = document.getElementById('easMdc1200OpCode')?.value || 'ptt_id_pre';
     const mdcVisible = pre === 'mdc1200' || post === 'mdc1200';
+    const isMdcDoublePacket = opCode === 'call_alert' || opCode === 'selective_call';
 
     const visibility = {
         'qc2': pre === 'qc2' || post === 'qc2',
         'dtmf': pre === 'dtmf' || post === 'dtmf',
         'mdc1200': mdcVisible,
         'mdc1200-custom': mdcVisible && opCode === 'custom',
+        'mdc1200-double': mdcVisible && isMdcDoublePacket,
         'pre-duration': isFreeform(pre),
         'post-duration': isFreeform(post),
     };
@@ -1209,6 +1211,11 @@ function populateEasForm(settings) {
     const mdcArgRaw = document.getElementById('easMdc1200ArgRaw');
     if (mdcArgRaw) {
         mdcArgRaw.value = _formatHexByte(settings.mdc1200_arg_raw);
+    }
+    const mdcTargetUnitId = document.getElementById('easMdc1200TargetUnitId');
+    if (mdcTargetUnitId) {
+        const _tv = settings.mdc1200_target_unit_id;
+        mdcTargetUnitId.value = (_tv === null || _tv === undefined) ? '' : String(_tv);
     }
     if (authorizedEventsTextarea) {
         authorizedEventsTextarea.value = (settings.authorized_event_codes || []).join('\n');
@@ -1365,6 +1372,7 @@ async function handleEasSettingsSubmit(e) {
         mdc1200_op_code: document.getElementById('easMdc1200OpCode')?.value || 'ptt_id_pre',
         mdc1200_op_code_raw: (document.getElementById('easMdc1200OpCodeRaw')?.value || '').trim() || null,
         mdc1200_arg_raw: (document.getElementById('easMdc1200ArgRaw')?.value || '').trim() || null,
+        mdc1200_target_unit_id: (document.getElementById('easMdc1200TargetUnitId')?.value || '').trim() || null,
         authorized_event_codes: parseNewlineValues(document.getElementById('easAuthorizedEvents')?.value || ''),
         forwarded_event_codes: (document.getElementById('easForwardedEventCodes')?.value || '')
             .split(',').map(s => s.trim().toUpperCase()).filter(Boolean),

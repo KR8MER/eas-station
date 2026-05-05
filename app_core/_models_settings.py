@@ -660,6 +660,14 @@ class EASSettings(db.Model):
     # Raw 8-bit argument byte (0..255) used when mdc1200_op_code == 'custom'.
     # NULL means "use the symbolic preset".
 
+    mdc1200_target_unit_id = db.Column(db.Integer, nullable=True)
+    # 16-bit MDC1200 *target* subscriber unit ID (1..65535) used by the
+    # double-packet ops (Call Alert, Selective Call) to address a specific
+    # receiver.  NULL or 0 forces single-packet emission, where
+    # mdc1200_unit_id is the only ID on the wire.  For PTT-ID, Emergency,
+    # Request-to-Talk, and Remote Monitor presets this column is ignored
+    # because those op-codes are single-packet by design.
+
     # ========================================================================
     # Authorized Broadcast Areas
     # ========================================================================
@@ -711,6 +719,10 @@ class EASSettings(db.Model):
             "mdc1200_arg_raw": (
                 int(self.mdc1200_arg_raw)
                 if self.mdc1200_arg_raw is not None else None
+            ),
+            "mdc1200_target_unit_id": (
+                int(self.mdc1200_target_unit_id)
+                if self.mdc1200_target_unit_id is not None else None
             ),
             "authorized_fips_codes": list(self.authorized_fips_codes or []),
             "authorized_event_codes": list(self.authorized_event_codes or []),

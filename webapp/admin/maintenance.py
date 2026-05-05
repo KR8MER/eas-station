@@ -1459,6 +1459,7 @@ def _ensure_eas_settings_record() -> EASSettings:
         "ALTER TABLE eas_settings ADD COLUMN IF NOT EXISTS mdc1200_op_code VARCHAR(32) NOT NULL DEFAULT 'ptt_id_pre'",
         "ALTER TABLE eas_settings ADD COLUMN IF NOT EXISTS mdc1200_op_code_raw SMALLINT",
         "ALTER TABLE eas_settings ADD COLUMN IF NOT EXISTS mdc1200_arg_raw SMALLINT",
+        "ALTER TABLE eas_settings ADD COLUMN IF NOT EXISTS mdc1200_target_unit_id INTEGER",
     ]
 
     def _query():
@@ -1612,11 +1613,34 @@ def admin_eas_settings():
         if "mdc1200_op_code" in payload:
             _allowed_ops = {
                 "ptt_id_pre", "ptt_id_post", "emergency",
-                "request_to_talk", "remote_monitor", "custom",
+                "request_to_talk", "remote_monitor",
+                "call_alert", "selective_call",
+                "custom",
             }
             _op = str(payload["mdc1200_op_code"] or "ptt_id_pre").strip().lower()
             if _op in _allowed_ops:
                 settings.mdc1200_op_code = _op
+        if "mdc1200_target_unit_id" in payload:
+            # Target ID for double-packet ops (Call Alert / Selective Call).
+            # Empty string / None / 0 => clear the field, falling back to
+            # single-packet emission with mdc1200_unit_id as the only ID
+            # on the wire.
+            _raw_tid = payload["mdc1200_target_unit_id"]
+            if _raw_tid in (None, ""):
+                settings.mdc1200_target_unit_id = None
+            else:
+                try:
+                    if isinstance(_raw_tid, str):
+                        _tid = int(_raw_tid.strip(), 0)
+                    else:
+                        _tid = int(_raw_tid)
+                except (TypeError, ValueError):
+                    _tid = None
+                if _tid is not None:
+                    if _tid == 0:
+                        settings.mdc1200_target_unit_id = None
+                    elif 1 <= _tid <= 0xFFFF:
+                        settings.mdc1200_target_unit_id = _tid
         for _byte_field in ("mdc1200_op_code_raw", "mdc1200_arg_raw"):
             if _byte_field in payload:
                 _val = payload[_byte_field]
