@@ -606,7 +606,7 @@ class EASSettings(db.Model):
     # Command to play audio (aplay, paplay, etc.)
 
     endec_fingerprint = db.Column(db.Boolean, nullable=False, default=True)
-    # Append 3 × 0xAA trill bytes after each SAME burst to fingerprint this station
+    # Append 3 × 0xA9 trill bytes after each SAME burst to fingerprint this station
 
     # ========================================================================
     # Pre/Post-Alert Signals (system-level pre/post-broadcast signals)

@@ -88,7 +88,7 @@ Each burst is a continuous bit stream made of three concatenated parts:
 ┌──────────────────────────────┬────────────────────────────────┬──────────────────┐
 │  Preamble                    │  ASCII header                  │  Optional ENDEC  │
 │  16 × 0xAB  (= 128 bits)     │  ZCZC-ORG-EEE-PSSCCC+TTTT-     │  fingerprint     │
-│                              │  JJJHHMM-LLLLLLLL-<CR>         │  3 × 0xAA        │
+│                              │  JJJHHMM-LLLLLLLL-<CR>         │  3 × 0xA9        │
 └──────────────────────────────┴────────────────────────────────┴──────────────────┘
 ```
 
@@ -134,12 +134,12 @@ bits** between characters — the bit stream is continuous within the burst.
 ### 2.3 ENDEC fingerprint (optional, EAS Station extension)
 
 Immediately after the carriage return, EAS Station optionally transmits 3
-copies of the byte `0xAA` (binary `10101010`, 24 alternating mark/space
+copies of the byte `0xA9` (binary `10101001`, 24 mostly-alternating mark/space
 pulses, ~46 ms). This is **not** part of the SAME standard — it is a
 common ENDEC-vendor convention for station fingerprinting, used to
 identify the originating ENDEC model from the audio waveform. It is
 controlled by the `endec_fingerprint` setting in `EASSettings` and
-implemented via `encode_terminator_bits(0xAA, 3)`.
+implemented via `encode_terminator_bits(0xA9, 3)`.
 
 Because it falls *after* the SAME `<CR>`, every standards-compliant
 decoder treats it as inter-burst silence/noise and ignores it.

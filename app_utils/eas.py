@@ -1915,14 +1915,14 @@ def _generate_chime(
 
 
 def _generate_station_terminator_samples(amplitude: float, sample_rate: int) -> List[int]:
-    """Generate the KR8MER EAS Station FSK fingerprint: 3 × 0xBB terminator bytes.
+    """Generate the KR8MER EAS Station FSK fingerprint: 3 × 0xA9 terminator bytes.
 
-    0xBB (10111011 binary) is not used by any known ENDEC hardware.  EAS-Tools
+    0xA9 (10101001 binary) is not used by any known ENDEC hardware.  EAS-Tools
     only recognises 0x00 and 0xFF, so third-party decoders gracefully exit
-    post-message mode on the first 0xBB byte (the message is already fully
+    post-message mode on the first 0xA9 byte (the message is already fully
     decoded).  Our own decoder captures the run and reports ENDEC_MODE_EAS_STATION.
     """
-    bits = encode_terminator_bits(0xBB, 3)
+    bits = encode_terminator_bits(0xA9, 3)
     return generate_fsk_samples(
         bits,
         sample_rate=sample_rate,
@@ -2353,7 +2353,7 @@ class EASAudioGenerator:
         
         self.tts_engine = TTSEngine(config, logger, self.sample_rate)
         # Opt-out flag: set config key 'endec_fingerprint' to False to suppress
-        # the 3 × 0xBB terminator bytes appended after each SAME burst.  Defaults to True.
+        # the 3 × 0xA9 trill appended after each SAME burst.  Defaults to True.
         self._fingerprint_enabled = bool(config.get('endec_fingerprint', True))
 
     def _terminator_samples(self, amplitude: float) -> List[int]:
