@@ -332,6 +332,8 @@ class SAMEAudioDecodeResult:
     alert_tones: List[Dict[str, Any]] = field(default_factory=list)
     # DTMF tones detected (serialised dicts from DTMFTone).
     dtmf_tones: List[Dict[str, Any]] = field(default_factory=list)
+    # QC-II two-tone paging sequences (serialised dicts from QC2Tone).
+    qc2_tones: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, object]:
         return {
@@ -353,6 +355,7 @@ class SAMEAudioDecodeResult:
             "voting_applied": self.voting_applied,
             "alert_tones": list(self.alert_tones),
             "dtmf_tones": list(self.dtmf_tones),
+            "qc2_tones": list(self.qc2_tones),
             "mdc1200_packets": [
                 {
                     "opcode": getattr(pkt, "opcode", 0),
