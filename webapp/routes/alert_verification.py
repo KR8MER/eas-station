@@ -151,6 +151,15 @@ class ProgressTracker:
 
     def __init__(self, operation_id: str):
         self.operation_id = operation_id
+        # Cached high-water mark used to clamp ``percent`` to be
+        # monotonically non-decreasing across phases.  Tracked in-process
+        # rather than re-read from disk on every ``update`` call to (a)
+        # avoid an extra open() on the hot path and (b) keep CodeQL's
+        # path-injection analysis happy without an extra sanitisation
+        # step (the on-disk path is already vetted by
+        # _sanitize_operation_id, but the in-memory cache sidesteps the
+        # question entirely).
+        self._max_percent: int = 0
 
     def _write_payload(self, payload: Dict) -> None:
         """Persist a progress payload to disk atomically."""
@@ -175,16 +184,15 @@ class ProgressTracker:
         return int(round(low + (high - low) * ratio))
 
     def _read_existing_percent(self) -> int:
-        path = _progress_path(self.operation_id)
-        try:
-            with open(path, "r", encoding="utf-8") as handle:
-                data = json_loads(handle.read())
-        except (FileNotFoundError, OSError, JSONDecodeError):
-            return 0
-        try:
-            return int(data.get("percent") or 0)
-        except (TypeError, ValueError):
-            return 0
+        """Highest percent reported on this tracker instance so far.
+
+        Used to clamp ``percent`` to be monotonically non-decreasing
+        across phases.  Stored in-memory on the tracker rather than
+        re-read from the on-disk progress file to avoid an extra
+        open() per update and to dodge the static-analysis
+        path-injection question entirely.
+        """
+        return self._max_percent
 
     def update(self, step: str, current: int, total: int, message: str = ""):
         """Update progress for the current operation.
@@ -200,6 +208,7 @@ class ProgressTracker:
             previous = self._read_existing_percent()
             if percent < previous:
                 percent = previous
+            self._max_percent = percent
             progress_data = {
                 "step": step,
                 "current": current,
@@ -668,9 +677,7 @@ def _detect_comprehensive_eas_segments(
         # previewing (store_results=False); narration extraction + WAV
         # encoding is the slowest segment-extraction step and we don't
         # need it for an ephemeral display where buffer already covers it.
-        if not store_results:
-            pass
-        elif detection_result.narration_segments:
+        if store_results and detection_result.narration_segments:
             # Take the first narration segment with speech
             narration = next((seg for seg in detection_result.narration_segments if seg.contains_speech),
                            detection_result.narration_segments[0] if detection_result.narration_segments else None)
