@@ -1066,11 +1066,16 @@ class CAPPoller:
             else:
                 self.logger.info("No alert filter settings found; using defaults")
         except Exception as exc:  # pragma: no cover - defensive logging
-            self.logger.warning("Falling back to default location settings: %s", exc)
+            self.logger.error(
+                "Failed to load location settings from DB: %s. "
+                "Falling back to defaults — rolling back DB session to prevent "
+                "subsequent queries from failing with InFailedSqlTransaction.",
+                exc,
+            )
             try:
                 self.db_session.rollback()
-            except Exception:
-                pass
+            except Exception as rb_exc:
+                self.logger.warning("Session rollback after location settings failure also failed: %s", rb_exc)
 
         if not settings['zone_codes']:
             settings['zone_codes'] = list(defaults['zone_codes'])
@@ -3078,8 +3083,18 @@ class CAPPoller:
         try:
             try:
                 self.db_session.execute(text("SELECT 1 FROM poll_history LIMIT 1"))
-            except Exception:
-                self.logger.debug("poll_history missing; file-only log")
+            except Exception as db_exc:
+                self.logger.error(
+                    "Failed to write poll history — DB session unusable: %s. "
+                    "Poll results will NOT be recorded until the session recovers. "
+                    "Check for earlier errors (e.g. a failed schema query) that "
+                    "left the transaction in an aborted state.",
+                    db_exc,
+                )
+                try:
+                    self.db_session.rollback()
+                except Exception:
+                    pass
                 return
 
             # Shared details fields (config info relevant to every source)
