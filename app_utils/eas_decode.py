@@ -483,16 +483,25 @@ def _goertzel(samples: Iterable[float], sample_rate: int, target_freq: float) ->
 
 def _correlate_and_decode_with_dll(
     samples: List[float], sample_rate: int
-) -> Tuple[List[str], float, List[Tuple[int, int]]]:
+) -> Tuple[List[str], float, List[Tuple[int, int]], List[Tuple[int, int]], bool]:
     """Decode SAME messages using SAMEDemodulatorCore (shared FSK/DLL engine).
 
-    Returns (decoded_messages, average_confidence, burst_sample_ranges).
+    Returns (decoded_messages, average_confidence, burst_sample_ranges,
+             terminator_runs, leading_null_detected).
     Bandpass filtering is handled by the caller before this function is called,
     so the core is instantiated with apply_bandpass=False.
     """
     core = SAMEDemodulatorCore(sample_rate, apply_bandpass=False)
     core.process_samples(np.asarray(samples, dtype=np.float32))
-    return core.messages, core.average_confidence, core.burst_sample_ranges
+    # Flush any open terminator run so the last burst's bytes are included.
+    core._flush_terminator_run()
+    return (
+        core.messages,
+        core.average_confidence,
+        core.burst_sample_ranges,
+        list(core._all_terminator_runs),
+        core._leading_null_detected,
+    )
 
 
 def _extract_bits(
@@ -1485,14 +1494,16 @@ def _decode_from_samples(
     correlation_raw_text: Optional[str] = None
     correlation_confidence: Optional[float] = None
     dll_burst_sample_ranges: List[Tuple[int, int]] = []
+    dll_terminator_runs: List[Tuple[int, int]] = []
+    dll_leading_null: bool = False
 
     # Enable correlation decoder to handle external files with timing variations
     USE_CORRELATION_DECODER = True
 
     if USE_CORRELATION_DECODER:
         try:
-            messages, confidence, dll_burst_sample_ranges = _correlate_and_decode_with_dll(
-                samples, sample_rate
+            messages, confidence, dll_burst_sample_ranges, dll_terminator_runs, dll_leading_null = (
+                _correlate_and_decode_with_dll(samples, sample_rate)
             )
 
             if messages:
@@ -1538,7 +1549,10 @@ def _decode_from_samples(
     # Compute inter-burst gap timing and fingerprint the ENDEC hardware type
     burst_timing_gaps_ms = _compute_burst_timing_gaps_ms(dll_burst_sample_ranges, sample_rate)
     endec_mode = _detect_endec_mode(
-        [h.header for h in (correlation_headers or [])], burst_timing_gaps_ms
+        [h.header for h in (correlation_headers or [])],
+        burst_timing_gaps_ms,
+        dll_terminator_runs or None,
+        dll_leading_null,
     )
 
     # Minimum DLL confidence above which the off-rate baud variants are not

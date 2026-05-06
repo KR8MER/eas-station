@@ -2353,7 +2353,7 @@ class EASAudioGenerator:
         
         self.tts_engine = TTSEngine(config, logger, self.sample_rate)
         # Opt-out flag: set config key 'endec_fingerprint' to False to suppress
-        # the 3 × 0xAA trill appended after each SAME burst.  Defaults to True.
+        # the 3 × 0xBB terminator bytes appended after each SAME burst.  Defaults to True.
         self._fingerprint_enabled = bool(config.get('endec_fingerprint', True))
 
     def _terminator_samples(self, amplitude: float) -> List[int]:

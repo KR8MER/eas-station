@@ -114,6 +114,8 @@ def _same_alert_to_dict(alert: Any) -> Dict[str, Any]:
         'purge_time': purge_time,
         'confidence': getattr(alert, 'confidence', 0.0),
         'timestamp': ts.isoformat() if hasattr(ts, 'isoformat') else str(ts),
+        'endec_mode': getattr(alert, 'endec_mode', 'UNKNOWN') or 'UNKNOWN',
+        'burst_timing_gaps_ms': list(getattr(alert, 'burst_timing_gaps_ms', [])),
     }
 
 
@@ -222,8 +224,22 @@ def _store_received_alert(
             if callsign:
                 duplicate_filters.append(ReceivedEASAlert.callsign == callsign)
 
-        duplicate_exists = db.session.query(ReceivedEASAlert.id).filter(*duplicate_filters).first()
-        if duplicate_exists:
+        duplicate_record = db.session.query(ReceivedEASAlert).filter(*duplicate_filters).first()
+        if duplicate_record:
+            # When burst 1 was stored before terminators arrived, its endec_mode is
+            # UNKNOWN.  Bursts 2 and 3 carry the correct fingerprint once the DLL has
+            # consumed burst 1's terminator bytes.  Promote the stored record here.
+            incoming_endec = full_alert_json.get('endec_mode') or 'UNKNOWN'
+            stored_endec = (duplicate_record.full_alert_data or {}).get('endec_mode') or 'UNKNOWN'
+            if incoming_endec != 'UNKNOWN' and stored_endec == 'UNKNOWN':
+                updated = dict(duplicate_record.full_alert_data or {})
+                updated['endec_mode'] = incoming_endec
+                updated['burst_timing_gaps_ms'] = full_alert_json.get('burst_timing_gaps_ms', [])
+                duplicate_record.full_alert_data = updated
+                try:
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
             logger.info(
                 "Duplicate received alert suppressed within 10-minute window: %s",
                 raw_same_header or event_code,
