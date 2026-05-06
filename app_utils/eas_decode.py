@@ -31,7 +31,7 @@ from datetime import datetime, timedelta, timezone
 from array import array
 from collections import OrderedDict
 from dataclasses import dataclass, field
-from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -326,6 +326,8 @@ class SAMEAudioDecodeResult:
     # True when 2-of-3 majority voting was applied across multiple bursts.
     # False when only a single burst was decoded (no voting possible).
     voting_applied: bool = False
+    # MDC1200 selective-calling packets decoded from the pre/post-alert audio.
+    mdc1200_packets: List[Any] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, object]:
         return {

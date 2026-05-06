@@ -788,6 +788,12 @@ def _detect_comprehensive_eas_segments(
         
         same_result.segments.update(ordered_segments)
 
+        # Lift MDC1200 packets from the detection result into the SAME result
+        # so the template and serialisation path see them without needing
+        # to thread a separate detection_result through every caller.
+        if getattr(detection_result, 'mdc1200_packets', None):
+            same_result.mdc1200_packets = list(detection_result.mdc1200_packets)
+
         return same_result, detection_result
 
     except Exception as e:
