@@ -877,6 +877,7 @@
     <script>
         window.alertSelfTestContext = {{ alert_self_test_context | tojson }};
     </script>
+    <script src="{{ url_for('static', filename='js/alert_verification_preupload.js') }}"></script>
     <script src="{{ url_for('static', filename='js/alert_self_test.js') }}"></script>
     <script src="{{ url_for('static', filename='js/charts/alert_delivery.js') }}"></script>
     <script>
