@@ -253,6 +253,7 @@ try:
         RadioReceiver,
         RadioReceiverStatus,
     )  # type: ignore
+    from app_core.models import AlertFilterSettings  # type: ignore
     from sqlalchemy import Column, Integer, String, DateTime, Text, JSON  # noqa: F401
 
     class PollHistory(db.Model):  # type: ignore
@@ -412,13 +413,19 @@ except Exception as e:
         county_name = Column(String(255))
         state_code = Column(String(2))
         timezone = Column(String(64))
-        zone_codes = Column(JSON)
-        storage_zone_codes = Column(JSON)
-        area_terms = Column(JSON)
         map_center_lat = Column(Float)
         map_center_lng = Column(Float)
         map_default_zoom = Column(Integer)
-        led_default_lines = Column(JSON)
+        updated_at = Column(DateTime, default=utc_now)
+
+    class AlertFilterSettings(Base):
+        __tablename__ = 'alert_filter_settings'
+        __table_args__ = {'extend_existing': True}
+        id = Column(Integer, primary_key=True)
+        fips_codes = Column(JSON)
+        zone_codes = Column(JSON)
+        storage_zone_codes = Column(JSON)
+        area_terms = Column(JSON)
         updated_at = Column(DateTime, default=utc_now)
 
     class EASMessage(Base):
@@ -1035,26 +1042,40 @@ class CAPPoller:
             # This is important when the web app has updated settings
             self.db_session.expire_all()
             record = self.db_session.query(LocationSettings).order_by(LocationSettings.id).first()
+            filter_record = self.db_session.query(AlertFilterSettings).order_by(AlertFilterSettings.id).first()
             if record:
-                fips_codes, _ = sanitize_fips_codes(record.fips_codes or defaults['fips_codes'])
-                storage_zones = getattr(record, 'storage_zone_codes', None)
                 settings.update({
                     'county_name': record.county_name or defaults['county_name'],
                     'state_code': (record.state_code or defaults['state_code']).upper(),
                     'timezone': record.timezone or defaults['timezone'],
-                    'zone_codes': normalise_upper(record.zone_codes) or list(defaults['zone_codes']),
-                    'storage_zone_codes': normalise_upper(storage_zones) if storage_zones else list(defaults['storage_zone_codes']),
-                    'fips_codes': fips_codes or list(defaults['fips_codes']),
-                    'area_terms': normalise_upper(record.area_terms) or list(defaults['area_terms']),
                     'map_center_lat': record.map_center_lat or defaults['map_center_lat'],
                     'map_center_lng': record.map_center_lng or defaults['map_center_lng'],
                     'map_default_zoom': record.map_default_zoom or defaults['map_default_zoom'],
-                    'led_default_lines': ensure_list(record.led_default_lines) or list(defaults['led_default_lines']),
                 })
             else:
                 self.logger.info("No location settings found; using defaults")
+            if filter_record:
+                fips_codes, _ = sanitize_fips_codes(filter_record.fips_codes or defaults['fips_codes'])
+                storage_zones = filter_record.storage_zone_codes
+                settings.update({
+                    'zone_codes': normalise_upper(filter_record.zone_codes) or list(defaults['zone_codes']),
+                    'storage_zone_codes': normalise_upper(storage_zones) if storage_zones else list(defaults['storage_zone_codes']),
+                    'fips_codes': fips_codes or list(defaults['fips_codes']),
+                    'area_terms': normalise_upper(filter_record.area_terms) or list(defaults['area_terms']),
+                })
+            else:
+                self.logger.info("No alert filter settings found; using defaults")
         except Exception as exc:  # pragma: no cover - defensive logging
-            self.logger.warning("Falling back to default location settings: %s", exc)
+            self.logger.error(
+                "Failed to load location settings from DB: %s. "
+                "Falling back to defaults — rolling back DB session to prevent "
+                "subsequent queries from failing with InFailedSqlTransaction.",
+                exc,
+            )
+            try:
+                self.db_session.rollback()
+            except Exception as rb_exc:
+                self.logger.warning("Session rollback after location settings failure also failed: %s", rb_exc)
 
         if not settings['zone_codes']:
             settings['zone_codes'] = list(defaults['zone_codes'])
@@ -3062,8 +3083,18 @@ class CAPPoller:
         try:
             try:
                 self.db_session.execute(text("SELECT 1 FROM poll_history LIMIT 1"))
-            except Exception:
-                self.logger.debug("poll_history missing; file-only log")
+            except Exception as db_exc:
+                self.logger.error(
+                    "Failed to write poll history — DB session unusable: %s. "
+                    "Poll results will NOT be recorded until the session recovers. "
+                    "Check for earlier errors (e.g. a failed schema query) that "
+                    "left the transaction in an aborted state.",
+                    db_exc,
+                )
+                try:
+                    self.db_session.rollback()
+                except Exception:
+                    pass
                 return
 
             # Shared details fields (config info relevant to every source)
@@ -3474,6 +3505,8 @@ class CAPPoller:
                         else 'ERROR'
                     )
 
+            stats['execution_time_ms'] = int((time.time() - start) * 1000)
+
             self.log_poll_history(stats, per_source_stats)
             self.persist_debug_records(poll_run_id, poll_start_utc, stats, debug_records)
             self.cleanup_old_debug_records()
@@ -3482,8 +3515,6 @@ class CAPPoller:
             self._publish_alert_event('alerts:led:refresh', {
                 'timestamp': utc_now()
             })
-
-            stats['execution_time_ms'] = int((time.time() - start) * 1000)
 
             # Log poll summary with location info for debugging
             self.logger.info("═══════════════════════════════════════════════════════════════")
