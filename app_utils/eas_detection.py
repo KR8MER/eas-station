@@ -81,6 +81,9 @@ class EASDetectionResult:
     # DTMF tones detected in the audio
     dtmf_tones: List[Any] = field(default_factory=list)
 
+    # QC-II (Motorola Quick Call II) two-tone paging sequences
+    qc2_tones: List[Any] = field(default_factory=list)
+
     # Raw detection details
     raw_same_result: Optional[SAMEAudioDecodeResult] = None
 
@@ -361,6 +364,20 @@ def detect_eas_from_file(
                     logger.info("DTMF detected: %s (%d tone(s))", digits, len(dtmf_results))
             except Exception as _dtmf_exc:
                 logger.debug("DTMF detection skipped: %s", _dtmf_exc)
+
+            # QC-II (Motorola Quick Call II) two-tone paging — reuse the buffer
+            try:
+                from app_utils.qc2 import detect_qc2 as _detect_qc2
+                qc2_results = _detect_qc2(tone_samples, tone_sample_rate)
+                result.qc2_tones = qc2_results
+                for q in qc2_results:
+                    logger.info(
+                        "QC-II detected: A=%.1f Hz (%.2fs) -> B=%.1f Hz (%.2fs)",
+                        q.tone_a_freq, q.tone_a_duration,
+                        q.tone_b_freq, q.tone_b_duration,
+                    )
+            except Exception as _qc2_exc:
+                logger.debug("QC-II detection skipped: %s", _qc2_exc)
 
             # Step 3: Extract narration if requested
             if detect_narration and tone_results:

@@ -46,7 +46,7 @@
     <div class="card mb-4">
         <div class="card-header bg-transparent d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
             <h5 class="card-title mb-0"><i class="fas fa-wave-square text-primary"></i> SAME Audio Decoder</h5>
-            <span class="text-muted small">Decodes SAME, MDC1200, DTMF, and alert tones.</span>
+            <span class="text-muted small">Decodes SAME, MDC1200, DTMF, QC-II, and alert tones.</span>
         </div>
         <div class="card-body">
             <form method="post" enctype="multipart/form-data" class="row g-3 align-items-end">
@@ -197,6 +197,22 @@
                                 <span class="badge bg-secondary me-1">{{ tone.digit }} · {{ '%.2f'|format(tone.duration_seconds) }}s @ {{ '%.2f'|format(tone.start_seconds) }}s</span>
                             {% endfor %}
                         </div>
+                    </dd>
+                    {% endif %}
+
+                    {# QC-II two-tone paging #}
+                    {% if decode_result.qc2_tones %}
+                    <dt class="col-sm-4">QC-II</dt>
+                    <dd class="col-sm-8">
+                        {% for q in decode_result.qc2_tones %}
+                            <span class="badge bg-primary me-1">
+                                Tone&nbsp;A {{ '%.1f'|format(q.tone_a_freq) }} Hz ({{ '%.2f'|format(q.tone_a_duration) }}s)
+                                &nbsp;→&nbsp;
+                                Tone&nbsp;B {{ '%.1f'|format(q.tone_b_freq) }} Hz ({{ '%.2f'|format(q.tone_b_duration) }}s)
+                                &nbsp;@&nbsp;{{ '%.2f'|format(q.start_seconds) }}s
+                                · {{ '%.0f'|format(q.confidence * 100) }}%
+                            </span>
+                        {% endfor %}
                     </dd>
                     {% endif %}
                 </dl>
