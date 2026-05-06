@@ -938,6 +938,122 @@ def decode_double_packet(frame: Sequence[int]) -> MDC1200Packet:
     )
 
 
+def decode_mdc1200_from_samples(
+    samples,
+    sample_rate: int,
+) -> Optional["MDC1200Packet"]:
+    """Demodulate MDC1200 FFSK from PCM audio and return the decoded packet.
+
+    Runs a Goertzel FSK demodulator at 1200 baud (mark = 1200 Hz,
+    space = 1800 Hz) over the provided samples, searches for the MDC1200
+    preamble + sync word, and returns the decoded packet when found.
+
+    Both single-packet (26-byte) and double-packet (40-byte) frames are
+    tried; double-packet is attempted first when enough bits are available.
+
+    Args:
+        samples: Audio samples as a list of floats or a numpy array.
+            May be int16-range or normalised − 1.0..1.0.
+        sample_rate: Sample rate in Hz.
+
+    Returns:
+        Decoded :class:`MDC1200Packet` on success, ``None`` if no valid
+        MDC1200 frame is found in the audio.
+    """
+    try:
+        sample_list = [float(s) for s in samples]
+    except (TypeError, ValueError):
+        return None
+
+    if len(sample_list) < int(sample_rate / MDC1200_BAUD) * 4:
+        return None
+
+    # FSK demodulate: for each bit period, compare Goertzel power at the
+    # mark (1200 Hz) and space (1800 Hz) carriers.  A stronger mark power
+    # means the transmitted bit was 1; stronger space power means 0.
+    samples_per_bit = sample_rate / MDC1200_BAUD
+    coeff_mark = 2.0 * math.cos(2.0 * math.pi * MDC1200_MARK_FREQ / sample_rate)
+    coeff_space = 2.0 * math.cos(2.0 * math.pi * MDC1200_SPACE_FREQ / sample_rate)
+
+    raw_bits: List[int] = []
+    carry = 0.0
+    index = 0
+    while index < len(sample_list):
+        total = samples_per_bit + carry
+        chunk_len = int(total)
+        carry = total - chunk_len
+        end = index + chunk_len
+        if end > len(sample_list):
+            break
+        chunk = sample_list[index:end]
+
+        s1_m, s2_m = 0.0, 0.0
+        for x in chunk:
+            s = x + coeff_mark * s1_m - s2_m
+            s2_m, s1_m = s1_m, s
+        p_mark = s2_m ** 2 + s1_m ** 2 - coeff_mark * s1_m * s2_m
+        if p_mark < 0.0:
+            p_mark = 0.0
+
+        s1_s, s2_s = 0.0, 0.0
+        for x in chunk:
+            s = x + coeff_space * s1_s - s2_s
+            s2_s, s1_s = s1_s, s
+        p_space = s2_s ** 2 + s1_s ** 2 - coeff_space * s1_s * s2_s
+        if p_space < 0.0:
+            p_space = 0.0
+
+        raw_bits.append(1 if p_mark >= p_space else 0)
+        index = end
+
+    # Single packet = 26 bytes = 208 bits; double packet = 40 bytes = 320 bits.
+    _SINGLE_BITS = (len(MDC1200_PREAMBLE) + len(MDC1200_SYNC) + _FEC_K * 2 + len(MDC1200_POST_PREAMBLE)) * 8
+    _DOUBLE_BITS = (len(MDC1200_PREAMBLE) + len(MDC1200_SYNC) + _FEC_K * 2 + len(MDC1200_INTER_PACKET_PREAMBLE) + _FEC_K * 2) * 8
+
+    if len(raw_bits) < _SINGLE_BITS:
+        return None
+
+    sync_result = find_sync_in_bits(raw_bits)
+    if sync_result is None:
+        return None
+    bit_offset, polarity = sync_result
+
+    frame_bits = raw_bits[bit_offset:]
+    if polarity:
+        frame_bits = [b ^ 1 for b in frame_bits]
+
+    def _bits_to_bytes(blist: List[int], n: int) -> Optional[List[int]]:
+        if len(blist) < n * 8:
+            return None
+        result = []
+        for i in range(0, n * 8, 8):
+            byte_val = 0
+            for j in range(8):
+                byte_val = (byte_val << 1) | (blist[i + j] & 1)
+            result.append(byte_val)
+        return result
+
+    _SINGLE_BYTES = _SINGLE_BITS // 8
+    _DOUBLE_BYTES = _DOUBLE_BITS // 8
+
+    if len(frame_bits) >= _DOUBLE_BITS:
+        double_frame = _bits_to_bytes(frame_bits, _DOUBLE_BYTES)
+        if double_frame is not None:
+            try:
+                return decode_double_packet(double_frame)
+            except MDC1200DecodeError:
+                pass
+
+    single_frame = _bits_to_bytes(frame_bits, _SINGLE_BYTES)
+    if single_frame is not None:
+        try:
+            return decode_packet(single_frame)
+        except MDC1200DecodeError:
+            pass
+
+    return None
+
+
 def find_sync_in_bits(bits: Sequence[int]) -> Optional[Tuple[int, int]]:
     """Search a recovered FFSK bit stream for the MDC1200 preamble + sync.
 
@@ -1009,4 +1125,5 @@ __all__ = [
     "decode_packet",
     "decode_double_packet",
     "find_sync_in_bits",
+    "decode_mdc1200_from_samples",
 ]

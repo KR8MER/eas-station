@@ -75,6 +75,9 @@ class EASDetectionResult:
     sample_rate: int = 0
     duration_seconds: float = 0.0
 
+    # MDC1200 selective-calling packets found in the audio (pre/post-alert chime)
+    mdc1200_packets: List[Any] = field(default_factory=list)
+
     # Raw detection details
     raw_same_result: Optional[SAMEAudioDecodeResult] = None
 
@@ -230,6 +233,41 @@ def detect_eas_from_file(
             result.eom_position = eom_segment.start_sample
 
         logger.info(f"SAME detection: {len(same_result.headers)} headers, confidence: {same_result.bit_confidence:.2%}")
+
+        # Step 1b: MDC1200 detection — scan the full audio for pre/post-alert
+        # MDC1200 selective-calling packets.  Uses the buffer or composite segment
+        # already in memory from the SAME decode to avoid re-reading the file.
+        try:
+            from app_utils.mdc1200 import decode_mdc1200_from_samples as _decode_mdc
+            mdc_audio: Optional[np.ndarray] = None
+            mdc_rate: int = same_result.sample_rate or 16000
+            for seg_key in ("buffer", "composite"):
+                seg = same_result.segments.get(seg_key)
+                if not (seg and getattr(seg, "wav_bytes", None)):
+                    continue
+                try:
+                    with wave.open(io.BytesIO(seg.wav_bytes), "rb") as wf:
+                        _sr = wf.getframerate()
+                        _sw = wf.getsampwidth()
+                        frames = wf.readframes(wf.getnframes())
+                    dtype = np.int16 if _sw == 2 else (np.int32 if _sw == 4 else None)
+                    if dtype is None:
+                        continue
+                    mdc_audio = np.frombuffer(frames, dtype=dtype).astype(np.float32) / float(2 ** (_sw * 8 - 1))
+                    mdc_rate = _sr
+                    break
+                except Exception:
+                    continue
+            if mdc_audio is not None:
+                pkt = _decode_mdc(mdc_audio, mdc_rate)
+                if pkt is not None:
+                    result.mdc1200_packets.append(pkt)
+                    logger.info(
+                        "MDC1200 packet decoded: unit_id=0x%04X op=0x%02X arg=0x%02X crc_ok=%s",
+                        pkt.unit_id, pkt.opcode, pkt.arg, pkt.crc_ok,
+                    )
+        except Exception as e:
+            logger.debug("MDC1200 detection skipped: %s", e)
 
     except Exception as e:
         logger.error(f"Error decoding SAME headers: {e}")

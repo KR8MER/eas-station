@@ -184,7 +184,7 @@ ENDEC_MODE_NWS_BMH = "NWS_BMH"         # NWS Broadcast Message Handler 2016+
 ENDEC_MODE_SAGE_3644 = "SAGE_DIGITAL_3644"
 ENDEC_MODE_SAGE_1822 = "SAGE_ANALOG_1822"
 ENDEC_MODE_TRILITHIC = "TRILITHIC"      # Trilithic EASyPLUS (~868 ms inter-burst gap)
-ENDEC_MODE_EAS_STATION = "EAS_STATION"  # KR8MER EAS Station (3 × 0xAA trill fingerprint)
+ENDEC_MODE_EAS_STATION = "EAS_STATION"  # KR8MER EAS Station (3 × 0xBB terminator fingerprint)
 
 # Inter-burst gap windows (ms) for mode fingerprinting
 _ENDEC_GAP_TRILITHIC = (820, 920)   # 868 ms nominal

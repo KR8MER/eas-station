@@ -12,6 +12,7 @@
         'SAGE_DIGITAL_3644': ('primary',   'SAGE Digital 3644'),
         'SAGE_ANALOG_1822':  ('primary',   'SAGE Analog 1822'),
         'TRILITHIC':         ('secondary', 'Trilithic EASyPLUS'),
+        'EAS_STATION':       ('success',   'KR8MER EAS Station'),
     } %}
     {% set info = endec_labels.get(mode, ('secondary', mode)) %}
     <span class="badge bg-{{ info[0] }}">{{ info[1] }}</span>
@@ -121,6 +122,27 @@
                         <dd class="col-sm-8">{{ '%.2f'|format(decode_result.duration_seconds) }} seconds @ {{ decode_result.sample_rate }} Hz</dd>
                         <dt class="col-sm-4">ENDEC hardware</dt>
                         <dd class="col-sm-8">{{ endec_badge(decode_result.endec_mode) }}</dd>
+                        {% if decode_result.mdc1200_packets %}
+                        <dt class="col-sm-4">MDC1200</dt>
+                        <dd class="col-sm-8">
+                            {% for pkt in decode_result.mdc1200_packets %}
+                            {% set op_names = {
+                                0x01: 'PTT-ID Pre',  0x00: 'PTT-ID Post',
+                                0x40: 'Emergency',   0x35: 'Request to Talk / Selective Call',
+                                0x11: 'Remote Monitor', 0x63: 'Call Alert'
+                            } %}
+                            <span class="badge bg-success me-1">
+                                Unit {{ '0x%04X'|format(pkt.unit_id) }}
+                                &nbsp;·&nbsp;
+                                {{ op_names.get(pkt.opcode, '0x%02X'|format(pkt.opcode)) }}
+                                {% if pkt.target_unit_id is not none %}
+                                    → {{ '0x%04X'|format(pkt.target_unit_id) }}
+                                {% endif %}
+                                {% if not pkt.crc_ok %}<span class="text-warning"> ⚠ CRC</span>{% endif %}
+                            </span>
+                            {% endfor %}
+                        </dd>
+                        {% endif %}
                     </dl>
 
                     {% if decode_result.raw_text %}
@@ -143,7 +165,9 @@
                                             'eom': 'End-of-Message (EOM)',
                                             'buffer': 'Buffer/Lead Audio',
                                             'composite': 'Complete Alert (Composite)',
-                                            'message': 'Message (Legacy)'
+                                            'message': 'Message (Legacy)',
+                                            'pre_chime': 'Pre-Alert Signal (MDC1200/chime)',
+                                            'post_chime': 'Post-Alert Signal (MDC1200/chime)'
                                         } %}
                                         <strong>{{ segment_labels.get(name, name|capitalize) }}</strong>
                                         · {{ '%.2f'|format(segment.duration_seconds) }}s
