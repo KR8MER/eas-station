@@ -3486,6 +3486,8 @@ class CAPPoller:
                         else 'ERROR'
                     )
 
+            stats['execution_time_ms'] = int((time.time() - start) * 1000)
+
             self.log_poll_history(stats, per_source_stats)
             self.persist_debug_records(poll_run_id, poll_start_utc, stats, debug_records)
             self.cleanup_old_debug_records()
@@ -3494,8 +3496,6 @@ class CAPPoller:
             self._publish_alert_event('alerts:led:refresh', {
                 'timestamp': utc_now()
             })
-
-            stats['execution_time_ms'] = int((time.time() - start) * 1000)
 
             # Log poll summary with location info for debugging
             self.logger.info("═══════════════════════════════════════════════════════════════")
