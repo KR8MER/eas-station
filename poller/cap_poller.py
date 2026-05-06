@@ -2705,6 +2705,22 @@ class CAPPoller:
             # Auto-forward to air chain: generate SAME header with station
             # originator, build audio, activate GPIO, and play broadcast.
             # This is fully automatic with zero operator intervention.
+            #
+            # Reload the EAS config from the database before each forwarding
+            # decision so admin UI changes (broadcast_enabled, originator,
+            # forwarded_event_codes, etc.) take effect without a service
+            # restart.  Without this refresh, alerts the operator has just
+            # de-selected from the auto-forward allowlist would continue to
+            # be rebroadcast until the cap-poller process is restarted.
+            try:
+                self.eas_config = load_eas_config(db_session=self.db_session)
+            except Exception as exc:
+                self.logger.warning(
+                    "Failed to refresh EAS config before forwarding %s; "
+                    "using cached config: %s",
+                    new_alert.identifier, exc,
+                )
+
             try:
                 forward_result = auto_forward_cap_alert(
                     cap_alert=new_alert,
