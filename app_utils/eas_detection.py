@@ -78,6 +78,9 @@ class EASDetectionResult:
     # MDC1200 selective-calling packets found in the audio (pre/post-alert chime)
     mdc1200_packets: List[Any] = field(default_factory=list)
 
+    # DTMF tones detected in the audio
+    dtmf_tones: List[Any] = field(default_factory=list)
+
     # Raw detection details
     raw_same_result: Optional[SAMEAudioDecodeResult] = None
 
@@ -347,6 +350,17 @@ def detect_eas_from_file(
             result.has_nws_tone = any(t.tone_type == "nws" for t in tone_results)
 
             logger.info(f"Tone detection: EBS={result.has_ebs_tone}, NWS={result.has_nws_tone}")
+
+            # DTMF detection — reuse the same PCM buffer
+            try:
+                from app_utils.dtmf import detect_dtmf as _detect_dtmf
+                dtmf_results = _detect_dtmf(tone_samples, tone_sample_rate)
+                result.dtmf_tones = dtmf_results
+                if dtmf_results:
+                    digits = ''.join(t.digit for t in dtmf_results)
+                    logger.info("DTMF detected: %s (%d tone(s))", digits, len(dtmf_results))
+            except Exception as _dtmf_exc:
+                logger.debug("DTMF detection skipped: %s", _dtmf_exc)
 
             # Step 3: Extract narration if requested
             if detect_narration and tone_results:

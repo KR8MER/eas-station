@@ -328,6 +328,10 @@ class SAMEAudioDecodeResult:
     voting_applied: bool = False
     # MDC1200 selective-calling packets decoded from the pre/post-alert audio.
     mdc1200_packets: List[Any] = field(default_factory=list)
+    # EBS/NWS alert tones detected (serialised dicts from ToneDetectionResult).
+    alert_tones: List[Dict[str, Any]] = field(default_factory=list)
+    # DTMF tones detected (serialised dicts from DTMFTone).
+    dtmf_tones: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, object]:
         return {
@@ -347,6 +351,8 @@ class SAMEAudioDecodeResult:
             "burst_timing_gaps_ms": self.burst_timing_gaps_ms,
             "burst_count": self.burst_count,
             "voting_applied": self.voting_applied,
+            "alert_tones": list(self.alert_tones),
+            "dtmf_tones": list(self.dtmf_tones),
         }
 
     @property
