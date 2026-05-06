@@ -46,6 +46,7 @@ EAS Station is a software-defined drop-in replacement for commercial EAS encoder
 - **Text-to-Speech voice-over** — eSpeak TTS narrates alert details automatically
 - **Manual EAS print** — compose and broadcast custom SAME messages for drills and tests
 - **Raw SAME parser** — paste any `ZCZC-…` string for instant field-by-field decode and validation
+- **MDC1200 selective calling** — optional 1200-baud FFSK pre/post signaling for forwarding EAS audio over Motorola-style two-way radio systems. Supports PTT-ID, Emergency, Request-to-Talk, Remote Monitor, Call Alert, and Voice Selective Call (unmute a specific target subscriber), plus DTMF tone bursts. See [Alert Signals guide](docs/guides/ALERT_SIGNALS.md).
 
 ### 🗺️ PostGIS Geographic Intelligence
 - **County/state spatial filtering** — alerts matched to your exact geographic footprint
