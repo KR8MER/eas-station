@@ -239,19 +239,37 @@ def auto_forward_cap_alert(
     fips_codes = _get_fips_from_cap_alert(cap_alert, raw_json)
     event_code = _resolve_event_code(cap_alert)
 
-    # Event code filtering: if forwarded_event_codes is configured, only forward
-    # events in that allowlist. An empty list means forward all event types.
+    # Event code filtering: forward only events the operator has selected.
+    # An empty allowlist means "forward all event types" — except RWT, which is
+    # always suppressed unless the operator explicitly opts in by adding 'RWT'
+    # to forwarded_event_codes.  This keeps the CAP path consistent with the
+    # OTA path (auto_forward_ota_alert) so test activations are not silently
+    # rebroadcast just because the allowlist is empty.
     forwarded_event_codes = eas_config.get('forwarded_event_codes') or []
-    if forwarded_event_codes and event_code:
-        allowed = {str(c).strip().upper() for c in forwarded_event_codes if str(c).strip()}
-        if event_code.upper() not in allowed:
-            reason = (
-                f"Event '{event_code}' is not in the configured forwarding allowlist"
-            )
-            log.info("Auto-forward skipped for %s: %s", result['identifier'], reason)
-            result['reason'] = reason
-            _update_cap_forwarding_status(cap_alert, db_session, False, reason, log)
-            return result
+    allowed = {str(c).strip().upper() for c in forwarded_event_codes if str(c).strip()}
+    event_code_upper = event_code.upper() if event_code else ''
+
+    if event_code_upper == 'RWT' and 'RWT' not in allowed:
+        reason = (
+            "RWT not forwarded — add 'RWT' to forwarded_event_codes to relay test activations"
+        )
+        log.info("Auto-forward skipped for %s: %s", result['identifier'], reason)
+        result['reason'] = reason
+        _update_cap_forwarding_status(cap_alert, db_session, False, reason, log)
+        return result
+
+    if allowed and event_code_upper not in allowed:
+        # An unresolved event code (event_code_upper == '') with a configured
+        # allowlist must also be rejected: we cannot prove the alert is on the
+        # allowlist, so refuse to forward rather than silently bypassing the
+        # operator's filter.
+        reason = (
+            f"Event '{event_code or 'UNKNOWN'}' is not in the configured forwarding allowlist"
+        )
+        log.info("Auto-forward skipped for %s: %s", result['identifier'], reason)
+        result['reason'] = reason
+        _update_cap_forwarding_status(cap_alert, db_session, False, reason, log)
+        return result
 
     # VTEC-aware action gating — only applies when VTEC was parsed at ingest
     vtec_action: Optional[str] = getattr(cap_alert, 'vtec_action', None)
