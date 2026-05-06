@@ -1067,6 +1067,10 @@ class CAPPoller:
                 self.logger.info("No alert filter settings found; using defaults")
         except Exception as exc:  # pragma: no cover - defensive logging
             self.logger.warning("Falling back to default location settings: %s", exc)
+            try:
+                self.db_session.rollback()
+            except Exception:
+                pass
 
         if not settings['zone_codes']:
             settings['zone_codes'] = list(defaults['zone_codes'])
