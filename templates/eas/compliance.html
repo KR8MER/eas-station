@@ -13,13 +13,119 @@
         </div>
         <div class="btn-group" role="group">
             <a class="btn btn-outline-primary" href="{{ url_for('compliance_export_csv', days=window_days) }}">
-                <i class="fas fa-file-csv"></i> Download CSV
+                <i class="fas fa-file-csv"></i> Activity Log CSV
             </a>
             <a class="btn btn-outline-primary" href="{{ url_for('compliance_export_pdf', days=window_days) }}">
-                <i class="fas fa-file-pdf"></i> Download PDF
+                <i class="fas fa-file-pdf"></i> Activity Log PDF
             </a>
         </div>
     </div>
+
+    <div class="card mb-4 border-primary">
+        <div class="card-header bg-primary bg-opacity-10 d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
+            <h5 class="card-title mb-0"><i class="fas fa-file-contract text-primary"></i> FCC Compliance Reports</h5>
+            <small class="text-muted">PDF (printable) and CSV per category, scoped to the selected window.</small>
+        </div>
+        <div class="card-body">
+            <form method="get" class="row g-2 align-items-end mb-3" id="fcc-report-form">
+                <div class="col-sm-3">
+                    <label class="form-label small mb-1" for="fcc-start">Start date</label>
+                    <input type="date" class="form-control form-control-sm" id="fcc-start" name="start"
+                        value="{{ (dashboard.window_start.strftime('%Y-%m-%d')) if dashboard.window_start else '' }}">
+                </div>
+                <div class="col-sm-3">
+                    <label class="form-label small mb-1" for="fcc-end">End date</label>
+                    <input type="date" class="form-control form-control-sm" id="fcc-end" name="end"
+                        value="{{ (dashboard.window_end.strftime('%Y-%m-%d')) if dashboard.window_end else '' }}">
+                </div>
+                <div class="col-sm-3">
+                    <label class="form-label small mb-1" for="fcc-days">Or last N days</label>
+                    <input type="number" min="1" max="365" class="form-control form-control-sm" id="fcc-days" name="days"
+                        value="{{ window_days }}">
+                </div>
+                <div class="col-sm-3 text-end">
+                    <small class="text-muted d-block">Date range overrides "last N days".</small>
+                </div>
+            </form>
+
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th scope="col">Report</th>
+                            <th scope="col">Description</th>
+                            <th scope="col" class="text-end">Export</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% set reports = [
+                            ('received',  'Received Alerts',  'All alerts decoded by audio monitors during the window.'),
+                            ('forwarded', 'Forwarded Alerts', 'Received alerts that were forwarded to broadcast.'),
+                            ('ignored',   'Ignored Alerts',   'Received alerts not forwarded (with reason).'),
+                            ('initiated', 'Initiated Alerts', 'Auto-relayed and manually-initiated broadcasts.'),
+                            ('weekly',    'Weekly Summary',   'Per-week rollup of received / forwarded / ignored / tests.'),
+                            ('monthly',   'Monthly Summary',  'Per-month rollup of received / forwarded / ignored / tests.'),
+                        ] %}
+                        {% for kind, label, desc in reports %}
+                            <tr>
+                                <td><strong>{{ label }}</strong></td>
+                                <td class="text-muted small">{{ desc }}</td>
+                                <td class="text-end">
+                                    <a class="btn btn-sm btn-outline-primary report-link"
+                                       data-kind="{{ kind }}" data-fmt="pdf"
+                                       href="{{ url_for('compliance_report_export', report_kind=kind, fmt='pdf', days=window_days) }}">
+                                        <i class="fas fa-file-pdf"></i> PDF
+                                    </a>
+                                    <a class="btn btn-sm btn-outline-secondary report-link"
+                                       data-kind="{{ kind }}" data-fmt="csv"
+                                       href="{{ url_for('compliance_report_export', report_kind=kind, fmt='csv', days=window_days) }}">
+                                        <i class="fas fa-file-csv"></i> CSV
+                                    </a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (function () {
+            var startInput = document.getElementById('fcc-start');
+            var endInput = document.getElementById('fcc-end');
+            var daysInput = document.getElementById('fcc-days');
+            var links = document.querySelectorAll('.report-link');
+
+            function buildQuery() {
+                var params = new URLSearchParams();
+                var start = (startInput && startInput.value) || '';
+                var end = (endInput && endInput.value) || '';
+                if (start && end) {
+                    params.set('start', start);
+                    params.set('end', end);
+                } else if (daysInput && daysInput.value) {
+                    params.set('days', daysInput.value);
+                }
+                return params.toString();
+            }
+
+            function rebuild() {
+                var qs = buildQuery();
+                links.forEach(function (link) {
+                    var kind = link.getAttribute('data-kind');
+                    var fmt = link.getAttribute('data-fmt');
+                    var base = '/admin/compliance/report/' + kind + '.' + fmt;
+                    link.href = qs ? base + '?' + qs : base;
+                });
+            }
+
+            [startInput, endInput, daysInput].forEach(function (el) {
+                if (el) { el.addEventListener('change', rebuild); el.addEventListener('input', rebuild); }
+            });
+            rebuild();
+        })();
+    </script>
 
     {% set relay = dashboard.received_vs_relayed or {} %}
     {% set weekly = dashboard.weekly_tests or {} %}

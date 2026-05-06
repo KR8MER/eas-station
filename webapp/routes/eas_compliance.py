@@ -21,16 +21,20 @@ from __future__ import annotations
 
 """Routes powering the EAS compliance dashboard and exports."""
 
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 from flask import Flask, Response, current_app, render_template, request
 
 from app_core.auth.decorators import require_auth, require_role
 from app_core.eas_storage import (
+    REPORT_BUILDERS,
     collect_compliance_dashboard_data,
     collect_compliance_log_entries,
     generate_compliance_log_csv,
     generate_compliance_log_pdf,
+    generate_report_csv,
+    generate_report_pdf,
+    resolve_report_window,
 )
 from app_core.system_health import (
     collect_audio_path_status,
@@ -169,6 +173,69 @@ def register(app: Flask, logger) -> None:
             f"attachment; filename=eas_compliance_{window_days}d.pdf"
         )
         return response
+
+
+    def _resolve_report_window():
+        """Pick the report window from start/end query args, or fall back to days."""
+        start_raw = request.args.get("start", type=str)
+        end_raw = request.args.get("end", type=str)
+
+        def _parse(value):
+            if not value:
+                return None
+            try:
+                # Accept either YYYY-MM-DD or full ISO timestamps.
+                if len(value) == 10:
+                    parsed = datetime.strptime(value, "%Y-%m-%d")
+                else:
+                    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError:
+                return None
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            return parsed
+
+        start_dt = _parse(start_raw)
+        end_dt = _parse(end_raw)
+        if start_dt or end_dt:
+            return resolve_report_window(start=start_dt, end=end_dt)
+        return resolve_report_window(days=_resolve_window_days())
+
+    def _make_response(report, fmt: str):
+        slug = report.get("slug", "report")
+        if fmt == "csv":
+            payload = generate_report_csv(report)
+            response = Response(payload, mimetype="text/csv")
+            filename = f"eas_{slug}.csv"
+        else:
+            payload = generate_report_pdf(report)
+            response = Response(payload, mimetype="application/pdf")
+            filename = f"eas_{slug}.pdf"
+        response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
+
+    @app.route("/admin/compliance/report/<report_kind>.<fmt>")
+    @require_auth
+    @require_role("Admin", "Operator", "Analyst")
+    def compliance_report_export(report_kind: str, fmt: str):
+        if fmt not in {"pdf", "csv"}:
+            return Response("Unsupported format.", status=404, mimetype="text/plain")
+        builder = REPORT_BUILDERS.get(report_kind)
+        if builder is None:
+            return Response("Unknown report.", status=404, mimetype="text/plain")
+        try:
+            window_start, window_end = _resolve_report_window()
+            report = builder(window_start=window_start, window_end=window_end)
+            return _make_response(report, fmt)
+        except Exception as exc:  # pragma: no cover - defensive fallback
+            route_logger.error(
+                "Failed to generate %s report (%s): %s", report_kind, fmt, exc
+            )
+            return Response(
+                "Unable to generate report. See logs for details.",
+                status=500,
+                mimetype="text/plain",
+            )
 
 
 __all__ = ["register"]
