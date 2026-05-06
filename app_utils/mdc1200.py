@@ -135,6 +135,7 @@ References
 """
 
 import math
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence, Tuple
 
 
@@ -658,6 +659,333 @@ def resolve_op_preset(name: str) -> Tuple[int, int]:
     return MDC1200_OP_PRESETS.get(key, MDC1200_OP_PRESETS[MDC1200_DEFAULT_PRESET])
 
 
+# ---------------------------------------------------------------------------
+# Receive-side decoder
+# ---------------------------------------------------------------------------
+#
+# The decoder is the byte-level inverse of :func:`encode_packet` /
+# :func:`encode_double_packet`.  It is written for two purposes:
+#
+#   1. **Round-trip verification** — encode a frame, decode it, confirm the
+#      op/arg/unit_id/CRC come back unchanged.  This is what the test suite
+#      uses to lock the encoder against silent regressions.
+#   2. **Reception of clean frames** — when the FFSK demodulator hands us
+#      a byte-aligned buffer (as produced by, e.g., a future SDR receive
+#      path), we can verify the frame's integrity end-to-end.
+#
+# The decoder validates the preamble, the 5-byte sync word, FEC parity, and
+# the CRC-16.  FEC is verified by *re-encoding* the recovered information
+# block and comparing the seven parity bytes; this catches every
+# bit-error-free frame and flags any frame with bit errors loudly.  A true
+# Viterbi soft-decision decoder (which would *correct* small numbers of
+# bit errors rather than just flag them) is intentionally out of scope
+# for this module — it is a meaningful chunk of code on its own and
+# belongs alongside an FFSK demodulator, not next to the encoder.
+#
+# The bit-level :func:`find_sync_in_bits` helper supports the realistic
+# receiver case where the demodulator emits a flat bit stream that is not
+# byte-aligned to the start of the frame.
+
+
+class MDC1200DecodeError(ValueError):
+    """Raised when an MDC1200 frame fails structural validation.
+
+    Structural problems (wrong frame length, mangled preamble, mangled
+    sync word) are unrecoverable and indicate the buffer is not an
+    MDC1200 frame at all.  In contrast, FEC and CRC failures are
+    reported via the ``fec_ok`` / ``crc_ok`` fields on
+    :class:`MDC1200Packet` so callers can decide their own tolerance.
+    """
+
+
+@dataclass(frozen=True)
+class MDC1200Packet:
+    """Decoded MDC1200 frame.
+
+    Attributes:
+        opcode: 8-bit op-code from packet 1 (e.g. 0x01 PTT-ID pre).
+        arg: 8-bit argument from packet 1 (e.g. 0x80).
+        unit_id: 16-bit subscriber unit ID from packet 1.  In double-
+            packet mode this is the *source* (transmitting) ID.
+        status: Status byte from packet 1.
+        crc_ok: ``True`` if the CRC-16 over packet 1's info bytes
+            matches the value carried on the wire.
+        fec_ok: ``True`` if re-encoding the recovered info bytes
+            reproduces the parity bytes exactly (lossless reception).
+        target_unit_id: For double-packet frames (Call Alert /
+            Selective Call), the 16-bit target subscriber ID from
+            packet 2.  ``None`` for single-packet frames.
+        crc2_ok: CRC validity for packet 2 (double-packet only).
+        fec2_ok: FEC validity for packet 2 (double-packet only).
+    """
+
+    opcode: int
+    arg: int
+    unit_id: int
+    status: int
+    crc_ok: bool
+    fec_ok: bool
+    target_unit_id: Optional[int] = None
+    crc2_ok: Optional[bool] = None
+    fec2_ok: Optional[bool] = None
+
+    @property
+    def is_double_packet(self) -> bool:
+        """True if this frame carried a packet-2 target ID."""
+        return self.target_unit_id is not None
+
+    @property
+    def all_checks_pass(self) -> bool:
+        """True if every CRC and FEC check in the frame validated."""
+        if not (self.crc_ok and self.fec_ok):
+            return False
+        if self.is_double_packet:
+            return bool(self.crc2_ok) and bool(self.fec2_ok)
+        return True
+
+
+def _de_xor_modulate(buf: Sequence[int]) -> List[int]:
+    """Inverse of :func:`_xor_modulate`.
+
+    Walks the on-air bytes MSB-first per byte, with the previous-bit
+    state carried across the entire buffer (matching the encoder).  For
+    each on-air bit ``t``, the recovered bit is
+    ``new_bit = prev_bit ^ (t ^ 1)`` — the ``^ 1`` undoes the byte-level
+    inversion the encoder applies after the differential step.
+    """
+    out: List[int] = []
+    prev_bit = 0
+    for byte in buf:
+        b = (byte ^ 0xFF) & 0xFF
+        decoded = 0
+        for bit_num in range(7, -1, -1):
+            transitioned = (b >> bit_num) & 1
+            new_bit = prev_bit ^ transitioned
+            decoded |= new_bit << bit_num
+            prev_bit = new_bit
+        out.append(decoded & 0xFF)
+    return out
+
+
+def _de_interleave(payload: Sequence[int]) -> List[int]:
+    """Inverse of :func:`_interleave`.
+
+    The encoder writes input bit ``s = 7*j + k`` (with ``j ∈ 0..15``,
+    ``k ∈ 0..6``) to interleaved position ``p = j + 16*k``, then packs
+    interleaved bits MSB-first per output byte.  This function reverses
+    that mapping: unpack interleaved bits MSB-first, recover source
+    bits via ``s = 7*(p mod 16) + (p // 16)``, then repack source bits
+    LSB-first per byte (matching the FEC encoder's input convention).
+    """
+    if len(payload) != _FEC_K * 2:
+        raise ValueError(f"MDC1200 de-interleaver expects {_FEC_K * 2} bytes")
+
+    total_bits = _FEC_K * 2 * 8  # 112
+    interleaved_bits: List[int] = [0] * total_bits
+    j = 0
+    for byte in payload:
+        for bit_num in range(7, -1, -1):
+            interleaved_bits[j] = (byte >> bit_num) & 1
+            j += 1
+
+    source_bits: List[int] = [0] * total_bits
+    for p in range(total_bits):
+        s = 7 * (p % 16) + (p // 16)
+        source_bits[s] = interleaved_bits[p]
+
+    out: List[int] = []
+    for byte_idx in range(_FEC_K * 2):
+        b = 0
+        for bit_num in range(8):
+            if source_bits[byte_idx * 8 + bit_num]:
+                b |= 1 << bit_num
+        out.append(b & 0xFF)
+    return out
+
+
+def _decode_info_block(payload14: Sequence[int]) -> Tuple[List[int], bool, bool]:
+    """De-interleave + FEC-verify + CRC-check a 14-byte payload half.
+
+    Returns ``(info_bytes, fec_ok, crc_ok)``.  ``info_bytes`` is always
+    the seven recovered information bytes in source order, even when
+    parity does not match — the caller may still decide the frame is
+    usable (e.g. the CRC over bytes 0..3 may pass even when one of the
+    parity bytes is corrupt).
+    """
+    deinter = _de_interleave(payload14)
+    info = deinter[:_FEC_K]
+    expected = _apply_fec(list(info))
+    fec_ok = list(deinter) == expected
+    crc_expected = compute_crc(info[:4])
+    crc_actual = info[4] | (info[5] << 8)
+    crc_ok = (crc_expected == crc_actual)
+    return list(info), fec_ok, crc_ok
+
+
+def decode_packet(frame: Sequence[int]) -> MDC1200Packet:
+    """Decode a 26-byte MDC1200 single packet.
+
+    Inverse of :func:`encode_packet`.  Validates the 3-byte preamble,
+    5-byte sync word, and 4-byte post-preamble; recovers the 7-byte
+    information block via de-interleave + FEC re-verification; and
+    checks the CRC-16 over the op/arg/unit-ID bytes.
+
+    Args:
+        frame: 26-byte on-air buffer (3 preamble + 5 sync + 14 payload
+            + 4 post-preamble), exactly as produced by
+            :func:`encode_packet`.
+
+    Returns:
+        :class:`MDC1200Packet` with op-code, argument, unit ID, status,
+        and ``crc_ok`` / ``fec_ok`` flags populated.
+
+    Raises:
+        MDC1200DecodeError: If the buffer is the wrong length or if any
+            of preamble / sync / post-preamble does not match the
+            canonical MDC1200 pattern.  CRC and FEC failures do *not*
+            raise — they are reported via the result fields.
+    """
+    expected_len = len(MDC1200_PREAMBLE) + len(MDC1200_SYNC) + (_FEC_K * 2) + len(
+        MDC1200_POST_PREAMBLE
+    )
+    if len(frame) != expected_len:
+        raise MDC1200DecodeError(
+            f"single-packet frame must be {expected_len} bytes, got {len(frame)}"
+        )
+
+    pre_mod = _de_xor_modulate(frame)
+    pre_end = len(MDC1200_PREAMBLE)
+    sync_end = pre_end + len(MDC1200_SYNC)
+    pay_end = sync_end + _FEC_K * 2
+
+    if tuple(pre_mod[:pre_end]) != MDC1200_PREAMBLE:
+        raise MDC1200DecodeError(
+            f"preamble mismatch: {tuple(pre_mod[:pre_end])!r}"
+        )
+    if tuple(pre_mod[pre_end:sync_end]) != MDC1200_SYNC:
+        raise MDC1200DecodeError(
+            f"sync word mismatch: {tuple(pre_mod[pre_end:sync_end])!r}"
+        )
+    if tuple(pre_mod[pay_end:]) != MDC1200_POST_PREAMBLE:
+        raise MDC1200DecodeError(
+            f"post-preamble mismatch: {tuple(pre_mod[pay_end:])!r}"
+        )
+
+    info, fec_ok, crc_ok = _decode_info_block(pre_mod[sync_end:pay_end])
+    return MDC1200Packet(
+        opcode=info[0],
+        arg=info[1],
+        unit_id=(info[2] << 8) | info[3],
+        status=info[6],
+        crc_ok=crc_ok,
+        fec_ok=fec_ok,
+    )
+
+
+def decode_double_packet(frame: Sequence[int]) -> MDC1200Packet:
+    """Decode a 40-byte MDC1200 double packet (Call Alert / Selective Call).
+
+    Inverse of :func:`encode_double_packet`.  Validates the preamble,
+    sync word, and 4-byte inter-packet preamble; both 14-byte payload
+    halves are de-interleaved, FEC-verified, and CRC-checked
+    independently.  Source ID, target ID, op-code, and arg are all
+    returned in a single :class:`MDC1200Packet`.
+    """
+    expected_len = (
+        len(MDC1200_PREAMBLE)
+        + len(MDC1200_SYNC)
+        + (_FEC_K * 2)
+        + len(MDC1200_INTER_PACKET_PREAMBLE)
+        + (_FEC_K * 2)
+    )
+    if len(frame) != expected_len:
+        raise MDC1200DecodeError(
+            f"double-packet frame must be {expected_len} bytes, got {len(frame)}"
+        )
+
+    pre_mod = _de_xor_modulate(frame)
+    pre_end = len(MDC1200_PREAMBLE)
+    sync_end = pre_end + len(MDC1200_SYNC)
+    pay1_end = sync_end + _FEC_K * 2
+    inter_end = pay1_end + len(MDC1200_INTER_PACKET_PREAMBLE)
+
+    if tuple(pre_mod[:pre_end]) != MDC1200_PREAMBLE:
+        raise MDC1200DecodeError(
+            f"preamble mismatch: {tuple(pre_mod[:pre_end])!r}"
+        )
+    if tuple(pre_mod[pre_end:sync_end]) != MDC1200_SYNC:
+        raise MDC1200DecodeError(
+            f"sync word mismatch: {tuple(pre_mod[pre_end:sync_end])!r}"
+        )
+    if tuple(pre_mod[pay1_end:inter_end]) != MDC1200_INTER_PACKET_PREAMBLE:
+        raise MDC1200DecodeError(
+            f"inter-packet preamble mismatch: "
+            f"{tuple(pre_mod[pay1_end:inter_end])!r}"
+        )
+
+    info1, fec1_ok, crc1_ok = _decode_info_block(pre_mod[sync_end:pay1_end])
+    info2, fec2_ok, crc2_ok = _decode_info_block(pre_mod[inter_end:])
+    return MDC1200Packet(
+        opcode=info1[0],
+        arg=info1[1],
+        unit_id=(info1[2] << 8) | info1[3],
+        status=info1[6],
+        crc_ok=crc1_ok,
+        fec_ok=fec1_ok,
+        target_unit_id=(info2[0] << 8) | info2[1],
+        crc2_ok=crc2_ok,
+        fec2_ok=fec2_ok,
+    )
+
+
+def find_sync_in_bits(bits: Sequence[int]) -> Optional[Tuple[int, int]]:
+    """Search a recovered FFSK bit stream for the MDC1200 preamble + sync.
+
+    Real receivers don't get byte-aligned input — the FFSK demodulator
+    emits a flat bit stream whose alignment to the start of a frame is
+    unknown.  This helper differentially decodes the entire stream once
+    (with ``prev_bit = 0``) and slides the canonical 64-bit
+    preamble + sync pattern across every bit offset.  Because changing
+    the initial polarity inverts every decoded bit, we also check
+    against the bitwise-inverted pattern; a hit there means the
+    recovered stream needs its polarity flipped before further parsing.
+
+    Args:
+        bits: Iterable of 0/1 ints representing recovered FFSK bits in
+            transmission order.
+
+    Returns:
+        ``(bit_offset, polarity)`` tuple — ``bit_offset`` is the index
+        of the first preamble bit in the input stream, ``polarity`` is
+        ``0`` if the stream decoded directly or ``1`` if the inverse
+        pattern matched (i.e. caller should flip subsequent bits).
+        Returns ``None`` if no sync is found.
+    """
+    bit_list = [int(b) & 1 for b in bits]
+    sync_pattern = list(MDC1200_PREAMBLE) + list(MDC1200_SYNC)
+    expected = bytes_to_bits_msb(sync_pattern)
+    needed = len(expected)
+    if len(bit_list) < needed:
+        return None
+
+    decoded: List[int] = []
+    prev_bit = 0
+    for t in bit_list:
+        new_bit = prev_bit ^ (t ^ 1)
+        decoded.append(new_bit)
+        prev_bit = new_bit
+
+    inverted = [b ^ 1 for b in expected]
+    last_offset = len(decoded) - needed
+    for offset in range(last_offset + 1):
+        window = decoded[offset : offset + needed]
+        if window == expected:
+            return (offset, 0)
+        if window == inverted:
+            return (offset, 1)
+    return None
+
+
 __all__ = [
     "MDC1200_BAUD",
     "MDC1200_MARK_FREQ",
@@ -676,4 +1004,9 @@ __all__ = [
     "bytes_to_bits_msb",
     "generate_mdc1200_samples",
     "resolve_op_preset",
+    "MDC1200DecodeError",
+    "MDC1200Packet",
+    "decode_packet",
+    "decode_double_packet",
+    "find_sync_in_bits",
 ]

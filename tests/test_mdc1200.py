@@ -49,12 +49,19 @@ from app_utils.mdc1200 import (  # noqa: E402
     MDC1200_PREAMBLE,
     MDC1200_SPACE_FREQ,
     MDC1200_SYNC,
+    MDC1200DecodeError,
+    MDC1200Packet,
     _apply_fec,
+    _de_interleave,
+    _de_xor_modulate,
     _interleave,
     _xor_modulate,
     bytes_to_bits_msb,
     compute_crc,
+    decode_double_packet,
+    decode_packet,
     encode_packet,
+    find_sync_in_bits,
     generate_mdc1200_samples,
     resolve_op_preset,
 )
@@ -133,21 +140,7 @@ def test_xor_modulate_zero_buffer_emits_steady_mark():
 def test_xor_modulate_round_trip():
     """Differential decode must recover the original buffer."""
     original = [0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0]
-    encoded = _xor_modulate(original)
-
-    # Decode: invert bytes, then turn each 0/1 transition flag back into bits.
-    decoded = []
-    prev_bit = 0
-    for byte in encoded:
-        b = byte ^ 0xFF
-        out = 0
-        for bit_num in range(7, -1, -1):
-            transitioned = (b >> bit_num) & 1
-            new_bit = prev_bit ^ transitioned
-            out |= new_bit << bit_num
-            prev_bit = new_bit
-        decoded.append(out)
-    assert decoded == original
+    assert _de_xor_modulate(_xor_modulate(original)) == original
 
 
 # ---------------------------------------------------------------------------
@@ -161,18 +154,8 @@ def test_encode_packet_length_and_prefix_structure():
 
     # The preamble + sync prefix passes through differential modulation as
     # well, but their *decoded* values must still match the canonical
-    # MDC1200 preamble/sync constants.  Decode the first 8 bytes:
-    decoded = []
-    prev_bit = 0
-    for byte in frame[: 3 + 5]:
-        b = byte ^ 0xFF
-        out = 0
-        for bit_num in range(7, -1, -1):
-            transitioned = (b >> bit_num) & 1
-            new_bit = prev_bit ^ transitioned
-            out |= new_bit << bit_num
-            prev_bit = new_bit
-        decoded.append(out)
+    # MDC1200 preamble/sync constants.
+    decoded = _de_xor_modulate(frame[: 3 + 5])
     assert decoded[:3] == list(MDC1200_PREAMBLE)
     assert decoded[3:8] == list(MDC1200_SYNC)
 
@@ -183,17 +166,7 @@ def test_encode_packet_includes_trailing_post_preamble():
     is what real Motorola subscribers expect as a clean tail-of-frame
     marker before they commit a decoded ID to their call list."""
     frame = encode_packet(0x01, 0x80, 0x1234)
-    decoded = []
-    prev_bit = 0
-    for byte in frame:
-        b = byte ^ 0xFF
-        out = 0
-        for bit_num in range(7, -1, -1):
-            transitioned = (b >> bit_num) & 1
-            new_bit = prev_bit ^ transitioned
-            out |= new_bit << bit_num
-            prev_bit = new_bit
-        decoded.append(out)
+    decoded = _de_xor_modulate(frame)
     assert decoded[-4:] == [0x00, 0x00, 0x00, 0x00]
 
 
@@ -248,18 +221,7 @@ def test_double_packet_frame_length_and_structure():
     frame = encode_double_packet(0x63, 0x85, 0x1111, 0x2222)
     assert len(frame) == 3 + 5 + 14 + 4 + 14 == 40
 
-    # Decode the prefix to verify preamble + sync round-trip
-    decoded = []
-    prev_bit = 0
-    for byte in frame:
-        b = byte ^ 0xFF
-        out = 0
-        for bit_num in range(7, -1, -1):
-            transitioned = (b >> bit_num) & 1
-            new_bit = prev_bit ^ transitioned
-            out |= new_bit << bit_num
-            prev_bit = new_bit
-        decoded.append(out)
+    decoded = _de_xor_modulate(frame)
     assert decoded[:3] == list(MDC1200_PREAMBLE)
     assert decoded[3:8] == list(MDC1200_SYNC)
     # 4-byte inter-packet preamble after payload 1 (offsets 22..25)
@@ -472,3 +434,204 @@ def test_generate_mdc1200_samples_contains_both_carriers():
     # off-band frequency.
     assert p_mark > 10 * p_offband
     assert p_space > 10 * p_offband
+
+
+# ---------------------------------------------------------------------------
+# Receive-side decoder
+# ---------------------------------------------------------------------------
+
+def test_de_xor_modulate_inverts_xor_modulate_for_arbitrary_buffers():
+    """The de-XOR-modulator must round-trip every byte buffer exactly,
+    including buffers that exercise the cross-byte ``prev_bit`` carry."""
+    cases = [
+        [0x00] * 8,                        # steady mark tone
+        [0xFF] * 8,                        # alternating-bit input
+        [0x55, 0xAA, 0x55, 0xAA],          # high-transition density
+        list(range(256)),                  # every byte value once
+    ]
+    for buf in cases:
+        assert _de_xor_modulate(_xor_modulate(buf)) == buf
+
+
+def test_de_interleave_inverts_interleave():
+    """The de-interleaver must recover the source-order bytes for any
+    14-byte interleaver input — the encoder uses a 16×7 distance-16
+    spreading and the inverse mapping must agree on every bit."""
+    payloads = [
+        list(range(14)),
+        [0x00] * 14,
+        [0xFF] * 14,
+        [0x01, 0x80, 0x12, 0x34, 0x2E, 0x3E, 0x00,
+         0x65, 0x80, 0xA8, 0x62, 0xDD, 0x88, 0x08],  # the documented vector
+    ]
+    for payload in payloads:
+        assert _de_interleave(_interleave(list(payload))) == payload
+
+
+def test_de_interleave_rejects_wrong_length():
+    with pytest.raises(ValueError):
+        _de_interleave([0] * 5)
+
+
+def test_decode_packet_round_trips_known_vector():
+    """``encode_packet`` → ``decode_packet`` must recover the original
+    op/arg/unit_id/status with both CRC and FEC validating cleanly."""
+    frame = encode_packet(0x01, 0x80, 0x1234, status=0x00)
+    pkt = decode_packet(frame)
+    assert pkt.opcode == 0x01
+    assert pkt.arg == 0x80
+    assert pkt.unit_id == 0x1234
+    assert pkt.status == 0x00
+    assert pkt.crc_ok is True
+    assert pkt.fec_ok is True
+    assert pkt.is_double_packet is False
+    assert pkt.all_checks_pass is True
+
+
+@pytest.mark.parametrize(
+    "preset",
+    [
+        "ptt_id_pre", "ptt_id_post", "emergency",
+        "request_to_talk", "remote_monitor",
+    ],
+)
+def test_decode_packet_round_trips_every_single_packet_preset(preset):
+    """Every single-packet op-code preset must round-trip through
+    encode → decode unchanged."""
+    op, arg = resolve_op_preset(preset)
+    frame = encode_packet(op, arg, 0xBEEF, status=0x00)
+    pkt = decode_packet(frame)
+    assert pkt.opcode == op
+    assert pkt.arg == arg
+    assert pkt.unit_id == 0xBEEF
+    assert pkt.crc_ok and pkt.fec_ok
+
+
+def test_decode_packet_recovers_full_hex_unit_id():
+    """4-digit hex IDs that exercise A–F must round-trip — this is the
+    range Motorola CPS uses for unit IDs."""
+    frame = encode_packet(0xAB, 0xCD, 0xDEAD, status=0xEF)
+    pkt = decode_packet(frame)
+    assert pkt.opcode == 0xAB
+    assert pkt.arg == 0xCD
+    assert pkt.unit_id == 0xDEAD
+    assert pkt.status == 0xEF
+
+
+def test_decode_double_packet_round_trips():
+    """``encode_double_packet`` → ``decode_double_packet`` must recover
+    both the source ID (in packet 1) and the target ID (in packet 2),
+    with CRC and FEC validating on both halves."""
+    from app_utils.mdc1200 import encode_double_packet
+    frame = encode_double_packet(0x63, 0x85, 0x1111, 0x2222)
+    pkt = decode_double_packet(frame)
+    assert pkt.opcode == 0x63
+    assert pkt.arg == 0x85
+    assert pkt.unit_id == 0x1111
+    assert pkt.target_unit_id == 0x2222
+    assert pkt.is_double_packet is True
+    assert pkt.crc_ok and pkt.fec_ok
+    assert pkt.crc2_ok and pkt.fec2_ok
+    assert pkt.all_checks_pass is True
+
+
+def test_decode_packet_flags_corrupted_payload_byte():
+    """A bit error in the interleaved payload must trip the CRC and/or
+    FEC checks without raising — structural validation stays clean so
+    callers can decide their own tolerance.
+
+    Differential modulation propagates a single on-air bit error
+    through every subsequent bit, so corrupting an on-air byte directly
+    would also mangle the post-preamble.  Instead we corrupt the
+    *pre-modulation* payload byte and re-modulate; that produces an
+    on-air frame whose differential decode yields a payload-only
+    corruption with preamble / sync / post-preamble all intact."""
+    frame = encode_packet(0x01, 0x80, 0x1234)
+    pre_mod = _de_xor_modulate(frame)
+    # Byte 10 sits at index 2 of the 14-byte interleaved payload region
+    # (offset 3 preamble + 5 sync + 2).  A single-bit flip there will
+    # both trip the FEC re-encode and (after de-interleaving) likely
+    # corrupt one of the info bytes the CRC covers.
+    pre_mod[10] ^= 0x10
+    frame_corrupt = _xor_modulate(pre_mod)
+    pkt = decode_packet(frame_corrupt)
+    assert pkt.is_double_packet is False
+    assert not pkt.all_checks_pass
+
+
+def test_decode_packet_rejects_wrong_length():
+    with pytest.raises(MDC1200DecodeError):
+        decode_packet([0x00] * 25)
+    with pytest.raises(MDC1200DecodeError):
+        decode_packet([0x00] * 27)
+
+
+def test_decode_packet_rejects_corrupted_sync_word():
+    """If the sync word is mangled the buffer is not an MDC1200 frame
+    at all — the decoder must raise rather than return a soft-bad
+    result, since the rest of the buffer cannot be trusted to align."""
+    frame = list(encode_packet(0x01, 0x80, 0x1234))
+    # Sync word lives at on-air bytes 3..7; corrupt one of them after
+    # differential modulation.  Flipping one bit in the modulated byte
+    # propagates to subsequent bits via the cross-byte prev_bit carry,
+    # so the decoded sync word will diverge from the canonical pattern.
+    frame[5] ^= 0xFF
+    with pytest.raises(MDC1200DecodeError):
+        decode_packet(frame)
+
+
+def test_decode_double_packet_rejects_wrong_length():
+    with pytest.raises(MDC1200DecodeError):
+        decode_double_packet([0x00] * 39)
+
+
+def test_find_sync_in_bits_locates_known_frame_at_offset_zero():
+    """A freshly-encoded frame, serialised MSB-first, must match sync at
+    bit offset 0 with polarity 0 (the encoder starts with prev_bit=0)."""
+    frame = encode_packet(0x01, 0x80, 0x1234)
+    bits = bytes_to_bits_msb(frame)
+    result = find_sync_in_bits(bits)
+    assert result is not None
+    offset, polarity = result
+    assert offset == 0
+    assert polarity == 0
+
+
+def test_find_sync_in_bits_locates_frame_after_leading_garbage():
+    """Real receivers see noise before the first frame.  Prepend some
+    arbitrary bits and confirm the search still locks onto the frame."""
+    frame = encode_packet(0x01, 0x80, 0x1234)
+    frame_bits = bytes_to_bits_msb(frame)
+    # 17 bits of arbitrary garbage so the offset is *not* a multiple of 8 —
+    # this exercises the bit-level (rather than byte-level) sync search.
+    garbage = [1, 0, 1, 1, 0, 0, 1, 0, 1, 1, 1, 0, 0, 0, 1, 0, 1]
+    stream = garbage + frame_bits
+    result = find_sync_in_bits(stream)
+    assert result is not None
+    offset, _polarity = result
+    assert offset == len(garbage)
+
+
+def test_find_sync_in_bits_returns_none_for_too_short_stream():
+    assert find_sync_in_bits([0, 1] * 10) is None
+
+
+def test_find_sync_in_bits_returns_none_for_random_bits():
+    """A stream of pseudo-random bits with no embedded frame must not
+    produce a spurious sync hit."""
+    import random
+    rng = random.Random(0xC0FFEE)
+    noise = [rng.randint(0, 1) for _ in range(2000)]
+    assert find_sync_in_bits(noise) is None
+
+
+def test_mdc1200_packet_all_checks_pass_requires_double_packet_halves():
+    """A double-packet result must require *both* halves to validate —
+    a corrupt second half cannot be silently masked by a clean first
+    half."""
+    pkt = MDC1200Packet(
+        opcode=0x63, arg=0x85, unit_id=0x1111, status=0,
+        crc_ok=True, fec_ok=True,
+        target_unit_id=0x2222, crc2_ok=False, fec2_ok=True,
+    )
+    assert pkt.all_checks_pass is False
