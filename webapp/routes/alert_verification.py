@@ -390,6 +390,10 @@ def _deserialize_decode_result(data: Dict[str, object]) -> SAMEAudioDecodeResult
             wav_bytes=wav_bytes,
         )
 
+    mdc1200_packets = [
+        SimpleNamespace(**pkt) for pkt in (data.get("mdc1200_packets") or [])
+    ]
+
     return SAMEAudioDecodeResult(
         raw_text=data.get("raw_text", ""),
         headers=headers,
@@ -404,6 +408,7 @@ def _deserialize_decode_result(data: Dict[str, object]) -> SAMEAudioDecodeResult
         endec_mode=str(data.get("endec_mode") or ENDEC_MODE_UNKNOWN),
         alert_tones=list(data.get("alert_tones") or []),
         dtmf_tones=list(data.get("dtmf_tones") or []),
+        mdc1200_packets=mdc1200_packets,
     )
 
 def _extract_audio_segment_wav(audio_path: str, start_sample: int, end_sample: int, sample_rate: int) -> bytes:

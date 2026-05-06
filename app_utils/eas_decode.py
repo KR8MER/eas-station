@@ -353,6 +353,20 @@ class SAMEAudioDecodeResult:
             "voting_applied": self.voting_applied,
             "alert_tones": list(self.alert_tones),
             "dtmf_tones": list(self.dtmf_tones),
+            "mdc1200_packets": [
+                {
+                    "opcode": getattr(pkt, "opcode", 0),
+                    "arg": getattr(pkt, "arg", 0),
+                    "unit_id": getattr(pkt, "unit_id", 0),
+                    "status": getattr(pkt, "status", 0),
+                    "crc_ok": bool(getattr(pkt, "crc_ok", False)),
+                    "fec_ok": bool(getattr(pkt, "fec_ok", False)),
+                    "target_unit_id": getattr(pkt, "target_unit_id", None),
+                    "crc2_ok": getattr(pkt, "crc2_ok", None),
+                    "fec2_ok": getattr(pkt, "fec2_ok", None),
+                }
+                for pkt in self.mdc1200_packets
+            ],
         }
 
     @property
