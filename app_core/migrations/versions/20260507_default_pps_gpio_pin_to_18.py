@@ -11,7 +11,7 @@ hardware_settings rows seeded after the upgrade pick BCM 18. Existing rows
 keep whatever pin the operator already configured — they are not rewritten.
 
 Revision ID: 20260507_default_pps_gpio_pin_to_18
-Revises: 20260506_add_signal_audio_to_activations
+Revises: 20260506_merge_mdc1200_target_and_signal_audio
 Create Date: 2026-05-07
 """
 
@@ -22,7 +22,7 @@ import sqlalchemy as sa
 
 
 revision = "20260507_default_pps_gpio_pin_to_18"
-down_revision = "20260506_add_signal_audio_to_activations"
+down_revision = "20260506_merge_mdc1200_target_and_signal_audio"
 branch_labels = None
 depends_on = None
 
