@@ -55,8 +55,8 @@ def encode_terminator_bits(byte_val: int, count: int) -> List[int]:
     SAME burst, before the inter-burst silence.  Encoding matches the standard
     SAME data encoding per FCC 47 CFR §11.31 (LSB first, no framing bits).
 
-    Example — EAS Station fingerprint (3 × 0xAA = 10101010):
-        bits: 0,1,0,1,0,1,0,1 × 3  →  24 alternating space/mark pulses
+    Example — EAS Station fingerprint (3 × 0xA9 = 10101001):
+        bits: 1,0,0,1,0,1,0,1 × 3  →  24 mostly-alternating space/mark pulses
         sound: rapid trill at ~521 Hz modulation rate (~46 ms)
     """
     bits: List[int] = []

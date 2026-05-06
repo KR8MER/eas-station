@@ -184,7 +184,7 @@ ENDEC_MODE_NWS_BMH = "NWS_BMH"         # NWS Broadcast Message Handler 2016+
 ENDEC_MODE_SAGE_3644 = "SAGE_DIGITAL_3644"
 ENDEC_MODE_SAGE_1822 = "SAGE_ANALOG_1822"
 ENDEC_MODE_TRILITHIC = "TRILITHIC"      # Trilithic EASyPLUS (~868 ms inter-burst gap)
-ENDEC_MODE_EAS_STATION = "EAS_STATION"  # KR8MER EAS Station (3 × 0xAA trill fingerprint)
+ENDEC_MODE_EAS_STATION = "EAS_STATION"  # KR8MER EAS Station (3 × 0xA9 trill fingerprint)
 
 # Inter-burst gap windows (ms) for mode fingerprinting
 _ENDEC_GAP_TRILITHIC = (820, 920)   # 868 ms nominal
@@ -253,7 +253,7 @@ def detect_endec_mode(
        - SAGE ANALOG 1822:           1 × 0xFF per burst
        - SAGE DIGITAL 3644:          3 × 0xFF per burst  (+ leading 0x00 on 1st burst)
        - DEFAULT/DASDEC, TRILITHIC:  no terminator bytes
-       - KR8MER EAS Station:         3 × 0xBB per burst
+       - KR8MER EAS Station:         3 × 0xA9 per burst
 
     2. **Leading 0x00 before preamble** — SAGE DIGITAL 3644 prepends one 0x00
        byte before the 16-byte preamble on the first burst.
@@ -316,8 +316,8 @@ def detect_endec_mode(
                 else:
                     votes[ENDEC_MODE_SAGE_1822] += 1.5
                     votes[ENDEC_MODE_SAGE_3644] += 1.5
-            elif byte_val == 0xBB:
-                # 0xBB terminator → KR8MER EAS Station.
+            elif byte_val == 0xA9:
+                # 0xA9 terminator → KR8MER EAS Station.
                 # Not used by any known ENDEC; EAS-Tools ignores it entirely.
                 if run_length >= 3:
                     votes[ENDEC_MODE_EAS_STATION] += 4.0
@@ -683,7 +683,7 @@ class SAMEDemodulatorCore:
                     # FCC Section 11.31 encoding appends a trailing \r after the header,
                     # which must be ignored here to avoid prematurely exiting
                     # post-message capture before ENDEC terminator bytes arrive.
-                    if byte_val in (0x00, 0xFF, 0xBB):
+                    if byte_val in (0x00, 0xFF, 0xA9):
                         if self._terminator_byte is None:
                             self._terminator_byte = byte_val
                             self._terminator_run = 1
