@@ -7,13 +7,14 @@ tracks releases under the 2.x series.
 ## [Unreleased]
 
 ### Changed
-- **EAS Station fingerprint trill changed from `0xBB` to `0xA9`**: The post-burst
+- **EAS Station fingerprint trill changed to `0xA9`**: The post-burst
   ENDEC fingerprint byte emitted by `_generate_station_terminator_samples()` (3
   copies appended after each SAME burst when `endec_fingerprint` is enabled) has
-  been updated from `0xBB` (10111011) to `0xA9` (10101001). The demodulator
-  `detect_endec_mode()` voting and post-message terminator capture updated to match
-  (`0xA9` now triggers `ENDEC_MODE_EAS_STATION`). All related comments and
-  documentation updated.
+  been updated to `0xA9` (10101001). The previous functional value in code was
+  `0xBB` (introduced in 2.71.54); several comments and documentation files still
+  referenced the original `0xAA` value (from 2.71.51) and have been corrected.
+  The demodulator `detect_endec_mode()` voting and post-message terminator capture
+  updated to match (`0xA9` now triggers `ENDEC_MODE_EAS_STATION`).
 
 ### Documentation
 - **`.env` deprecation cleanup in user-facing docs**: Several docs still instructed users to edit `.env` for settings that have been migrated to the database (configured via the admin UI). Updated to reflect that polling, EAS broadcast, notifications, and application-logging settings now live in dedicated DB tables (per the `migrated_vars` list in `webapp/admin/environment.py`); only boot-time infrastructure (`SECRET_KEY`, `DATABASE_URL`, hostnames, paths) belongs in `.env`. Files updated: `docs/troubleshooting/POLLING_NOT_WORKING.md` (no longer tells users to grep / edit `.env` for `POLL_INTERVAL_SEC` / `IPAWS_CAP_FEED_URLS` / `NOAA_USER_AGENT` — points at Settings → Poller and the `poller_settings` table); `docs/guides/ipaws_feed_integration.md` (removed three `.env`-snippet config examples and the Quick Start "edit `.env`" instructions, replaced with admin-UI guidance); `docs/architecture/THEORY_OF_OPERATION.md` (sequence-diagram loop labels and prose no longer reference `POLL_INTERVAL_SEC` as an env var; "Configuration is read from `.env`" sentence corrected to distinguish runtime settings (DB) from boot-time infrastructure); `docs/architecture/DATA_FLOW_SEQUENCES.md` (originator substitution no longer claims `EAS_ORIGINATOR` env var as an alternative — it's database-only via the Broadcast admin tab); `docs/guides/SETUP_INSTRUCTIONS.md` (Station ID validation note points at the Broadcast admin tab / `eas_settings.station_id` instead of an `EAS_STATION_ID` env var). No code changes.
