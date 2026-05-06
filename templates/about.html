@@ -92,7 +92,8 @@
                             <li class="mb-2"><i class="fas fa-circle-check text-success me-2"></i>SDR Verification</li>
                             <li class="mb-2"><i class="fas fa-circle-check text-success me-2"></i>Automatic RWT Scheduling</li>
                             <li class="mb-2"><i class="fas fa-circle-check text-success me-2"></i>LED Sign Integration</li>
-                            <li class="mb-0"><i class="fas fa-circle-check text-success me-2"></i>Custom Display Screens &amp; VFD Graphics</li>
+                            <li class="mb-2"><i class="fas fa-circle-check text-success me-2"></i>Custom Display Screens &amp; VFD Graphics</li>
+                            <li class="mb-0"><i class="fas fa-circle-check text-success me-2"></i>MDC1200 Selective Calling</li>
                         </ul>
                     </div>
                 </div>
@@ -282,6 +283,72 @@
                             <h5 class="feature-card-title">4 · Verification</h5>
                             <p class="feature-card-text">SDR monitoring, compliance analytics, audit trails.</p>
                         </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- MDC1200 Selective Calling -->
+            <section class="about-card" id="mdc1200">
+                <div class="about-section-head">
+                    <span class="about-section-icon ico-warning"><i class="fas fa-walkie-talkie"></i></span>
+                    <div>
+                        <h2 class="about-section-title">MDC1200 Selective Calling</h2>
+                        <p class="about-section-sub">EAS breaks squelch only where it should — and identifies itself on every radio it reaches.</p>
+                    </div>
+                </div>
+
+                <p class="mb-3">EAS Station is the first open-source EAS encoder to natively support <strong>MDC1200 selective calling</strong> — Motorola's 1200-baud FFSK signalling protocol for Land Mobile Radio (LMR) systems. When EAS alerts are forwarded into a two-way radio dispatch system, MDC1200 ensures they are correctly identified on subscriber displays, selectively routed to authorised radios, and cleanly terminated — exactly as a Motorola infrastructure device would behave.</p>
+
+                <div class="row g-3 mb-4">
+                    <div class="col-md-6 col-lg-4">
+                        <div class="feature-card fc-orange h-100">
+                            <div class="feature-card-icon"><i class="fas fa-id-badge"></i></div>
+                            <h5 class="feature-card-title">Pre-Alert PTT-ID</h5>
+                            <p class="feature-card-text">An MDC1200 PTT-ID packet transmits <em>before</em> the SAME header burst. Every subscriber radio on the channel displays EAS Station's unit ID the moment the transmission opens — no ambiguity about the source.</p>
+                        </div>
+                    </div>
+                    <div class="col-md-6 col-lg-4">
+                        <div class="feature-card fc-teal h-100">
+                            <div class="feature-card-icon"><i class="fas fa-volume-xmark"></i></div>
+                            <h5 class="feature-card-title">Selective Unmuting</h5>
+                            <p class="feature-card-text">Motorola-compatible subscribers programmed with EAS Station's unit ID break squelch automatically. Radios on the same channel that aren't configured for that ID stay silent — no alert fatigue on channels not intended for EAS.</p>
+                        </div>
+                    </div>
+                    <div class="col-md-6 col-lg-4">
+                        <div class="feature-card fc-green h-100">
+                            <div class="feature-card-icon"><i class="fas fa-check-double"></i></div>
+                            <h5 class="feature-card-title">Clean Post-Alert Close</h5>
+                            <p class="feature-card-text">After the EOM burst, a second MDC1200 packet (op 0x00) cleanly releases the call on every subscriber. The radio's display doesn't latch indefinitely, and the call list logs a complete, properly terminated entry.</p>
+                        </div>
+                    </div>
+                    <div class="col-md-6 col-lg-4">
+                        <div class="feature-card fc-blue h-100">
+                            <div class="feature-card-icon"><i class="fas fa-shield-halved"></i></div>
+                            <h5 class="feature-card-title">Invisible to SAME Decoders</h5>
+                            <p class="feature-card-text">MDC1200 packets sit entirely <em>outside</em> the SAME burst window — before the first header and after the final EOM. Downstream ENDECs and EAS monitors receive a fully conformant SAME signal with no interference.</p>
+                        </div>
+                    </div>
+                    <div class="col-md-6 col-lg-4">
+                        <div class="feature-card fc-purple h-100">
+                            <div class="feature-card-icon"><i class="fas fa-list-ol"></i></div>
+                            <h5 class="feature-card-title">Dispatch Console Logging</h5>
+                            <p class="feature-card-text">Every EAS transmission appears in the radio system's call list with EAS Station's unit ID, timestamp, and call duration — providing a hardware-level audit trail alongside the software compliance logs.</p>
+                        </div>
+                    </div>
+                    <div class="col-md-6 col-lg-4">
+                        <div class="feature-card fc-pink h-100">
+                            <div class="feature-card-icon"><i class="fas fa-sliders"></i></div>
+                            <h5 class="feature-card-title">Fully Configurable</h5>
+                            <p class="feature-card-text">Unit ID, op-code, and argument accept decimal or <code>0x</code>-hex values. Pre and post positions auto-select complementary op-codes (PTT-ID pre / PTT-ID post), and the entire profile can be switched to None, Bell, Beep, or DTMF with a single setting.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="alert alert-info d-flex align-items-start mb-0" role="alert">
+                    <i class="fas fa-circle-info me-2 mt-1 flex-shrink-0"></i>
+                    <div>
+                        <strong>Designed for LMR integration.</strong> Wire EAS Station's audio output into a base-station radio's auxiliary input — MDC1200 handles the PTT-ID signalling automatically so the dispatch console sees a clean, identified, full-featured EAS call. No extra hardware, no separate signalling controller.
+                        See the <a href="/docs/reference/protocols/MDC1200" class="alert-link">MDC1200 protocol reference</a> for encoder internals, op-code tables, and verification instructions.
                     </div>
                 </div>
             </section>
