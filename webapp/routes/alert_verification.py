@@ -402,6 +402,8 @@ def _deserialize_decode_result(data: Dict[str, object]) -> SAMEAudioDecodeResult
         min_bit_confidence=float(data.get("min_bit_confidence") or 0.0),
         segments=segments,
         endec_mode=str(data.get("endec_mode") or ENDEC_MODE_UNKNOWN),
+        alert_tones=list(data.get("alert_tones") or []),
+        dtmf_tones=list(data.get("dtmf_tones") or []),
     )
 
 def _extract_audio_segment_wav(audio_path: str, start_sample: int, end_sample: int, sample_rate: int) -> bytes:
@@ -793,6 +795,25 @@ def _detect_comprehensive_eas_segments(
         # to thread a separate detection_result through every caller.
         if getattr(detection_result, 'mdc1200_packets', None):
             same_result.mdc1200_packets = list(detection_result.mdc1200_packets)
+
+        # Lift alert tones (EBS/NWS) as serialisable dicts.
+        if getattr(detection_result, 'alert_tones', None):
+            same_result.alert_tones = [
+                {
+                    'tone_type': t.tone_type,
+                    'confidence': t.confidence,
+                    'duration_seconds': t.duration_seconds,
+                    'snr_db': t.snr_db,
+                    'start_sample': t.start_sample,
+                    'end_sample': t.end_sample,
+                    'frequencies': list(getattr(t, 'frequencies_detected', []) or []),
+                }
+                for t in detection_result.alert_tones
+            ]
+
+        # Lift DTMF tones as serialisable dicts.
+        if getattr(detection_result, 'dtmf_tones', None):
+            same_result.dtmf_tones = [t.to_dict() for t in detection_result.dtmf_tones]
 
         return same_result, detection_result
 

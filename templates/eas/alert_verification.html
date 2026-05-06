@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from 'components/confidence_scale.html' import confidence_scale %}
-{% block title %}Alert Validation & Analytics{% endblock %}
+{% block title %}Audio Decoder{% endblock %}
 
 {% macro endec_badge(mode) %}
     {% set endec_labels = {
@@ -37,29 +37,16 @@
 </div>
 
 <div class="container py-4">
-    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
-        <div>
-            <h1 class="h3 mb-1">Alert Validation &amp; Analytics</h1>
-            <p class="text-muted mb-0">
-                Monitoring window: last {{ window_days }} days · Generated
-                {% if payload.generated_at %}
-                    {{ format_local_datetime(payload.generated_at, include_utc=True) }}
-                {% else %}
-                    —
-                {% endif %}
-            </p>
-        </div>
-        <div class="btn-group" role="group">
-            <a class="btn btn-outline-primary" href="{{ url_for('alert_verification_export', days=window_days) }}">
-                <i class="fas fa-file-csv"></i> Export CSV
-            </a>
-        </div>
+    <div class="mb-4">
+        <h1 class="h3 mb-1">Audio Decoder</h1>
+        <p class="text-muted mb-0">Upload a WAV or MP3 recording to decode SAME headers and in-band signals.</p>
     </div>
 
+    <!-- Audio Upload & Decode Results -->
     <div class="card mb-4">
         <div class="card-header bg-transparent d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
-            <h5 class="card-title mb-0"><i class="fas fa-wave-square text-primary"></i> SAME Audio Header Decoder</h5>
-            <span class="text-muted small">Upload a WAV or MP3 recording of SAME bursts.</span>
+            <h5 class="card-title mb-0"><i class="fas fa-wave-square text-primary"></i> SAME Audio Decoder</h5>
+            <span class="text-muted small">Decodes SAME, MDC1200, DTMF, and alert tones.</span>
         </div>
         <div class="card-body">
             <form method="post" enctype="multipart/form-data" class="row g-3 align-items-end">
@@ -68,9 +55,7 @@
                     <label class="form-label" for="audio_file">Audio file</label>
                     <input class="form-control" type="file" id="audio_file" name="audio_file" accept=".wav,.mp3" required>
                     <div class="form-text">
-                        Analyzes SAME headers, attention tones, and narration segments.<br>
-                        <i class="fas fa-clock text-muted"></i> <small>Processing usually completes in under a minute for short recordings.</small><br>
-                        <i class="fas fa-info-circle text-warning"></i> <small><strong>Tip:</strong> For faster processing, trim audio to ~30 seconds around the alert (SAME bursts + tones + message + EOM).</small>
+                        WAV or MP3 · Trim to ~30 s around the alert for faster processing.
                     </div>
                 </div>
                 <div class="col-md-3">
@@ -104,816 +89,273 @@
             {% endif %}
 
             {% if decode_result %}
-                <div class="mt-4">
-                    <h6 class="text-muted text-uppercase">Decode Summary</h6>
-                    <dl class="row mb-3 small">
-                        <dt class="col-sm-4">Detected headers</dt>
-                        <dd class="col-sm-8">{{ decode_result.headers|length }}</dd>
-                        <dt class="col-sm-4">Bit Confidence</dt>
-                        <dd class="col-sm-8">
-                            {{ confidence_scale(decode_result.bit_confidence, show_percentage=true, size='sm') }}
-                            <div class="text-muted mt-1" style="font-size: 0.75rem;">
-                                Min: {{ '%.1f' | format(decode_result.min_bit_confidence * 100) }}%
-                            </div>
-                        </dd>
-                        <dt class="col-sm-4">Frame quality</dt>
-                        <dd class="col-sm-8">{{ decode_result.frame_count - decode_result.frame_errors }} valid of {{ decode_result.frame_count }}</dd>
-                        <dt class="col-sm-4">Duration analysed</dt>
-                        <dd class="col-sm-8">{{ '%.2f'|format(decode_result.duration_seconds) }} seconds @ {{ decode_result.sample_rate }} Hz</dd>
-                        <dt class="col-sm-4">ENDEC hardware</dt>
-                        <dd class="col-sm-8">{{ endec_badge(decode_result.endec_mode) }}</dd>
-                        {% if decode_result.mdc1200_packets %}
-                        <dt class="col-sm-4">MDC1200</dt>
-                        <dd class="col-sm-8">
-                            {% for pkt in decode_result.mdc1200_packets %}
-                            {% set op_names = {
-                                0x01: 'PTT-ID Pre',  0x00: 'PTT-ID Post',
-                                0x40: 'Emergency',   0x35: 'Request to Talk / Selective Call',
-                                0x11: 'Remote Monitor', 0x63: 'Call Alert'
-                            } %}
-                            <span class="badge bg-success me-1">
-                                Unit {{ '0x%04X'|format(pkt.unit_id) }}
-                                &nbsp;·&nbsp;
-                                {{ op_names.get(pkt.opcode, '0x%02X'|format(pkt.opcode)) }}
-                                {% if pkt.target_unit_id is not none %}
-                                    → {{ '0x%04X'|format(pkt.target_unit_id) }}
-                                {% endif %}
-                                {% if not pkt.crc_ok %}<span class="text-warning"> ⚠ CRC</span>{% endif %}
-                            </span>
-                            {% endfor %}
-                        </dd>
-                        {% endif %}
-                    </dl>
+                <hr class="my-4">
 
-                    {% if decode_result.raw_text %}
-                        <div class="mb-3">
-                            <label class="form-label">Raw decoded text</label>
-                            <pre class="bg-light border rounded px-3 py-2 small mb-0">{{ decode_result.raw_text }}</pre>
+                {# ── Validity banner ── #}
+                {% set is_valid = decode_result.headers|length > 0 and decode_result.bit_confidence >= 0.5 %}
+                {% if is_valid %}
+                    <div class="alert alert-success d-flex align-items-center gap-2 mb-4">
+                        <i class="fas fa-circle-check fa-lg"></i>
+                        <div>
+                            <strong>Valid EAS audio</strong> — {{ decode_result.headers|length }} SAME header{{ 's' if decode_result.headers|length != 1 else '' }} decoded with {{ '%.0f'|format(decode_result.bit_confidence * 100) }}% bit confidence.
                         </div>
+                    </div>
+                {% elif decode_result.headers|length > 0 %}
+                    <div class="alert alert-warning d-flex align-items-center gap-2 mb-4">
+                        <i class="fas fa-triangle-exclamation fa-lg"></i>
+                        <div>
+                            <strong>Low-confidence decode</strong> — {{ decode_result.headers|length }} SAME header{{ 's' if decode_result.headers|length != 1 else '' }} found but bit confidence is only {{ '%.0f'|format(decode_result.bit_confidence * 100) }}%.
+                        </div>
+                    </div>
+                {% else %}
+                    <div class="alert alert-danger d-flex align-items-center gap-2 mb-4">
+                        <i class="fas fa-circle-xmark fa-lg"></i>
+                        <div>
+                            <strong>No SAME headers detected</strong> — the audio may not contain EAS content, or the signal quality is too low to decode.
+                        </div>
+                    </div>
+                {% endif %}
+
+                {# ── Decode summary table ── #}
+                <h6 class="text-muted text-uppercase mb-2">Decode Summary</h6>
+                <dl class="row mb-4 small">
+                    <dt class="col-sm-4">Detected headers</dt>
+                    <dd class="col-sm-8">{{ decode_result.headers|length }}</dd>
+
+                    <dt class="col-sm-4">Bit confidence</dt>
+                    <dd class="col-sm-8">
+                        {{ confidence_scale(decode_result.bit_confidence, show_percentage=true, size='sm') }}
+                        <div class="text-muted mt-1" style="font-size: 0.75rem;">
+                            Min: {{ '%.1f'|format(decode_result.min_bit_confidence * 100) }}%
+                        </div>
+                    </dd>
+
+                    <dt class="col-sm-4">Frame quality</dt>
+                    <dd class="col-sm-8">{{ decode_result.frame_count - decode_result.frame_errors }} valid of {{ decode_result.frame_count }}</dd>
+
+                    <dt class="col-sm-4">Duration analysed</dt>
+                    <dd class="col-sm-8">{{ '%.2f'|format(decode_result.duration_seconds) }}s @ {{ decode_result.sample_rate }} Hz</dd>
+
+                    <dt class="col-sm-4">ENDEC hardware</dt>
+                    <dd class="col-sm-8">{{ endec_badge(decode_result.endec_mode) }}</dd>
+
+                    {# EBS / NWS alert tones #}
+                    {% if decode_result.alert_tones %}
+                    <dt class="col-sm-4">Alert tones</dt>
+                    <dd class="col-sm-8">
+                        {% for tone in decode_result.alert_tones %}
+                            {% if tone.tone_type == 'ebs' %}
+                                <span class="badge bg-warning text-dark me-1">
+                                    EBS Two-Tone · {{ '%.2f'|format(tone.duration_seconds) }}s · {{ '%.0f'|format(tone.snr_db) }} dB SNR
+                                </span>
+                            {% elif tone.tone_type == 'nws' %}
+                                <span class="badge bg-info text-dark me-1">
+                                    NWS 1050 Hz · {{ '%.2f'|format(tone.duration_seconds) }}s · {{ '%.0f'|format(tone.snr_db) }} dB SNR
+                                </span>
+                            {% else %}
+                                <span class="badge bg-secondary me-1">
+                                    {{ tone.tone_type|upper }} · {{ '%.2f'|format(tone.duration_seconds) }}s
+                                </span>
+                            {% endif %}
+                        {% endfor %}
+                    </dd>
                     {% endif %}
 
-                    {% if decode_result.segments %}
-                        <div class="mb-3">
-                            <label class="form-label">Extracted audio segments</label>
-                            <ul class="list-unstyled small mb-0">
-                                {% for name, segment in decode_result.segments.items() %}
-                                    <li>
-                                        {% set segment_labels = {
-                                            'header': 'SAME Header Bursts',
-                                            'attention_tone': 'Attention Tone (EBS/NWS)',
-                                            'narration': 'Voice Narration',
-                                            'eom': 'End-of-Message (EOM)',
-                                            'buffer': 'Buffer/Lead Audio',
-                                            'composite': 'Complete Alert (Composite)',
-                                            'message': 'Message (Legacy)',
-                                            'pre_chime': 'Pre-Alert Signal (MDC1200/chime)',
-                                            'post_chime': 'Post-Alert Signal (MDC1200/chime)'
-                                        } %}
-                                        <strong>{{ segment_labels.get(name, name|capitalize) }}</strong>
-                                        · {{ '%.2f'|format(segment.duration_seconds) }}s
-                                        ({{ '%.2f'|format(segment.start_seconds) }}s –
-                                        {{ '%.2f'|format(segment.end_seconds) }}s)
-                                        {% set inline_url = decode_segment_urls.get(name|lower) %}
-                                        {% if inline_url %}
-                                            <div class="mt-2">
-                                                <audio class="w-100" controls>
-                                                    <source src="{{ inline_url }}" type="audio/wav">
-                                                    Your browser does not support the audio element.
-                                                </audio>
-                                                <div class="mt-1">
-                                                    <a class="btn btn-sm btn-outline-primary" href="{{ inline_url }}" download="decode_{{ name|lower }}.wav">
-                                                        <i class="fas fa-download"></i> Download
-                                                    </a>
-                                                </div>
-                                            </div>
-                                        {% endif %}
-                                    </li>
-                                {% endfor %}
+                    {# MDC1200 #}
+                    {% if decode_result.mdc1200_packets %}
+                    <dt class="col-sm-4">MDC1200</dt>
+                    <dd class="col-sm-8">
+                        {% for pkt in decode_result.mdc1200_packets %}
+                        {% set op_names = {
+                            0x01: 'PTT-ID Pre',  0x00: 'PTT-ID Post',
+                            0x40: 'Emergency',   0x35: 'Request to Talk / Selective Call',
+                            0x11: 'Remote Monitor', 0x63: 'Call Alert'
+                        } %}
+                        <span class="badge bg-success me-1">
+                            Unit {{ '0x%04X'|format(pkt.unit_id) }}
+                            &nbsp;·&nbsp;
+                            {{ op_names.get(pkt.opcode, '0x%02X'|format(pkt.opcode)) }}
+                            {% if pkt.target_unit_id is not none %}
+                                → {{ '0x%04X'|format(pkt.target_unit_id) }}
+                            {% endif %}
+                            {% if not pkt.crc_ok %}<span class="text-warning"> ⚠ CRC</span>{% endif %}
+                        </span>
+                        {% endfor %}
+                    </dd>
+                    {% endif %}
+
+                    {# DTMF #}
+                    {% if decode_result.dtmf_tones %}
+                    <dt class="col-sm-4">DTMF</dt>
+                    <dd class="col-sm-8">
+                        <span class="font-monospace fw-bold me-2">
+                            {% for t in decode_result.dtmf_tones %}{{ t.digit }}{% endfor %}
+                        </span>
+                        <span class="text-muted small">({{ decode_result.dtmf_tones|length }} digit{{ 's' if decode_result.dtmf_tones|length != 1 else '' }})</span>
+                        <div class="mt-1">
+                            {% for tone in decode_result.dtmf_tones %}
+                                <span class="badge bg-secondary me-1">{{ tone.digit }} · {{ '%.2f'|format(tone.duration_seconds) }}s @ {{ '%.2f'|format(tone.start_seconds) }}s</span>
+                            {% endfor %}
+                        </div>
+                    </dd>
+                    {% endif %}
+                </dl>
+
+                {# ── Raw SAME text ── #}
+                {% if decode_result.raw_text %}
+                    <div class="mb-4">
+                        <label class="form-label text-muted text-uppercase small">Raw decoded text</label>
+                        <pre class="bg-light border rounded px-3 py-2 small mb-0">{{ decode_result.raw_text }}</pre>
+                    </div>
+                {% endif %}
+
+                {# ── Audio segments ── #}
+                {% if decode_result.segments %}
+                    <div class="mb-4">
+                        <label class="form-label text-muted text-uppercase small">Extracted audio segments</label>
+                        <ul class="list-unstyled small mb-0">
+                            {% set segment_labels = {
+                                'header': 'SAME Header Bursts',
+                                'attention_tone': 'Attention Tone (EBS/NWS)',
+                                'narration': 'Voice Narration',
+                                'eom': 'End-of-Message (EOM)',
+                                'buffer': 'Buffer / Lead Audio',
+                                'composite': 'Complete Alert (Composite)',
+                                'message': 'Message (Legacy)',
+                                'pre_chime': 'Pre-Alert Signal (MDC1200/chime)',
+                                'post_chime': 'Post-Alert Signal (MDC1200/chime)'
+                            } %}
+                            {% for name, segment in decode_result.segments.items() %}
+                                <li class="mb-3">
+                                    <strong>{{ segment_labels.get(name, name|capitalize) }}</strong>
+                                    · {{ '%.2f'|format(segment.duration_seconds) }}s
+                                    ({{ '%.2f'|format(segment.start_seconds) }}s –
+                                    {{ '%.2f'|format(segment.end_seconds) }}s)
+                                    {% set inline_url = decode_segment_urls.get(name|lower) %}
+                                    {% if inline_url %}
+                                        <div class="mt-1">
+                                            <audio class="w-100" controls>
+                                                <source src="{{ inline_url }}" type="audio/wav">
+                                                Your browser does not support the audio element.
+                                            </audio>
+                                            <a class="btn btn-sm btn-outline-primary mt-1" href="{{ inline_url }}" download="decode_{{ name|lower }}.wav">
+                                                <i class="fas fa-download"></i> Download
+                                            </a>
+                                        </div>
+                                    {% endif %}
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                {% endif %}
+
+                {# ── Per-header detail cards ── #}
+                {% if decode_result.headers %}
+                    <label class="form-label text-muted text-uppercase small">SAME Header Detail</label>
+                    <div class="row g-3">
+                        {% for header in decode_result.headers %}
+                            <div class="col-xl-6">
+                                <div class="border rounded p-3 h-100">
+                                    <h6 class="mb-3 font-monospace">{{ header.header }}</h6>
+                                    <div class="mb-3">
+                                        {{ confidence_scale(header.confidence, show_percentage=true, size='sm') }}
+                                    </div>
+                                    {% if header.summary %}
+                                        <p class="small fw-semibold text-primary mb-2">{{ header.summary }}</p>
+                                    {% endif %}
+                                    {% set detail = header.fields or {} %}
+                                    <dl class="row small mb-0">
+                                        <dt class="col-sm-5">Originator</dt>
+                                        <dd class="col-sm-7">{{ detail.originator or '—' }}{% if detail.originator_description %} ({{ detail.originator_description }}){% endif %}</dd>
+                                        <dt class="col-sm-5">Event</dt>
+                                        <dd class="col-sm-7">{{ detail.event_code or '—' }}</dd>
+                                        <dt class="col-sm-5">Station</dt>
+                                        <dd class="col-sm-7">{{ detail.station_identifier or '—' }}</dd>
+                                        <dt class="col-sm-5">Purge duration</dt>
+                                        <dd class="col-sm-7">{{ detail.purge_label or detail.purge_code or '—' }}</dd>
+                                        <dt class="col-sm-5">Issue time</dt>
+                                        <dd class="col-sm-7">{{ detail.issue_time_label or '—' }}</dd>
+                                    </dl>
+                                    {% if detail.locations %}
+                                        <div class="mt-2">
+                                            <h6 class="text-muted text-uppercase small mb-1">Locations ({{ detail.location_count }})</h6>
+                                            <ul class="list-unstyled small mb-0">
+                                                {% for location in detail.locations %}
+                                                    <li>
+                                                        <strong>{{ location.code }}</strong>
+                                                        · {{ location.description }}
+                                                        {% if location.p_meaning %}
+                                                            <span class="text-muted">({{ location.p_meaning }})</span>
+                                                        {% endif %}
+                                                    </li>
+                                                {% endfor %}
+                                            </ul>
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="text-muted mb-0">No SAME headers were detected in the supplied audio.</p>
+                {% endif %}
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Raw SAME Header Parser -->
+    <div class="card mb-4" id="raw-header-panel">
+        <div class="card-header bg-transparent d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
+            <div>
+                <h5 class="card-title mb-0"><i class="fas fa-code text-secondary"></i> Raw SAME Header Parser</h5>
+                <p class="text-muted small mb-0">
+                    Paste any ZCZC string to inspect its fields instantly — no audio file required.
+                </p>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-9">
+                    <label class="form-label" for="raw-header-input">Raw ZCZC header</label>
+                    <input type="text" class="form-control font-monospace" id="raw-header-input"
+                           placeholder="ZCZC-WXR-TOR-039137+0015-3042020-KR8MER-"
+                           autocomplete="off" spellcheck="false">
+                </div>
+                <div class="col-md-3 text-md-end">
+                    <button class="btn btn-outline-secondary" id="raw-header-parse-btn" type="button">
+                        <i class="fas fa-magnifying-glass"></i> Parse Header
+                    </button>
+                </div>
+            </div>
+
+            <div id="raw-header-error" class="alert alert-danger mt-3 d-none"></div>
+
+            <div id="raw-header-result" class="mt-4 d-none">
+                <div class="row g-3">
+                    <div class="col-md-7">
+                        <div class="border rounded p-3 h-100">
+                            <p class="fw-semibold text-primary mb-3 small" id="raw-header-summary"></p>
+                            <dl class="row small mb-0" id="raw-header-fields"></dl>
+                        </div>
+                    </div>
+                    <div class="col-md-5">
+                        <div class="border rounded p-3 h-100">
+                            <h6 class="text-muted text-uppercase small mb-2">Locations</h6>
+                            <ul class="list-unstyled small mb-0" id="raw-header-locations">
+                                <li class="text-muted">—</li>
                             </ul>
                         </div>
-                    {% endif %}
-
-                    {% if decode_result.headers %}
-                        <div class="row g-3">
-                            {% for header in decode_result.headers %}
-                                <div class="col-xl-6">
-                                    <div class="border rounded p-3 h-100">
-                                        <h6 class="mb-3">{{ header.header }}</h6>
-                                        <div class="mb-3">
-                                            {{ confidence_scale(header.confidence, show_percentage=true, size='sm') }}
-                                        </div>
-                                        {% if header.summary %}
-                                            <p class="small fw-semibold text-primary mb-2">
-                                                {{ header.summary }}
-                                            </p>
-                                        {% endif %}
-                                        {% set detail = header.fields or {} %}
-                                        <dl class="row small mb-0">
-                                            <dt class="col-sm-5">Originator</dt>
-                                            <dd class="col-sm-7">{{ detail.originator or '—' }}{% if detail.originator_description %} ({{ detail.originator_description }}){% endif %}</dd>
-                                            <dt class="col-sm-5">Event</dt>
-                                            <dd class="col-sm-7">{{ detail.event_code or '—' }}</dd>
-                                            <dt class="col-sm-5">Station</dt>
-                                            <dd class="col-sm-7">{{ detail.station_identifier or '—' }}</dd>
-                                            <dt class="col-sm-5">Purge duration</dt>
-                                            <dd class="col-sm-7">{{ detail.purge_label or detail.purge_code or '—' }}</dd>
-                                            <dt class="col-sm-5">Issue time</dt>
-                                            <dd class="col-sm-7">{{ detail.issue_time_label or '—' }}</dd>
-                                        </dl>
-                                        {% if detail.locations %}
-                                            <div class="mt-2">
-                                                <h6 class="text-muted text-uppercase small mb-1">Locations ({{ detail.location_count }})</h6>
-                                                <ul class="list-unstyled small mb-0">
-                                                    {% for location in detail.locations %}
-                                                        <li>
-                                                            <strong>{{ location.code }}</strong>
-                                                            · {{ location.description }}
-                                                            {% if location.p_meaning %}
-                                                                <span class="text-muted">({{ location.p_meaning }})</span>
-                                                            {% endif %}
-                                                        </li>
-                                                    {% endfor %}
-                                                </ul>
-                                            </div>
-                                        {% endif %}
-                                    </div>
-                                </div>
-                            {% endfor %}
-                        </div>
-                    {% else %}
-                        <p class="text-muted mb-0">No SAME headers were detected in the supplied audio.</p>
-                    {% endif %}
-                </div>
-            {% endif %}
-
-            <div class="card mb-4" id="raw-header-panel">
-                <div class="card-header bg-transparent d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
-                    <div>
-                        <h5 class="card-title mb-0"><i class="fas fa-code text-secondary"></i> Raw SAME Header Parser</h5>
-                        <p class="text-muted small mb-0">
-                            Paste any ZCZC string to inspect its fields instantly — no audio file required.
-                        </p>
-                    </div>
-                </div>
-                <div class="card-body">
-                    <div class="row g-3 align-items-end">
-                        <div class="col-md-9">
-                            <label class="form-label" for="raw-header-input">Raw ZCZC header</label>
-                            <input type="text" class="form-control font-monospace" id="raw-header-input"
-                                   placeholder="ZCZC-WXR-TOR-039137+0015-3042020-KR8MER-"
-                                   autocomplete="off" spellcheck="false">
-                        </div>
-                        <div class="col-md-3 text-md-end">
-                            <button class="btn btn-outline-secondary" id="raw-header-parse-btn" type="button">
-                                <i class="fas fa-magnifying-glass"></i> Parse Header
-                            </button>
-                        </div>
-                    </div>
-
-                    <div id="raw-header-error" class="alert alert-danger mt-3 d-none"></div>
-
-                    <div id="raw-header-result" class="mt-4 d-none">
-                        <div class="row g-3">
-                            <div class="col-md-7">
-                                <div class="border rounded p-3 h-100">
-                                    <p class="fw-semibold text-primary mb-3 small" id="raw-header-summary"></p>
-                                    <dl class="row small mb-0" id="raw-header-fields"></dl>
-                                </div>
-                            </div>
-                            <div class="col-md-5">
-                                <div class="border rounded p-3 h-100">
-                                    <h6 class="text-muted text-uppercase small mb-2">Locations</h6>
-                                    <ul class="list-unstyled small mb-0" id="raw-header-locations">
-                                        <li class="text-muted">—</li>
-                                    </ul>
-                                </div>
-                            </div>
-                        </div>
                     </div>
                 </div>
             </div>
-
-            <div class="card mb-4" id="alert-self-test-panel">
-                <div class="card-header d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3">
-                    <div>
-                        <h5 class="mb-1"><i class="fas fa-wave-square text-warning me-2"></i>Alert Self-Test Harness</h5>
-                        <p class="text-muted mb-0 small">
-                            Replay bundled or custom SAME captures through the live FIPS filter & duplicate suppression logic
-                            without waiting for a broadcaster to air an RWT.
-                        </p>
-                    </div>
-                    <div class="text-lg-end">
-                        <button class="btn btn-primary" id="run-self-test">
-                            <i class="fas fa-play-circle me-2"></i>Run Self-Test
-                        </button>
-                        <div class="spinner-border text-primary ms-3 d-none" role="status" id="self-test-spinner">
-                            <span class="visually-hidden">Processing...</span>
-                        </div>
-                    </div>
-                </div>
-                <div class="card-body">
-                    <div class="row g-4">
-                        <div class="col-xl-4">
-                            <div class="border rounded p-3 h-100">
-                                <h6 class="text-uppercase text-muted small mb-2">Configured Coverage</h6>
-                                <ul class="list-group small" id="configured-fips-list">
-                                    {% if self_test_configured_fips %}
-                                        {% for code in self_test_configured_fips %}
-                                            <li class="list-group-item d-flex justify-content-between align-items-center">
-                                                <span class="fw-semibold">{{ code }}</span>
-                                                <span class="badge bg-light text-muted">Active</span>
-                                            </li>
-                                        {% endfor %}
-                                    {% else %}
-                                        <li class="list-group-item text-muted">No FIPS codes configured in Location Settings.</li>
-                                    {% endif %}
-                                </ul>
-                                <div class="mt-3">
-                                    <label for="fips-override" class="form-label">FIPS Override (comma/line separated)</label>
-                                    <input type="text" id="fips-override" class="form-control" placeholder="039137,039051">
-                                    <small class="text-muted">Leave blank to reuse the configured coverage shown above.</small>
-                                </div>
-                                <div class="row g-3 mt-1">
-                                    <div class="col-sm-6">
-                                        <label for="cooldown-input" class="form-label">Duplicate Cooldown (s)</label>
-                                        <input type="number" step="0.1" min="0" id="cooldown-input" class="form-control" value="30">
-                                    </div>
-                                    <div class="col-sm-6">
-                                        <label for="source-name-input" class="form-label">Source Label</label>
-                                        <input type="text" id="source-name-input" class="form-control" value="self-test">
-                                    </div>
-                                </div>
-                                <div class="form-check form-switch mt-3">
-                                    <input class="form-check-input" type="checkbox" role="switch" id="require-match" checked>
-                                    <label class="form-check-label" for="require-match">
-                                        Require at least one forwarded alert to pass
-                                    </label>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-xl-4">
-                            <div class="border rounded p-3 h-100">
-                                <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <h6 class="text-uppercase text-muted small mb-0">Bundled Sample Library</h6>
-                                    {% if self_test_samples %}
-                                        <button class="btn btn-sm btn-outline-secondary" id="select-all-samples">
-                                            <i class="fas fa-check-double"></i> Select All
-                                        </button>
-                                    {% endif %}
-                                </div>
-                                {% if self_test_samples %}
-                                    <div class="list-group" id="sample-library">
-                                        {% for sample in self_test_samples %}
-                                            <label class="list-group-item d-flex justify-content-between align-items-center">
-                                                <span>
-                                                    <input class="form-check-input me-2 sample-checkbox" type="checkbox" value="{{ sample.relative_path }}" {% if sample.exists %}checked{% endif %}>
-                                                    {{ sample.name }}
-                                                </span>
-                                                {% if sample.exists %}
-                                                    <span class="badge bg-success-subtle text-success">Ready</span>
-                                                {% else %}
-                                                    <span class="badge bg-danger-subtle text-danger">Missing</span>
-                                                {% endif %}
-                                            </label>
-                                        {% endfor %}
-                                    </div>
-                                    <small class="text-muted d-block mt-2">Samples live in <code>samples/</code> within the appliance.</small>
-                                {% else %}
-                                    <p class="text-muted mb-0">No bundled samples detected. Upload recordings or reference an external path.</p>
-                                {% endif %}
-                            </div>
-                        </div>
-                        <div class="col-xl-4">
-                            <div class="border rounded p-3 h-100">
-                                <h6 class="text-uppercase text-muted small mb-2">Custom Audio Paths</h6>
-                                <p class="text-muted small">Paste absolute or relative paths (one per line). Relative paths resolve from the application root.</p>
-                                <textarea class="form-control" id="custom-audio-paths" rows="6" placeholder="/var/audio/lab/rwt.wav"></textarea>
-                                <div class="form-check mt-3">
-                                    <input class="form-check-input" type="checkbox" id="include-default-samples" checked>
-                                    <label class="form-check-label" for="include-default-samples">
-                                        Include bundled samples when none are selected
-                                    </label>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="alert d-none mt-4" id="self-test-error" role="alert"></div>
-
-                    <div id="self-test-feedback" class="mt-4" hidden>
-                        <div class="card shadow-sm border-0">
-                            <div class="card-body">
-                                <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center">
-                                    <div>
-                                        <h4 class="mb-1" id="self-test-status">--</h4>
-                                        <p class="text-muted mb-0" id="self-test-summary">--</p>
-                                    </div>
-                                    <div class="text-lg-end mt-3 mt-lg-0">
-                                        <div class="d-flex flex-column flex-sm-row gap-3">
-                                            <div class="stat-pill bg-success-subtle text-success" id="stat-forwarded">
-                                                <strong class="d-block">Forwarded</strong>
-                                                <span class="display-6" id="forwarded-count">0</span>
-                                            </div>
-                                            <div class="stat-pill bg-warning-subtle text-warning" id="stat-duplicate">
-                                                <strong class="d-block">Duplicates</strong>
-                                                <span class="display-6" id="duplicate-count">0</span>
-                                            </div>
-                                            <div class="stat-pill bg-danger-subtle text-danger" id="stat-errors">
-                                                <strong class="d-block">Decode Errors</strong>
-                                                <span class="display-6" id="error-count">0</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="mt-3">
-                                    <small class="text-muted">Executed at <span id="self-test-timestamp">--</span> using FIPS <span id="self-test-fips">--</span></small>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="card shadow-sm mt-4" id="self-test-results" hidden>
-                        <div class="card-header d-flex flex-column flex-lg-row justify-content-between align-items-lg-center">
-                            <div>
-                                <h6 class="mb-0"><i class="fas fa-list-check me-2"></i>Detailed Results</h6>
-                            </div>
-                            <div class="text-lg-end mt-2 mt-lg-0">
-                                <span class="badge bg-secondary" id="self-test-cooldown">Cooldown: 30s</span>
-                                <span class="badge bg-secondary ms-2" id="self-test-source">Source: self-test</span>
-                            </div>
-                        </div>
-                        <div class="table-responsive">
-                            <table class="table table-hover mb-0">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th>Status</th>
-                                        <th>Event</th>
-                                        <th>Originator</th>
-                                        <th>Matched FIPS</th>
-                                        <th>Reason</th>
-                                        <th>Audio</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="self-test-results-body">
-                                    <tr>
-                                        <td colspan="6" class="text-center text-muted">No runs yet.</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <style>
-                #alert-self-test-panel .stat-pill {
-                    border-radius: 0.75rem;
-                    padding: 0.75rem 1.25rem;
-                    min-width: 140px;
-                    text-align: center;
-                }
-            </style>
-
-            {% if recent_decodes %}
-                <hr>
-                <h6 class="text-muted text-uppercase mb-3">Recent Stored Decodes</h6>
-                <div class="table-responsive">
-                    <table class="table table-sm align-middle mb-0">
-                        <thead>
-                            <tr>
-                                <th scope="col">Recorded</th>
-                                <th scope="col">Source File</th>
-                                <th scope="col">Headers</th>
-                                <th scope="col">Confidence</th>
-                                <th scope="col">ENDEC</th>
-                                <th scope="col">Segments</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for decode in recent_decodes %}
-                                <tr>
-                                    <td>
-                                        {% if decode.created_at %}
-                                            {{ format_local_datetime(decode.created_at, include_utc=True) }}
-                                        {% else %}
-                                            <span class="text-muted">Unknown</span>
-                                        {% endif %}
-                                    </td>
-                                    <td>{{ decode.original_filename or '—' }}</td>
-                                    <td>
-                                        {% if decode.same_headers %}
-                                            <ul class="list-unstyled mb-0 small">
-                                                {% for header in decode.same_headers %}
-                                                    <li class="mb-2">
-                                                        {% if header.summary is defined and header.summary %}
-                                                            <div class="fw-semibold">{{ header.summary }}</div>
-                                                        {% endif %}
-                                                        {% set header_text = header.header if header.header is defined else header %}
-                                                        <div class="text-muted">{{ header_text or header }}</div>
-                                                    </li>
-                                                {% endfor %}
-                                            </ul>
-                                        {% else %}
-                                            <span class="text-muted small">None captured</span>
-                                        {% endif %}
-                                    </td>
-                                    <td>
-                                        {% set metrics = decode.quality_metrics or {} %}
-                                        {% if metrics.bit_confidence is not none %}
-                                            <div style="min-width: 120px;">
-                                                {{ confidence_scale(metrics.bit_confidence, show_percentage=false, size='sm') }}
-                                                <div class="text-center mt-1" style="font-size: 0.7rem;">
-                                                    {{ '%.1f'|format(metrics.bit_confidence * 100) }}%
-                                                </div>
-                                            </div>
-                                        {% else %}
-                                            <span class="text-muted">—</span>
-                                        {% endif %}
-                                    </td>
-                                    <td>
-                                        {% set endec_val = (decode.quality_metrics or {}).get('endec_mode') or 'UNKNOWN' %}
-                                        {{ endec_badge(endec_val) }}
-                                    </td>
-                                    <td>
-                                        {% set metadata = decode.segment_metadata or {} %}
-                                        {% set has_fallback = not metadata and (decode.has_header_audio or decode.has_message_audio or decode.has_eom_audio or decode.has_buffer_audio) %}
-                                        {% if metadata %}
-                                            <ul class="list-unstyled mb-0 small">
-                                                {% for key, meta in metadata.items() %}
-                                                    <li>
-                                                        {{ key|capitalize }}
-                                                        {% if meta.duration_seconds is defined %}
-                                                            · {{ '%.2f'|format(meta.duration_seconds) }}s
-                                                        {% endif %}
-                                                        <div class="mt-2">
-                                                            {% set segment_url = url_for('alert_verification_decode_audio', decode_id=decode.id, segment=key|lower) %}
-                                                            <audio class="w-100" controls>
-                                                                <source src="{{ segment_url }}" type="audio/wav">
-                                                                Your browser does not support the audio element.
-                                                            </audio>
-                                                            <div class="mt-1">
-                                                                <a class="btn btn-sm btn-outline-primary" href="{{ segment_url }}?download=1">
-                                                                    <i class="fas fa-download"></i>
-                                                                    Download
-                                                                </a>
-                                                            </div>
-                                                        </div>
-                                                    </li>
-                                                {% endfor %}
-                                            </ul>
-                                        {% elif has_fallback %}
-                                            <ul class="list-unstyled mb-0 small">
-                                                {% if decode.has_header_audio %}
-                                                    {% set key = 'header' %}
-                                                    <li>
-                                                        Header
-                                                        <div class="mt-2">
-                                                            {% set segment_url = url_for('alert_verification_decode_audio', decode_id=decode.id, segment=key) %}
-                                                            <audio class="w-100" controls>
-                                                                <source src="{{ segment_url }}" type="audio/wav">
-                                                                Your browser does not support the audio element.
-                                                            </audio>
-                                                            <div class="mt-1">
-                                                                <a class="btn btn-sm btn-outline-primary" href="{{ segment_url }}?download=1">
-                                                                    <i class="fas fa-download"></i>
-                                                                    Download
-                                                                </a>
-                                                            </div>
-                                                        </div>
-                                                    </li>
-                                                {% endif %}
-                                                {% if decode.has_message_audio %}
-                                                    {% set key = 'message' %}
-                                                    <li>
-                                                        Message
-                                                        <div class="mt-2">
-                                                            {% set segment_url = url_for('alert_verification_decode_audio', decode_id=decode.id, segment=key) %}
-                                                            <audio class="w-100" controls>
-                                                                <source src="{{ segment_url }}" type="audio/wav">
-                                                                Your browser does not support the audio element.
-                                                            </audio>
-                                                            <div class="mt-1">
-                                                                <a class="btn btn-sm btn-outline-primary" href="{{ segment_url }}?download=1">
-                                                                    <i class="fas fa-download"></i>
-                                                                    Download
-                                                                </a>
-                                                            </div>
-                                                        </div>
-                                                    </li>
-                                                {% endif %}
-                                                {% if decode.has_eom_audio %}
-                                                    {% set key = 'eom' %}
-                                                    <li>
-                                                        EOM
-                                                        <div class="mt-2">
-                                                            {% set segment_url = url_for('alert_verification_decode_audio', decode_id=decode.id, segment=key) %}
-                                                            <audio class="w-100" controls>
-                                                                <source src="{{ segment_url }}" type="audio/wav">
-                                                                Your browser does not support the audio element.
-                                                            </audio>
-                                                            <div class="mt-1">
-                                                                <a class="btn btn-sm btn-outline-primary" href="{{ segment_url }}?download=1">
-                                                                    <i class="fas fa-download"></i>
-                                                                    Download
-                                                                </a>
-                                                            </div>
-                                                        </div>
-                                                    </li>
-                                                {% endif %}
-                                                {% if decode.has_buffer_audio %}
-                                                    {% set key = 'buffer' %}
-                                                    <li>
-                                                        Buffer
-                                                        <div class="mt-2">
-                                                            {% set segment_url = url_for('alert_verification_decode_audio', decode_id=decode.id, segment=key) %}
-                                                            <audio class="w-100" controls>
-                                                                <source src="{{ segment_url }}" type="audio/wav">
-                                                                Your browser does not support the audio element.
-                                                            </audio>
-                                                            <div class="mt-1">
-                                                                <a class="btn btn-sm btn-outline-primary" href="{{ segment_url }}?download=1">
-                                                                    <i class="fas fa-download"></i>
-                                                                    Download
-                                                                </a>
-                                                            </div>
-                                                        </div>
-                                                    </li>
-                                                {% endif %}
-                                            </ul>
-                                        {% else %}
-                                            <span class="text-muted small">None</span>
-                                        {% endif %}
-                                    </td>
-                                </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            {% endif %}
-        </div>
-    </div>
-
-    {% set summary = payload.summary or {} %}
-    {% set total = summary.total or 0 %}
-    {% set delivered = (summary.delivered or 0) + (summary.partial or 0) %}
-    {% set issues_count = (summary.partial or 0) + (summary.pending or 0) + (summary.awaiting_playout or 0) + (summary.missing or 0) %}
-    {% set success_rate = (delivered / total * 100) if total else None %}
-
-    <div class="row g-3 mb-4">
-        <div class="col-md-4">
-            <div class="card h-100">
-                <div class="card-body">
-                    <h5 class="card-title"><i class="fas fa-circle-check text-success"></i> Delivery Success</h5>
-                    <p class="display-6 fw-semibold mb-1">
-                        {% if success_rate is not none %}
-                            {{ '%.1f'|format(success_rate) }}%
-                        {% else %}
-                            <span class="text-muted">N/A</span>
-                        {% endif %}
-                    </p>
-                    <p class="text-muted mb-2">Alerts with at least one successful playout.</p>
-                    <dl class="row mb-0 small">
-                        <dt class="col-6">Total Alerts</dt>
-                        <dd class="col-6 text-end">{{ total }}</dd>
-                        <dt class="col-6">Fully Delivered</dt>
-                        <dd class="col-6 text-end">{{ summary.delivered or 0 }}</dd>
-                        <dt class="col-6">Partial Delivery</dt>
-                        <dd class="col-6 text-end">{{ summary.partial or 0 }}</dd>
-                    </dl>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card h-100">
-                <div class="card-body">
-                    <h5 class="card-title"><i class="fas fa-triangle-exclamation text-warning"></i> Alerts Requiring Attention</h5>
-                    <p class="display-6 fw-semibold mb-1">{{ issues_count }}</p>
-                    <p class="text-muted mb-2">Alerts pending, missing, or with failed outputs.</p>
-                    <dl class="row mb-0 small">
-                        <dt class="col-6">Pending</dt>
-                        <dd class="col-6 text-end">{{ summary.pending or 0 }}</dd>
-                        <dt class="col-6">Awaiting Playout</dt>
-                        <dd class="col-6 text-end">{{ summary.awaiting_playout or 0 }}</dd>
-                        <dt class="col-6">Missing Audio</dt>
-                        <dd class="col-6 text-end">{{ summary.missing or 0 }}</dd>
-                    </dl>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card h-100">
-                <div class="card-body">
-                    <h5 class="card-title"><i class="fas fa-hourglass-half text-info"></i> Average Latency</h5>
-                    <p class="display-6 fw-semibold mb-1">
-                        {% if summary.average_latency_seconds is not none %}
-                            {{ '%.1f'|format(summary.average_latency_seconds) }}s
-                        {% else %}
-                            <span class="text-muted">No samples</span>
-                        {% endif %}
-                    </p>
-                    <p class="text-muted mb-2">Delay threshold: {{ payload.delay_threshold_seconds }}s</p>
-                    {% if trends.originators %}
-                        <p class="small text-muted mb-0">{{ trends.originators|length }} originators analysed.</p>
-                    {% else %}
-                        <p class="small text-muted mb-0">No playout metrics recorded during this window.</p>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="card mb-4">
-        <div class="card-header bg-transparent d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-2">
-            <h5 class="card-title mb-0"><i class="fas fa-chart-line text-primary"></i> Delivery Trends</h5>
-            <span class="badge bg-secondary">Delay threshold: {{ payload.delay_threshold_seconds }} seconds</span>
-        </div>
-        <div class="card-body">
-            {% if trends.originators or trends.stations %}
-                <div class="row g-4">
-                    <div class="col-lg-6">
-                        <h6 class="text-muted text-uppercase">By Originator</h6>
-                        <div id="alert-originator-chart" style="min-height: 260px;"></div>
-                    </div>
-                    <div class="col-lg-6">
-                        <h6 class="text-muted text-uppercase">By Output Target</h6>
-                        <div id="alert-station-chart" style="min-height: 260px;"></div>
-                    </div>
-                </div>
-            {% else %}
-                <p class="text-muted mb-0">No delivery metrics are available for this window.</p>
-            {% endif %}
-        </div>
-    </div>
-
-    <div class="card mb-4">
-        <div class="card-header bg-transparent">
-            <h5 class="card-title mb-0"><i class="fas fa-list-check text-secondary"></i> Alert Delivery Records</h5>
-        </div>
-        <div class="card-body">
-            {% if payload.records %}
-                <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0">
-                        <thead>
-                            <tr>
-                                <th scope="col">Sent</th>
-                                <th scope="col">Identifier</th>
-                                <th scope="col">Event</th>
-                                <th scope="col">Status</th>
-                                <th scope="col">Outputs</th>
-                                <th scope="col" class="text-end">Latency</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for record in payload.records %}
-                                <tr>
-                                    <td>
-                                        {% if record.sent %}
-                                            {{ format_local_datetime(record.sent, include_utc=True) }}
-                                        {% else %}
-                                            <span class="text-muted">Unknown</span>
-                                        {% endif %}
-                                    </td>
-                                    <td class="text-nowrap">{{ record.identifier or '—' }}</td>
-                                    <td>{{ record.event or '—' }}</td>
-                                    <td>
-                                        {% if record.delivery_status == 'delivered' %}
-                                            <span class="badge bg-success text-uppercase">Delivered</span>
-                                        {% elif record.delivery_status == 'partial' %}
-                                            <span class="badge bg-warning text-dark text-uppercase">Partial</span>
-                                        {% elif record.delivery_status == 'pending' %}
-                                            <span class="badge bg-info text-uppercase">Pending</span>
-                                        {% elif record.delivery_status == 'missing' %}
-                                            <span class="badge bg-danger text-uppercase">Missing</span>
-                                        {% else %}
-                                            <span class="badge bg-secondary text-uppercase">{{ record.delivery_status or 'Unknown' }}</span>
-                                        {% endif %}
-                                        {% if record.issues %}
-                                            <div class="small text-muted mt-1">
-                                                {% for issue in record.issues %}
-                                                    <div><i class="fas fa-circle-exclamation text-warning"></i> {{ issue }}</div>
-                                                {% endfor %}
-                                            </div>
-                                        {% endif %}
-                                    </td>
-                                    <td>
-                                        {% if record.target_details %}
-                                            <ul class="list-unstyled mb-0 small">
-                                                {% for target in record.target_details %}
-                                                    <li>
-                                                        <strong>{{ target.target }}</strong>
-                                                        {% if target.status == 'delivered' %}
-                                                            <span class="text-success">delivered</span>
-                                                        {% elif target.status == 'failed' %}
-                                                            <span class="text-danger">failed</span>
-                                                        {% elif target.status == 'pending' %}
-                                                            <span class="text-info">pending</span>
-                                                        {% elif target.status == 'partial' %}
-                                                            <span class="text-warning">partial</span>
-                                                        {% else %}
-                                                            <span class="text-muted">{{ target.status }}</span>
-                                                        {% endif %}
-                                                        {% if target.latency_seconds is not none %}
-                                                            · {{ '%.1f'|format(target.latency_seconds) }}s
-                                                        {% endif %}
-                                                    </li>
-                                                {% endfor %}
-                                            </ul>
-                                        {% else %}
-                                            <span class="text-muted small">No playout data</span>
-                                        {% endif %}
-                                    </td>
-                                    <td class="text-end">
-                                        {% if record.average_latency_seconds is not none %}
-                                            {{ '%.1f'|format(record.average_latency_seconds) }}s
-                                        {% else %}
-                                            <span class="text-muted">—</span>
-                                        {% endif %}
-                                    </td>
-                                </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            {% else %}
-                <p class="text-muted mb-0">No CAP alerts were recorded during this window.</p>
-            {% endif %}
-        </div>
-    </div>
-
-    <div class="card">
-        <div class="card-header bg-transparent">
-            <h5 class="card-title mb-0"><i class="fas fa-link-slash text-danger"></i> Unmatched Playout Records</h5>
-        </div>
-        <div class="card-body">
-            {% if payload.orphans %}
-                <div class="table-responsive">
-                    <table class="table table-sm align-middle mb-0">
-                        <thead>
-                            <tr>
-                                <th scope="col">Timestamp</th>
-                                <th scope="col">SAME Header</th>
-                                <th scope="col">Events Logged</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for orphan in payload.orphans %}
-                                <tr>
-                                    <td>
-                                        {% if orphan.created_at %}
-                                            {{ format_local_datetime(orphan.created_at, include_utc=True) }}
-                                        {% else %}
-                                            <span class="text-muted">Unknown</span>
-                                        {% endif %}
-                                    </td>
-                                    <td class="text-nowrap">{{ orphan.same_header }}</td>
-                                    <td>
-                                        {% if orphan.playout_events %}
-                                            <ul class="list-unstyled mb-0 small">
-                                                {% for event in orphan.playout_events %}
-                                                    <li>
-                                                        <strong>{{ event.target }}</strong>
-                                                        — {{ event.status }}
-                                                        {% if event.latency_seconds is not none %}
-                                                            ({{ '%.1f'|format(event.latency_seconds) }}s)
-                                                        {% endif %}
-                                                    </li>
-                                                {% endfor %}
-                                            </ul>
-                                        {% else %}
-                                            <span class="text-muted">No playout metadata captured.</span>
-                                        {% endif %}
-                                    </td>
-                                </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            {% else %}
-                <p class="text-muted mb-0">All playout records were matched to CAP alerts.</p>
-            {% endif %}
         </div>
     </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
-    <script src="{{ url_for('static', filename='vendor/chartjs/chart-v3.min.js') }}"></script>
-    <script>
-        window.alertSelfTestContext = {{ alert_self_test_context | tojson }};
-    </script>
-    <script src="{{ url_for('static', filename='js/alert_verification_preupload.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/alert_self_test.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/charts/alert_delivery.js') }}"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            if (window.AlertVerificationCharts) {
-                window.AlertVerificationCharts.render({
-                    originators: {{ trends.originators | tojson }},
-                    stations: {{ trends.stations | tojson }},
-                    delayThreshold: {{ payload.delay_threshold_seconds | tojson }}
-                });
-            }
-
             // Progress tracking for audio decode form
             const form = document.querySelector('form[enctype="multipart/form-data"]');
             const progressOverlay = document.getElementById('progress-overlay');
@@ -965,12 +407,8 @@
                         })
                         .catch(error => {
                             console.error('Error starting alert verification:', error);
-                            if (pollInterval) {
-                                clearInterval(pollInterval);
-                            }
-                            if (fallbackTimer) {
-                                clearTimeout(fallbackTimer);
-                            }
+                            if (pollInterval) clearInterval(pollInterval);
+                            if (fallbackTimer) clearTimeout(fallbackTimer);
                             updateProgress(0, 'Error: ' + error.message, true);
                             setTimeout(function() {
                                 progressOverlay.style.display = 'none';
@@ -988,15 +426,11 @@
 
                                         if (progress.step === 'complete') {
                                             clearInterval(pollInterval);
-                                            if (fallbackTimer) {
-                                                clearTimeout(fallbackTimer);
-                                            }
+                                            if (fallbackTimer) clearTimeout(fallbackTimer);
                                             window.location.href = redirectUrl;
                                         } else if (progress.step === 'error') {
                                             clearInterval(pollInterval);
-                                            if (fallbackTimer) {
-                                                clearTimeout(fallbackTimer);
-                                            }
+                                            if (fallbackTimer) clearTimeout(fallbackTimer);
                                             updateProgress(0, 'Error: ' + progress.message, true);
                                             setTimeout(function() {
                                                 progressOverlay.style.display = 'none';
@@ -1028,12 +462,8 @@
                         progressBar.classList.remove('bg-primary');
                     }
                 }
-                if (progressMessage) {
-                    progressMessage.textContent = message;
-                }
-                if (progressPercent) {
-                    progressPercent.textContent = percent + '%';
-                }
+                if (progressMessage) progressMessage.textContent = message;
+                if (progressPercent) progressPercent.textContent = percent + '%';
             }
 
             function generateUUID() {
