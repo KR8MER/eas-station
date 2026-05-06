@@ -1693,8 +1693,15 @@ def register(app: Flask, logger) -> None:
         }
 
     @app.route("/api/radio/diagnostics/status", methods=["GET"])
+    @cache.cached(timeout=2, key_prefix='radio_diagnostics_status')
     def api_radio_diagnostics_status() -> Any:
-        """Get comprehensive diagnostic information about RadioManager and receivers."""
+        """Get comprehensive diagnostic information about RadioManager and receivers.
+
+        Cached for 2 seconds to bound load when multiple admin dashboards
+        (admin/radio, audio_monitoring, admin/radio/diagnostics) poll this
+        endpoint at 1-2 second intervals.  The 2 s TTL preserves near-live
+        status updates while flattening per-viewer database/Redis queries.
+        """
         try:
             # Get database receivers
             receivers_db = RadioReceiver.query.all()
