@@ -35,7 +35,7 @@ import io
 import logging
 import wave
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any
+from typing import Any, Callable, Dict, List, Optional
 import numpy as np
 
 from .eas_decode import decode_same_audio, SAMEHeaderDetails, SAMEAudioDecodeResult
@@ -174,6 +174,8 @@ def detect_eas_from_file(
     sample_rate: Optional[int] = None,
     detect_tones: bool = True,
     detect_narration: bool = True,
+    auto_rate_sweep: bool = True,
+    progress_callback: Optional[Callable[[int, int, str], None]] = None,
     **kwargs
 ) -> EASDetectionResult:
     """
@@ -184,6 +186,14 @@ def detect_eas_from_file(
         sample_rate: Sample rate (auto-detected if None)
         detect_tones: Whether to detect alert tones
         detect_narration: Whether to extract narration segments
+        auto_rate_sweep: When True (default) and ``sample_rate`` is None,
+            try multiple candidate rates to recover from mis-tagged files.
+            Callers that trust the file's native rate (e.g., a freshly
+            uploaded WAV with a valid RIFF header) should pass False to
+            skip up to six redundant demodulation passes.
+        progress_callback: Forwarded to :func:`decode_same_audio` so
+            progress UIs can report per-rate updates during the slowest
+            stage of the pipeline.
         **kwargs: Additional parameters for tone detection
 
     Returns:
@@ -200,7 +210,12 @@ def detect_eas_from_file(
     try:
         # Step 1: Decode SAME headers using existing decoder
         logger.info(f"Decoding SAME headers from {audio_path}")
-        same_result = decode_same_audio(audio_path, sample_rate=sample_rate)
+        same_result = decode_same_audio(
+            audio_path,
+            sample_rate=sample_rate,
+            auto_rate_sweep=auto_rate_sweep,
+            progress_callback=progress_callback,
+        )
         result.raw_same_result = same_result
         result.same_headers = same_result.headers
         result.same_confidence = same_result.bit_confidence

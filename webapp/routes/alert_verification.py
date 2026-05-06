@@ -127,7 +127,27 @@ def _progress_path(operation_id: str) -> str:
     return os.path.join(_progress_dir, f"{safe_id}.json")
 
 class ProgressTracker:
-    """Track progress of long-running operations using a shared file store."""
+    """Track progress of long-running operations using a shared file store.
+
+    The reported ``percent`` is mapped onto a unified 0–100 timeline using
+    phase weights so the bar advances monotonically across upload → decode
+    → extract → storage → data-load instead of resetting every time the
+    caller starts a new ``step`` with a different ``total``.  This was the
+    root cause of the visible 50 % → 16 % regression users observed when
+    the pipeline transitioned from the upload phase (total=4) to the
+    decode phase (total=6).
+    """
+
+    # Each phase claims a slice of the global 0–100 timeline.  Sub-progress
+    # within a phase (current/total) is linearly mapped into the slice.
+    PHASE_RANGES: Dict[str, Tuple[int, int]] = {
+        "init": (0, 1),
+        "upload": (1, 5),
+        "decode": (5, 75),
+        "extract": (75, 88),
+        "storage": (88, 95),
+        "data": (95, 99),
+    }
 
     def __init__(self, operation_id: str):
         self.operation_id = operation_id
@@ -144,16 +164,49 @@ class ProgressTracker:
             handle.write(json_dumps(payload))
         os.replace(temp_path, target_path)
 
+    @classmethod
+    def _phase_percent(cls, step: str, current: int, total: int) -> int:
+        """Map a phase + sub-progress into the unified 0–100 timeline."""
+
+        low, high = cls.PHASE_RANGES.get(step, (0, 100))
+        if total <= 0:
+            return low
+        ratio = max(0.0, min(1.0, current / total))
+        return int(round(low + (high - low) * ratio))
+
+    def _read_existing_percent(self) -> int:
+        path = _progress_path(self.operation_id)
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                data = json_loads(handle.read())
+        except (FileNotFoundError, OSError, JSONDecodeError):
+            return 0
+        try:
+            return int(data.get("percent") or 0)
+        except (TypeError, ValueError):
+            return 0
+
     def update(self, step: str, current: int, total: int, message: str = ""):
-        """Update progress for the current operation."""
-        progress_data = {
-            "step": step,
-            "current": current,
-            "total": total,
-            "message": message,
-            "percent": int((current / total * 100)) if total > 0 else 0,
-        }
+        """Update progress for the current operation.
+
+        Sub-progress within the named phase is mapped onto the global
+        0–100 timeline.  The reported ``percent`` is also clamped to be
+        monotonically non-decreasing, so a slow phase can't visually
+        rewind the bar when a faster phase takes over.
+        """
+        percent = self._phase_percent(step, current, total)
+
         with _progress_lock:
+            previous = self._read_existing_percent()
+            if percent < previous:
+                percent = previous
+            progress_data = {
+                "step": step,
+                "current": current,
+                "total": total,
+                "message": message,
+                "percent": percent,
+            }
             self._write_payload(progress_data)
 
     def complete(self, message: str = "Complete"):
@@ -487,26 +540,62 @@ class _PCMBuffer:
         )
 
 
-def _detect_comprehensive_eas_segments(audio_path: str, route_logger, progress: Optional[ProgressTracker] = None):
+def _detect_comprehensive_eas_segments(
+    audio_path: str,
+    route_logger,
+    progress: Optional[ProgressTracker] = None,
+    *,
+    store_results: bool = True,
+):
     """
     Perform comprehensive EAS detection and return properly separated segments.
 
     Returns a dict compatible with SAMEAudioDecodeResult format but with additional segments:
     - header: SAME header bursts
     - attention_tone: EBS two-tone or NWS 1050 Hz
-    - narration: Voice narration
+    - narration: Voice narration (only when ``store_results=True``)
     - eom: End-of-Message marker
     - buffer: Lead-in/lead-out audio
+
+    When ``store_results`` is False the user is only previewing the
+    decode and we skip the narration extraction + composite-WAV
+    assembly steps.  Those are the slowest parts of the comprehensive
+    pipeline and only need to run when the result will be persisted.
     """
     try:
-        # Step 1: Run comprehensive detection
+        # Step 1: Run comprehensive detection.  The "decode" phase claims a
+        # large slice of the unified progress timeline (see
+        # ProgressTracker.PHASE_RANGES); sub-steps below report into it.
         if progress:
             progress.update("decode", 1, 6, "Detecting SAME headers and audio segments...")
+
+        # Trust the native sample rate for WAV uploads — their RIFF
+        # header is reliable and the multi-rate sweep would just spend
+        # ~6 redundant demod passes on a known-good input.  MP3 (and
+        # anything else) keeps the existing sweep so mis-tagged files
+        # still recover.
+        ext = os.path.splitext(audio_path.lower())[1]
+        wav_fast_path = ext == ".wav"
+
+        decode_progress_cb = None
+        if progress is not None:
+            def decode_progress_cb(current: int, total: int, message: str) -> None:
+                # Map per-rate decode progress into steps 1..3 of the
+                # decode phase so the bar advances visibly while the
+                # demod loop runs (previously sat frozen at 16 %).
+                progress.update(
+                    "decode",
+                    1 + min(2, max(0, int(round(2 * current / max(total, 1))))),
+                    6,
+                    message,
+                )
 
         detection_result = detect_eas_from_file(
             audio_path,
             detect_tones=True,
-            detect_narration=True
+            detect_narration=store_results,
+            auto_rate_sweep=not wav_fast_path,
+            progress_callback=decode_progress_cb,
         )
 
         route_logger.info(f"Comprehensive detection: SAME={detection_result.same_detected}, "
@@ -514,16 +603,18 @@ def _detect_comprehensive_eas_segments(audio_path: str, route_logger, progress: 
                          f"Narration={detection_result.has_narration}")
 
         if progress:
-            progress.update("decode", 2, 6, "Processing SAME headers...")
+            progress.update("decode", 4, 6, "Processing SAME headers...")
 
         # Get the basic SAME decode result
         same_result = detection_result.raw_same_result
         if not same_result:
             # Fallback to basic decode if comprehensive failed
-            same_result = decode_same_audio(audio_path)
+            same_result = decode_same_audio(
+                audio_path, auto_rate_sweep=not wav_fast_path
+            )
 
         if progress:
-            progress.update("decode", 3, 6, "Extracting audio segments...")
+            progress.update("extract", 1, 4, "Extracting audio segments...")
 
         # Step 2: Build segment dictionary with comprehensive segments
         segments = {}
@@ -573,8 +664,13 @@ def _detect_comprehensive_eas_segments(audio_path: str, route_logger, progress: 
             route_logger.info(f"Extracted {tone.tone_type.upper()} tone: "
                             f"{tone.duration_seconds:.2f}s at {tone.start_sample / sample_rate:.2f}s")
 
-        # Add narration segment
-        if detection_result.narration_segments:
+        # Add narration segment.  Skipped entirely when the user is just
+        # previewing (store_results=False); narration extraction + WAV
+        # encoding is the slowest segment-extraction step and we don't
+        # need it for an ephemeral display where buffer already covers it.
+        if not store_results:
+            pass
+        elif detection_result.narration_segments:
             # Take the first narration segment with speech
             narration = next((seg for seg in detection_result.narration_segments if seg.contains_speech),
                            detection_result.narration_segments[0] if detection_result.narration_segments else None)
@@ -608,7 +704,7 @@ def _detect_comprehensive_eas_segments(audio_path: str, route_logger, progress: 
                 route_logger.info(f"Extracted narration: {narration.duration_seconds:.2f}s "
                                 f"at {narration.start_sample / sample_rate:.2f}s, "
                                 f"speech={narration.contains_speech}")
-        elif 'buffer' in same_result.segments and not detection_result.alert_tones:
+        elif 'buffer' in same_result.segments and not detection_result.alert_tones and store_results:
             # Fallback: If no narration detected and no tones, extract narration from buffer
             # This helps when the audio doesn't have clear attention tones
             buffer_seg = same_result.segments['buffer']
@@ -657,15 +753,17 @@ def _detect_comprehensive_eas_segments(audio_path: str, route_logger, progress: 
             segments['buffer'] = same_result.segments['buffer']
 
         if progress:
-            progress.update("decode", 5, 6, "Building composite audio segment...")
+            progress.update("extract", 3, 4, "Building composite audio segment...")
 
-        # Build composite audio segment combining all individual segments
-        composite = _build_composite_audio_segment(segments, sample_rate)
+        # Build composite audio segment combining all individual segments.
+        # Skipped on preview to avoid the WAV decode + concat work — the
+        # buffer segment already gives the user a playable artifact.
+        composite = _build_composite_audio_segment(segments, sample_rate) if store_results else None
         if composite:
             route_logger.info(f"Created composite segment: {composite.duration_seconds:.2f}s")
 
         if progress:
-            progress.update("decode", 6, 6, "Finalizing audio segments...")
+            progress.update("extract", 4, 4, "Finalizing audio segments...")
 
         # Update the decode result with comprehensive segments in desired order
         # Composite first, then individual segments in chronological order
@@ -806,6 +904,7 @@ def _process_temp_audio_file(
             temp_path,
             route_logger,
             progress=progress,
+            store_results=store_results,
         )
     except AudioDecodeError as exc:
         if progress:

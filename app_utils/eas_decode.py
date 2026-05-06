@@ -31,7 +31,7 @@ from datetime import datetime, timedelta, timezone
 from array import array
 from collections import OrderedDict
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -1334,7 +1334,11 @@ def _score_decode_result(result: SAMEAudioDecodeResult, expected_rate: int, actu
     return score
 
 
-def _try_multiple_sample_rates(path: str, native_rate: int) -> Tuple[SAMEAudioDecodeResult, int, bool]:
+def _try_multiple_sample_rates(
+    path: str,
+    native_rate: int,
+    progress_callback: Optional[Callable[[int, int, str], None]] = None,
+) -> Tuple[SAMEAudioDecodeResult, int, bool]:
     """Try decoding at multiple sample rates and return the best result.
 
     Performance optimisation: the audio file is read **once** at its native
@@ -1342,6 +1346,14 @@ def _try_multiple_sample_rates(path: str, native_rate: int) -> Tuple[SAMEAudioDe
     cached samples in-memory (via scipy when available), avoiding repeated
     disk I/O and ffmpeg subprocess launches that would otherwise cost
     hundreds of milliseconds each.
+
+    Args:
+        path: Audio file path.
+        native_rate: Detected native sample rate.
+        progress_callback: Optional ``cb(current, total, message)`` invoked
+            once per candidate rate so callers (e.g., the alert-verification
+            UI) can show real progress instead of a frozen bar during the
+            slowest stage of the pipeline.
 
     Returns: (best_result, best_rate, rate_mismatch_detected)
     """
@@ -1386,7 +1398,17 @@ def _try_multiple_sample_rates(path: str, native_rate: int) -> Tuple[SAMEAudioDe
     best_score = -float('inf')
     best_rate = native_rate
 
-    for rate in unique_rates:
+    total_rates = len(unique_rates)
+    for rate_index, rate in enumerate(unique_rates, start=1):
+        if progress_callback is not None:
+            try:
+                progress_callback(
+                    rate_index,
+                    total_rates,
+                    f"Demodulating SAME at {rate} Hz",
+                )
+            except Exception:  # pragma: no cover - never let UI crash decode
+                pass
         try:
             # Fast path: use cached native samples, resample in-memory.
             if native_samples is not None:
@@ -1782,14 +1804,30 @@ def _decode_from_samples(
     )
 
 
-def decode_same_audio(path: str, *, sample_rate: Optional[int] = None) -> SAMEAudioDecodeResult:
+def decode_same_audio(
+    path: str,
+    *,
+    sample_rate: Optional[int] = None,
+    auto_rate_sweep: bool = True,
+    progress_callback: Optional[Callable[[int, int, str], None]] = None,
+) -> SAMEAudioDecodeResult:
     """Decode SAME headers from a WAV or MP3 file located at ``path``.
 
-    If sample_rate is not provided, multi-rate auto-detection will be used to find
-    the best sample rate. This handles files with incorrect sample rate metadata.
+    If ``sample_rate`` is provided explicitly it is used directly.
 
-    If sample_rate is provided explicitly, it will be used directly without trying
-    other rates.
+    Otherwise behaviour depends on ``auto_rate_sweep``:
+
+    * ``True`` (default, preserves prior behaviour) — multi-rate
+      auto-detection runs.  This is necessary for files with unreliable
+      sample-rate metadata (mis-resampled MP3s, etc.) but costs up to
+      seven full demodulation passes on noisy / borderline inputs.
+    * ``False`` — trust the file's native rate and decode once.  Callers
+      that already know the rate is reliable (e.g., a freshly-uploaded WAV
+      with a valid RIFF header) should opt in to skip the sweep.
+
+    ``progress_callback`` is forwarded to the multi-rate sweep when it
+    runs; it is invoked as ``cb(current, total, message)`` once per rate
+    tried so progress UIs can update during the slowest stage.
     """
 
     if not os.path.exists(path):
@@ -1799,9 +1837,23 @@ def decode_same_audio(path: str, *, sample_rate: Optional[int] = None) -> SAMEAu
     if sample_rate is not None:
         return _decode_at_sample_rate(path, sample_rate)
 
-    # Auto-detect and try multiple rates
     native_rate = _detect_audio_sample_rate(path)
-    result, actual_rate, rate_mismatch = _try_multiple_sample_rates(path, native_rate)
+
+    # Fast path: caller has told us the native rate is trustworthy.  Skip
+    # the multi-rate sweep entirely — saves up to ~6 redundant demod
+    # passes on every upload.
+    if not auto_rate_sweep:
+        if progress_callback is not None:
+            try:
+                progress_callback(1, 1, f"Demodulating SAME at {native_rate} Hz")
+            except Exception:  # pragma: no cover
+                pass
+        return _decode_at_sample_rate(path, native_rate)
+
+    # Auto-detect and try multiple rates
+    result, actual_rate, rate_mismatch = _try_multiple_sample_rates(
+        path, native_rate, progress_callback=progress_callback
+    )
 
     # Log warning if sample rate mismatch detected
     if rate_mismatch and result.headers:
