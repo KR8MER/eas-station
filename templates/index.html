@@ -432,6 +432,40 @@
         }
     }
 
+    .platform-highlights-card {
+        border: 1px solid var(--border-color);
+        background: var(--surface-color);
+    }
+
+    .platform-cap-item {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.35rem 0.5rem;
+        border-radius: var(--radius-sm);
+        font-size: 0.8rem;
+        font-weight: 500;
+        color: var(--text-secondary);
+        background: var(--surface-raised);
+        border: 1px solid var(--border-color);
+    }
+
+    .platform-cap-item i {
+        font-size: 0.85rem;
+        flex-shrink: 0;
+    }
+
+    .platform-cap-item--highlight {
+        background: linear-gradient(135deg, rgba(var(--warning-rgb, 255, 193, 7), 0.12), rgba(var(--primary-rgb, 13, 110, 253), 0.08));
+        border-color: var(--warning-color, #ffc107);
+        color: var(--text-primary);
+        font-weight: 600;
+    }
+
+    .platform-cap-item--highlight i {
+        color: var(--warning-color, #ffc107);
+    }
+
 </style>
 {% endblock %}
 
@@ -699,6 +733,62 @@
                                 <p class="text-muted small mb-0" id="alert-summary-placeholder">Alert types will appear after the next data refresh.</p>
                             </div>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card platform-highlights-card">
+                <div class="card-header d-flex align-items-center gap-2">
+                    <i class="fas fa-star text-warning"></i>
+                    <h6 class="card-title mb-0">Platform Capabilities</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row g-2">
+                        <div class="col-6 col-md-4 col-lg-6 col-xl-4">
+                            <div class="platform-cap-item">
+                                <i class="fas fa-microphone text-primary"></i>
+                                <span>SAME Audio</span>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-4 col-lg-6 col-xl-4">
+                            <div class="platform-cap-item">
+                                <i class="fas fa-satellite-dish text-success"></i>
+                                <span>SDR Verify</span>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-4 col-lg-6 col-xl-4">
+                            <div class="platform-cap-item">
+                                <i class="fas fa-map-location-dot text-info"></i>
+                                <span>Spatial GIS</span>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-4 col-lg-6 col-xl-4">
+                            <div class="platform-cap-item">
+                                <i class="fas fa-clock-rotate-left text-secondary"></i>
+                                <span>Auto RWT</span>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-4 col-lg-6 col-xl-4">
+                            <div class="platform-cap-item">
+                                <i class="fas fa-sign text-warning"></i>
+                                <span>LED Signs</span>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-4 col-lg-6 col-xl-4">
+                            <div class="platform-cap-item platform-cap-item--highlight">
+                                <i class="fas fa-walkie-talkie"></i>
+                                <span>MDC1200 Selective Calling</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-2 pt-2 border-top">
+                        <p class="small text-muted mb-1">
+                            <i class="fas fa-circle-info me-1"></i>
+                            <strong>MDC1200 selective calling</strong> lets EAS alerts break squelch only on authorised LMR radios — with full PTT-ID identification and dispatch console logging.
+                        </p>
+                        <a href="/about#mdc1200" class="btn btn-sm btn-outline-primary w-100 mt-1">
+                            <i class="fas fa-arrow-right me-1"></i>Learn about all features
+                        </a>
                     </div>
                 </div>
             </div>
