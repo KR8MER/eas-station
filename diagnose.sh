@@ -38,19 +38,22 @@ else
 fi
 echo ""
 
-echo "4. Checking if migrations tables exist..."
+echo "4. Database schema health check..."
 echo "-------------------------------"
-TABLES=$(sudo -u postgres psql -d alerts -tAc "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('hardware_settings', 'icecast_settings');" 2>/dev/null)
-if echo "$TABLES" | grep -q "hardware_settings"; then
-    echo -e "${GREEN}✓ hardware_settings table exists${NC}"
+if [ -f /opt/eas-station/venv/bin/python3 ] && [ -f /opt/eas-station/scripts/database/check_schema.py ]; then
+    cd /opt/eas-station
+    sudo -u eas-station /opt/eas-station/venv/bin/python3 \
+        scripts/database/check_schema.py 2>&1
 else
-    echo -e "${RED}✗ hardware_settings table MISSING${NC}"
-fi
-
-if echo "$TABLES" | grep -q "icecast_settings"; then
-    echo -e "${GREEN}✓ icecast_settings table exists${NC}"
-else
-    echo -e "${RED}✗ icecast_settings table MISSING${NC}"
+    echo -e "${YELLOW}⚠ check_schema.py not found; falling back to basic table check${NC}"
+    TABLES=$(sudo -u postgres psql -d alerts -tAc "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('hardware_settings', 'icecast_settings', 'alert_filter_settings', 'poll_history');" 2>/dev/null)
+    for t in hardware_settings icecast_settings alert_filter_settings poll_history; do
+        if echo "$TABLES" | grep -q "$t"; then
+            echo -e "${GREEN}✓ $t exists${NC}"
+        else
+            echo -e "${RED}✗ $t MISSING${NC}"
+        fi
+    done
 fi
 echo ""
 
