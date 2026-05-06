@@ -164,10 +164,37 @@ def record_audio_decode_result(
 
 
 def load_recent_audio_decodes(limit: int = 5) -> List[Dict[str, Any]]:
-    """Return the most recent decoded audio payloads for display."""
+    """Return the most recent decoded audio payloads for display.
+
+    Uses ``IS NOT NULL`` projections instead of selecting the BYTEA blob
+    columns so that the listing view never pulls the full audio payloads
+    (which can be megabytes per row) just to populate the ``has_*`` flags.
+    """
 
     try:
-        query = EASDecodedAudio.query.order_by(EASDecodedAudio.created_at.desc())
+        query = (
+            db.session.query(
+                EASDecodedAudio.id,
+                EASDecodedAudio.created_at,
+                EASDecodedAudio.original_filename,
+                EASDecodedAudio.content_type,
+                EASDecodedAudio.raw_text,
+                EASDecodedAudio.same_headers,
+                EASDecodedAudio.quality_metrics,
+                EASDecodedAudio.segment_metadata,
+                EASDecodedAudio.header_audio_data.isnot(None).label(
+                    "has_header_audio"
+                ),
+                EASDecodedAudio.message_audio_data.isnot(None).label(
+                    "has_message_audio"
+                ),
+                EASDecodedAudio.eom_audio_data.isnot(None).label("has_eom_audio"),
+                EASDecodedAudio.buffer_audio_data.isnot(None).label(
+                    "has_buffer_audio"
+                ),
+            )
+            .order_by(EASDecodedAudio.created_at.desc())
+        )
         if limit > 0:
             query = query.limit(limit)
         rows = query.all()
@@ -190,10 +217,10 @@ def load_recent_audio_decodes(limit: int = 5) -> List[Dict[str, Any]]:
                 ],
                 "quality_metrics": dict(row.quality_metrics or {}),
                 "segment_metadata": dict(row.segment_metadata or {}),
-                "has_header_audio": row.header_audio_data is not None,
-                "has_message_audio": row.message_audio_data is not None,
-                "has_eom_audio": row.eom_audio_data is not None,
-                "has_buffer_audio": row.buffer_audio_data is not None,
+                "has_header_audio": bool(row.has_header_audio),
+                "has_message_audio": bool(row.has_message_audio),
+                "has_eom_audio": bool(row.has_eom_audio),
+                "has_buffer_audio": bool(row.has_buffer_audio),
             }
         )
 

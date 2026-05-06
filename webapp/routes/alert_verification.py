@@ -21,13 +21,14 @@ from __future__ import annotations
 
 """Routes powering the alert verification and analytics dashboard."""
 
-import json
 import os
+import re
 import tempfile
 import time
 import uuid
 import threading
 from collections import OrderedDict
+from dataclasses import replace as dataclass_replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import (
@@ -74,7 +75,7 @@ import struct
 import numpy as np
 from app_utils import format_local_datetime, utc_now
 from app_utils.export import generate_csv
-from app_utils.optimized_parsing import json_loads, json_dumps
+from app_utils.optimized_parsing import json_loads, json_dumps, JSONDecodeError
 from app_utils.eas_decode import (
     AudioDecodeError,
     ENDEC_MODE_UNKNOWN,
@@ -110,10 +111,13 @@ _result_dir = os.path.join(_progress_dir, "results")
 os.makedirs(_result_dir, exist_ok=True)
 
 
+_OPERATION_ID_SANITIZER = re.compile(r"[^A-Za-z0-9_-]")
+
+
 def _sanitize_operation_id(operation_id: str) -> str:
     """Return a filesystem-safe operation identifier."""
 
-    return "".join(ch for ch in operation_id if ch.isalnum() or ch in {"-", "_"})
+    return _OPERATION_ID_SANITIZER.sub("", operation_id or "")
 
 
 def _progress_path(operation_id: str) -> str:
@@ -137,7 +141,7 @@ class ProgressTracker:
         temp_path = f"{target_path}.{uuid.uuid4().hex}.tmp"
 
         with open(temp_path, "w", encoding="utf-8") as handle:
-            json.dump(payload, handle)
+            handle.write(json_dumps(payload))
         os.replace(temp_path, target_path)
 
     def update(self, step: str, current: int, total: int, message: str = ""):
@@ -181,10 +185,10 @@ class ProgressTracker:
             path = _progress_path(operation_id)
             try:
                 with open(path, "r", encoding="utf-8") as handle:
-                    return json.load(handle)
+                    return json_loads(handle.read())
             except FileNotFoundError:
                 return None
-            except (OSError, json.JSONDecodeError):  # pragma: no cover - defensive
+            except (OSError, JSONDecodeError):  # pragma: no cover - defensive
                 return None
 
     @staticmethod
@@ -238,7 +242,7 @@ class OperationResultStore:
 
         with _result_lock:
             with open(temp_path, "w", encoding="utf-8") as handle:
-                json.dump(data, handle)
+                handle.write(json_dumps(data))
             os.replace(temp_path, target_path)
 
     @classmethod
@@ -246,10 +250,10 @@ class OperationResultStore:
         with _result_lock:
             try:
                 with open(cls._path(operation_id), "r", encoding="utf-8") as handle:
-                    return json.load(handle)
+                    return json_loads(handle.read())
             except FileNotFoundError:
                 return None
-            except (OSError, json.JSONDecodeError):  # pragma: no cover - defensive
+            except (OSError, JSONDecodeError):  # pragma: no cover - defensive
                 return None
 
     @classmethod
@@ -403,7 +407,11 @@ class _PCMBuffer:
 
     def __init__(self, *, sample_rate: int, samples: np.ndarray, origin_start: int = 0):
         self.sample_rate = int(sample_rate)
-        self.samples = samples.astype(np.int16, copy=True)
+        # Avoid an unconditional copy: ``astype(copy=False)`` returns the
+        # same buffer when the dtype already matches, which is the common
+        # case (16-bit PCM extracted via ``np.frombuffer``). For non-int16
+        # sources the conversion still allocates a fresh array.
+        self.samples = np.ascontiguousarray(samples, dtype=np.int16)
         self.origin_start = max(0, int(origin_start))
 
     @property
@@ -701,16 +709,12 @@ def _build_composite_audio_segment(segments: Dict[str, SAMEAudioSegment], sample
     Returns:
         Composite SAMEAudioSegment or None if no segments available
     """
-    # Check if we have buffer segment - it contains the full alert audio
+    # Check if we have buffer segment - it contains the full alert audio.
+    # Reuse the existing dataclass instance via ``dataclasses.replace`` so we
+    # share the immutable wav_bytes reference instead of allocating a fresh
+    # copy of all fields just to relabel the segment.
     if 'buffer' in segments:
-        buffer_seg = segments['buffer']
-        return SAMEAudioSegment(
-            label='composite',
-            start_sample=buffer_seg.start_sample,
-            end_sample=buffer_seg.end_sample,
-            sample_rate=buffer_seg.sample_rate,
-            wav_bytes=buffer_seg.wav_bytes
-        )
+        return dataclass_replace(segments['buffer'], label='composite')
     
     # Fallback: combine individual segments
     # Define the order of segments for the composite
