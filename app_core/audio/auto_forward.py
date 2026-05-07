@@ -275,9 +275,10 @@ def auto_forward_cap_alert(
     vtec_action: Optional[str] = getattr(cap_alert, 'vtec_action', None)
     if vtec_action:
         if vtec_action in VTEC_SKIP_ACTIONS:
-            # CON / ROU: event is already on air; no new broadcast needed
+            # CON / ROU / COR: event is already on air, this is a non-VTEC text
+            # update or routine placeholder — no new broadcast needed
             reason = (
-                f"VTEC action '{vtec_action}' indicates a continuing/routine update "
+                f"VTEC action '{vtec_action}' is a non-broadcast update "
                 "— rebroadcast suppressed"
             )
             log.info("Auto-forward skipped for %s: %s", result['identifier'], reason)

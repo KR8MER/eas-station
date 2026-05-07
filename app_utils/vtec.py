@@ -42,10 +42,12 @@ VTEC_ACTIONS: Dict[str, str] = {
 }
 
 # Actions that should trigger a new or updated EAS broadcast
-VTEC_BROADCAST_ACTIONS = frozenset({'NEW', 'EXT', 'EXA', 'EXB', 'UPG', 'COR'})
+VTEC_BROADCAST_ACTIONS = frozenset({'NEW', 'EXT', 'EXA', 'EXB', 'UPG'})
 
-# Actions where a prior broadcast already covers this event — skip rebroadcast
-VTEC_SKIP_ACTIONS = frozenset({'CON', 'ROU'})
+# Actions where a prior broadcast already covers this event — skip rebroadcast.
+# COR per NWSI 10-1703 §2.1.2 corrects only non-VTEC/non-UGC text errors in a
+# previously-issued event, so it must not re-tone an event that is already on air.
+VTEC_SKIP_ACTIONS = frozenset({'CON', 'ROU', 'COR'})
 
 # Actions that represent the event ending
 VTEC_TERMINAL_ACTIONS = frozenset({'CAN', 'EXP'})
@@ -146,7 +148,7 @@ _VTEC_RE = re.compile(
     r'([A-Z]{2,3})\.'      # aaa — action
     r'([A-Z]{4})\.'        # cccc — office ID
     r'([A-Z]{2})\.'        # pp  — phenomenon
-    r'([WAYSFONM])\.'      # s   — significance
+    r'([WAYSFON])\.'       # s   — significance (Appendix A: W/A/Y/S/F/O/N)
     r'(\d{4})\.'           # #### — ETN
     r'(\d{6}T\d{4}Z)'     # begin time (yymmddThhnnZ)
     r'-'
@@ -186,6 +188,40 @@ def _parse_raw(raw: str) -> Optional[re.Match]:
     return _VTEC_RE.search(raw.strip().strip('/'))
 
 
+# Per NWSI 10-1703 §3.1 / Table 2, an upgrade or downgrade/replacement segment
+# carries two P-VTEC strings: the first ends the old event (UPG or CAN); the
+# second creates/updates the new event (NEW, EXA, EXB, EXT, CON, or COR).  The
+# segment's primary identity is the second string.
+_PAIRED_LEAD_ACTIONS = frozenset({'UPG', 'CAN'})
+_PAIRED_FOLLOW_ACTIONS = frozenset({'NEW', 'EXA', 'EXB', 'EXT', 'CON', 'COR'})
+
+
+def _select_primary_vtec(vtec_list: List[str]) -> Optional[re.Match]:
+    """Pick the VTEC string that represents the alert's primary event.
+
+    For an UPG/CAN-paired segment (§3.1) the second string is the new event
+    being created; treat it as primary.  Otherwise use the first string.
+    """
+    if not vtec_list:
+        return None
+
+    first = _parse_raw(vtec_list[0])
+    if first is None:
+        # First string unparseable — try the rest in order before giving up.
+        for raw in vtec_list[1:]:
+            m = _parse_raw(raw)
+            if m is not None:
+                return m
+        return None
+
+    if first.group(2) in _PAIRED_LEAD_ACTIONS and len(vtec_list) >= 2:
+        second = _parse_raw(vtec_list[1])
+        if second is not None and second.group(2) in _PAIRED_FOLLOW_ACTIONS:
+            return second
+
+    return first
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -208,17 +244,18 @@ def extract_vtec_identity(raw_json: Any) -> Optional[Dict[str, Any]]:
         .get('parameters', {})
         .get('VTEC', [])
     )
-    if not vtec_list:
-        return None
-
-    m = _parse_raw(vtec_list[0])
+    m = _select_primary_vtec(vtec_list)
     if not m:
         return None
 
     prog, action, office, phen, sig, etn_str, begin_raw, end_raw = m.groups()
 
-    # Use end time for year; fall back to begin if end is zeros; then None.
-    year = _vtec_year_from_time(end_raw) or _vtec_year_from_time(begin_raw)
+    # NWSI 10-1703 §2.1.6: ETN is anchored to the year of the NEW issuance and
+    # carries forward even when the event extends into the next calendar year.
+    # Prefer begin time so an EXT that pushes the end time across a year
+    # boundary doesn't break the (office, phen, sig, etn, year) chain key.
+    # Fall back to end time only when begin is the all-zeros "ongoing" sentinel.
+    year = _vtec_year_from_time(begin_raw) or _vtec_year_from_time(end_raw)
 
     return {
         'vtec_office':       office,
@@ -244,7 +281,7 @@ def parse_vtec_display(raw: str) -> Dict[str, Any]:
 
     prog, action, office, phen, sig, etn_str, begin_raw, end_raw = m.groups()
 
-    year = _vtec_year_from_time(end_raw) or _vtec_year_from_time(begin_raw)
+    year = _vtec_year_from_time(begin_raw) or _vtec_year_from_time(end_raw)
 
     result.update({
         'program':            prog,
