@@ -332,7 +332,7 @@
 
     .scope-coverage-na {
         background: var(--text-muted);
-        color: #fff;
+        color: var(--bg-color);
     }
 
     .county-wide-badge {
@@ -358,6 +358,19 @@
     .alert-actions {
         position: sticky;
         top: 20px;
+    }
+
+    /* "Current alert" star marker in the VTEC timeline. The theme's primary
+       color spans the full lightness range across themes, so pick the text
+       color per-theme: dark ink on themes whose primary resolves to a light
+       hue (lightning/yellow), white on the rest. */
+    .vtec-current-marker {
+        background: var(--primary-color);
+        color: #ffffff;
+    }
+    [data-theme="lightning"] .vtec-current-marker,
+    [data-theme="yellow"] .vtec-current-marker {
+        color: #0d1b2a;
     }
 </style>
 {% endblock %}
@@ -1322,7 +1335,7 @@
                                 <div class="d-flex align-items-start gap-2 mb-2">
                                     <div class="d-flex flex-column align-items-center" style="min-width:2rem;">
                                         {% if is_current %}
-                                        <div class="rounded-circle border border-primary d-flex align-items-center justify-content-center" style="width:1.5rem;height:1.5rem;background:var(--primary-color);color:#fff;font-size:.65rem;font-weight:700;">★</div>
+                                        <div class="rounded-circle border border-primary d-flex align-items-center justify-content-center vtec-current-marker" style="width:1.5rem;height:1.5rem;font-size:.65rem;font-weight:700;">★</div>
                                         {% else %}
                                         <div class="rounded-circle border d-flex align-items-center justify-content-center" style="width:1.5rem;height:1.5rem;background:var(--surface-color);font-size:.6rem;font-weight:700;color:var(--text-secondary);">{{ loop.index }}</div>
                                         {% endif %}

@@ -1034,3 +1034,48 @@ code {
 .timeline-item.success::before { background: var(--success-color); }
 .timeline-item.error::before { background: var(--danger-color); }
 .timeline-item.warning::before { background: var(--warning-color); }
+
+/* ----------------------------------------------------------------------------
+   Lightning theme readability — admin gradient banners
+   ----------------------------------------------------------------------------
+   The admin header/stat cards/modal header/count badge all paint a
+   primary→secondary gradient and put `color: white` on top. On the lightning
+   theme that gradient resolves to bright-yellow→cyan (very light) so white
+   text becomes nearly invisible. Force dark ink on every admin-themed gradient
+   surface for this theme. The yellow theme is similar (primary is
+   bright yellow). */
+[data-theme="lightning"] .admin-header,
+[data-theme="lightning"] .admin-header h1,
+[data-theme="lightning"] .admin-header h2,
+[data-theme="lightning"] .admin-header p,
+[data-theme="lightning"] .admin-header *,
+[data-theme="lightning"] .admin-page-header,
+[data-theme="lightning"] .admin-page-header h1,
+[data-theme="lightning"] .admin-page-header h2,
+[data-theme="lightning"] .admin-page-header p,
+[data-theme="lightning"] .admin-page-header *,
+[data-theme="lightning"] .stat-card,
+[data-theme="lightning"] .stat-card *,
+[data-theme="lightning"] .modal-header,
+[data-theme="lightning"] .modal-header *,
+[data-theme="lightning"] .admin-count-badge,
+[data-theme="yellow"] .admin-header,
+[data-theme="yellow"] .admin-header *,
+[data-theme="yellow"] .admin-page-header,
+[data-theme="yellow"] .admin-page-header *,
+[data-theme="yellow"] .stat-card,
+[data-theme="yellow"] .stat-card *,
+[data-theme="yellow"] .modal-header,
+[data-theme="yellow"] .modal-header *,
+[data-theme="yellow"] .admin-count-badge {
+    color: #0d1b2a !important;
+    text-shadow: none;
+}
+
+/* Restore the admin-page-header subtitle to a softer dark ink (was
+   rgba(white, 0.85) in the default rule). Pure black is too heavy for the
+   subtitle's smaller font size on the bright gradient. */
+[data-theme="lightning"] .admin-page-header p,
+[data-theme="yellow"] .admin-page-header p {
+    color: rgba(13, 27, 42, 0.78) !important;
+}
