@@ -6,6 +6,34 @@ tracks releases under the 2.x series.
 
 ## [Unreleased]
 
+### Fixed
+- **Phantom whitespace below the page footer on every page (PR #2040 follow-up)**:
+  Three independent bugs were combining to leave a band of empty space below the
+  footer that resisted multiple earlier fixes.
+  1. `static/css/styles.css` had **14 un-commented section headers** at top
+     level (lines like `1. RESET & BASE STYLES` and `PERFORMANCE OPTIMIZATIONS`).
+     Per the CSS error-recovery rules, each one was parsed as the prelude of an
+     invalid qualified rule, silently consuming the **first real rule that
+     followed it**. The casualty in section 5 was `.card { overflow: hidden }`,
+     which let a `::after` glow pseudo-element escape its parent and stretch
+     the document height; PR #2040 patched section 5 only. Sections 1, 2, 3,
+     4, 6, 7, 8, 9, 10, 11, 12, 13, and the un-numbered "PERFORMANCE
+     OPTIMIZATIONS" header were also wrapped in `/* … */`.
+  2. `footer { margin-top: var(--footer-margin-top) }` relied on
+     `.page-shell { flex: 1 0 auto }` to consume any leftover space in the
+     `body` flex column. Switched the footer to `margin-top: auto`, the
+     canonical sticky-footer guarantee — the footer is now pinned to the
+     bottom of `body` (which has `min-height: 100vh`) regardless of whether
+     `.page-shell`'s grow is honored, so no whitespace can appear below it.
+     The 4rem footer top-padding still provides breathing room above.
+  3. `templates/base.html` cache-busts `styles.css` with
+     `?v={{ static_asset_version }}`, derived from the `VERSION` file. None
+     of the prior CSS fix commits bumped `VERSION`, so browsers and
+     intermediary caches kept serving the stale `styles.css?v=2.73.2` bytes
+     even after a hard refresh — meaning every fix landed in source but
+     never reached the rendered page. `VERSION` is now bumped per
+     AGENTS.md, forcing a fresh asset URL.
+
 ### Changed
 - **EAS Station fingerprint trill changed to `0xA9`**: The post-burst
   ENDEC fingerprint byte emitted by `_generate_station_terminator_samples()` (3
