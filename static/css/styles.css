@@ -2235,8 +2235,11 @@ footer {
         var(--secondary-color) 100%);
     color: white;
     padding: 4rem 0 2rem;
-    margin-top: var(--footer-margin-top);
-    box-shadow: 
+    /* margin-top: auto pins the footer to the bottom of body (a flex column
+       with min-height: 100vh) regardless of whether .page-shell's flex-grow
+       is honored — eliminating any phantom whitespace below the footer. */
+    margin-top: auto;
+    box-shadow:
         0 -8px 32px rgba(0, 0, 0, 0.15),
         0 -2px 8px rgba(0, 0, 0, 0.08);
     position: relative;
@@ -5791,7 +5794,7 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 }
 
 
-   PERFORMANCE OPTIMIZATIONS
+/* PERFORMANCE OPTIMIZATIONS */
 
 /* GPU Acceleration for Animations */
 .card-3d,
