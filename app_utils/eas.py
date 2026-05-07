@@ -1493,7 +1493,12 @@ def _compose_message_text(alert: object, payload: Optional[Dict[str, object]] = 
     1. EASText CAP parameter — if present, use verbatim (§3.6.3).
     2. Otherwise: senderName + description + instruction (§3.6.2).
        NOTE: headline is metadata, not alert content, and is excluded.
-    3. Fallback: generated FCC Required Text when no body text is available.
+    3. IPAWS/WEA fallback when description AND instruction are empty:
+       senderName + CMAMlongtext, then CMAMtext, then headline.  Many
+       IPAWS-only senders (e.g. OHDOT) place the narratable text only in
+       CMAMlongtext; without this fallback the audio would be limited to
+       "Message from <senderName>".
+    4. Fallback: generated FCC Required Text when no body text is available.
 
     Total text is hard-capped at 1800 characters (§3.6.5).
     All text is passed through _normalize_text_for_tts before returning.
@@ -1564,10 +1569,38 @@ def _compose_message_text(alert: object, payload: Optional[Dict[str, object]] = 
         sender = str(properties.get('senderName', '') or '').strip()
         if sender:
             body_parts.append(f"Message from {sender}.")
-        for attr in ('description', 'instruction'):
-            value = str(getattr(alert, attr, '') or '').strip()
-            if value:
-                body_parts.append(value)
+
+        description = str(getattr(alert, 'description', '') or '').strip()
+        instruction = str(getattr(alert, 'instruction', '') or '').strip()
+
+        if description:
+            body_parts.append(description)
+        if instruction:
+            body_parts.append(instruction)
+
+        # IPAWS / WEA fallback: when an alert lacks a CAP <description> and
+        # <instruction> (common for IPAWS-only senders such as OHDOT), the
+        # narratable text lives in the WEA-specific CAP parameters.  Prefer
+        # CMAMlongtext (≤360 chars), then CMAMtext (≤90 chars), then the
+        # CAP <headline>.  Without this fallback the only audio rendered
+        # from such alerts would be "Message from <senderName>", which omits
+        # the actual emergency content.
+        if not description and not instruction:
+            def _first_str(value):
+                if isinstance(value, list):
+                    value = value[0] if value else None
+                if value is None:
+                    return ''
+                return str(value).strip()
+
+            cmam_long = _first_str(parameters.get('CMAMlongtext'))
+            cmam_short = _first_str(parameters.get('CMAMtext'))
+            headline = str(properties.get('headline', '') or '').strip()
+
+            fallback_text = cmam_long or cmam_short or headline
+            if fallback_text:
+                body_parts.append(fallback_text)
+
         body = '\n\n'.join(body_parts).strip()
 
     # Use only the body for TTS narration — the SAME header already encodes the
