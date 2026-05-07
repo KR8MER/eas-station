@@ -1352,12 +1352,26 @@ def build_alert_delivery_trends(
 
 def collect_compliance_log_entries(
     window_days: int = 30,
+    *,
+    window_start: Optional[datetime] = None,
+    window_end: Optional[datetime] = None,
 ) -> Tuple[List[Dict[str, Any]], datetime, datetime]:
-    """Return compliance activity entries for the requested window."""
+    """Return compliance activity entries for the requested window.
 
-    days = _normalize_window_days(window_days)
-    window_end = utc_now()
-    window_start = window_end - timedelta(days=days)
+    When ``window_start`` and ``window_end`` are both provided they take
+    precedence over ``window_days``; otherwise the window ends at "now" and
+    extends ``window_days`` into the past.
+    """
+
+    if window_start is not None and window_end is not None:
+        window_start = _coerce_aware_utc(window_start) or window_start
+        window_end = _coerce_aware_utc(window_end) or window_end
+        if window_start > window_end:
+            window_start, window_end = window_end, window_start
+    else:
+        days = _normalize_window_days(window_days)
+        window_end = utc_now()
+        window_start = window_end - timedelta(days=days)
 
     entries: List[Dict[str, Any]] = []
 
@@ -1444,10 +1458,23 @@ def collect_compliance_log_entries(
     return entries, window_start, window_end
 
 
-def collect_compliance_dashboard_data(window_days: int = 30) -> Dict[str, Any]:
-    """Aggregate compliance metrics for dashboard presentation."""
+def collect_compliance_dashboard_data(
+    window_days: int = 30,
+    *,
+    window_start: Optional[datetime] = None,
+    window_end: Optional[datetime] = None,
+) -> Dict[str, Any]:
+    """Aggregate compliance metrics for dashboard presentation.
 
-    entries, window_start, window_end = collect_compliance_log_entries(window_days)
+    Either supply ``window_days`` for a relative window, or pin the window by
+    providing both ``window_start`` and ``window_end`` (explicit bounds win).
+    """
+
+    entries, window_start, window_end = collect_compliance_log_entries(
+        window_days,
+        window_start=window_start,
+        window_end=window_end,
+    )
 
     received_total = sum(1 for entry in entries if entry["category"] == "received")
     auto_relay_total = sum(1 for entry in entries if entry["category"] == "relayed")
@@ -1502,8 +1529,11 @@ def collect_compliance_dashboard_data(window_days: int = 30) -> Dict[str, Any]:
 
     recent_activity = entries[:25]
 
+    span_seconds = max((window_end - window_start).total_seconds(), 0)
+    effective_window_days = max(1, int(round(span_seconds / 86400))) or 1
+
     return {
-        "window_days": _normalize_window_days(window_days),
+        "window_days": effective_window_days,
         "window_start": window_start,
         "window_end": window_end,
         "generated_at": utc_now(),

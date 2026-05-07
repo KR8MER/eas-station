@@ -54,14 +54,45 @@ def register(app: Flask, logger) -> None:
             return 30
         return max(1, min(int(value), 365))
 
+    def _parse_query_date(value: str) -> "datetime | None":
+        if not value:
+            return None
+        try:
+            if len(value) == 10:
+                parsed = datetime.strptime(value, "%Y-%m-%d")
+            else:
+                parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed
+
+    def _resolve_dashboard_window():
+        """Return ``(start, end, days)``. Explicit start+end wins over days."""
+        start = _parse_query_date(request.args.get("start", type=str) or "")
+        end = _parse_query_date(request.args.get("end", type=str) or "")
+        if start and end:
+            window_start, window_end = resolve_report_window(start=start, end=end)
+            span = max((window_end - window_start).total_seconds(), 0)
+            days = max(1, int(round(span / 86400))) or 1
+            return window_start, window_end, days
+        days = _resolve_window_days()
+        window_start, window_end = resolve_report_window(days=days)
+        return window_start, window_end, days
+
     @app.route("/admin/compliance")
     @require_auth
     @require_role("Admin", "Operator", "Analyst")
     def compliance_dashboard():
-        window_days = _resolve_window_days()
+        window_start, window_end, window_days = _resolve_dashboard_window()
 
         try:
-            dashboard = collect_compliance_dashboard_data(window_days=window_days)
+            dashboard = collect_compliance_dashboard_data(
+                window_days=window_days,
+                window_start=window_start,
+                window_end=window_end,
+            )
             receiver_snapshot = collect_receiver_health_snapshot(route_logger)
             audio_status = collect_audio_path_status(route_logger)
         except Exception as exc:  # pragma: no cover - defensive fallback
@@ -69,8 +100,8 @@ def register(app: Flask, logger) -> None:
             now = utc_now()
             dashboard = {
                 "window_days": window_days,
-                "window_start": now - timedelta(days=window_days),
-                "window_end": now,
+                "window_start": window_start or (now - timedelta(days=window_days)),
+                "window_end": window_end or now,
                 "generated_at": now,
                 "received_vs_relayed": {
                     "received": 0,
@@ -119,6 +150,8 @@ def register(app: Flask, logger) -> None:
             audio_status=audio_status,
             timezone_name=timezone_name,
             window_days=window_days,
+            window_start=window_start,
+            window_end=window_end,
             format_local_datetime=format_local_datetime,
         )
 
@@ -126,10 +159,14 @@ def register(app: Flask, logger) -> None:
     @require_auth
     @require_role("Admin", "Operator", "Analyst")
     def compliance_export_csv():
-        window_days = _resolve_window_days()
+        window_start, window_end, window_days = _resolve_dashboard_window()
 
         try:
-            entries, _, _ = collect_compliance_log_entries(window_days=window_days)
+            entries, _, _ = collect_compliance_log_entries(
+                window_days=window_days,
+                window_start=window_start,
+                window_end=window_end,
+            )
             csv_payload = generate_compliance_log_csv(entries)
         except Exception as exc:  # pragma: no cover - defensive fallback
             route_logger.error("Failed to generate compliance CSV export: %s", exc)
@@ -149,11 +186,13 @@ def register(app: Flask, logger) -> None:
     @require_auth
     @require_role("Admin", "Operator", "Analyst")
     def compliance_export_pdf():
-        window_days = _resolve_window_days()
+        window_start, window_end, window_days = _resolve_dashboard_window()
 
         try:
             entries, window_start, window_end = collect_compliance_log_entries(
-                window_days=window_days
+                window_days=window_days,
+                window_start=window_start,
+                window_end=window_end,
             )
             pdf_payload = generate_compliance_log_pdf(
                 entries,
@@ -177,29 +216,8 @@ def register(app: Flask, logger) -> None:
 
     def _resolve_report_window():
         """Pick the report window from start/end query args, or fall back to days."""
-        start_raw = request.args.get("start", type=str)
-        end_raw = request.args.get("end", type=str)
-
-        def _parse(value):
-            if not value:
-                return None
-            try:
-                # Accept either YYYY-MM-DD or full ISO timestamps.
-                if len(value) == 10:
-                    parsed = datetime.strptime(value, "%Y-%m-%d")
-                else:
-                    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-            except ValueError:
-                return None
-            if parsed.tzinfo is None:
-                parsed = parsed.replace(tzinfo=timezone.utc)
-            return parsed
-
-        start_dt = _parse(start_raw)
-        end_dt = _parse(end_raw)
-        if start_dt or end_dt:
-            return resolve_report_window(start=start_dt, end=end_dt)
-        return resolve_report_window(days=_resolve_window_days())
+        window_start, window_end, _ = _resolve_dashboard_window()
+        return window_start, window_end
 
     def _make_response(report, fmt: str):
         slug = report.get("slug", "report")

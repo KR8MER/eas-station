@@ -7,15 +7,26 @@
         <div>
             <h1 class="h3 mb-1">EAS Compliance Dashboard</h1>
             <p class="text-muted mb-0">
-                Monitoring window: last {{ window_days }} days · Generated
+                Monitoring window:
+                {% if dashboard.window_start and dashboard.window_end %}
+                    {{ format_local_datetime(dashboard.window_start, include_utc=False) }}
+                    &ndash;
+                    {{ format_local_datetime(dashboard.window_end, include_utc=False) }}
+                    ({{ window_days }} day{{ '' if window_days == 1 else 's' }})
+                {% else %}
+                    last {{ window_days }} days
+                {% endif %}
+                · Generated
                 {{ format_local_datetime(dashboard.generated_at, include_utc=True) if dashboard.generated_at else '—' }}
             </p>
         </div>
         <div class="btn-group" role="group">
-            <a class="btn btn-outline-primary" href="{{ url_for('compliance_export_csv', days=window_days) }}">
+            <a class="btn btn-outline-primary activity-log-link" data-fmt="csv"
+               href="{{ url_for('compliance_export_csv', days=window_days) }}">
                 <i class="fas fa-file-csv"></i> Activity Log CSV
             </a>
-            <a class="btn btn-outline-primary" href="{{ url_for('compliance_export_pdf', days=window_days) }}">
+            <a class="btn btn-outline-primary activity-log-link" data-fmt="pdf"
+               href="{{ url_for('compliance_export_pdf', days=window_days) }}">
                 <i class="fas fa-file-pdf"></i> Activity Log PDF
             </a>
         </div>
@@ -27,7 +38,8 @@
             <small class="text-muted">PDF (printable) and CSV per category, scoped to the selected window.</small>
         </div>
         <div class="card-body">
-            <form method="get" class="row g-2 align-items-end mb-3" id="fcc-report-form">
+            <form method="get" action="{{ url_for('compliance_dashboard') }}"
+                  class="row g-2 align-items-end mb-3" id="fcc-report-form">
                 <div class="col-sm-3">
                     <label class="form-label small mb-1" for="fcc-start">Start date</label>
                     <input type="date" class="form-control form-control-sm" id="fcc-start" name="start"
@@ -43,7 +55,10 @@
                     <input type="number" min="1" max="365" class="form-control form-control-sm" id="fcc-days" name="days"
                         value="{{ window_days }}">
                 </div>
-                <div class="col-sm-3 text-end">
+                <div class="col-sm-3 text-end d-flex flex-column align-items-end justify-content-end gap-1">
+                    <button type="submit" class="btn btn-sm btn-primary">
+                        <i class="fas fa-filter"></i> Apply
+                    </button>
                     <small class="text-muted d-block">Date range overrides "last N days".</small>
                 </div>
             </form>
@@ -95,7 +110,12 @@
             var startInput = document.getElementById('fcc-start');
             var endInput = document.getElementById('fcc-end');
             var daysInput = document.getElementById('fcc-days');
-            var links = document.querySelectorAll('.report-link');
+            var reportLinks = document.querySelectorAll('.report-link');
+            var activityLinks = document.querySelectorAll('.activity-log-link');
+            var activityBases = {
+                csv: {{ url_for('compliance_export_csv')|tojson }},
+                pdf: {{ url_for('compliance_export_pdf')|tojson }}
+            };
 
             function buildQuery() {
                 var params = new URLSearchParams();
@@ -112,10 +132,16 @@
 
             function rebuild() {
                 var qs = buildQuery();
-                links.forEach(function (link) {
+                reportLinks.forEach(function (link) {
                     var kind = link.getAttribute('data-kind');
                     var fmt = link.getAttribute('data-fmt');
                     var base = '/admin/compliance/report/' + kind + '.' + fmt;
+                    link.href = qs ? base + '?' + qs : base;
+                });
+                activityLinks.forEach(function (link) {
+                    var fmt = link.getAttribute('data-fmt');
+                    var base = activityBases[fmt];
+                    if (!base) { return; }
                     link.href = qs ? base + '?' + qs : base;
                 });
             }
