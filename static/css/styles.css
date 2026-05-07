@@ -907,22 +907,115 @@
     color: #0d1b2a;
 }
 
-/* Lightning Theme - .bg-light surfaces
-   --light-color resolves to pale yellow (#fff9c4) in this theme. Components
-   that declare their own text color (.metric-value, .metric-label, etc.)
-   beat the low-specificity `.bg-light * { color: inherit }` rule and render
-   cream-on-yellow, which is unreadable. Force dark text on any descendant
-   of a .bg-light region so those overrides lose. */
-[data-theme="lightning"] .bg-light,
-[data-theme="lightning"] .bg-light *,
-[data-theme="lightning"] .card-header.bg-light,
-[data-theme="lightning"] .card-header.bg-light * {
+/* ----------------------------------------------------------------------------
+   Bootstrap .bg-light surfaces - global readability
+   ----------------------------------------------------------------------------
+   Two structural problems make `.bg-light` containers unreadable on every
+   dark theme (lightning, aurora, nebula, midnight, charcoal, obsidian, slate,
+   coffee, dark):
+
+   1. `.card { background: linear-gradient(...) }` is a `background` shorthand
+      that paints an OPAQUE surface-color gradient into background-image.
+      Bootstrap's `.bg-light { background-color: ... !important }` cannot
+      override that, because !important on background-color does not clear an
+      image. Result: `<div class="card bg-light">` (or
+      `card-body bg-light` / `card-header bg-light` etc.) keeps the dark
+      gradient on every theme — visually identical to a non-bg-light card.
+
+   2. With the gradient suppressed, the bg-light surface is near-white, but
+      descendant text inherits `--text-color` which resolves to white / cream
+      / lavender on dark themes. White-on-white is unreadable.
+
+   Fix: clear the gradient, force the bg-light container to actually paint a
+   light surface, and pin dark ink on it (with !important so component-level
+   overrides like `.metric-value { color: var(--text-color) }` lose). */
+.card.bg-light,
+.card.card-body.bg-light,
+.card-body.bg-light,
+.card-footer.bg-light {
+    background-image: none !important;
+    background-color: var(--bs-light, #f8f9fa) !important;
+}
+
+.bg-light,
+.card.bg-light,
+.card-header.bg-light,
+.card-body.bg-light,
+.card-footer.bg-light {
     color: #0d1b2a !important;
     text-shadow: none;
 }
 
+/* Force dark ink on plain text descendants of a .bg-light surface, but
+   exclude self-coloring components (`.btn`, `.badge`, `.alert`, anything
+   with a `.bg-*` background utility) so their own theme-aware text colors
+   survive. Without these `:not()` exclusions the !important above would
+   bleach dark ink onto bg-primary buttons, colored badges, etc. */
+:is(.bg-light, .card.bg-light, .card-header.bg-light, .card-body.bg-light, .card-footer.bg-light) :not(.btn, .badge, .alert, [class*="bg-primary"], [class*="bg-success"], [class*="bg-info"], [class*="bg-warning"], [class*="bg-danger"], [class*="bg-secondary"], [class*="bg-dark"], .btn *, .badge *, .alert *) {
+    color: #0d1b2a !important;
+    text-shadow: none;
+}
+
+/* .text-muted inside a .bg-light region: its own rule sets
+   `color: var(--text-muted) !important`, which on dark themes resolves to a
+   light gray that is invisible against a near-white bg-light. Pin a darker
+   muted ink that still reads as "secondary" against the light surface. */
+.bg-light .text-muted,
+.card.bg-light .text-muted,
+.card-header.bg-light .text-muted,
+.card-body.bg-light .text-muted,
+.card-footer.bg-light .text-muted {
+    color: #495057 !important;
+}
+
+/* `<pre>` / `<code>` / `.code-block` inherit a global rule that paints them
+   with `background: color-mix(in srgb, var(--text-color) 5%, transparent)`.
+   On dark themes inside a `.bg-light` parent, that resolves to a 5% white
+   tint over a near-white surface (still light) — but the global text color
+   resolves to white, which we then override to #0d1b2a above. The pre block
+   itself though has been observed to render as dark-on-dark when its parent
+   is a `.card.bg-light` (see the original bug: collapsed JSON details in
+   templates/logs.html). Pin an explicit light surface and dark ink so any
+   descendant code/pre stays legible. */
+.bg-light pre,
+.bg-light code,
+.bg-light .code-block,
+.card.bg-light pre,
+.card.bg-light code,
+.card-body.bg-light pre,
+.card-body.bg-light code,
+.card-footer.bg-light pre,
+.card-footer.bg-light code,
+.card-header.bg-light pre,
+.card-header.bg-light code {
+    background: rgba(0, 0, 0, 0.06) !important;
+    color: #0d1b2a !important;
+    border-color: rgba(0, 0, 0, 0.08);
+}
+
+/* Bootstrap utility classes inside .bg-light: when an author writes
+   `<span class="text-success">` inside a bg-light region, the descendant
+   color override above (`color: #0d1b2a`) flattens that intent. Restore
+   theme-aware semantic colors (using the dark/text-emphasis variants so they
+   read well on a near-white background). */
+.bg-light .text-primary,
+.card.bg-light .text-primary { color: #0d6efd !important; }
+.bg-light .text-success,
+.card.bg-light .text-success { color: #198754 !important; }
+.bg-light .text-info,
+.card.bg-light .text-info { color: #087990 !important; }
+.bg-light .text-warning,
+.card.bg-light .text-warning { color: #997404 !important; }
+.bg-light .text-danger,
+.card.bg-light .text-danger { color: #dc3545 !important; }
+
+/* Lightning Theme - small additional tweak: keep the lightning-specific
+   muted ink that was tuned for its pale-yellow aesthetic when the theme
+   is active; otherwise the global #495057 above applies. */
 [data-theme="lightning"] .bg-light .text-muted,
-[data-theme="lightning"] .card-header.bg-light .text-muted {
+[data-theme="lightning"] .card-header.bg-light .text-muted,
+[data-theme="lightning"] .card-body.bg-light .text-muted,
+[data-theme="lightning"] .card-footer.bg-light .text-muted {
     color: #3a4d7a !important;
 }
 
