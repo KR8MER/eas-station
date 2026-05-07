@@ -354,8 +354,12 @@ def _assemble_pdf(page_streams: List[bytes], page_size: Tuple[int, int]) -> byte
     page_w, page_h = page_size
     objects: List[Tuple[int, bytes]] = []
     font_obj_id = 3
+    bold_font_obj_id = font_obj_id + 1
     page_objects: List[int] = []
-    next_obj_id = 4
+    # IDs 1..4 are reserved for catalog, pages tree, regular font, and bold
+    # font (inserted at the front below); content/page objects start at 5 to
+    # avoid colliding with the bold font's object number.
+    next_obj_id = bold_font_obj_id + 1
 
     for content_stream in page_streams:
         content_obj_id = next_obj_id
@@ -375,7 +379,7 @@ def _assemble_pdf(page_streams: List[bytes], page_size: Tuple[int, int]) -> byte
         page_body = (
             f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {page_w} {page_h}] "
             f"/Contents {content_obj_id} 0 R "
-            f"/Resources << /Font << /F1 {font_obj_id} 0 R /F2 {font_obj_id + 1} 0 R >> >> >>"
+            f"/Resources << /Font << /F1 {font_obj_id} 0 R /F2 {bold_font_obj_id} 0 R >> >> >>"
         ).encode("latin-1")
         objects.append((page_obj_id, page_body))
 
@@ -393,7 +397,7 @@ def _assemble_pdf(page_streams: List[bytes], page_size: Tuple[int, int]) -> byte
     objects.insert(0, (1, catalog_body))
     objects.insert(1, (2, pages_body))
     objects.insert(2, (font_obj_id, font_body))
-    objects.insert(3, (font_obj_id + 1, bold_body))
+    objects.insert(3, (bold_font_obj_id, bold_body))
 
     buffer = io.BytesIO()
     buffer.write(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
