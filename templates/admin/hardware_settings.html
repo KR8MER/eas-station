@@ -143,6 +143,201 @@
         .snr-legend { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; color: var(--text-muted); font-size: 0.68rem; }
         .snr-legend span { display: inline-flex; align-items: center; gap: 3px; }
         .snr-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+
+        /* Constellation summary chips in the header */
+        .gps-const-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 1px 7px;
+            border-radius: 999px;
+            font-size: 0.68rem;
+            background: var(--bg-color);
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            font-family: 'Courier New', monospace;
+        }
+        .gps-const-chip .gps-const-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+        }
+        .gps-const-chip .gps-const-used { color: var(--text-muted); margin-left: 2px; }
+
+        /* Time-sync chip next to the PPS chip */
+        .gps-tsync-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.7rem;
+            font-family: 'Courier New', monospace;
+            padding: 2px 8px;
+            border-radius: 999px;
+            background: rgba(88, 166, 255, 0.12);
+            color: #58a6ff;
+            margin-left: 6px;
+        }
+        .gps-tsync-chip.tsync-off {
+            background: var(--bg-color);
+            color: var(--text-muted);
+        }
+
+        /* NMEA log: filter chips, search box, pause button */
+        .gps-nmea-controls {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 5px 8px;
+            padding: 6px 10px 4px;
+            border-top: 1px solid var(--border-color);
+            font-size: 0.68rem;
+        }
+        .gps-nmea-controls .gps-nmea-label {
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: .05em;
+            margin-right: 4px;
+        }
+        .gps-nmea-chip {
+            cursor: pointer;
+            padding: 1px 8px;
+            border-radius: 999px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-color);
+            color: var(--text-muted);
+            font-family: 'Courier New', monospace;
+            font-size: 0.68rem;
+            user-select: none;
+            transition: background 0.15s, color 0.15s, border-color 0.15s;
+        }
+        .gps-nmea-chip.on {
+            color: var(--text-color);
+            border-color: currentColor;
+            background: rgba(88, 166, 255, 0.08);
+        }
+        .gps-nmea-chip:hover { color: var(--text-color); }
+        .gps-nmea-search {
+            flex: 1 1 80px;
+            min-width: 80px;
+            max-width: 160px;
+            padding: 1px 6px;
+            font-size: 0.7rem;
+            font-family: 'Courier New', monospace;
+            background: var(--bg-color);
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            border-radius: 4px;
+        }
+        .gps-nmea-pause {
+            cursor: pointer;
+            padding: 1px 8px;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-color);
+            color: var(--text-muted);
+            font-size: 0.68rem;
+            font-family: 'Courier New', monospace;
+        }
+        .gps-nmea-pause.paused {
+            color: #d29922;
+            border-color: #d29922;
+            background: rgba(210, 153, 34, 0.12);
+        }
+        .gps-nmea-rows {
+            padding: 4px 10px 8px;
+            max-height: 140px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.7rem;
+        }
+        .gps-nmea-rows .gps-nmea-empty {
+            color: var(--text-muted);
+            padding: 2px 0;
+        }
+
+        /* Diagnostics disclosure tucked at the bottom of the panel */
+        .gps-diag {
+            border-top: 1px solid var(--border-color);
+            background: var(--bg-color);
+            font-family: 'Courier New', monospace;
+            font-size: 0.72rem;
+        }
+        .gps-diag > summary {
+            cursor: pointer;
+            list-style: none;
+            padding: 6px 12px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: .06em;
+            font-size: 0.68rem;
+            user-select: none;
+        }
+        .gps-diag > summary::-webkit-details-marker { display: none; }
+        .gps-diag > summary::before {
+            content: "\25B8";
+            display: inline-block;
+            margin-right: 6px;
+            transition: transform 0.15s;
+        }
+        .gps-diag[open] > summary::before { transform: rotate(90deg); }
+        .gps-diag-body {
+            padding: 4px 12px 10px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 4px 16px;
+        }
+        .gps-diag-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 1px 0;
+        }
+        .gps-diag-row .gps-diag-label {
+            color: var(--text-muted);
+        }
+        .gps-diag-row .gps-diag-val {
+            color: var(--text-color);
+            text-align: right;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .gps-diag-rates {
+            grid-column: 1 / -1;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px 10px;
+            padding-top: 2px;
+        }
+        .gps-diag-rate-chip {
+            padding: 1px 7px;
+            border-radius: 999px;
+            border: 1px solid var(--border-color);
+            color: var(--text-muted);
+            font-size: 0.68rem;
+        }
+        .gps-diag-rate-chip strong { color: var(--text-color); }
+        .gps-diag-copy {
+            grid-column: 1 / -1;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            padding-top: 4px;
+            border-top: 1px dashed var(--border-color);
+            margin-top: 4px;
+        }
+        .gps-diag-copy-btn {
+            cursor: pointer;
+            padding: 2px 9px;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-color);
+            color: var(--text-color);
+            font-size: 0.7rem;
+            font-family: 'Courier New', monospace;
+        }
+        .gps-diag-copy-btn:hover { color: var(--accent-color); border-color: var(--accent-color); }
+        .gps-diag-copy-btn.copied { color: #3fb950; border-color: #3fb950; }
     </style>
 {% endblock %}
 
@@ -873,8 +1068,25 @@
 // ── GPS Live Panel ────────────────────────────────────────────────────
 var _gpsPollTimer  = null;
 var _gpsRendered   = false;   // true once the panel shell has been inserted
+var _gpsHandlersAttached = false; // event-delegation wiring done once
 var METERS_TO_FEET = 3.28084;
 var KNOTS_TO_MPH   = 1.15078;
+// Approx UERE for consumer GPS (5 m); used to translate HDOP into a rough
+// horizontal-accuracy estimate. Real receivers vary, so we label it "~".
+var GPS_UERE_M = 5.0;
+// Recognised NMEA sentence types — used for the per-type filter chips and
+// the rate display in the diagnostics section.
+var NMEA_TYPES = ['GGA', 'RMC', 'GSV', 'GSA', 'GLL', 'VTG'];
+
+/* Mutable client-side state preserved across polls. */
+var _gpsState = {
+    nmeaFilter: { types: null, text: '', paused: false, pauseSnapshot: null },
+    posHistory: [],          // {lat, lon, t} — last ~30 fixes for stability calc
+    posHistoryMax: 30,
+    lastCounts: null,        // sentence_counts from previous poll
+    lastCountsAt: 0,         // performance.now() at lastCounts time
+    rates: {}                // smoothed Hz per sentence type
+};
 
 function startGpsPolling() {
     stopGpsPolling();
@@ -890,14 +1102,24 @@ function stopGpsPolling() {
     if (badge) badge.style.display = 'none';
 }
 
-/* One-time panel shell — all dynamic content sits behind stable element IDs. */
+/* One-time panel shell — all dynamic content sits behind stable element IDs.
+   The NMEA filter controls live in the shell (not inside a patched slot) so
+   their DOM state — chip on/off, search text, pause toggle — survives the
+   2-second poll cycle. Only `gps-nmea-rows` is replaced each refresh. */
 function _buildGpsPanelShell() {
-    return '<div class="gps-live-panel">'
+    var chips = NMEA_TYPES.map(function (t) {
+        return '<button type="button" class="gps-nmea-chip on" data-nmea-filter="' + t + '">' + t + '</button>';
+    }).join('');
+    return '<div class="gps-live-panel" id="gps-panel-root">'
         + '<div class="gps-live-header">'
         +   '<span id="gps-hdr-badge"></span>'
         +   '<span id="gps-hdr-vis-used" style="color:var(--text-muted)"></span>'
         +   '<span id="gps-hdr-port"     style="color:var(--text-muted)"></span>'
-        +   '<span class="ms-auto"><span id="gps-hdr-pps"></span></span>'
+        +   '<span id="gps-hdr-constellations" style="display:inline-flex;flex-wrap:wrap;gap:4px"></span>'
+        +   '<span class="ms-auto" style="display:inline-flex;align-items:center;gap:4px">'
+        +     '<span id="gps-hdr-pps"></span>'
+        +     '<span id="gps-hdr-tsync"></span>'
+        +   '</span>'
         + '</div>'
         + '<div id="gps-error-hint"></div>'
         + '<div class="gps-live-body">'
@@ -907,9 +1129,97 @@ function _buildGpsPanelShell() {
         +   '</div>'
         +   '<div class="gps-sat-col"><div id="gps-sat-table-wrap"></div></div>'
         + '</div>'
-        + '<div id="gps-nmea-wrap"></div>'
+        + '<div id="gps-nmea-wrap">'
+        +   '<div class="gps-nmea-controls">'
+        +     '<span class="gps-nmea-label">Recent NMEA</span>'
+        +     chips
+        +     '<input type="text" class="gps-nmea-search" id="gps-nmea-search" placeholder="filter…" />'
+        +     '<button type="button" class="gps-nmea-pause" id="gps-nmea-pause">&#10074;&#10074; Pause</button>'
+        +   '</div>'
+        +   '<div class="gps-nmea-rows" id="gps-nmea-rows"></div>'
+        + '</div>'
         + '<div class="gps-fix-footer" id="gps-footer"></div>'
+        + '<details class="gps-diag" id="gps-diag">'
+        +   '<summary>Diagnostics</summary>'
+        +   '<div class="gps-diag-body" id="gps-diag-body"></div>'
+        + '</details>'
         + '</div>';
+}
+
+/* One-time event-delegation hookup for the NMEA filter UI and the diagnostics
+   copy buttons. The targets are recreated on every poll, so we listen on the
+   stable shell root and dispatch by data-attribute. */
+function _attachGpsHandlers() {
+    if (_gpsHandlersAttached) return;
+    var root = document.getElementById('gps-panel-root');
+    if (!root) return;
+
+    // Initialise filter set with all known types enabled
+    if (_gpsState.nmeaFilter.types === null) {
+        _gpsState.nmeaFilter.types = {};
+        NMEA_TYPES.forEach(function (t) { _gpsState.nmeaFilter.types[t] = true; });
+    }
+
+    root.addEventListener('click', function (ev) {
+        var chip = ev.target.closest('[data-nmea-filter]');
+        if (chip) {
+            var t = chip.getAttribute('data-nmea-filter');
+            _gpsState.nmeaFilter.types[t] = !_gpsState.nmeaFilter.types[t];
+            chip.classList.toggle('on', !!_gpsState.nmeaFilter.types[t]);
+            _renderNmeaRows();
+            return;
+        }
+        if (ev.target.id === 'gps-nmea-pause') {
+            var f = _gpsState.nmeaFilter;
+            f.paused = !f.paused;
+            ev.target.classList.toggle('paused', f.paused);
+            ev.target.innerHTML = f.paused ? '▶ Resume' : '❚❚ Pause';
+            // Snapshot the buffer at pause time so the displayed rows freeze
+            f.pauseSnapshot = f.paused ? (_gpsState.lastSentences || []).slice() : null;
+            _renderNmeaRows();
+            return;
+        }
+        var copy = ev.target.closest('[data-copy]');
+        if (copy) {
+            var text = copy.getAttribute('data-copy');
+            _copyToClipboard(text, copy);
+            return;
+        }
+    });
+
+    var search = document.getElementById('gps-nmea-search');
+    if (search) {
+        search.addEventListener('input', function () {
+            _gpsState.nmeaFilter.text = this.value || '';
+            _renderNmeaRows();
+        });
+    }
+    _gpsHandlersAttached = true;
+}
+
+function _copyToClipboard(text, btn) {
+    var done = function () {
+        if (!btn) return;
+        var prev = btn.textContent;
+        btn.classList.add('copied');
+        btn.textContent = 'Copied!';
+        setTimeout(function () {
+            btn.classList.remove('copied');
+            btn.textContent = prev;
+        }, 1100);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function () {});
+        return;
+    }
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); done(); } catch (e) {}
+    document.body.removeChild(ta);
 }
 
 /* Patch a single element's innerHTML without touching any other element. */
@@ -1154,26 +1464,283 @@ function buildSatTable(satsInView, activePrns) {
         + constLegendHtml;
 }
 
-/* Build the scrollable NMEA sentence log */
-function buildNmeaSection(sentences) {
-    var SENT_COLORS = {
-        GGA: '#3fb950', RMC: '#58a6ff', GSV: '#bc8cff',
-        GSA: '#e3b341', GLL: '#79c0ff', VTG: '#ffa657',
-    };
-    if (!sentences || sentences.length === 0) {
-        return '<div style="padding:6px 10px;color:var(--text-muted);font-family:\'Courier New\',monospace;font-size:0.7rem;border-top:1px solid var(--border-color)">'
-            + 'No NMEA sentences received yet&hellip;</div>';
+var GPS_NMEA_COLORS = {
+    GGA: '#3fb950', RMC: '#58a6ff', GSV: '#bc8cff',
+    GSA: '#e3b341', GLL: '#79c0ff', VTG: '#ffa657'
+};
+
+/* Render the NMEA rows panel from current state — applies type filter and
+   free-text filter. Pause freezes the visible buffer to whatever was present
+   when the user paused. */
+function _renderNmeaRows() {
+    var slot = document.getElementById('gps-nmea-rows');
+    if (!slot) return;
+    var f = _gpsState.nmeaFilter;
+    var sentences = f.paused ? (f.pauseSnapshot || []) : (_gpsState.lastSentences || []);
+    if (!sentences.length) {
+        slot.innerHTML = '<div class="gps-nmea-empty">No NMEA sentences received yet…</div>';
+        return;
     }
-    var rows = sentences.slice().reverse().map(function(s) {
-        var color = 'var(--text-muted)';
+    var typeOk = f.types || {};
+    var needle = (f.text || '').toLowerCase();
+    var rows = [];
+    for (var i = sentences.length - 1; i >= 0; i--) {
+        var s = sentences[i];
         var m = s.match(/^\$[A-Z]{2}([A-Z]{3})/);
-        if (m) { color = SENT_COLORS[m[1]] || 'var(--text-muted)'; }
-        return '<div style="color:' + color + ';white-space:pre;line-height:1.4">'
-            + gpsEscapeHtml(s) + '</div>';
+        var t = m ? m[1] : null;
+        if (t && Object.prototype.hasOwnProperty.call(typeOk, t) && !typeOk[t]) continue;
+        if (needle && s.toLowerCase().indexOf(needle) === -1) continue;
+        var color = (t && GPS_NMEA_COLORS[t]) || 'var(--text-muted)';
+        rows.push('<div style="color:' + color + ';white-space:pre;line-height:1.4">'
+            + gpsEscapeHtml(s) + '</div>');
+    }
+    if (!rows.length) {
+        slot.innerHTML = '<div class="gps-nmea-empty">No sentences match the current filter.</div>';
+        return;
+    }
+    slot.innerHTML = rows.join('');
+}
+
+/* Build the per-constellation chips that go in the header. Each chip shows
+   the constellation name, total satellites in view for it, and how many of
+   those are being used in the current fix. */
+function buildConstellationChips(satsInView, activePrns) {
+    if (!satsInView || !satsInView.length) return '';
+    var groups = {};
+    var activeSet = {};
+    (activePrns || []).forEach(function (p) { activeSet[p] = true; });
+    satsInView.forEach(function (s) {
+        var code = s.constellation || 'GN';
+        if (!groups[code]) groups[code] = { total: 0, used: 0 };
+        groups[code].total += 1;
+        if (activeSet[s.prn]) groups[code].used += 1;
+    });
+    return Object.keys(groups).sort().map(function (code) {
+        var info = constellationInfo(code);
+        var g = groups[code];
+        return '<span class="gps-const-chip" title="' + info.label + ' — ' + g.used + ' used of ' + g.total + ' visible">'
+            + '<span class="gps-const-dot" style="background:' + info.color + '"></span>'
+            + info.label + ' ' + g.total
+            + (g.used ? '<span class="gps-const-used">·' + g.used + '</span>' : '')
+            + '</span>';
     }).join('');
-    return '<div style="padding:6px 10px;border-top:1px solid var(--border-color);max-height:110px;overflow-y:auto;font-family:\'Courier New\',monospace;font-size:0.7rem">'
-        + '<div style="color:var(--text-muted);font-size:0.65rem;margin-bottom:3px;text-transform:uppercase;letter-spacing:.05em">Recent NMEA</div>'
-        + rows + '</div>';
+}
+
+/* Time-sync indicator. Hidden when use_for_time is off, since otherwise it
+   would always read "OFF" and add noise. */
+function buildTimeSyncChip(d) {
+    if (!d.use_for_time) return '';
+    if (d.time_synced) {
+        var label = d.ntp_disabled ? 'TIME · GPS' : 'TIME · synced';
+        return '<span class="gps-tsync-chip" title="System clock has been set from GPS time">'
+            + '<i class="fas fa-clock"></i> ' + label + '</span>';
+    }
+    return '<span class="gps-tsync-chip tsync-off" title="Waiting for first GPS time sync">'
+        + '<i class="far fa-clock"></i> TIME · pending</span>';
+}
+
+/* Map fix_quality enum to a short human label appended to the badge.
+   Returns empty for the default/unknown case to avoid clutter. */
+function fixQualityLabel(q) {
+    return ({
+        gps_fix:    '',
+        dgps_fix:   'DGPS',
+        pps_fix:    'PPS',
+        rtk_fix:    'RTK',
+        float_rtk:  'RTK Float',
+        estimated:  'Dead-reckon',
+        manual:     'Manual',
+        simulation: 'Sim'
+    }[q] || '');
+}
+
+/* Convert track_angle (true course) to an 8-point cardinal indicator. */
+function bearingToCardinal(deg) {
+    if (deg === null || deg === undefined || isNaN(deg)) return '';
+    var dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+    return dirs[Math.round(((deg % 360) / 45)) % 8];
+}
+
+/* Decimal degrees → "DD° MM' SS.SS\" H" with a hemisphere letter. */
+function toDMS(deg, posChar, negChar) {
+    if (deg === null || deg === undefined || isNaN(deg)) return '—';
+    var hemi = deg >= 0 ? posChar : negChar;
+    var abs = Math.abs(deg);
+    var d = Math.floor(abs);
+    var mFloat = (abs - d) * 60;
+    var m = Math.floor(mFloat);
+    var s = (mFloat - m) * 60;
+    return d + '° ' + m + "' " + s.toFixed(2) + '" ' + hemi;
+}
+
+/* 6-character Maidenhead grid (e.g. EN80la) — handy for ham operators. */
+function toMaidenhead(lat, lon) {
+    if (lat === null || lon === null) return '—';
+    var adjLon = lon + 180;
+    var adjLat = lat + 90;
+    var fLon = Math.floor(adjLon / 20);
+    var fLat = Math.floor(adjLat / 10);
+    var sLon = Math.floor((adjLon % 20) / 2);
+    var sLat = Math.floor(adjLat % 10);
+    var subLon = Math.floor((adjLon - 20 * fLon - 2 * sLon) * 12);
+    var subLat = Math.floor((adjLat - 10 * fLat -     sLat) * 24);
+    return String.fromCharCode(65 + fLon) + String.fromCharCode(65 + fLat)
+        + sLon + sLat
+        + String.fromCharCode(97 + subLon) + String.fromCharCode(97 + subLat);
+}
+
+/* RMS scatter of recent positions, in metres — a quick smoke test for
+   "is this fix actually stable, or is it dancing?" */
+function positionStability(history) {
+    if (!history || history.length < 5) return null;
+    var n = history.length;
+    var meanLat = 0, meanLon = 0;
+    for (var i = 0; i < n; i++) { meanLat += history[i].lat; meanLon += history[i].lon; }
+    meanLat /= n; meanLon /= n;
+    var vLat = 0, vLon = 0;
+    for (var j = 0; j < n; j++) {
+        vLat += Math.pow(history[j].lat - meanLat, 2);
+        vLon += Math.pow(history[j].lon - meanLon, 2);
+    }
+    vLat /= n; vLon /= n;
+    var sdLatM = Math.sqrt(vLat) * 111320;
+    var sdLonM = Math.sqrt(vLon) * 111320 * Math.cos(meanLat * Math.PI / 180);
+    return {
+        samples: n,
+        rmsM: Math.sqrt(sdLatM * sdLatM + sdLonM * sdLonM),
+        spanS: history[n - 1].t - history[0].t
+    };
+}
+
+/* Update _gpsState.rates from the latest sentence_counts dict using a simple
+   delta over wall-clock time. Resets cleanly on counter rollover (manager
+   restart) by clamping negative deltas to 0. */
+function updateSentenceRates(counts) {
+    var nowMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    if (_gpsState.lastCounts && _gpsState.lastCountsAt) {
+        var dt = (nowMs - _gpsState.lastCountsAt) / 1000;
+        if (dt > 0.1) {
+            var keys = {};
+            Object.keys(counts || {}).forEach(function (k) { keys[k] = true; });
+            Object.keys(_gpsState.lastCounts).forEach(function (k) { keys[k] = true; });
+            Object.keys(keys).forEach(function (k) {
+                var cur = (counts && counts[k]) || 0;
+                var prev = _gpsState.lastCounts[k] || 0;
+                var delta = Math.max(0, cur - prev);
+                _gpsState.rates[k] = delta / dt;
+            });
+        }
+    }
+    _gpsState.lastCounts = Object.assign({}, counts || {});
+    _gpsState.lastCountsAt = nowMs;
+}
+
+/* Build the diagnostics disclosure body — every secondary metric lives here
+   so the main panel stays focused on at-a-glance fix quality. */
+function buildDiagnostics(d, sats, activePrns, stability) {
+    function row(label, val) {
+        return '<div class="gps-diag-row">'
+            + '<span class="gps-diag-label">' + label + '</span>'
+            + '<span class="gps-diag-val">' + val + '</span></div>';
+    }
+    var rows = [];
+
+    // SNR statistics across used satellites (falls back to all in view)
+    var snrs = (sats || [])
+        .filter(function (s) { return s.snr !== null && s.snr !== undefined; })
+        .map(function (s) { return s.snr; });
+    var usedSnrs = (sats || [])
+        .filter(function (s) { return activePrns.indexOf(s.prn) !== -1
+            && s.snr !== null && s.snr !== undefined; })
+        .map(function (s) { return s.snr; });
+    var snrSet = usedSnrs.length ? usedSnrs : snrs;
+    if (snrSet.length) {
+        var avg = snrSet.reduce(function (a, b) { return a + b; }, 0) / snrSet.length;
+        var max = Math.max.apply(null, snrSet);
+        var min = Math.min.apply(null, snrSet);
+        rows.push(row('Avg C/N₀',
+            avg.toFixed(1) + ' dBHz <span style="color:var(--text-muted)">(min ' + min + ', max ' + max + ')</span>'));
+    }
+
+    // Geoid separation (height of MSL above WGS-84 ellipsoid)
+    if (d.geoid_separation_m !== null && d.geoid_separation_m !== undefined) {
+        rows.push(row('Geoid separation', d.geoid_separation_m.toFixed(1) + ' m'));
+        if (d.altitude_m !== null && d.altitude_m !== undefined) {
+            rows.push(row('Altitude (WGS-84)',
+                (d.altitude_m + d.geoid_separation_m).toFixed(1) + ' m'));
+        }
+    }
+
+    // Magnetic variation (RMC)
+    if (d.magnetic_variation !== null && d.magnetic_variation !== undefined) {
+        rows.push(row('Magnetic variation',
+            d.magnetic_variation.toFixed(1) + '° ' + (d.magnetic_variation_dir || '')));
+    }
+
+    // DGPS correction info
+    if (d.dgps_age_s !== null && d.dgps_age_s !== undefined) {
+        rows.push(row('DGPS age', d.dgps_age_s.toFixed(1) + ' s'));
+    }
+    if (d.dgps_station_id) {
+        rows.push(row('DGPS station', gpsEscapeHtml(d.dgps_station_id)));
+    }
+
+    // Position stability over recent history
+    if (stability) {
+        rows.push(row('Position stability',
+            '±' + stability.rmsM.toFixed(2) + ' m RMS '
+            + '<span style="color:var(--text-muted)">(' + stability.samples + ' samples / '
+            + Math.round(stability.spanS) + 's)</span>'));
+    }
+
+    // Parser health
+    if (d.sentence_errors !== null && d.sentence_errors !== undefined) {
+        var errColor = d.sentence_errors > 0 ? 'var(--warning-color)' : 'var(--text-muted)';
+        rows.push(row('Parse errors',
+            '<span style="color:' + errColor + '">' + d.sentence_errors + '</span>'));
+    }
+
+    // PPS pulse counter
+    if (d.pps_pulse_count) {
+        rows.push(row('PPS pulses', d.pps_pulse_count.toLocaleString()));
+    }
+
+    var html = rows.join('');
+
+    // Sentence rates row spans full width
+    var rateChips = NMEA_TYPES
+        .filter(function (t) { return _gpsState.lastCounts && _gpsState.lastCounts[t]; })
+        .map(function (t) {
+            var hz = _gpsState.rates[t];
+            var hzText = (hz !== undefined) ? hz.toFixed(1) + 'Hz' : '—';
+            return '<span class="gps-diag-rate-chip">' + t + ' <strong>' + hzText + '</strong></span>';
+        }).join('');
+    if (rateChips) {
+        html += '<div class="gps-diag-rates">'
+            + '<span class="gps-diag-label" style="font-size:0.68rem">Sentence rates &nbsp;</span>'
+            + rateChips + '</div>';
+    }
+
+    // Copy buttons — only when a position is available
+    if (d.has_fix && d.latitude !== null && d.longitude !== null) {
+        var dec = d.latitude.toFixed(6) + ', ' + d.longitude.toFixed(6);
+        var dms = toDMS(d.latitude, 'N', 'S') + ', ' + toDMS(d.longitude, 'E', 'W');
+        var grid = toMaidenhead(d.latitude, d.longitude);
+        html += '<div class="gps-diag-copy">'
+            + '<button type="button" class="gps-diag-copy-btn" data-copy="' + dec + '">'
+              + '<i class="far fa-copy fa-fw"></i> Decimal</button>'
+            + '<button type="button" class="gps-diag-copy-btn" data-copy="' + dms + '">'
+              + '<i class="far fa-copy fa-fw"></i> DMS</button>'
+            + '<button type="button" class="gps-diag-copy-btn" data-copy="' + grid + '">'
+              + '<i class="far fa-copy fa-fw"></i> ' + grid + '</button>'
+            + '</div>';
+    }
+
+    if (!html) {
+        html = '<div class="gps-diag-row" style="grid-column:1/-1">'
+            + '<span class="gps-diag-label">Awaiting data…</span></div>';
+    }
+    return html;
 }
 
 /* Build the PPS blinkenlite badge */
@@ -1194,7 +1761,9 @@ function buildPpsHtml(d) {
         + '<span class="pps-dot"></span>' + txt + '</span>';
 }
 
-/* Status badge */
+/* Status badge \u2014 when we have a fix, prefer the GSA-derived 2D/3D label and
+   append the GGA fix-quality detail (DGPS / RTK / etc) when it's something
+   more interesting than a plain GPS solution. */
 function buildStatusBadge(d) {
     var errorStatuses = ['port_not_found','port_open_failed','pyserial_missing','pynmea2_missing'];
     var labels = {
@@ -1204,8 +1773,13 @@ function buildStatusBadge(d) {
         'not_started':'Not Started','disabled':'Disabled','stopped':'Stopped','reading':'Reading\u2026'
     };
     var lbl = labels[d.status] || d.status || 'Unknown';
-    if (d.has_fix)
+    if (d.has_fix) {
+        if (d.fix_mode === 2) lbl = '2D Fix';
+        else if (d.fix_mode === 3) lbl = '3D Fix';
+        var detail = fixQualityLabel(d.fix_quality);
+        if (detail) lbl += ' \u00b7 ' + detail;
         return '<span style="color:#3fb950;font-weight:bold">[' + lbl + ']</span>';
+    }
     if (d.status === 'acquiring' || d.status === 'reading')
         return '<span style="color:var(--warning-color);font-weight:bold">[' + lbl + ']</span>';
     if (errorStatuses.indexOf(d.status) !== -1)
@@ -1271,7 +1845,23 @@ function refreshGpsStatus() {
             if (!_gpsRendered) {
                 container.innerHTML = _buildGpsPanelShell();
                 _gpsRendered = true;
+                _attachGpsHandlers();
             }
+
+            // ── Track rolling state ─────────────────────────────────
+            _gpsState.lastSentences = recentSentences;
+            updateSentenceRates(d.sentence_counts || {});
+
+            if (d.has_fix && d.latitude !== null && d.longitude !== null) {
+                var nowS = Date.now() / 1000;
+                _gpsState.posHistory.push({ lat: d.latitude, lon: d.longitude, t: nowS });
+                if (_gpsState.posHistory.length > _gpsState.posHistoryMax) {
+                    _gpsState.posHistory.shift();
+                }
+            } else if (!d.has_fix) {
+                _gpsState.posHistory = [];
+            }
+            var stability = positionStability(_gpsState.posHistory);
 
             // ── Patch each element in-place ──────────────────────────
             _gpsSet('gps-hdr-badge',    buildStatusBadge(d));
@@ -1279,7 +1869,9 @@ function refreshGpsStatus() {
             _gpsSet('gps-hdr-port',
                 '<code style="color:var(--accent-color)">' + (d.serial_port||'—') + '</code>'
                 + ' &bull; ' + (d.baudrate||'9600') + 'bd');
+            _gpsSet('gps-hdr-constellations', buildConstellationChips(satsInView, activePrns));
             _gpsSet('gps-hdr-pps',      buildPpsHtml(d));
+            _gpsSet('gps-hdr-tsync',    buildTimeSyncChip(d));
             _gpsSet('gps-error-hint',   buildErrorHint(d));
             _gpsSet('gps-sky-overlay',
                 pendingAlmanac
@@ -1287,7 +1879,7 @@ function refreshGpsStatus() {
                       + '<i class="fas fa-satellite-dish fa-fw"></i> Downloading sky positions&hellip;</div>'
                     : '');
             _gpsSet('gps-sat-table-wrap', buildSatTable(satsInView, activePrns));
-            _gpsSet('gps-nmea-wrap',      buildNmeaSection(recentSentences));
+            _renderNmeaRows();
 
             // ── Footer ───────────────────────────────────────────────
             var footerHtml;
@@ -1296,15 +1888,27 @@ function refreshGpsStatus() {
                 var lon  = d.longitude != null ? d.longitude.toFixed(6) + '&deg;' : '&mdash;';
                 var alt  = d.altitude_m != null ? (d.altitude_m * METERS_TO_FEET).toFixed(0) + ' ft' : '&mdash;';
                 var hdop = d.hdop != null ? d.hdop : '&mdash;';
+                var pdop = d.pdop != null ? d.pdop : null;
+                var vdop = d.vdop != null ? d.vdop : null;
                 var utc  = d.gps_utc_time || '&mdash;';
                 var spd  = d.speed_knots != null ? (d.speed_knots * KNOTS_TO_MPH).toFixed(1) + ' mph' : null;
+                var crs  = d.track_angle != null
+                    ? d.track_angle.toFixed(0) + '° ' + bearingToCardinal(d.track_angle)
+                    : null;
+                var acc  = d.hdop != null
+                    ? '~' + (d.hdop * GPS_UERE_M).toFixed(1) + ' m'
+                    : null;
                 footerHtml =
                     '<span><span class="gps-lbl">Lat&nbsp;</span>' + lat + '</span>'
                     + '<span><span class="gps-lbl">Lon&nbsp;</span>' + lon + '</span>'
                     + '<span><span class="gps-lbl">Alt&nbsp;</span>' + alt + '</span>'
                     + '<span><span class="gps-lbl">HDOP&nbsp;</span>' + hdop + '</span>'
-                    + '<span><span class="gps-lbl">UTC&nbsp;</span>' + utc + '</span>'
-                    + (spd ? '<span><span class="gps-lbl">Speed&nbsp;</span>' + spd + '</span>' : '');
+                    + (pdop !== null ? '<span><span class="gps-lbl">PDOP&nbsp;</span>' + pdop + '</span>' : '')
+                    + (vdop !== null ? '<span><span class="gps-lbl">VDOP&nbsp;</span>' + vdop + '</span>' : '')
+                    + (acc  !== null ? '<span title="Estimated horizontal accuracy = HDOP × ~5 m UERE"><span class="gps-lbl">Accuracy&nbsp;</span>' + acc + '</span>' : '')
+                    + (crs  !== null ? '<span><span class="gps-lbl">Course&nbsp;</span>' + crs + '</span>' : '')
+                    + (spd ? '<span><span class="gps-lbl">Speed&nbsp;</span>' + spd + '</span>' : '')
+                    + '<span><span class="gps-lbl">UTC&nbsp;</span>' + utc + '</span>';
             } else {
                 var noFixUtc = d.gps_utc_time
                     ? '<span><span class="gps-lbl">GPS UTC&nbsp;</span><span style="color:var(--accent-color)">' + d.gps_utc_time + '</span></span>'
@@ -1319,12 +1923,19 @@ function refreshGpsStatus() {
             }
             _gpsSet('gps-footer', footerHtml);
 
+            // ── Diagnostics disclosure ──────────────────────────────
+            _gpsSet('gps-diag-body', buildDiagnostics(d, satsInView, activePrns, stability));
+
             // Redraw sky plot onto the persistent canvas — never recreated.
             var canvas = document.getElementById('gps-sky-canvas');
             if (canvas) drawSkyPlot(canvas, satsInView, activePrns);
         })
         .catch(function (err) {
-            _gpsRendered = false;   // allow shell rebuild after an error clears
+            // Allow the shell to rebuild after an error clears, and re-arm
+            // the delegated click/input handlers since the old root element
+            // will be discarded with the error markup.
+            _gpsRendered = false;
+            _gpsHandlersAttached = false;
             var c = document.getElementById('gps-status-card');
             if (c) c.innerHTML =
                 '<span class="text-danger small">'

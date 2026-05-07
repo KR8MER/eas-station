@@ -153,8 +153,10 @@ class GPSManager:
         # PPS GPIO interrupt state
         self._pps_gpio_active: bool = False
 
-        # Recent raw NMEA sentences (protected by _lock)
-        self._recent_sentences: Deque[str] = deque(maxlen=20)
+        # Recent raw NMEA sentences (protected by _lock).  Sized for ~20s of
+        # traffic on a multi-GNSS receiver so the UI's filter/pause UX has
+        # something to scroll through.
+        self._recent_sentences: Deque[str] = deque(maxlen=100)
 
         # Time-sync state — reader thread only, no lock needed
         self._time_synced: bool = False
@@ -294,6 +296,19 @@ class GPSManager:
             "use_for_time": self._use_for_time,
             "time_synced": False,
             "ntp_disabled": False,
+            # Diagnostics — extra fields parsed from GGA/RMC for the UI
+            # diagnostics disclosure. Optional, may stay None on receivers
+            # that don't emit them (e.g. no DGPS reference station).
+            "geoid_separation_m": None,
+            "magnetic_variation": None,
+            "magnetic_variation_dir": None,
+            "dgps_age_s": None,
+            "dgps_station_id": None,
+            # Per-type sentence counters (cumulative since manager start) so
+            # the UI can derive arrival rates and surface "this receiver isn't
+            # emitting GSA" type problems.
+            "sentence_counts": {},
+            "sentence_errors": 0,
             # Raw NMEA sentences (populated separately, not stored in _fix)
             "recent_sentences": [],
         }
@@ -339,6 +354,12 @@ class GPSManager:
                 try:
                     msg = pynmea2.parse(line)
                 except pynmea2.ParseError:
+                    # pynmea2 validates the NMEA checksum during parse; this
+                    # branch is a useful health signal for noisy UART wiring.
+                    with self._lock:
+                        self._fix["sentence_errors"] = (
+                            self._fix.get("sentence_errors", 0) + 1
+                        )
                     continue
 
                 self._handle_sentence(msg)
@@ -374,6 +395,12 @@ class GPSManager:
             self._fix["timestamp"] = now_iso
 
             sentence_type = msg.sentence_type
+
+            # Per-type counter (cumulative); the UI computes arrival rates
+            # from poll-to-poll deltas.
+            counts = self._fix.get("sentence_counts") or {}
+            counts[sentence_type] = counts.get(sentence_type, 0) + 1
+            self._fix["sentence_counts"] = counts
 
             if sentence_type == "GGA":
                 # GGA marks the start of a new NMEA cycle. The next GSA we see
@@ -421,6 +448,28 @@ class GPSManager:
                 if msg.timestamp:
                     self._fix["gps_utc_time"] = str(msg.timestamp)
 
+                # Geoid separation (height of MSL above WGS-84 ellipsoid).
+                # Useful for users converting our MSL-altitude to ellipsoid
+                # height (or vice versa) without looking up a geoid model.
+                geo_sep = getattr(msg, "geo_sep", None)
+                if geo_sep not in (None, ""):
+                    try:
+                        self._fix["geoid_separation_m"] = float(geo_sep)
+                    except (ValueError, TypeError):
+                        pass
+
+                # DGPS correction age and reference station ID — only emitted
+                # when the receiver is using DGPS/SBAS corrections.
+                dgps_age = getattr(msg, "age_gps_data", None)
+                if dgps_age not in (None, ""):
+                    try:
+                        self._fix["dgps_age_s"] = float(dgps_age)
+                    except (ValueError, TypeError):
+                        pass
+                ref_id = getattr(msg, "ref_station_id", None)
+                if ref_id not in (None, ""):
+                    self._fix["dgps_station_id"] = str(ref_id)
+
             elif sentence_type == "RMC":
                 # Recommended Minimum Navigation Information
                 if msg.status == "A":  # Active (valid fix)
@@ -437,6 +486,19 @@ class GPSManager:
                             self._fix["track_angle"] = float(msg.true_course)
                         except (ValueError, TypeError):
                             pass
+                    # Magnetic variation (degrees + E/W direction).
+                    # Diagnostic-only — useful for users with a magnetic
+                    # compass to derive true-vs-magnetic offset at the
+                    # current location.
+                    mag_var = getattr(msg, "mag_variation", None)
+                    if mag_var not in (None, ""):
+                        try:
+                            self._fix["magnetic_variation"] = float(mag_var)
+                        except (ValueError, TypeError):
+                            pass
+                    mag_var_dir = getattr(msg, "mag_var_dir", None)
+                    if mag_var_dir not in (None, ""):
+                        self._fix["magnetic_variation_dir"] = str(mag_var_dir)
                     if msg.datestamp and msg.timestamp:
                         try:
                             dt = datetime.combine(msg.datestamp, msg.timestamp)
