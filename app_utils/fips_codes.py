@@ -1679,24 +1679,29 @@ US_FIPS_COUNTY_TABLE = """
 29177|MO|Ray County
 29179|MO|Reynolds County
 29181|MO|Ripley County
-29183|MO|Saline County
-29185|MO|Schuyler County
-29186|MO|Scotland County
-29187|MO|Scott County
-29189|MO|Shannon County
-29195|MO|Shelby County
-29197|MO|Stoddard County
-29199|MO|Stone County
-29201|MO|Sullivan County
-29203|MO|Taney County
-29205|MO|Texas County
-29207|MO|Vernon County
-29209|MO|Warren County
-29211|MO|Washington County
-29213|MO|Wayne County
-29215|MO|Webster County
-29217|MO|Worth County
-29219|MO|Wright County
+29183|MO|St. Charles County
+29185|MO|St. Clair County
+29186|MO|Ste. Genevieve County
+29187|MO|St. Francois County
+29189|MO|St. Louis County
+29195|MO|Saline County
+29197|MO|Schuyler County
+29199|MO|Scotland County
+29201|MO|Scott County
+29203|MO|Shannon County
+29205|MO|Shelby County
+29207|MO|Stoddard County
+29209|MO|Stone County
+29211|MO|Sullivan County
+29213|MO|Taney County
+29215|MO|Texas County
+29217|MO|Vernon County
+29219|MO|Warren County
+29221|MO|Washington County
+29223|MO|Wayne County
+29225|MO|Webster County
+29227|MO|Worth County
+29229|MO|Wright County
 29510|MO|St. Louis city
 30001|MT|Beaverhead County
 30003|MT|Big Horn County
@@ -3245,6 +3250,97 @@ US_FIPS_COUNTY_TABLE = """
 56041|WY|Uinta County
 56043|WY|Washakie County
 56045|WY|Weston County
+60010|AS|Eastern District
+60020|AS|Manu'a District
+60030|AS|Rose Island
+60040|AS|Swains Island
+60050|AS|Western District
+66010|GU|Guam
+69085|MP|Northern Islands Municipality
+69100|MP|Rota Municipality
+69110|MP|Saipan Municipality
+69120|MP|Tinian Municipality
+72001|PR|Adjuntas Municipio
+72003|PR|Aguada Municipio
+72005|PR|Aguadilla Municipio
+72007|PR|Aguas Buenas Municipio
+72009|PR|Aibonito Municipio
+72011|PR|Añasco Municipio
+72013|PR|Arecibo Municipio
+72015|PR|Arroyo Municipio
+72017|PR|Barceloneta Municipio
+72019|PR|Barranquitas Municipio
+72021|PR|Bayamón Municipio
+72023|PR|Cabo Rojo Municipio
+72025|PR|Caguas Municipio
+72027|PR|Camuy Municipio
+72029|PR|Canóvanas Municipio
+72031|PR|Carolina Municipio
+72033|PR|Cataño Municipio
+72035|PR|Cayey Municipio
+72037|PR|Ceiba Municipio
+72039|PR|Ciales Municipio
+72041|PR|Cidra Municipio
+72043|PR|Coamo Municipio
+72045|PR|Comerío Municipio
+72047|PR|Corozal Municipio
+72049|PR|Culebra Municipio
+72051|PR|Dorado Municipio
+72053|PR|Fajardo Municipio
+72054|PR|Florida Municipio
+72055|PR|Guánica Municipio
+72057|PR|Guayama Municipio
+72059|PR|Guayanilla Municipio
+72061|PR|Guaynabo Municipio
+72063|PR|Gurabo Municipio
+72065|PR|Hatillo Municipio
+72067|PR|Hormigueros Municipio
+72069|PR|Humacao Municipio
+72071|PR|Isabela Municipio
+72073|PR|Jayuya Municipio
+72075|PR|Juana Díaz Municipio
+72077|PR|Juncos Municipio
+72079|PR|Lajas Municipio
+72081|PR|Lares Municipio
+72083|PR|Las Marías Municipio
+72085|PR|Las Piedras Municipio
+72087|PR|Loíza Municipio
+72089|PR|Luquillo Municipio
+72091|PR|Manatí Municipio
+72093|PR|Maricao Municipio
+72095|PR|Maunabo Municipio
+72097|PR|Mayagüez Municipio
+72099|PR|Moca Municipio
+72101|PR|Morovis Municipio
+72103|PR|Naguabo Municipio
+72105|PR|Naranjito Municipio
+72107|PR|Orocovis Municipio
+72109|PR|Patillas Municipio
+72111|PR|Peñuelas Municipio
+72113|PR|Ponce Municipio
+72115|PR|Quebradillas Municipio
+72117|PR|Rincón Municipio
+72119|PR|Río Grande Municipio
+72121|PR|Sabana Grande Municipio
+72123|PR|Salinas Municipio
+72125|PR|San Germán Municipio
+72127|PR|San Juan Municipio
+72129|PR|San Lorenzo Municipio
+72131|PR|San Sebastián Municipio
+72133|PR|Santa Isabel Municipio
+72135|PR|Toa Alta Municipio
+72137|PR|Toa Baja Municipio
+72139|PR|Trujillo Alto Municipio
+72141|PR|Utuado Municipio
+72143|PR|Vega Alta Municipio
+72145|PR|Vega Baja Municipio
+72147|PR|Vieques Municipio
+72149|PR|Villalba Municipio
+72151|PR|Yabucoa Municipio
+72153|PR|Yauco Municipio
+78010|VI|St. Croix Island
+78020|VI|St. John Island
+78030|VI|St. Thomas Island
 """
 
 

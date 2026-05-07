@@ -14,13 +14,44 @@
     <div class="row">
         <div class="col-12">
             <div class="alert alert-info">
-                <i class="fas fa-info-circle"></i> 
-                <strong>Zone Catalog Files:</strong> Download the latest NOAA public zone shapefiles from 
-                <a href="https://www.weather.gov/gis/publiczones" target="_blank" rel="noopener noreferrer">
-                    https://www.weather.gov/gis/publiczones <i class="fas fa-external-link-alt"></i>
+                <i class="fas fa-info-circle"></i>
+                <strong>Where to get zone catalog files (NOAA/NWS):</strong>
+                <ul class="mb-2 mt-2">
+                    <li>
+                        <strong>Public forecast zones</strong> (land &mdash; <code>z_*.dbf</code>):
+                        <a href="https://www.weather.gov/gis/PublicZones" target="_blank" rel="noopener noreferrer">
+                            weather.gov/gis/PublicZones <i class="fas fa-external-link-alt fa-sm"></i>
+                        </a>
+                    </li>
+                    <li>
+                        <strong>Marine zones</strong> (coastal, Great Lakes, offshore &mdash; <code>mz*.dbf</code>):
+                        <a href="https://www.weather.gov/gis/MarineZones" target="_blank" rel="noopener noreferrer">
+                            weather.gov/gis/MarineZones <i class="fas fa-external-link-alt fa-sm"></i>
+                        </a>
+                    </li>
+                    <li>
+                        <strong>Fire-weather zones</strong> (<code>fz_*.dbf</code>):
+                        <a href="https://www.weather.gov/gis/FireZones" target="_blank" rel="noopener noreferrer">
+                            weather.gov/gis/FireZones <i class="fas fa-external-link-alt fa-sm"></i>
+                        </a>
+                    </li>
+                    <li>
+                        <strong>NWR partial counties</strong> (subdivisions &mdash; <code>cs*.dbf</code>):
+                        <a href="https://www.weather.gov/gis/NWRPartialCounties" target="_blank" rel="noopener noreferrer">
+                            weather.gov/gis/NWRPartialCounties <i class="fas fa-external-link-alt fa-sm"></i>
+                        </a>
+                    </li>
+                </ul>
+                Each link goes to the official NOAA landing page; download the
+                ZIP, extract the <code>.dbf</code>, and upload it below.
+                Headless installs can run
+                <code>python tools/download_nws_gis_data.py</code> (use
+                <code>--zones</code>, <code>--marine</code>, or
+                <code>--partial</code> to fetch one family at a time). See
+                <a href="https://github.com/KR8MER/eas-station/blob/main/docs/reference/NWS_ZONE_CATALOG.md" target="_blank" rel="noopener noreferrer">
+                    NWS_ZONE_CATALOG.md <i class="fas fa-external-link-alt fa-sm"></i>
                 </a>
-                <br>
-                Look for the <strong>.dbf</strong> file (dBase format) that accompanies the shapefile downloads.
+                for the full refresh procedure, schema, and validator behavior.
             </div>
             <hr>
         </div>
@@ -96,15 +127,15 @@
                         <div class="col-md-6 mb-3">
                             <h6>Upload New Zone Catalog File</h6>
                             <p class="text-muted">
-                                Upload a .dbf file containing NOAA zone data. 
-                                <a href="https://www.weather.gov/gis/publiczones" target="_blank" rel="noopener noreferrer">
-                                    Download from NWS <i class="fas fa-external-link-alt fa-sm"></i>
-                                </a>
+                                Upload a <code>.dbf</code> from any NOAA zone shapefile
+                                (public&nbsp;<code>z_*</code>, marine&nbsp;<code>mz*</code>,
+                                or fire&nbsp;<code>fz_*</code>). See the source links at the
+                                top of this page.
                             </p>
                             <form id="upload-form" enctype="multipart/form-data">
                                 <div class="mb-3">
                                     <input type="file" class="form-control" id="zone-file" name="file" accept=".dbf" required>
-                                    <div class="form-text">Only .dbf (dBase) files are accepted. Download from <a href="https://www.weather.gov/gis/publiczones" target="_blank">NWS Public Zones</a></div>
+                                    <div class="form-text">Only .dbf (dBase) files are accepted.</div>
                                 </div>
                                 <button type="submit" class="btn btn-primary">
                                     <i class="fas fa-upload"></i> Upload and Load

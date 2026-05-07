@@ -35,12 +35,23 @@ Downloads two official NOAA/NWS shapefiles into the ``assets/`` directory:
    (NOAA Hazard Services partial-county alert targeting;
     see https://vlab.noaa.gov/web/hazard-services/partial-county-alerts).
 
+3. **Marine Zones** (``mz*.dbf``) from
+   https://www.weather.gov/gis/MarineZones
+   The NWS UGC zones for coastal, Great Lakes, and offshore waters
+   (prefixes ``AM``, ``AN``, ``GM``, ``LC``, ``LE``, ``LH``, ``LM``, ``LO``,
+   ``LS``, ``PH``, ``PK``, ``PM``, ``PS``, ``PZ``, ``SL``). Schema is
+   compatible with the public-zone DBF, so the same loader and
+   ``tools/sync_zone_catalog.py`` import them into ``nws_zones``.
+
 Usage::
 
-    python tools/download_nws_gis_data.py           # download both
-    python tools/download_nws_gis_data.py --zones   # only zone catalog
-    python tools/download_nws_gis_data.py --partial # only partial counties
-    python tools/download_nws_gis_data.py --dry-run # print URLs, do not download
+    python tools/download_nws_gis_data.py             # download all three
+    python tools/download_nws_gis_data.py --zones     # only public zone catalog
+    python tools/download_nws_gis_data.py --partial   # only partial counties
+    python tools/download_nws_gis_data.py --marine    # only marine zone catalog
+    python tools/download_nws_gis_data.py --dry-run   # print URLs, do not download
+
+See ``docs/reference/NWS_ZONE_CATALOG.md`` for the full refresh procedure.
 """
 
 import argparse
@@ -63,6 +74,9 @@ ZONES_INDEX_URL = "https://www.weather.gov/gis/PublicZones"
 # Landing page that lists the current partial-county ZIP download link.
 PARTIAL_COUNTIES_INDEX_URL = "https://www.weather.gov/gis/NWRPartialCounties"
 
+# Landing page that lists the current marine-zone ZIP download link.
+MARINE_ZONES_INDEX_URL = "https://www.weather.gov/gis/MarineZones"
+
 # NOAA Vlab reference for the Hazard Services partial-county alert spec:
 # https://vlab.noaa.gov/web/hazard-services/partial-county-alerts
 
@@ -80,11 +94,13 @@ _ASSETS_DIR = Path(__file__).resolve().parents[1] / "assets"
 #       cs16ap26.zip   cs18mr25.zip   cs_25mr19.zip
 _ZONE_ZIP_RE = re.compile(r'href="([^"]*\bz_\d{2}[a-z]{2}\d{2}\.zip[^"]*)"', re.I)
 _PARTIAL_ZIP_RE = re.compile(r'href="([^"]*\bcs_?\d{2}[a-z]{2}\d{2}\.zip[^"]*)"', re.I)
+_MARINE_ZIP_RE = re.compile(r'href="([^"]*\bmz_?\d{2}[a-z]{2}\d{2}\.zip[^"]*)"', re.I)
 
 # Hard-coded fallback URLs used when the index page cannot be fetched/parsed.
 # Update these whenever NOAA publishes a new vintage of the shapefiles.
 _ZONE_FALLBACK = "https://www.weather.gov/source/gis/Shapefiles/WSOM/z_18mr25.zip"
 _PARTIAL_FALLBACK = "https://www.weather.gov/source/gis/Shapefiles/County/cs16ap26.zip"
+_MARINE_FALLBACK = "https://www.weather.gov/source/gis/Shapefiles/WSOM/mz18mr25.zip"
 
 _USER_AGENT = (
     "Mozilla/5.0 (compatible; EASStation/1.0; "
@@ -231,15 +247,22 @@ def main(argv: Optional[list[str]] = None) -> int:
         help="Download only the NWR Partial Counties file (cs*.dbf).",
     )
     parser.add_argument(
+        "--marine",
+        action="store_true",
+        help="Download only the NWS Marine Zones file (mz*.dbf).",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Resolve download URLs and print them without downloading.",
     )
     args = parser.parse_args(argv)
 
-    # Default: download both unless one flag is explicitly set
-    do_zones = args.zones or (not args.zones and not args.partial)
-    do_partial = args.partial or (not args.zones and not args.partial)
+    # Default: download all unless one or more explicit flags are set.
+    any_explicit = args.zones or args.partial or args.marine
+    do_zones = args.zones or not any_explicit
+    do_partial = args.partial or not any_explicit
+    do_marine = args.marine or not any_explicit
 
     success = True
 
@@ -259,6 +282,16 @@ def main(argv: Optional[list[str]] = None) -> int:
             pattern=_PARTIAL_ZIP_RE,
             fallback=_PARTIAL_FALLBACK,
             label="NWR Partial Counties (political subdivisions)",
+            dry_run=args.dry_run,
+        )
+        success = success and ok
+
+    if do_marine:
+        ok = _download_and_install(
+            index_url=MARINE_ZONES_INDEX_URL,
+            pattern=_MARINE_ZIP_RE,
+            fallback=_MARINE_FALLBACK,
+            label="Marine Zones (coastal, Great Lakes, offshore)",
             dry_run=args.dry_run,
         )
         success = success and ok
