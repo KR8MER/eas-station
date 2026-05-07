@@ -1428,7 +1428,7 @@
 }
 
 
-   2. BASE & RESET STYLES
+/* 2. BASE & RESET STYLES */
 
 * {
     box-sizing: border-box;
@@ -1471,7 +1471,7 @@ body {
 }
 
 
-   3. TYPOGRAPHY
+/* 3. TYPOGRAPHY */
 
 h1, h2, h3, h4, h5, h6,
 .h1, .h2, .h3, .h4, .h5, .h6 {
@@ -1535,7 +1535,7 @@ small,
 }
 
 
-   4. LAYOUT (Navbar, Containers, Footer)
+/* 4. LAYOUT (Navbar, Containers, Footer) */
 
 /* iOS 26 Navigation Bar - Translucent Blur Effect */
 .navbar {
@@ -3675,7 +3675,7 @@ textarea:focus {
 }
 
 
-   6. UTILITIES (Spacing, Text, Display, etc.)
+/* 6. UTILITIES (Spacing, Text, Display, etc.) */
 
 /* Spacing Utilities */
 .m-0 { margin: 0; }
@@ -3923,7 +3923,7 @@ textarea:focus {
 .shadow-lg { box-shadow: 0 12px 32px var(--shadow-color); }
 
 
-   7. LOADING STATES
+/* 7. LOADING STATES */
 
 .loading-spinner {
     display: inline-block;
@@ -3991,7 +3991,7 @@ textarea:focus {
 }
 
 
-   8. ERROR HANDLING
+/* 8. ERROR HANDLING */
 
 .error-page {
     display: flex;
@@ -4035,7 +4035,7 @@ textarea:focus {
 }
 
 
-   9. ACCESSIBILITY
+/* 9. ACCESSIBILITY */
 
 /* Focus States */
 *:focus,
@@ -4119,7 +4119,7 @@ textarea:focus {
 }
 
 
-   10. VISUAL EFFECTS (Animations, Shadows, etc.)
+/* 10. VISUAL EFFECTS (Animations, Shadows, etc.) */
 
 /* Floating Orbs Background Effect - Subtle Ambient Accents */
 .page-header .orb,
@@ -4638,7 +4638,7 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 }
 
 
-   11. MAP STYLING
+/* 11. MAP STYLING */
 
 #map {
     position: relative;
@@ -4778,7 +4778,7 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 }
 
 
-   12. LOGO ENHANCEMENTS - VISIBILITY & CONTRAST
+/* 12. LOGO ENHANCEMENTS - VISIBILITY & CONTRAST */
 
 /* Base logo styling with enhanced visibility */
 .logo-wordmark,
@@ -5030,7 +5030,7 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 }
 
 
-   13. RESPONSIVE DESIGN - iOS 26 Mobile-First Approach
+/* 13. RESPONSIVE DESIGN - iOS 26 Mobile-First Approach */
 
 /* ========================================
    LARGE DESKTOP (1400px and above)
@@ -5600,7 +5600,7 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 }
 
 
-   14. THEME-SPECIFIC OVERRIDES
+/* 14. THEME-SPECIFIC OVERRIDES */
 
 /* Dark Themes - Enhanced Visibility */
 [data-theme="dark"] .logo-bar,
@@ -5631,7 +5631,7 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 }
 
 
-   15. HELP PAGE STYLES
+/* 15. HELP PAGE STYLES */
 
 /* Help Page Quick Links */
 .quick-links-card {
