@@ -1236,6 +1236,16 @@ function gpsEscapeHtml(s) {
         .replace(/>/g, '&gt;');
 }
 
+/* Attribute-value escaper — also escapes the double-quote that breaks
+   `data-copy="..."` when the payload is a DMS string like 41° 0' 38.26" N. */
+function gpsEscapeAttr(s) {
+    return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
 /* Map SNR (dBHz) to a CSS class and hex colour for bars / sky plot */
 function snrClass(snr) {
     if (snr === null || snr === undefined) return 'snr-s0';
@@ -1727,12 +1737,12 @@ function buildDiagnostics(d, sats, activePrns, stability) {
         var dms = toDMS(d.latitude, 'N', 'S') + ', ' + toDMS(d.longitude, 'E', 'W');
         var grid = toMaidenhead(d.latitude, d.longitude);
         html += '<div class="gps-diag-copy">'
-            + '<button type="button" class="gps-diag-copy-btn" data-copy="' + dec + '">'
+            + '<button type="button" class="gps-diag-copy-btn" data-copy="' + gpsEscapeAttr(dec) + '">'
               + '<i class="far fa-copy fa-fw"></i> Decimal</button>'
-            + '<button type="button" class="gps-diag-copy-btn" data-copy="' + dms + '">'
+            + '<button type="button" class="gps-diag-copy-btn" data-copy="' + gpsEscapeAttr(dms) + '">'
               + '<i class="far fa-copy fa-fw"></i> DMS</button>'
-            + '<button type="button" class="gps-diag-copy-btn" data-copy="' + grid + '">'
-              + '<i class="far fa-copy fa-fw"></i> ' + grid + '</button>'
+            + '<button type="button" class="gps-diag-copy-btn" data-copy="' + gpsEscapeAttr(grid) + '">'
+              + '<i class="far fa-copy fa-fw"></i> ' + gpsEscapeHtml(grid) + '</button>'
             + '</div>';
     }
 
