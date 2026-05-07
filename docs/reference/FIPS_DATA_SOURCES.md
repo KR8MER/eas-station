@@ -87,7 +87,12 @@ To refresh it:
   omits the retired predecessors (`02201`, `02232`, `02270`, `02280`).
 * **South Dakota**: `46102` *Oglala Lakota County* is included instead of
   the renamed `46113` *Shannon County* (renamed by SD legislature in 2015).
-* **Marine / offshore Z-zones** from the NWS list (e.g. `LE…`, `PZ…`) are
-  *not* included — `app_utils/fips_codes.py` covers only land-area FIPS
-  codes. EAS receivers handle marine zones through a separate UGC zone
-  table.
+* **Marine / offshore Z-zones** from the NWS list (e.g. `LEZ###`, `PZZ###`,
+  `AMZ###`, `GMZ###`) are *not* embedded in `app_utils/fips_codes.py` —
+  they use alphabetic UGC prefixes that don't fit the numeric FIPS grid.
+  They are instead managed by the runtime **NWS zone catalog**
+  (`nws_zones` table, fed by NOAA shapefiles). See
+  [`NWS_ZONE_CATALOG.md`](NWS_ZONE_CATALOG.md) for the authoritative
+  marine sources, the DBF schema, and every supported mechanism for
+  refreshing the catalog (CLI, admin UI upload, env var, asset
+  auto-detect).
