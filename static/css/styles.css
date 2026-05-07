@@ -937,6 +937,24 @@
     background-color: var(--bs-light, #f8f9fa) !important;
 }
 
+/* When a `<div class="card bg-light">` wraps an inner `<div class="card-body">`
+   (no `bg-light` of its own), the inner card-body's own
+   `background-color: var(--surface-color)` paints a dark navy surface on top
+   of the now-light card — and the descendant text-color rule below pins dark
+   ink on it, producing dark-on-dark again (visible in the audio_monitoring
+   "Now Playing" card and any similar `card bg-light > card-body` pattern).
+   Make the inner card-body transparent so the parent's light surface shows
+   through. Same for card-header / card-footer descendants of a bg-light card. */
+.card.bg-light > .card-body,
+.card.bg-light > .card-header,
+.card.bg-light > .card-footer,
+.card.bg-light .card-body,
+.card.bg-light .card-header,
+.card.bg-light .card-footer {
+    background-color: transparent !important;
+    background-image: none !important;
+}
+
 .bg-light,
 .card.bg-light,
 .card-header.bg-light,
