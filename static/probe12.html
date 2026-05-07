@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html><head>
+<link rel="stylesheet" href="/static/css/styles.css">
+<style>.col-lg-9 { width: 75%; float: left; }</style>
+</head>
+<body>
+<div class="card"><div style="height:8000px;background:#eee">Tall</div></div>
+<pre id="probe"></pre>
+<script>
+window.addEventListener('load', () => {
+  const card = document.querySelector('.card');
+  const cs = getComputedStyle(card);
+  document.getElementById('probe').textContent = 
+    'card overflow=' + cs.overflow + ' position=' + cs.position +
+    ' h=' + card.offsetHeight + ' sh=' + card.scrollHeight +
+    ' body sh=' + document.body.scrollHeight;
+});
+</script>
+</body></html>
