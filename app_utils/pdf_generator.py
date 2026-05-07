@@ -308,4 +308,278 @@ def generate_pdf_document(
     return buffer.getvalue()
 
 
-__all__ = ["generate_pdf_document"]
+# ---------------------------------------------------------------------------
+# Table-oriented report PDFs (used for FCC compliance exports)
+# ---------------------------------------------------------------------------
+
+_PAGE_PORTRAIT: Tuple[int, int] = (612, 792)
+_PAGE_LANDSCAPE: Tuple[int, int] = (792, 612)
+
+
+def _approx_helvetica_width(text: str, font_size: int) -> float:
+    """Rough Helvetica advance width for monospace-style truncation."""
+    # Helvetica averages ~0.5em advance for most printable ASCII; this is a
+    # deliberately conservative approximation since the renderer has no real
+    # font metrics.
+    return len(text) * font_size * 0.52
+
+
+def _truncate_to_width(text: Any, max_width_pts: float, font_size: int) -> str:
+    s = "" if text is None else str(text)
+    s = s.replace("\r\n", " ").replace("\r", " ").replace("\n", " ")
+    if max_width_pts <= 0:
+        return ""
+    if _approx_helvetica_width(s, font_size) <= max_width_pts:
+        return s
+    # Binary-search a fitting prefix so wide characters do not blow past the
+    # column boundary even though we are guessing average widths.
+    ellipsis = "…"
+    lo, hi = 0, len(s)
+    best = 0
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        candidate = s[:mid] + ellipsis
+        if _approx_helvetica_width(candidate, font_size) <= max_width_pts:
+            best = mid
+            lo = mid + 1
+        else:
+            hi = mid - 1
+    if best == 0:
+        return ""
+    return s[:best] + ellipsis
+
+
+def _assemble_pdf(page_streams: List[bytes], page_size: Tuple[int, int]) -> bytes:
+    """Wrap pre-rendered content streams into a complete PDF document."""
+    page_w, page_h = page_size
+    objects: List[Tuple[int, bytes]] = []
+    font_obj_id = 3
+    page_objects: List[int] = []
+    next_obj_id = 4
+
+    for content_stream in page_streams:
+        content_obj_id = next_obj_id
+        next_obj_id += 1
+        stream_body = (
+            b"<< /Length "
+            + str(len(content_stream)).encode("ascii")
+            + b" >>\nstream\n"
+            + content_stream
+            + b"\nendstream"
+        )
+        objects.append((content_obj_id, stream_body))
+
+        page_obj_id = next_obj_id
+        next_obj_id += 1
+        page_objects.append(page_obj_id)
+        page_body = (
+            f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {page_w} {page_h}] "
+            f"/Contents {content_obj_id} 0 R "
+            f"/Resources << /Font << /F1 {font_obj_id} 0 R /F2 {font_obj_id + 1} 0 R >> >> >>"
+        ).encode("latin-1")
+        objects.append((page_obj_id, page_body))
+
+    pages_body = (
+        "<< /Type /Pages /Count {count} /Kids [{kids}] >>".format(
+            count=len(page_objects),
+            kids=" ".join(f"{obj_id} 0 R" for obj_id in page_objects),
+        )
+    ).encode("latin-1")
+
+    catalog_body = b"<< /Type /Catalog /Pages 2 0 R >>"
+    font_body = b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"
+    bold_body = b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>"
+
+    objects.insert(0, (1, catalog_body))
+    objects.insert(1, (2, pages_body))
+    objects.insert(2, (font_obj_id, font_body))
+    objects.insert(3, (font_obj_id + 1, bold_body))
+
+    buffer = io.BytesIO()
+    buffer.write(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
+    xref_positions = []
+    for obj_id, body in objects:
+        xref_positions.append(buffer.tell())
+        buffer.write(f"{obj_id} 0 obj\n".encode("latin-1"))
+        buffer.write(body)
+        buffer.write(b"\nendobj\n")
+    startxref = buffer.tell()
+    buffer.write(f"xref\n0 {len(objects) + 1}\n".encode("latin-1"))
+    buffer.write(b"0000000000 65535 f \n")
+    for offset in xref_positions:
+        buffer.write(f"{offset:010d} 00000 n \n".encode("latin-1"))
+    buffer.write(b"trailer\n")
+    buffer.write(f"<< /Size {len(objects) + 1} /Root 1 0 R >>\n".encode("latin-1"))
+    buffer.write(f"startxref\n{startxref}\n%%EOF".encode("latin-1"))
+    return buffer.getvalue()
+
+
+def generate_table_pdf(
+    title: str,
+    columns: Sequence[Dict[str, Any]],
+    rows: Sequence[Sequence[Any]],
+    *,
+    subtitle: Optional[str] = None,
+    summary_lines: Optional[Sequence[str]] = None,
+    generated_at: Optional[datetime] = None,
+    footer_text: Optional[str] = None,
+    landscape: bool = True,
+    empty_message: str = "No matching records during this window.",
+) -> bytes:
+    """Render a paginated tabular PDF report.
+
+    ``columns`` entries accept ``label`` and an optional ``weight`` (relative
+    column width).  Rows are sequences of cell values; values are stringified
+    and truncated with an ellipsis when they exceed the allotted column width.
+    """
+
+    from app_core.eas_storage import utc_now
+
+    if generated_at is None:
+        generated_at = utc_now()
+
+    page_w, page_h = _PAGE_LANDSCAPE if landscape else _PAGE_PORTRAIT
+    margin_x = 36
+    margin_top = 56
+    margin_bottom = 44
+    body_font = 9
+    header_font = 9
+    title_font = 16
+    subtitle_font = 11
+    line_height = 13
+
+    weights = [float(c.get("weight", 1) or 1) for c in columns]
+    total_weight = sum(weights) or 1.0
+    available_w = page_w - 2 * margin_x
+    col_widths = [w / total_weight * available_w for w in weights]
+    col_x: List[float] = []
+    x_cursor = float(margin_x)
+    for w in col_widths:
+        col_x.append(x_cursor)
+        x_cursor += w
+
+    def emit_text(content: List[str], font_alias: str, size: int, x: float, y: float, value: str) -> None:
+        content.append(f"/{font_alias} {size} Tf")
+        content.append(
+            f"1 0 0 1 {x:.2f} {y:.2f} Tm ({_escape_pdf_text(value)}) Tj"
+        )
+
+    def render_doc_header(content: List[str], y: float) -> float:
+        emit_text(content, "F2", title_font, margin_x, y, title)
+        y -= title_font + 6
+        if subtitle:
+            emit_text(content, "F1", subtitle_font, margin_x, y, subtitle)
+            y -= subtitle_font + 4
+        from app_utils.time import format_local_datetime
+        gen_line = f"Generated: {format_local_datetime(generated_at, include_utc=True)}"
+        emit_text(content, "F1", body_font, margin_x, y, gen_line)
+        y -= body_font + 8
+        return y
+
+    def render_table_header(content: List[str], y: float) -> float:
+        for i, col in enumerate(columns):
+            label = _truncate_to_width(col.get("label", ""), col_widths[i] - 4, header_font)
+            emit_text(content, "F2", header_font, col_x[i] + 1, y, label)
+        y -= line_height - 1
+        # Underline as a thin rule using a stroked path inside the text scope.
+        # We close the BT/ET block, draw the rule, and reopen the text scope.
+        content.append("ET")
+        content.append(f"{margin_x} {y + 4:.2f} m {page_w - margin_x} {y + 4:.2f} l S")
+        content.append("BT")
+        return y
+
+    def render_footer(content: List[str], page_num: int, total_pages: Optional[int]) -> None:
+        footer = footer_text or "EAS Station — FCC Compliance Report"
+        emit_text(content, "F1", 8, margin_x, 24, footer)
+        if total_pages is not None:
+            label = f"Page {page_num} of {total_pages}"
+        else:
+            label = f"Page {page_num}"
+        emit_text(content, "F1", 8, page_w - margin_x - 70, 24, label)
+
+    # Two-pass render: pass 1 figures out page count, pass 2 stamps "of N".
+    row_list = list(rows)
+
+    def _layout(total_pages: Optional[int]) -> List[bytes]:
+        rendered: List[bytes] = []
+        idx = 0
+        page_num = 0
+        n_rows = len(row_list)
+        rendered_summary = False
+
+        while True:
+            page_num += 1
+            content: List[str] = ["BT"]
+            y = page_h - margin_top
+            if page_num == 1:
+                y = render_doc_header(content, y)
+            else:
+                emit_text(content, "F1", body_font, margin_x, y, f"{title} (continued)")
+                y -= body_font + 8
+            y = render_table_header(content, y)
+
+            if n_rows == 0 and page_num == 1:
+                emit_text(content, "F1", body_font, margin_x, y - 4, empty_message)
+                y -= line_height + 4
+            else:
+                while idx < n_rows and y >= margin_bottom + line_height:
+                    row = row_list[idx]
+                    for i, col in enumerate(columns):
+                        cell = row[i] if i < len(row) else ""
+                        text_val = _truncate_to_width(cell, col_widths[i] - 4, body_font)
+                        emit_text(content, "F1", body_font, col_x[i] + 1, y, text_val)
+                    y -= line_height
+                    idx += 1
+
+            done = idx >= n_rows
+            if done and summary_lines and not rendered_summary:
+                needed = (len(summary_lines) + 1) * line_height + 12
+                if y - margin_bottom < needed:
+                    # Defer summary to a fresh page.
+                    pass
+                else:
+                    y -= 6
+                    content.append("ET")
+                    content.append(
+                        f"{margin_x} {y:.2f} m {page_w - margin_x} {y:.2f} l S"
+                    )
+                    content.append("BT")
+                    y -= line_height
+                    emit_text(content, "F2", header_font, margin_x, y, "Summary")
+                    y -= line_height
+                    for line in summary_lines:
+                        emit_text(content, "F1", body_font, margin_x, y, str(line))
+                        y -= line_height
+                    rendered_summary = True
+
+            content.append("ET")
+            render_footer(content, page_num, total_pages)
+            stream = "\n".join(content).encode("latin-1", "ignore")
+            rendered.append(stream)
+
+            if done and (rendered_summary or not summary_lines):
+                break
+            # Overflow summary onto its own page.
+            if done and summary_lines and not rendered_summary:
+                page_num += 1
+                content = ["BT"]
+                y = page_h - margin_top
+                emit_text(content, "F2", title_font, margin_x, y, "Summary")
+                y -= title_font + 8
+                for line in summary_lines:
+                    emit_text(content, "F1", body_font, margin_x, y, str(line))
+                    y -= line_height
+                content.append("ET")
+                render_footer(content, page_num, total_pages)
+                rendered.append("\n".join(content).encode("latin-1", "ignore"))
+                rendered_summary = True
+                break
+
+        return rendered
+
+    first_pass = _layout(None)
+    page_streams = _layout(len(first_pass))
+    return _assemble_pdf(page_streams, (page_w, page_h))
+
+
+__all__ = ["generate_pdf_document", "generate_table_pdf"]

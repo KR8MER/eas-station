@@ -39,6 +39,7 @@ from app_core.models import (
     EASDecodedAudio,
     EASMessage,
     ManualEASActivation,
+    ReceivedEASAlert,
 )
 from app_utils import ALERT_SOURCE_UNKNOWN
 from app_utils.eas_decode import (
@@ -1693,6 +1694,472 @@ def generate_compliance_log_pdf(
     buffer.write(f"startxref\n{startxref}\n%%EOF".encode("latin-1"))
 
     return buffer.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# FCC compliance report builders (received / forwarded / ignored / initiated /
+# weekly / monthly).  Each builder returns a uniform ``ReportPayload`` dict
+# that the PDF and CSV exporters consume.
+# ---------------------------------------------------------------------------
+
+
+REPORT_DECISION_FILTERS: Dict[str, Tuple[str, ...]] = {
+    "received": (),  # all decisions
+    "forwarded": ("forwarded",),
+    "ignored": ("ignored",),
+}
+
+
+def _coerce_aware_utc(value: Any) -> Optional[datetime]:
+    if not isinstance(value, datetime):
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def resolve_report_window(
+    *,
+    start: Optional[datetime] = None,
+    end: Optional[datetime] = None,
+    days: Optional[int] = None,
+) -> Tuple[datetime, datetime]:
+    """Resolve a report window from explicit bounds or a relative day count."""
+    end_dt = _coerce_aware_utc(end) or utc_now()
+    if start is not None:
+        start_dt = _coerce_aware_utc(start) or end_dt - timedelta(days=30)
+    else:
+        window_days = _normalize_window_days(days if days is not None else 30)
+        start_dt = end_dt - timedelta(days=window_days)
+    if start_dt > end_dt:
+        start_dt, end_dt = end_dt, start_dt
+    return start_dt, end_dt
+
+
+def _format_fips(values: Any) -> str:
+    if not values:
+        return ""
+    if isinstance(values, (list, tuple, set)):
+        return ", ".join(str(v) for v in values)
+    return str(values)
+
+
+def _short(text: Any, limit: int = 80) -> str:
+    if text is None:
+        return ""
+    s = str(text)
+    if len(s) <= limit:
+        return s
+    return s[: limit - 1] + "…"
+
+
+_DECISION_TITLES: Dict[str, str] = {
+    "received": "Received Alerts Report",
+    "forwarded": "Forwarded Alerts Report",
+    "ignored": "Ignored Alerts Report",
+}
+
+
+def build_received_alerts_report(
+    *,
+    window_start: datetime,
+    window_end: datetime,
+    decision: str = "received",
+) -> Dict[str, Any]:
+    """Build a per-category report covering received_eas_alerts rows.
+
+    ``decision`` selects ``received`` (all), ``forwarded`` or ``ignored``.
+    """
+    decision_key = decision if decision in REPORT_DECISION_FILTERS else "received"
+    filters = REPORT_DECISION_FILTERS[decision_key]
+
+    query = ReceivedEASAlert.query.filter(
+        ReceivedEASAlert.received_at >= window_start,
+        ReceivedEASAlert.received_at < window_end,
+    )
+    if filters:
+        query = query.filter(ReceivedEASAlert.forwarding_decision.in_(filters))
+    alerts = query.order_by(ReceivedEASAlert.received_at.desc()).all()
+
+    rows: List[List[Any]] = []
+    forwarded_count = 0
+    ignored_count = 0
+    error_count = 0
+    for alert in alerts:
+        decision_value = (alert.forwarding_decision or "").lower()
+        if decision_value == "forwarded":
+            forwarded_count += 1
+        elif decision_value == "ignored":
+            ignored_count += 1
+        elif decision_value == "error":
+            error_count += 1
+        rows.append([
+            format_local_datetime(alert.received_at, include_utc=True),
+            alert.event_code or "",
+            _short(alert.event_name, 40),
+            alert.originator_code or "",
+            alert.callsign or alert.source_name or "",
+            _format_fips(alert.matched_fips_codes or alert.fips_codes),
+            (alert.forwarding_decision or "").upper(),
+            _short(alert.forwarding_reason, 60),
+        ])
+
+    columns = [
+        {"label": "Received (local / UTC)", "weight": 2.4},
+        {"label": "Event", "weight": 0.7},
+        {"label": "Description", "weight": 2.0},
+        {"label": "Originator", "weight": 0.8},
+        {"label": "Callsign / Source", "weight": 1.4},
+        {"label": "FIPS", "weight": 1.5},
+        {"label": "Decision", "weight": 1.0},
+        {"label": "Reason", "weight": 2.4},
+    ]
+
+    title = _DECISION_TITLES[decision_key]
+    subtitle = (
+        f"Window: {format_local_datetime(window_start, include_utc=False)}"
+        f" to {format_local_datetime(window_end, include_utc=False)}"
+    )
+
+    summary_lines = [
+        f"Total entries:    {len(alerts)}",
+        f"Forwarded:        {forwarded_count}",
+        f"Ignored:          {ignored_count}",
+        f"Errors:           {error_count}",
+    ]
+
+    slug = f"{decision_key}-alerts"
+    return {
+        "slug": slug,
+        "title": title,
+        "subtitle": subtitle,
+        "columns": columns,
+        "rows": rows,
+        "summary_lines": summary_lines,
+        "window_start": window_start,
+        "window_end": window_end,
+        "row_count": len(alerts),
+    }
+
+
+def build_initiated_alerts_report(
+    *,
+    window_start: datetime,
+    window_end: datetime,
+) -> Dict[str, Any]:
+    """Alerts initiated by this station: auto-relays plus manual activations."""
+
+    auto_query = (
+        EASMessage.query.options(joinedload(EASMessage.cap_alert))
+        .filter(EASMessage.created_at >= window_start)
+        .filter(EASMessage.created_at < window_end)
+        .order_by(EASMessage.created_at.desc())
+    )
+    manual_query = (
+        ManualEASActivation.query.filter(
+            ManualEASActivation.created_at >= window_start,
+            ManualEASActivation.created_at < window_end,
+        ).order_by(ManualEASActivation.created_at.desc())
+    )
+
+    rows: List[List[Any]] = []
+    auto_count = 0
+    manual_count = 0
+
+    for message in auto_query:
+        auto_count += 1
+        alert = message.cap_alert
+        rows.append([
+            format_local_datetime(message.created_at, include_utc=True),
+            "AUTO",
+            (alert.event if alert and alert.event else "") or "",
+            "",
+            _short(message.same_header, 50),
+            "relayed",
+            _short(alert.identifier if alert else "", 40),
+        ])
+
+    for activation in manual_query:
+        manual_count += 1
+        ts = activation.sent_at or activation.created_at
+        rows.append([
+            format_local_datetime(ts, include_utc=True),
+            "MANUAL",
+            activation.event_name or activation.event_code or "",
+            activation.event_code or "",
+            _short(activation.same_header, 50),
+            activation.status or "",
+            _short(activation.identifier, 40),
+        ])
+
+    rows.sort(key=lambda r: r[0], reverse=True)
+
+    columns = [
+        {"label": "Initiated (local / UTC)", "weight": 2.4},
+        {"label": "Source", "weight": 0.7},
+        {"label": "Event", "weight": 1.6},
+        {"label": "Code", "weight": 0.6},
+        {"label": "SAME Header", "weight": 3.0},
+        {"label": "Status", "weight": 1.0},
+        {"label": "Identifier", "weight": 1.8},
+    ]
+
+    subtitle = (
+        f"Window: {format_local_datetime(window_start, include_utc=False)}"
+        f" to {format_local_datetime(window_end, include_utc=False)}"
+    )
+    summary_lines = [
+        f"Total initiated:  {auto_count + manual_count}",
+        f"Automated relay:  {auto_count}",
+        f"Manual activation:{manual_count}",
+    ]
+
+    return {
+        "slug": "initiated-alerts",
+        "title": "Initiated Alerts Report",
+        "subtitle": subtitle,
+        "columns": columns,
+        "rows": rows,
+        "summary_lines": summary_lines,
+        "window_start": window_start,
+        "window_end": window_end,
+        "row_count": len(rows),
+    }
+
+
+def _bucket_received(window_start: datetime, window_end: datetime) -> List[ReceivedEASAlert]:
+    return (
+        ReceivedEASAlert.query.filter(
+            ReceivedEASAlert.received_at >= window_start,
+            ReceivedEASAlert.received_at < window_end,
+        )
+        .order_by(ReceivedEASAlert.received_at.asc())
+        .all()
+    )
+
+
+def _bucket_initiated(window_start: datetime, window_end: datetime) -> List[Tuple[datetime, str]]:
+    items: List[Tuple[datetime, str]] = []
+    for message in EASMessage.query.filter(
+        EASMessage.created_at >= window_start,
+        EASMessage.created_at < window_end,
+    ).all():
+        items.append((message.created_at, "auto"))
+    for activation in ManualEASActivation.query.filter(
+        ManualEASActivation.created_at >= window_start,
+        ManualEASActivation.created_at < window_end,
+    ).all():
+        ts = activation.sent_at or activation.created_at
+        items.append((ts, "manual"))
+    return items
+
+
+def _iso_week_start(dt: datetime) -> datetime:
+    aware = _coerce_aware_utc(dt) or dt
+    monday = aware - timedelta(days=aware.weekday())
+    return monday.replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+def _month_start(dt: datetime) -> datetime:
+    aware = _coerce_aware_utc(dt) or dt
+    return aware.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+
+def _bucket_summary_report(
+    *,
+    window_start: datetime,
+    window_end: datetime,
+    period: str,
+) -> Dict[str, Any]:
+    received_alerts = _bucket_received(window_start, window_end)
+    initiated_items = _bucket_initiated(window_start, window_end)
+
+    if period == "weekly":
+        bucket_fn = _iso_week_start
+        bucket_label = "Week starting"
+        title = "Weekly Compliance Summary"
+        slug = "weekly-summary"
+    else:
+        bucket_fn = _month_start
+        bucket_label = "Month"
+        title = "Monthly Compliance Summary"
+        slug = "monthly-summary"
+
+    buckets: Dict[datetime, Dict[str, int]] = defaultdict(
+        lambda: {
+            "received": 0,
+            "forwarded": 0,
+            "ignored": 0,
+            "errors": 0,
+            "tests": 0,
+            "auto_initiated": 0,
+            "manual_initiated": 0,
+        }
+    )
+
+    for alert in received_alerts:
+        ts = _coerce_aware_utc(alert.received_at)
+        if ts is None:
+            continue
+        key = bucket_fn(ts)
+        bucket = buckets[key]
+        bucket["received"] += 1
+        decision = (alert.forwarding_decision or "").lower()
+        if decision == "forwarded":
+            bucket["forwarded"] += 1
+        elif decision == "ignored":
+            bucket["ignored"] += 1
+        elif decision == "error":
+            bucket["errors"] += 1
+        if (alert.event_code or "").upper() in {"RWT", "RMT"} or _event_matches_test(alert.event_name):
+            bucket["tests"] += 1
+
+    for ts, source in initiated_items:
+        ts_aware = _coerce_aware_utc(ts)
+        if ts_aware is None:
+            continue
+        key = bucket_fn(ts_aware)
+        bucket = buckets[key]
+        if source == "auto":
+            bucket["auto_initiated"] += 1
+        else:
+            bucket["manual_initiated"] += 1
+
+    sorted_keys = sorted(buckets.keys(), reverse=True)
+
+    rows: List[List[Any]] = []
+    totals = {
+        "received": 0,
+        "forwarded": 0,
+        "ignored": 0,
+        "errors": 0,
+        "tests": 0,
+        "auto_initiated": 0,
+        "manual_initiated": 0,
+    }
+    for key in sorted_keys:
+        b = buckets[key]
+        for k, v in b.items():
+            totals[k] += v
+        if period == "weekly":
+            label = format_local_datetime(key, include_utc=False)
+        else:
+            local = key
+            label = local.strftime("%Y-%m")
+        forward_rate = (b["forwarded"] / b["received"] * 100.0) if b["received"] else None
+        rate_str = f"{forward_rate:.1f}%" if forward_rate is not None else "—"
+        rows.append([
+            label,
+            b["received"],
+            b["forwarded"],
+            b["ignored"],
+            b["errors"],
+            b["tests"],
+            b["auto_initiated"],
+            b["manual_initiated"],
+            rate_str,
+        ])
+
+    columns = [
+        {"label": bucket_label, "weight": 2.0},
+        {"label": "Received", "weight": 1.0},
+        {"label": "Forwarded", "weight": 1.0},
+        {"label": "Ignored", "weight": 1.0},
+        {"label": "Errors", "weight": 0.9},
+        {"label": "Tests (RWT/RMT)", "weight": 1.3},
+        {"label": "Auto Initiated", "weight": 1.2},
+        {"label": "Manual Initiated", "weight": 1.3},
+        {"label": "Forward Rate", "weight": 1.1},
+    ]
+
+    subtitle = (
+        f"Window: {format_local_datetime(window_start, include_utc=False)}"
+        f" to {format_local_datetime(window_end, include_utc=False)}"
+    )
+
+    forward_rate = (
+        (totals["forwarded"] / totals["received"] * 100.0) if totals["received"] else None
+    )
+    rate_str = f"{forward_rate:.1f}%" if forward_rate is not None else "N/A"
+    summary_lines = [
+        f"Buckets:           {len(sorted_keys)}",
+        f"Received:          {totals['received']}",
+        f"Forwarded:         {totals['forwarded']}",
+        f"Ignored:           {totals['ignored']}",
+        f"Errors:            {totals['errors']}",
+        f"Tests (RWT/RMT):   {totals['tests']}",
+        f"Auto initiated:    {totals['auto_initiated']}",
+        f"Manual initiated:  {totals['manual_initiated']}",
+        f"Overall forward rate: {rate_str}",
+    ]
+
+    return {
+        "slug": slug,
+        "title": title,
+        "subtitle": subtitle,
+        "columns": columns,
+        "rows": rows,
+        "summary_lines": summary_lines,
+        "window_start": window_start,
+        "window_end": window_end,
+        "row_count": len(rows),
+    }
+
+
+def build_weekly_summary_report(
+    *, window_start: datetime, window_end: datetime
+) -> Dict[str, Any]:
+    return _bucket_summary_report(
+        window_start=window_start, window_end=window_end, period="weekly"
+    )
+
+
+def build_monthly_summary_report(
+    *, window_start: datetime, window_end: datetime
+) -> Dict[str, Any]:
+    return _bucket_summary_report(
+        window_start=window_start, window_end=window_end, period="monthly"
+    )
+
+
+def generate_report_csv(report: Dict[str, Any]) -> str:
+    """Render a report payload as CSV (header row + data + summary block)."""
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([col.get("label", "") for col in report.get("columns", [])])
+    for row in report.get("rows", []):
+        writer.writerow(["" if cell is None else str(cell) for cell in row])
+    summary_lines = report.get("summary_lines") or []
+    if summary_lines:
+        writer.writerow([])
+        writer.writerow(["Summary"])
+        for line in summary_lines:
+            writer.writerow([line])
+    return output.getvalue()
+
+
+def generate_report_pdf(report: Dict[str, Any]) -> bytes:
+    """Render a report payload as a paginated landscape PDF."""
+    from app_utils.pdf_generator import generate_table_pdf
+
+    return generate_table_pdf(
+        report.get("title", "Compliance Report"),
+        report.get("columns", []),
+        report.get("rows", []),
+        subtitle=report.get("subtitle"),
+        summary_lines=report.get("summary_lines"),
+        landscape=True,
+    )
+
+
+REPORT_BUILDERS = {
+    "received": lambda **kw: build_received_alerts_report(decision="received", **kw),
+    "forwarded": lambda **kw: build_received_alerts_report(decision="forwarded", **kw),
+    "ignored": lambda **kw: build_received_alerts_report(decision="ignored", **kw),
+    "initiated": build_initiated_alerts_report,
+    "weekly": build_weekly_summary_report,
+    "monthly": build_monthly_summary_report,
+}
 
 
 def determine_alert_precedence(alert: CAPAlert) -> Optional[str]:
