@@ -851,7 +851,7 @@ def upload_shapefile():
                             member_dest = os.path.realpath(os.path.join(dest, member.filename))
                             if not member_dest.startswith(dest + os.sep):
                                 return jsonify({"error": "Invalid ZIP file: path traversal detected"}), 400
-                        zip_ref.extractall(tmpdir)
+                            zip_ref.extract(member, tmpdir)
 
                     # Find .shp file in extracted contents
                     shp_files = list(Path(tmpdir).glob("**/*.shp"))

@@ -215,8 +215,8 @@ def configure_postfix():
     try:
         hostname = _sanitize_postfix_value(hostname)
         from_address = _sanitize_postfix_value(from_address)
-    except ValueError as exc:
-        return jsonify({"success": False, "error": str(exc)}), 400
+    except ValueError:
+        return jsonify({"success": False, "error": "Hostname and from address must not contain newlines or null bytes."}), 400
 
     config_content = _POSTFIX_MAIN_CF.format(
         generated=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
@@ -237,7 +237,7 @@ def configure_postfix():
             raise RuntimeError(proc.stderr.strip())
     except Exception as exc:
         logger.error("Failed to write Postfix config: %s", exc)
-        return jsonify({"success": False, "error": f"Could not write main.cf: {exc}"}), 500
+        return jsonify({"success": False, "error": "Failed to write Postfix configuration. Check server logs."}), 500
 
     # Validate the new config before restarting
     ok_check, check_out = _run(["postfix", "check"])

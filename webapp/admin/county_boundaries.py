@@ -132,7 +132,7 @@ def county_boundaries_upload():
                     member_dest = os.path.realpath(os.path.join(dest, member.filename))
                     if not member_dest.startswith(dest + os.sep):
                         return jsonify({"success": False, "error": "Invalid ZIP file: path traversal detected"}), 400
-                zf.extractall(tmpdir)
+                    zf.extract(member, tmpdir)
         except zipfile.BadZipFile:
             return jsonify({"success": False, "error": "Invalid ZIP file"}), 400
 

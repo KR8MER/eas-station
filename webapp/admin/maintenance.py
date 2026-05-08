@@ -496,10 +496,12 @@ def run_one_click_backup():
         _backup_base = Path(
             current_app.config.get("BACKUP_DIR", "/var/backups/eas-station")
         ).resolve()
-        _candidate = Path(output_dir.strip()).resolve()
-        if _candidate != _backup_base and _backup_base not in _candidate.parents:
+        try:
+            _relative = Path(output_dir.strip()).resolve().relative_to(_backup_base)
+        except ValueError:
             return jsonify({"error": "output_dir must be within the configured backup directory"}), 400
-        extra_args.extend(["--output-dir", str(_candidate)])
+        # Reconstruct from the safe base so the subprocess arg is derived from a trusted root
+        extra_args.extend(["--output-dir", str(_backup_base / _relative)])
     python_executable = sys.executable or "python3"
     command = [python_executable, str(repo_root / "tools" / "create_backup.py"), *extra_args]
     try:
