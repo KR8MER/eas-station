@@ -849,7 +849,7 @@ def _emit_alerts_update(
     # and updates that change expiry time.  Doesn't catch in-place edits to e.g.
     # the headline, which is fine — those don't drive UI urgency.
     sig_input = '|'.join(f"{a['id']}:{a['expires']}" for a in alerts)
-    signature = hashlib.sha1(sig_input.encode('utf-8')).hexdigest()
+    signature = hashlib.sha256(sig_input.encode('utf-8')).hexdigest()
 
     payload = {
         'alerts': alerts,

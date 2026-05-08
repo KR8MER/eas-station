@@ -381,7 +381,7 @@ def parse_noaa_cap_alert(alert_payload: dict) -> Optional[Tuple[dict, Optional[d
             event_name = properties.get("event", "Unknown")
             sent_value = properties.get("sent", "") or ""
             hash_input = f"{event_name}:{sent_value}:{utc_now().isoformat()}"
-            identifier = f"manual_{hashlib.md5(hash_input.encode('utf-8')).hexdigest()[:16]}"
+            identifier = f"manual_{hashlib.sha256(hash_input.encode('utf-8')).hexdigest()[:16]}"
 
         sent_value = properties.get("sent")
         expires_value = properties.get("expires")

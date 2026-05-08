@@ -816,6 +816,7 @@ def upload_shapefile():
     """Upload shapefile (with companion files) and convert to boundaries."""
     try:
         import io
+        import os
         import tempfile
         import zipfile
         from pathlib import Path
@@ -845,6 +846,11 @@ def upload_shapefile():
                 with tempfile.TemporaryDirectory() as tmpdir:
                     zip_data = io.BytesIO(file.read())
                     with zipfile.ZipFile(zip_data, 'r') as zip_ref:
+                        dest = os.path.realpath(tmpdir)
+                        for member in zip_ref.infolist():
+                            member_dest = os.path.realpath(os.path.join(dest, member.filename))
+                            if not member_dest.startswith(dest + os.sep):
+                                return jsonify({"error": "Invalid ZIP file: path traversal detected"}), 400
                         zip_ref.extractall(tmpdir)
 
                     # Find .shp file in extracted contents

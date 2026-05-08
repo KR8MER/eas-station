@@ -833,6 +833,8 @@ def register(app: Flask, logger_arg, archive_dir: str = _DEFAULT_ARCHIVE_DIR) ->
         2. VAST XML — parses the XML and returns the first audio MediaFile URL.
         3. Anything else — returns an error explaining it could not be resolved.
         """
+        import ipaddress
+        import socket as _socket
         import urllib.request
         import xml.etree.ElementTree as ET
 
@@ -840,6 +842,16 @@ def register(app: Flask, logger_arg, archive_dir: str = _DEFAULT_ARCHIVE_DIR) ->
         url = (body.get("url") or "").strip()
 
         if not url or not url.startswith(("http://", "https://")):
+            return jsonify({"error": "Invalid or missing URL"}), 400
+
+        # Block SSRF: reject URLs that resolve to private/loopback/link-local addresses
+        try:
+            from urllib.parse import urlparse as _urlparse
+            _host = _urlparse(url).hostname or ""
+            _ip = ipaddress.ip_address(_socket.gethostbyname(_host))
+            if _ip.is_private or _ip.is_loopback or _ip.is_link_local or _ip.is_reserved:
+                return jsonify({"error": "Invalid or missing URL"}), 400
+        except Exception:
             return jsonify({"error": "Invalid or missing URL"}), 400
 
         try:

@@ -492,7 +492,14 @@ def run_one_click_backup():
         extra_args.extend(["--label", sanitized_label])
     output_dir = payload.get("output_dir")
     if isinstance(output_dir, str) and output_dir.strip():
-        extra_args.extend(["--output-dir", output_dir.strip()])
+        # Enforce boundary: output_dir must stay within the configured backup directory
+        _backup_base = Path(
+            current_app.config.get("BACKUP_DIR", "/var/backups/eas-station")
+        ).resolve()
+        _candidate = Path(output_dir.strip()).resolve()
+        if _candidate != _backup_base and _backup_base not in _candidate.parents:
+            return jsonify({"error": "output_dir must be within the configured backup directory"}), 400
+        extra_args.extend(["--output-dir", str(_candidate)])
     python_executable = sys.executable or "python3"
     command = [python_executable, str(repo_root / "tools" / "create_backup.py"), *extra_args]
     try:

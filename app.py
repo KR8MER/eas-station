@@ -584,7 +584,11 @@ except ImportError as gevent_error:
     # "ImportError: No module named 'gevent'" or similar greenlet C extension error.
     # The pre-flight check in systemd service will catch this before gunicorn starts.
 
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent')
+socketio = SocketIO(
+    app,
+    cors_allowed_origins=list(app.config.get('CORS_ALLOWED_ORIGINS') or []) or '*',
+    async_mode='gevent',
+)
 
 
 logger.info("Checking database connectivity at startup...")
@@ -794,8 +798,6 @@ def not_found_error(error):
 @app.errorhandler(500)
 def internal_error(error):
     """Enhanced 500 error page with detailed logging for debugging."""
-    import traceback
-
     # Log the error with full traceback for debugging
     logger.error(
         "Internal server error on %s %s: %s",
@@ -818,6 +820,10 @@ def internal_error(error):
 
     if hasattr(db, 'session') and db.session:
         db.session.rollback()
+
+    # Return JSON for API endpoints, HTML for everything else
+    if request.path.startswith('/api/') or request.accept_mimetypes.best == 'application/json':
+        return jsonify({'error': 'An unexpected error occurred. Check server logs.'}), 500
 
     return render_template('error.html',
                          error='500 - Internal Server Error',
@@ -1069,6 +1075,22 @@ def after_request(response):
     response.headers.add('X-Content-Type-Options', 'nosniff')
     response.headers.add('X-Frame-Options', 'SAMEORIGIN')
     response.headers.add('X-XSS-Protection', '1; mode=block')
+    response.headers.setdefault(
+        'Content-Security-Policy',
+        (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; "
+            "connect-src 'self' wss: ws:; "
+            "frame-ancestors 'none';"
+        ),
+    )
+    if request.is_secure:
+        response.headers.setdefault(
+            'Strict-Transport-Security',
+            'max-age=63072000; includeSubDomains',
+        )
 
     return response
 
