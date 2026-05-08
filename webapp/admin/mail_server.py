@@ -149,6 +149,14 @@ def _postfix_status() -> dict:
     }
 
 
+def _sanitize_postfix_value(value: str) -> str:
+    """Strip characters that would allow Postfix config injection (newlines, null bytes)."""
+    sanitized = value.replace('\r', '').replace('\n', '').replace('\x00', '')
+    if sanitized != value:
+        raise ValueError("Invalid characters in Postfix configuration value")
+    return sanitized
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @mail_server_bp.route("/", methods=["GET"])
@@ -204,6 +212,12 @@ def configure_postfix():
     if not hostname:
         return jsonify({"success": False, "error": "Hostname is required."}), 400
 
+    try:
+        hostname = _sanitize_postfix_value(hostname)
+        from_address = _sanitize_postfix_value(from_address)
+    except ValueError:
+        return jsonify({"success": False, "error": "Hostname and from address must not contain newlines or null bytes."}), 400
+
     config_content = _POSTFIX_MAIN_CF.format(
         generated=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
         myhostname=hostname,
@@ -223,7 +237,7 @@ def configure_postfix():
             raise RuntimeError(proc.stderr.strip())
     except Exception as exc:
         logger.error("Failed to write Postfix config: %s", exc)
-        return jsonify({"success": False, "error": f"Could not write main.cf: {exc}"}), 500
+        return jsonify({"success": False, "error": "Failed to write Postfix configuration. Check server logs."}), 500
 
     # Validate the new config before restarting
     ok_check, check_out = _run(["postfix", "check"])

@@ -1198,7 +1198,7 @@ class CAPPoller:
 
         if not properties['identifier']:
             fallback = f"{properties.get('event', 'Unknown')}|{properties.get('sent', '')}"
-            properties['identifier'] = f"ipaws_{hashlib.md5(fallback.encode()).hexdigest()[:16]}"
+            properties['identifier'] = f"ipaws_{hashlib.sha256(fallback.encode()).hexdigest()[:16]}"
 
         feature = {
             'type': 'Feature',
@@ -2031,7 +2031,7 @@ class CAPPoller:
             if not identifier:
                 event = properties.get('event', 'Unknown')
                 sent = properties.get('sent', str(time.time()))
-                identifier = f"temp_{hashlib.md5((event + sent).encode()).hexdigest()[:16]}"
+                identifier = f"temp_{hashlib.sha256((event + sent).encode()).hexdigest()[:16]}"
 
             sent = parse_nws_datetime(properties.get('sent')) if properties.get('sent') else None
             expires = parse_nws_datetime(properties.get('expires')) if properties.get('expires') else None
