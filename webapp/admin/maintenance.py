@@ -492,16 +492,23 @@ def run_one_click_backup():
         extra_args.extend(["--label", sanitized_label])
     output_dir = payload.get("output_dir")
     if isinstance(output_dir, str) and output_dir.strip():
-        # Enforce boundary: output_dir must stay within the configured backup directory
-        _backup_base = Path(
-            current_app.config.get("BACKUP_DIR", "/var/backups/eas-station")
-        ).resolve()
-        try:
-            _relative = Path(output_dir.strip()).resolve().relative_to(_backup_base)
-        except ValueError:
-            return jsonify({"error": "output_dir must be within the configured backup directory"}), 400
-        # Reconstruct from the safe base so the subprocess arg is derived from a trusted root
-        extra_args.extend(["--output-dir", str(_backup_base / _relative)])
+        candidate = output_dir.strip()
+        # Reject control-character / argparse-confusing inputs; otherwise pass the
+        # operator-supplied path through.  Backups commonly target USB drives,
+        # NFS mounts, or arbitrary directories outside BACKUP_DIR, and the route
+        # is already gated by admin auth — locking it to BACKUP_DIR breaks the
+        # existing UI workflow (relative paths from the form would 400).
+        if "\x00" in candidate or "\n" in candidate or "\r" in candidate or candidate.startswith("-"):
+            return jsonify({"error": "Invalid output_dir"}), 400
+        # If the user supplied a relative path, anchor it under BACKUP_DIR so
+        # the form's placeholder ("Default location") behaves intuitively.
+        candidate_path = Path(candidate)
+        if not candidate_path.is_absolute():
+            backup_base = Path(
+                current_app.config.get("BACKUP_DIR", "/var/backups/eas-station")
+            )
+            candidate_path = backup_base / candidate_path
+        extra_args.extend(["--output-dir", str(candidate_path)])
     python_executable = sys.executable or "python3"
     command = [python_executable, str(repo_root / "tools" / "create_backup.py"), *extra_args]
     try:

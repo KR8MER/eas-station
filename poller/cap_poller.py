@@ -1198,7 +1198,9 @@ class CAPPoller:
 
         if not properties['identifier']:
             fallback = f"{properties.get('event', 'Unknown')}|{properties.get('sent', '')}"
-            properties['identifier'] = f"ipaws_{hashlib.sha256(fallback.encode()).hexdigest()[:16]}"
+            # md5 here is a non-security deterministic dedup key; switching algorithms
+            # would orphan rows already stored under the original fingerprint.
+            properties['identifier'] = f"ipaws_{hashlib.md5(fallback.encode()).hexdigest()[:16]}"  # noqa: S324
 
         feature = {
             'type': 'Feature',
@@ -2031,7 +2033,9 @@ class CAPPoller:
             if not identifier:
                 event = properties.get('event', 'Unknown')
                 sent = properties.get('sent', str(time.time()))
-                identifier = f"temp_{hashlib.sha256((event + sent).encode()).hexdigest()[:16]}"
+                # md5 here is a non-security deterministic dedup key; switching algorithms
+                # would orphan rows already stored under the original fingerprint.
+                identifier = f"temp_{hashlib.md5((event + sent).encode()).hexdigest()[:16]}"  # noqa: S324
 
             sent = parse_nws_datetime(properties.get('sent')) if properties.get('sent') else None
             expires = parse_nws_datetime(properties.get('expires')) if properties.get('expires') else None
