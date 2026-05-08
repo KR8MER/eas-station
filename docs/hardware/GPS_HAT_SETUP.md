@@ -366,6 +366,36 @@ The driver could not read a sane epoch from the RTC. The two common causes are:
    ```
 2. **Wrong overlay loaded** — e.g. `i2c-rtc,ds3231` selected but the board is actually an RV-3028. The kernel will still register *something* on rtc0 but reads come back as zero. Fix per the detection steps above.
 
+### `hwclock -r` fails with `RTC_RD_TIME ... Invalid argument` (RV-3028 only)
+
+Symptom — typically seen on a brand-new board, after a long unpowered storage period, or after replacing the coin cell:
+
+```
+hwclock: ioctl(RTC_RD_TIME) to /dev/rtc0 to read the time failed: Invalid argument
+...synchronization failed
+```
+
+(The earlier `ioctl(4, RTC_UIE_ON, 0): Invalid argument` line in `-v` output is unrelated — the RV-3028 simply does not implement the update-interrupt; hwclock automatically falls back to polling.)
+
+This is **not** an I²C wiring or overlay problem. The Linux `rv3028` driver returns `-EINVAL` from `RTC_RD_TIME` whenever the chip's status register has the **PORF** (Power-On Reset Flag) bit set — its way of signalling "the time I have is unreliable, do not use it." PORF latches on whenever the RV-3028 has lost both VDD and the backup coin cell, and is only cleared by *writing* a new time.
+
+**Resolution:** write the RTC (this clears PORF in the same operation), do not read it first.
+
+```bash
+# 1. Confirm system time is actually correct
+timedatectl                 # look for "System clock synchronized: yes"
+chronyc tracking            # or check that the offset is small
+
+# 2. Write current system time to the RTC (clears PORF)
+sudo hwclock -w
+
+# 3. Reads should now succeed
+sudo hwclock -r
+cat /sys/class/rtc/rtc0/since_epoch
+```
+
+If PORF re-appears after the next power cycle, the backup coin cell is exhausted — replace it (CR1225 on the Uputronics board) and run `sudo hwclock -w` once more.
+
 ---
 
 ## Hardware Documentation
