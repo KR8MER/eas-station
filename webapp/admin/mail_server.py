@@ -153,7 +153,7 @@ def _sanitize_postfix_value(value: str) -> str:
     """Strip characters that would allow Postfix config injection (newlines, null bytes)."""
     sanitized = value.replace('\r', '').replace('\n', '').replace('\x00', '')
     if sanitized != value:
-        raise ValueError(f"Invalid characters in Postfix configuration value")
+        raise ValueError("Invalid characters in Postfix configuration value")
     return sanitized
 
 

@@ -851,7 +851,7 @@ def register(app: Flask, logger_arg, archive_dir: str = _DEFAULT_ARCHIVE_DIR) ->
             if not _host:
                 return jsonify({"error": "Invalid or missing URL"}), 400
             _ip = ipaddress.ip_address(_socket.gethostbyname(_host))
-            if _ip.is_private or _ip.is_loopback or _ip.is_link_local or _ip.is_reserved:
+            if _ip.is_private or _ip.is_loopback or _ip.is_link_local or _ip.is_reserved or _ip.is_multicast or _ip.is_unspecified:
                 return jsonify({"error": "Invalid or missing URL"}), 400
         except (_socket.gaierror, ValueError):
             return jsonify({"error": "Invalid or missing URL"}), 400

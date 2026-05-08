@@ -849,7 +849,7 @@ def upload_shapefile():
                         dest = os.path.realpath(tmpdir)
                         for member in zip_ref.infolist():
                             member_dest = os.path.realpath(os.path.join(dest, member.filename))
-                            if not member_dest.startswith(dest + os.sep):
+                            if not (member_dest == dest or member_dest.startswith(dest + os.sep)):
                                 return jsonify({"error": "Invalid ZIP file: path traversal detected"}), 400
                             zip_ref.extract(member, tmpdir)
 
