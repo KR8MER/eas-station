@@ -2,7 +2,7 @@
 
 EAS Station supports two NMEA-0183 GPS HATs out of the box:
 
-- **Uputronics Raspberry Pi GPS/RTC Expansion Board** *(recommended default)* — u-blox MAX-M8Q multi-GNSS receiver with PPS on **BCM 18**, battery-backed DS3231 RTC, and a low-profile stacking GPIO header.
+- **Uputronics Raspberry Pi GPS/RTC Expansion Board** *(recommended default)* — u-blox MAX-M8Q multi-GNSS receiver with PPS on **BCM 18**, battery-backed RTC (DS3231 on older revisions, RV-3028-C7 on current revisions), and a low-profile stacking GPIO header.
 - **Adafruit Ultimate GPS HAT (#2324)** *(legacy / alternative)* — MTK3339 GPS-only receiver with PPS on **BCM 4** and a tall non-stacking GPIO header.
 
 When enabled, the GPS module provides:
@@ -25,7 +25,7 @@ The Uputronics board solves two mechanical / electrical problems that the Adafru
 | OLED coexistence | Covers entire 40-pin header; PPS on BCM 4 (GPCLK0) crowds I²C OLED wiring | Stacking passthrough leaves I²C (BCM 2/3) free; PPS on BCM 18 |
 | GNSS constellations | GPS only (MTK3339, 22 channels) | GPS + GLONASS + Galileo + BeiDou concurrent (u-blox MAX-M8Q, 72 channels) |
 | Sensitivity / TTFF | −165 dBm tracking, ~34 s cold TTFF | −167 dBm tracking, ~26 s cold TTFF |
-| Battery-backed RTC | None (coin cell only seeds GPS warm-start) | DS3231-SN (±2 ppm, I²C `0x68`) — accurate time at boot before GPS lock or NTP |
+| Battery-backed RTC | None (coin cell only seeds GPS warm-start) | DS3231-SN at I²C `0x68` (older boards) or RV-3028-C7 at I²C `0x52` (current boards) — both ±2 ppm, accurate time at boot before GPS lock or NTP |
 | Antenna bias | 3.0 V fixed, no detect | 3.3 V with short-/open-circuit detection |
 | Configuration tooling | Proprietary PMTK commands | u-blox u-center over USB-serial bridge or UART |
 
@@ -41,7 +41,7 @@ Multi-GNSS in particular is something `app_core/gps/gps_manager.py` already hand
 | Interface | UART via `/dev/serial0` | UART via `/dev/serial0` |
 | Default baud rate | 9600 | 9600 |
 | PPS output | **GPIO BCM 18** | **GPIO BCM 4** |
-| Hardware RTC | DS3231 on I²C `0x68` (battery-backed) | none |
+| Hardware RTC | DS3231 (`0x68`) or RV-3028-C7 (`0x52`), battery-backed | none |
 | Fix indicator LED | 1 Hz blink with fix | 1 Hz blink no fix; 15 s pulse with fix |
 | Supported NMEA sentences | GGA, RMC, GSA, GSV (multi-GNSS) | GGA, RMC, GSV (GPS only) |
 | Update rate | 1 Hz default (configurable) | 1 Hz default (configurable) |
@@ -99,22 +99,54 @@ sudo usermod -aG dialout eas-station
 pip install pyserial pynmea2
 ```
 
-### 4. (Uputronics only) Enable the on-board DS3231 RTC
+### 4. (Uputronics only) Enable the on-board RTC
 
-The Uputronics board exposes a battery-backed DS3231 at I²C address `0x68`. Linux already has a kernel driver for it, so no application code is required to seed the system clock at boot — just enable the overlay:
+The Uputronics board exposes a battery-backed RTC on the I²C bus. Linux ships kernel drivers for both variants, so no application code is required to seed the system clock at boot — just enable the matching overlay.
 
-```ini
-# /boot/config.txt  (or /boot/firmware/config.txt on newer Pi OS)
-dtparam=i2c_arm=on
-dtoverlay=i2c-rtc,ds3231
-```
-
-After rebooting, verify:
+**Identify your RTC chip first** so you pick the right overlay:
 
 ```bash
-ls /dev/rtc*           # should list /dev/rtc0
-sudo hwclock -r        # should print the RTC time
+sudo apt install -y i2c-tools
+sudo i2cdetect -y 1
 ```
+
+- An entry at address `68` → **DS3231** (older Uputronics revisions)
+- An entry at address `52` → **RV-3028-C7** (current Uputronics revisions)
+
+Then add the matching line to `/boot/firmware/config.txt` (or `/boot/config.txt` on older Pi OS):
+
+```ini
+# Common to both
+dtparam=i2c_arm=on
+
+# Pick ONE of these to match your board:
+dtoverlay=i2c-rtc,ds3231       # DS3231 at 0x68
+# dtoverlay=i2c-rtc,rv3028      # RV-3028-C7 at 0x52
+```
+
+Reboot, then verify the kernel registered the RTC:
+
+```bash
+ls /dev/rtc*                   # should list /dev/rtc0
+cat /sys/class/rtc/rtc0/name   # e.g. "rtc-ds3231 1-0068" or "rtc-rv3028 1-0052"
+```
+
+#### `hwclock` on Raspberry Pi OS Bookworm and newer
+
+On Raspberry Pi OS / Debian 12 (Bookworm) and later, `hwclock` was split out of `util-linux` into a separate package and is **not installed by default** on Pi OS Lite images. If `sudo hwclock -r` reports `command not found`, install:
+
+```bash
+sudo apt install -y util-linux-extra
+```
+
+Then read and write the RTC:
+
+```bash
+sudo hwclock -r        # read RTC time
+sudo hwclock -w        # write current system time to RTC (do this once after NTP/GPS sync)
+```
+
+You do not strictly need `hwclock` for boot-time time-of-day — the kernel `i2c-rtc` overlay already seeds the system clock from the RTC at boot via `rtc-hctosys`. `hwclock -w` is only needed to **save** the current system time back to the RTC after NTP or GPS gets a fix (and after replacing the coin cell).
 
 This gives the Pi correct timestamps the moment the kernel mounts the I²C bus, well before `gpsd`/`chrony` come up. Combined with PPS, the system clock is then disciplined to sub-millisecond precision after fix.
 
@@ -265,12 +297,12 @@ redis-cli GET gps:status | python3 -m json.tool
 If you previously configured EAS Station for the Adafruit #2324 and are swapping in the Uputronics board:
 
 1. Power off the Pi and replace the HAT.
-2. Edit `/boot/config.txt` (or `/boot/firmware/config.txt`):
+2. Edit `/boot/firmware/config.txt` (or `/boot/config.txt` on older Pi OS):
    - Change `dtoverlay=pps-gpio,gpiopin=4` to `dtoverlay=pps-gpio,gpiopin=18`.
-   - Add `dtoverlay=i2c-rtc,ds3231` to enable the DS3231 RTC.
+   - Add the RTC overlay matching your board — run `sudo i2cdetect -y 1` to check: `dtoverlay=i2c-rtc,ds3231` if `0x68` is present, or `dtoverlay=i2c-rtc,rv3028` if `0x52` is present.
 3. Reboot. Verify `/dev/pps0` and `/dev/rtc0` both exist.
 4. In **Admin → Hardware Settings → GPS**, change the **PPS GPIO Pin** from `4` to `18` and **Save Settings**.
-5. (Optional) Run `sudo hwclock -w` once after a confirmed NTP/GPS sync to seed the DS3231 from system time.
+5. (Optional) On Pi OS Bookworm or newer, install `hwclock` if missing (`sudo apt install -y util-linux-extra`), then run `sudo hwclock -w` once after a confirmed NTP/GPS sync to seed the RTC from system time.
 
 No application data needs to be rebuilt; the GPS manager and chrony pick up the new pin/overlay on next start.
 
@@ -305,11 +337,34 @@ No application data needs to be rebuilt; the GPS manager and chrony pick up the 
 - PPS requires an active NMEA fix (the `lock GPS` directive). Run `cgps -s` to confirm gpsd has a fix before expecting PPS to be selected.
 - Check chrony sources: `chronyc sources -v`
 
-### DS3231 RTC not detected (Uputronics only)
+### RTC not detected (Uputronics only)
 
 - Confirm I²C is enabled: `sudo raspi-config` → **Interface Options → I2C → Yes**.
-- Confirm the device responds: `sudo i2cdetect -y 1` should show `68` on the bus.
-- Confirm the overlay is loaded: `dmesg | grep rtc`.
+- Confirm the device responds: `sudo i2cdetect -y 1`. You should see `68` (DS3231) **or** `52` (RV-3028-C7) on the bus, depending on board revision.
+- Confirm the overlay is loaded for the chip you actually have: `dmesg | grep rtc`. The expected lines are `rtc-ds3231 1-0068: registered as rtc0` or `rtc-rv3028 1-0052: registered as rtc0`. If they don't match, fix the `dtoverlay=i2c-rtc,...` line in `/boot/firmware/config.txt` and reboot.
+
+### `hwclock: command not found`
+
+On Raspberry Pi OS / Debian 12 (Bookworm) and newer, `hwclock` was moved to the `util-linux-extra` package, which is not preinstalled on Pi OS Lite. Install it:
+
+```bash
+sudo apt install -y util-linux-extra
+hwclock --version    # confirm it's now on PATH
+```
+
+Note that you generally do **not** need `hwclock` for the system clock to be correct at boot — the kernel `i2c-rtc` overlay already seeds time-of-day from the RTC via `rtc-hctosys` before userspace starts. `hwclock -w` is only required to push the *current* system time back to the RTC after NTP/GPS sync, or after replacing an exhausted coin cell.
+
+### Hardware Clock card shows "Drift vs system: Unknown" or large drift after a power cycle
+
+The driver could not read a sane epoch from the RTC. The two common causes are:
+
+1. **Backup coin cell is exhausted** — the chip lost time entirely (the RV-3028 / DS3231 sets its Power-On Reset / Oscillator Stop flag in this case). Replace the CR1225 (Uputronics) coin cell, then once the Pi has a confirmed NTP or GPS fix run:
+   ```bash
+   sudo apt install -y util-linux-extra   # only if hwclock is missing
+   sudo hwclock -w                        # write system time → RTC
+   sudo hwclock -r                        # confirm RTC reads back the same time
+   ```
+2. **Wrong overlay loaded** — e.g. `i2c-rtc,ds3231` selected but the board is actually an RV-3028. The kernel will still register *something* on rtc0 but reads come back as zero. Fix per the detection steps above.
 
 ---
 

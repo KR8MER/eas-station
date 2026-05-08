@@ -1973,6 +1973,8 @@
                                             {% endif %}
                                             {% if rtc.get('is_ds3231') %}
                                                 <span class="badge bg-info ms-1">DS3231</span>
+                                            {% elif rtc.get('is_rv3028') %}
+                                                <span class="badge bg-info ms-1">RV-3028</span>
                                             {% endif %}
                                             {% if rtc.get('is_battery_backed') %}
                                                 <span class="badge bg-success ms-1" title="Battery-backed"><i class="fas fa-battery-three-quarters me-1"></i>Battery-backed</span>
@@ -2017,7 +2019,9 @@
                                         <i class="fas fa-exclamation-triangle me-1 text-warning"></i>
                                         Large drift after a power cycle usually means the RTC backup battery is
                                         exhausted. Replace the coin cell, then run <code>sudo hwclock -w</code>
-                                        once after the system clock is synced.
+                                        once after the system clock is synced. On Pi OS Bookworm or newer,
+                                        <code>hwclock</code> ships in a separate package — install it with
+                                        <code>sudo apt install util-linux-extra</code> if the command is not found.
                                     </p>
                                     {% endif %}
                                 </div>
@@ -4035,13 +4039,18 @@
 
             const device = rtc.device || '/dev/rtc0';
             const nameSuffix = rtc.name ? `<span class="ms-1 text-muted small">(${escapeHtml(rtc.name)})</span>` : '';
-            const ds3231Badge = rtc.is_ds3231 ? '<span class="badge bg-info ms-1">DS3231</span>' : '';
+            let chipBadge = '';
+            if (rtc.is_ds3231) {
+                chipBadge = '<span class="badge bg-info ms-1">DS3231</span>';
+            } else if (rtc.is_rv3028) {
+                chipBadge = '<span class="badge bg-info ms-1">RV-3028</span>';
+            }
             const batteryBadge = rtc.is_battery_backed
                 ? '<span class="badge bg-success ms-1" title="Battery-backed"><i class="fas fa-battery-three-quarters me-1"></i>Battery-backed</span>'
                 : '';
             setHtml('rtc-h-device-row',
                 `<div class="metric-row"><span class="metric-label">Device:</span>
-                    <span class="metric-value"><code>${escapeHtml(device)}</code>${nameSuffix}${ds3231Badge}${batteryBadge}</span></div>`);
+                    <span class="metric-value"><code>${escapeHtml(device)}</code>${nameSuffix}${chipBadge}${batteryBadge}</span></div>`);
 
             setHtml('rtc-h-time-row', rtc.rtc_time_iso
                 ? `<div class="metric-row"><span class="metric-label">RTC UTC:</span>
@@ -4067,7 +4076,9 @@
                             <i class="fas fa-exclamation-triangle me-1 text-warning"></i>
                             Large drift after a power cycle usually means the RTC backup battery is
                             exhausted. Replace the coin cell, then run <code>sudo hwclock -w</code>
-                            once after the system clock is synced.
+                            once after the system clock is synced. On Pi OS Bookworm or newer,
+                            <code>hwclock</code> ships in a separate package — install it with
+                            <code>sudo apt install util-linux-extra</code> if the command is not found.
                        </p>`
                     : '');
         }
