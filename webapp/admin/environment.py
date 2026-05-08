@@ -641,7 +641,7 @@ def environment_settings():
     )
 
 @environment_bp.route('/admin/environment/download-env')
-@require_permission_or_setup_mode('system.configure')
+@require_permission_or_setup_mode('system.view_config')
 def admin_download_env():
     """Download the current .env file as a backup."""
     from flask import send_file
@@ -673,7 +673,7 @@ def generate_secret_key_api():
     return jsonify({'secret_key': secret_key})
 
 @environment_bp.route('/admin/environment/download-ssl-cert')
-@require_permission('system.configure')
+@require_permission('system.view_config')
 def admin_download_ssl_cert():
     """Download the SSL certificate file (fullchain.pem) for use in Portainer or other deployments.
     
@@ -728,7 +728,7 @@ def admin_download_ssl_cert():
     )
 
 @environment_bp.route('/admin/environment/download-ssl-key')
-@require_permission('system.configure')
+@require_permission('system.view_config')
 def admin_download_ssl_key():
     """Download the SSL private key file (privkey.pem) for use in Portainer or other deployments.
     
