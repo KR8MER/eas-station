@@ -1075,13 +1075,19 @@ def after_request(response):
     response.headers.add('X-Content-Type-Options', 'nosniff')
     response.headers.add('X-Frame-Options', 'SAMEORIGIN')
     response.headers.add('X-XSS-Protection', '1; mode=block')
+    # CSP allowlist covers external resources the UI legitimately loads:
+    #   - img.shields.io: tech-stack and system-health badges (base.html, footer,
+    #     templates/system_health.html)
+    #   - *.tile.openstreetmap.org: Leaflet basemap tiles (index, alert detail,
+    #     county boundaries map)
+    #   - cdn.socket.io: Socket.IO client used for realtime updates
     response.headers.setdefault(
         'Content-Security-Policy',
         (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline'; "
+            "script-src 'self' 'unsafe-inline' https://cdn.socket.io; "
             "style-src 'self' 'unsafe-inline'; "
-            "img-src 'self' data:; "
+            "img-src 'self' data: https://img.shields.io https://*.tile.openstreetmap.org; "
             "connect-src 'self' wss: ws:; "
             "frame-ancestors 'none';"
         ),
