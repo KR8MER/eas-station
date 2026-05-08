@@ -2322,10 +2322,13 @@ def _to_bool(value: Any) -> Optional[bool]:
 def _collect_rtc_status(logger) -> Dict[str, Any]:
     """Inspect any battery-backed real-time clock exposed via ``/sys/class/rtc``.
 
-    Targets the DS3231 on the Uputronics Raspberry Pi GPS/RTC Expansion Board
-    (enabled on the Pi via ``dtoverlay=i2c-rtc,ds3231``), but works for any
-    Linux RTC. All reads come from sysfs — ``hwclock`` is never invoked, so
-    the function is safe to run without root and never blocks.
+    Targets the on-board RTC of the Uputronics Raspberry Pi GPS/RTC Expansion
+    Board — DS3231 at I²C ``0x68`` on older revisions (``dtoverlay=i2c-rtc,ds3231``)
+    and RV-3028-C7 at I²C ``0x52`` on current revisions
+    (``dtoverlay=i2c-rtc,rv3028``) — but works for any Linux RTC. All reads
+    come from sysfs — ``hwclock`` is never invoked, so the function is safe
+    to run without root, never blocks, and does not depend on the
+    ``util-linux-extra`` package being installed.
 
     Returns a best-effort dict that is always safe to serialise. When no RTC
     is present the dict will contain ``available=False`` so the health page
@@ -2345,11 +2348,19 @@ def _collect_rtc_status(logger) -> Dict[str, Any]:
         name = _safe_read_text(rtc_root / "name")
         if name:
             # The kernel reports e.g. "rtc-ds3231 1-0068" for the DS3231 driver
-            # bound on I²C bus 1 address 0x68. Normalise for downstream UI.
+            # bound on I²C bus 1 address 0x68, or "rtc-rv3028 1-0052" for the
+            # RV-3028-C7 used on current Uputronics boards. Normalise for
+            # downstream UI.
             result["name"] = name
             lowered = name.lower()
             result["is_ds3231"] = "ds3231" in lowered
-            result["is_battery_backed"] = result["is_ds3231"] or "ds1307" in lowered or "pcf85" in lowered
+            result["is_rv3028"] = "rv3028" in lowered
+            result["is_battery_backed"] = (
+                result["is_ds3231"]
+                or result["is_rv3028"]
+                or "ds1307" in lowered
+                or "pcf85" in lowered
+            )
 
         # Current RTC time. ``since_epoch`` is exported in seconds (UTC) and
         # is the most reliable source — the textual ``date``/``time`` files
@@ -2373,7 +2384,8 @@ def _collect_rtc_status(logger) -> Dict[str, Any]:
                 result["drift_status"] = "moderate"
             else:
                 # Large drift after a power cycle is the classic "RTC battery
-                # failed and the clock reset" symptom on the DS3231.
+                # failed and the clock reset" symptom on both the DS3231 and
+                # the RV-3028-C7.
                 result["drift_status"] = "severe"
         else:
             # An unreadable ``since_epoch`` typically means the OSF
