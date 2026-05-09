@@ -10,7 +10,8 @@ Wants=eas-station-web.service \
       eas-station-audio.service \
       eas-station-eas.service \
       eas-station-hardware.service \
-      eas-station-poller.service
+      eas-station-poller.service \
+      eas-station-hwsetup.service
 
 [Install]
 WantedBy=multi-user.target
