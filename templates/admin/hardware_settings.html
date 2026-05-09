@@ -1638,13 +1638,37 @@ document.addEventListener('DOMContentLoaded', function() {
         var ppsSummary = pps.gpio_device
             ? pps.gpio_device.name + ' seq=' + (pps.gpio_device.assert_sequence || 0)
             : 'no pps-gpio device';
+        // Serial owner detection requires lsof + privileges the web service
+        // user doesn't have, so we suppress the "— unknown" suffix when the
+        // probe couldn't see it. Showing the resolved device path is enough
+        // for the operator to recognise.
         var serialSummary = serial.exists
-            ? (serial.resolved || serial.device) + ' — ' + serial.owner
+            ? (serial.resolved || serial.device)
+                + (serial.owner && serial.owner !== 'unknown'
+                    ? ' — ' + serial.owner
+                    : '')
             : 'missing';
-        var pkgList = (pkg.items || []).map(function (i) {
+        var pkgItems = pkg.items || [];
+        var pkgInstalled = pkgItems.filter(function (i) { return i.installed; }).length;
+        var pkgMissingRequired = (pkg.missing_required || []).length;
+        var pkgSummary = pkgItems.length === 0
+            ? 'dpkg-query unavailable'
+            : pkgMissingRequired === 0
+                ? pkgInstalled + ' / ' + pkgItems.length + ' installed'
+                : pkgMissingRequired + ' required missing';
+        var pkgList = pkgItems.map(function (i) {
             return (i.installed ? '✅' : '❌') + ' ' + i.name + (i.version ? ' (' + i.version + ')' : '');
         }).join('<br>') || '<em>dpkg-query unavailable</em>';
-        var svcList = (svc.items || []).map(function (i) {
+        var svcItems = svc.items || [];
+        var svcAllActive = svcItems.length > 0
+            && svcItems.every(function (i) { return i.active === 'active'; });
+        var svcSummary = svcItems.length === 0
+            ? 'systemctl unavailable'
+            : svcAllActive
+                ? 'all units active'
+                : svcItems.filter(function (i) { return i.active !== 'active'; }).length
+                    + ' / ' + svcItems.length + ' inactive';
+        var svcList = svcItems.map(function (i) {
             return i.unit + ': ' + i.active + ' / ' + i.enabled;
         }).join('<br>');
         var gpsdSummary = gcf.exists
@@ -1656,11 +1680,27 @@ document.addEventListener('DOMContentLoaded', function() {
                 + '; SHM refclock=' + ccf.has_shm_refclock
                 + '; sources=' + ((ccf.pool_lines || []).length))
             : '/etc/chrony/chrony.conf missing';
-        var chronyRunSummary = crun.tracking_ok
-            ? ('source=' + (crun.selected_source || '?')
-                + '; offset=' + (crun.last_offset_seconds === null ? '?' : crun.last_offset_seconds + 's')
-                + '; leap=' + (crun.leap_status || '?'))
-            : 'chronyc unavailable';
+        // Stratum is the headline number an operator wants to see — surface
+        // it prominently. Also flag any refclocks at Reach=0 so the user
+        // sees why they're not yet at stratum 1.
+        var chronyParts = [];
+        if (crun.tracking_ok) {
+            if (crun.stratum != null) chronyParts.push('stratum ' + crun.stratum);
+            if (crun.selected_source) chronyParts.push('source=' + crun.selected_source);
+            var offsetSrc = (crun.system_time_offset_seconds != null)
+                ? crun.system_time_offset_seconds
+                : crun.last_offset_seconds;
+            if (offsetSrc != null) {
+                chronyParts.push('offset=' + (Number(offsetSrc) * 1000).toFixed(3) + 'ms');
+            }
+            if (crun.leap_status) chronyParts.push('leap=' + crun.leap_status);
+            if ((crun.refclocks_unreached || []).length) {
+                chronyParts.push('refclocks unreached: ' + crun.refclocks_unreached.join(', '));
+            }
+        } else {
+            chronyParts.push('chronyc unavailable');
+        }
+        var chronyRunSummary = chronyParts.join('; ');
         var configSummary = cfg.exists
             ? (cfg.path
                 + (cfg.i2c_rtc_overlay_line ? ' [' + cfg.i2c_rtc_overlay_line + ']' : '')
@@ -1675,9 +1715,9 @@ document.addEventListener('DOMContentLoaded', function() {
             +   row('config.txt',    configSummary, cfg.exists)
             + '</div>'
             + '<div class="col-md-6">'
-            +   row('Packages',      null,          (pkg.missing_required || []).length === 0)
+            +   row('Packages',      pkgSummary,    pkgMissingRequired === 0 && pkgItems.length > 0)
             +   '<div class="ms-3 small">' + pkgList + '</div>'
-            +   row('Services',      null,          null)
+            +   row('Services',      svcSummary,    svcItems.length > 0 ? svcAllActive : null)
             +   '<div class="ms-3 small">' + svcList + '</div>'
             +   row('gpsd config',   gpsdSummary,   gcf.exists)
             +   row('chrony config', chronySummary, ccf.exists)
