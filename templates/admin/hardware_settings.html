@@ -897,7 +897,12 @@
                 <div id="panel-gps" class="hw-panel">
                     <div class="card mb-3">
                         <div class="card-body">
-                            <h5 class="card-title"><i class="fas fa-satellite me-1"></i> GPS Receiver</h5>
+                            <h5 class="card-title d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                <span><i class="fas fa-satellite me-1"></i> GPS Receiver</span>
+                                <a href="{{ url_for('hardware.gps_dashboard_page') }}" class="btn btn-sm btn-outline-info">
+                                    <i class="fas fa-satellite-dish"></i> Open GPS &amp; Time Dashboard
+                                </a>
+                            </h5>
                             <div class="form-check mb-2">
                                 <input class="form-check-input" type="checkbox" id="gps_enabled" name="gps_enabled" value="true" {% if settings.gps_enabled %}checked{% endif %}>
                                 <label class="form-check-label" for="gps_enabled">Enable GPS Receiver</label>
