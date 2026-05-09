@@ -866,44 +866,132 @@ _CHRONY_BLOCK_END   = "# <<< eas-station-hwsetup — managed block"
 _PPS_DEVICE_RE = re.compile(r"^/dev/pps[0-9]$")
 
 
+def _strip_chrony_managed_block(existing: str) -> str:
+    """Return ``existing`` with any eas-station managed block removed.
+
+    Used to inspect the *user-authored* portion of chrony.conf before we
+    decide what to put inside the managed block — so that re-running this
+    action against a file the user has already partially configured by
+    hand doesn't create duplicate ``rtcsync`` directives or two
+    ``refclock PPS /dev/pps0`` lines (which chrony refuses to register).
+    """
+    begin_idx = existing.find(_CHRONY_BLOCK_BEGIN)
+    end_idx = existing.find(_CHRONY_BLOCK_END)
+    if begin_idx < 0 or end_idx <= begin_idx:
+        return existing
+    end_line_break = existing.find("\n", end_idx)
+    if end_line_break < 0:
+        end_line_break = len(existing)
+    return existing[:begin_idx] + existing[end_line_break + 1:]
+
+
+def _user_has_rtcsync(user_text: str) -> bool:
+    for raw in user_text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        # rtcsync is a flag with no arguments
+        if line == "rtcsync" or line.split("#", 1)[0].strip() == "rtcsync":
+            return True
+    return False
+
+
+def _user_has_refclock_shm(user_text: str) -> bool:
+    """True if the user already declared the SHM 0 refclock we'd add."""
+    for raw in user_text.splitlines():
+        line = raw.strip().split("#", 1)[0].strip()
+        if not line.startswith("refclock"):
+            continue
+        toks = line.split()
+        if len(toks) >= 3 and toks[1].upper() == "SHM" and toks[2] == "0":
+            return True
+    return False
+
+
+def _user_has_refclock_pps(user_text: str, pps_device: str) -> bool:
+    """True if the user already declared a PPS refclock pointing at the
+    same device. Different /dev/ppsN devices coexist fine, so we only
+    refuse to re-add an exact match."""
+    for raw in user_text.splitlines():
+        line = raw.strip().split("#", 1)[0].strip()
+        if not line.startswith("refclock"):
+            continue
+        toks = line.split()
+        if len(toks) >= 3 and toks[1].upper() == "PPS" and toks[2] == pps_device:
+            return True
+    return False
+
+
 def _build_chrony_block(
+    *,
     ensure_rtcsync: bool,
     ensure_pps_refclock: bool,
     pps_device: str,
-) -> str:
-    lines = [_CHRONY_BLOCK_BEGIN]
+    user_has_rtcsync: bool,
+    user_has_refclock_shm: bool,
+    user_has_refclock_pps: bool,
+) -> Tuple[str, List[str]]:
+    """Return ``(block_text, skipped_directives)``.
+
+    ``skipped_directives`` lists any directives the caller asked us to
+    ensure but which the user has already declared outside the managed
+    block. The UI surfaces these so the operator knows we deliberately
+    didn't duplicate them.
+    """
+    payload: List[str] = []
+    skipped: List[str] = []
     if ensure_rtcsync:
-        lines.append("rtcsync")
+        if user_has_rtcsync:
+            skipped.append("rtcsync (already in user-authored section)")
+        else:
+            payload.append("rtcsync")
     if ensure_pps_refclock:
-        lines.append(
-            "refclock SHM 0 refid GPS precision 1e-1 offset 0.0 delay 0.2 noselect"
-        )
-        lines.append(f"refclock PPS {pps_device} lock GPS refid PPS")
-    lines.append(_CHRONY_BLOCK_END)
-    return "\n".join(lines) + "\n"
+        if user_has_refclock_shm:
+            skipped.append("refclock SHM 0 (already in user-authored section)")
+        else:
+            payload.append(
+                "refclock SHM 0 refid GPS precision 1e-1 offset 0.0 delay 0.2 noselect"
+            )
+        if user_has_refclock_pps:
+            skipped.append(f"refclock PPS {pps_device} (already in user-authored section)")
+        else:
+            payload.append(f"refclock PPS {pps_device} lock GPS refid PPS")
+    if not payload:
+        return "", skipped
+    block_lines = [_CHRONY_BLOCK_BEGIN, *payload, _CHRONY_BLOCK_END]
+    return "\n".join(block_lines) + "\n", skipped
 
 
 def _splice_chrony_block(existing: str, block: str) -> Tuple[str, bool]:
     """If a managed block already exists, replace its content.
     Otherwise, append a newline-prefixed managed block to the file.
     Returns (new_text, changed_flag). When the block is absent and
-    `block` is empty, returns the original unchanged.
+    `block` is empty, returns the original unchanged. When the block
+    exists and `block` is empty, the existing block is removed entirely
+    (e.g. user disabled both ensure flags after a previous run).
     """
     begin_idx = existing.find(_CHRONY_BLOCK_BEGIN)
     end_idx = existing.find(_CHRONY_BLOCK_END)
-    if begin_idx >= 0 and end_idx > begin_idx:
-        # Replace existing block (from begin to end-of-end-marker line)
+    has_block = begin_idx >= 0 and end_idx > begin_idx
+    if has_block:
         end_line_break = existing.find("\n", end_idx)
         if end_line_break < 0:
             end_line_break = len(existing)
-        replaced = existing[:begin_idx] + block.rstrip("\n") + existing[end_line_break:]
+        before = existing[:begin_idx]
+        after = existing[end_line_break + 1:] if end_line_break < len(existing) else ""
+        if not block.strip():
+            # Caller asked for an empty block → strip the existing one entirely
+            replaced = before + after
+            # Tidy up any blank-line crater the removal left behind
+            while "\n\n\n" in replaced:
+                replaced = replaced.replace("\n\n\n", "\n\n")
+            return replaced, replaced != existing
+        replaced = before + block + after
         return replaced, replaced != existing
-    if not block.strip().splitlines()[1:-1]:
-        # Block has no payload between markers; just leave the file alone.
+    if not block.strip():
         return existing, False
     sep = "" if existing.endswith("\n") or not existing else "\n"
-    appended = existing + sep + "\n" + block
-    return appended, True
+    return existing + sep + "\n" + block, True
 
 
 def _cmd_chrony_config_ensure(params: Dict[str, Any], emit: EmitFn) -> Dict[str, Any]:
@@ -934,7 +1022,22 @@ def _cmd_chrony_config_ensure(params: Dict[str, Any], emit: EmitFn) -> Dict[str,
     with open(target, "r", encoding="utf-8") as f:
         existing = f.read()
 
-    block = _build_chrony_block(raw_rtcsync, raw_pps, pps_device)
+    user_text = _strip_chrony_managed_block(existing)
+    user_rtc = _user_has_rtcsync(user_text)
+    user_shm = _user_has_refclock_shm(user_text)
+    user_pps = _user_has_refclock_pps(user_text, pps_device)
+
+    block, skipped = _build_chrony_block(
+        ensure_rtcsync=raw_rtcsync,
+        ensure_pps_refclock=raw_pps,
+        pps_device=pps_device,
+        user_has_rtcsync=user_rtc,
+        user_has_refclock_shm=user_shm,
+        user_has_refclock_pps=user_pps,
+    )
+    if skipped:
+        for line in skipped:
+            emit("stdout", f"  skipping: {line}\n")
     new_text, changed = _splice_chrony_block(existing, block)
 
     if not changed:
@@ -948,6 +1051,12 @@ def _cmd_chrony_config_ensure(params: Dict[str, Any], emit: EmitFn) -> Dict[str,
             "ensure_rtcsync": raw_rtcsync,
             "ensure_pps_refclock": raw_pps,
             "pps_device": pps_device,
+            "skipped_directives": skipped,
+            "user_already_has": {
+                "rtcsync": user_rtc,
+                "refclock_shm_0": user_shm,
+                "refclock_pps": user_pps,
+            },
         }
 
     try:
@@ -964,6 +1073,12 @@ def _cmd_chrony_config_ensure(params: Dict[str, Any], emit: EmitFn) -> Dict[str,
         "ensure_rtcsync": raw_rtcsync,
         "ensure_pps_refclock": raw_pps,
         "pps_device": pps_device,
+        "skipped_directives": skipped,
+        "user_already_has": {
+            "rtcsync": user_rtc,
+            "refclock_shm_0": user_shm,
+            "refclock_pps": user_pps,
+        },
     }
 
 
@@ -1007,51 +1122,76 @@ def _config_txt_target() -> Optional[str]:
     return None
 
 
-def _splice_overlay(existing: str, overlay: str, params_str: str) -> Tuple[str, bool, str]:
-    """Replace any ``dtoverlay=<overlay>...`` line, or append if missing.
+def _splice_overlay(existing: str, overlay: str, params_str: str) -> Tuple[str, bool, str, int]:
+    """Replace any ``dtoverlay=<overlay>...`` lines, deduplicating any
+    duplicates the user (or a previous hand-edit) may have left behind.
 
-    Returns ``(new_text, changed, action)`` where ``action`` is one of
-    ``"unchanged"``, ``"replaced"``, or ``"appended"``.
+    Behaviour:
+
+    * No matching line   → append a single new line. action="appended".
+    * One matching line, params match desired → unchanged. action="unchanged".
+    * One matching line, params differ        → replaced in place.
+                                                action="replaced".
+    * Multiple matching lines (any combination of correct and stale) →
+      keep the FIRST occurrence (so its position in the file is preserved
+      and any surrounding ``[pi5]`` / ``[all]`` filter still applies),
+      rewrite it to the desired params, and DELETE every subsequent
+      duplicate. action="deduped" — even if the kept line was already
+      correct, we count this as a change so the UI shows the recovery.
+
+    Returns ``(new_text, changed, action, duplicates_removed)``.
     """
     desired = f"dtoverlay={overlay}"
     if params_str:
         desired += f",{params_str}"
 
-    new_lines: List[str] = []
-    found = False
-    replaced = False
-    for line in existing.splitlines(keepends=True):
+    prefix = f"dtoverlay={overlay}"
+
+    def _is_match(stripped: str) -> bool:
+        # dtoverlay=<overlay> followed by either end-of-line, comma, or
+        # whitespace. We deliberately don't accept "dtoverlay = ..." with
+        # spaces around the '=' because Pi OS itself rejects that form;
+        # treating it as non-matching means the user's malformed line is
+        # left alone for them to fix rather than silently overwritten.
+        if not stripped.startswith(prefix):
+            return False
+        rest = stripped[len(prefix):]
+        return rest == "" or rest[0] in (",", " ", "\t")
+
+    # First pass: locate all matching lines so we know whether to dedupe.
+    lines = existing.splitlines(keepends=True)
+    match_indices: List[int] = []
+    for i, line in enumerate(lines):
         stripped = line.strip()
-        # Skip comments and blank lines — never touch them.
         if not stripped or stripped.startswith("#"):
-            new_lines.append(line)
             continue
-        # Match dtoverlay=<overlay>(<,...>|$)
-        if stripped.startswith(f"dtoverlay={overlay}") and (
-            len(stripped) == len(f"dtoverlay={overlay}")
-            or stripped[len(f"dtoverlay={overlay}")] in (",", " ", "\t")
-        ):
-            found = True
-            if stripped == desired:
-                new_lines.append(line)
-            else:
-                # Preserve the line's terminator
-                term = "\n" if line.endswith("\n") else ""
-                new_lines.append(desired + term)
-                replaced = True
-            continue
-        new_lines.append(line)
+        if _is_match(stripped):
+            match_indices.append(i)
 
-    if found:
-        new_text = "".join(new_lines)
-        if replaced:
-            return new_text, True, "replaced"
-        return existing, False, "unchanged"
+    if not match_indices:
+        sep = "" if existing.endswith("\n") or not existing else "\n"
+        return existing + sep + desired + "\n", True, "appended", 0
 
-    # Not found — append.
-    sep = "" if existing.endswith("\n") or not existing else "\n"
-    appended = existing + sep + desired + "\n"
-    return appended, True, "appended"
+    if len(match_indices) == 1:
+        idx = match_indices[0]
+        existing_line = lines[idx]
+        existing_stripped = existing_line.strip()
+        if existing_stripped == desired:
+            return existing, False, "unchanged", 0
+        term = "\n" if existing_line.endswith("\n") else ""
+        lines[idx] = desired + term
+        return "".join(lines), True, "replaced", 0
+
+    # Multiple matches → dedupe. Keep the first, drop the rest.
+    keep_idx = match_indices[0]
+    keep_line = lines[keep_idx]
+    term = "\n" if keep_line.endswith("\n") else ""
+    lines[keep_idx] = desired + term
+    # Remove duplicates from highest index down so earlier indices stay valid.
+    for idx in reversed(match_indices[1:]):
+        lines.pop(idx)
+    duplicates_removed = len(match_indices) - 1
+    return "".join(lines), True, "deduped", duplicates_removed
 
 
 def _cmd_config_txt_set_overlay(params: Dict[str, Any], emit: EmitFn) -> Dict[str, Any]:
@@ -1087,7 +1227,9 @@ def _cmd_config_txt_set_overlay(params: Dict[str, Any], emit: EmitFn) -> Dict[st
 
     with open(target, "r", encoding="utf-8") as f:
         existing = f.read()
-    new_text, changed, action = _splice_overlay(existing, overlay, params_str)
+    new_text, changed, action, duplicates_removed = _splice_overlay(
+        existing, overlay, params_str
+    )
 
     if not changed:
         emit("stdout", f"{target}: dtoverlay={overlay}{(',' + params_str) if params_str else ''} already present\n")
@@ -1100,8 +1242,15 @@ def _cmd_config_txt_set_overlay(params: Dict[str, Any], emit: EmitFn) -> Dict[st
             "overlay": overlay,
             "params": params_str,
             "action": action,
+            "duplicates_removed": 0,
             "requires_reboot": False,
         }
+
+    if duplicates_removed:
+        emit(
+            "stdout",
+            f"{target}: removed {duplicates_removed} duplicate dtoverlay={overlay} line(s)\n",
+        )
 
     try:
         result = _atomic_write_with_backup(target, new_text, emit)
@@ -1117,6 +1266,7 @@ def _cmd_config_txt_set_overlay(params: Dict[str, Any], emit: EmitFn) -> Dict[st
         "overlay": overlay,
         "params": params_str,
         "action": action,
+        "duplicates_removed": duplicates_removed,
         "requires_reboot": True,
     }
 

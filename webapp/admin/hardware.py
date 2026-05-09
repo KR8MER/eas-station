@@ -300,7 +300,8 @@ def _forward_to_helper(action: str, params: Dict[str, Any], *, timeout: float = 
         "path", "changed", "backup", "requires_reboot",
         "devices", "options", "start_daemon", "usbauto",
         "ensure_rtcsync", "ensure_pps_refclock", "pps_device",
-        "overlay", "params", "action",
+        "skipped_directives", "user_already_has",
+        "overlay", "params", "action", "duplicates_removed",
     ):
         if key in result_event:
             payload[key] = result_event[key]
