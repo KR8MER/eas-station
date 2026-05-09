@@ -31,6 +31,7 @@ from __future__ import annotations
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy import inspect
 
 
 revision = "20260509_add_gps_source_columns"
@@ -39,9 +40,43 @@ branch_labels = None
 depends_on = None
 
 
+TABLE_NAME = "hardware_settings"
+
+
+def _existing_columns(table_name: str) -> set[str]:
+    """Return the set of column names currently present on ``table_name``.
+
+    Returns an empty set if the table itself does not exist or cannot be
+    introspected — callers should treat that as "nothing to skip" and let
+    the underlying ``ADD COLUMN`` raise the real error.
+    """
+
+    bind = op.get_bind()
+    try:
+        inspector = inspect(bind)
+        return {col["name"] for col in inspector.get_columns(table_name)}
+    except Exception:  # pragma: no cover - defensive: rely on real error
+        return set()
+
+
 def upgrade() -> None:
-    with op.batch_alter_table("hardware_settings") as batch_op:
-        batch_op.add_column(
+    """Add gps_source / gps_gpsd_host / gps_gpsd_port if not already present.
+
+    This migration is idempotent against deployments where a prior run of
+    ``install.sh`` fell back to ``db.create_all()`` after a failed alembic
+    upgrade. ``create_all`` would have added the new columns directly from
+    the ORM model definitions while leaving ``alembic_version`` pointing
+    at an earlier revision. Without the existence check below, the next
+    ``alembic upgrade head`` would crash with ``column "gps_source" of
+    relation "hardware_settings" already exists`` and the schema would
+    never advance to this revision.
+    """
+
+    existing = _existing_columns(TABLE_NAME)
+
+    columns_to_add = []
+    if "gps_source" not in existing:
+        columns_to_add.append(
             sa.Column(
                 "gps_source",
                 sa.String(length=16),
@@ -49,7 +84,8 @@ def upgrade() -> None:
                 server_default="auto",
             )
         )
-        batch_op.add_column(
+    if "gps_gpsd_host" not in existing:
+        columns_to_add.append(
             sa.Column(
                 "gps_gpsd_host",
                 sa.String(length=100),
@@ -57,7 +93,8 @@ def upgrade() -> None:
                 server_default="127.0.0.1",
             )
         )
-        batch_op.add_column(
+    if "gps_gpsd_port" not in existing:
+        columns_to_add.append(
             sa.Column(
                 "gps_gpsd_port",
                 sa.Integer(),
@@ -66,9 +103,24 @@ def upgrade() -> None:
             )
         )
 
+    if not columns_to_add:
+        return
+
+    with op.batch_alter_table(TABLE_NAME) as batch_op:
+        for column in columns_to_add:
+            batch_op.add_column(column)
+
 
 def downgrade() -> None:
-    with op.batch_alter_table("hardware_settings") as batch_op:
-        batch_op.drop_column("gps_gpsd_port")
-        batch_op.drop_column("gps_gpsd_host")
-        batch_op.drop_column("gps_source")
+    existing = _existing_columns(TABLE_NAME)
+    columns_to_drop = [
+        name
+        for name in ("gps_gpsd_port", "gps_gpsd_host", "gps_source")
+        if name in existing
+    ]
+    if not columns_to_drop:
+        return
+
+    with op.batch_alter_table(TABLE_NAME) as batch_op:
+        for name in columns_to_drop:
+            batch_op.drop_column(name)
