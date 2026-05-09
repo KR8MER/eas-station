@@ -32,10 +32,12 @@ from werkzeug.exceptions import BadRequest
 from app_core.auth.roles import require_permission
 from app_core.extensions import db
 from app_core.hardware_settings import (
+    get_gps_settings,
     get_hardware_settings,
     update_hardware_settings,
     invalidate_hardware_settings_cache,
 )
+from app_utils.gps_hat import collect_gps_hat_diagnostics
 from app_utils.pi_pinout import ARGON_OLED_RESERVED_BCM
 
 logger = logging.getLogger(__name__)
@@ -62,6 +64,30 @@ def hardware_settings_page():
         logger.error(f"Failed to load hardware settings: {exc}")
         flash(f"Error loading hardware settings: {exc}", "error")
         return redirect(url_for('dashboard.admin'))
+
+
+@hardware_bp.route('/hardware/gps-hat/diagnostics', methods=['GET'])
+@require_permission('system.configure')
+def gps_hat_diagnostics():
+    """Read-only probe of every GPS HAT prerequisite — RTC chip vs overlay,
+    PPS device, gpsd / chrony / package state, ``/boot/firmware/config.txt``
+    overlays, and the well-known failure modes (RV-3028 PORF, baud
+    mismatch, ``hwclock`` missing on Bookworm, serial-port contention).
+
+    The response is consumed by the "GPS HAT" diagnostic panel in the
+    hardware settings UI. No state is modified.
+    """
+    try:
+        gps_settings = get_gps_settings() or {}
+        report = collect_gps_hat_diagnostics(
+            expected_pps_pin=int(gps_settings.get('pps_gpio_pin', 18) or 18),
+            expected_baud=int(gps_settings.get('baudrate', 9600) or 9600),
+            logger=logger,
+        )
+        return jsonify({"ok": True, "report": report})
+    except Exception as exc:
+        logger.exception("GPS HAT diagnostics probe failed")
+        return jsonify({"ok": False, "error": str(exc)}), 500
 
 
 @hardware_bp.route('/hardware/update', methods=['POST'])

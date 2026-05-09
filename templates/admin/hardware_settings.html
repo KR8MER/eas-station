@@ -911,6 +911,37 @@
                         </div>
                     </div>
 
+                    <!-- ──────────────────────────────────────────────────
+                         GPS HAT diagnostic panel — read-only probe of every
+                         prerequisite (RTC chip, PPS device, packages, gpsd
+                         and chrony config). Populated from
+                         /admin/hardware/gps-hat/diagnostics.
+                         ────────────────────────────────────────────────── -->
+                    <div class="card mb-3" id="gps-hat-diag-card">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center justify-content-between mb-2">
+                                <h5 class="card-title mb-0">
+                                    <i class="fas fa-stethoscope me-1"></i>
+                                    GPS HAT Setup Status
+                                    <span id="gps-hat-status-badge" class="badge bg-secondary ms-2">Checking…</span>
+                                </h5>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" id="gps-hat-refresh-btn">
+                                    <i class="fas fa-rotate"></i> Recheck
+                                </button>
+                            </div>
+                            <p class="text-muted small mb-2" id="gps-hat-summary">
+                                Probes the operating system for every dependency the GPS HAT
+                                needs — kernel overlays, packages, services, and config files —
+                                and tells you exactly what to fix.
+                            </p>
+                            <div id="gps-hat-actions" class="mb-3"></div>
+                            <details>
+                                <summary class="text-muted small">Detected state</summary>
+                                <div id="gps-hat-detail" class="small mt-2"></div>
+                            </details>
+                        </div>
+                    </div>
+
                     <div class="card mb-3">
                         <div class="card-body">
                             <h5 class="card-title">Serial Connection</h5>
@@ -2084,5 +2115,212 @@ document.addEventListener('DOMContentLoaded', function() {
             });
     });
 });
+
+/* ── GPS HAT diagnostic panel ────────────────────────────────────────
+   Populates the "GPS HAT Setup Status" card by polling
+   /admin/hardware/gps-hat/diagnostics. Read-only — every action shown
+   to the user is just a copy-paste shell command for now. Tier 2 of
+   this work will add buttons that execute via a privileged helper.
+   ──────────────────────────────────────────────────────────────────── */
+(function () {
+    var BADGE_CLASS = {
+        ok:      'bg-success',
+        info:    'bg-info text-dark',
+        warning: 'bg-warning text-dark',
+        error:   'bg-danger',
+    };
+    var BADGE_TEXT = {
+        ok:      'All good',
+        info:    'Suggestions',
+        warning: 'Needs attention',
+        error:   'Action required',
+    };
+    var SEVERITY_CLASS = {
+        info:    'alert-info',
+        warning: 'alert-warning',
+        error:   'alert-danger',
+    };
+    var SEVERITY_ICON = {
+        info:    'fa-circle-info',
+        warning: 'fa-triangle-exclamation',
+        error:   'fa-circle-xmark',
+    };
+
+    function escapeHtml(s) {
+        if (s === null || s === undefined) return '';
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function renderActions(actions) {
+        if (!actions || !actions.length) {
+            return '<div class="alert alert-success py-2 mb-0 small">'
+                + '<i class="fas fa-check-circle me-1"></i> '
+                + 'Every prerequisite is in place. The GPS HAT, RTC, PPS, gpsd, and chrony all look healthy.'
+                + '</div>';
+        }
+        return actions.map(function (a) {
+            var sev = a.severity || 'info';
+            var alertCls = SEVERITY_CLASS[sev] || 'alert-secondary';
+            var icon = SEVERITY_ICON[sev] || 'fa-circle-info';
+            var preconditions = '';
+            if (a.preconditions && a.preconditions.length) {
+                preconditions = '<div class="small text-muted mt-1"><em>Before running: '
+                    + a.preconditions.map(escapeHtml).join('; ') + '</em></div>';
+            }
+            var rebootHint = a.requires_reboot
+                ? '<div class="small text-muted mt-1"><i class="fas fa-power-off me-1"></i>Requires reboot to take effect.</div>'
+                : '';
+            return '<div class="alert ' + alertCls + ' py-2 mb-2">'
+                +   '<div class="d-flex align-items-start">'
+                +     '<i class="fas ' + icon + ' me-2 mt-1"></i>'
+                +     '<div class="flex-grow-1">'
+                +       '<div class="fw-semibold">' + escapeHtml(a.label || a.id) + '</div>'
+                +       (a.reason ? '<div class="small">' + escapeHtml(a.reason) + '</div>' : '')
+                +       preconditions
+                +       (a.command
+                            ? '<pre class="mt-2 mb-0 small bg-dark text-light p-2 rounded" style="white-space:pre-wrap;"><code>'
+                                + escapeHtml(a.command) + '</code></pre>'
+                            : '')
+                +       rebootHint
+                +     '</div>'
+                +   '</div>'
+                + '</div>';
+        }).join('');
+    }
+
+    function renderDetail(report) {
+        var rtc = report.rtc || {};
+        var pps = report.pps || {};
+        var serial = report.serial || {};
+        var pkg  = report.packages || {};
+        var svc  = report.services || {};
+        var gcf  = report.gpsd_config || {};
+        var ccf  = report.chrony_config || {};
+        var crun = report.chrony_runtime || {};
+        var cfg  = report.config_txt || {};
+
+        function row(label, value, ok) {
+            var icon = ok === true
+                ? '<i class="fas fa-check-circle text-success me-1"></i>'
+                : ok === false
+                    ? '<i class="fas fa-circle-xmark text-danger me-1"></i>'
+                    : '<i class="fas fa-circle text-muted me-1" style="font-size:.5em;vertical-align:middle;"></i>';
+            return '<div>' + icon + '<strong>' + escapeHtml(label) + ':</strong> '
+                + (value === null || value === undefined ? '<em class="text-muted">unknown</em>' : escapeHtml(value))
+                + '</div>';
+        }
+        var rtcSummary = rtc.kernel_name
+            ? rtc.kernel_name + (rtc.chip_label ? ' (' + rtc.chip_label + ')' : '')
+            : (rtc.device_present ? 'present' : 'no /dev/rtc0');
+        var ppsSummary = pps.gpio_device
+            ? pps.gpio_device.name + ' seq=' + (pps.gpio_device.assert_sequence || 0)
+            : 'no pps-gpio device';
+        var serialSummary = serial.exists
+            ? (serial.resolved || serial.device) + ' — ' + serial.owner
+            : 'missing';
+        var pkgList = (pkg.items || []).map(function (i) {
+            return (i.installed ? '✅' : '❌') + ' ' + i.name + (i.version ? ' (' + i.version + ')' : '');
+        }).join('<br>') || '<em>dpkg-query unavailable</em>';
+        var svcList = (svc.items || []).map(function (i) {
+            return i.unit + ': ' + i.active + ' / ' + i.enabled;
+        }).join('<br>');
+        var gpsdSummary = gcf.exists
+            ? 'DEVICES=' + (gcf.devices || '?') + '; OPTIONS=' + (gcf.options || '?')
+            : '/etc/default/gpsd missing';
+        var chronySummary = ccf.exists
+            ? ('rtcsync=' + ccf.rtcsync_enabled
+                + '; PPS refclock=' + ccf.has_pps_refclock
+                + '; SHM refclock=' + ccf.has_shm_refclock
+                + '; sources=' + ((ccf.pool_lines || []).length))
+            : '/etc/chrony/chrony.conf missing';
+        var chronyRunSummary = crun.tracking_ok
+            ? ('source=' + (crun.selected_source || '?')
+                + '; offset=' + (crun.last_offset_seconds === null ? '?' : crun.last_offset_seconds + 's')
+                + '; leap=' + (crun.leap_status || '?'))
+            : 'chronyc unavailable';
+        var configSummary = cfg.exists
+            ? (cfg.path
+                + (cfg.i2c_rtc_overlay_line ? ' [' + cfg.i2c_rtc_overlay_line + ']' : '')
+                + (cfg.pps_gpio_overlay_line ? ' [' + cfg.pps_gpio_overlay_line + ']' : ''))
+            : 'config.txt not found';
+
+        return '<div class="row g-2">'
+            + '<div class="col-md-6">'
+            +   row('RTC',           rtcSummary,    rtc.device_present)
+            +   row('PPS',           ppsSummary,    !!pps.gpio_device)
+            +   row('Serial',        serialSummary, serial.exists)
+            +   row('config.txt',    configSummary, cfg.exists)
+            + '</div>'
+            + '<div class="col-md-6">'
+            +   row('Packages',      null,          (pkg.missing_required || []).length === 0)
+            +   '<div class="ms-3 small">' + pkgList + '</div>'
+            +   row('Services',      null,          null)
+            +   '<div class="ms-3 small">' + svcList + '</div>'
+            +   row('gpsd config',   gpsdSummary,   gcf.exists)
+            +   row('chrony config', chronySummary, ccf.exists)
+            +   row('chrony status', chronyRunSummary, crun.tracking_ok)
+            + '</div>'
+            + '</div>';
+    }
+
+    function refresh(button) {
+        var badge   = document.getElementById('gps-hat-status-badge');
+        var actions = document.getElementById('gps-hat-actions');
+        var detail  = document.getElementById('gps-hat-detail');
+        if (!badge || !actions || !detail) return;
+        badge.className = 'badge bg-secondary ms-2';
+        badge.textContent = 'Checking…';
+        if (button) {
+            button.disabled = true;
+            button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Checking';
+        }
+        fetch('/admin/hardware/gps-hat/diagnostics', {
+            credentials: 'same-origin',
+            headers: { 'Accept': 'application/json' },
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data || !data.ok) {
+                    throw new Error((data && data.error) || 'unknown error');
+                }
+                var report = data.report;
+                var status = report.status || 'info';
+                badge.className = 'badge ms-2 ' + (BADGE_CLASS[status] || 'bg-secondary');
+                badge.textContent = BADGE_TEXT[status] || status;
+                actions.innerHTML = renderActions(report.actions || []);
+                detail.innerHTML = renderDetail(report);
+            })
+            .catch(function (err) {
+                badge.className = 'badge bg-danger ms-2';
+                badge.textContent = 'Probe failed';
+                actions.innerHTML = '<div class="alert alert-danger py-2 mb-0 small">'
+                    + '<i class="fas fa-circle-xmark me-1"></i> '
+                    + 'Diagnostic probe failed: ' + escapeHtml(String(err))
+                    + '</div>';
+                detail.innerHTML = '';
+            })
+            .finally(function () {
+                if (button) {
+                    button.disabled = false;
+                    button.innerHTML = '<i class="fas fa-rotate"></i> Recheck';
+                }
+            });
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        var card = document.getElementById('gps-hat-diag-card');
+        if (!card) return;
+        var btn = document.getElementById('gps-hat-refresh-btn');
+        if (btn) {
+            btn.addEventListener('click', function () { refresh(btn); });
+        }
+        refresh(null);
+    });
+})();
 </script>
 {% endblock %}
