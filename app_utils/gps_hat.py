@@ -486,6 +486,13 @@ def _probe_config_txt(rtc_overlay: Optional[str], expected_pps_pin: int) -> Dict
 # ---------------------------------------------------------------------------
 
 def _build_actions(report: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Translate raw probe data into a checklist of issues. Each entry
+    that has a corresponding helper command also gets a ``runner``
+    field describing the endpoint and body the UI should POST when
+    the operator clicks "Run". Actions without a ``runner`` stay
+    copy-paste-only (e.g. PPS pin mismatch with EAS Station settings,
+    which is solved by editing the form, not by a privileged action).
+    """
     actions: List[Dict[str, Any]] = []
     rtc = report["rtc"]
     pkg = report["packages"]
@@ -496,22 +503,37 @@ def _build_actions(report: Dict[str, Any]) -> List[Dict[str, Any]]:
     pps = report["pps"]
     serial = report["serial"]
     expected_baud = serial.get("expected_baud", 9600)
+    expected_pps_pin = report.get("expected_pps_pin", 18)
 
     # 1. Missing packages
     missing = [item for item in pkg["items"] if item["required"] and not item["installed"]]
     if missing:
         names = " ".join(item["name"] for item in missing)
+        package_list = [item["name"] for item in missing]
         actions.append({
             "id": "install_packages",
             "severity": "error",
             "label": f"Install missing packages: {names}",
             "reason": "Required packages are not installed; the time-sync chain cannot run without them.",
             "command": f"sudo apt update && sudo apt install -y {names}",
+            "runner": {
+                "endpoint": "/admin/hardware/gps-hat/apt-install",
+                "body": {"packages": package_list, "update_first": True},
+                "button_label": "Install",
+                "confirm": (
+                    "This will run apt update and install: "
+                    + ", ".join(package_list)
+                    + ". Continue?"
+                ),
+            },
         })
 
     # 2. RTC chip vs overlay mismatch
     if rtc["detected_chip"] and rtc["expected_overlay"]:
         actual_line = config_txt.get("i2c_rtc_overlay_line")
+        # Helper takes overlay name without the "i2c-rtc," prefix; we already
+        # have that as the chip name baked into expected_overlay.
+        chip_only = rtc["expected_overlay"].split(",", 1)[1] if "," in rtc["expected_overlay"] else rtc["expected_overlay"]
         if not actual_line:
             actions.append({
                 "id": "config_rtc_overlay",
@@ -520,6 +542,12 @@ def _build_actions(report: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "reason": f"Detected {rtc['chip_label']} RTC but no i2c-rtc overlay line is in config.txt.",
                 "command": f"echo 'dtoverlay={rtc['expected_overlay']}' | sudo tee -a {config_txt['path']}",
                 "requires_reboot": True,
+                "runner": {
+                    "endpoint": "/admin/hardware/gps-hat/config-txt-overlay",
+                    "body": {"overlay": "i2c-rtc", "params": chip_only},
+                    "button_label": "Add overlay",
+                    "confirm": f"Add 'dtoverlay=i2c-rtc,{chip_only}' to {config_txt['path']}? You'll need to reboot for it to take effect.",
+                },
             })
         elif config_txt.get("i2c_rtc_overlay_match") is False:
             actions.append({
@@ -532,6 +560,15 @@ def _build_actions(report: Dict[str, Any]) -> List[Dict[str, Any]]:
                     f"{config_txt['path']}"
                 ),
                 "requires_reboot": True,
+                "runner": {
+                    "endpoint": "/admin/hardware/gps-hat/config-txt-overlay",
+                    "body": {"overlay": "i2c-rtc", "params": chip_only},
+                    "button_label": "Replace overlay",
+                    "confirm": (
+                        f"Replace existing dtoverlay=i2c-rtc line in {config_txt['path']} "
+                        f"with 'dtoverlay=i2c-rtc,{chip_only}'? You'll need to reboot."
+                    ),
+                },
             })
 
     # 3. RV-3028 / DS3231 PORF — needs hwclock -w after system clock is sane
@@ -546,6 +583,19 @@ def _build_actions(report: Dict[str, Any]) -> List[Dict[str, Any]]:
             ),
             "command": "timedatectl && sudo hwclock -w && sudo hwclock -r",
             "preconditions": ["System clock must be synchronized (chrony or NTP)."],
+            "runner": {
+                "endpoint": "/admin/hardware/gps-hat/seed-rtc",
+                "body": {},
+                "button_label": "Seed RTC",
+                "extra_params": [
+                    {
+                        "name": "force_unsynced",
+                        "type": "boolean",
+                        "default": False,
+                        "label": "Force even if system clock isn't NTP-synchronized (footgun)",
+                    },
+                ],
+            },
         })
 
     # 4. PPS overlay missing or wrong pin
@@ -553,19 +603,30 @@ def _build_actions(report: Dict[str, Any]) -> List[Dict[str, Any]]:
         actions.append({
             "id": "config_pps_overlay",
             "severity": "info",
-            "label": "Add pps-gpio overlay to config.txt",
+            "label": f"Add pps-gpio overlay (gpiopin={expected_pps_pin}) to config.txt",
             "reason": "PPS time discipline requires the pps-gpio kernel overlay.",
-            "command": f"echo 'dtoverlay=pps-gpio,gpiopin=18' | sudo tee -a {config_txt['path']}",
+            "command": f"echo 'dtoverlay=pps-gpio,gpiopin={expected_pps_pin}' | sudo tee -a {config_txt['path']}",
             "requires_reboot": True,
+            "runner": {
+                "endpoint": "/admin/hardware/gps-hat/config-txt-overlay",
+                "body": {"overlay": "pps-gpio", "params": f"gpiopin={expected_pps_pin}"},
+                "button_label": "Add PPS overlay",
+                "confirm": (
+                    f"Add 'dtoverlay=pps-gpio,gpiopin={expected_pps_pin}' to {config_txt['path']}? "
+                    "You'll need to reboot for /dev/pps0 to appear."
+                ),
+            },
         })
     elif config_txt.get("pps_pin_match") is False:
+        # No runner: this is a settings/UI mismatch the user should resolve in
+        # the GPS receiver form, not by re-flashing the dtoverlay.
         actions.append({
             "id": "fix_pps_pin",
             "severity": "warning",
             "label": "PPS GPIO pin in config.txt does not match EAS Station settings",
             "reason": (
                 f"config.txt has gpiopin={config_txt.get('pps_gpio_pin_in_config')}, "
-                "but EAS Station expects 18 (Uputronics) or 4 (Adafruit)."
+                f"but EAS Station expects {expected_pps_pin}."
             ),
             "command": "Edit the dtoverlay=pps-gpio line in config.txt to match your HAT.",
         })
@@ -587,6 +648,16 @@ def _build_actions(report: Dict[str, Any]) -> List[Dict[str, Any]]:
                     'USBAUTO="false"\n'
                     "EOF"
                 ),
+                "runner": {
+                    "endpoint": "/admin/hardware/gps-hat/gpsd-config",
+                    "body": {
+                        "devices": ["/dev/serial0", "/dev/pps0"],
+                        "options": f"-n -b -s {expected_baud}",
+                        "start_daemon": True,
+                        "usbauto": False,
+                    },
+                    "button_label": "Write gpsd config",
+                },
             })
         else:
             issues = []
@@ -597,6 +668,12 @@ def _build_actions(report: Dict[str, Any]) -> List[Dict[str, Any]]:
             if not gpsd_cfg.get("baud_flag"):
                 issues.append(f"no -s flag (will auto-detect; force -s {expected_baud})")
             if issues:
+                # Try to preserve the user's existing DEVICES line if it parses
+                # cleanly; otherwise fall back to the standard pair. The helper
+                # validates this against its own allowlist either way.
+                existing_devs = (gpsd_cfg.get("devices") or "").split()
+                preserved_devs = [d for d in existing_devs if d.startswith("/dev/")] \
+                                 or ["/dev/serial0", "/dev/pps0"]
                 actions.append({
                     "id": "fix_gpsd_options",
                     "severity": "warning",
@@ -606,6 +683,21 @@ def _build_actions(report: Dict[str, Any]) -> List[Dict[str, Any]]:
                         f"sudo sed -i 's|^GPSD_OPTIONS=.*|GPSD_OPTIONS=\"-n -b -s {expected_baud}\"|' "
                         "/etc/default/gpsd && sudo systemctl restart gpsd"
                     ),
+                    "runner": {
+                        "endpoint": "/admin/hardware/gps-hat/gpsd-config",
+                        "body": {
+                            "devices": preserved_devs,
+                            "options": f"-n -b -s {expected_baud}",
+                            "start_daemon": True,
+                            "usbauto": False,
+                        },
+                        "button_label": "Fix gpsd config",
+                        "post_action": {
+                            "endpoint": "/admin/hardware/gps-hat/systemctl",
+                            "body": {"unit": "gpsd.service", "verb": "restart"},
+                            "label": "restart gpsd",
+                        },
+                    },
                 })
 
     # 6. chrony refclock + rtcsync
@@ -617,6 +709,20 @@ def _build_actions(report: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "label": "Enable rtcsync in chrony.conf",
                 "reason": "Without rtcsync, the kernel will not periodically copy disciplined system time back to the RTC.",
                 "command": "echo 'rtcsync' | sudo tee -a /etc/chrony/chrony.conf && sudo systemctl restart chrony",
+                "runner": {
+                    "endpoint": "/admin/hardware/gps-hat/chrony-config",
+                    "body": {
+                        "ensure_rtcsync": True,
+                        "ensure_pps_refclock": False,
+                        "pps_device": "/dev/pps0",
+                    },
+                    "button_label": "Enable rtcsync",
+                    "post_action": {
+                        "endpoint": "/admin/hardware/gps-hat/systemctl",
+                        "body": {"unit": "chrony.service", "verb": "restart"},
+                        "label": "restart chrony",
+                    },
+                },
             })
         if pps.get("gpio_device") and not chrony_cfg.get("has_pps_refclock"):
             actions.append({
@@ -631,6 +737,20 @@ def _build_actions(report: Dict[str, Any]) -> List[Dict[str, Any]]:
                     "EOF\n"
                     "sudo systemctl restart chrony"
                 ),
+                "runner": {
+                    "endpoint": "/admin/hardware/gps-hat/chrony-config",
+                    "body": {
+                        "ensure_rtcsync": True,
+                        "ensure_pps_refclock": True,
+                        "pps_device": "/dev/pps0",
+                    },
+                    "button_label": "Configure refclocks",
+                    "post_action": {
+                        "endpoint": "/admin/hardware/gps-hat/systemctl",
+                        "body": {"unit": "chrony.service", "verb": "restart"},
+                        "label": "restart chrony",
+                    },
+                },
             })
 
     # 7. chrony tracking — call it out if it's not running
@@ -641,6 +761,11 @@ def _build_actions(report: Dict[str, Any]) -> List[Dict[str, Any]]:
             "label": "Start the chrony service",
             "reason": "chronyc is not responding — system clock is not being disciplined.",
             "command": "sudo systemctl enable --now chrony",
+            "runner": {
+                "endpoint": "/admin/hardware/gps-hat/systemctl",
+                "body": {"unit": "chrony.service", "verb": "enable", "now": True},
+                "button_label": "Enable + start",
+            },
         })
 
     return actions

@@ -1,0 +1,1683 @@
+#!/usr/bin/env python3
+"""EAS Station hardware-setup helper daemon.
+
+Runs as root and exposes a tiny Unix-socket RPC that the web service
+(running unprivileged as ``eas-station``) calls to perform privileged
+GPS HAT setup operations — ``apt install`` of missing packages,
+idempotent edits to ``/etc/default/gpsd``, ``/etc/chrony/chrony.conf``,
+and ``/boot/firmware/config.txt``, ``hwclock -w`` after PORF, and
+``systemctl`` enable/restart of chrony / gpsd. Only commands explicitly
+registered in :data:`COMMANDS` are accepted — every other request is
+rejected.
+
+This file is deliberately stdlib-only. Keeping the helper free of
+project imports means the root-privileged surface is small, auditable,
+and decoupled from the rest of the codebase, so a SQLAlchemy /
+Flask-WTF / Jinja2 vulnerability can never reach root through this
+daemon.
+
+Wire format (JSON-Lines over a Unix stream socket):
+
+* Request: one line, ``{"action": "<name>", "params": {...},
+  "request_id": "<uuid>"}``.
+* Response: zero or more streaming events
+  ``{"type": "stdout"|"stderr", "data": "..."}``, then exactly one
+  terminal event ``{"type": "result", "ok": bool, "exit_code": int,
+  "error": "..."}``. Connection closes after the result event.
+
+Socket layout: ``/run/eas-station/hwsetup.sock``, mode ``0660``,
+owned by ``root:eas-station`` so only the service user can connect.
+The directory is created on startup if missing.
+
+For end-to-end verification this initial revision implements only the
+``ping`` action (returns ``pong`` and exits 0). Real actions land in
+subsequent commits, each with their own validation and tests.
+"""
+
+from __future__ import annotations
+
+import argparse
+import errno
+import grp
+import json
+import logging
+import logging.handlers
+import os
+import re
+import shutil
+import socket
+import socketserver
+import stat
+import subprocess
+import sys
+import tempfile
+import threading
+import time
+import traceback
+import uuid
+from typing import Any, Callable, Dict, List, Optional, Tuple
+
+# ---------------------------------------------------------------------------
+# Configuration constants. Kept at module scope so unit-style tests can
+# patch them, and so deployers can grep for them in a single place.
+# ---------------------------------------------------------------------------
+
+DEFAULT_SOCKET_PATH = "/run/eas-station/hwsetup.sock"
+DEFAULT_OWNER_GROUP = "eas-station"
+DEFAULT_SOCKET_MODE = 0o660
+
+# Per-connection limits — bound a single client's blast radius.
+MAX_REQUEST_BYTES = 64 * 1024     # 64 KiB request line is plenty for JSON
+MAX_PARAM_DEPTH = 4               # how nested a params object may be
+DEFAULT_REQUEST_TIMEOUT_S = 5.0   # ping is a no-op; later actions raise this
+
+LOG = logging.getLogger("eas-station-hwsetup")
+
+
+# ---------------------------------------------------------------------------
+# Command registry. Each entry returns a dict that becomes the terminal
+# ``result`` event. Commands that need to stream stdout/stderr will use
+# the ``emit`` callback (added in the action commits) instead of returning
+# all data in one shot.
+# ---------------------------------------------------------------------------
+
+CommandFn = Callable[[Dict[str, Any], "EmitFn"], Dict[str, Any]]
+EmitFn = Callable[[str, str], None]   # (channel, data) → None; channel ∈ {stdout, stderr}
+
+
+def _cmd_ping(params: Dict[str, Any], emit: EmitFn) -> Dict[str, Any]:
+    """Simplest possible action — used for end-to-end socket verification.
+
+    Echoes any ``message`` parameter back, otherwise returns "pong".
+    """
+    msg = params.get("message", "pong")
+    if not isinstance(msg, str) or len(msg) > 256:
+        return {"ok": False, "exit_code": 22, "error": "message must be a short string"}
+    emit("stdout", msg)
+    return {"ok": True, "exit_code": 0, "stdout": msg}
+
+
+# ---------------------------------------------------------------------------
+# Subprocess helper. Every real action runs at least one external command,
+# so we centralise the "run with timeout, stream output, never use a
+# shell" pattern here. All argv must be lists of strings the action
+# itself controls — no caller-supplied strings ever land in argv.
+# ---------------------------------------------------------------------------
+
+def _run_streaming(
+    argv: List[str],
+    emit: EmitFn,
+    *,
+    timeout: float = 30.0,
+    label: Optional[str] = None,
+) -> Tuple[int, str, str]:
+    """Run ``argv`` (no shell), stream stdout/stderr to ``emit`` line-by-line,
+    and return ``(exit_code, stdout_full, stderr_full)``.
+
+    Any caller-derived data must already have been validated against an
+    allowlist by the time it reaches here. ``argv[0]`` may be a bare name
+    only when the caller has confirmed a specific path with shutil.which;
+    otherwise pass an absolute path.
+    """
+    if not isinstance(argv, list) or not argv or not all(isinstance(a, str) for a in argv):
+        raise ValueError("argv must be a non-empty list of strings")
+    label = label or argv[0]
+    emit("stdout", f"$ {' '.join(argv)}\n")
+    try:
+        proc = subprocess.Popen(
+            argv,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,
+            close_fds=True,
+            text=True,
+            bufsize=1,
+        )
+    except FileNotFoundError as exc:
+        emit("stderr", f"{label}: {exc}\n")
+        return 127, "", str(exc)
+    except OSError as exc:
+        emit("stderr", f"{label}: {exc}\n")
+        return getattr(exc, "errno", 1) or 1, "", str(exc)
+
+    stdout_buf: List[str] = []
+    stderr_buf: List[str] = []
+
+    def pump(stream, channel: str, buf: List[str]) -> None:
+        try:
+            for line in iter(stream.readline, ""):
+                buf.append(line)
+                emit(channel, line)
+        except Exception as exc:
+            emit("stderr", f"[{label}] read error: {exc}\n")
+        finally:
+            try:
+                stream.close()
+            except Exception:
+                pass
+
+    threads = [
+        threading.Thread(target=pump, args=(proc.stdout, "stdout", stdout_buf), daemon=True),
+        threading.Thread(target=pump, args=(proc.stderr, "stderr", stderr_buf), daemon=True),
+    ]
+    for t in threads:
+        t.start()
+
+    try:
+        rc = proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        try:
+            proc.wait(timeout=2)
+        except Exception:
+            pass
+        emit("stderr", f"[{label}] timed out after {timeout:.1f}s\n")
+        rc = 124
+
+    for t in threads:
+        t.join(timeout=2)
+
+    return rc, "".join(stdout_buf), "".join(stderr_buf)
+
+
+# ---------------------------------------------------------------------------
+# seed_rtc — write the (synchronized) system clock back to the RTC,
+# clearing the RV-3028 / DS3231 PORF flag. This is the "I just replaced
+# the coin cell" / "I just brought up a fresh HAT" recovery path.
+#
+# Params:
+#   force_unsynced (bool, default False) — proceed even if timedatectl
+#     reports the system clock is not yet NTP/GPS-synchronized. Off by
+#     default because writing a wrong system time to the RTC and then
+#     trusting it on next boot is a footgun; the UI surfaces the flag
+#     explicitly with a "I know what I'm doing" checkbox.
+#
+# Result fields beyond ok / exit_code:
+#   system_time_iso   — datetime stamp the system reported at the start
+#   rtc_time_after    — output of `hwclock -r` after the write
+#   ntp_synchronized  — boolean from timedatectl
+# ---------------------------------------------------------------------------
+
+def _which_required(name: str) -> Optional[str]:
+    """shutil.which() but explicitly searches the privileged PATH the
+    helper uses. Returns None if the binary is missing entirely."""
+    return shutil.which(name)
+
+
+def _read_timedatectl_synchronized() -> Tuple[Optional[bool], Optional[str]]:
+    """Return (synchronized, error). synchronized is True/False/None
+    where None means timedatectl couldn't be parsed."""
+    if not _which_required("timedatectl"):
+        return None, "timedatectl not installed"
+    try:
+        result = subprocess.run(
+            ["timedatectl", "show", "--property=NTPSynchronized", "--value"],
+            capture_output=True, text=True, timeout=4.0, check=False,
+        )
+    except Exception as exc:
+        return None, f"timedatectl failed: {exc}"
+    if result.returncode != 0:
+        return None, f"timedatectl exited {result.returncode}: {result.stderr.strip()}"
+    val = (result.stdout or "").strip().lower()
+    if val in ("yes", "true"):
+        return True, None
+    if val in ("no", "false"):
+        return False, None
+    return None, f"unexpected timedatectl output: {val!r}"
+
+
+def _cmd_seed_rtc(params: Dict[str, Any], emit: EmitFn) -> Dict[str, Any]:
+    raw_force = params.get("force_unsynced", False)
+    if not isinstance(raw_force, bool):
+        return {
+            "ok": False,
+            "exit_code": 22,
+            "error": "force_unsynced must be a boolean (true / false)",
+        }
+    force: bool = raw_force
+
+    hwclock = _which_required("hwclock")
+    if not hwclock:
+        return {
+            "ok": False,
+            "exit_code": 127,
+            "error": (
+                "hwclock not found. On Pi OS Bookworm and newer, install "
+                "util-linux-extra: sudo apt install -y util-linux-extra"
+            ),
+        }
+
+    # 1. Synchronization gate.
+    synced, sync_err = _read_timedatectl_synchronized()
+    emit("stdout", f"timedatectl NTPSynchronized: {synced} (error={sync_err})\n")
+    if synced is False and not force:
+        return {
+            "ok": False,
+            "exit_code": 1,
+            "error": (
+                "System clock is not synchronized to NTP/GPS. Refusing to "
+                "write a possibly-wrong time to the RTC. Either wait for "
+                "chrony to converge, or re-run with force_unsynced=true."
+            ),
+            "ntp_synchronized": False,
+        }
+
+    system_time_iso = ""
+    try:
+        from datetime import datetime, timezone as _tz
+        system_time_iso = datetime.now(_tz.utc).isoformat()
+    except Exception:
+        pass
+
+    # 2. Write system time → RTC. -u forces UTC; --rtc /dev/rtc0 pins the
+    #    target. Both are hardcoded — no caller input lands in argv.
+    rc, _out, err = _run_streaming(
+        [hwclock, "-w", "-u", "--rtc", "/dev/rtc0"],
+        emit,
+        timeout=8.0,
+        label="hwclock -w",
+    )
+    if rc != 0:
+        return {
+            "ok": False,
+            "exit_code": rc,
+            "error": f"hwclock -w failed: {err.strip() or 'no stderr'}",
+            "ntp_synchronized": synced,
+            "system_time_iso": system_time_iso,
+        }
+
+    # 3. Read back. On a healthy chip this prints one line like
+    #    "2026-05-08 21:29:08.000000+00:00".
+    rc_r, out_r, err_r = _run_streaming(
+        [hwclock, "-r", "-u", "--rtc", "/dev/rtc0"],
+        emit,
+        timeout=4.0,
+        label="hwclock -r",
+    )
+    rtc_time_after = out_r.strip().splitlines()[-1] if out_r.strip() else ""
+    if rc_r != 0:
+        return {
+            "ok": False,
+            "exit_code": rc_r,
+            "error": (
+                "hwclock -w succeeded but hwclock -r failed: "
+                + (err_r.strip() or "no stderr")
+            ),
+            "ntp_synchronized": synced,
+            "system_time_iso": system_time_iso,
+            "rtc_time_after": rtc_time_after,
+        }
+
+    return {
+        "ok": True,
+        "exit_code": 0,
+        "ntp_synchronized": synced,
+        "system_time_iso": system_time_iso,
+        "rtc_time_after": rtc_time_after,
+    }
+
+
+# ---------------------------------------------------------------------------
+# apt_install — install one or more packages from a hardcoded allowlist.
+#
+# The allowlist is the single security boundary for this action. Even if the
+# web tier is compromised and starts asking for arbitrary package names,
+# the helper rejects anything not in the set below. This is defense in
+# depth — the web tier validates input too — but the helper is what stops
+# someone from turning this RPC into ``apt install netcat-openbsd
+# socat python3-pip`` and getting a remote shell on root.
+#
+# We deliberately do NOT support arbitrary "version pinning" or apt
+# options. The action exists to fix one user-visible problem ("hwclock
+# command not found", "chrony isn't installed") and that fix is always
+# the same: install the latest distro package.
+#
+# Params:
+#   packages (list[str]) — non-empty, every entry must be in
+#     _APT_ALLOWLIST and match _APT_NAME_RE (defense in depth).
+#   update_first (bool, default True) — run ``apt-get update`` before
+#     install. The UI surfaces this as a checkbox so users on metered
+#     links can skip it.
+# ---------------------------------------------------------------------------
+
+# Package names this helper is willing to install. Keep aligned with
+# app_utils/gps_hat.py's _PACKAGES tuple (which is what the diagnostic
+# panel surfaces as installable). Adding to this list is a deliberate
+# security review event.
+_APT_ALLOWLIST = frozenset({
+    "chrony",
+    "gpsd",
+    "gpsd-clients",
+    "pps-tools",
+    "util-linux-extra",
+    "i2c-tools",
+})
+
+# Belt-and-braces regex: even within the allowlist, refuse anything that
+# doesn't look like a Debian binary package name. This stops a typo or
+# corrupted allowlist from ever producing weird argv (and matches the
+# Debian Policy §5.6.7 grammar for binary package names).
+_APT_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9+\-.]+$")
+
+
+def _cmd_apt_install(params: Dict[str, Any], emit: EmitFn) -> Dict[str, Any]:
+    raw_packages = params.get("packages")
+    if not isinstance(raw_packages, list) or not raw_packages:
+        return {
+            "ok": False,
+            "exit_code": 22,
+            "error": "packages must be a non-empty list of strings",
+        }
+    if len(raw_packages) > len(_APT_ALLOWLIST):
+        return {
+            "ok": False,
+            "exit_code": 22,
+            "error": f"too many packages requested (max {len(_APT_ALLOWLIST)})",
+        }
+    cleaned: List[str] = []
+    for entry in raw_packages:
+        if not isinstance(entry, str):
+            return {
+                "ok": False,
+                "exit_code": 22,
+                "error": "every package name must be a string",
+            }
+        name = entry.strip()
+        if not _APT_NAME_RE.match(name):
+            return {
+                "ok": False,
+                "exit_code": 22,
+                "error": f"package name failed sanity check: {name!r}",
+            }
+        if name not in _APT_ALLOWLIST:
+            return {
+                "ok": False,
+                "exit_code": 22,
+                "error": (
+                    f"package {name!r} is not in the helper allowlist. "
+                    "Adding a package requires editing the helper itself "
+                    "(see _APT_ALLOWLIST in eas-station-hwsetup)."
+                ),
+                "allowlist": sorted(_APT_ALLOWLIST),
+            }
+        if name not in cleaned:  # de-dup, preserve order
+            cleaned.append(name)
+
+    raw_update = params.get("update_first", True)
+    if not isinstance(raw_update, bool):
+        return {
+            "ok": False,
+            "exit_code": 22,
+            "error": "update_first must be a boolean",
+        }
+
+    apt_get = _which_required("apt-get")
+    if not apt_get:
+        return {
+            "ok": False,
+            "exit_code": 127,
+            "error": "apt-get not found — this helper only supports Debian-family distributions.",
+        }
+
+    # apt-get tries hard to be interactive. Force non-interactive mode and
+    # disable any installer prompts, so an unattended unit-file or
+    # debconf-prompt question can never wedge the helper.
+    env = dict(os.environ)
+    env["DEBIAN_FRONTEND"] = "noninteractive"
+    env["APT_LISTCHANGES_FRONTEND"] = "none"
+    # "lock" tools intermittently fight each other on Pi OS during boot;
+    # this option makes apt wait for the lock instead of failing fast.
+    apt_options = [
+        "-y",
+        "-o", "Dpkg::Options::=--force-confdef",
+        "-o", "Dpkg::Options::=--force-confold",
+        "-o", "DPkg::Lock::Timeout=60",
+    ]
+
+    overall_stdout: List[str] = []
+    overall_stderr: List[str] = []
+
+    if raw_update:
+        emit("stdout", "[1/2] apt-get update\n")
+        rc, out, err = _run_streaming_env(
+            [apt_get, "update", "-q", *apt_options[:1]],
+            emit,
+            env=env,
+            timeout=180.0,
+            label="apt-get update",
+        )
+        overall_stdout.append(out)
+        overall_stderr.append(err)
+        if rc != 0:
+            return {
+                "ok": False,
+                "exit_code": rc,
+                "error": (
+                    "apt-get update failed. Network or repository problem; "
+                    "try again, or pass update_first=false to skip it."
+                ),
+                "packages": cleaned,
+            }
+    else:
+        emit("stdout", "[1/2] apt-get update — skipped (update_first=false)\n")
+
+    emit("stdout", f"[2/2] apt-get install {' '.join(cleaned)}\n")
+    rc, out, err = _run_streaming_env(
+        [apt_get, "install", *apt_options, "--", *cleaned],
+        emit,
+        env=env,
+        timeout=600.0,
+        label="apt-get install",
+    )
+    overall_stdout.append(out)
+    overall_stderr.append(err)
+    if rc != 0:
+        return {
+            "ok": False,
+            "exit_code": rc,
+            "error": (
+                "apt-get install failed. See streamed stderr for details. "
+                "Common causes: missing apt cache (run with update_first=true), "
+                "package conflicts, or insufficient disk space."
+            ),
+            "packages": cleaned,
+            "stderr": err.strip()[:2000],
+        }
+
+    # Verify each package is now in 'install ok installed' state. apt-get
+    # exits 0 even when a package wasn't actually installed (e.g. mid-pipe
+    # cancellation, debconf timeout) so this is the authoritative check.
+    installed_state: Dict[str, str] = {}
+    dpkg_query = _which_required("dpkg-query")
+    if dpkg_query:
+        for name in cleaned:
+            try:
+                r = subprocess.run(
+                    [dpkg_query, "-W", "-f=${Status}", name],
+                    capture_output=True, text=True, timeout=5.0, check=False,
+                )
+                installed_state[name] = (r.stdout or "").strip() or "unknown"
+            except Exception as exc:
+                installed_state[name] = f"query failed: {exc}"
+    not_installed = [
+        name for name, status in installed_state.items()
+        if "install ok installed" not in status
+    ]
+    if not_installed:
+        return {
+            "ok": False,
+            "exit_code": 1,
+            "error": (
+                "apt-get reported success but the following packages are "
+                f"not in the 'installed' state: {', '.join(not_installed)}"
+            ),
+            "packages": cleaned,
+            "installed_state": installed_state,
+        }
+
+    return {
+        "ok": True,
+        "exit_code": 0,
+        "packages": cleaned,
+        "installed_state": installed_state,
+    }
+
+
+def _run_streaming_env(
+    argv: List[str],
+    emit: EmitFn,
+    *,
+    env: Optional[Dict[str, str]] = None,
+    timeout: float = 30.0,
+    label: Optional[str] = None,
+) -> Tuple[int, str, str]:
+    """Variant of :func:`_run_streaming` that takes an explicit env dict.
+
+    Used by ``apt_install`` to inject ``DEBIAN_FRONTEND=noninteractive``
+    without leaking it into the helper's own environment. Behaviour is
+    otherwise identical — same threading model, same timeout semantics,
+    same line-by-line streaming through ``emit``.
+    """
+    if not isinstance(argv, list) or not argv or not all(isinstance(a, str) for a in argv):
+        raise ValueError("argv must be a non-empty list of strings")
+    label = label or argv[0]
+    emit("stdout", f"$ {' '.join(argv)}\n")
+    try:
+        proc = subprocess.Popen(
+            argv,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,
+            close_fds=True,
+            text=True,
+            bufsize=1,
+            env=env,
+        )
+    except FileNotFoundError as exc:
+        emit("stderr", f"{label}: {exc}\n")
+        return 127, "", str(exc)
+    except OSError as exc:
+        emit("stderr", f"{label}: {exc}\n")
+        return getattr(exc, "errno", 1) or 1, "", str(exc)
+
+    stdout_buf: List[str] = []
+    stderr_buf: List[str] = []
+
+    def pump(stream, channel: str, buf: List[str]) -> None:
+        try:
+            for line in iter(stream.readline, ""):
+                buf.append(line)
+                emit(channel, line)
+        except Exception as exc:
+            emit("stderr", f"[{label}] read error: {exc}\n")
+        finally:
+            try:
+                stream.close()
+            except Exception:
+                pass
+
+    threads = [
+        threading.Thread(target=pump, args=(proc.stdout, "stdout", stdout_buf), daemon=True),
+        threading.Thread(target=pump, args=(proc.stderr, "stderr", stderr_buf), daemon=True),
+    ]
+    for t in threads:
+        t.start()
+
+    try:
+        rc = proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        try:
+            proc.wait(timeout=2)
+        except Exception:
+            pass
+        emit("stderr", f"[{label}] timed out after {timeout:.1f}s\n")
+        rc = 124
+
+    for t in threads:
+        t.join(timeout=2)
+
+    return rc, "".join(stdout_buf), "".join(stderr_buf)
+
+
+# ---------------------------------------------------------------------------
+# Config-file editing primitives.
+#
+# Every config-file action shares the same safety contract:
+#
+# 1. The target path is hardcoded inside the action. Callers never pass
+#    a path. This is the single most important defense against turning
+#    this RPC into "write arbitrary file as root".
+# 2. The original file is copied to ``<path>.bak.<UTC timestamp>`` once,
+#    BEFORE the new content is written. We never overwrite an existing
+#    backup with the same timestamp — collisions add a numeric suffix.
+# 3. The new content is written via mkstemp + fsync + os.replace into
+#    the same directory as the target, so the rename is atomic on any
+#    POSIX filesystem (and on the FAT /boot/firmware partition we
+#    accept the weaker but sufficient atomicity that mkfs.fat provides
+#    for renames within a single directory).
+# 4. The new file inherits the original's mode + ownership so packages
+#    can still rewrite it on next upgrade without permission surprises.
+# 5. Actions are idempotent. Re-running with the same parameters either
+#    no-ops ("already in desired state") or re-writes byte-identical
+#    content. The UI reads the result's ``changed`` field to decide
+#    whether to show "modified" or "already correct".
+# ---------------------------------------------------------------------------
+
+# Hardcoded path → kind allowlist. Any caller-derived path that isn't
+# exactly equal to one of these keys is refused before we touch the
+# filesystem. The "kind" tag is used purely for nicer log lines.
+_MANAGED_PATHS: Dict[str, str] = {
+    "/etc/default/gpsd":              "gpsd",
+    "/etc/chrony/chrony.conf":        "chrony",
+    "/boot/firmware/config.txt":      "boot",
+    "/boot/config.txt":               "boot",   # older Pi OS layout
+}
+
+
+def _backup_path(path: str) -> str:
+    """Return a non-colliding ``<path>.bak.<UTC stamp>`` filename."""
+    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    candidate = f"{path}.bak.{stamp}"
+    if not os.path.exists(candidate):
+        return candidate
+    # Sub-second collision (rare). Append a counter until we find a free name.
+    for n in range(1, 100):
+        suffix = f"{path}.bak.{stamp}.{n}"
+        if not os.path.exists(suffix):
+            return suffix
+    raise RuntimeError(f"could not find a non-colliding backup name for {path!r}")
+
+
+def _atomic_write_with_backup(
+    path: str,
+    new_text: str,
+    emit: EmitFn,
+) -> Dict[str, Any]:
+    """Atomically write ``new_text`` to ``path`` after backing the
+    original up. Returns metadata about what happened.
+
+    The path MUST appear in :data:`_MANAGED_PATHS` and must already
+    exist (we refuse to create a new config from scratch — the wrong
+    path is far too easy to mis-target). The action that calls this
+    function is responsible for any caller-supplied content; this
+    helper does no content validation.
+    """
+    if path not in _MANAGED_PATHS:
+        raise ValueError(f"path {path!r} is not in the managed allowlist")
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"refusing to create {path!r} — file must already exist")
+    if not os.path.isfile(path):
+        raise ValueError(f"{path!r} is not a regular file")
+
+    # Read the existing content so we can detect no-op writes and report
+    # ``changed=False``.
+    with open(path, "r", encoding="utf-8") as f:
+        old_text = f.read()
+    changed = old_text != new_text
+    if not changed:
+        emit("stdout", f"{path}: already in desired state; not writing\n")
+        return {
+            "path": path,
+            "changed": False,
+            "backup": None,
+            "bytes_written": len(old_text.encode("utf-8")),
+        }
+
+    st = os.stat(path)
+    backup = _backup_path(path)
+    shutil.copy2(path, backup)
+    try:
+        os.chmod(backup, 0o600)
+    except OSError:
+        pass
+    emit("stdout", f"{path}: backed up to {backup}\n")
+
+    parent = os.path.dirname(path) or "."
+    fd, tmp = tempfile.mkstemp(prefix=".eas-hwsetup-", dir=parent, text=False)
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(new_text.encode("utf-8"))
+            f.flush()
+            os.fsync(f.fileno())
+        # Match the original's mode and (where possible) ownership so
+        # package upgrades don't surprise anyone with new permissions.
+        os.chmod(tmp, stat.S_IMODE(st.st_mode))
+        try:
+            os.chown(tmp, st.st_uid, st.st_gid)
+        except PermissionError:
+            pass
+        os.replace(tmp, path)
+        emit("stdout", f"{path}: wrote {len(new_text.encode('utf-8'))} bytes\n")
+    except Exception:
+        # Best-effort cleanup of the tempfile if we never made it to replace
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+    return {
+        "path": path,
+        "changed": True,
+        "backup": backup,
+        "bytes_written": len(new_text.encode("utf-8")),
+    }
+
+
+# ---------------------------------------------------------------------------
+# gpsd_config_write — regenerate /etc/default/gpsd from a tight schema.
+#
+# The file is small and entirely structured (KEY="value" lines), so we
+# rewrite it whole rather than trying to edit in place. The schema below
+# is the only shape we accept; anything else is rejected with exit 22.
+#
+# Params:
+#   devices       (list[str], required)  one or more device paths from the
+#                                        device allowlist (/dev/serial0,
+#                                        /dev/serial1, /dev/ttyAMA0..3,
+#                                        /dev/ttyS0..3, /dev/pps0..3,
+#                                        /dev/ttyUSB0..3, /dev/ttyACM0..3).
+#   options       (str,       required)  the GPSD_OPTIONS string. Must
+#                                        only contain a small set of
+#                                        flags we know about.
+#   start_daemon  (bool,      default True)
+#   usbauto       (bool,      default False)
+# ---------------------------------------------------------------------------
+
+_GPSD_DEVICE_RE = re.compile(
+    r"^/dev/(serial[0-9]|ttyAMA[0-9]|ttyAMA1[0-9]?|ttyS[0-9]|"
+    r"pps[0-9]|ttyUSB[0-9]|ttyACM[0-9])$"
+)
+# Tokens we accept inside GPSD_OPTIONS. Everything else is rejected so
+# users (or a compromised web tier) cannot smuggle arbitrary flags into
+# the gpsd command line — gpsd flags can do things like enable raw
+# control of the receiver or open additional sockets.
+_GPSD_OPTION_FLAGS = frozenset({"-n", "-b", "-N", "-s", "-G", "-D"})
+
+
+def _validate_gpsd_options(opts: str) -> Tuple[Optional[List[str]], Optional[str]]:
+    """Return (token_list, error). Token list is what we'll write back."""
+    if not isinstance(opts, str):
+        return None, "options must be a string"
+    if len(opts) > 128:
+        return None, "options string too long"
+    tokens = opts.split()
+    out: List[str] = []
+    i = 0
+    while i < len(tokens):
+        tok = tokens[i]
+        if tok in ("-s", "-D"):
+            # Both take a numeric argument. -s baud, -D debug-level.
+            if i + 1 >= len(tokens):
+                return None, f"flag {tok} requires an argument"
+            arg = tokens[i + 1]
+            if not arg.isdigit() or not (0 < int(arg) <= 921600):
+                return None, f"argument to {tok} must be a positive integer ≤ 921600"
+            out.extend([tok, arg])
+            i += 2
+            continue
+        if tok in _GPSD_OPTION_FLAGS:
+            out.append(tok)
+            i += 1
+            continue
+        return None, f"unsupported flag: {tok!r}"
+    return out, None
+
+
+def _cmd_gpsd_config_write(params: Dict[str, Any], emit: EmitFn) -> Dict[str, Any]:
+    raw_devs = params.get("devices")
+    if not isinstance(raw_devs, list) or not raw_devs:
+        return {"ok": False, "exit_code": 22, "error": "devices must be a non-empty list"}
+    if len(raw_devs) > 4:
+        return {"ok": False, "exit_code": 22, "error": "at most 4 devices supported"}
+    devices: List[str] = []
+    for entry in raw_devs:
+        if not isinstance(entry, str) or not _GPSD_DEVICE_RE.match(entry):
+            return {
+                "ok": False,
+                "exit_code": 22,
+                "error": f"device path failed allowlist check: {entry!r}",
+            }
+        if entry not in devices:
+            devices.append(entry)
+
+    opts_in = params.get("options", "-n -b -s 9600")
+    opt_tokens, opt_err = _validate_gpsd_options(opts_in)
+    if opt_err:
+        return {"ok": False, "exit_code": 22, "error": opt_err}
+    assert opt_tokens is not None
+
+    raw_start = params.get("start_daemon", True)
+    raw_usb = params.get("usbauto", False)
+    if not isinstance(raw_start, bool) or not isinstance(raw_usb, bool):
+        return {
+            "ok": False,
+            "exit_code": 22,
+            "error": "start_daemon and usbauto must be booleans",
+        }
+
+    target = "/etc/default/gpsd"
+    body = (
+        "# Default settings for the gpsd init script and the hotplug wrapper.\n"
+        "# Managed by eas-station-hwsetup. Hand edits will be preserved in\n"
+        "# the most recent .bak file in this directory.\n"
+        "\n"
+        f"START_DAEMON=\"{'true' if raw_start else 'false'}\"\n"
+        f"USBAUTO=\"{'true' if raw_usb else 'false'}\"\n"
+        f"DEVICES=\"{' '.join(devices)}\"\n"
+        f"GPSD_OPTIONS=\"{' '.join(opt_tokens)}\"\n"
+    )
+
+    try:
+        result = _atomic_write_with_backup(target, body, emit)
+    except FileNotFoundError as exc:
+        return {"ok": False, "exit_code": 1, "error": str(exc)}
+    except Exception as exc:
+        return {"ok": False, "exit_code": 1, "error": f"{type(exc).__name__}: {exc}"}
+
+    return {
+        "ok": True,
+        "exit_code": 0,
+        "path": target,
+        "changed": result["changed"],
+        "backup": result["backup"],
+        "devices": devices,
+        "options": " ".join(opt_tokens),
+        "start_daemon": raw_start,
+        "usbauto": raw_usb,
+    }
+
+
+# ---------------------------------------------------------------------------
+# chrony_config_ensure — append a managed block to /etc/chrony/chrony.conf
+# without disturbing user-authored lines (pool / server / refclock /
+# allow / etc.). The block is bounded by sentinel comments; on re-run we
+# replace just the bytes between them, leaving everything else alone.
+#
+# Params:
+#   ensure_rtcsync       (bool, default True)
+#   ensure_pps_refclock  (bool, default True)
+#   pps_device           (str, default "/dev/pps0") — must match _PPS_DEVICE_RE
+# ---------------------------------------------------------------------------
+
+_CHRONY_BLOCK_BEGIN = "# >>> eas-station-hwsetup — managed block (do not edit between markers)"
+_CHRONY_BLOCK_END   = "# <<< eas-station-hwsetup — managed block"
+_PPS_DEVICE_RE = re.compile(r"^/dev/pps[0-9]$")
+
+
+def _strip_chrony_managed_block(existing: str) -> str:
+    """Return ``existing`` with any eas-station managed block removed.
+
+    Used to inspect the *user-authored* portion of chrony.conf before we
+    decide what to put inside the managed block — so that re-running this
+    action against a file the user has already partially configured by
+    hand doesn't create duplicate ``rtcsync`` directives or two
+    ``refclock PPS /dev/pps0`` lines (which chrony refuses to register).
+    """
+    begin_idx = existing.find(_CHRONY_BLOCK_BEGIN)
+    end_idx = existing.find(_CHRONY_BLOCK_END)
+    if begin_idx < 0 or end_idx <= begin_idx:
+        return existing
+    end_line_break = existing.find("\n", end_idx)
+    if end_line_break < 0:
+        end_line_break = len(existing)
+    return existing[:begin_idx] + existing[end_line_break + 1:]
+
+
+def _user_has_rtcsync(user_text: str) -> bool:
+    for raw in user_text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        # rtcsync is a flag with no arguments
+        if line == "rtcsync" or line.split("#", 1)[0].strip() == "rtcsync":
+            return True
+    return False
+
+
+def _user_has_refclock_shm(user_text: str) -> bool:
+    """True if the user already declared the SHM 0 refclock we'd add."""
+    for raw in user_text.splitlines():
+        line = raw.strip().split("#", 1)[0].strip()
+        if not line.startswith("refclock"):
+            continue
+        toks = line.split()
+        if len(toks) >= 3 and toks[1].upper() == "SHM" and toks[2] == "0":
+            return True
+    return False
+
+
+def _user_has_refclock_pps(user_text: str, pps_device: str) -> bool:
+    """True if the user already declared a PPS refclock pointing at the
+    same device. Different /dev/ppsN devices coexist fine, so we only
+    refuse to re-add an exact match."""
+    for raw in user_text.splitlines():
+        line = raw.strip().split("#", 1)[0].strip()
+        if not line.startswith("refclock"):
+            continue
+        toks = line.split()
+        if len(toks) >= 3 and toks[1].upper() == "PPS" and toks[2] == pps_device:
+            return True
+    return False
+
+
+def _build_chrony_block(
+    *,
+    ensure_rtcsync: bool,
+    ensure_pps_refclock: bool,
+    pps_device: str,
+    user_has_rtcsync: bool,
+    user_has_refclock_shm: bool,
+    user_has_refclock_pps: bool,
+) -> Tuple[str, List[str]]:
+    """Return ``(block_text, skipped_directives)``.
+
+    ``skipped_directives`` lists any directives the caller asked us to
+    ensure but which the user has already declared outside the managed
+    block. The UI surfaces these so the operator knows we deliberately
+    didn't duplicate them.
+    """
+    payload: List[str] = []
+    skipped: List[str] = []
+    if ensure_rtcsync:
+        if user_has_rtcsync:
+            skipped.append("rtcsync (already in user-authored section)")
+        else:
+            payload.append("rtcsync")
+    if ensure_pps_refclock:
+        if user_has_refclock_shm:
+            skipped.append("refclock SHM 0 (already in user-authored section)")
+        else:
+            payload.append(
+                "refclock SHM 0 refid GPS precision 1e-1 offset 0.0 delay 0.2 noselect"
+            )
+        if user_has_refclock_pps:
+            skipped.append(f"refclock PPS {pps_device} (already in user-authored section)")
+        else:
+            payload.append(f"refclock PPS {pps_device} lock GPS refid PPS")
+    if not payload:
+        return "", skipped
+    block_lines = [_CHRONY_BLOCK_BEGIN, *payload, _CHRONY_BLOCK_END]
+    return "\n".join(block_lines) + "\n", skipped
+
+
+def _splice_chrony_block(existing: str, block: str) -> Tuple[str, bool]:
+    """If a managed block already exists, replace its content.
+    Otherwise, append a newline-prefixed managed block to the file.
+    Returns (new_text, changed_flag). When the block is absent and
+    `block` is empty, returns the original unchanged. When the block
+    exists and `block` is empty, the existing block is removed entirely
+    (e.g. user disabled both ensure flags after a previous run).
+    """
+    begin_idx = existing.find(_CHRONY_BLOCK_BEGIN)
+    end_idx = existing.find(_CHRONY_BLOCK_END)
+    has_block = begin_idx >= 0 and end_idx > begin_idx
+    if has_block:
+        end_line_break = existing.find("\n", end_idx)
+        if end_line_break < 0:
+            end_line_break = len(existing)
+        before = existing[:begin_idx]
+        after = existing[end_line_break + 1:] if end_line_break < len(existing) else ""
+        if not block.strip():
+            # Caller asked for an empty block → strip the existing one entirely
+            replaced = before + after
+            # Tidy up any blank-line crater the removal left behind
+            while "\n\n\n" in replaced:
+                replaced = replaced.replace("\n\n\n", "\n\n")
+            return replaced, replaced != existing
+        replaced = before + block + after
+        return replaced, replaced != existing
+    if not block.strip():
+        return existing, False
+    sep = "" if existing.endswith("\n") or not existing else "\n"
+    return existing + sep + "\n" + block, True
+
+
+def _cmd_chrony_config_ensure(params: Dict[str, Any], emit: EmitFn) -> Dict[str, Any]:
+    raw_rtcsync = params.get("ensure_rtcsync", True)
+    raw_pps = params.get("ensure_pps_refclock", True)
+    if not isinstance(raw_rtcsync, bool) or not isinstance(raw_pps, bool):
+        return {
+            "ok": False,
+            "exit_code": 22,
+            "error": "ensure_rtcsync and ensure_pps_refclock must be booleans",
+        }
+    pps_device = params.get("pps_device", "/dev/pps0")
+    if not isinstance(pps_device, str) or not _PPS_DEVICE_RE.match(pps_device):
+        return {
+            "ok": False,
+            "exit_code": 22,
+            "error": f"pps_device must match /dev/pps[0-9], got {pps_device!r}",
+        }
+
+    target = "/etc/chrony/chrony.conf"
+    if not os.path.exists(target):
+        return {
+            "ok": False,
+            "exit_code": 1,
+            "error": f"{target} not found — install chrony first",
+        }
+
+    with open(target, "r", encoding="utf-8") as f:
+        existing = f.read()
+
+    user_text = _strip_chrony_managed_block(existing)
+    user_rtc = _user_has_rtcsync(user_text)
+    user_shm = _user_has_refclock_shm(user_text)
+    user_pps = _user_has_refclock_pps(user_text, pps_device)
+
+    block, skipped = _build_chrony_block(
+        ensure_rtcsync=raw_rtcsync,
+        ensure_pps_refclock=raw_pps,
+        pps_device=pps_device,
+        user_has_rtcsync=user_rtc,
+        user_has_refclock_shm=user_shm,
+        user_has_refclock_pps=user_pps,
+    )
+    if skipped:
+        for line in skipped:
+            emit("stdout", f"  skipping: {line}\n")
+    new_text, changed = _splice_chrony_block(existing, block)
+
+    if not changed:
+        emit("stdout", f"{target}: managed block already in desired state\n")
+        return {
+            "ok": True,
+            "exit_code": 0,
+            "path": target,
+            "changed": False,
+            "backup": None,
+            "ensure_rtcsync": raw_rtcsync,
+            "ensure_pps_refclock": raw_pps,
+            "pps_device": pps_device,
+            "skipped_directives": skipped,
+            "user_already_has": {
+                "rtcsync": user_rtc,
+                "refclock_shm_0": user_shm,
+                "refclock_pps": user_pps,
+            },
+        }
+
+    try:
+        result = _atomic_write_with_backup(target, new_text, emit)
+    except Exception as exc:
+        return {"ok": False, "exit_code": 1, "error": f"{type(exc).__name__}: {exc}"}
+
+    return {
+        "ok": True,
+        "exit_code": 0,
+        "path": target,
+        "changed": result["changed"],
+        "backup": result["backup"],
+        "ensure_rtcsync": raw_rtcsync,
+        "ensure_pps_refclock": raw_pps,
+        "pps_device": pps_device,
+        "skipped_directives": skipped,
+        "user_already_has": {
+            "rtcsync": user_rtc,
+            "refclock_shm_0": user_shm,
+            "refclock_pps": user_pps,
+        },
+    }
+
+
+# ---------------------------------------------------------------------------
+# config_txt_set_overlay — idempotently install a single dtoverlay line in
+# /boot/firmware/config.txt (or /boot/config.txt on older Pi OS).
+#
+# We accept ONE overlay per call so the action is easy to reason about
+# and the UI can show a per-overlay outcome. Re-running with identical
+# params no-ops; re-running with new params replaces the matching line.
+#
+# Params:
+#   overlay  (str, required)  — must be in _OVERLAY_ALLOWLIST.
+#   params   (str, optional)  — comma-separated key=value or token list,
+#                               restricted to the overlay's parameter
+#                               regex. Empty string is fine for overlays
+#                               that take no parameters.
+# ---------------------------------------------------------------------------
+
+# Each overlay we are willing to write maps to the regex its parameter
+# string must satisfy. Anything else is rejected before we touch the
+# filesystem. Add new overlays here only after a security review of
+# their accepted parameters.
+_OVERLAY_ALLOWLIST: Dict[str, re.Pattern] = {
+    # i2c-rtc: kept narrow to the chips and address forms Pi OS supports.
+    "i2c-rtc":     re.compile(
+        r"^(ds3231|rv3028|ds1307|pcf8523|pcf85063)"
+        r"(,addr=0x[0-9a-fA-F]{2})?$"
+    ),
+    # pps-gpio: only the gpiopin=N parameter, N in [0..27] (BCM range).
+    "pps-gpio":    re.compile(r"^gpiopin=([0-9]|1[0-9]|2[0-7])$"),
+    # disable-bt: takes no parameters.
+    "disable-bt":  re.compile(r"^$"),
+}
+
+
+def _config_txt_target() -> Optional[str]:
+    for candidate in ("/boot/firmware/config.txt", "/boot/config.txt"):
+        if os.path.exists(candidate):
+            return candidate
+    return None
+
+
+def _splice_overlay(existing: str, overlay: str, params_str: str) -> Tuple[str, bool, str, int]:
+    """Replace any ``dtoverlay=<overlay>...`` lines, deduplicating any
+    duplicates the user (or a previous hand-edit) may have left behind.
+
+    Behaviour:
+
+    * No matching line   → append a single new line. action="appended".
+    * One matching line, params match desired → unchanged. action="unchanged".
+    * One matching line, params differ        → replaced in place.
+                                                action="replaced".
+    * Multiple matching lines (any combination of correct and stale) →
+      keep the FIRST occurrence (so its position in the file is preserved
+      and any surrounding ``[pi5]`` / ``[all]`` filter still applies),
+      rewrite it to the desired params, and DELETE every subsequent
+      duplicate. action="deduped" — even if the kept line was already
+      correct, we count this as a change so the UI shows the recovery.
+
+    Returns ``(new_text, changed, action, duplicates_removed)``.
+    """
+    desired = f"dtoverlay={overlay}"
+    if params_str:
+        desired += f",{params_str}"
+
+    prefix = f"dtoverlay={overlay}"
+
+    def _is_match(stripped: str) -> bool:
+        # dtoverlay=<overlay> followed by either end-of-line, comma, or
+        # whitespace. We deliberately don't accept "dtoverlay = ..." with
+        # spaces around the '=' because Pi OS itself rejects that form;
+        # treating it as non-matching means the user's malformed line is
+        # left alone for them to fix rather than silently overwritten.
+        if not stripped.startswith(prefix):
+            return False
+        rest = stripped[len(prefix):]
+        return rest == "" or rest[0] in (",", " ", "\t")
+
+    # First pass: locate all matching lines so we know whether to dedupe.
+    lines = existing.splitlines(keepends=True)
+    match_indices: List[int] = []
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if _is_match(stripped):
+            match_indices.append(i)
+
+    if not match_indices:
+        sep = "" if existing.endswith("\n") or not existing else "\n"
+        return existing + sep + desired + "\n", True, "appended", 0
+
+    if len(match_indices) == 1:
+        idx = match_indices[0]
+        existing_line = lines[idx]
+        existing_stripped = existing_line.strip()
+        if existing_stripped == desired:
+            return existing, False, "unchanged", 0
+        term = "\n" if existing_line.endswith("\n") else ""
+        lines[idx] = desired + term
+        return "".join(lines), True, "replaced", 0
+
+    # Multiple matches → dedupe. Keep the first, drop the rest.
+    keep_idx = match_indices[0]
+    keep_line = lines[keep_idx]
+    term = "\n" if keep_line.endswith("\n") else ""
+    lines[keep_idx] = desired + term
+    # Remove duplicates from highest index down so earlier indices stay valid.
+    for idx in reversed(match_indices[1:]):
+        lines.pop(idx)
+    duplicates_removed = len(match_indices) - 1
+    return "".join(lines), True, "deduped", duplicates_removed
+
+
+def _cmd_config_txt_set_overlay(params: Dict[str, Any], emit: EmitFn) -> Dict[str, Any]:
+    overlay = params.get("overlay")
+    if not isinstance(overlay, str) or overlay not in _OVERLAY_ALLOWLIST:
+        return {
+            "ok": False,
+            "exit_code": 22,
+            "error": (
+                f"overlay must be one of: {sorted(_OVERLAY_ALLOWLIST.keys())}"
+            ),
+        }
+    params_str = params.get("params", "")
+    if not isinstance(params_str, str):
+        return {"ok": False, "exit_code": 22, "error": "params must be a string"}
+    params_str = params_str.strip().lstrip(",")
+    if len(params_str) > 128:
+        return {"ok": False, "exit_code": 22, "error": "params string too long"}
+    if not _OVERLAY_ALLOWLIST[overlay].match(params_str):
+        return {
+            "ok": False,
+            "exit_code": 22,
+            "error": f"params {params_str!r} do not match the {overlay} schema",
+        }
+
+    target = _config_txt_target()
+    if not target:
+        return {
+            "ok": False,
+            "exit_code": 1,
+            "error": "config.txt not found at /boot/firmware/config.txt or /boot/config.txt",
+        }
+
+    with open(target, "r", encoding="utf-8") as f:
+        existing = f.read()
+    new_text, changed, action, duplicates_removed = _splice_overlay(
+        existing, overlay, params_str
+    )
+
+    if not changed:
+        emit("stdout", f"{target}: dtoverlay={overlay}{(',' + params_str) if params_str else ''} already present\n")
+        return {
+            "ok": True,
+            "exit_code": 0,
+            "path": target,
+            "changed": False,
+            "backup": None,
+            "overlay": overlay,
+            "params": params_str,
+            "action": action,
+            "duplicates_removed": 0,
+            "requires_reboot": False,
+        }
+
+    if duplicates_removed:
+        emit(
+            "stdout",
+            f"{target}: removed {duplicates_removed} duplicate dtoverlay={overlay} line(s)\n",
+        )
+
+    try:
+        result = _atomic_write_with_backup(target, new_text, emit)
+    except Exception as exc:
+        return {"ok": False, "exit_code": 1, "error": f"{type(exc).__name__}: {exc}"}
+
+    return {
+        "ok": True,
+        "exit_code": 0,
+        "path": target,
+        "changed": result["changed"],
+        "backup": result["backup"],
+        "overlay": overlay,
+        "params": params_str,
+        "action": action,
+        "duplicates_removed": duplicates_removed,
+        "requires_reboot": True,
+    }
+
+
+# ---------------------------------------------------------------------------
+# systemctl_action — start / stop / restart / enable / disable / mask /
+# unmask, restricted to the units the GPS HAT setup actually touches.
+#
+# The unit allowlist is the security boundary. We never accept a unit
+# name from the caller that isn't in this set — even unit names that
+# *look* well-formed could be e.g. ``ssh.service`` (where stopping it
+# would lock an operator out remotely) or ``firewalld.service``
+# (where disabling it would silently expose the machine).
+#
+# Why mask/unmask is on the allowlist: the gpsd Debian package ships
+# a ``gpsd.socket`` socket-activation unit that overrides
+# ``START_DAEMON=true`` in /etc/default/gpsd. We documented earlier
+# that the only reliable way to keep gpsd running with ``-n`` is to
+# mask gpsd.socket, so the helper needs to be able to do that.
+#
+# Params:
+#   unit  (str, required)  — must be in _SYSTEMCTL_UNIT_ALLOWLIST
+#   verb  (str, required)  — must be in _SYSTEMCTL_VERB_ALLOWLIST
+#   now   (bool, optional, default False) — append --now (only valid
+#                                            with enable/disable/mask/
+#                                            unmask; rejected otherwise)
+# ---------------------------------------------------------------------------
+
+_SYSTEMCTL_UNIT_ALLOWLIST = frozenset({
+    "chrony.service",
+    "gpsd.service",
+    "gpsd.socket",
+})
+
+_SYSTEMCTL_VERB_ALLOWLIST = frozenset({
+    "start", "stop", "restart",
+    "enable", "disable",
+    "mask", "unmask",
+})
+
+# Verbs where --now is meaningful. systemctl will reject "--now" on
+# start/stop/restart anyway, but we sanity-check it here so the user
+# gets a helpful error instead of an opaque systemctl exit.
+_SYSTEMCTL_VERBS_ACCEPTING_NOW = frozenset({
+    "enable", "disable", "mask", "unmask",
+})
+
+
+def _cmd_systemctl_action(params: Dict[str, Any], emit: EmitFn) -> Dict[str, Any]:
+    unit = params.get("unit")
+    if not isinstance(unit, str) or unit not in _SYSTEMCTL_UNIT_ALLOWLIST:
+        return {
+            "ok": False,
+            "exit_code": 22,
+            "error": (
+                f"unit must be one of: {sorted(_SYSTEMCTL_UNIT_ALLOWLIST)}"
+            ),
+        }
+    verb = params.get("verb")
+    if not isinstance(verb, str) or verb not in _SYSTEMCTL_VERB_ALLOWLIST:
+        return {
+            "ok": False,
+            "exit_code": 22,
+            "error": (
+                f"verb must be one of: {sorted(_SYSTEMCTL_VERB_ALLOWLIST)}"
+            ),
+        }
+    raw_now = params.get("now", False)
+    if not isinstance(raw_now, bool):
+        return {
+            "ok": False,
+            "exit_code": 22,
+            "error": "now must be a boolean",
+        }
+    if raw_now and verb not in _SYSTEMCTL_VERBS_ACCEPTING_NOW:
+        return {
+            "ok": False,
+            "exit_code": 22,
+            "error": (
+                f"now=true is only valid with verbs "
+                f"{sorted(_SYSTEMCTL_VERBS_ACCEPTING_NOW)}; got verb={verb!r}"
+            ),
+        }
+
+    systemctl = _which_required("systemctl")
+    if not systemctl:
+        return {
+            "ok": False,
+            "exit_code": 127,
+            "error": "systemctl not found — not a systemd-managed system?",
+        }
+
+    # Build argv as a list — caller-derived strings only land here after
+    # surviving the two allowlists above, so we know they're safe.
+    argv: List[str] = [systemctl]
+    if raw_now:
+        argv.append("--now")
+    argv.extend([verb, "--", unit])
+
+    rc, out, err = _run_streaming(argv, emit, timeout=30.0, label=f"systemctl {verb}")
+    if rc != 0:
+        return {
+            "ok": False,
+            "exit_code": rc,
+            "error": (
+                f"systemctl {verb} {unit} failed (exit {rc}). "
+                + (err.strip()[:400] if err.strip() else "")
+            ),
+            "unit": unit,
+            "verb": verb,
+            "now": raw_now,
+        }
+
+    # Always re-query is-active and is-enabled so the UI knows the new
+    # state without having to call back. Failures here aren't fatal —
+    # the verb already succeeded.
+    state: Dict[str, Optional[str]] = {"active": None, "enabled": None}
+    for attr in ("is-active", "is-enabled"):
+        try:
+            r = subprocess.run(
+                [systemctl, attr, "--", unit],
+                capture_output=True, text=True, timeout=4.0, check=False,
+            )
+            state[attr.split("-", 1)[1]] = (r.stdout or "").strip() or None
+        except Exception as exc:
+            state[attr.split("-", 1)[1]] = f"query failed: {exc}"
+
+    return {
+        "ok": True,
+        "exit_code": 0,
+        "unit": unit,
+        "verb": verb,
+        "now": raw_now,
+        "state": state,
+    }
+
+
+COMMANDS: Dict[str, CommandFn] = {
+    "ping": _cmd_ping,
+    "seed_rtc": _cmd_seed_rtc,
+    "apt_install": _cmd_apt_install,
+    "gpsd_config_write": _cmd_gpsd_config_write,
+    "chrony_config_ensure": _cmd_chrony_config_ensure,
+    "config_txt_set_overlay": _cmd_config_txt_set_overlay,
+    "systemctl_action": _cmd_systemctl_action,
+}
+
+
+# ---------------------------------------------------------------------------
+# Request validation
+# ---------------------------------------------------------------------------
+
+class RequestError(ValueError):
+    """Raised for any malformed or out-of-policy request."""
+
+
+def _validate_request(raw: bytes) -> Dict[str, Any]:
+    """Parse and shallow-validate a request line. Returns the request dict."""
+    if not raw:
+        raise RequestError("empty request")
+    if len(raw) > MAX_REQUEST_BYTES:
+        raise RequestError(f"request exceeds {MAX_REQUEST_BYTES} bytes")
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise RequestError(f"request is not valid UTF-8: {exc}") from exc
+    try:
+        obj = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise RequestError(f"request is not valid JSON: {exc}") from exc
+    if not isinstance(obj, dict):
+        raise RequestError("request must be a JSON object")
+    action = obj.get("action")
+    if not isinstance(action, str) or not action:
+        raise RequestError("missing action")
+    if action not in COMMANDS:
+        raise RequestError(f"unknown action: {action}")
+    params = obj.get("params", {})
+    if not isinstance(params, dict):
+        raise RequestError("params must be an object")
+    _check_depth(params, MAX_PARAM_DEPTH)
+    rid = obj.get("request_id")
+    if rid is not None and not isinstance(rid, str):
+        raise RequestError("request_id must be a string if present")
+    return {
+        "action": action,
+        "params": params,
+        "request_id": rid or str(uuid.uuid4()),
+    }
+
+
+def _check_depth(obj: Any, remaining: int) -> None:
+    if remaining < 0:
+        raise RequestError("params nesting too deep")
+    if isinstance(obj, dict):
+        for v in obj.values():
+            _check_depth(v, remaining - 1)
+    elif isinstance(obj, list):
+        for v in obj:
+            _check_depth(v, remaining - 1)
+
+
+# ---------------------------------------------------------------------------
+# Socket plumbing
+# ---------------------------------------------------------------------------
+
+class _ConnectionHandler(socketserver.BaseRequestHandler):
+    """Handle one client connection: read a single request line, dispatch,
+    stream events back, close the socket."""
+
+    server: "_HelperServer"
+
+    def handle(self) -> None:
+        sock: socket.socket = self.request
+        sock.settimeout(DEFAULT_REQUEST_TIMEOUT_S)
+        peer_creds = _get_peer_creds(sock)
+        peer_label = f"pid={peer_creds[0]} uid={peer_creds[1]} gid={peer_creds[2]}" if peer_creds else "unknown"
+
+        try:
+            raw = _read_line(sock, MAX_REQUEST_BYTES)
+        except Exception as exc:
+            LOG.warning("[%s] failed to read request: %s", peer_label, exc)
+            _send_event(sock, {"type": "result", "ok": False, "exit_code": 1, "error": str(exc)})
+            return
+
+        try:
+            req = _validate_request(raw)
+        except RequestError as exc:
+            LOG.warning("[%s] rejected request: %s", peer_label, exc)
+            _send_event(sock, {"type": "result", "ok": False, "exit_code": 22, "error": str(exc)})
+            return
+
+        rid = req["request_id"]
+        action = req["action"]
+        LOG.info("[%s] action=%s request_id=%s", peer_label, action, rid)
+
+        def emit(channel: str, data: str) -> None:
+            if channel not in ("stdout", "stderr"):
+                channel = "stdout"
+            try:
+                _send_event(sock, {"type": channel, "data": data, "request_id": rid})
+            except Exception as exc:
+                LOG.debug("emit failed: %s", exc)
+
+        handler = COMMANDS[action]
+        try:
+            result = handler(req["params"], emit)
+        except Exception as exc:
+            LOG.exception("[%s] action=%s raised: %s", peer_label, action, exc)
+            result = {
+                "ok": False,
+                "exit_code": 1,
+                "error": f"{type(exc).__name__}: {exc}",
+                "traceback": traceback.format_exc(limit=3),
+            }
+
+        result.setdefault("ok", False)
+        result.setdefault("exit_code", 1)
+        result["type"] = "result"
+        result["request_id"] = rid
+        _send_event(sock, result)
+
+
+class _HelperServer(socketserver.ThreadingUnixStreamServer):
+    """Threaded Unix-socket server. Each connection is a one-shot
+    request/response so threading is just there to keep one client from
+    blocking another."""
+
+    daemon_threads = True
+    allow_reuse_address = True
+
+
+def _get_peer_creds(sock: socket.socket) -> Optional[tuple]:
+    """Return ``(pid, uid, gid)`` of the connected peer via SO_PEERCRED.
+
+    Used purely for log enrichment — access control is enforced by the
+    socket's filesystem permissions, not by trusting the peer's claimed
+    identity.
+    """
+    try:
+        SO_PEERCRED = 17  # Linux constant; not exposed on all stdlibs
+        creds = sock.getsockopt(socket.SOL_SOCKET, SO_PEERCRED, 12)
+        import struct
+        pid, uid, gid = struct.unpack("=III", creds)
+        return pid, uid, gid
+    except Exception:
+        return None
+
+
+def _read_line(sock: socket.socket, max_bytes: int) -> bytes:
+    """Read until newline or EOF, with a hard byte cap."""
+    chunks = []
+    received = 0
+    while True:
+        chunk = sock.recv(4096)
+        if not chunk:
+            break
+        chunks.append(chunk)
+        received += len(chunk)
+        if received > max_bytes:
+            raise RequestError(f"request exceeds {max_bytes} bytes")
+        if b"\n" in chunk:
+            break
+    data = b"".join(chunks)
+    nl = data.find(b"\n")
+    if nl >= 0:
+        data = data[:nl]
+    return data.strip()
+
+
+def _send_event(sock: socket.socket, event: Dict[str, Any]) -> None:
+    line = (json.dumps(event, ensure_ascii=False) + "\n").encode("utf-8")
+    try:
+        sock.sendall(line)
+    except (BrokenPipeError, ConnectionResetError):
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Daemon entry point
+# ---------------------------------------------------------------------------
+
+def _ensure_socket_dir(path: str) -> None:
+    parent = os.path.dirname(path) or "/"
+    if parent and not os.path.isdir(parent):
+        os.makedirs(parent, mode=0o755, exist_ok=True)
+
+
+def _set_socket_perms(path: str, group: str, mode: int) -> None:
+    """Chgrp + chmod the socket so only ``group`` members can connect."""
+    try:
+        gid = grp.getgrnam(group).gr_gid
+    except KeyError:
+        LOG.warning("group %r not found; leaving socket group as default", group)
+        gid = -1
+    try:
+        os.chown(path, 0, gid)
+    except PermissionError as exc:
+        LOG.warning("failed to chown %s to root:%s: %s", path, group, exc)
+    try:
+        os.chmod(path, mode)
+    except PermissionError as exc:
+        LOG.warning("failed to chmod %s to %#o: %s", path, mode, exc)
+    st = os.stat(path)
+    if not stat.S_ISSOCK(st.st_mode):
+        raise RuntimeError(f"{path} is not a socket")
+
+
+def _setup_logging(verbose: bool) -> None:
+    level = logging.DEBUG if verbose else logging.INFO
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        stream=sys.stderr,
+    )
+    # Also log to syslog when available so audit events survive a restart.
+    try:
+        handler = logging.handlers.SysLogHandler(address="/dev/log")
+        handler.setFormatter(logging.Formatter(
+            "eas-station-hwsetup[%(process)d]: %(levelname)s %(message)s"
+        ))
+        LOG.addHandler(handler)
+    except Exception as exc:
+        LOG.debug("syslog handler unavailable: %s", exc)
+
+
+def main(argv: Optional[list] = None) -> int:
+    parser = argparse.ArgumentParser(
+        prog="eas-station-hwsetup",
+        description="Privileged GPS HAT setup helper for EAS Station.",
+    )
+    parser.add_argument("--socket", default=DEFAULT_SOCKET_PATH,
+                        help=f"Unix socket path (default: {DEFAULT_SOCKET_PATH})")
+    parser.add_argument("--group", default=DEFAULT_OWNER_GROUP,
+                        help=f"Group allowed to connect (default: {DEFAULT_OWNER_GROUP})")
+    parser.add_argument("--mode", default="0660",
+                        help="Octal socket mode (default: 0660)")
+    parser.add_argument("--verbose", "-v", action="store_true")
+    args = parser.parse_args(argv)
+
+    _setup_logging(args.verbose)
+
+    if os.geteuid() != 0:
+        LOG.error("must run as root (effective uid=%d)", os.geteuid())
+        return 1
+
+    _ensure_socket_dir(args.socket)
+    # Remove a stale socket from a previous crash
+    if os.path.exists(args.socket):
+        try:
+            os.unlink(args.socket)
+        except OSError as exc:
+            LOG.error("failed to remove stale socket %s: %s", args.socket, exc)
+            return 1
+
+    server = _HelperServer(args.socket, _ConnectionHandler)
+    _set_socket_perms(args.socket, args.group, int(args.mode, 8))
+    LOG.info("listening on %s as root:%s mode=%s", args.socket, args.group, args.mode)
+
+    try:
+        server.serve_forever(poll_interval=1.0)
+    except KeyboardInterrupt:
+        LOG.info("shutdown requested")
+    finally:
+        server.server_close()
+        try:
+            os.unlink(args.socket)
+        except OSError:
+            pass
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

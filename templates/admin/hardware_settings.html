@@ -934,11 +934,45 @@
                                 needs — kernel overlays, packages, services, and config files —
                                 and tells you exactly what to fix.
                             </p>
+                            <div id="gps-hat-helper-status" class="small text-muted mb-2"></div>
                             <div id="gps-hat-actions" class="mb-3"></div>
                             <details>
                                 <summary class="text-muted small">Detected state</summary>
                                 <div id="gps-hat-detail" class="small mt-2"></div>
                             </details>
+                        </div>
+                    </div>
+
+                    <!-- ──────────────────────────────────────────────────
+                         Modal that hosts privileged-helper output for
+                         every action button. Reused by all action runs;
+                         only the title and body content change.
+                         ────────────────────────────────────────────────── -->
+                    <div class="modal fade" id="gps-hat-action-modal" tabindex="-1" aria-hidden="true">
+                        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">
+                                        <i class="fas fa-bolt me-1"></i>
+                                        <span id="gps-hat-modal-title">Run action</span>
+                                    </h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div id="gps-hat-modal-summary" class="mb-2"></div>
+                                    <div id="gps-hat-modal-extra-params" class="mb-2"></div>
+                                    <pre id="gps-hat-modal-output"
+                                         class="small bg-dark text-light p-2 rounded"
+                                         style="white-space:pre-wrap; max-height:400px; min-height:120px; overflow-y:auto;"></pre>
+                                    <div id="gps-hat-modal-status" class="small mt-2 text-muted"></div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary"
+                                            data-bs-dismiss="modal">Close</button>
+                                    <button type="button" class="btn btn-primary"
+                                            id="gps-hat-modal-run-btn">Run</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -2118,11 +2152,25 @@ document.addEventListener('DOMContentLoaded', function() {
 
 /* ── GPS HAT diagnostic panel ────────────────────────────────────────
    Populates the "GPS HAT Setup Status" card by polling
-   /admin/hardware/gps-hat/diagnostics. Read-only — every action shown
-   to the user is just a copy-paste shell command for now. Tier 2 of
-   this work will add buttons that execute via a privileged helper.
+   /admin/hardware/gps-hat/diagnostics. When the privileged helper is
+   reachable, each action is rendered with a "Run" button that POSTs
+   to the corresponding /admin/hardware/gps-hat/* endpoint and shows
+   the streamed (collected) helper output in a modal. Otherwise the
+   action stays in copy-paste mode.
    ──────────────────────────────────────────────────────────────────── */
 (function () {
+    let _helperAvailable = false;
+    let _activeAction = null;     // currently displayed in the modal
+    let _runInFlight = false;
+    let _bsModalRef = null;       // bootstrap.Modal instance (lazy)
+    function getModal() {
+        if (_bsModalRef) return _bsModalRef;
+        const el = document.getElementById('gps-hat-action-modal');
+        if (!el || !window.bootstrap || !window.bootstrap.Modal) return null;
+        _bsModalRef = new window.bootstrap.Modal(el);
+        return _bsModalRef;
+    }
+
     var BADGE_CLASS = {
         ok:      'bg-success',
         info:    'bg-info text-dark',
@@ -2163,7 +2211,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 + 'Every prerequisite is in place. The GPS HAT, RTC, PPS, gpsd, and chrony all look healthy.'
                 + '</div>';
         }
-        return actions.map(function (a) {
+        return actions.map(function (a, idx) {
             var sev = a.severity || 'info';
             var alertCls = SEVERITY_CLASS[sev] || 'alert-secondary';
             var icon = SEVERITY_ICON[sev] || 'fa-circle-info';
@@ -2175,6 +2223,23 @@ document.addEventListener('DOMContentLoaded', function() {
             var rebootHint = a.requires_reboot
                 ? '<div class="small text-muted mt-1"><i class="fas fa-power-off me-1"></i>Requires reboot to take effect.</div>'
                 : '';
+            // Action button (Tier 2): rendered only when the helper is
+            // available AND this action carries a runner spec. Otherwise
+            // we fall back to the copy-paste command box.
+            var runBtn = '';
+            if (_helperAvailable && a.runner && a.runner.endpoint) {
+                var btnLabel = a.runner.button_label || 'Run';
+                runBtn = '<button type="button" '
+                    +     'class="btn btn-sm btn-primary mt-2 gps-hat-run-btn" '
+                    +     'data-action-idx="' + idx + '">'
+                    +     '<i class="fas fa-play me-1"></i>' + escapeHtml(btnLabel)
+                    +   '</button>';
+            }
+            // Suppress the copy-paste box when a runnable button is present
+            // and the helper is up — it's just visual noise once the user
+            // can click. When the helper isn't available we still show the
+            // command so the user has a path forward.
+            var showCommand = !!a.command && !(runBtn && _helperAvailable);
             return '<div class="alert ' + alertCls + ' py-2 mb-2">'
                 +   '<div class="d-flex align-items-start">'
                 +     '<i class="fas ' + icon + ' me-2 mt-1"></i>'
@@ -2182,11 +2247,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 +       '<div class="fw-semibold">' + escapeHtml(a.label || a.id) + '</div>'
                 +       (a.reason ? '<div class="small">' + escapeHtml(a.reason) + '</div>' : '')
                 +       preconditions
-                +       (a.command
+                +       (showCommand
                             ? '<pre class="mt-2 mb-0 small bg-dark text-light p-2 rounded" style="white-space:pre-wrap;"><code>'
                                 + escapeHtml(a.command) + '</code></pre>'
                             : '')
                 +       rebootHint
+                +       runBtn
                 +     '</div>'
                 +   '</div>'
                 + '</div>';
@@ -2268,10 +2334,13 @@ document.addEventListener('DOMContentLoaded', function() {
             + '</div>';
     }
 
+    let _lastActions = [];
+
     function refresh(button) {
         var badge   = document.getElementById('gps-hat-status-badge');
         var actions = document.getElementById('gps-hat-actions');
         var detail  = document.getElementById('gps-hat-detail');
+        var helperRow = document.getElementById('gps-hat-helper-status');
         if (!badge || !actions || !detail) return;
         badge.className = 'badge bg-secondary ms-2';
         badge.textContent = 'Checking…';
@@ -2289,15 +2358,27 @@ document.addEventListener('DOMContentLoaded', function() {
                     throw new Error((data && data.error) || 'unknown error');
                 }
                 var report = data.report;
+                _helperAvailable = !!(report.helper && report.helper.available);
+                _lastActions = report.actions || [];
+                if (helperRow) {
+                    helperRow.innerHTML = _helperAvailable
+                        ? '<i class="fas fa-plug text-success me-1"></i>'
+                            + 'Privileged helper is reachable — actions can be run from this page.'
+                        : '<i class="fas fa-plug text-warning me-1"></i>'
+                            + 'Privileged helper not reachable — install the '
+                            + '<code>eas-station-hwsetup</code> service to enable one-click fixes. '
+                            + 'Until then the commands below can be copied into a terminal.';
+                }
                 var status = report.status || 'info';
                 badge.className = 'badge ms-2 ' + (BADGE_CLASS[status] || 'bg-secondary');
                 badge.textContent = BADGE_TEXT[status] || status;
-                actions.innerHTML = renderActions(report.actions || []);
+                actions.innerHTML = renderActions(_lastActions);
                 detail.innerHTML = renderDetail(report);
             })
             .catch(function (err) {
                 badge.className = 'badge bg-danger ms-2';
                 badge.textContent = 'Probe failed';
+                if (helperRow) helperRow.innerHTML = '';
                 actions.innerHTML = '<div class="alert alert-danger py-2 mb-0 small">'
                     + '<i class="fas fa-circle-xmark me-1"></i> '
                     + 'Diagnostic probe failed: ' + escapeHtml(String(err))
@@ -2312,12 +2393,228 @@ document.addEventListener('DOMContentLoaded', function() {
             });
     }
 
+    /* ── Modal-driven action runner ──────────────────────────────────
+       Click handler for the "Run" buttons rendered in renderActions().
+       Opens the shared modal, populates it with the action's summary
+       and any extra-param controls, lets the operator confirm, and
+       POSTs to action.runner.endpoint. The result body is appended to
+       a <pre> in the modal so the operator can see what happened.
+       After a successful run we re-poll the diagnostics so the panel
+       reflects the new state.
+       ──────────────────────────────────────────────────────────────── */
+    function appendOutput(text) {
+        var pre = document.getElementById('gps-hat-modal-output');
+        if (!pre) return;
+        pre.textContent += text;
+        pre.scrollTop = pre.scrollHeight;
+    }
+
+    function setModalStatus(html, cls) {
+        var status = document.getElementById('gps-hat-modal-status');
+        if (!status) return;
+        status.className = 'small mt-2 ' + (cls || 'text-muted');
+        status.innerHTML = html;
+    }
+
+    function openActionModal(action) {
+        var modal = getModal();
+        if (!modal) {
+            // Bootstrap not loaded; fall back to confirm() + run inline.
+            return runActionInline(action);
+        }
+        _activeAction = action;
+        document.getElementById('gps-hat-modal-title').textContent =
+            action.runner.button_label || ('Run ' + action.id);
+        var summary = document.getElementById('gps-hat-modal-summary');
+        if (summary) {
+            summary.innerHTML = '<div class="fw-semibold">' + escapeHtml(action.label || action.id) + '</div>'
+                + (action.reason ? '<div class="small text-muted">' + escapeHtml(action.reason) + '</div>' : '')
+                + (action.runner.confirm
+                    ? '<div class="small mt-2 fst-italic">' + escapeHtml(action.runner.confirm) + '</div>'
+                    : '')
+                + (action.runner.post_action
+                    ? '<div class="small mt-2 text-muted">'
+                        + '<i class="fas fa-link me-1"></i>'
+                        + 'Will also ' + escapeHtml(action.runner.post_action.label || 'run a follow-up') + ' on success.'
+                        + '</div>'
+                    : '');
+        }
+        var extraWrap = document.getElementById('gps-hat-modal-extra-params');
+        extraWrap.innerHTML = '';
+        var extras = action.runner.extra_params || [];
+        extras.forEach(function (p) {
+            if (p.type === 'boolean') {
+                extraWrap.innerHTML += '<div class="form-check small">'
+                    + '<input class="form-check-input gps-hat-modal-extra" '
+                    +   'type="checkbox" '
+                    +   'data-extra-name="' + escapeHtml(p.name) + '" '
+                    +   'id="gps-hat-modal-extra-' + escapeHtml(p.name) + '" '
+                    +   (p.default ? 'checked' : '') + '>'
+                    + '<label class="form-check-label" '
+                    +   'for="gps-hat-modal-extra-' + escapeHtml(p.name) + '">'
+                    +   escapeHtml(p.label || p.name)
+                    + '</label>'
+                    + '</div>';
+            }
+        });
+        document.getElementById('gps-hat-modal-output').textContent = '';
+        setModalStatus('Ready to run. Press the Run button below.', 'text-muted');
+        var runBtn = document.getElementById('gps-hat-modal-run-btn');
+        if (runBtn) {
+            runBtn.disabled = false;
+            runBtn.innerHTML = '<i class="fas fa-play me-1"></i>'
+                + escapeHtml(action.runner.button_label || 'Run');
+        }
+        modal.show();
+    }
+
+    function gatherExtraParams() {
+        var out = {};
+        var inputs = document.querySelectorAll('.gps-hat-modal-extra');
+        inputs.forEach(function (input) {
+            var name = input.getAttribute('data-extra-name');
+            if (!name) return;
+            if (input.type === 'checkbox') {
+                out[name] = input.checked;
+            } else {
+                out[name] = input.value;
+            }
+        });
+        return out;
+    }
+
+    function runActiveAction() {
+        if (_runInFlight || !_activeAction) return;
+        var action = _activeAction;
+        var runner = action.runner;
+        if (!runner || !runner.endpoint) return;
+        var body = Object.assign({}, runner.body || {}, gatherExtraParams());
+        var runBtn = document.getElementById('gps-hat-modal-run-btn');
+        if (runBtn) {
+            runBtn.disabled = true;
+            runBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Running…';
+        }
+        _runInFlight = true;
+        appendOutput('POST ' + runner.endpoint + '\n');
+        appendOutput('body: ' + JSON.stringify(body, null, 2) + '\n\n');
+        setModalStatus('Calling helper…', 'text-muted');
+        fetch(runner.endpoint, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        })
+            .then(function (resp) {
+                return resp.json().then(function (json) {
+                    return { httpStatus: resp.status, body: json };
+                });
+            })
+            .then(function (result) {
+                var json = result.body || {};
+                if (json.stdout)  appendOutput('--- stdout ---\n' + json.stdout);
+                if (json.stderr)  appendOutput('--- stderr ---\n' + json.stderr);
+                if (!json.stdout && !json.stderr) {
+                    appendOutput('(no streamed output)\n');
+                }
+                appendOutput('\n--- result ---\n' + JSON.stringify(json, null, 2) + '\n');
+                if (json.ok) {
+                    setModalStatus(
+                        '<i class="fas fa-check-circle text-success me-1"></i>'
+                        + 'Action completed.'
+                        + (json.requires_reboot ? ' <strong>Reboot required for the change to take effect.</strong>' : '')
+                        + (json.duplicates_removed ? ' Removed ' + json.duplicates_removed + ' duplicate line(s).' : '')
+                        + ((json.skipped_directives && json.skipped_directives.length)
+                            ? ' Skipped: ' + json.skipped_directives.map(escapeHtml).join('; ') + '.'
+                            : ''),
+                        'text-success'
+                    );
+                    if (runner.post_action && runner.post_action.endpoint) {
+                        appendOutput('\n--- post-action: ' + (runner.post_action.label || 'follow-up') + ' ---\n');
+                        return fetch(runner.post_action.endpoint, {
+                            method: 'POST',
+                            credentials: 'same-origin',
+                            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+                            body: JSON.stringify(runner.post_action.body || {}),
+                        }).then(function (r) { return r.json(); }).then(function (postJson) {
+                            if (postJson.stdout) appendOutput(postJson.stdout);
+                            if (postJson.stderr) appendOutput(postJson.stderr);
+                            appendOutput(JSON.stringify(postJson, null, 2) + '\n');
+                            if (!postJson.ok) {
+                                setModalStatus(
+                                    '<i class="fas fa-exclamation-triangle text-warning me-1"></i>'
+                                    + 'Main action succeeded but follow-up '
+                                    + escapeHtml(runner.post_action.label || '') + ' failed.',
+                                    'text-warning'
+                                );
+                            }
+                        });
+                    }
+                } else {
+                    setModalStatus(
+                        '<i class="fas fa-circle-xmark text-danger me-1"></i>'
+                        + 'Action failed: ' + escapeHtml(json.error || ('HTTP ' + result.httpStatus)),
+                        'text-danger'
+                    );
+                }
+            })
+            .catch(function (err) {
+                appendOutput('\n--- request error ---\n' + String(err) + '\n');
+                setModalStatus(
+                    '<i class="fas fa-circle-xmark text-danger me-1"></i>'
+                    + 'Request error: ' + escapeHtml(String(err)),
+                    'text-danger'
+                );
+            })
+            .finally(function () {
+                _runInFlight = false;
+                if (runBtn) {
+                    runBtn.disabled = false;
+                    runBtn.innerHTML = '<i class="fas fa-play me-1"></i>Run again';
+                }
+                // Re-poll diagnostics so the panel updates without a full
+                // page reload. Small delay so the user can read the modal.
+                setTimeout(function () { refresh(null); }, 500);
+            });
+    }
+
+    function runActionInline(action) {
+        // Bootstrap-modal-less fallback. Should only fire on environments
+        // where bootstrap.bundle.js failed to load.
+        if (!action.runner || !action.runner.endpoint) return;
+        if (action.runner.confirm && !window.confirm(action.runner.confirm)) return;
+        _activeAction = action;
+        runActiveAction();
+    }
+
+    function findActionByIndex(idx) {
+        var n = parseInt(idx, 10);
+        if (isNaN(n) || n < 0 || n >= _lastActions.length) return null;
+        return _lastActions[n];
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
         var card = document.getElementById('gps-hat-diag-card');
         if (!card) return;
         var btn = document.getElementById('gps-hat-refresh-btn');
         if (btn) {
             btn.addEventListener('click', function () { refresh(btn); });
+        }
+        // Delegated click handler for per-action Run buttons rendered
+        // inside the actions container.
+        var actionsHost = document.getElementById('gps-hat-actions');
+        if (actionsHost) {
+            actionsHost.addEventListener('click', function (ev) {
+                var target = ev.target.closest('.gps-hat-run-btn');
+                if (!target) return;
+                ev.preventDefault();
+                var action = findActionByIndex(target.getAttribute('data-action-idx'));
+                if (action) openActionModal(action);
+            });
+        }
+        // Modal "Run" button handler.
+        var modalRunBtn = document.getElementById('gps-hat-modal-run-btn');
+        if (modalRunBtn) {
+            modalRunBtn.addEventListener('click', function () { runActiveAction(); });
         }
         refresh(null);
     });
