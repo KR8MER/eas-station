@@ -818,15 +818,33 @@ def _cmd_gpsd_config_write(params: Dict[str, Any], emit: EmitFn) -> Dict[str, An
         }
 
     target = "/etc/default/gpsd"
+    # Different Debian/Ubuntu generations use different variable names in
+    # the gpsd.service unit's ExecStart line:
+    #   - older units reference  $OPTIONS / $DEVICES
+    #   - newer units reference  $GPSD_OPTIONS / $GPSD_DEVICES
+    # The "wrong" form silently leaves the variable unset (systemd just
+    # logs "Referenced but unset environment variable evaluates to an
+    # empty string: OPTIONS"), which on gpsd 3.25 means no -n, no -s, no
+    # -b — and a confused operator wondering why TPV events never arrive.
+    # Cheapest possible fix: write both names. Whichever the unit
+    # references picks up the value; the other is harmless surplus.
+    devices_str = " ".join(devices)
+    options_str = " ".join(opt_tokens)
     body = (
-        "# Default settings for the gpsd init script and the hotplug wrapper.\n"
-        "# Managed by eas-station-hwsetup. Hand edits will be preserved in\n"
-        "# the most recent .bak file in this directory.\n"
+        "# Default settings for gpsd. Managed by eas-station-hwsetup.\n"
+        "# Hand edits will be preserved in the most recent .bak file in\n"
+        "# this directory; re-running this action restores the form below.\n"
         "\n"
         f"START_DAEMON=\"{'true' if raw_start else 'false'}\"\n"
         f"USBAUTO=\"{'true' if raw_usb else 'false'}\"\n"
-        f"DEVICES=\"{' '.join(devices)}\"\n"
-        f"GPSD_OPTIONS=\"{' '.join(opt_tokens)}\"\n"
+        # New-style names (gpsd ≥ 3.21 on Bookworm and most Ubuntu).
+        f"DEVICES=\"{devices_str}\"\n"
+        f"GPSD_OPTIONS=\"{options_str}\"\n"
+        "# Legacy names — needed for older systemd units (Trixie's gpsd\n"
+        "# 3.25-5 and older Bullseye units reference $OPTIONS, not\n"
+        "# $GPSD_OPTIONS). Keeping both makes us unit-file agnostic.\n"
+        f"OPTIONS=\"{options_str}\"\n"
+        f"GPSD_DEVICES=\"{devices_str}\"\n"
     )
 
     try:
