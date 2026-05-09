@@ -178,6 +178,14 @@ class ScreenManager:
         self._active_alert_cache: List[Dict[str, Any]] = []
         self._active_alert_cache_timestamp = datetime.min
         self._active_alert_cache_ttl = timedelta(seconds=1)
+        # _update_rotations runs three SQLAlchemy queries; without this
+        # throttle it fires on every _run_loop tick (60 Hz = 180 queries/s),
+        # which manifests as a slow heap leak in the long-lived hardware
+        # service (each query allocates Connection / RowProxy / ORM
+        # objects that the identity map only releases on session close).
+        # Rotation configs change infrequently — once per second is plenty.
+        self._last_rotation_refresh_mono: float = 0.0
+        self._rotation_refresh_interval_s: float = 1.0
 
     def init_app(self, app: Flask):
         """Initialize with Flask app context.
@@ -239,7 +247,16 @@ class ScreenManager:
                 time.sleep(sleep_time)
 
     def _update_rotations(self):
-        """Load active screen rotations from database."""
+        """Load active screen rotations from database.
+
+        Throttled to ``self._rotation_refresh_interval_s`` (1 s) — see
+        ``_last_rotation_refresh_mono`` in __init__ for rationale.
+        """
+        now_mono = time.monotonic()
+        if now_mono - self._last_rotation_refresh_mono < self._rotation_refresh_interval_s:
+            return
+        self._last_rotation_refresh_mono = now_mono
+
         try:
             from app_core.models import ScreenRotation
 
