@@ -419,8 +419,12 @@ def _probe_chrony_runtime() -> Dict[str, Any]:
         "tool_present": _which("chronyc") is not None,
         "tracking_ok": False,
         "selected_source": None,
+        "stratum": None,
         "leap_status": None,
+        "system_time_offset_seconds": None,
         "last_offset_seconds": None,
+        "root_dispersion_seconds": None,
+        "sources": [],
     }
     if not out["tool_present"]:
         return out
@@ -429,16 +433,67 @@ def _probe_chrony_runtime() -> Dict[str, Any]:
         return out
     out["tracking_ok"] = True
     parts = [p.strip() for p in stdout.strip().split(",")]
-    # Format: ref_id_hex,ref_id_name,stratum,ref_time,system_time_offset, ...
+    # chronyc -c tracking format (chrony ≥4.x):
+    #   0:ref_id_hex 1:ref_id_name 2:stratum 3:ref_time
+    #   4:system_time_offset 5:last_offset 6:rms_offset 7:frequency
+    #   8:residual_freq 9:skew 10:root_delay 11:root_dispersion
+    #   12:update_interval 13:leap_status
     if len(parts) >= 2:
         out["selected_source"] = parts[1] or None
+    if len(parts) >= 3:
+        try:
+            out["stratum"] = int(parts[2])
+        except ValueError:
+            pass
     if len(parts) >= 5:
         try:
+            out["system_time_offset_seconds"] = float(parts[4])
+            # Keep last_offset_seconds for backwards compatibility — older
+            # callers expected this name. New callers should prefer the
+            # named field above.
             out["last_offset_seconds"] = float(parts[4])
+        except ValueError:
+            pass
+    if len(parts) >= 12:
+        try:
+            out["root_dispersion_seconds"] = float(parts[11])
         except ValueError:
             pass
     if len(parts) >= 14:
         out["leap_status"] = parts[13] or None
+
+    # Source table: useful for surfacing GPS / PPS Reach=0 (the classic
+    # port-contention symptom).
+    rc2, stdout2, _ = _run(["chronyc", "-c", "sources"], timeout=2.0)
+    if rc2 == 0 and stdout2.strip():
+        sources: List[Dict[str, Any]] = []
+        # CSV format (chrony ≥4.x):
+        #   M,S,Name,Stratum,Poll,Reach,LastRx,LastSample,...
+        for raw in stdout2.strip().splitlines():
+            cols = [c.strip() for c in raw.split(",")]
+            if len(cols) < 6:
+                continue
+            try:
+                reach_octal = int(cols[5])
+            except ValueError:
+                reach_octal = None
+            sources.append({
+                "mode": cols[0],
+                "state": cols[1],
+                "name": cols[2],
+                "stratum": int(cols[3]) if cols[3].isdigit() else None,
+                "reach": reach_octal,
+                "last_rx_seconds": int(cols[6]) if len(cols) > 6 and cols[6].lstrip("-").isdigit() else None,
+            })
+        out["sources"] = sources
+        # Convenient flag: any refclock (M="#") that's stuck at reach=0
+        # almost always means the source isn't actually getting samples
+        # — for this codebase that's the gpsd-can't-read-serial-port
+        # symptom, called out in the action recommender below.
+        out["refclocks_unreached"] = [
+            s["name"] for s in sources
+            if s.get("mode") == "#" and s.get("reach") == 0
+        ]
     return out
 
 
@@ -767,6 +822,47 @@ def _build_actions(report: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "button_label": "Enable + start",
             },
         })
+
+    # 8. GPS/PPS refclocks configured but never reaching chrony. This is
+    #    the port-contention symptom: gpsd is configured for /dev/serial0
+    #    (which resolves to /dev/ttyAMAN on Pi 5) but EAS Station's
+    #    hardware service has the same port open. gpsd never gets NMEA,
+    #    SHM 0 stays empty, the `lock GPS` constraint on PPS never fires,
+    #    and chrony falls back to internet NTP at stratum ≥ 2. There is
+    #    no one-click fix yet — properly resolving it needs Tier 3
+    #    (gpsd-as-NMEA-source mode in gps_manager.py).
+    unreached = chrony_run.get("refclocks_unreached") or []
+    if unreached and serial.get("exists"):
+        # Only surface when chrony itself is otherwise healthy — if chrony
+        # isn't tracking yet there are bigger fish to fry.
+        if chrony_run.get("tracking_ok"):
+            current_stratum = chrony_run.get("stratum")
+            stratum_note = (
+                f" (currently stratum {current_stratum} via internet NTP)"
+                if current_stratum is not None else ""
+            )
+            actions.append({
+                "id": "refclocks_unreached",
+                "severity": "info",
+                "label": (
+                    "GPS / PPS refclocks aren't reaching chrony "
+                    + stratum_note
+                ),
+                "reason": (
+                    f"chrony has the {' / '.join(unreached)} refclock(s) configured "
+                    "but Reach=0 — no samples have ever arrived. The most common "
+                    "cause is gpsd not being able to open the GPS serial port "
+                    "because EAS Station's hardware service holds it. Until the "
+                    "gpsd-as-NMEA-source feature lands, the workaround is to "
+                    "uncheck 'Enable GPS Receiver' under Admin → Hardware "
+                    "Settings → GPS, save, and let gpsd own the port. You'll "
+                    "lose the live GPS card but gain stratum-1 PPS time."
+                ),
+                "command": (
+                    "# Check who owns the serial port:\n"
+                    "sudo lsof /dev/ttyAMA10 /dev/ttyAMA0 /dev/serial0 2>/dev/null"
+                ),
+            })
 
     return actions
 
