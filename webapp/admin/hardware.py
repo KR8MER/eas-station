@@ -759,3 +759,38 @@ def gps_dashboard_data():
         "chrony": chrony_payload,
         "host": host_info,
     })
+
+
+@hardware_bp.route('/api/gps-dashboard/trends', methods=['GET'])
+@require_permission('system.configure')
+def gps_dashboard_trends():
+    """Return the server-side trend ring buffer for the GPS dashboard.
+
+    Proxies ``/api/hardware/gps/trends`` from the hardware service.  The
+    dashboard JS calls this once on page load to seed its in-memory ring
+    buffers, so trend sparklines render with whatever history was
+    collected while the page was closed (the whole point of a trend
+    chart).  The page's normal live polling continues to append fresh
+    samples on top of the seeded history.
+    """
+    # Same lazy import pattern used by gps_dashboard_data() above to
+    # avoid a circular import via webapp.admin.network.
+    from webapp.admin.network import call_hardware_service
+
+    try:
+        payload = call_hardware_service('/api/hardware/gps/trends', method='GET') or {}
+        if isinstance(payload, dict) and payload.get('success') is False:
+            payload = {'samples': []}
+        if not isinstance(payload, dict) or 'samples' not in payload:
+            payload = {'samples': []}
+    except Exception:
+        # Mirror the defensive logging used by gps_dashboard_data():
+        # log full detail server-side, return a generic empty payload
+        # to the client (no stack-trace exposure).
+        logger.warning(
+            "GPS dashboard: hardware service trends call failed",
+            exc_info=True,
+        )
+        payload = {'samples': []}
+
+    return jsonify(payload)

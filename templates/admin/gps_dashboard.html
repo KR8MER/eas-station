@@ -1061,11 +1061,15 @@
     }
 
     // ── Time-series ring buffers + sparkline drawing.
-    //    Capacity = 720 samples → 1 hour at the 5 s default refresh,
-    //    36 min at the 3 s minimum, 6 hours at the 30 s slow setting.
-    //    Each series holds parallel arrays of timestamps + values (or
-    //    null for "missing sample" — we render those as gaps rather
-    //    than connecting through).
+    //    Capacity = 720 samples → 1 hour at the 5 s server-side sampler
+    //    cadence (the dashboard JS only acts as a live tail; persistent
+    //    history comes from the hardware service's Redis-backed ring
+    //    buffer at /admin/api/gps-dashboard/trends, which we seed on
+    //    page load so sparklines repaint with whatever history was
+    //    collected while the page was closed).  Each series holds
+    //    parallel arrays of timestamps + values (or null for "missing
+    //    sample" — we render those as gaps rather than connecting
+    //    through).
     var TS_CAPACITY = 720;
     function makeRing() {
         return { t: [], v: [] };
@@ -1076,6 +1080,29 @@
         if (buf.t.length > TS_CAPACITY) {
             buf.t.splice(0, buf.t.length - TS_CAPACITY);
             buf.v.splice(0, buf.v.length - TS_CAPACITY);
+        }
+    }
+    // Seed every ring buffer from a server-side history payload (the
+    // shape returned by /admin/api/gps-dashboard/trends: {samples: [
+    // {t, last_offset_s, rms_offset_s, frequency_ppm, residual_freq_ppm,
+    //  hdop, vdop, pdop, avg_snr}, ...]}).  Idempotent: callers that
+    // already have data should reset() the rings first if they want a
+    // clean slate, but in practice we only call this once on load
+    // before live polling has had a chance to push anything.
+    function seedTimeSeriesFromHistory(samples) {
+        if (!samples || !samples.length) return;
+        function pickNum(v) { return typeof v === 'number' ? v : null; }
+        for (var i = 0; i < samples.length; i++) {
+            var s = samples[i] || {};
+            var sampleTs = typeof s.t === 'number' ? s.t : Date.now();
+            ringPush(ts.pps,   sampleTs, pickNum(s.last_offset_s));
+            ringPush(ts.rms,   sampleTs, pickNum(s.rms_offset_s));
+            ringPush(ts.freq,  sampleTs, pickNum(s.frequency_ppm));
+            ringPush(ts.resid, sampleTs, pickNum(s.residual_freq_ppm));
+            ringPush(ts.hdop,  sampleTs, pickNum(s.hdop));
+            ringPush(ts.vdop,  sampleTs, pickNum(s.vdop));
+            ringPush(ts.pdop,  sampleTs, pickNum(s.pdop));
+            ringPush(ts.snr,   sampleTs, pickNum(s.avg_snr));
         }
     }
     function ringStats(buf) {
@@ -1383,7 +1410,21 @@
             if (resizeTimer) clearTimeout(resizeTimer);
             resizeTimer = setTimeout(renderTimeSeriesCharts, 120);
         });
-        fetchOnce();
+        // Seed the trend rings from the server-side history before the
+        // first live poll so sparklines repaint with whatever was
+        // collected while the page was closed.  We render once after
+        // seeding (in case the live fetch is slow / fails) and then
+        // kick off the regular live fetch which appends on top.
+        fetch('/admin/api/gps-dashboard/trends', { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (payload) {
+                seedTimeSeriesFromHistory((payload && payload.samples) || []);
+                renderTimeSeriesCharts();
+            })
+            .catch(function (err) {
+                console.warn('GPS dashboard trends seed failed:', err);
+            })
+            .then(fetchOnce);
     });
 })();
 </script>

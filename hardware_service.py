@@ -826,6 +826,111 @@ def initialize_neopixel_controller():
         logger.info("Continuing without NeoPixel support")
 
 
+# ---------------------------------------------------------------------------
+# GPS / chrony trend sampler.
+#
+# The /admin/gps-dashboard page draws sparklines from a JS-side ring buffer
+# that only fills while the page is open.  To make the trend charts useful
+# (i.e. preserve history across page reloads / closures), the hardware
+# service samples the relevant fields every 5 s and pushes a small JSON
+# row into a Redis list which acts as a server-side ring buffer.  The
+# dashboard seeds its in-memory buffers from that list on load.
+# ---------------------------------------------------------------------------
+GPS_TRENDS_REDIS_KEY = "gps:dashboard:trends"
+GPS_TRENDS_MAX_SAMPLES = 720  # 1 hour at 5 s cadence (matches client TS_CAPACITY)
+GPS_TRENDS_INTERVAL_S = 5
+
+
+def _collect_chrony_tracking_for_trends() -> dict:
+    """Run ``chronyc -c tracking`` and return the four fields the trend
+    charts care about.  Missing/unparseable fields come back as ``None``;
+    if chronyc isn't installed at all we return an empty dict so callers
+    can detect "no chrony data this tick" without faking values.
+    """
+    try:
+        from shutil import which as _which
+        if not _which("chronyc"):
+            return {}
+        from app_utils.chrony_parser import parse_chronyc_tracking_csv
+        rc = subprocess.run(
+            ["chronyc", "-c", "tracking"],
+            capture_output=True,
+            text=True,
+            timeout=2.0,
+        )
+        if rc.returncode != 0:
+            return {}
+        parsed = parse_chronyc_tracking_csv(rc.stdout) or {}
+        return {
+            "last_offset_s":     parsed.get("last_offset_s"),
+            "rms_offset_s":      parsed.get("rms_offset_s"),
+            "frequency_ppm":     parsed.get("frequency_ppm"),
+            "residual_freq_ppm": parsed.get("residual_freq_ppm"),
+        }
+    except Exception as exc:
+        logger.debug("Trend sampler: chronyc tracking failed: %s", exc)
+        return {}
+
+
+def _collect_gps_for_trends() -> dict:
+    """Pull the DOP / SNR fields the dashboard plots from the live GPS
+    manager.  Returns an empty dict when no manager is running so the
+    sampler can decide whether the row is worth publishing at all.
+    """
+    if _gps_manager is None:
+        return {}
+    try:
+        status = _gps_manager.get_status() or {}
+    except Exception as exc:
+        logger.debug("Trend sampler: gps_manager.get_status failed: %s", exc)
+        return {}
+
+    def _num(v):
+        return float(v) if isinstance(v, (int, float)) else None
+
+    sats_in_view = status.get("satellites_in_view") or []
+    snrs = [
+        s.get("snr") for s in sats_in_view
+        if isinstance(s, dict) and isinstance(s.get("snr"), (int, float))
+    ]
+    avg_snr = (sum(snrs) / len(snrs)) if snrs else None
+
+    return {
+        "hdop":    _num(status.get("hdop")),
+        "vdop":    _num(status.get("vdop")),
+        "pdop":    _num(status.get("pdop")),
+        "avg_snr": avg_snr,
+    }
+
+
+def publish_gps_trend_sample() -> None:
+    """Append one trend sample to the Redis ring buffer.
+
+    Skips publication entirely when neither GPS nor chrony returned any
+    usable fields, so the buffer doesn't fill with placeholder rows
+    while the hardware service is still starting up.
+    """
+    if not _redis_client:
+        return
+
+    chrony_fields = _collect_chrony_tracking_for_trends()
+    gps_fields = _collect_gps_for_trends()
+    if not chrony_fields and not gps_fields:
+        return
+
+    sample = {"t": int(time.time() * 1000)}
+    sample.update(chrony_fields)
+    sample.update(gps_fields)
+
+    try:
+        pipe = _redis_client.pipeline()
+        pipe.lpush(GPS_TRENDS_REDIS_KEY, json.dumps(sample))
+        pipe.ltrim(GPS_TRENDS_REDIS_KEY, 0, GPS_TRENDS_MAX_SAMPLES - 1)
+        pipe.execute()
+    except Exception as exc:
+        logger.debug("Trend sampler: failed to publish to Redis: %s", exc)
+
+
 def publish_hardware_metrics():
     """Publish hardware status and metrics to Redis.
 
@@ -2300,6 +2405,46 @@ def create_api_app():
             logger.error(f"Error getting GPS status: {e}", exc_info=True)
             return jsonify({'success': False, 'error': str(e)}), 500
 
+    @api_app.route('/api/hardware/gps/trends', methods=['GET'])
+    def get_gps_trends():
+        """Return the server-side ring buffer of GPS / chrony trend samples.
+
+        The ring buffer is filled by ``publish_gps_trend_sample`` on the
+        hardware service health-check loop (5 s cadence, capped at
+        ``GPS_TRENDS_MAX_SAMPLES``).  Samples are stored newest-first in
+        Redis (``LPUSH`` + ``LTRIM``); we reverse before returning so the
+        consumer gets chronological order.
+        """
+        try:
+            samples: list = []
+            if _redis_client:
+                try:
+                    raw_items = _redis_client.lrange(
+                        GPS_TRENDS_REDIS_KEY, 0, GPS_TRENDS_MAX_SAMPLES - 1
+                    ) or []
+                except Exception as exc:
+                    logger.debug("GPS trends: lrange failed: %s", exc)
+                    raw_items = []
+                # Stored newest-first, reverse for chronological output.
+                for raw in reversed(raw_items):
+                    try:
+                        if isinstance(raw, bytes):
+                            raw = raw.decode("utf-8", errors="replace")
+                        samples.append(json.loads(raw))
+                    except Exception as exc:
+                        # Skip malformed rows so one bad entry can't
+                        # poison the whole chart, but log at debug so an
+                        # operator can spot systematic corruption.
+                        logger.debug("GPS trends: skipping malformed row: %s", exc)
+                        continue
+            return jsonify({'samples': samples})
+        except Exception:
+            # Log full detail server-side; return a generic message to
+            # the client so we don't leak internal paths / library
+            # exception text (CodeQL py/stack-trace-exposure).
+            logger.error("Error getting GPS trends", exc_info=True)
+            return jsonify({'success': False, 'error': 'gps_trends_unavailable'}), 500
+
     @api_app.route('/api/hardware/gps/configure', methods=['POST'])
     def configure_gps():
         """Save GPS configuration and restart the GPS manager."""
@@ -2598,6 +2743,10 @@ def health_check_loop():
             # Publish metrics periodically
             if current_time - last_metrics_publish >= metrics_interval:
                 publish_hardware_metrics()
+                # The trend sampler runs at the same cadence as the metrics
+                # publish (5 s) — see GPS_TRENDS_INTERVAL_S.  Keeping them
+                # in lockstep avoids adding a second timer to this loop.
+                publish_gps_trend_sample()
                 last_metrics_publish = current_time
 
             # Sleep briefly
