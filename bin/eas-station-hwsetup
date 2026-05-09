@@ -50,6 +50,7 @@ import socketserver
 import stat
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import traceback
@@ -599,10 +600,534 @@ def _run_streaming_env(
     return rc, "".join(stdout_buf), "".join(stderr_buf)
 
 
+# ---------------------------------------------------------------------------
+# Config-file editing primitives.
+#
+# Every config-file action shares the same safety contract:
+#
+# 1. The target path is hardcoded inside the action. Callers never pass
+#    a path. This is the single most important defense against turning
+#    this RPC into "write arbitrary file as root".
+# 2. The original file is copied to ``<path>.bak.<UTC timestamp>`` once,
+#    BEFORE the new content is written. We never overwrite an existing
+#    backup with the same timestamp — collisions add a numeric suffix.
+# 3. The new content is written via mkstemp + fsync + os.replace into
+#    the same directory as the target, so the rename is atomic on any
+#    POSIX filesystem (and on the FAT /boot/firmware partition we
+#    accept the weaker but sufficient atomicity that mkfs.fat provides
+#    for renames within a single directory).
+# 4. The new file inherits the original's mode + ownership so packages
+#    can still rewrite it on next upgrade without permission surprises.
+# 5. Actions are idempotent. Re-running with the same parameters either
+#    no-ops ("already in desired state") or re-writes byte-identical
+#    content. The UI reads the result's ``changed`` field to decide
+#    whether to show "modified" or "already correct".
+# ---------------------------------------------------------------------------
+
+# Hardcoded path → kind allowlist. Any caller-derived path that isn't
+# exactly equal to one of these keys is refused before we touch the
+# filesystem. The "kind" tag is used purely for nicer log lines.
+_MANAGED_PATHS: Dict[str, str] = {
+    "/etc/default/gpsd":              "gpsd",
+    "/etc/chrony/chrony.conf":        "chrony",
+    "/boot/firmware/config.txt":      "boot",
+    "/boot/config.txt":               "boot",   # older Pi OS layout
+}
+
+
+def _backup_path(path: str) -> str:
+    """Return a non-colliding ``<path>.bak.<UTC stamp>`` filename."""
+    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    candidate = f"{path}.bak.{stamp}"
+    if not os.path.exists(candidate):
+        return candidate
+    # Sub-second collision (rare). Append a counter until we find a free name.
+    for n in range(1, 100):
+        suffix = f"{path}.bak.{stamp}.{n}"
+        if not os.path.exists(suffix):
+            return suffix
+    raise RuntimeError(f"could not find a non-colliding backup name for {path!r}")
+
+
+def _atomic_write_with_backup(
+    path: str,
+    new_text: str,
+    emit: EmitFn,
+) -> Dict[str, Any]:
+    """Atomically write ``new_text`` to ``path`` after backing the
+    original up. Returns metadata about what happened.
+
+    The path MUST appear in :data:`_MANAGED_PATHS` and must already
+    exist (we refuse to create a new config from scratch — the wrong
+    path is far too easy to mis-target). The action that calls this
+    function is responsible for any caller-supplied content; this
+    helper does no content validation.
+    """
+    if path not in _MANAGED_PATHS:
+        raise ValueError(f"path {path!r} is not in the managed allowlist")
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"refusing to create {path!r} — file must already exist")
+    if not os.path.isfile(path):
+        raise ValueError(f"{path!r} is not a regular file")
+
+    # Read the existing content so we can detect no-op writes and report
+    # ``changed=False``.
+    with open(path, "r", encoding="utf-8") as f:
+        old_text = f.read()
+    changed = old_text != new_text
+    if not changed:
+        emit("stdout", f"{path}: already in desired state; not writing\n")
+        return {
+            "path": path,
+            "changed": False,
+            "backup": None,
+            "bytes_written": len(old_text.encode("utf-8")),
+        }
+
+    st = os.stat(path)
+    backup = _backup_path(path)
+    shutil.copy2(path, backup)
+    try:
+        os.chmod(backup, 0o600)
+    except OSError:
+        pass
+    emit("stdout", f"{path}: backed up to {backup}\n")
+
+    parent = os.path.dirname(path) or "."
+    fd, tmp = tempfile.mkstemp(prefix=".eas-hwsetup-", dir=parent, text=False)
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(new_text.encode("utf-8"))
+            f.flush()
+            os.fsync(f.fileno())
+        # Match the original's mode and (where possible) ownership so
+        # package upgrades don't surprise anyone with new permissions.
+        os.chmod(tmp, stat.S_IMODE(st.st_mode))
+        try:
+            os.chown(tmp, st.st_uid, st.st_gid)
+        except PermissionError:
+            pass
+        os.replace(tmp, path)
+        emit("stdout", f"{path}: wrote {len(new_text.encode('utf-8'))} bytes\n")
+    except Exception:
+        # Best-effort cleanup of the tempfile if we never made it to replace
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+    return {
+        "path": path,
+        "changed": True,
+        "backup": backup,
+        "bytes_written": len(new_text.encode("utf-8")),
+    }
+
+
+# ---------------------------------------------------------------------------
+# gpsd_config_write — regenerate /etc/default/gpsd from a tight schema.
+#
+# The file is small and entirely structured (KEY="value" lines), so we
+# rewrite it whole rather than trying to edit in place. The schema below
+# is the only shape we accept; anything else is rejected with exit 22.
+#
+# Params:
+#   devices       (list[str], required)  one or more device paths from the
+#                                        device allowlist (/dev/serial0,
+#                                        /dev/serial1, /dev/ttyAMA0..3,
+#                                        /dev/ttyS0..3, /dev/pps0..3,
+#                                        /dev/ttyUSB0..3, /dev/ttyACM0..3).
+#   options       (str,       required)  the GPSD_OPTIONS string. Must
+#                                        only contain a small set of
+#                                        flags we know about.
+#   start_daemon  (bool,      default True)
+#   usbauto       (bool,      default False)
+# ---------------------------------------------------------------------------
+
+_GPSD_DEVICE_RE = re.compile(
+    r"^/dev/(serial[0-9]|ttyAMA[0-9]|ttyAMA1[0-9]?|ttyS[0-9]|"
+    r"pps[0-9]|ttyUSB[0-9]|ttyACM[0-9])$"
+)
+# Tokens we accept inside GPSD_OPTIONS. Everything else is rejected so
+# users (or a compromised web tier) cannot smuggle arbitrary flags into
+# the gpsd command line — gpsd flags can do things like enable raw
+# control of the receiver or open additional sockets.
+_GPSD_OPTION_FLAGS = frozenset({"-n", "-b", "-N", "-s", "-G", "-D"})
+
+
+def _validate_gpsd_options(opts: str) -> Tuple[Optional[List[str]], Optional[str]]:
+    """Return (token_list, error). Token list is what we'll write back."""
+    if not isinstance(opts, str):
+        return None, "options must be a string"
+    if len(opts) > 128:
+        return None, "options string too long"
+    tokens = opts.split()
+    out: List[str] = []
+    i = 0
+    while i < len(tokens):
+        tok = tokens[i]
+        if tok in ("-s", "-D"):
+            # Both take a numeric argument. -s baud, -D debug-level.
+            if i + 1 >= len(tokens):
+                return None, f"flag {tok} requires an argument"
+            arg = tokens[i + 1]
+            if not arg.isdigit() or not (0 < int(arg) <= 921600):
+                return None, f"argument to {tok} must be a positive integer ≤ 921600"
+            out.extend([tok, arg])
+            i += 2
+            continue
+        if tok in _GPSD_OPTION_FLAGS:
+            out.append(tok)
+            i += 1
+            continue
+        return None, f"unsupported flag: {tok!r}"
+    return out, None
+
+
+def _cmd_gpsd_config_write(params: Dict[str, Any], emit: EmitFn) -> Dict[str, Any]:
+    raw_devs = params.get("devices")
+    if not isinstance(raw_devs, list) or not raw_devs:
+        return {"ok": False, "exit_code": 22, "error": "devices must be a non-empty list"}
+    if len(raw_devs) > 4:
+        return {"ok": False, "exit_code": 22, "error": "at most 4 devices supported"}
+    devices: List[str] = []
+    for entry in raw_devs:
+        if not isinstance(entry, str) or not _GPSD_DEVICE_RE.match(entry):
+            return {
+                "ok": False,
+                "exit_code": 22,
+                "error": f"device path failed allowlist check: {entry!r}",
+            }
+        if entry not in devices:
+            devices.append(entry)
+
+    opts_in = params.get("options", "-n -b -s 9600")
+    opt_tokens, opt_err = _validate_gpsd_options(opts_in)
+    if opt_err:
+        return {"ok": False, "exit_code": 22, "error": opt_err}
+    assert opt_tokens is not None
+
+    raw_start = params.get("start_daemon", True)
+    raw_usb = params.get("usbauto", False)
+    if not isinstance(raw_start, bool) or not isinstance(raw_usb, bool):
+        return {
+            "ok": False,
+            "exit_code": 22,
+            "error": "start_daemon and usbauto must be booleans",
+        }
+
+    target = "/etc/default/gpsd"
+    body = (
+        "# Default settings for the gpsd init script and the hotplug wrapper.\n"
+        "# Managed by eas-station-hwsetup. Hand edits will be preserved in\n"
+        "# the most recent .bak file in this directory.\n"
+        "\n"
+        f"START_DAEMON=\"{'true' if raw_start else 'false'}\"\n"
+        f"USBAUTO=\"{'true' if raw_usb else 'false'}\"\n"
+        f"DEVICES=\"{' '.join(devices)}\"\n"
+        f"GPSD_OPTIONS=\"{' '.join(opt_tokens)}\"\n"
+    )
+
+    try:
+        result = _atomic_write_with_backup(target, body, emit)
+    except FileNotFoundError as exc:
+        return {"ok": False, "exit_code": 1, "error": str(exc)}
+    except Exception as exc:
+        return {"ok": False, "exit_code": 1, "error": f"{type(exc).__name__}: {exc}"}
+
+    return {
+        "ok": True,
+        "exit_code": 0,
+        "path": target,
+        "changed": result["changed"],
+        "backup": result["backup"],
+        "devices": devices,
+        "options": " ".join(opt_tokens),
+        "start_daemon": raw_start,
+        "usbauto": raw_usb,
+    }
+
+
+# ---------------------------------------------------------------------------
+# chrony_config_ensure — append a managed block to /etc/chrony/chrony.conf
+# without disturbing user-authored lines (pool / server / refclock /
+# allow / etc.). The block is bounded by sentinel comments; on re-run we
+# replace just the bytes between them, leaving everything else alone.
+#
+# Params:
+#   ensure_rtcsync       (bool, default True)
+#   ensure_pps_refclock  (bool, default True)
+#   pps_device           (str, default "/dev/pps0") — must match _PPS_DEVICE_RE
+# ---------------------------------------------------------------------------
+
+_CHRONY_BLOCK_BEGIN = "# >>> eas-station-hwsetup — managed block (do not edit between markers)"
+_CHRONY_BLOCK_END   = "# <<< eas-station-hwsetup — managed block"
+_PPS_DEVICE_RE = re.compile(r"^/dev/pps[0-9]$")
+
+
+def _build_chrony_block(
+    ensure_rtcsync: bool,
+    ensure_pps_refclock: bool,
+    pps_device: str,
+) -> str:
+    lines = [_CHRONY_BLOCK_BEGIN]
+    if ensure_rtcsync:
+        lines.append("rtcsync")
+    if ensure_pps_refclock:
+        lines.append(
+            "refclock SHM 0 refid GPS precision 1e-1 offset 0.0 delay 0.2 noselect"
+        )
+        lines.append(f"refclock PPS {pps_device} lock GPS refid PPS")
+    lines.append(_CHRONY_BLOCK_END)
+    return "\n".join(lines) + "\n"
+
+
+def _splice_chrony_block(existing: str, block: str) -> Tuple[str, bool]:
+    """If a managed block already exists, replace its content.
+    Otherwise, append a newline-prefixed managed block to the file.
+    Returns (new_text, changed_flag). When the block is absent and
+    `block` is empty, returns the original unchanged.
+    """
+    begin_idx = existing.find(_CHRONY_BLOCK_BEGIN)
+    end_idx = existing.find(_CHRONY_BLOCK_END)
+    if begin_idx >= 0 and end_idx > begin_idx:
+        # Replace existing block (from begin to end-of-end-marker line)
+        end_line_break = existing.find("\n", end_idx)
+        if end_line_break < 0:
+            end_line_break = len(existing)
+        replaced = existing[:begin_idx] + block.rstrip("\n") + existing[end_line_break:]
+        return replaced, replaced != existing
+    if not block.strip().splitlines()[1:-1]:
+        # Block has no payload between markers; just leave the file alone.
+        return existing, False
+    sep = "" if existing.endswith("\n") or not existing else "\n"
+    appended = existing + sep + "\n" + block
+    return appended, True
+
+
+def _cmd_chrony_config_ensure(params: Dict[str, Any], emit: EmitFn) -> Dict[str, Any]:
+    raw_rtcsync = params.get("ensure_rtcsync", True)
+    raw_pps = params.get("ensure_pps_refclock", True)
+    if not isinstance(raw_rtcsync, bool) or not isinstance(raw_pps, bool):
+        return {
+            "ok": False,
+            "exit_code": 22,
+            "error": "ensure_rtcsync and ensure_pps_refclock must be booleans",
+        }
+    pps_device = params.get("pps_device", "/dev/pps0")
+    if not isinstance(pps_device, str) or not _PPS_DEVICE_RE.match(pps_device):
+        return {
+            "ok": False,
+            "exit_code": 22,
+            "error": f"pps_device must match /dev/pps[0-9], got {pps_device!r}",
+        }
+
+    target = "/etc/chrony/chrony.conf"
+    if not os.path.exists(target):
+        return {
+            "ok": False,
+            "exit_code": 1,
+            "error": f"{target} not found — install chrony first",
+        }
+
+    with open(target, "r", encoding="utf-8") as f:
+        existing = f.read()
+
+    block = _build_chrony_block(raw_rtcsync, raw_pps, pps_device)
+    new_text, changed = _splice_chrony_block(existing, block)
+
+    if not changed:
+        emit("stdout", f"{target}: managed block already in desired state\n")
+        return {
+            "ok": True,
+            "exit_code": 0,
+            "path": target,
+            "changed": False,
+            "backup": None,
+            "ensure_rtcsync": raw_rtcsync,
+            "ensure_pps_refclock": raw_pps,
+            "pps_device": pps_device,
+        }
+
+    try:
+        result = _atomic_write_with_backup(target, new_text, emit)
+    except Exception as exc:
+        return {"ok": False, "exit_code": 1, "error": f"{type(exc).__name__}: {exc}"}
+
+    return {
+        "ok": True,
+        "exit_code": 0,
+        "path": target,
+        "changed": result["changed"],
+        "backup": result["backup"],
+        "ensure_rtcsync": raw_rtcsync,
+        "ensure_pps_refclock": raw_pps,
+        "pps_device": pps_device,
+    }
+
+
+# ---------------------------------------------------------------------------
+# config_txt_set_overlay — idempotently install a single dtoverlay line in
+# /boot/firmware/config.txt (or /boot/config.txt on older Pi OS).
+#
+# We accept ONE overlay per call so the action is easy to reason about
+# and the UI can show a per-overlay outcome. Re-running with identical
+# params no-ops; re-running with new params replaces the matching line.
+#
+# Params:
+#   overlay  (str, required)  — must be in _OVERLAY_ALLOWLIST.
+#   params   (str, optional)  — comma-separated key=value or token list,
+#                               restricted to the overlay's parameter
+#                               regex. Empty string is fine for overlays
+#                               that take no parameters.
+# ---------------------------------------------------------------------------
+
+# Each overlay we are willing to write maps to the regex its parameter
+# string must satisfy. Anything else is rejected before we touch the
+# filesystem. Add new overlays here only after a security review of
+# their accepted parameters.
+_OVERLAY_ALLOWLIST: Dict[str, re.Pattern] = {
+    # i2c-rtc: kept narrow to the chips and address forms Pi OS supports.
+    "i2c-rtc":     re.compile(
+        r"^(ds3231|rv3028|ds1307|pcf8523|pcf85063)"
+        r"(,addr=0x[0-9a-fA-F]{2})?$"
+    ),
+    # pps-gpio: only the gpiopin=N parameter, N in [0..27] (BCM range).
+    "pps-gpio":    re.compile(r"^gpiopin=([0-9]|1[0-9]|2[0-7])$"),
+    # disable-bt: takes no parameters.
+    "disable-bt":  re.compile(r"^$"),
+}
+
+
+def _config_txt_target() -> Optional[str]:
+    for candidate in ("/boot/firmware/config.txt", "/boot/config.txt"):
+        if os.path.exists(candidate):
+            return candidate
+    return None
+
+
+def _splice_overlay(existing: str, overlay: str, params_str: str) -> Tuple[str, bool, str]:
+    """Replace any ``dtoverlay=<overlay>...`` line, or append if missing.
+
+    Returns ``(new_text, changed, action)`` where ``action`` is one of
+    ``"unchanged"``, ``"replaced"``, or ``"appended"``.
+    """
+    desired = f"dtoverlay={overlay}"
+    if params_str:
+        desired += f",{params_str}"
+
+    new_lines: List[str] = []
+    found = False
+    replaced = False
+    for line in existing.splitlines(keepends=True):
+        stripped = line.strip()
+        # Skip comments and blank lines — never touch them.
+        if not stripped or stripped.startswith("#"):
+            new_lines.append(line)
+            continue
+        # Match dtoverlay=<overlay>(<,...>|$)
+        if stripped.startswith(f"dtoverlay={overlay}") and (
+            len(stripped) == len(f"dtoverlay={overlay}")
+            or stripped[len(f"dtoverlay={overlay}")] in (",", " ", "\t")
+        ):
+            found = True
+            if stripped == desired:
+                new_lines.append(line)
+            else:
+                # Preserve the line's terminator
+                term = "\n" if line.endswith("\n") else ""
+                new_lines.append(desired + term)
+                replaced = True
+            continue
+        new_lines.append(line)
+
+    if found:
+        new_text = "".join(new_lines)
+        if replaced:
+            return new_text, True, "replaced"
+        return existing, False, "unchanged"
+
+    # Not found — append.
+    sep = "" if existing.endswith("\n") or not existing else "\n"
+    appended = existing + sep + desired + "\n"
+    return appended, True, "appended"
+
+
+def _cmd_config_txt_set_overlay(params: Dict[str, Any], emit: EmitFn) -> Dict[str, Any]:
+    overlay = params.get("overlay")
+    if not isinstance(overlay, str) or overlay not in _OVERLAY_ALLOWLIST:
+        return {
+            "ok": False,
+            "exit_code": 22,
+            "error": (
+                f"overlay must be one of: {sorted(_OVERLAY_ALLOWLIST.keys())}"
+            ),
+        }
+    params_str = params.get("params", "")
+    if not isinstance(params_str, str):
+        return {"ok": False, "exit_code": 22, "error": "params must be a string"}
+    params_str = params_str.strip().lstrip(",")
+    if len(params_str) > 128:
+        return {"ok": False, "exit_code": 22, "error": "params string too long"}
+    if not _OVERLAY_ALLOWLIST[overlay].match(params_str):
+        return {
+            "ok": False,
+            "exit_code": 22,
+            "error": f"params {params_str!r} do not match the {overlay} schema",
+        }
+
+    target = _config_txt_target()
+    if not target:
+        return {
+            "ok": False,
+            "exit_code": 1,
+            "error": "config.txt not found at /boot/firmware/config.txt or /boot/config.txt",
+        }
+
+    with open(target, "r", encoding="utf-8") as f:
+        existing = f.read()
+    new_text, changed, action = _splice_overlay(existing, overlay, params_str)
+
+    if not changed:
+        emit("stdout", f"{target}: dtoverlay={overlay}{(',' + params_str) if params_str else ''} already present\n")
+        return {
+            "ok": True,
+            "exit_code": 0,
+            "path": target,
+            "changed": False,
+            "backup": None,
+            "overlay": overlay,
+            "params": params_str,
+            "action": action,
+            "requires_reboot": False,
+        }
+
+    try:
+        result = _atomic_write_with_backup(target, new_text, emit)
+    except Exception as exc:
+        return {"ok": False, "exit_code": 1, "error": f"{type(exc).__name__}: {exc}"}
+
+    return {
+        "ok": True,
+        "exit_code": 0,
+        "path": target,
+        "changed": result["changed"],
+        "backup": result["backup"],
+        "overlay": overlay,
+        "params": params_str,
+        "action": action,
+        "requires_reboot": True,
+    }
+
+
 COMMANDS: Dict[str, CommandFn] = {
     "ping": _cmd_ping,
     "seed_rtc": _cmd_seed_rtc,
     "apt_install": _cmd_apt_install,
+    "gpsd_config_write": _cmd_gpsd_config_write,
+    "chrony_config_ensure": _cmd_chrony_config_ensure,
+    "config_txt_set_overlay": _cmd_config_txt_set_overlay,
 }
 
 

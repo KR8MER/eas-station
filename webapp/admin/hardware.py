@@ -274,6 +274,105 @@ def gps_hat_apt_install():
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
+def _forward_to_helper(action: str, params: Dict[str, Any], *, timeout: float = 30.0):
+    """Common wrapper for config-edit endpoints. Returns (json_dict, http_status).
+
+    Delegates *all* security-sensitive validation to the helper itself —
+    this layer just shapes the JSON response. The helper's allowlists,
+    regexes, and bounds are the actual security boundary; the web tier
+    only does enough validation to reject obvious garbage early.
+    """
+    try:
+        result = hwsetup_call(action, params, timeout=timeout, raise_on_error=False)
+    except HelperUnavailable as exc:
+        return {"ok": False, "error": str(exc), "helper_available": False}, 503
+    result_event = result.get("result_event") or {}
+    payload = {
+        "ok": result.get("ok", False),
+        "exit_code": result.get("exit_code"),
+        "stdout": result.get("stdout", ""),
+        "stderr": result.get("stderr", ""),
+        "error": result.get("error"),
+    }
+    # Pass through any fields the action reports beyond the standard set
+    # so the UI can render path / changed / backup / requires_reboot etc.
+    for key in (
+        "path", "changed", "backup", "requires_reboot",
+        "devices", "options", "start_daemon", "usbauto",
+        "ensure_rtcsync", "ensure_pps_refclock", "pps_device",
+        "overlay", "params", "action",
+    ):
+        if key in result_event:
+            payload[key] = result_event[key]
+    status = 200 if payload["ok"] else 409
+    return payload, status
+
+
+@hardware_bp.route('/hardware/gps-hat/gpsd-config', methods=['POST'])
+@require_permission('system.configure')
+def gps_hat_gpsd_config():
+    """Rewrite /etc/default/gpsd from a tight schema (helper enforces).
+
+    Body: ``{"devices": ["/dev/serial0", "/dev/pps0"],
+             "options": "-n -b -s 9600",
+             "start_daemon": true, "usbauto": false}``
+    """
+    try:
+        body = request.get_json(silent=True) or {}
+        if not isinstance(body, dict):
+            raise BadRequest("body must be a JSON object")
+        payload, status = _forward_to_helper("gpsd_config_write", body, timeout=10.0)
+        return jsonify(payload), status
+    except BadRequest:
+        raise
+    except Exception as exc:
+        logger.exception("hwsetup gpsd_config_write failed")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@hardware_bp.route('/hardware/gps-hat/chrony-config', methods=['POST'])
+@require_permission('system.configure')
+def gps_hat_chrony_config():
+    """Append (or refresh) the eas-station-managed block in chrony.conf.
+
+    Body: ``{"ensure_rtcsync": true, "ensure_pps_refclock": true,
+             "pps_device": "/dev/pps0"}``
+    """
+    try:
+        body = request.get_json(silent=True) or {}
+        if not isinstance(body, dict):
+            raise BadRequest("body must be a JSON object")
+        payload, status = _forward_to_helper("chrony_config_ensure", body, timeout=10.0)
+        return jsonify(payload), status
+    except BadRequest:
+        raise
+    except Exception as exc:
+        logger.exception("hwsetup chrony_config_ensure failed")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@hardware_bp.route('/hardware/gps-hat/config-txt-overlay', methods=['POST'])
+@require_permission('system.configure')
+def gps_hat_config_txt_overlay():
+    """Idempotently install a single dtoverlay= line in config.txt.
+
+    Body: ``{"overlay": "i2c-rtc", "params": "rv3028,addr=0x52"}`` or
+          ``{"overlay": "pps-gpio", "params": "gpiopin=18"}`` or
+          ``{"overlay": "disable-bt", "params": ""}``
+    """
+    try:
+        body = request.get_json(silent=True) or {}
+        if not isinstance(body, dict):
+            raise BadRequest("body must be a JSON object")
+        payload, status = _forward_to_helper("config_txt_set_overlay", body, timeout=10.0)
+        return jsonify(payload), status
+    except BadRequest:
+        raise
+    except Exception as exc:
+        logger.exception("hwsetup config_txt_set_overlay failed")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
 @hardware_bp.route('/hardware/update', methods=['POST'])
 @require_permission('system.configure')
 def update_hardware():
