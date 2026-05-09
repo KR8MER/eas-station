@@ -93,6 +93,14 @@ tracks releases under the 2.x series.
 ### Dependencies
 - **Added (frontend, vendored under `static/vendor/jspdf/`):** `jspdf` 4.2.1 and `html2canvas` 1.4.1 (both MIT) — used by the Statistics dashboard for client-side PDF report generation. No new server-side dependencies; PDF generation runs entirely in the browser.
 
+## [2.73.4] - 2026-05-09 - Enforce VERSION/CHANGELOG guardrails in CI
+
+### Added
+- **Release metadata CI workflow** — Added `.github/workflows/release-metadata.yml` to run `tests/test_release_metadata.py` on pull requests and pushes to `main`/`develop`. This enforces the existing contributor requirement to keep `VERSION` and `docs/reference/CHANGELOG.md` aligned for behavioral changes.
+
+### Fixed
+- **Missed version/changelog updates no longer slip through review** — The repository previously had no workflow running release-governance checks, so instructions in `docs/development/AGENTS.md` / `docs/process/CONTRIBUTING.md` were advisory only. CI now blocks regressions when release metadata is not updated.
+
 ## [2.71.74] - 2026-04-29 - FM stereo decoding, per-source decoder streams, WebSocket alerts
 
 ### Fixed
