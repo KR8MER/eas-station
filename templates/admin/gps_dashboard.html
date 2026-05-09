@@ -137,7 +137,9 @@
     }
     .gps-snr-bar {
         flex: 0 0 22px;
-        display: flex; flex-direction: column; align-items: center; gap: 4px;
+        align-self: stretch;
+        display: flex; flex-direction: column;
+        justify-content: flex-end; align-items: center; gap: 4px;
         position: relative;
     }
     .gps-snr-bar .bar {
@@ -508,6 +510,22 @@
         if (v === null || v === undefined || isNaN(v)) return '—';
         return v.toFixed(1) + ' s';
     }
+    // chronyc -c tracking emits "ref time" as a Unix timestamp string
+    // (e.g. "1778355459.498333426").  Render it as a human-readable UTC
+    // datetime — chrogps-dash convention — while leaving non-numeric
+    // values (e.g. blank, "?") alone.
+    function fmtRefTime(v) {
+        if (v === null || v === undefined || v === '') return '—';
+        var num = Number(v);
+        if (!isFinite(num) || num <= 0) return String(v);
+        var d = new Date(num * 1000);
+        if (isNaN(d.getTime())) return String(v);
+        // YYYY-MM-DD HH:MM:SS UTC — fixed-width, mono-friendly.
+        var pad = function (n) { return n < 10 ? '0' + n : '' + n; };
+        return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate())
+            + ' ' + pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes()) + ':' + pad(d.getUTCSeconds())
+            + ' UTC';
+    }
     function signClass(v) {
         if (v === null || v === undefined || isNaN(v)) return '';
         if (v > 0) return 'pos';
@@ -836,7 +854,7 @@
             : (t.reference_id_hex || '—');
         setText('t-ref-id', refId);
         setText('t-stratum', t.stratum === null || t.stratum === undefined ? '—' : String(t.stratum));
-        setText('t-ref-time', t.ref_time || '—');
+        setText('t-ref-time', fmtRefTime(t.ref_time));
         setText('t-sys-offset', fmtSeconds(t.system_time_offset_s));
         setText('t-last-offset', fmtSeconds(t.last_offset_s));
         setText('t-rms-offset', fmtSeconds(t.rms_offset_s));
