@@ -1061,10 +1061,11 @@
     }
 
     // ── Time-series ring buffers + sparkline drawing.
-    //    Capacity = 720 samples → 1 hour at the 5 s default refresh, 12 min
-    //    at the 3 s minimum, 6 hours at the 30 s slow setting.  Each series
-    //    holds parallel arrays of timestamps + values (or null for "missing
-    //    sample" — we render those as gaps rather than connecting through).
+    //    Capacity = 720 samples → 1 hour at the 5 s default refresh,
+    //    36 min at the 3 s minimum, 6 hours at the 30 s slow setting.
+    //    Each series holds parallel arrays of timestamps + values (or
+    //    null for "missing sample" — we render those as gaps rather
+    //    than connecting through).
     var TS_CAPACITY = 720;
     function makeRing() {
         return { t: [], v: [] };
@@ -1214,10 +1215,10 @@
         });
     }
 
-    // Buffers for the five WIP charts (PPS drift, clock stability,
-    // frequency steering, DOP history, SNR history).  Re-rendered on
-    // every poll, also redrawn on resize so they stay sharp when the
-    // browser window changes.
+    // Buffers for the five time-series charts (PPS drift, clock
+    // stability, frequency steering, DOP history, SNR history).
+    // Re-rendered on every poll, also redrawn on resize so they stay
+    // sharp when the browser window changes.
     var ts = {
         pps:   makeRing(),  // chrony last_offset_s          (seconds)
         rms:   makeRing(),  // chrony rms_offset_s           (seconds)
