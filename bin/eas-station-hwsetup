@@ -37,20 +37,23 @@ subsequent commits, each with their own validation and tests.
 from __future__ import annotations
 
 import argparse
+import errno
 import grp
 import json
 import logging
 import logging.handlers
 import os
+import shutil
 import socket
 import socketserver
 import stat
+import subprocess
 import sys
 import threading
 import time
 import traceback
 import uuid
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 # ---------------------------------------------------------------------------
 # Configuration constants. Kept at module scope so unit-style tests can
@@ -92,8 +95,229 @@ def _cmd_ping(params: Dict[str, Any], emit: EmitFn) -> Dict[str, Any]:
     return {"ok": True, "exit_code": 0, "stdout": msg}
 
 
+# ---------------------------------------------------------------------------
+# Subprocess helper. Every real action runs at least one external command,
+# so we centralise the "run with timeout, stream output, never use a
+# shell" pattern here. All argv must be lists of strings the action
+# itself controls — no caller-supplied strings ever land in argv.
+# ---------------------------------------------------------------------------
+
+def _run_streaming(
+    argv: List[str],
+    emit: EmitFn,
+    *,
+    timeout: float = 30.0,
+    label: Optional[str] = None,
+) -> Tuple[int, str, str]:
+    """Run ``argv`` (no shell), stream stdout/stderr to ``emit`` line-by-line,
+    and return ``(exit_code, stdout_full, stderr_full)``.
+
+    Any caller-derived data must already have been validated against an
+    allowlist by the time it reaches here. ``argv[0]`` may be a bare name
+    only when the caller has confirmed a specific path with shutil.which;
+    otherwise pass an absolute path.
+    """
+    if not isinstance(argv, list) or not argv or not all(isinstance(a, str) for a in argv):
+        raise ValueError("argv must be a non-empty list of strings")
+    label = label or argv[0]
+    emit("stdout", f"$ {' '.join(argv)}\n")
+    try:
+        proc = subprocess.Popen(
+            argv,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,
+            close_fds=True,
+            text=True,
+            bufsize=1,
+        )
+    except FileNotFoundError as exc:
+        emit("stderr", f"{label}: {exc}\n")
+        return 127, "", str(exc)
+    except OSError as exc:
+        emit("stderr", f"{label}: {exc}\n")
+        return getattr(exc, "errno", 1) or 1, "", str(exc)
+
+    stdout_buf: List[str] = []
+    stderr_buf: List[str] = []
+
+    def pump(stream, channel: str, buf: List[str]) -> None:
+        try:
+            for line in iter(stream.readline, ""):
+                buf.append(line)
+                emit(channel, line)
+        except Exception as exc:
+            emit("stderr", f"[{label}] read error: {exc}\n")
+        finally:
+            try:
+                stream.close()
+            except Exception:
+                pass
+
+    threads = [
+        threading.Thread(target=pump, args=(proc.stdout, "stdout", stdout_buf), daemon=True),
+        threading.Thread(target=pump, args=(proc.stderr, "stderr", stderr_buf), daemon=True),
+    ]
+    for t in threads:
+        t.start()
+
+    try:
+        rc = proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        try:
+            proc.wait(timeout=2)
+        except Exception:
+            pass
+        emit("stderr", f"[{label}] timed out after {timeout:.1f}s\n")
+        rc = 124
+
+    for t in threads:
+        t.join(timeout=2)
+
+    return rc, "".join(stdout_buf), "".join(stderr_buf)
+
+
+# ---------------------------------------------------------------------------
+# seed_rtc — write the (synchronized) system clock back to the RTC,
+# clearing the RV-3028 / DS3231 PORF flag. This is the "I just replaced
+# the coin cell" / "I just brought up a fresh HAT" recovery path.
+#
+# Params:
+#   force_unsynced (bool, default False) — proceed even if timedatectl
+#     reports the system clock is not yet NTP/GPS-synchronized. Off by
+#     default because writing a wrong system time to the RTC and then
+#     trusting it on next boot is a footgun; the UI surfaces the flag
+#     explicitly with a "I know what I'm doing" checkbox.
+#
+# Result fields beyond ok / exit_code:
+#   system_time_iso   — datetime stamp the system reported at the start
+#   rtc_time_after    — output of `hwclock -r` after the write
+#   ntp_synchronized  — boolean from timedatectl
+# ---------------------------------------------------------------------------
+
+def _which_required(name: str) -> Optional[str]:
+    """shutil.which() but explicitly searches the privileged PATH the
+    helper uses. Returns None if the binary is missing entirely."""
+    return shutil.which(name)
+
+
+def _read_timedatectl_synchronized() -> Tuple[Optional[bool], Optional[str]]:
+    """Return (synchronized, error). synchronized is True/False/None
+    where None means timedatectl couldn't be parsed."""
+    if not _which_required("timedatectl"):
+        return None, "timedatectl not installed"
+    try:
+        result = subprocess.run(
+            ["timedatectl", "show", "--property=NTPSynchronized", "--value"],
+            capture_output=True, text=True, timeout=4.0, check=False,
+        )
+    except Exception as exc:
+        return None, f"timedatectl failed: {exc}"
+    if result.returncode != 0:
+        return None, f"timedatectl exited {result.returncode}: {result.stderr.strip()}"
+    val = (result.stdout or "").strip().lower()
+    if val in ("yes", "true"):
+        return True, None
+    if val in ("no", "false"):
+        return False, None
+    return None, f"unexpected timedatectl output: {val!r}"
+
+
+def _cmd_seed_rtc(params: Dict[str, Any], emit: EmitFn) -> Dict[str, Any]:
+    raw_force = params.get("force_unsynced", False)
+    if not isinstance(raw_force, bool):
+        return {
+            "ok": False,
+            "exit_code": 22,
+            "error": "force_unsynced must be a boolean (true / false)",
+        }
+    force: bool = raw_force
+
+    hwclock = _which_required("hwclock")
+    if not hwclock:
+        return {
+            "ok": False,
+            "exit_code": 127,
+            "error": (
+                "hwclock not found. On Pi OS Bookworm and newer, install "
+                "util-linux-extra: sudo apt install -y util-linux-extra"
+            ),
+        }
+
+    # 1. Synchronization gate.
+    synced, sync_err = _read_timedatectl_synchronized()
+    emit("stdout", f"timedatectl NTPSynchronized: {synced} (error={sync_err})\n")
+    if synced is False and not force:
+        return {
+            "ok": False,
+            "exit_code": 1,
+            "error": (
+                "System clock is not synchronized to NTP/GPS. Refusing to "
+                "write a possibly-wrong time to the RTC. Either wait for "
+                "chrony to converge, or re-run with force_unsynced=true."
+            ),
+            "ntp_synchronized": False,
+        }
+
+    system_time_iso = ""
+    try:
+        from datetime import datetime, timezone as _tz
+        system_time_iso = datetime.now(_tz.utc).isoformat()
+    except Exception:
+        pass
+
+    # 2. Write system time → RTC. -u forces UTC; --rtc /dev/rtc0 pins the
+    #    target. Both are hardcoded — no caller input lands in argv.
+    rc, _out, err = _run_streaming(
+        [hwclock, "-w", "-u", "--rtc", "/dev/rtc0"],
+        emit,
+        timeout=8.0,
+        label="hwclock -w",
+    )
+    if rc != 0:
+        return {
+            "ok": False,
+            "exit_code": rc,
+            "error": f"hwclock -w failed: {err.strip() or 'no stderr'}",
+            "ntp_synchronized": synced,
+            "system_time_iso": system_time_iso,
+        }
+
+    # 3. Read back. On a healthy chip this prints one line like
+    #    "2026-05-08 21:29:08.000000+00:00".
+    rc_r, out_r, err_r = _run_streaming(
+        [hwclock, "-r", "-u", "--rtc", "/dev/rtc0"],
+        emit,
+        timeout=4.0,
+        label="hwclock -r",
+    )
+    rtc_time_after = out_r.strip().splitlines()[-1] if out_r.strip() else ""
+    if rc_r != 0:
+        return {
+            "ok": False,
+            "exit_code": rc_r,
+            "error": (
+                "hwclock -w succeeded but hwclock -r failed: "
+                + (err_r.strip() or "no stderr")
+            ),
+            "ntp_synchronized": synced,
+            "system_time_iso": system_time_iso,
+            "rtc_time_after": rtc_time_after,
+        }
+
+    return {
+        "ok": True,
+        "exit_code": 0,
+        "ntp_synchronized": synced,
+        "system_time_iso": system_time_iso,
+        "rtc_time_after": rtc_time_after,
+    }
+
+
 COMMANDS: Dict[str, CommandFn] = {
     "ping": _cmd_ping,
+    "seed_rtc": _cmd_seed_rtc,
 }
 
 

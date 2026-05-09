@@ -137,6 +137,60 @@ def gps_hat_ping():
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
+@hardware_bp.route('/hardware/gps-hat/seed-rtc', methods=['POST'])
+@require_permission('system.configure')
+def gps_hat_seed_rtc():
+    """Write the (synchronized) system clock back to the RTC.
+
+    Recovery action for two specific failure modes:
+
+    * RV-3028 / DS3231 PORF set after a fresh-out-of-the-box HAT or a
+      replaced coin cell — the chip refuses ``RTC_RD_TIME`` until a
+      successful ``RTC_SET_TIME`` clears the flag.
+    * Routine "I just configured chrony, push my disciplined time back
+      to the RTC so cold boots come up correct."
+
+    Body (optional):
+        {"force_unsynced": false}
+
+    By default we refuse to run when ``timedatectl`` reports the system
+    clock is not NTP/GPS synchronized — writing a wrong time and then
+    trusting it on next boot is a footgun. Set ``force_unsynced=true``
+    to override (the UI surfaces this as an explicit checkbox).
+    """
+    try:
+        body = request.get_json(silent=True) or {}
+        force = bool(body.get("force_unsynced", False))
+        result = hwsetup_call(
+            "seed_rtc",
+            {"force_unsynced": force},
+            timeout=15.0,
+            raise_on_error=False,
+        )
+        # Pass through the helper's verdict; the UI renders ok/error/details.
+        status = 200 if result.get("ok") else 409
+        result_event = result.get("result_event") or {}
+        return jsonify({
+            "ok": result.get("ok", False),
+            "exit_code": result.get("exit_code"),
+            "stdout": result.get("stdout", ""),
+            "stderr": result.get("stderr", ""),
+            "error": result.get("error"),
+            "ntp_synchronized": result_event.get("ntp_synchronized"),
+            "system_time_iso": result_event.get("system_time_iso"),
+            "rtc_time_after": result_event.get("rtc_time_after"),
+        }), status
+    except HelperUnavailable as exc:
+        return jsonify({
+            "ok": False,
+            "error": str(exc),
+            "helper_available": False,
+        }), 503
+    except Exception as exc:
+        logger.exception("hwsetup seed_rtc failed")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
 @hardware_bp.route('/hardware/update', methods=['POST'])
 @require_permission('system.configure')
 def update_hardware():
