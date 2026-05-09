@@ -1031,6 +1031,80 @@ def _get_controller_and_adapter(
     return controller, adapter, db_config, restored
 
 
+def _read_redis_source_data(source_name: str) -> Optional[Dict[str, Any]]:
+    """Look up live runtime data for a source from Redis (separated architecture).
+
+    Returns the per-source dict published by audio-service via
+    ``audio_controller.sources[<name>]`` or ``None`` if no fresh data exists.
+    """
+    try:
+        redis_metrics = _read_audio_metrics_from_redis()
+        if not redis_metrics or 'audio_controller' not in redis_metrics:
+            return None
+
+        audio_controller_data = redis_metrics.get('audio_controller')
+        if isinstance(audio_controller_data, str):
+            audio_controller_data = json.loads(audio_controller_data)
+
+        if not isinstance(audio_controller_data, dict):
+            return None
+
+        sources = audio_controller_data.get('sources') or {}
+        data = sources.get(source_name)
+        if isinstance(data, dict):
+            return data
+        return None
+    except Exception as exc:  # pylint: disable=broad-except
+        logger.debug("Failed to read Redis source data for %s: %s", source_name, exc)
+        return None
+
+
+def _serialize_audio_source_from_db(
+    db_config: AudioSourceConfigDB,
+    redis_source_data: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Serialize an audio source from its persisted DB row (and optional live Redis data).
+
+    Used by the edit/detail endpoints so they do not need to instantiate a local
+    adapter — which would fail in the separated architecture where audio runs
+    in a different process.
+    """
+
+    config_params = db_config.config_params or {}
+    icecast_url = _get_icecast_stream_url(db_config.name)
+
+    status = 'stopped'
+    error_message = None
+    if isinstance(redis_source_data, dict):
+        status = redis_source_data.get('status') or 'stopped'
+        error_message = redis_source_data.get('error_message')
+
+    return {
+        'id': db_config.name,
+        'name': db_config.name,
+        'type': db_config.source_type,
+        'status': status,
+        'error_message': error_message,
+        'enabled': bool(db_config.enabled),
+        'priority': db_config.priority,
+        'auto_start': bool(db_config.auto_start),
+        'description': db_config.description or '',
+        'icecast_url': icecast_url,
+        'config': {
+            'sample_rate': config_params.get('sample_rate', 44100),
+            'channels': config_params.get('channels', 1),
+            'buffer_size': config_params.get('buffer_size', 4096),
+            'silence_threshold_db': config_params.get('silence_threshold_db', -60.0),
+            'silence_duration_seconds': config_params.get('silence_duration_seconds', 5.0),
+            'device_params': config_params.get('device_params', {}),
+        },
+        'metrics': None,
+        'streaming': None,
+        'in_memory': bool(redis_source_data),
+        'redis_mode': bool(redis_source_data),
+    }
+
+
 def _sanitize_streaming_stats(stats: Optional[Dict[str, Any]], icecast_url: Optional[str]) -> Optional[Dict[str, Any]]:
     """Prepare streaming statistics for API output."""
     if not stats:
@@ -1591,6 +1665,34 @@ def api_create_audio_source():
             except Exception as e:
                 logger.warning(f'⚠️ Failed to register {name} with Icecast: {e}')
 
+        # Notify audio-service so the new source is added to the running
+        # process without a service restart.  Optionally auto-start it if
+        # requested.
+        try:
+            publisher = get_audio_command_publisher()
+            publisher.add_source({
+                'name': name,
+                'source_type': source_type,
+                'enabled': config.enabled,
+                'priority': config.priority,
+                'sample_rate': config.sample_rate,
+                'channels': config.channels,
+                'buffer_size': config.buffer_size,
+                'silence_threshold_db': config.silence_threshold_db,
+                'silence_duration_seconds': config.silence_duration_seconds,
+                'device_params': config.device_params,
+            })
+            if data.get('auto_start'):
+                publisher.start_source(name, wait_for_response=False)
+        except Exception as pub_exc:  # pylint: disable=broad-except
+            logger.warning(
+                'Failed to publish source_add for %s (DB row created, will load on next audio-service restart): %s',
+                name, pub_exc,
+            )
+
+        # Clear cache so the next list call sees the new source immediately.
+        clear_audio_source_cache(name)
+
         return jsonify({
             'source': _serialize_audio_source(name, adapter),
             'message': 'Audio source created successfully'
@@ -1602,22 +1704,29 @@ def api_create_audio_source():
 
 @audio_ingest_bp.route('/api/audio/sources/<path:source_name>', methods=['GET'])
 def api_get_audio_source(source_name: str):
-    """Get details of a specific audio source."""
-    try:
-        controller, adapter, db_config, _ = _get_controller_and_adapter(source_name)
+    """Get details of a specific audio source.
 
-        if adapter is None:
-            if db_config:
-                return jsonify({
-                    'error': 'Source exists in database but could not be loaded',
-                    'hint': 'Check audio ingest logs for initialization errors',
-                }), 503
+    The configuration is sourced from the database (the source of truth) so the
+    endpoint succeeds even when the audio-service is running in a separate
+    process and the web process has no local adapter.  Live status, when
+    available, is overlaid from Redis.
+    """
+    try:
+        db_config = AudioSourceConfigDB.query.filter_by(name=source_name).first()
+
+        if db_config is None:
+            # Fall back to a local adapter if one happens to exist in this process
+            controller = _get_audio_controller()
+            adapter = controller._sources.get(source_name)
+            if adapter is not None:
+                return jsonify(_serialize_audio_source(source_name, adapter))
             return jsonify({
                 'error': f'Audio source "{source_name}" not found',
                 'hint': 'Check /api/audio/sources for available sources'
             }), 404
 
-        return jsonify(_serialize_audio_source(source_name, adapter, db_config=db_config))
+        redis_source_data = _read_redis_source_data(source_name)
+        return jsonify(_serialize_audio_source_from_db(db_config, redis_source_data))
 
     except Exception as exc:
         logger.error('Error getting audio source %s: %s', source_name, exc)
@@ -1625,76 +1734,88 @@ def api_get_audio_source(source_name: str):
 
 @audio_ingest_bp.route('/api/audio/sources/<path:source_name>', methods=['PATCH'])
 def api_update_audio_source(source_name: str):
-    """Update audio source configuration."""
-    try:
-        # Clear cache before updating
-        clear_audio_source_cache(source_name)
-        
-        controller, adapter, db_config, _restored = _get_controller_and_adapter(source_name)
+    """Update audio source configuration.
 
-        if adapter is None:
-            if db_config:
-                return jsonify({
-                    'error': 'Source exists in database but could not be loaded',
-                    'hint': 'Check audio ingest logs for initialization errors',
-                }), 503
+    Updates the database (source of truth) and publishes a ``source_update``
+    command to the audio-service so the running source picks up the new
+    settings without a service restart.
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+
+        db_config = AudioSourceConfigDB.query.filter_by(name=source_name).first()
+        if db_config is None:
             return jsonify({
                 'error': f'Audio source "{source_name}" not found',
                 'hint': 'Check /api/audio/sources for available sources'
             }), 404
 
-        config = adapter.config
-        data = request.get_json()
-        if not data:
-            return jsonify({'error': 'No data provided'}), 400
-
-        # Update database configuration FIRST, before touching the in-memory config
-        db_config = AudioSourceConfigDB.query.filter_by(name=source_name).first()
-        if db_config:
-            if 'enabled' in data:
-                db_config.enabled = data['enabled']
-            if 'priority' in data:
-                db_config.priority = data['priority']
-            if 'auto_start' in data:
-                db_config.auto_start = data['auto_start']
-            if 'description' in data:
-                db_config.description = data['description']
-
-            # Update config params
-            config_params = db_config.config_params or {}
-            if 'silence_threshold_db' in data:
-                config_params['silence_threshold_db'] = data['silence_threshold_db']
-            if 'silence_duration_seconds' in data:
-                config_params['silence_duration_seconds'] = data['silence_duration_seconds']
-            if 'device_params' in data:
-                device_params = config_params.get('device_params', {})
-                device_params.update(data['device_params'])
-                config_params['device_params'] = device_params
-
-            db_config.config_params = config_params
-            try:
-                db.session.commit()
-            except Exception:
-                db.session.rollback()
-                raise
-
-        # Update in-memory configuration AFTER the database transaction succeeds
-        # This prevents inconsistency if the commit fails
         if 'enabled' in data:
-            config.enabled = data['enabled']
+            db_config.enabled = bool(data['enabled'])
         if 'priority' in data:
-            config.priority = data['priority']
+            db_config.priority = int(data['priority'])
+        if 'auto_start' in data:
+            db_config.auto_start = bool(data['auto_start'])
+        if 'description' in data:
+            db_config.description = data['description']
+
+        config_params = dict(db_config.config_params or {})
         if 'silence_threshold_db' in data:
-            config.silence_threshold_db = data['silence_threshold_db']
+            config_params['silence_threshold_db'] = float(data['silence_threshold_db'])
         if 'silence_duration_seconds' in data:
-            config.silence_duration_seconds = data['silence_duration_seconds']
-        if 'device_params' in data:
-            config.device_params.update(data['device_params'])
+            config_params['silence_duration_seconds'] = float(data['silence_duration_seconds'])
+        if 'device_params' in data and isinstance(data['device_params'], dict):
+            device_params = dict(config_params.get('device_params', {}))
+            device_params.update(data['device_params'])
+            config_params['device_params'] = device_params
+        db_config.config_params = config_params
+
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            raise
+
+        # Mirror the change into the local controller (integrated mode); ignore
+        # failures because in separated mode there is no local adapter.
+        try:
+            controller = _get_audio_controller()
+            adapter = controller._sources.get(source_name)
+            if adapter is not None:
+                cfg = adapter.config
+                if 'enabled' in data:
+                    cfg.enabled = bool(data['enabled'])
+                if 'priority' in data:
+                    cfg.priority = int(data['priority'])
+                if 'silence_threshold_db' in data:
+                    cfg.silence_threshold_db = float(data['silence_threshold_db'])
+                if 'silence_duration_seconds' in data:
+                    cfg.silence_duration_seconds = float(data['silence_duration_seconds'])
+                if 'device_params' in data and isinstance(data['device_params'], dict):
+                    cfg.device_params.update(data['device_params'])
+        except Exception as local_exc:  # pylint: disable=broad-except
+            logger.debug('Local adapter update skipped for %s: %s', source_name, local_exc)
+
+        # Notify audio-service so the running source applies the new config
+        # without a full service restart.
+        try:
+            publisher = get_audio_command_publisher()
+            publisher.update_source(source_name, dict(data))
+        except Exception as pub_exc:  # pylint: disable=broad-except
+            logger.warning(
+                'Failed to publish source_update for %s (DB updated, service will pick up on next restart): %s',
+                source_name, pub_exc,
+            )
+
+        clear_audio_source_cache(source_name)
 
         logger.info('Updated audio source: %s', source_name)
 
+        redis_source_data = _read_redis_source_data(source_name)
         return jsonify({
-            'source': _serialize_audio_source(source_name, adapter),
+            'source': _serialize_audio_source_from_db(db_config, redis_source_data),
             'message': 'Audio source updated successfully'
         })
 
@@ -1810,6 +1931,9 @@ def api_start_audio_source(source_name: str):
             result = publisher.start_source(source_name)
 
             if result['success']:
+                # Drop the cached source list so the next /api/audio/sources
+                # call reflects the new running state immediately.
+                clear_audio_source_cache(source_name)
                 logger.info('Published start command for audio source: %s', source_name)
                 return jsonify({
                     'message': f'Start command sent to audio-service for source: {source_name}',
@@ -1852,6 +1976,9 @@ def api_stop_audio_source(source_name: str):
             result = publisher.stop_source(source_name)
 
             if result['success']:
+                # Drop the cached source list so the next /api/audio/sources
+                # call reflects the stopped state immediately.
+                clear_audio_source_cache(source_name)
                 logger.info('Published stop command for audio source: %s', source_name)
                 return jsonify({
                     'message': f'Stop command sent to audio-service for source: {source_name}',
