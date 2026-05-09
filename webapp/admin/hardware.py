@@ -508,6 +508,7 @@ def update_hardware():
             'neopixel_gpio_pin', 'neopixel_num_pixels', 'neopixel_brightness',
             'neopixel_flash_interval_ms',
             'gps_baudrate', 'gps_pps_gpio_pin', 'gps_min_satellites',
+            'gps_gpsd_port',
         ]
         for field in int_fields:
             if field in data and data[field] is not None:
@@ -544,6 +545,23 @@ def update_hardware():
                         }
                     except ValueError:
                         pass
+
+        # gps_source is a string enum — clamp to known values so a stale
+        # form post or a JSON client cannot store nonsense that the GPS
+        # Manager would then refuse to act on.
+        if 'gps_source' in data and data['gps_source'] is not None:
+            src = str(data['gps_source']).strip().lower()
+            if src not in ('auto', 'serial', 'gpsd'):
+                src = 'auto'
+            data['gps_source'] = src
+        if 'gps_gpsd_port' in data and data['gps_gpsd_port'] is not None:
+            try:
+                p = int(data['gps_gpsd_port'])
+            except (TypeError, ValueError):
+                p = 2947
+            if not (1 <= p <= 65535):
+                p = 2947
+            data['gps_gpsd_port'] = p
 
         # Update settings
         settings = update_hardware_settings(data)

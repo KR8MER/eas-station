@@ -48,6 +48,7 @@ import ctypes.util
 import json
 import logging
 import os
+import socket
 import subprocess
 import threading
 import time
@@ -106,6 +107,28 @@ def _safe_int(val) -> Optional[int]:
 _TIME_SYNC_INTERVAL_S: int = 3600
 
 
+# gpsd's gnssid → NMEA-style talker IDs. The UI groups satellites by
+# talker (GP/GL/GA/GB) and we want gpsd-mode output to look the same as
+# direct-NMEA mode, so we translate up front. Anything we don't recognise
+# is reported as the unknown talker so the UI can render it generically.
+_GPSD_GNSSID_TO_TALKER = {
+    0: "GP",  # GPS
+    1: "SB",  # SBAS — UI doesn't filter on this today, but it's correct
+    2: "GA",  # Galileo
+    3: "GB",  # BeiDou
+    4: "IM",  # IMES
+    5: "GQ",  # QZSS
+    6: "GL",  # GLONASS
+    7: "GI",  # NavIC / IRNSS
+}
+
+
+def _gpsd_gnssid_to_talker(gnssid: Any) -> str:
+    if isinstance(gnssid, int):
+        return _GPSD_GNSSID_TO_TALKER.get(gnssid, "GN")
+    return "GN"
+
+
 class GPSManager:
     """Background thread that reads NMEA sentences from a GPS serial port
     and publishes position/time data to Redis.
@@ -133,9 +156,29 @@ class GPSManager:
 
         self._use_for_time: bool = bool(config.get("use_for_time", False))
 
+        # NMEA source selection. One of:
+        #   "serial" — open the configured /dev/serial0 directly (legacy /
+        #              fallback when gpsd isn't running). What this manager
+        #              has always done.
+        #   "gpsd"   — connect to gpsd's TCP socket on localhost:2947 and
+        #              consume its JSON event stream. Lets chrony share the
+        #              GPS for stratum-1 PPS time without port contention.
+        #   "auto"   — prefer gpsd when reachable; fall back to serial.
+        # Anything unrecognised collapses to "auto" so a stale config row
+        # cannot brick the manager.
+        raw_source = str(config.get("gps_source", "auto") or "auto").lower()
+        self._source: str = raw_source if raw_source in ("serial", "gpsd", "auto") else "auto"
+        self._gpsd_host: str = str(config.get("gpsd_host", "127.0.0.1") or "127.0.0.1")
+        self._gpsd_port: int = int(config.get("gpsd_port", 2947) or 2947)
+        # Set by start() once we know which backend actually started; the
+        # diagnostic code surfaces this so operators can see whether a
+        # fallback fired.
+        self._active_source: str = "stopped"
+
         self._running = False
         self._thread: Optional[threading.Thread] = None
         self._ser = None  # serial.Serial instance
+        self._gpsd_sock = None  # socket.socket when source=="gpsd"
 
         # Most-recently parsed fix data (protected by _lock)
         self._lock = threading.Lock()
@@ -183,11 +226,34 @@ class GPSManager:
     # ------------------------------------------------------------------
 
     def start(self) -> bool:
-        """Open the serial port and start the reader thread.
+        """Open the configured NMEA source (serial port or gpsd) and start
+        the reader thread.
+
+        Source selection follows ``self._source``:
+
+        * ``"serial"`` — open ``self._serial_port`` directly. Legacy path.
+        * ``"gpsd"``   — connect to ``gpsd_host:gpsd_port`` (default
+          127.0.0.1:2947). Lets chrony share the GPS receiver.
+        * ``"auto"``   — try gpsd first; fall back to serial if gpsd isn't
+          reachable. Default for new installs.
 
         Returns:
-            True if the serial port was opened successfully, False otherwise.
+            True if a source was opened, False otherwise.
         """
+        if self._source == "gpsd":
+            return self._start_gpsd_only()
+        if self._source == "serial":
+            return self._start_serial_only()
+        # auto
+        if self._start_gpsd_only(quiet=True):
+            return True
+        self._logger.info(
+            "gpsd not reachable on %s:%d — falling back to direct serial read",
+            self._gpsd_host, self._gpsd_port,
+        )
+        return self._start_serial_only()
+
+    def _start_serial_only(self) -> bool:
         port_path = self._serial_port
         if not os.path.exists(port_path):
             self._logger.warning(
@@ -218,6 +284,7 @@ class GPSManager:
             self._set_error_status("port_open_failed")
             return False
 
+        self._active_source = "serial"
         self._running = True
         self._thread = threading.Thread(
             target=self._reader_loop,
@@ -227,18 +294,115 @@ class GPSManager:
         self._thread.start()
         self._start_pps_monitor()
         self._logger.info(
-            "✅ GPS reader started on %s @ %d baud (PPS GPIO %d)",
+            "✅ GPS reader started on %s @ %d baud (PPS GPIO %d, source=serial)",
             port_path,
             self._baudrate,
             self._pps_pin,
         )
         return True
 
+    def _start_gpsd_only(self, quiet: bool = False) -> bool:
+        """Connect to gpsd, send WATCH, kick off the reader thread.
+
+        ``quiet=True`` suppresses the warning log line on failure (used
+        when ``source==auto`` and we're going to fall back to serial
+        next — the failure isn't an error in that case).
+        """
+        sock = self._gpsd_connect(quiet=quiet)
+        if sock is None:
+            return False
+        self._gpsd_sock = sock
+        self._active_source = "gpsd"
+        self._running = True
+        self._thread = threading.Thread(
+            target=self._gpsd_reader_loop,
+            name="gps-reader-gpsd",
+            daemon=True,
+        )
+        self._thread.start()
+        # PPS monitor still works in gpsd mode — the kernel exposes
+        # /sys/class/pps/pps0 regardless of who's reading the serial port.
+        self._start_pps_monitor()
+        self._logger.info(
+            "✅ GPS reader started via gpsd at %s:%d (PPS GPIO %d, source=gpsd)",
+            self._gpsd_host, self._gpsd_port, self._pps_pin,
+        )
+        return True
+
+    def _gpsd_connect(self, *, quiet: bool = False) -> Optional[socket.socket]:
+        """Open a TCP connection to gpsd, send WATCH, validate the greeting.
+
+        Returns the socket on success, None on any failure. The greeting
+        validation is intentionally cheap — we only check that gpsd
+        responds with a JSON-shaped line within the connect timeout.
+        """
+        try:
+            sock = socket.create_connection(
+                (self._gpsd_host, self._gpsd_port),
+                timeout=3.0,
+            )
+        except (OSError, socket.timeout) as exc:
+            if not quiet:
+                self._logger.warning(
+                    "Cannot connect to gpsd at %s:%d: %s",
+                    self._gpsd_host, self._gpsd_port, exc,
+                )
+            return None
+        try:
+            sock.settimeout(3.0)
+            # Read gpsd's VERSION greeting before subscribing — proves we
+            # really are talking to gpsd and not, say, a stray HTTP server.
+            greeting = b""
+            while b"\n" not in greeting:
+                chunk = sock.recv(1024)
+                if not chunk:
+                    break
+                greeting += chunk
+                if len(greeting) > 4096:
+                    break
+            if b'"class":"VERSION"' not in greeting:
+                if not quiet:
+                    self._logger.warning(
+                        "gpsd at %s:%d did not send a VERSION greeting (got %r)",
+                        self._gpsd_host, self._gpsd_port, greeting[:120],
+                    )
+                sock.close()
+                return None
+            # Subscribe to JSON event stream — `pps:true` asks gpsd to
+            # forward kernel PPS samples too, but it's harmless if the
+            # gpsd build is too old to support it.
+            sock.sendall(b'?WATCH={"enable":true,"json":true,"pps":true}\n')
+            # Use a long read timeout in the steady state; reconnect logic
+            # in the loop handles dropped connections.
+            sock.settimeout(15.0)
+            return sock
+        except (OSError, socket.timeout) as exc:
+            if not quiet:
+                self._logger.warning(
+                    "gpsd handshake failed at %s:%d: %s",
+                    self._gpsd_host, self._gpsd_port, exc,
+                )
+            try:
+                sock.close()
+            except OSError:
+                pass
+            return None
+
     def stop(self) -> None:
-        """Stop the reader thread and close the serial port."""
+        """Stop the reader thread and close the serial port / gpsd socket."""
         self._running = False
+        # Close the gpsd socket from the outside so the recv() in
+        # _gpsd_reader_loop returns immediately. shutdown() is needed
+        # because plain close() on a blocked recv() doesn't always wake
+        # the thread on Linux.
+        if self._gpsd_sock is not None:
+            try:
+                self._gpsd_sock.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=3)
+        self._close_gpsd_socket()
         if self._pps_kernel_thread and self._pps_kernel_thread.is_alive():
             self._pps_kernel_thread.join(timeout=2)
         self._pps_kernel_thread = None
@@ -256,6 +420,7 @@ class GPSManager:
             except Exception:
                 pass
             self._ser = None
+        self._active_source = "stopped"
         self._logger.info("GPS reader stopped")
 
     def get_status(self) -> Dict[str, Any]:
@@ -641,6 +806,242 @@ class GPSManager:
             self._redis.setex(REDIS_KEY, REDIS_TTL, json.dumps(data))
         except Exception as exc:
             self._logger.debug("Failed to publish GPS status to Redis: %s", exc)
+
+    # ------------------------------------------------------------------
+    # gpsd reader path
+    # ------------------------------------------------------------------
+    #
+    # Wire format: gpsd serves JSON-Lines over TCP. After we send
+    # ``?WATCH={"enable":true,"json":true,"pps":true}`` it streams events
+    # of the form documented at https://gpsd.gitlab.io/gpsd/gpsd_json.html
+    # — primarily TPV (time/position/velocity), SKY (satellite snapshot),
+    # and GST (error estimates), interleaved with periodic VERSION /
+    # WATCH / DEVICES bookkeeping events we mostly ignore.
+    #
+    # We map gpsd events into the same _fix dict the serial reader
+    # populates so the UI doesn't care which backend produced the data.
+    # ------------------------------------------------------------------
+
+    # gpsd's TPV.mode → fix_quality / has_fix mapping. Closer to NMEA
+    # GGA quality codes than to gpsd's own enum so the UI rendering
+    # logic (which already knows about "no_fix" / "gps_fix") doesn't
+    # have to learn a new vocabulary.
+    _GPSD_MODE_TO_QUALITY = {
+        0: ("no_fix", False),    # MODE_NOT_SEEN
+        1: ("no_fix", False),    # MODE_NO_FIX
+        2: ("gps_fix", True),    # MODE_2D
+        3: ("gps_fix", True),    # MODE_3D
+    }
+
+    def _gpsd_reader_loop(self) -> None:
+        """Read JSON events from gpsd until shutdown, populating self._fix.
+
+        Reconnects with exponential backoff on socket errors. The reader
+        thread owns the socket exclusively; ``stop()`` closes it from the
+        outside to break out of recv() promptly.
+        """
+        backoff = 1.0
+        with self._lock:
+            self._fix["status"] = "running"
+            self._fix["running"] = True
+            self._fix["source"] = "gpsd"
+        self._publish_current_fix()
+
+        buf = b""
+        while self._running:
+            sock = self._gpsd_sock
+            if sock is None:
+                # Initial connection lost; try to reopen.
+                sock = self._gpsd_connect(quiet=True)
+                if sock is None:
+                    time.sleep(min(backoff, 30.0))
+                    backoff = min(backoff * 2, 30.0)
+                    continue
+                self._gpsd_sock = sock
+                backoff = 1.0
+            try:
+                chunk = sock.recv(8192)
+            except socket.timeout:
+                # Steady-state read timeout. gpsd sends events at ~1 Hz
+                # when there's a fix and stays quiet otherwise. A 15s
+                # silence isn't fatal — we just loop.
+                continue
+            except (OSError, ConnectionResetError) as exc:
+                if not self._running:
+                    break
+                self._logger.warning("gpsd socket error: %s; reconnecting", exc)
+                self._close_gpsd_socket()
+                time.sleep(min(backoff, 30.0))
+                backoff = min(backoff * 2, 30.0)
+                continue
+            if not chunk:
+                # gpsd closed the connection. Reconnect.
+                if not self._running:
+                    break
+                self._logger.info("gpsd closed the connection; reconnecting")
+                self._close_gpsd_socket()
+                time.sleep(min(backoff, 30.0))
+                backoff = min(backoff * 2, 30.0)
+                continue
+            buf += chunk
+            while b"\n" in buf:
+                line, _, buf = buf.partition(b"\n")
+                if not line.strip():
+                    continue
+                self._record_recent_sentence(line.decode("utf-8", errors="replace"))
+                try:
+                    obj = json.loads(line)
+                except json.JSONDecodeError as exc:
+                    self._logger.debug("gpsd malformed JSON %r: %s", line[:120], exc)
+                    with self._lock:
+                        self._fix["sentence_errors"] = self._fix.get("sentence_errors", 0) + 1
+                    continue
+                self._handle_gpsd_message(obj)
+            self._publish_current_fix()
+
+        # Clean shutdown
+        self._close_gpsd_socket()
+        with self._lock:
+            self._fix["status"] = "stopped"
+            self._fix["running"] = False
+        self._publish_current_fix()
+
+    def _record_recent_sentence(self, line: str) -> None:
+        """Append a raw line to the rolling buffer the UI shows. Threadsafe."""
+        with self._lock:
+            self._recent_sentences.append(line.strip())
+
+    def _close_gpsd_socket(self) -> None:
+        sock = self._gpsd_sock
+        self._gpsd_sock = None
+        if sock is None:
+            return
+        try:
+            sock.close()
+        except OSError:
+            pass
+
+    def _handle_gpsd_message(self, obj: Dict[str, Any]) -> None:
+        """Dispatch one JSON event from gpsd into the _fix dict."""
+        cls = obj.get("class")
+        if not isinstance(cls, str):
+            return
+        # Track per-class arrival counts so the UI can spot a receiver
+        # that's emitting GGA but no SKY (and vice versa).
+        with self._lock:
+            counts = self._fix.setdefault("sentence_counts", {})
+            counts[cls] = counts.get(cls, 0) + 1
+            self._fix["last_sentence_at"] = datetime.now(timezone.utc).isoformat()
+
+        if cls == "TPV":
+            self._handle_gpsd_tpv(obj)
+        elif cls == "SKY":
+            self._handle_gpsd_sky(obj)
+        elif cls == "GST":
+            self._handle_gpsd_gst(obj)
+        elif cls == "PPS":
+            # gpsd's PPS event carries a real_sec/real_nsec stamp — the
+            # kernel-PPS poller in _start_pps_monitor handles the
+            # pulse-count UI signal already, so we just use this as a
+            # liveness hint.
+            with self._lock:
+                self._fix["pps_last_pulse_at"] = datetime.now(timezone.utc).isoformat()
+        # VERSION / DEVICES / WATCH events arrive once at handshake time
+        # and after device hot-plugs; we already updated the counter
+        # above so we drop them on the floor.
+
+    def _handle_gpsd_tpv(self, obj: Dict[str, Any]) -> None:
+        mode = obj.get("mode")
+        quality, has_fix = self._GPSD_MODE_TO_QUALITY.get(
+            mode if isinstance(mode, int) else 0, ("no_fix", False),
+        )
+        # gpsd `speed` is metres-per-second; the existing UI expects knots.
+        speed_mps = obj.get("speed")
+        speed_knots = (
+            round(float(speed_mps) * 1.943844, 3)
+            if isinstance(speed_mps, (int, float)) else None
+        )
+        # gpsd reports altitude as `altMSL` (mean sea level — what users
+        # actually want) on modern releases, but older releases only have
+        # `alt` (which is HAE on some receivers). Prefer altMSL.
+        alt = obj.get("altMSL")
+        if alt is None:
+            alt = obj.get("alt")
+        with self._lock:
+            self._fix["fix_quality"] = quality
+            self._fix["has_fix"] = has_fix
+            self._fix["fix_mode"] = mode if mode in (1, 2, 3) else None
+            if isinstance(obj.get("lat"), (int, float)):
+                self._fix["latitude"] = float(obj["lat"])
+            if isinstance(obj.get("lon"), (int, float)):
+                self._fix["longitude"] = float(obj["lon"])
+            if isinstance(alt, (int, float)):
+                self._fix["altitude_m"] = float(alt)
+            if speed_knots is not None:
+                self._fix["speed_knots"] = speed_knots
+            if isinstance(obj.get("track"), (int, float)):
+                self._fix["track_angle"] = float(obj["track"])
+            t = obj.get("time")
+            if isinstance(t, str):
+                self._fix["gps_utc_time"] = t
+            # Optional error-estimate passthrough for the diagnostics
+            # disclosure the UI surfaces under the GPS card.
+            for src, dst in (("epx", "epx_m"), ("epy", "epy_m"), ("epv", "epv_m")):
+                v = obj.get(src)
+                if isinstance(v, (int, float)):
+                    self._fix[dst] = float(v)
+
+    def _handle_gpsd_sky(self, obj: Dict[str, Any]) -> None:
+        sats = obj.get("satellites")
+        if not isinstance(sats, list):
+            return
+        in_view: List[Dict[str, Any]] = []
+        used_prns: List[int] = []
+        for s in sats:
+            if not isinstance(s, dict):
+                continue
+            prn = s.get("PRN")
+            if not isinstance(prn, int):
+                continue
+            entry = {
+                "prn": prn,
+                "elevation": s.get("el") if isinstance(s.get("el"), (int, float)) else None,
+                "azimuth":   s.get("az") if isinstance(s.get("az"), (int, float)) else None,
+                "snr":       s.get("ss") if isinstance(s.get("ss"), (int, float)) else None,
+                "used":      bool(s.get("used")),
+                # Map gpsd's gnssid (0=GPS, 1=SBAS, 2=Galileo, 3=BeiDou,
+                # 5=QZSS, 6=GLONASS) to the talker-id strings the UI
+                # already groups by.
+                "talker": _gpsd_gnssid_to_talker(s.get("gnssid")),
+            }
+            in_view.append(entry)
+            if entry["used"]:
+                used_prns.append(prn)
+        with self._lock:
+            self._fix["satellites_in_view"] = in_view
+            self._fix["active_satellite_prns"] = used_prns
+            self._fix["satellites"] = len(used_prns)
+            for src, dst in (("hdop", "hdop"), ("vdop", "vdop"), ("pdop", "pdop")):
+                v = obj.get(src)
+                if isinstance(v, (int, float)):
+                    self._fix[dst] = float(v)
+
+    def _handle_gpsd_gst(self, obj: Dict[str, Any]) -> None:
+        # GST carries 1-sigma error estimates in metres along principal
+        # axes. We forward the diagonal terms so the diagnostics block
+        # can surface them next to HDOP/VDOP.
+        with self._lock:
+            for src, dst in (
+                ("major", "gst_major_m"),
+                ("minor", "gst_minor_m"),
+                ("orient", "gst_orient_deg"),
+                ("alt", "gst_alt_m"),
+                ("lat", "gst_lat_m"),
+                ("lon", "gst_lon_m"),
+            ):
+                v = obj.get(src)
+                if isinstance(v, (int, float)):
+                    self._fix[dst] = float(v)
 
     def _start_pps_monitor(self) -> None:
         """Begin counting PPS pulses, preferring the kernel pps-gpio device.
