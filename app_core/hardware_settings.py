@@ -258,6 +258,12 @@ def get_gps_settings() -> Dict[str, Any]:
         'use_for_location': settings.gps_use_for_location,
         'use_for_time': settings.gps_use_for_time,
         'min_satellites': settings.gps_min_satellites,
+        # Tier 3 fields. ``source`` is a string enum (auto/serial/gpsd);
+        # the gpsd host/port are only consulted when source is "gpsd"
+        # or "auto".
+        'gps_source': getattr(settings, 'gps_source', 'auto') or 'auto',
+        'gpsd_host': getattr(settings, 'gps_gpsd_host', '127.0.0.1') or '127.0.0.1',
+        'gpsd_port': int(getattr(settings, 'gps_gpsd_port', 2947) or 2947),
     }
 
 

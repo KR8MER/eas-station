@@ -236,6 +236,18 @@ class HardwareSettings(db.Model):
     gps_use_for_location = db.Column(db.Boolean, nullable=False, default=False)
     gps_use_for_time = db.Column(db.Boolean, nullable=False, default=False)
     gps_min_satellites = db.Column(db.Integer, nullable=False, default=4)
+    # Where the GPS Manager should get NMEA from. One of:
+    #   "auto"   — prefer gpsd at gps_gpsd_host:gps_gpsd_port; fall back to
+    #              opening gps_serial_port directly when gpsd isn't reachable.
+    #              Default for new installs.
+    #   "serial" — open gps_serial_port directly (the legacy behaviour).
+    #              Required if you don't run gpsd, or if gpsd would conflict
+    #              with another tool that needs the serial port.
+    #   "gpsd"   — only use gpsd; refuse to start if it's not reachable.
+    #              Useful when chrony also needs the GPS for stratum-1 PPS.
+    gps_source = db.Column(db.String(16), nullable=False, default='auto')
+    gps_gpsd_host = db.Column(db.String(100), nullable=False, default='127.0.0.1')
+    gps_gpsd_port = db.Column(db.Integer, nullable=False, default=2947)
 
     # ========================================================================
     # Metadata
@@ -317,6 +329,9 @@ class HardwareSettings(db.Model):
             "gps_use_for_location": self.gps_use_for_location,
             "gps_use_for_time": self.gps_use_for_time,
             "gps_min_satellites": self.gps_min_satellites,
+            "gps_source": self.gps_source,
+            "gps_gpsd_host": self.gps_gpsd_host,
+            "gps_gpsd_port": self.gps_gpsd_port,
             # Metadata
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

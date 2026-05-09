@@ -949,9 +949,49 @@
                          clipped by an ancestor's overflow:hidden / transform. -->
 
 
+                    <!-- ──────────────────────────────────────────────────
+                         GPS Source — picks where the GPS Manager reads
+                         NMEA from. The "auto" default is conservative:
+                         falls back to the legacy direct-serial path when
+                         gpsd isn't running, so existing installs see no
+                         behaviour change. Switch to "gpsd" to share the
+                         GPS with chrony for stratum-1 PPS time.
+                         ────────────────────────────────────────────────── -->
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <h5 class="card-title">Source</h5>
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label for="gps_source" class="form-label">NMEA Source</label>
+                                    <select class="form-select" id="gps_source" name="gps_source">
+                                        <option value="auto"   {% if (settings.gps_source or 'auto') == 'auto'   %}selected{% endif %}>Auto (prefer gpsd, fall back to serial)</option>
+                                        <option value="serial" {% if  settings.gps_source            == 'serial' %}selected{% endif %}>Serial port (legacy / standalone)</option>
+                                        <option value="gpsd"   {% if  settings.gps_source            == 'gpsd'   %}selected{% endif %}>gpsd (share GPS with chrony for PPS)</option>
+                                    </select>
+                                    <small class="form-text text-muted">
+                                        <strong>Auto</strong> tries gpsd first and falls back to the serial port if it isn't running.
+                                        <strong>gpsd</strong> mode lets chrony use the same GPS for sub-millisecond time discipline.
+                                    </small>
+                                </div>
+                                <div class="col-md-3">
+                                    <label for="gps_gpsd_host" class="form-label">gpsd host</label>
+                                    <input type="text" class="form-control font-monospace" id="gps_gpsd_host" name="gps_gpsd_host" value="{{ settings.gps_gpsd_host or '127.0.0.1' }}" placeholder="127.0.0.1">
+                                </div>
+                                <div class="col-md-3">
+                                    <label for="gps_gpsd_port" class="form-label">gpsd port</label>
+                                    <input type="number" class="form-control" id="gps_gpsd_port" name="gps_gpsd_port" value="{{ settings.gps_gpsd_port or 2947 }}" min="1" max="65535">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="card mb-3">
                         <div class="card-body">
                             <h5 class="card-title">Serial Connection</h5>
+                            <small class="form-text text-muted d-block mb-2">
+                                Used when <strong>NMEA Source</strong> above is set to <em>Serial port</em>, or as the fallback in <em>Auto</em> mode.
+                                In <em>gpsd</em> mode these are written to <code>/etc/default/gpsd</code> instead, via the GPS HAT setup helper.
+                            </small>
                             <div class="row g-3">
                                 <div class="col-md-6">
                                     <label for="gps_serial_port" class="form-label">Serial Port</label>
