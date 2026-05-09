@@ -17,6 +17,13 @@ Environment="PATH=/opt/eas-station/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/
 Environment="PYTHONPATH=/opt/eas-station"
 # Pi 5 requires lgpio for GPIO access - prevents gpiozero auto-detection hangs
 Environment="GPIOZERO_PIN_FACTORY=lgpio"
+# Memory diagnostics — capture allocator tracebacks so SIGUSR1 produces
+# a useful top-N list. Tracemalloc has non-trivial overhead, so leave
+# it off once the leak is identified and a fix has shipped.
+# Dumps land in MEMDIAG_DUMP_DIR; we override the /tmp default because
+# PrivateTmp=true below would hide /tmp dumps from a normal shell.
+Environment="MEMDIAG_TRACEMALLOC=1"
+Environment="MEMDIAG_DUMP_DIR=/var/log/eas-station"
 EnvironmentFile=/opt/eas-station/.env
 
 # Logging to systemd journal
