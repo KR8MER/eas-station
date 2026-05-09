@@ -221,6 +221,16 @@ class GPSManager:
         # Set by _handle_sentence (under _lock), cleared and acted on by _reader_loop
         self._pending_time_sync: Optional[datetime] = None
 
+        # Throttle for _publish_current_fix(): without this we serialize+
+        # SETEX the full fix dict on every NMEA sentence (≈10 Hz on a typical
+        # multi-constellation receiver). At ~3 KiB JSON per write that was
+        # the dominant CPU consumer in this process. Consumers (UI, trend
+        # sampler) only refresh at 1–5 s anyway, so 1 Hz is more than
+        # enough — but we still publish immediately on lifecycle events
+        # (start/stop/reconnect) by passing force=True.
+        self._last_publish_mono: float = 0.0
+        self._publish_min_interval_s: float = 1.0
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -795,10 +805,23 @@ class GPSManager:
         # Publish to Redis after releasing lock
         self._publish_current_fix()
 
-    def _publish_current_fix(self) -> None:
-        """Write the current fix dict to Redis."""
+    def _publish_current_fix(self, force: bool = False) -> None:
+        """Write the current fix dict to Redis.
+
+        Throttled to at most ``self._publish_min_interval_s`` (1 s by
+        default) — see ``_last_publish_mono`` in __init__ for rationale.
+        Pass ``force=True`` for lifecycle events (start, stop, reconnect)
+        where the UI should see the new state immediately.
+        """
         if not self._redis:
             return
+        if not force:
+            now_mono = time.monotonic()
+            if now_mono - self._last_publish_mono < self._publish_min_interval_s:
+                return
+            self._last_publish_mono = now_mono
+        else:
+            self._last_publish_mono = time.monotonic()
         try:
             with self._lock:
                 data = dict(self._fix)
@@ -845,7 +868,7 @@ class GPSManager:
             self._fix["status"] = "running"
             self._fix["running"] = True
             self._fix["source"] = "gpsd"
-        self._publish_current_fix()
+        self._publish_current_fix(force=True)
 
         buf = b""
         while self._running:
@@ -884,6 +907,19 @@ class GPSManager:
                 backoff = min(backoff * 2, 30.0)
                 continue
             buf += chunk
+            # Defensive cap: gpsd events are bounded (a few KiB at most),
+            # so anything past 1 MiB without a newline indicates the
+            # other end is misbehaving (or we're being fed garbage). Drop
+            # the buffer rather than letting it grow without bound — this
+            # is one of the few code paths in the hot loop that *could*
+            # leak Python heap if the peer never delimited messages.
+            if len(buf) > 1_048_576:
+                self._logger.warning(
+                    "gpsd: %d bytes buffered without newline; resetting",
+                    len(buf),
+                )
+                buf = b""
+                continue
             while b"\n" in buf:
                 line, _, buf = buf.partition(b"\n")
                 if not line.strip():
@@ -904,7 +940,7 @@ class GPSManager:
         with self._lock:
             self._fix["status"] = "stopped"
             self._fix["running"] = False
-        self._publish_current_fix()
+        self._publish_current_fix(force=True)
 
     def _record_recent_sentence(self, line: str) -> None:
         """Append a raw line to the rolling buffer the UI shows. Threadsafe."""

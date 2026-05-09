@@ -24,6 +24,21 @@ Environment="GPIOZERO_PIN_FACTORY=lgpio"
 # PrivateTmp=true below would hide /tmp dumps from a normal shell.
 Environment="MEMDIAG_TRACEMALLOC=1"
 Environment="MEMDIAG_DUMP_DIR=/var/log/eas-station"
+# glibc malloc tuning. Multi-threaded Python services on glibc default
+# to one malloc arena per CPU thread (= 8 on a Pi 5), and each arena
+# holds onto freed memory in a per-thread free-list rather than
+# returning it to the kernel. Combined with NMEA reader / gpsd reader /
+# screen manager / Flask API / health-check threads all allocating and
+# freeing small objects in a hot loop, the result is RSS that grows to
+# multiples of the actual live working set. The first SIGUSR1 dump on
+# this branch confirmed Python heap = 580 MiB while RSS = 3.05 GiB —
+# i.e. ~2.5 GiB lives in glibc arenas, not Python objects.
+#   * MALLOC_ARENA_MAX=2 caps arena count to 2 (forces sharing).
+#   * MALLOC_TRIM_THRESHOLD_=131072 lowers the threshold at which
+#     glibc returns top-of-heap memory to the kernel (default is 128 KiB
+#     dynamically tuned upward; pinning it low keeps RSS honest).
+Environment="MALLOC_ARENA_MAX=2"
+Environment="MALLOC_TRIM_THRESHOLD_=131072"
 EnvironmentFile=/opt/eas-station/.env
 
 # Logging to systemd journal

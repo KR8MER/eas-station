@@ -178,8 +178,18 @@ def _write_tracemalloc_section(fh) -> None:
     current, peak = tracemalloc.get_traced_memory()
     fh.write(f"tracemalloc.current: {_format_bytes(current)}\n")
     fh.write(f"tracemalloc.peak   : {_format_bytes(peak)}\n\n")
+    # Flush before the (potentially expensive) statistics pass so the
+    # header survives even if statistics() runs out of memory or the
+    # service is OOM-killed mid-dump (the original bug that produced
+    # 367-byte stub dumps).
+    try:
+        fh.flush()
+    except Exception:
+        pass
 
     # 1) Top by file:line — best for spotting hot allocation sites.
+    #    Each entry is written + flushed individually so a partial dump
+    #    is still useful when the process dies mid-loop.
     fh.write(f"--- top {_TRACEMALLOC_TOP_N} allocators by file:line ---\n")
     try:
         stats = snapshot.statistics("lineno")
@@ -187,12 +197,31 @@ def _write_tracemalloc_section(fh) -> None:
         fh.write(f"  (failed to compute lineno stats: {exc})\n")
         stats = []
     for i, stat in enumerate(stats[:_TRACEMALLOC_TOP_N], 1):
-        fh.write(f"#{i:>2}  {_format_bytes(stat.size)}  count={stat.count}  {stat.traceback}\n")
+        try:
+            fh.write(f"#{i:>2}  {_format_bytes(stat.size)}  count={stat.count}  {stat.traceback}\n")
+            fh.flush()
+        except Exception as exc:
+            fh.write(f"  (entry #{i} write failed: {exc})\n")
+            break
 
     fh.write("\n")
+    try:
+        fh.flush()
+    except Exception:
+        pass
 
-    # 2) Top by full traceback — best for deduplicating leaks that share
-    #    a low-level allocation but came from different call paths.
+    # 2) Top by full traceback — opt-in via MEMDIAG_TRACEMALLOC_TRACEBACKS=1.
+    #    With high allocation counts this section is the one that hangs /
+    #    OOMs the dump (it walks every captured traceback), so we skip it
+    #    by default. Set MEMDIAG_TRACEMALLOC_FRAMES>1 *and* the env var
+    #    to opt back in once the by-lineno top has narrowed the suspect.
+    if not _env_bool("MEMDIAG_TRACEMALLOC_TRACEBACKS", default=False):
+        fh.write(
+            "--- top allocators by full traceback (skipped) ---\n"
+            "  Set MEMDIAG_TRACEMALLOC_TRACEBACKS=1 (and frames>1) to enable.\n"
+        )
+        return
+
     fh.write(f"--- top {_TRACEMALLOC_TOP_N} allocators by traceback ---\n")
     try:
         stats = snapshot.statistics("traceback")
@@ -200,10 +229,15 @@ def _write_tracemalloc_section(fh) -> None:
         fh.write(f"  (failed to compute traceback stats: {exc})\n")
         stats = []
     for i, stat in enumerate(stats[:_TRACEMALLOC_TOP_N], 1):
-        fh.write(f"#{i:>2} {_format_bytes(stat.size)}  count={stat.count}\n")
-        for line in stat.traceback.format():
-            fh.write(f"    {line}\n")
-        fh.write("\n")
+        try:
+            fh.write(f"#{i:>2} {_format_bytes(stat.size)}  count={stat.count}\n")
+            for line in stat.traceback.format():
+                fh.write(f"    {line}\n")
+            fh.write("\n")
+            fh.flush()
+        except Exception as exc:
+            fh.write(f"  (entry #{i} write failed: {exc})\n")
+            break
 
 
 def write_memory_dump(reason: str = "manual") -> Optional[str]:
@@ -341,10 +375,15 @@ def install_memdiag_handlers(
         enable_tracemalloc = _env_bool("MEMDIAG_TRACEMALLOC", default=False)
 
     if tracemalloc_frames is None:
+        # Default to 1 frame: just enough to populate the by-lineno top.
+        # 10-frame stacks (the previous default) bloated tracemalloc's
+        # internal storage to the point where statistics("lineno") could
+        # OOM on a leaking process — the very situation the dump is
+        # supposed to diagnose.
         try:
-            tracemalloc_frames = int(os.environ.get("MEMDIAG_TRACEMALLOC_FRAMES", "10"))
+            tracemalloc_frames = int(os.environ.get("MEMDIAG_TRACEMALLOC_FRAMES", "1"))
         except ValueError:
-            tracemalloc_frames = 10
+            tracemalloc_frames = 1
     tracemalloc_frames = max(1, tracemalloc_frames)
 
     if enable_tracemalloc:
