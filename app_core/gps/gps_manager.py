@@ -36,7 +36,11 @@ Hardware (supported by default; any NMEA-0183 UART GPS module will work):
 Dependencies:
 - pyserial: Serial port I/O
 - pynmea2: NMEA-0183 sentence parser
-- RPi.GPIO (optional): PPS pulse reading
+- RPi.GPIO (optional): PPS pulse reading on systems without the
+  ``pps-gpio`` kernel overlay. When the overlay is loaded
+  (``dtoverlay=pps-gpio,gpiopin=N``) the manager prefers the kernel's
+  ``/sys/class/pps/ppsX`` interface, since the overlay claims the GPIO
+  exclusively and userspace cannot attach an edge interrupt to it.
 """
 
 import ctypes
@@ -49,6 +53,7 @@ import threading
 import time
 from collections import deque
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Deque, Dict, Optional, Set
 
 # ---------------------------------------------------------------------------
@@ -150,8 +155,16 @@ class GPSManager:
         # start of a new cycle) — reader thread only, no lock needed.
         self._gsa_accumulator: Set[int] = set()
         self._gsa_cycle_started: bool = False
-        # PPS GPIO interrupt state
+        # PPS monitoring state. Two mutually-exclusive backends:
+        #   * kernel: poll /sys/class/pps/ppsX/assert (preferred whenever
+        #     the pps-gpio overlay is loaded — the overlay owns the pin
+        #     and userspace edge interrupts on the same GPIO will not fire)
+        #   * RPi.GPIO: rising-edge interrupt on the configured BCM pin
+        #     (used only when no /sys/class/pps device is present)
         self._pps_gpio_active: bool = False
+        self._pps_kernel_device: Optional[str] = None  # e.g. "/sys/class/pps/pps0"
+        self._pps_kernel_baseline_seq: Optional[int] = None
+        self._pps_kernel_thread: Optional[threading.Thread] = None
 
         # Recent raw NMEA sentences (protected by _lock).  Sized for ~20s of
         # traffic on a multi-GNSS receiver so the UI's filter/pause UX has
@@ -226,6 +239,10 @@ class GPSManager:
         self._running = False
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=3)
+        if self._pps_kernel_thread and self._pps_kernel_thread.is_alive():
+            self._pps_kernel_thread.join(timeout=2)
+        self._pps_kernel_thread = None
+        self._pps_kernel_device = None
         if self._pps_gpio_active:
             try:
                 import RPi.GPIO as GPIO  # type: ignore[import]
@@ -626,13 +643,153 @@ class GPSManager:
             self._logger.debug("Failed to publish GPS status to Redis: %s", exc)
 
     def _start_pps_monitor(self) -> None:
-        """Set up an RPi.GPIO rising-edge interrupt to detect PPS pulses.
+        """Begin counting PPS pulses, preferring the kernel pps-gpio device.
 
-        Silently no-ops if RPi.GPIO is unavailable (e.g. development host)
-        or if the GPIO pin cannot be configured.
+        Order of attempts:
+
+        1. ``/sys/class/pps/pps0`` (or the first ``ppsN`` whose source is
+           ``pps-gpio``). This is what ``dtoverlay=pps-gpio,gpiopin=N``
+           creates, and is also what chrony's ``refclock PPS`` consumes.
+        2. RPi.GPIO rising-edge interrupt on ``self._pps_pin``.
+
+        We prefer (1) because the pps-gpio kernel driver claims the GPIO
+        exclusively. RPi.GPIO can still register an event handler against
+        it, but the rising edges have already been consumed by the kernel
+        IRQ, so the callback never fires and ``pps_pulse_count`` stays at
+        zero — which is what manifests in the UI as a dim PPS indicator
+        despite ``ppstest /dev/pps0`` showing healthy pulses.
+
+        Both backends are silent no-ops when the relevant facility is
+        unavailable (development host, missing module, etc.).
         """
         if not self._pps_pin:
             return
+
+        device = self._find_kernel_pps_device()
+        if device:
+            self._start_pps_kernel_monitor(device)
+            return
+
+        self._start_pps_gpio_monitor()
+
+    def _find_kernel_pps_device(self) -> Optional[str]:
+        """Return the sysfs path of a pps-gpio device, or None.
+
+        Discriminator: pps-gpio is a platform device whose ``device``
+        symlink resolves to ``/sys/devices/platform/pps@N`` (or similar).
+        gpsd's line-discipline PPS devices instead point at a tty
+        (e.g. ``…/tty/ttyAMA0``). We pick the first entry that is not a
+        tty-backed pps device — counting line-discipline pulses would
+        double up with the GPIO source.
+        """
+        try:
+            base = Path("/sys/class/pps")
+            if not base.exists():
+                return None
+            for entry in sorted(base.iterdir()):
+                if not entry.name.startswith("pps"):
+                    continue
+                device_link = entry / "device"
+                try:
+                    target = os.fspath(device_link.resolve())
+                except Exception:
+                    target = ""
+                # Line-discipline PPS resolves under /sys/.../tty/ttyXXX —
+                # skip those. Anything else (platform/pps@N, of/...) is the
+                # pps-gpio overlay we want.
+                if "/tty/" in target or "/tty" in Path(target).name:
+                    continue
+                # Confirm we can at least read the assert attribute. If it
+                # never existed (e.g. driver bound but never enabled) we
+                # don't want to claim kernel-mode.
+                if not (entry / "assert").exists():
+                    continue
+                return str(entry)
+            return None
+        except Exception as exc:
+            self._logger.debug("Failed to scan /sys/class/pps: %s", exc)
+            return None
+
+    @staticmethod
+    def _safe_read(path: Path) -> Optional[str]:
+        try:
+            return path.read_text().strip()
+        except Exception:
+            return None
+
+    def _start_pps_kernel_monitor(self, device: str) -> None:
+        """Spawn a low-rate poller of ``<device>/assert`` and update the fix."""
+        # Capture the current sequence so pps_pulse_count reflects pulses
+        # observed since this manager started, matching the existing
+        # RPi.GPIO semantic.
+        seq, _ts = self._read_pps_assert(device) or (None, None)
+        self._pps_kernel_baseline_seq = seq if seq is not None else 0
+        self._pps_kernel_device = device
+
+        thread = threading.Thread(
+            target=self._pps_kernel_loop,
+            name="gps-pps-kernel",
+            daemon=True,
+        )
+        self._pps_kernel_thread = thread
+        thread.start()
+        self._logger.info(
+            "PPS blinkenlite armed via kernel device %s (baseline seq=%s)",
+            device,
+            self._pps_kernel_baseline_seq,
+        )
+
+    def _read_pps_assert(self, device: str) -> Optional[tuple]:
+        """Parse ``<device>/assert`` and return ``(sequence, timestamp_iso)``.
+
+        The kernel exports the line as ``<seconds>.<nanoseconds>#<sequence>``
+        (see ``Documentation/ABI/testing/sysfs-pps``). Returns ``None`` if
+        the file is missing or the sequence is zero (no pulse yet seen).
+        """
+        try:
+            raw = self._safe_read(Path(device) / "assert")
+            if not raw or "#" not in raw:
+                return None
+            ts_part, _, seq_part = raw.partition("#")
+            seq = int(seq_part.strip())
+            if seq <= 0:
+                return None
+            secs_str, _, ns_str = ts_part.partition(".")
+            secs = int(secs_str)
+            ns = int(ns_str.ljust(9, "0")[:9]) if ns_str else 0
+            ts = datetime.fromtimestamp(secs + ns / 1e9, tz=timezone.utc)
+            return seq, ts.isoformat()
+        except Exception as exc:
+            self._logger.debug("Failed to parse %s/assert: %s", device, exc)
+            return None
+
+    def _pps_kernel_loop(self) -> None:
+        """Poll the kernel PPS device once a second while the manager runs."""
+        last_seq: Optional[int] = self._pps_kernel_baseline_seq
+        device = self._pps_kernel_device or ""
+        while self._running and device:
+            try:
+                result = self._read_pps_assert(device)
+                if result is not None:
+                    seq, ts_iso = result
+                    if last_seq is None or seq != last_seq:
+                        baseline = self._pps_kernel_baseline_seq or 0
+                        count = max(0, seq - baseline)
+                        with self._lock:
+                            self._fix["pps_last_pulse_at"] = ts_iso
+                            self._fix["pps_pulse_count"] = count
+                        last_seq = seq
+            except Exception as exc:
+                self._logger.debug("PPS kernel poll error: %s", exc)
+            time.sleep(1.0)
+
+    def _start_pps_gpio_monitor(self) -> None:
+        """Set up an RPi.GPIO rising-edge interrupt to detect PPS pulses.
+
+        Silently no-ops if RPi.GPIO is unavailable (e.g. development host)
+        or if the GPIO pin cannot be configured. Used as a fallback when
+        the pps-gpio kernel overlay is not loaded.
+        """
         try:
             import RPi.GPIO as GPIO  # type: ignore[import]
 
