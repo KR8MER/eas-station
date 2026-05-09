@@ -984,6 +984,17 @@ class GPSManager:
             t = obj.get("time")
             if isinstance(t, str):
                 self._fix["gps_utc_time"] = t
+                # In gpsd mode, the gps_manager does NOT call clock_settime
+                # itself — chrony reads gpsd's SHM segments + /dev/pps0 and
+                # is the sole authority for the system clock. The TIME pill
+                # in the UI reads this flag, though, so flip it on once
+                # gpsd is delivering us GPS-derived time. The actual
+                # system-clock discipline is happening one layer down via
+                # chrony's refclock SHM + refclock PPS, which is what makes
+                # this strictly more accurate than the serial-mode direct
+                # clock_settime path it replaces.
+                if has_fix:
+                    self._fix["time_synced"] = True
             # Optional error-estimate passthrough for the diagnostics
             # disclosure the UI surfaces under the GPS card.
             for src, dst in (("epx", "epx_m"), ("epy", "epy_m"), ("epv", "epv_m")):

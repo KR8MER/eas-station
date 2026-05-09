@@ -15,6 +15,119 @@ Any other UART GPS module that emits standard NMEA at 9600 baud will also work; 
 
 ---
 
+## Quick setup via the admin UI (recommended)
+
+Since EAS Station 2.74 you do **not** need a terminal to install or configure the GPS HAT. Everything below — package installs, `dtoverlay` lines in `config.txt`, `/etc/default/gpsd`, the chrony refclock block, and seeding the RTC after replacing the coin cell — is one click each in the admin UI. The terminal sections later in this document describe what those buttons do under the hood for operators who prefer to see the machinery, or for diagnosing a system where the UI itself isn't reachable.
+
+### 1. Install the HAT and reboot
+
+Power off the Pi, seat the HAT, attach the antenna, power back on. Nothing software-side yet.
+
+### 2. Open the GPS HAT Setup Status panel
+
+**Admin → Hardware Settings → GPS** — the second card from the top is **GPS HAT Setup Status**. It probes every prerequisite (RTC chip vs overlay, PPS device, gpsd / chrony / `util-linux-extra` package state, `/boot/firmware/config.txt` overlays, chrony's currently-selected source) and shows you a checklist:
+
+- ✅ items are healthy
+- ⚠ items have a **Run** button next to them when the privileged setup helper is reachable, or a copy-paste shell command otherwise
+- The status badge at the top of the card tells you the overall posture: *All good* / *Suggestions* / *Needs attention* / *Action required*
+
+**Click each ⚠ card's Run button in the order they appear**, watching the result modal until it reports success. The panel re-polls itself after every action so the list shrinks as you fix things. Reboot when an action says *"Requires reboot to take effect"* — typically only the `dtoverlay` actions need that.
+
+### 3. Pick a source mode
+
+This is the only judgement call. Above the **GPS HAT Setup Status** card, the **Source** card has a dropdown labelled **NMEA Source**:
+
+| Mode | Use when | Trade-off |
+|---|---|---|
+| **Auto** *(default)* | You want it to "just work" — gpsd if available, direct serial otherwise | None practical; this is the recommended default |
+| **gpsd** | You want chrony to discipline the system clock from PPS for stratum-1 time | Requires `gpsd` installed and running; the HAT will go offline if gpsd dies |
+| **Serial port** | You don't want to run gpsd, or you have a non-standard NMEA tap | The Live GPS card works, but chrony can't share the GPS so you stay at stratum ≥ 2 |
+
+Save & Restart after changing the mode.
+
+### 4. (Uputronics, brand-new HAT or fresh coin cell) Seed the RTC
+
+If the **Detected state** block under the diagnostic panel shows the chip with `seq=0` or the RTC drift status is *Unreadable*, the chip's Power-On Reset Flag is set — normal for a new HAT or one whose coin cell was just replaced. The diagnostic panel will offer a **Seed RTC** action card; click *Run*, leave the *Force unsynced* checkbox **unchecked** (the helper will refuse to seed unsynchronised time, which is the safe behaviour), and let it complete. After that the Hardware Clock card on the System Health page will report the chip in sync.
+
+### 5. Verify
+
+You're done when:
+
+- The **GPS HAT Setup Status** badge reads **All good**
+- The **Live GPS Status** card shows mode `3D Fix` with several satellites used, and the **PPS** pill is lit
+- In **gpsd** or **auto** mode: `chronyc tracking` (or the chrony status row in the diagnostic panel's *Detected state*) reports **stratum 1** and the offset is sub-millisecond
+
+That's the end-to-end happy path. The rest of this document covers manual operation, board-specific quirks, and what each piece does — useful when something doesn't go to plan, or for builders who want to reproduce the setup outside the admin UI.
+
+---
+
+## NMEA source modes (Tier 3)
+
+EAS Station 2.74+ can read NMEA from one of two sources. The choice does **not** affect what the Live GPS Status card displays — the same fix data, satellite list, and per-talker counts populate both ways. It only affects whether `chrony` can use the same GPS for time discipline.
+
+### Why two modes exist
+
+GPS receivers expose NMEA over a single serial port. Two userspace processes cannot share one open serial device, so:
+
+- If EAS Station opens `/dev/serial0` directly, chrony's `refclock SHM` gets nothing because gpsd can't read the port either.
+- If gpsd opens `/dev/serial0`, the legacy direct-serial path inside EAS Station fails.
+
+The Tier 3 mode resolves this by letting EAS Station consume NMEA from gpsd over the localhost TCP JSON socket (`127.0.0.1:2947`) instead of opening the serial port directly. gpsd becomes the single owner of the port; chrony reads the same data via SHM segment 0; PPS locks to the GPS via `lock GPS` in chrony.conf; everyone is happy.
+
+### How each mode behaves
+
+| Setting | Where the Live GPS data comes from | Where chrony's GPS samples come from | What happens if gpsd is down |
+|---|---|---|---|
+| **`auto`** *(default)* | gpsd if reachable, else `/dev/serial0` directly | gpsd's SHM segment if it's running | Falls back to direct serial; Live GPS keeps working; chrony loses GPS |
+| **`gpsd`** | gpsd's TCP JSON stream | gpsd's SHM segment | GPS goes offline (start fails fast); chrony loses GPS |
+| **`serial`** | `/dev/serial0` directly | nothing (port contention; not used) | n/a — gpsd is irrelevant in this mode |
+
+### Where the existing form fields apply
+
+In the GPS form under *Hardware Settings → GPS*:
+
+- **Serial Port** and **Baud Rate** apply when the runtime ends up on the direct-serial path: **serial** mode always, and **auto** mode when gpsd isn't running. In **gpsd** mode they are ignored by EAS Station — gpsd has its own copy in `/etc/default/gpsd`. The GPS HAT Setup Status panel's *Write gpsd config* / *Fix gpsd config* actions write the gpsd-side equivalents.
+- **PPS GPIO Pin** is independent of source mode. It's used to detect kernel pulses via `/sys/class/pps/pps0` regardless of who's reading the serial port.
+- **Use GPS for station location** and **Use GPS for time sync** apply in every mode.
+
+### Recommended pairings
+
+- **Single-purpose station, no chrony**: leave on **auto**. Even if gpsd isn't installed, things just work via the legacy serial path.
+- **Anywhere you want stratum-1 PPS time**: switch to **gpsd**. Run the GPS HAT Setup Status panel's Run buttons until everything is green; you get sub-microsecond UTC discipline for free.
+- **Custom NMEA source / non-standard pinout / debugging**: switch to **serial**. The HAT runs on whatever path you point it at, no gpsd dependency.
+
+### Verifying gpsd mode is actually active
+
+Hardware service log line on startup should read:
+
+```
+✅ GPS reader started via gpsd at 127.0.0.1:2947 (PPS GPIO 18, source=gpsd)
+```
+
+If it reads `source=serial` instead, gpsd wasn't reachable when the manager started — either gpsd isn't running (`systemctl status gpsd.service`), the port is wrong, or `gpsd.socket` is masking the always-running daemon. The diagnostic panel calls these out as separate actions you can fix in one click.
+
+---
+
+## What the GPS HAT Setup Status panel actually does
+
+Each Run button in the panel calls a privileged setup helper (`eas-station-hwsetup`, runs as root, listens on a Unix socket only the `eas-station` group can connect to) which executes one of a hardcoded set of allowlisted actions. The full list:
+
+| Action card / button | Calls | Effect |
+|---|---|---|
+| *Install missing packages* | `apt-get update && apt-get install -y` | Installs from a 6-package allowlist (`chrony`, `gpsd`, `gpsd-clients`, `pps-tools`, `util-linux-extra`, `i2c-tools`); rejects anything else |
+| *Add overlay* / *Replace overlay* (RTC) | edits `/boot/firmware/config.txt` | Idempotent `dtoverlay=i2c-rtc,<chip>`. Replaces an existing line, or appends; deduplicates if you have stale duplicates from earlier hand-edits. Sets *Requires reboot*. |
+| *Add PPS overlay* | same | Idempotent `dtoverlay=pps-gpio,gpiopin=N`. Same dedup behaviour. Sets *Requires reboot*. |
+| *Seed RTC* | `hwclock -w -u --rtc /dev/rtc0` then `hwclock -r` | Refuses unless `timedatectl` says NTP-synchronized, unless you check the *Force unsynced* override. |
+| *Write gpsd config* / *Fix gpsd config* | rewrites `/etc/default/gpsd` | Uses tight allowlists for device paths and option flags; rejects shell-injection attempts. |
+| *Enable rtcsync* / *Configure refclocks* | appends to `/etc/chrony/chrony.conf` | Uses sentinel-bracketed managed block; never duplicates `rtcsync` or `refclock` lines you've added by hand outside the block. |
+| *Enable + start* | `systemctl enable --now <unit>` | Restricted to `chrony.service`, `gpsd.service`, `gpsd.socket`. |
+
+Every action takes a `.bak.<timestamp>` of any file it edits before writing. Backups live next to the original. The helper logs every request (with peer pid/uid/gid via `SO_PEERCRED`) to the systemd journal as `eas-station-hwsetup` for audit.
+
+The architecture and the rules for adding a new action are documented in [HWSETUP_HELPER.md](HWSETUP_HELPER.md).
+
+---
+
 ## Why the Uputronics board is the default
 
 The Uputronics board solves two mechanical / electrical problems that the Adafruit #2324 has:
