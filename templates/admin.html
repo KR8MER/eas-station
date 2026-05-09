@@ -1673,6 +1673,18 @@
                             <div class="col-md-6 col-lg-4">
                                 <div class="card shadow-sm h-100">
                                     <div class="card-body text-center">
+                                        <i class="fas fa-satellite-dish fa-2x text-info mb-3"></i>
+                                        <h6>GPS &amp; Time Dashboard</h6>
+                                        <p class="text-muted small">Stratum 1 lock, chrony tracking, sky plot, satellite SNR</p>
+                                        <a href="{{ url_for('hardware.gps_dashboard_page') }}" class="btn btn-info w-100">
+                                            <i class="fas fa-satellite-dish"></i> Open Dashboard
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6 col-lg-4">
+                                <div class="card shadow-sm h-100">
+                                    <div class="card-body text-center">
                                         <i class="fas fa-signal fa-2x text-success mb-3"></i>
                                         <h6>Radio / SDR</h6>
                                         <p class="text-muted small">SDR receivers and radio monitoring</p>

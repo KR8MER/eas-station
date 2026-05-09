@@ -1,0 +1,960 @@
+{% extends 'base.html' %}
+{% block title %}GPS &amp; Time Dashboard | EAS Station{% endblock %}
+
+{# ---------------------------------------------------------------------------
+   GPS & Time Dashboard — chrogps-dash inspired
+   --------------------------------------------------------------------------
+   Modelled visually on https://w0chp.radio/chrogps-dash/ — a single dense
+   page with two hero cards (System Tracking + Satellite Skyview), a
+   per-PRN signal-level bar chart, and twin tables (Chrony Sources +
+   Satellite SNR Data).  All live data comes from a single backend
+   endpoint, /admin/api/gps-dashboard/data, polled on a configurable
+   interval.
+
+   The layout uses CSS variables from the EAS Station theme system so it
+   adapts to every dark and light theme rather than forcing a fixed
+   palette.  Constellation colours mirror the existing GPS panel on
+   Hardware Settings / System Health for visual consistency.
+   --------------------------------------------------------------------------
+#}
+{% block extra_css %}
+<style>
+    /* ── GPS & Time dashboard ────────────────────────────────────────────
+       Scoped under .gps-dash so styles can't leak into other pages.
+       Uses theme tokens (--bg-secondary, --text-color, etc.) so it
+       renders cleanly on every theme. */
+    .gps-dash { font-size: 0.92rem; }
+    .gps-dash code { background: var(--bg-tertiary, rgba(127,127,127,.12)); padding: 1px 5px; border-radius: 3px; }
+
+    /* Header banner — node id + GPS lock + refresh-rate selector */
+    .gps-dash-header {
+        display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+        padding: 10px 14px; margin-bottom: 14px;
+        border: 1px solid var(--border-color, rgba(127,127,127,.25));
+        border-radius: 8px;
+        background: var(--bg-secondary, rgba(127,127,127,.04));
+    }
+    .gps-dash-header .title {
+        font-weight: 700; letter-spacing: 0.04em;
+        display: inline-flex; align-items: center; gap: 8px;
+    }
+    .gps-dash-header .node {
+        color: var(--text-muted); font-family: var(--font-mono, monospace);
+    }
+    .gps-dash-header .spacer { flex: 1 1 auto; }
+    .gps-dash-header select.form-select-sm { width: auto; }
+
+    /* Pills (lock state, fix mode) */
+    .gps-pill {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 2px 9px; border-radius: 999px;
+        font-size: 0.78rem; font-weight: 600; letter-spacing: 0.04em;
+        border: 1px solid currentColor;
+    }
+    .gps-pill.ok      { color: #3fb950; }
+    .gps-pill.warn    { color: #d29922; }
+    .gps-pill.danger  { color: #f85149; }
+    .gps-pill.muted   { color: var(--text-muted, #8b949e); }
+
+    /* Card shell — styled like the EAS Station eas-card section */
+    .gps-card {
+        border: 1px solid var(--border-color, rgba(127,127,127,.25));
+        border-radius: 8px;
+        background: var(--bg-secondary, rgba(127,127,127,.04));
+        padding: 14px 16px;
+        margin-bottom: 14px;
+    }
+    .gps-card-head {
+        display: flex; align-items: center; gap: 10px;
+        margin-bottom: 10px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid var(--border-color, rgba(127,127,127,.18));
+    }
+    .gps-card-head h3 {
+        font-size: 0.82rem; font-weight: 700;
+        letter-spacing: 0.12em; text-transform: uppercase;
+        margin: 0; color: var(--text-color);
+    }
+    .gps-card-head .badge-area { margin-left: auto; }
+
+    /* Tracking key/value grid */
+    .gps-kv {
+        display: grid;
+        grid-template-columns: minmax(140px, max-content) 1fr;
+        column-gap: 14px; row-gap: 4px;
+        font-family: var(--font-mono, ui-monospace, monospace);
+        font-size: 0.85rem;
+    }
+    .gps-kv dt { color: var(--text-muted, #8b949e); font-weight: 400; }
+    .gps-kv dd { margin: 0; word-break: break-word; }
+    .gps-kv .num { font-variant-numeric: tabular-nums; }
+    .gps-kv .pos { color: #3fb950; }
+    .gps-kv .neg { color: #f85149; }
+
+    /* Sync-health bar (offset → 0-100 %) */
+    .gps-sync-health {
+        display: flex; flex-direction: column; gap: 3px;
+        margin: 6px 0 12px;
+    }
+    .gps-sync-health .label {
+        display: flex; justify-content: space-between;
+        font-size: 0.78rem; letter-spacing: 0.06em;
+        color: var(--text-muted);
+    }
+    .gps-sync-health .label .pct { color: var(--text-color); font-weight: 700; }
+    .gps-sync-health .bar {
+        height: 8px; border-radius: 4px;
+        background: var(--bg-tertiary, rgba(127,127,127,.18));
+        overflow: hidden;
+    }
+    .gps-sync-health .bar > span {
+        display: block; height: 100%;
+        background: linear-gradient(90deg, #3fb950, #84cc16);
+        transition: width 0.4s ease;
+    }
+
+    /* Sky plot area */
+    .gps-sky-wrap {
+        display: flex; flex-direction: column; align-items: center; gap: 8px;
+    }
+    #gps-dash-sky-canvas {
+        width: 280px; height: 280px;
+        max-width: 100%;
+    }
+    .gps-sky-counts {
+        display: flex; gap: 14px; font-size: 0.82rem;
+        color: var(--text-muted);
+    }
+    .gps-sky-counts strong { color: var(--text-color); font-weight: 700; }
+
+    /* Per-PRN signal-level bar chart */
+    .gps-snr-chart {
+        display: flex; align-items: flex-end; gap: 3px;
+        height: 130px;
+        padding: 6px 0 22px;
+        border-bottom: 1px solid var(--border-color, rgba(127,127,127,.2));
+        overflow-x: auto;
+    }
+    .gps-snr-bar {
+        flex: 0 0 22px;
+        display: flex; flex-direction: column; align-items: center; gap: 4px;
+        position: relative;
+    }
+    .gps-snr-bar .bar {
+        width: 14px; min-height: 2px;
+        border-radius: 2px 2px 0 0;
+        opacity: 0.95;
+    }
+    .gps-snr-bar.used .bar {
+        box-shadow: 0 0 0 1px rgba(255,255,255,0.35) inset;
+    }
+    .gps-snr-bar .prn {
+        font-size: 0.66rem;
+        font-family: var(--font-mono, monospace);
+        color: var(--text-muted);
+        position: absolute; bottom: -18px;
+        white-space: nowrap;
+    }
+
+    /* Constellation chips */
+    .gps-const-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .gps-const-chip {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 3px 9px; border-radius: 999px;
+        font-size: 0.74rem; letter-spacing: 0.04em;
+        background: var(--bg-tertiary, rgba(127,127,127,.12));
+        border: 1px solid var(--border-color, rgba(127,127,127,.25));
+    }
+    .gps-const-chip .dot {
+        width: 8px; height: 8px; border-radius: 50%;
+        display: inline-block;
+    }
+    .gps-const-chip .label { font-weight: 600; }
+    .gps-const-chip .count { font-family: var(--font-mono, monospace); }
+
+    /* Tables — compact & monospace for chrony / satellite data */
+    .gps-table {
+        width: 100%;
+        font-size: 0.82rem;
+        font-family: var(--font-mono, ui-monospace, monospace);
+        border-collapse: collapse;
+    }
+    .gps-table th, .gps-table td {
+        padding: 4px 8px;
+        border-bottom: 1px solid var(--border-color, rgba(127,127,127,.15));
+        white-space: nowrap;
+    }
+    .gps-table th {
+        text-align: left;
+        font-size: 0.70rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+        font-weight: 600;
+        border-bottom-width: 2px;
+    }
+    .gps-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .gps-table tbody tr:hover { background: var(--bg-tertiary, rgba(127,127,127,.08)); }
+
+    /* Source-row state indicator (chrony state column) */
+    .gps-src-state {
+        display: inline-block; width: 1.4em; text-align: center;
+        font-weight: 700;
+    }
+    .gps-src-state.s-best   { color: #3fb950; }   /* * */
+    .gps-src-state.s-comb   { color: #58a6ff; }   /* + */
+    .gps-src-state.s-not    { color: var(--text-muted); }   /* - */
+    .gps-src-state.s-unr    { color: #d29922; }   /* ? */
+    .gps-src-state.s-false  { color: #f85149; }   /* x */
+    .gps-src-state.s-jit    { color: #bc8cff; }   /* ~ */
+
+    .gps-empty {
+        padding: 14px; text-align: center;
+        color: var(--text-muted); font-style: italic;
+    }
+
+    /* Constellation filter chips above the satellite table */
+    .gps-filter-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+    .gps-filter-chip {
+        padding: 2px 9px; border-radius: 999px;
+        font-size: 0.74rem; cursor: pointer; user-select: none;
+        background: var(--bg-tertiary, rgba(127,127,127,.12));
+        border: 1px solid var(--border-color, rgba(127,127,127,.25));
+        color: var(--text-color);
+    }
+    .gps-filter-chip.active {
+        outline: 2px solid currentColor;
+    }
+    .gps-filter-chip.muted { opacity: 0.45; }
+
+    /* SNR cell colour scale matches the existing GPS panel */
+    .gps-snr-s0 { color: #484f58; }
+    .gps-snr-s1 { color: #f85149; }
+    .gps-snr-s2 { color: #f97316; }
+    .gps-snr-s3 { color: #d29922; }
+    .gps-snr-s4 { color: #84cc16; }
+    .gps-snr-s5 { color: #3fb950; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3 gps-dash">
+
+    <!-- Header banner: node id + GPS lock state + refresh control -->
+    <div class="gps-dash-header" role="region" aria-label="GPS dashboard header">
+        <span class="title">
+            <i class="fas fa-satellite-dish"></i>
+            GPS &amp; Time
+        </span>
+        <span class="node">NTP Node:&nbsp;<span id="gps-dash-node">…</span></span>
+        <span id="gps-dash-lock-pill" class="gps-pill muted">
+            <i class="fas fa-circle"></i> CONNECTING
+        </span>
+        <span id="gps-dash-fix-pill" class="gps-pill muted">— FIX</span>
+        <span id="gps-dash-stratum-pill" class="gps-pill muted">STRATUM —</span>
+        <span class="spacer"></span>
+        <label for="gps-dash-refresh" class="text-muted small mb-0 me-1">Refresh</label>
+        <select id="gps-dash-refresh" class="form-select form-select-sm">
+            <option value="3000">3s</option>
+            <option value="5000" selected>5s</option>
+            <option value="10000">10s</option>
+            <option value="30000">30s</option>
+            <option value="0">Paused</option>
+        </select>
+        <a href="{{ url_for('hardware.hardware_settings_page') }}#gps"
+           class="btn btn-sm btn-outline-secondary" title="GPS Hardware Settings">
+            <i class="fas fa-cog"></i> Settings
+        </a>
+    </div>
+
+    <div class="row g-3">
+        <!-- ============================================================
+             SYSTEM TRACKING — chronyc tracking dump
+             ============================================================ -->
+        <div class="col-12 col-xl-6">
+            <div class="gps-card h-100">
+                <div class="gps-card-head">
+                    <h3><i class="fas fa-stopwatch me-1"></i> System Tracking</h3>
+                    <div class="badge-area">
+                        <span id="gps-dash-clock-utc"  class="text-muted small me-2"></span>
+                        <span id="gps-dash-clock-local" class="text-muted small"></span>
+                    </div>
+                </div>
+
+                <div class="gps-sync-health" title="Lower offset → better sync health">
+                    <div class="label">
+                        <span>SYNC HEALTH</span>
+                        <span><span id="gps-dash-health-pct" class="pct">—</span></span>
+                    </div>
+                    <div class="bar"><span id="gps-dash-health-bar" style="width:0%"></span></div>
+                    <div class="label" style="font-size:0.70rem;">
+                        <span>System offset: <span id="gps-dash-health-offset" class="num">—</span></span>
+                        <span>RMS: <span id="gps-dash-health-rms" class="num">—</span></span>
+                    </div>
+                </div>
+
+                <dl class="gps-kv" id="gps-dash-tracking-kv">
+                    <dt>Reference ID</dt>      <dd id="t-ref-id">—</dd>
+                    <dt>Stratum</dt>           <dd id="t-stratum">—</dd>
+                    <dt>Ref time (UTC)</dt>    <dd id="t-ref-time">—</dd>
+                    <dt>System offset</dt>     <dd id="t-sys-offset" class="num">—</dd>
+                    <dt>Last offset</dt>       <dd id="t-last-offset" class="num">—</dd>
+                    <dt>RMS offset</dt>        <dd id="t-rms-offset" class="num">—</dd>
+                    <dt>Frequency</dt>         <dd id="t-frequency" class="num">—</dd>
+                    <dt>Residual freq</dt>     <dd id="t-residual" class="num">—</dd>
+                    <dt>Skew</dt>              <dd id="t-skew" class="num">—</dd>
+                    <dt>Root delay</dt>        <dd id="t-root-delay" class="num">—</dd>
+                    <dt>Root dispersion</dt>   <dd id="t-root-disp" class="num">—</dd>
+                    <dt>Update interval</dt>   <dd id="t-update-int" class="num">—</dd>
+                    <dt>Leap status</dt>       <dd id="t-leap">—</dd>
+                </dl>
+            </div>
+        </div>
+
+        <!-- ============================================================
+             SATELLITE SKYVIEW — sky plot + position + DOP + hardware
+             ============================================================ -->
+        <div class="col-12 col-xl-6">
+            <div class="gps-card h-100">
+                <div class="gps-card-head">
+                    <h3><i class="fas fa-satellite me-1"></i> Satellite Skyview</h3>
+                    <div class="badge-area">
+                        <span id="gps-dash-fix-pill-skyview" class="gps-pill muted">— FIX</span>
+                    </div>
+                </div>
+
+                <div class="gps-sync-health" title="Average SNR across all satellites in view">
+                    <div class="label">
+                        <span>SIGNAL INTEGRITY</span>
+                        <span><span id="gps-dash-snr-pct" class="pct">—</span></span>
+                    </div>
+                    <div class="bar"><span id="gps-dash-snr-bar" style="width:0%; background:linear-gradient(90deg,#bc8cff,#58a6ff);"></span></div>
+                    <div class="label" style="font-size:0.70rem;">
+                        <span>Avg SNR: <span id="gps-dash-avg-snr" class="num">—</span> dBHz</span>
+                    </div>
+                </div>
+
+                <div class="gps-sky-wrap">
+                    <canvas id="gps-dash-sky-canvas" width="280" height="280"
+                            aria-label="Polar sky plot of satellites in view"></canvas>
+                    <div class="gps-sky-counts">
+                        <span><strong id="gps-dash-active-count">—</strong> active fix</span>
+                        <span><strong id="gps-dash-visible-count">—</strong> visible</span>
+                        <span><strong id="gps-dash-total-count">—</strong> total</span>
+                    </div>
+                </div>
+
+                <hr class="my-3" style="border-color: var(--border-color, rgba(127,127,127,.2));">
+
+                <dl class="gps-kv">
+                    <dt>Position</dt>       <dd id="g-pos">—</dd>
+                    <dt>Altitude</dt>       <dd id="g-alt" class="num">—</dd>
+                    <dt>Geometry (DOP)</dt> <dd id="g-dop" class="num">—</dd>
+                    <dt>Hardware</dt>       <dd id="g-hw">—</dd>
+                </dl>
+
+                <div class="gps-const-row" id="gps-dash-const-chips"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================
+         INDIVIDUAL SIGNAL LEVELS — per-PRN SNR bars, coloured by constellation
+         ============================================================ -->
+    <div class="gps-card">
+        <div class="gps-card-head">
+            <h3><i class="fas fa-signal me-1"></i> Individual Signal Levels</h3>
+            <div class="badge-area">
+                <span class="text-muted small">dBHz · used-in-fix outlined</span>
+            </div>
+        </div>
+        <div id="gps-dash-snr-chart" class="gps-snr-chart"></div>
+    </div>
+
+    <div class="row g-3">
+        <!-- ============================================================
+             CHRONY SOURCES table
+             ============================================================ -->
+        <div class="col-12 col-xl-6">
+            <div class="gps-card h-100">
+                <div class="gps-card-head">
+                    <h3><i class="fas fa-network-wired me-1"></i> Chrony Sources</h3>
+                </div>
+                <div class="table-responsive">
+                    <table class="gps-table" id="gps-dash-sources-table">
+                        <thead>
+                            <tr>
+                                <th></th>
+                                <th>Source</th>
+                                <th class="num">Strat</th>
+                                <th class="num">Poll</th>
+                                <th class="num">Reach</th>
+                                <th class="num">Last</th>
+                                <th class="num">Offset</th>
+                            </tr>
+                        </thead>
+                        <tbody id="gps-dash-sources-body">
+                            <tr><td colspan="7" class="gps-empty">Loading…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================================
+             SATELLITE SNR DATA table
+             ============================================================ -->
+        <div class="col-12 col-xl-6">
+            <div class="gps-card h-100">
+                <div class="gps-card-head">
+                    <h3><i class="fas fa-list me-1"></i> Satellite Data</h3>
+                    <div class="badge-area">
+                        <span class="text-muted small">
+                            <span id="gps-dash-sat-active">—</span> active /
+                            <span id="gps-dash-sat-total">—</span> total
+                        </span>
+                    </div>
+                </div>
+                <div class="gps-filter-row" id="gps-dash-sat-filters"></div>
+                <div class="table-responsive">
+                    <table class="gps-table" id="gps-dash-sat-table">
+                        <thead>
+                            <tr>
+                                <th>PRN</th>
+                                <th class="num">EL</th>
+                                <th class="num">AZ</th>
+                                <th class="num">SNR</th>
+                                <th>Stat</th>
+                            </tr>
+                        </thead>
+                        <tbody id="gps-dash-sat-body">
+                            <tr><td colspan="5" class="gps-empty">Loading…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <p class="text-muted small mt-3">
+        Modelled visually on
+        <a href="https://w0chp.radio/chrogps-dash/" target="_blank" rel="noopener">W0CHP's chrogps-dash</a>;
+        all data is sourced live from this station's GPS receiver and local <code>chronyc</code>.
+        Time-series performance graphs (PPS drift, clock stability, frequency steering, DOP history,
+        SNR history) are planned for a future release once the historical store is in place.
+    </p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    'use strict';
+
+    // ── Constellation palette — mirrors the existing GPS panels
+    //    (templates/admin/hardware_settings.html, templates/system_health.html)
+    //    so colours stay consistent across the three places we plot satellites.
+    var CONSTELLATION_INFO = {
+        'GP': { color: '#58a6ff', label: 'GPS' },
+        'GL': { color: '#f85149', label: 'GLONASS' },
+        'GA': { color: '#bc8cff', label: 'Galileo' },
+        'GB': { color: '#ffa657', label: 'BeiDou' },
+        'GQ': { color: '#79c0ff', label: 'QZSS' },
+        'GI': { color: '#84cc16', label: 'NavIC' },
+        'SB': { color: '#a78bfa', label: 'SBAS' }
+    };
+    function constInfo(code) {
+        return CONSTELLATION_INFO[code] || { color: '#8b949e', label: code || 'Unknown' };
+    }
+
+    // SNR → palette class.  Same stops as the legacy GPS panels.
+    function snrClass(snr) {
+        if (snr === null || snr === undefined) return 'gps-snr-s0';
+        if (snr < 15) return 'gps-snr-s1';
+        if (snr < 25) return 'gps-snr-s2';
+        if (snr < 35) return 'gps-snr-s3';
+        if (snr < 45) return 'gps-snr-s4';
+        return 'gps-snr-s5';
+    }
+
+    // Active filter — null means "all", else a 2-letter talker code.
+    var activeFilter = null;
+
+    function escapeHtml(s) {
+        if (s === null || s === undefined) return '';
+        return String(s).replace(/[&<>"']/g, function (c) {
+            return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c];
+        });
+    }
+    function setText(id, text) {
+        var el = document.getElementById(id);
+        if (el) el.textContent = (text === null || text === undefined || text === '') ? '—' : text;
+    }
+    function fmtSeconds(v) {
+        // Render an offset/delay value with adaptive units so a sub-microsecond
+        // chrony offset doesn't read as "0.000000 s".
+        if (v === null || v === undefined || isNaN(v)) return '—';
+        var abs = Math.abs(v);
+        if (abs < 1e-6) return (v * 1e9).toFixed(1) + ' ns';
+        if (abs < 1e-3) return (v * 1e6).toFixed(2) + ' µs';
+        if (abs < 1)    return (v * 1e3).toFixed(3) + ' ms';
+        return v.toFixed(6) + ' s';
+    }
+    function fmtPpm(v) {
+        if (v === null || v === undefined || isNaN(v)) return '—';
+        return v.toFixed(3) + ' ppm';
+    }
+    function fmtSeconds2(v) {
+        if (v === null || v === undefined || isNaN(v)) return '—';
+        return v.toFixed(1) + ' s';
+    }
+    function signClass(v) {
+        if (v === null || v === undefined || isNaN(v)) return '';
+        if (v > 0) return 'pos';
+        if (v < 0) return 'neg';
+        return '';
+    }
+
+    // ── Sky plot — adapted from the existing GPS panel.  Polar coords with
+    //    elevation from 90° at center to 0° at the rim, azimuth measured
+    //    clockwise from N.  Dots colour by constellation, alpha by SNR,
+    //    used-in-fix sats get a glowing outer ring.
+    function drawSkyPlot(canvas, satsInView, activePrns) {
+        var ctx = canvas.getContext('2d');
+        var W = canvas.width, H = canvas.height;
+        ctx.clearRect(0, 0, W, H);
+        var cx = W / 2, cy = H / 2, R = Math.min(cx, cy) - 8;
+
+        // Cosmetic grid: 30°/60° elevation rings + cardinal cross-hair.
+        ctx.strokeStyle = 'rgba(127,127,127,0.25)';
+        ctx.lineWidth = 1;
+        [R, R * (2/3), R * (1/3)].forEach(function (rr) {
+            ctx.beginPath(); ctx.arc(cx, cy, rr, 0, Math.PI * 2); ctx.stroke();
+        });
+        ctx.beginPath();
+        ctx.moveTo(cx - R, cy); ctx.lineTo(cx + R, cy);
+        ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy + R);
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(127,127,127,0.55)';
+        ctx.font = '11px sans-serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('N', cx, cy - R - 0); ctx.fillText('S', cx, cy + R + 0);
+        ctx.fillText('W', cx - R - 0, cy); ctx.fillText('E', cx + R + 0, cy);
+
+        var activeSet = {};
+        (activePrns || []).forEach(function (p) { activeSet[p] = true; });
+
+        (satsInView || []).forEach(function (sat) {
+            if (sat.elevation === null || sat.azimuth === null ||
+                sat.elevation === undefined || sat.azimuth === undefined) return;
+            var elev = Math.max(0, Math.min(90, sat.elevation));
+            var az = sat.azimuth * Math.PI / 180;
+            var r = R * (1 - elev / 90);
+            var x = cx + r * Math.sin(az);
+            var y = cy - r * Math.cos(az);
+            var info = constInfo(sat.constellation);
+            var alpha = (sat.snr === null || sat.snr === undefined)
+                ? 0.55
+                : Math.max(0.3, Math.min(1, sat.snr / 50));
+
+            // Glow ring for sats actively contributing to the fix.
+            if (activeSet[sat.prn]) {
+                ctx.beginPath();
+                ctx.arc(x, y, 11, 0, Math.PI * 2);
+                ctx.strokeStyle = info.color;
+                ctx.lineWidth = 2;
+                ctx.globalAlpha = 0.5;
+                ctx.stroke();
+                ctx.globalAlpha = 1;
+            }
+            ctx.beginPath();
+            ctx.arc(x, y, 7, 0, Math.PI * 2);
+            ctx.fillStyle = info.color;
+            ctx.globalAlpha = alpha;
+            ctx.fill();
+            ctx.globalAlpha = 1;
+            ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 9px sans-serif';
+            ctx.fillText(String(sat.prn), x, y);
+        });
+    }
+
+    // ── Per-PRN SNR bar chart — flexbox of fixed-height bars.  Sorted by
+    //    constellation then PRN so the same constellation clusters together,
+    //    matching the chrogps-dash visual rhythm.
+    function renderSnrChart(satsInView, activePrns) {
+        var host = document.getElementById('gps-dash-snr-chart');
+        if (!host) return;
+        var sats = (satsInView || []).slice().sort(function (a, b) {
+            var ca = (a.constellation || 'ZZ'), cb = (b.constellation || 'ZZ');
+            if (ca !== cb) return ca < cb ? -1 : 1;
+            return (a.prn || 0) - (b.prn || 0);
+        });
+        var activeSet = {};
+        (activePrns || []).forEach(function (p) { activeSet[p] = true; });
+        var html = sats.map(function (s) {
+            var info = constInfo(s.constellation);
+            var snr = (s.snr === null || s.snr === undefined) ? 0 : s.snr;
+            // Cap bar height fraction at SNR 50 dBHz — anything above that is
+            // already "very strong" and we don't need to grow the bar more.
+            var pct = Math.max(2, Math.min(100, (snr / 50) * 100));
+            return '<div class="gps-snr-bar' + (activeSet[s.prn] ? ' used' : '') + '" '
+                + 'title="PRN ' + s.prn + ' (' + info.label + ') · ' + (s.snr ?? '—') + ' dBHz">'
+                +    '<div class="bar" style="height:' + pct + '%; background:' + info.color + ';"></div>'
+                +    '<div class="prn">' + s.prn + '</div>'
+                + '</div>';
+        }).join('');
+        host.innerHTML = html || '<div class="gps-empty">No satellites in view yet.</div>';
+    }
+
+    // ── Constellation chips: e.g. "GPS 9/9", "GLONASS 4/5".
+    function renderConstellationChips(satsInView, activePrns) {
+        var host = document.getElementById('gps-dash-const-chips');
+        if (!host) return;
+        var groups = {};
+        var activeSet = {};
+        (activePrns || []).forEach(function (p) { activeSet[p] = true; });
+        (satsInView || []).forEach(function (s) {
+            var c = s.constellation || 'GN';
+            if (!groups[c]) groups[c] = { total: 0, used: 0 };
+            groups[c].total += 1;
+            if (activeSet[s.prn]) groups[c].used += 1;
+        });
+        var html = Object.keys(groups).sort().map(function (code) {
+            var info = constInfo(code);
+            var g = groups[code];
+            return '<span class="gps-const-chip" title="' + escapeHtml(info.label) + ' — '
+                + g.used + ' used of ' + g.total + ' visible">'
+                +   '<span class="dot" style="background:' + info.color + '"></span>'
+                +   '<span class="label">' + escapeHtml(info.label) + '</span>'
+                +   '<span class="count">' + g.used + '/' + g.total + '</span>'
+                + '</span>';
+        }).join('');
+        host.innerHTML = html;
+    }
+
+    // ── Constellation filter chips above the satellite table.
+    function renderSatFilters(satsInView) {
+        var host = document.getElementById('gps-dash-sat-filters');
+        if (!host) return;
+        var present = {};
+        (satsInView || []).forEach(function (s) {
+            if (s.constellation) present[s.constellation] = true;
+        });
+        var codes = Object.keys(present).sort();
+        if (!codes.length) { host.innerHTML = ''; return; }
+        var html = '<span class="gps-filter-chip ' + (activeFilter === null ? 'active' : '') + '" '
+                + 'data-code="">All</span>';
+        codes.forEach(function (code) {
+            var info = constInfo(code);
+            html += '<span class="gps-filter-chip' + (activeFilter === code ? ' active' : '') + '" '
+                +  'data-code="' + escapeHtml(code) + '" '
+                +  'style="color:' + info.color + ';">'
+                +  escapeHtml(info.label) + '</span>';
+        });
+        host.innerHTML = html;
+        host.querySelectorAll('.gps-filter-chip').forEach(function (chip) {
+            chip.onclick = function () {
+                var c = chip.getAttribute('data-code');
+                activeFilter = c ? c : null;
+                lastSnapshot && renderSatTable(lastSnapshot.gps);
+                renderSatFilters((lastSnapshot && lastSnapshot.gps && lastSnapshot.gps.satellites_in_view) || []);
+            };
+        });
+    }
+
+    // ── Satellite SNR table rows.
+    function renderSatTable(gps) {
+        var body = document.getElementById('gps-dash-sat-body');
+        if (!body) return;
+        var sats = (gps && gps.satellites_in_view) || [];
+        var activePrns = (gps && gps.active_satellite_prns) || [];
+        var activeSet = {};
+        activePrns.forEach(function (p) { activeSet[p] = true; });
+
+        var filtered = activeFilter
+            ? sats.filter(function (s) { return s.constellation === activeFilter; })
+            : sats;
+
+        var rows = filtered.slice().sort(function (a, b) {
+            var ca = a.constellation || 'ZZ', cb = b.constellation || 'ZZ';
+            if (ca !== cb) return ca < cb ? -1 : 1;
+            return (a.prn || 0) - (b.prn || 0);
+        }).map(function (s) {
+            var info = constInfo(s.constellation);
+            var statLabel = activeSet[s.prn] ? 'ACTIVE' : 'VIEW';
+            var statColor = activeSet[s.prn] ? '#3fb950' : 'var(--text-muted)';
+            var prnCell = '<span style="color:' + info.color + ';font-weight:700;">' + s.prn + '</span>';
+            var snr = s.snr;
+            var snrCell = snr === null || snr === undefined
+                ? '<span class="text-muted">—</span>'
+                : '<span class="' + snrClass(snr) + '">' + snr + ' dBHz</span>';
+            var elev = (s.elevation === null || s.elevation === undefined) ? '—' : (s.elevation + '°');
+            var azim = (s.azimuth === null || s.azimuth === undefined) ? '—' : (s.azimuth + '°');
+            return '<tr>'
+                + '<td>' + prnCell + '</td>'
+                + '<td class="num">' + elev + '</td>'
+                + '<td class="num">' + azim + '</td>'
+                + '<td class="num">' + snrCell + '</td>'
+                + '<td style="color:' + statColor + ';font-weight:700;">' + statLabel + '</td>'
+                + '</tr>';
+        }).join('');
+        body.innerHTML = rows || '<tr><td colspan="5" class="gps-empty">No satellites match the current filter.</td></tr>';
+
+        setText('gps-dash-sat-active', activePrns.length);
+        setText('gps-dash-sat-total', sats.length);
+    }
+
+    // ── Chrony sources table.  Mode/state characters are mapped to the
+    //    descriptive class names defined in chronyc(1).
+    function renderSourcesTable(sources) {
+        var body = document.getElementById('gps-dash-sources-body');
+        if (!body) return;
+        if (!sources || !sources.length) {
+            body.innerHTML = '<tr><td colspan="7" class="gps-empty">'
+                + 'No chrony sources reported (is <code>chrony</code> installed and running?).'
+                + '</td></tr>';
+            return;
+        }
+        var rows = sources.map(function (src) {
+            var stateClass = ({
+                '*': 's-best', '+': 's-comb', '-': 's-not',
+                '?': 's-unr',  'x': 's-false', '~': 's-jit'
+            })[src.state] || 's-not';
+            var modeIcon = ({
+                '^': 'fa-server',
+                '=': 'fa-arrows-left-right',
+                '#': 'fa-microchip'
+            })[src.mode] || 'fa-question';
+            var lastRx = (src.last_rx_s === null || src.last_rx_s === undefined)
+                ? '—'
+                : (src.last_rx_s < 60 ? src.last_rx_s + 's'
+                    : src.last_rx_s < 3600 ? Math.round(src.last_rx_s/60) + 'm'
+                    : Math.round(src.last_rx_s/3600) + 'h');
+            var offsetTxt = fmtSeconds(src.last_sample_offset_s);
+            var reachOctal = (src.reach === null || src.reach === undefined)
+                ? '—'
+                : src.reach.toString(8).padStart(3, '0');
+            return '<tr>'
+                + '<td><span class="gps-src-state ' + stateClass + '">'
+                +     escapeHtml(src.state || '·')
+                +     '</span><i class="fas ' + modeIcon + ' ms-1 text-muted"></i></td>'
+                + '<td>' + escapeHtml(src.name || '—') + '</td>'
+                + '<td class="num">' + (src.stratum === null || src.stratum === undefined ? '—' : src.stratum) + '</td>'
+                + '<td class="num">' + (src.poll === null || src.poll === undefined ? '—' : src.poll) + '</td>'
+                + '<td class="num">' + reachOctal + '</td>'
+                + '<td class="num">' + lastRx + '</td>'
+                + '<td class="num ' + signClass(src.last_sample_offset_s) + '">' + offsetTxt + '</td>'
+                + '</tr>';
+        }).join('');
+        body.innerHTML = rows;
+    }
+
+    // ── Top-level pills (lock state, fix mode, stratum) — drive their
+    //    severity off the live data so the operator can see at a glance
+    //    whether the station is locked.
+    function setLockPill(gps) {
+        var pill = document.getElementById('gps-dash-lock-pill');
+        if (!pill) return;
+        var hasFix = !!(gps && gps.has_fix);
+        var running = !!(gps && gps.running);
+        if (hasFix && running) {
+            pill.className = 'gps-pill ok';
+            pill.innerHTML = '<i class="fas fa-circle-check"></i> GPS LOCKED';
+        } else if (running) {
+            pill.className = 'gps-pill warn';
+            pill.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ACQUIRING';
+        } else {
+            pill.className = 'gps-pill danger';
+            pill.innerHTML = '<i class="fas fa-circle-xmark"></i> NO GPS';
+        }
+    }
+    function setFixPill(gps) {
+        var label = '— FIX';
+        var cls = 'muted';
+        if (gps && gps.fix_mode === 3) { label = '3D FIX'; cls = 'ok'; }
+        else if (gps && gps.fix_mode === 2) { label = '2D FIX'; cls = 'warn'; }
+        else if (gps && gps.has_fix) { label = 'FIX'; cls = 'ok'; }
+        ['gps-dash-fix-pill', 'gps-dash-fix-pill-skyview'].forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el) { el.className = 'gps-pill ' + cls; el.textContent = label; }
+        });
+    }
+    function setStratumPill(tracking) {
+        var pill = document.getElementById('gps-dash-stratum-pill');
+        if (!pill) return;
+        var s = tracking && tracking.stratum;
+        if (s === null || s === undefined) {
+            pill.className = 'gps-pill muted';
+            pill.textContent = 'STRATUM —';
+        } else if (s === 1) {
+            pill.className = 'gps-pill ok';
+            pill.textContent = 'STRATUM 1';
+        } else if (s <= 4) {
+            pill.className = 'gps-pill warn';
+            pill.textContent = 'STRATUM ' + s;
+        } else {
+            pill.className = 'gps-pill danger';
+            pill.textContent = 'STRATUM ' + s;
+        }
+    }
+
+    // ── Sync-health bar — translate the system-time offset into a
+    //    confidence percentage.  10 µs and below is "stratum-1 healthy",
+    //    a full second is essentially "broken".  Logarithmic so the
+    //    needle stays meaningful across many decades of offset.
+    function renderSyncHealth(tracking) {
+        var pct = 0;
+        var offset = tracking && tracking.system_time_offset_s;
+        if (offset !== null && offset !== undefined && !isNaN(offset)) {
+            var abs = Math.abs(offset);
+            if (abs <= 1e-5)      pct = 100;
+            else if (abs >= 1)    pct = 5;
+            else {
+                // log-scale: 10µs → 100%, 1s → 0%, smooth between.
+                pct = Math.round(100 * (1 - (Math.log10(abs) + 5) / 5));
+                pct = Math.max(5, Math.min(100, pct));
+            }
+        }
+        var bar = document.getElementById('gps-dash-health-bar');
+        if (bar) bar.style.width = pct + '%';
+        setText('gps-dash-health-pct', pct + '%');
+        setText('gps-dash-health-offset', fmtSeconds(offset));
+        setText('gps-dash-health-rms', fmtSeconds(tracking && tracking.rms_offset_s));
+    }
+
+    // ── Tracking key/value table.
+    function renderTracking(chrony) {
+        var t = chrony && chrony.tracking || {};
+        var refId = t.reference_id_name
+            ? (t.reference_id_name + (t.reference_id_hex ? ' (' + t.reference_id_hex + ')' : ''))
+            : (t.reference_id_hex || '—');
+        setText('t-ref-id', refId);
+        setText('t-stratum', t.stratum === null || t.stratum === undefined ? '—' : String(t.stratum));
+        setText('t-ref-time', t.ref_time || '—');
+        setText('t-sys-offset', fmtSeconds(t.system_time_offset_s));
+        setText('t-last-offset', fmtSeconds(t.last_offset_s));
+        setText('t-rms-offset', fmtSeconds(t.rms_offset_s));
+        setText('t-frequency', fmtPpm(t.frequency_ppm));
+        setText('t-residual', fmtPpm(t.residual_freq_ppm));
+        setText('t-skew', fmtPpm(t.skew_ppm));
+        setText('t-root-delay', fmtSeconds(t.root_delay_s));
+        setText('t-root-disp', fmtSeconds(t.root_dispersion_s));
+        setText('t-update-int', fmtSeconds2(t.update_interval_s));
+        setText('t-leap', t.leap_status || '—');
+
+        // Add sign-coloured class on offset cells for quick reading.
+        ['t-sys-offset', 't-last-offset'].forEach(function (id) {
+            var el = document.getElementById(id);
+            if (!el) return;
+            el.classList.remove('pos', 'neg');
+            var v = id === 't-sys-offset' ? t.system_time_offset_s : t.last_offset_s;
+            if (typeof v === 'number') el.classList.add(signClass(v));
+        });
+    }
+
+    // ── GPS skyview side-card details (position, altitude, DOP, hardware).
+    function renderGpsSummary(gps) {
+        var pos = (gps && gps.latitude !== null && gps.longitude !== null && gps.latitude !== undefined)
+            ? gps.latitude.toFixed(6) + ', ' + gps.longitude.toFixed(6)
+            : '—';
+        setText('g-pos', pos);
+        setText('g-alt', gps && gps.altitude_m !== null && gps.altitude_m !== undefined
+            ? gps.altitude_m.toFixed(1) + ' m' : '—');
+
+        var dopBits = [];
+        if (gps && gps.hdop !== null && gps.hdop !== undefined) dopBits.push('H ' + gps.hdop);
+        if (gps && gps.vdop !== null && gps.vdop !== undefined) dopBits.push('V ' + gps.vdop);
+        if (gps && gps.pdop !== null && gps.pdop !== undefined) dopBits.push('P ' + gps.pdop);
+        setText('g-dop', dopBits.length ? dopBits.join(' · ') : '—');
+
+        var hw = (gps && gps.serial_port)
+            ? (gps.serial_port + (gps.baudrate ? ' @ ' + gps.baudrate + ' bd' : ''))
+            : '—';
+        setText('g-hw', hw);
+
+        var sats = (gps && gps.satellites_in_view) || [];
+        var active = (gps && gps.active_satellite_prns) || [];
+        setText('gps-dash-active-count', active.length);
+        setText('gps-dash-visible-count', sats.length);
+        setText('gps-dash-total-count', sats.length);
+
+        // Signal-integrity bar = average SNR scaled to 50 dBHz.
+        var validSnrs = sats.filter(function (s) { return typeof s.snr === 'number'; }).map(function (s) { return s.snr; });
+        var avg = validSnrs.length ? validSnrs.reduce(function (a, b) { return a + b; }, 0) / validSnrs.length : null;
+        var pct = avg === null ? 0 : Math.max(2, Math.min(100, Math.round((avg / 50) * 100)));
+        var bar = document.getElementById('gps-dash-snr-bar');
+        if (bar) bar.style.width = pct + '%';
+        setText('gps-dash-snr-pct', pct + '%');
+        setText('gps-dash-avg-snr', avg === null ? '—' : avg.toFixed(1));
+    }
+
+    // ── Render everything from a single snapshot.  Tolerates missing
+    //    sub-fields so a partial server response (e.g. chronyc not
+    //    installed) renders meaningfully instead of erroring.
+    var lastSnapshot = null;
+    function render(snapshot) {
+        lastSnapshot = snapshot;
+        var gps = snapshot.gps || {};
+        var chrony = snapshot.chrony || {};
+        var host = snapshot.host || {};
+
+        // Header
+        setText('gps-dash-node', host.hostname || '—');
+        setLockPill(gps);
+        setFixPill(gps);
+        setStratumPill(chrony.tracking || {});
+
+        // Clocks
+        var now = new Date();
+        setText('gps-dash-clock-utc',   'UTC ' + now.toISOString().slice(11, 19));
+        setText('gps-dash-clock-local', 'Local ' + now.toTimeString().slice(0, 8));
+
+        // Tracking + sync-health bar
+        renderTracking(chrony);
+        renderSyncHealth(chrony.tracking || {});
+
+        // Skyview
+        var canvas = document.getElementById('gps-dash-sky-canvas');
+        if (canvas) drawSkyPlot(canvas, gps.satellites_in_view || [], gps.active_satellite_prns || []);
+        renderGpsSummary(gps);
+        renderConstellationChips(gps.satellites_in_view || [], gps.active_satellite_prns || []);
+        renderSnrChart(gps.satellites_in_view || [], gps.active_satellite_prns || []);
+
+        // Bottom tables
+        renderSourcesTable(chrony.sources || []);
+        renderSatFilters(gps.satellites_in_view || []);
+        renderSatTable(gps);
+    }
+
+    // ── Polling.  Configurable interval; "0" means paused.
+    var timer = null;
+    function fetchOnce() {
+        fetch('/admin/api/gps-dashboard/data', { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(render)
+            .catch(function (err) {
+                console.warn('GPS dashboard fetch failed:', err);
+            });
+    }
+    function schedule(intervalMs) {
+        if (timer) { clearInterval(timer); timer = null; }
+        if (intervalMs > 0) timer = setInterval(fetchOnce, intervalMs);
+    }
+    document.addEventListener('DOMContentLoaded', function () {
+        var sel = document.getElementById('gps-dash-refresh');
+        if (sel) {
+            sel.addEventListener('change', function () {
+                schedule(parseInt(sel.value, 10) || 0);
+            });
+            schedule(parseInt(sel.value, 10) || 0);
+        }
+        fetchOnce();
+    });
+})();
+</script>
+{% endblock %}
