@@ -6,6 +6,9 @@ tracks releases under the 2.x series.
 
 ## [Unreleased]
 
+### Documentation
+- **Stratum 1 GPS time server documented as a first-class feature.** The repository previously documented the GPS HAT only as a hardware-setup procedure; the resulting *capability* — a true stratum 1 NTP server, GPS-disciplined via PPS, with a battery-backed RTC and one-click admin-UI setup — was not surfaced where new users decide whether to deploy the platform. Updated the marketing/feature surfaces to call this out: a new "🛰️ Built-In Stratum 1 NTP Time Source" section in `README.md` (between Hardware Integration and the Modern Web Dashboard), a new "Stratum 1 GPS-Disciplined Time" section card on the public About page (`templates/about.html`) with six feature cards (multi-GNSS receiver, hardware PPS edge, true stratum 1 NTP, battery-backed RTC, air-gap friendly, one-click setup), an additional "Stratum 1 Time" hero chip and "Stratum 1 GPS Time Source" Key Features bullet, and a new sentence in the reference build description in `docs/reference/ABOUT.md`. No code changes; existing GPS HAT setup guide at `docs/hardware/GPS_HAT_SETUP.md` remains the authoritative procedural reference.
+
 ### Changed
 - Backfill completed for recent release metadata; new changes should be documented here going forward.
 

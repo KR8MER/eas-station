@@ -72,6 +72,16 @@ EAS Station is a software-defined drop-in replacement for commercial EAS encoder
 - **Multi-relay HAT support** — coordinate multiple relay outputs for complex workflows
 - **GPIO pin map** — visual interface showing every pin assignment and current state
 
+### 🛰️ Built-In Stratum 1 NTP Time Source
+- **GPS-disciplined precision time** — a Uputronics Raspberry Pi GPS/RTC HAT (u-blox MAX-M8Q multi-GNSS: GPS, GLONASS, Galileo, BeiDou) with **hardware PPS** delivers sub-microsecond reference time directly to the kernel
+- **True stratum 1** — `chrony` consumes the NMEA fix and the PPS edge as a kernel refclock, so the station serves NTP at **stratum 1** with no upstream internet time required. Logged alert timestamps, audit trails, and SAME header `JJJHHMM` fields are accurate to the satellites themselves.
+- **Real broadcast-grade hardware** — battery-backed RTC (RV-3028-C7 on current revisions, DS3231 on older boards) keeps the clock disciplined across power cycles even before GPS lock, and survives complete network isolation. Adafruit Ultimate GPS HAT (#2324, MTK3339) is supported as a drop-in alternative; any standard 9600-baud NMEA UART module with PPS will also work.
+- **One-click setup** — **Admin → Hardware Settings → GPS** runs a checklist that probes every prerequisite (RTC overlay, PPS device, `gpsd`/`chrony`/`util-linux-extra` package state, `/boot/firmware/config.txt` overlays, chrony's currently-selected source) and offers a single **Run** button per remediation step. RTC seeding after a coin-cell change is one click.
+- **Live status in the dashboard** — fix quality, satellite count, HDOP, sky plot, PPS pill, and `chronyc tracking` are surfaced in real time so an operator can prove stratum 1 lock at a glance.
+- **Why it matters** — every EAS event is timestamped, geofenced, and audited; a station that drifts seconds against NIST is a station whose RWT logs and CAP `sent`/`effective`/`expires` math eventually cease to match the real world. Timing is treated as first-class infrastructure, not an afterthought.
+
+See the [GPS HAT Setup guide](docs/hardware/GPS_HAT_SETUP.md) for hardware options, wiring, and the manual configuration steps the admin UI automates.
+
 ### 🌐 Modern Web Dashboard
 - **Responsive Bootstrap 5 UI** — works on desktop, tablet, and mobile
 - **Real-time updates** — Socket.IO pushes live alert and system data without page refresh
