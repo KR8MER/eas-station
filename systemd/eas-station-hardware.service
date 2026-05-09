@@ -17,12 +17,13 @@ Environment="PATH=/opt/eas-station/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/
 Environment="PYTHONPATH=/opt/eas-station"
 # Pi 5 requires lgpio for GPIO access - prevents gpiozero auto-detection hangs
 Environment="GPIOZERO_PIN_FACTORY=lgpio"
-# Memory diagnostics — capture allocator tracebacks so SIGUSR1 produces
-# a useful top-N list. Tracemalloc has non-trivial overhead, so leave
-# it off once the leak is identified and a fix has shipped.
-# Dumps land in MEMDIAG_DUMP_DIR; we override the /tmp default because
-# PrivateTmp=true below would hide /tmp dumps from a normal shell.
-Environment="MEMDIAG_TRACEMALLOC=1"
+# Memory diagnostics — SIGUSR1 still produces an RSS + gc-summary
+# snapshot, but tracemalloc is left off in production because every
+# allocation is captured (CPU + RSS overhead). To re-enable for a
+# leak hunt, add MEMDIAG_TRACEMALLOC=1 here, restart, and reproduce.
+# Dumps land in MEMDIAG_DUMP_DIR; we override the /tmp default
+# because PrivateTmp=true below would hide /tmp dumps from a normal
+# shell.
 Environment="MEMDIAG_DUMP_DIR=/var/log/eas-station"
 # glibc malloc tuning. Multi-threaded Python services on glibc default
 # to one malloc arena per CPU thread (= 8 on a Pi 5), and each arena
