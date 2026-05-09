@@ -43,6 +43,7 @@ import json
 import logging
 import logging.handlers
 import os
+import re
 import shutil
 import socket
 import socketserver
@@ -315,9 +316,293 @@ def _cmd_seed_rtc(params: Dict[str, Any], emit: EmitFn) -> Dict[str, Any]:
     }
 
 
+# ---------------------------------------------------------------------------
+# apt_install — install one or more packages from a hardcoded allowlist.
+#
+# The allowlist is the single security boundary for this action. Even if the
+# web tier is compromised and starts asking for arbitrary package names,
+# the helper rejects anything not in the set below. This is defense in
+# depth — the web tier validates input too — but the helper is what stops
+# someone from turning this RPC into ``apt install netcat-openbsd
+# socat python3-pip`` and getting a remote shell on root.
+#
+# We deliberately do NOT support arbitrary "version pinning" or apt
+# options. The action exists to fix one user-visible problem ("hwclock
+# command not found", "chrony isn't installed") and that fix is always
+# the same: install the latest distro package.
+#
+# Params:
+#   packages (list[str]) — non-empty, every entry must be in
+#     _APT_ALLOWLIST and match _APT_NAME_RE (defense in depth).
+#   update_first (bool, default True) — run ``apt-get update`` before
+#     install. The UI surfaces this as a checkbox so users on metered
+#     links can skip it.
+# ---------------------------------------------------------------------------
+
+# Package names this helper is willing to install. Keep aligned with
+# app_utils/gps_hat.py's _PACKAGES tuple (which is what the diagnostic
+# panel surfaces as installable). Adding to this list is a deliberate
+# security review event.
+_APT_ALLOWLIST = frozenset({
+    "chrony",
+    "gpsd",
+    "gpsd-clients",
+    "pps-tools",
+    "util-linux-extra",
+    "i2c-tools",
+})
+
+# Belt-and-braces regex: even within the allowlist, refuse anything that
+# doesn't look like a Debian binary package name. This stops a typo or
+# corrupted allowlist from ever producing weird argv (and matches the
+# Debian Policy §5.6.7 grammar for binary package names).
+_APT_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9+\-.]+$")
+
+
+def _cmd_apt_install(params: Dict[str, Any], emit: EmitFn) -> Dict[str, Any]:
+    raw_packages = params.get("packages")
+    if not isinstance(raw_packages, list) or not raw_packages:
+        return {
+            "ok": False,
+            "exit_code": 22,
+            "error": "packages must be a non-empty list of strings",
+        }
+    if len(raw_packages) > len(_APT_ALLOWLIST):
+        return {
+            "ok": False,
+            "exit_code": 22,
+            "error": f"too many packages requested (max {len(_APT_ALLOWLIST)})",
+        }
+    cleaned: List[str] = []
+    for entry in raw_packages:
+        if not isinstance(entry, str):
+            return {
+                "ok": False,
+                "exit_code": 22,
+                "error": "every package name must be a string",
+            }
+        name = entry.strip()
+        if not _APT_NAME_RE.match(name):
+            return {
+                "ok": False,
+                "exit_code": 22,
+                "error": f"package name failed sanity check: {name!r}",
+            }
+        if name not in _APT_ALLOWLIST:
+            return {
+                "ok": False,
+                "exit_code": 22,
+                "error": (
+                    f"package {name!r} is not in the helper allowlist. "
+                    "Adding a package requires editing the helper itself "
+                    "(see _APT_ALLOWLIST in eas-station-hwsetup)."
+                ),
+                "allowlist": sorted(_APT_ALLOWLIST),
+            }
+        if name not in cleaned:  # de-dup, preserve order
+            cleaned.append(name)
+
+    raw_update = params.get("update_first", True)
+    if not isinstance(raw_update, bool):
+        return {
+            "ok": False,
+            "exit_code": 22,
+            "error": "update_first must be a boolean",
+        }
+
+    apt_get = _which_required("apt-get")
+    if not apt_get:
+        return {
+            "ok": False,
+            "exit_code": 127,
+            "error": "apt-get not found — this helper only supports Debian-family distributions.",
+        }
+
+    # apt-get tries hard to be interactive. Force non-interactive mode and
+    # disable any installer prompts, so an unattended unit-file or
+    # debconf-prompt question can never wedge the helper.
+    env = dict(os.environ)
+    env["DEBIAN_FRONTEND"] = "noninteractive"
+    env["APT_LISTCHANGES_FRONTEND"] = "none"
+    # "lock" tools intermittently fight each other on Pi OS during boot;
+    # this option makes apt wait for the lock instead of failing fast.
+    apt_options = [
+        "-y",
+        "-o", "Dpkg::Options::=--force-confdef",
+        "-o", "Dpkg::Options::=--force-confold",
+        "-o", "DPkg::Lock::Timeout=60",
+    ]
+
+    overall_stdout: List[str] = []
+    overall_stderr: List[str] = []
+
+    if raw_update:
+        emit("stdout", "[1/2] apt-get update\n")
+        rc, out, err = _run_streaming_env(
+            [apt_get, "update", "-q", *apt_options[:1]],
+            emit,
+            env=env,
+            timeout=180.0,
+            label="apt-get update",
+        )
+        overall_stdout.append(out)
+        overall_stderr.append(err)
+        if rc != 0:
+            return {
+                "ok": False,
+                "exit_code": rc,
+                "error": (
+                    "apt-get update failed. Network or repository problem; "
+                    "try again, or pass update_first=false to skip it."
+                ),
+                "packages": cleaned,
+            }
+    else:
+        emit("stdout", "[1/2] apt-get update — skipped (update_first=false)\n")
+
+    emit("stdout", f"[2/2] apt-get install {' '.join(cleaned)}\n")
+    rc, out, err = _run_streaming_env(
+        [apt_get, "install", *apt_options, "--", *cleaned],
+        emit,
+        env=env,
+        timeout=600.0,
+        label="apt-get install",
+    )
+    overall_stdout.append(out)
+    overall_stderr.append(err)
+    if rc != 0:
+        return {
+            "ok": False,
+            "exit_code": rc,
+            "error": (
+                "apt-get install failed. See streamed stderr for details. "
+                "Common causes: missing apt cache (run with update_first=true), "
+                "package conflicts, or insufficient disk space."
+            ),
+            "packages": cleaned,
+            "stderr": err.strip()[:2000],
+        }
+
+    # Verify each package is now in 'install ok installed' state. apt-get
+    # exits 0 even when a package wasn't actually installed (e.g. mid-pipe
+    # cancellation, debconf timeout) so this is the authoritative check.
+    installed_state: Dict[str, str] = {}
+    dpkg_query = _which_required("dpkg-query")
+    if dpkg_query:
+        for name in cleaned:
+            try:
+                r = subprocess.run(
+                    [dpkg_query, "-W", "-f=${Status}", name],
+                    capture_output=True, text=True, timeout=5.0, check=False,
+                )
+                installed_state[name] = (r.stdout or "").strip() or "unknown"
+            except Exception as exc:
+                installed_state[name] = f"query failed: {exc}"
+    not_installed = [
+        name for name, status in installed_state.items()
+        if "install ok installed" not in status
+    ]
+    if not_installed:
+        return {
+            "ok": False,
+            "exit_code": 1,
+            "error": (
+                "apt-get reported success but the following packages are "
+                f"not in the 'installed' state: {', '.join(not_installed)}"
+            ),
+            "packages": cleaned,
+            "installed_state": installed_state,
+        }
+
+    return {
+        "ok": True,
+        "exit_code": 0,
+        "packages": cleaned,
+        "installed_state": installed_state,
+    }
+
+
+def _run_streaming_env(
+    argv: List[str],
+    emit: EmitFn,
+    *,
+    env: Optional[Dict[str, str]] = None,
+    timeout: float = 30.0,
+    label: Optional[str] = None,
+) -> Tuple[int, str, str]:
+    """Variant of :func:`_run_streaming` that takes an explicit env dict.
+
+    Used by ``apt_install`` to inject ``DEBIAN_FRONTEND=noninteractive``
+    without leaking it into the helper's own environment. Behaviour is
+    otherwise identical — same threading model, same timeout semantics,
+    same line-by-line streaming through ``emit``.
+    """
+    if not isinstance(argv, list) or not argv or not all(isinstance(a, str) for a in argv):
+        raise ValueError("argv must be a non-empty list of strings")
+    label = label or argv[0]
+    emit("stdout", f"$ {' '.join(argv)}\n")
+    try:
+        proc = subprocess.Popen(
+            argv,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,
+            close_fds=True,
+            text=True,
+            bufsize=1,
+            env=env,
+        )
+    except FileNotFoundError as exc:
+        emit("stderr", f"{label}: {exc}\n")
+        return 127, "", str(exc)
+    except OSError as exc:
+        emit("stderr", f"{label}: {exc}\n")
+        return getattr(exc, "errno", 1) or 1, "", str(exc)
+
+    stdout_buf: List[str] = []
+    stderr_buf: List[str] = []
+
+    def pump(stream, channel: str, buf: List[str]) -> None:
+        try:
+            for line in iter(stream.readline, ""):
+                buf.append(line)
+                emit(channel, line)
+        except Exception as exc:
+            emit("stderr", f"[{label}] read error: {exc}\n")
+        finally:
+            try:
+                stream.close()
+            except Exception:
+                pass
+
+    threads = [
+        threading.Thread(target=pump, args=(proc.stdout, "stdout", stdout_buf), daemon=True),
+        threading.Thread(target=pump, args=(proc.stderr, "stderr", stderr_buf), daemon=True),
+    ]
+    for t in threads:
+        t.start()
+
+    try:
+        rc = proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        try:
+            proc.wait(timeout=2)
+        except Exception:
+            pass
+        emit("stderr", f"[{label}] timed out after {timeout:.1f}s\n")
+        rc = 124
+
+    for t in threads:
+        t.join(timeout=2)
+
+    return rc, "".join(stdout_buf), "".join(stderr_buf)
+
+
 COMMANDS: Dict[str, CommandFn] = {
     "ping": _cmd_ping,
     "seed_rtc": _cmd_seed_rtc,
+    "apt_install": _cmd_apt_install,
 }
 
 

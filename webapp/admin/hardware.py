@@ -191,6 +191,89 @@ def gps_hat_seed_rtc():
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
+# Mirror of the helper's _APT_ALLOWLIST. Defense in depth: even if the
+# web tier is asked to install something not on this list, we reject it
+# before the request reaches the privileged daemon. The helper has the
+# final say either way; this just produces a nicer error in the UI.
+_GPS_HAT_APT_ALLOWLIST = frozenset({
+    "chrony",
+    "gpsd",
+    "gpsd-clients",
+    "pps-tools",
+    "util-linux-extra",
+    "i2c-tools",
+})
+
+
+@hardware_bp.route('/hardware/gps-hat/apt-install', methods=['POST'])
+@require_permission('system.configure')
+def gps_hat_apt_install():
+    """Install one or more packages from the GPS-HAT-related allowlist.
+
+    Body:
+        {"packages": ["chrony", "gpsd", ...], "update_first": true}
+
+    Every package name must appear in :data:`_GPS_HAT_APT_ALLOWLIST` and
+    in the helper's ``_APT_ALLOWLIST`` (defense in depth — both lists
+    are kept identical by hand). The helper streams ``apt-get update``
+    and ``apt-get install`` output; this endpoint collects the streamed
+    output into the response. A streaming Server-Sent-Events variant
+    can be added later if the install runtimes get long.
+    """
+    try:
+        body = request.get_json(silent=True) or {}
+        raw_packages = body.get("packages", [])
+        if not isinstance(raw_packages, list) or not raw_packages:
+            raise BadRequest("packages must be a non-empty list of strings")
+        if len(raw_packages) > len(_GPS_HAT_APT_ALLOWLIST):
+            raise BadRequest(
+                f"too many packages requested (max {len(_GPS_HAT_APT_ALLOWLIST)})"
+            )
+        bad: list = []
+        for entry in raw_packages:
+            if not isinstance(entry, str):
+                raise BadRequest("every package name must be a string")
+            name = entry.strip()
+            if name not in _GPS_HAT_APT_ALLOWLIST:
+                bad.append(name)
+        if bad:
+            return jsonify({
+                "ok": False,
+                "error": f"packages not in allowlist: {', '.join(bad)}",
+                "allowlist": sorted(_GPS_HAT_APT_ALLOWLIST),
+            }), 400
+        update_first = bool(body.get("update_first", True))
+
+        result = hwsetup_call(
+            "apt_install",
+            {"packages": raw_packages, "update_first": update_first},
+            timeout=720.0,            # apt update + install + dpkg-query verify
+            raise_on_error=False,
+        )
+        result_event = result.get("result_event") or {}
+        status = 200 if result.get("ok") else 409
+        return jsonify({
+            "ok": result.get("ok", False),
+            "exit_code": result.get("exit_code"),
+            "stdout": result.get("stdout", ""),
+            "stderr": result.get("stderr", ""),
+            "error": result.get("error"),
+            "packages": result_event.get("packages"),
+            "installed_state": result_event.get("installed_state"),
+        }), status
+    except HelperUnavailable as exc:
+        return jsonify({
+            "ok": False,
+            "error": str(exc),
+            "helper_available": False,
+        }), 503
+    except BadRequest:
+        raise
+    except Exception as exc:
+        logger.exception("hwsetup apt_install failed")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
 @hardware_bp.route('/hardware/update', methods=['POST'])
 @require_permission('system.configure')
 def update_hardware():
