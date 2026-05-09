@@ -23,7 +23,10 @@ from __future__ import annotations
 
 import json
 import logging
+import shutil
+import socket
 import subprocess
+from datetime import datetime, timezone
 from typing import Any, Dict
 
 from flask import Blueprint, flash, jsonify, redirect, render_template, request, url_for
@@ -36,6 +39,10 @@ from app_core.hardware_settings import (
     get_hardware_settings,
     update_hardware_settings,
     invalidate_hardware_settings_cache,
+)
+from app_utils.chrony_parser import (
+    parse_chronyc_tracking_csv as _parse_chronyc_tracking_csv,
+    parse_chronyc_sources_csv as _parse_chronyc_sources_csv,
 )
 from app_utils.gps_hat import collect_gps_hat_diagnostics
 from app_utils.hwsetup_client import (
@@ -637,10 +644,6 @@ def restart_hardware_services():
 # app_utils.chrony_parser (kept as a pure module so they're testable
 # without the Flask stack).
 # ---------------------------------------------------------------------------
-from app_utils.chrony_parser import (
-    parse_chronyc_tracking_csv as _parse_chronyc_tracking_csv,
-    parse_chronyc_sources_csv as _parse_chronyc_sources_csv,
-)
 
 
 def _collect_chrony_dashboard_data() -> Dict[str, Any]:
@@ -651,7 +654,6 @@ def _collect_chrony_dashboard_data() -> Dict[str, Any]:
     tolerated — the dashboard renders the partial information rather than
     erroring out the whole page.
     """
-    import shutil
     out: Dict[str, Any] = {
         "tool_present": shutil.which("chronyc") is not None,
         "tracking_ok": False,
@@ -720,8 +722,10 @@ def gps_dashboard_data():
       * ``host`` — hostname/uptime so the header banner can show the
         node identity (chrogps-dash convention).
     """
-    import socket
-    from datetime import datetime, timezone
+    # Imported here (rather than at module top) to avoid a circular
+    # import: webapp.admin.network → app_core.config → … → admin.__init__
+    # which itself imports this module.  This is the documented pattern
+    # already used elsewhere in the admin package.
     from webapp.admin.network import call_hardware_service
 
     # GPS fix from the hardware service.  Tolerant of an unreachable
@@ -731,11 +735,16 @@ def gps_dashboard_data():
         gps_payload = call_hardware_service('/api/hardware/gps/status', method='GET') or {}
         if isinstance(gps_payload, dict) and gps_payload.get('success') is False:
             # call_hardware_service returns {'success': False, ...} on
-            # failure; surface the error but keep the response shape stable.
-            gps_payload = {"_error": gps_payload.get('error', 'unreachable')}
-    except Exception as exc:  # defensive — must never 500 the dashboard
-        logger.warning("GPS dashboard: hardware service call failed: %s", exc)
-        gps_payload = {"_error": str(exc)}
+            # failure; surface a generic error rather than the upstream
+            # error string so we don't risk leaking implementation
+            # details (paths, internal hostnames) to the browser.
+            gps_payload = {"_error": "hardware_service_unavailable"}
+    except Exception:  # defensive — must never 500 the dashboard
+        # Log the full exception server-side for the operator while
+        # returning a generic, fixed string to the client.  Avoids the
+        # stack-trace-exposure pattern flagged by CodeQL.
+        logger.warning("GPS dashboard: hardware service call failed", exc_info=True)
+        gps_payload = {"_error": "hardware_service_unavailable"}
 
     chrony_payload = _collect_chrony_dashboard_data()
 

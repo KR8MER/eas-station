@@ -538,8 +538,8 @@
         ctx.fillStyle = 'rgba(127,127,127,0.55)';
         ctx.font = '11px sans-serif';
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText('N', cx, cy - R - 0); ctx.fillText('S', cx, cy + R + 0);
-        ctx.fillText('W', cx - R - 0, cy); ctx.fillText('E', cx + R + 0, cy);
+        ctx.fillText('N', cx, cy - R); ctx.fillText('S', cx, cy + R);
+        ctx.fillText('W', cx - R, cy); ctx.fillText('E', cx + R, cy);
 
         var activeSet = {};
         (activePrns || []).forEach(function (p) { activeSet[p] = true; });
@@ -603,7 +603,8 @@
             // already "very strong" and we don't need to grow the bar more.
             var pct = Math.max(2, Math.min(100, (snr / 50) * 100));
             return '<div class="gps-snr-bar' + (activeSet[s.prn] ? ' used' : '') + '" '
-                + 'title="PRN ' + s.prn + ' (' + info.label + ') · ' + (s.snr ?? '—') + ' dBHz">'
+                + 'title="PRN ' + s.prn + ' (' + info.label + ') · '
+                + ((s.snr === null || s.snr === undefined) ? '—' : s.snr) + ' dBHz">'
                 +    '<div class="bar" style="height:' + pct + '%; background:' + info.color + ';"></div>'
                 +    '<div class="prn">' + s.prn + '</div>'
                 + '</div>';
