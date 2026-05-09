@@ -6,6 +6,11 @@ tracks releases under the 2.x series.
 
 ## [Unreleased]
 
+### Changed
+- Backfill completed for recent release metadata; new changes should be documented here going forward.
+
+## [2.73.5] - 2026-05-09 - Backfill changelog/version history
+
 ### Fixed
 - **Phantom whitespace below the page footer on every page (PR #2040 follow-up)**:
   Three independent bugs were combining to leave a band of empty space below the
