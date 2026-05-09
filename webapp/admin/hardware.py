@@ -352,6 +352,87 @@ def gps_hat_chrony_config():
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
+_GPS_HAT_SYSTEMCTL_UNITS = frozenset({
+    "chrony.service",
+    "gpsd.service",
+    "gpsd.socket",
+})
+
+_GPS_HAT_SYSTEMCTL_VERBS = frozenset({
+    "start", "stop", "restart",
+    "enable", "disable",
+    "mask", "unmask",
+})
+
+
+@hardware_bp.route('/hardware/gps-hat/systemctl', methods=['POST'])
+@require_permission('system.configure')
+def gps_hat_systemctl():
+    """Run a single systemctl verb against one of the GPS-HAT-related
+    units. The web tier mirrors the helper's allowlists so an
+    obviously-wrong request is rejected before it even reaches the
+    privileged daemon.
+
+    Body: ``{"unit": "<unit>", "verb": "<verb>", "now": false}``
+
+    Allowed units: chrony.service, gpsd.service, gpsd.socket.
+    Allowed verbs: start, stop, restart, enable, disable, mask, unmask.
+    ``now`` is only valid with enable / disable / mask / unmask.
+    """
+    try:
+        body = request.get_json(silent=True) or {}
+        if not isinstance(body, dict):
+            raise BadRequest("body must be a JSON object")
+        unit = body.get("unit")
+        verb = body.get("verb")
+        if unit not in _GPS_HAT_SYSTEMCTL_UNITS:
+            return jsonify({
+                "ok": False,
+                "error": f"unit must be one of: {sorted(_GPS_HAT_SYSTEMCTL_UNITS)}",
+            }), 400
+        if verb not in _GPS_HAT_SYSTEMCTL_VERBS:
+            return jsonify({
+                "ok": False,
+                "error": f"verb must be one of: {sorted(_GPS_HAT_SYSTEMCTL_VERBS)}",
+            }), 400
+        now_flag = body.get("now", False)
+        if not isinstance(now_flag, bool):
+            raise BadRequest("now must be a boolean")
+
+        try:
+            result = hwsetup_call(
+                "systemctl_action",
+                {"unit": unit, "verb": verb, "now": now_flag},
+                timeout=45.0,
+                raise_on_error=False,
+            )
+        except HelperUnavailable as exc:
+            return jsonify({
+                "ok": False,
+                "error": str(exc),
+                "helper_available": False,
+            }), 503
+
+        result_event = result.get("result_event") or {}
+        status = 200 if result.get("ok") else 409
+        return jsonify({
+            "ok": result.get("ok", False),
+            "exit_code": result.get("exit_code"),
+            "stdout": result.get("stdout", ""),
+            "stderr": result.get("stderr", ""),
+            "error": result.get("error"),
+            "unit": result_event.get("unit", unit),
+            "verb": result_event.get("verb", verb),
+            "now": result_event.get("now", now_flag),
+            "state": result_event.get("state"),
+        }), status
+    except BadRequest:
+        raise
+    except Exception as exc:
+        logger.exception("hwsetup systemctl_action failed")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
 @hardware_bp.route('/hardware/gps-hat/config-txt-overlay', methods=['POST'])
 @require_permission('system.configure')
 def gps_hat_config_txt_overlay():

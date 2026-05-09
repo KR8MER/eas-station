@@ -1271,6 +1271,139 @@ def _cmd_config_txt_set_overlay(params: Dict[str, Any], emit: EmitFn) -> Dict[st
     }
 
 
+# ---------------------------------------------------------------------------
+# systemctl_action — start / stop / restart / enable / disable / mask /
+# unmask, restricted to the units the GPS HAT setup actually touches.
+#
+# The unit allowlist is the security boundary. We never accept a unit
+# name from the caller that isn't in this set — even unit names that
+# *look* well-formed could be e.g. ``ssh.service`` (where stopping it
+# would lock an operator out remotely) or ``firewalld.service``
+# (where disabling it would silently expose the machine).
+#
+# Why mask/unmask is on the allowlist: the gpsd Debian package ships
+# a ``gpsd.socket`` socket-activation unit that overrides
+# ``START_DAEMON=true`` in /etc/default/gpsd. We documented earlier
+# that the only reliable way to keep gpsd running with ``-n`` is to
+# mask gpsd.socket, so the helper needs to be able to do that.
+#
+# Params:
+#   unit  (str, required)  — must be in _SYSTEMCTL_UNIT_ALLOWLIST
+#   verb  (str, required)  — must be in _SYSTEMCTL_VERB_ALLOWLIST
+#   now   (bool, optional, default False) — append --now (only valid
+#                                            with enable/disable/mask/
+#                                            unmask; rejected otherwise)
+# ---------------------------------------------------------------------------
+
+_SYSTEMCTL_UNIT_ALLOWLIST = frozenset({
+    "chrony.service",
+    "gpsd.service",
+    "gpsd.socket",
+})
+
+_SYSTEMCTL_VERB_ALLOWLIST = frozenset({
+    "start", "stop", "restart",
+    "enable", "disable",
+    "mask", "unmask",
+})
+
+# Verbs where --now is meaningful. systemctl will reject "--now" on
+# start/stop/restart anyway, but we sanity-check it here so the user
+# gets a helpful error instead of an opaque systemctl exit.
+_SYSTEMCTL_VERBS_ACCEPTING_NOW = frozenset({
+    "enable", "disable", "mask", "unmask",
+})
+
+
+def _cmd_systemctl_action(params: Dict[str, Any], emit: EmitFn) -> Dict[str, Any]:
+    unit = params.get("unit")
+    if not isinstance(unit, str) or unit not in _SYSTEMCTL_UNIT_ALLOWLIST:
+        return {
+            "ok": False,
+            "exit_code": 22,
+            "error": (
+                f"unit must be one of: {sorted(_SYSTEMCTL_UNIT_ALLOWLIST)}"
+            ),
+        }
+    verb = params.get("verb")
+    if not isinstance(verb, str) or verb not in _SYSTEMCTL_VERB_ALLOWLIST:
+        return {
+            "ok": False,
+            "exit_code": 22,
+            "error": (
+                f"verb must be one of: {sorted(_SYSTEMCTL_VERB_ALLOWLIST)}"
+            ),
+        }
+    raw_now = params.get("now", False)
+    if not isinstance(raw_now, bool):
+        return {
+            "ok": False,
+            "exit_code": 22,
+            "error": "now must be a boolean",
+        }
+    if raw_now and verb not in _SYSTEMCTL_VERBS_ACCEPTING_NOW:
+        return {
+            "ok": False,
+            "exit_code": 22,
+            "error": (
+                f"now=true is only valid with verbs "
+                f"{sorted(_SYSTEMCTL_VERBS_ACCEPTING_NOW)}; got verb={verb!r}"
+            ),
+        }
+
+    systemctl = _which_required("systemctl")
+    if not systemctl:
+        return {
+            "ok": False,
+            "exit_code": 127,
+            "error": "systemctl not found — not a systemd-managed system?",
+        }
+
+    # Build argv as a list — caller-derived strings only land here after
+    # surviving the two allowlists above, so we know they're safe.
+    argv: List[str] = [systemctl]
+    if raw_now:
+        argv.append("--now")
+    argv.extend([verb, "--", unit])
+
+    rc, out, err = _run_streaming(argv, emit, timeout=30.0, label=f"systemctl {verb}")
+    if rc != 0:
+        return {
+            "ok": False,
+            "exit_code": rc,
+            "error": (
+                f"systemctl {verb} {unit} failed (exit {rc}). "
+                + (err.strip()[:400] if err.strip() else "")
+            ),
+            "unit": unit,
+            "verb": verb,
+            "now": raw_now,
+        }
+
+    # Always re-query is-active and is-enabled so the UI knows the new
+    # state without having to call back. Failures here aren't fatal —
+    # the verb already succeeded.
+    state: Dict[str, Optional[str]] = {"active": None, "enabled": None}
+    for attr in ("is-active", "is-enabled"):
+        try:
+            r = subprocess.run(
+                [systemctl, attr, "--", unit],
+                capture_output=True, text=True, timeout=4.0, check=False,
+            )
+            state[attr.split("-", 1)[1]] = (r.stdout or "").strip() or None
+        except Exception as exc:
+            state[attr.split("-", 1)[1]] = f"query failed: {exc}"
+
+    return {
+        "ok": True,
+        "exit_code": 0,
+        "unit": unit,
+        "verb": verb,
+        "now": raw_now,
+        "state": state,
+    }
+
+
 COMMANDS: Dict[str, CommandFn] = {
     "ping": _cmd_ping,
     "seed_rtc": _cmd_seed_rtc,
@@ -1278,6 +1411,7 @@ COMMANDS: Dict[str, CommandFn] = {
     "gpsd_config_write": _cmd_gpsd_config_write,
     "chrony_config_ensure": _cmd_chrony_config_ensure,
     "config_txt_set_overlay": _cmd_config_txt_set_overlay,
+    "systemctl_action": _cmd_systemctl_action,
 }
 
 
