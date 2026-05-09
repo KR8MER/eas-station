@@ -200,7 +200,7 @@ def _write_tracemalloc_section(fh) -> None:
         fh.write(f"  (failed to compute traceback stats: {exc})\n")
         stats = []
     for i, stat in enumerate(stats[:_TRACEMALLOC_TOP_N], 1):
-        fh.write(f"#{i} {_format_bytes(stat.size)}  count={stat.count}\n")
+        fh.write(f"#{i:>2} {_format_bytes(stat.size)}  count={stat.count}\n")
         for line in stat.traceback.format():
             fh.write(f"    {line}\n")
         fh.write("\n")

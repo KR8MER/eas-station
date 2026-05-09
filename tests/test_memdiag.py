@@ -99,8 +99,8 @@ def test_memory_dump_includes_tracemalloc_section_when_enabled(_isolate_memdiag)
     # We should see both views and at least one entry.
     assert "top 20 allocators by file:line" in content
     assert "top 20 allocators by traceback" in content
-    # The "by file:line" output uses #N indexing — at least #1 should appear.
-    assert "#1  " in content or "# 1  " in content
+    # Both sections use the same right-aligned `#NN` prefix.
+    assert "# 1 " in content
     # Reference the captured allocations to keep them alive until the
     # snapshot has been taken.
     assert junk[0] == "x" * 1024
