@@ -38,6 +38,12 @@ from app_core.hardware_settings import (
     invalidate_hardware_settings_cache,
 )
 from app_utils.gps_hat import collect_gps_hat_diagnostics
+from app_utils.hwsetup_client import (
+    HelperError,
+    HelperUnavailable,
+    call as hwsetup_call,
+    is_helper_available,
+)
 from app_utils.pi_pinout import ARGON_OLED_RESERVED_BCM
 
 logger = logging.getLogger(__name__)
@@ -84,9 +90,50 @@ def gps_hat_diagnostics():
             expected_baud=int(gps_settings.get('baudrate', 9600) or 9600),
             logger=logger,
         )
+        # Surface helper availability so the UI can show "Run" buttons (when
+        # the privileged helper is installed and reachable) versus
+        # copy-paste-only mode.
+        report["helper"] = {"available": is_helper_available()}
         return jsonify({"ok": True, "report": report})
     except Exception as exc:
         logger.exception("GPS HAT diagnostics probe failed")
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@hardware_bp.route('/hardware/gps-hat/ping', methods=['POST'])
+@require_permission('system.configure')
+def gps_hat_ping():
+    """End-to-end check that the privileged helper daemon is wired up.
+
+    POSTs ``{"message": "..."}`` to the hwsetup helper, returns the
+    captured stdout. Useful as an integration test from the UI before
+    the real action commits land.
+    """
+    try:
+        body = request.get_json(silent=True) or {}
+        message = body.get("message") or "pong"
+        if not isinstance(message, str) or len(message) > 256:
+            raise BadRequest("message must be a short string")
+        result = hwsetup_call("ping", {"message": message}, timeout=2.0)
+        return jsonify({
+            "ok": True,
+            "stdout": result.get("stdout", ""),
+            "exit_code": result.get("exit_code"),
+        })
+    except HelperUnavailable as exc:
+        return jsonify({
+            "ok": False,
+            "error": str(exc),
+            "helper_available": False,
+        }), 503
+    except HelperError as exc:
+        return jsonify({
+            "ok": False,
+            "error": str(exc),
+            "result": exc.result,
+        }), 502
+    except Exception as exc:
+        logger.exception("hwsetup ping failed")
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 

@@ -1,0 +1,365 @@
+#!/usr/bin/env python3
+"""EAS Station hardware-setup helper daemon.
+
+Runs as root and exposes a tiny Unix-socket RPC that the web service
+(running unprivileged as ``eas-station``) calls to perform privileged
+GPS HAT setup operations — ``apt install`` of missing packages,
+idempotent edits to ``/etc/default/gpsd``, ``/etc/chrony/chrony.conf``,
+and ``/boot/firmware/config.txt``, ``hwclock -w`` after PORF, and
+``systemctl`` enable/restart of chrony / gpsd. Only commands explicitly
+registered in :data:`COMMANDS` are accepted — every other request is
+rejected.
+
+This file is deliberately stdlib-only. Keeping the helper free of
+project imports means the root-privileged surface is small, auditable,
+and decoupled from the rest of the codebase, so a SQLAlchemy /
+Flask-WTF / Jinja2 vulnerability can never reach root through this
+daemon.
+
+Wire format (JSON-Lines over a Unix stream socket):
+
+* Request: one line, ``{"action": "<name>", "params": {...},
+  "request_id": "<uuid>"}``.
+* Response: zero or more streaming events
+  ``{"type": "stdout"|"stderr", "data": "..."}``, then exactly one
+  terminal event ``{"type": "result", "ok": bool, "exit_code": int,
+  "error": "..."}``. Connection closes after the result event.
+
+Socket layout: ``/run/eas-station/hwsetup.sock``, mode ``0660``,
+owned by ``root:eas-station`` so only the service user can connect.
+The directory is created on startup if missing.
+
+For end-to-end verification this initial revision implements only the
+``ping`` action (returns ``pong`` and exits 0). Real actions land in
+subsequent commits, each with their own validation and tests.
+"""
+
+from __future__ import annotations
+
+import argparse
+import grp
+import json
+import logging
+import logging.handlers
+import os
+import socket
+import socketserver
+import stat
+import sys
+import threading
+import time
+import traceback
+import uuid
+from typing import Any, Callable, Dict, Optional
+
+# ---------------------------------------------------------------------------
+# Configuration constants. Kept at module scope so unit-style tests can
+# patch them, and so deployers can grep for them in a single place.
+# ---------------------------------------------------------------------------
+
+DEFAULT_SOCKET_PATH = "/run/eas-station/hwsetup.sock"
+DEFAULT_OWNER_GROUP = "eas-station"
+DEFAULT_SOCKET_MODE = 0o660
+
+# Per-connection limits — bound a single client's blast radius.
+MAX_REQUEST_BYTES = 64 * 1024     # 64 KiB request line is plenty for JSON
+MAX_PARAM_DEPTH = 4               # how nested a params object may be
+DEFAULT_REQUEST_TIMEOUT_S = 5.0   # ping is a no-op; later actions raise this
+
+LOG = logging.getLogger("eas-station-hwsetup")
+
+
+# ---------------------------------------------------------------------------
+# Command registry. Each entry returns a dict that becomes the terminal
+# ``result`` event. Commands that need to stream stdout/stderr will use
+# the ``emit`` callback (added in the action commits) instead of returning
+# all data in one shot.
+# ---------------------------------------------------------------------------
+
+CommandFn = Callable[[Dict[str, Any], "EmitFn"], Dict[str, Any]]
+EmitFn = Callable[[str, str], None]   # (channel, data) → None; channel ∈ {stdout, stderr}
+
+
+def _cmd_ping(params: Dict[str, Any], emit: EmitFn) -> Dict[str, Any]:
+    """Simplest possible action — used for end-to-end socket verification.
+
+    Echoes any ``message`` parameter back, otherwise returns "pong".
+    """
+    msg = params.get("message", "pong")
+    if not isinstance(msg, str) or len(msg) > 256:
+        return {"ok": False, "exit_code": 22, "error": "message must be a short string"}
+    emit("stdout", msg)
+    return {"ok": True, "exit_code": 0, "stdout": msg}
+
+
+COMMANDS: Dict[str, CommandFn] = {
+    "ping": _cmd_ping,
+}
+
+
+# ---------------------------------------------------------------------------
+# Request validation
+# ---------------------------------------------------------------------------
+
+class RequestError(ValueError):
+    """Raised for any malformed or out-of-policy request."""
+
+
+def _validate_request(raw: bytes) -> Dict[str, Any]:
+    """Parse and shallow-validate a request line. Returns the request dict."""
+    if not raw:
+        raise RequestError("empty request")
+    if len(raw) > MAX_REQUEST_BYTES:
+        raise RequestError(f"request exceeds {MAX_REQUEST_BYTES} bytes")
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise RequestError(f"request is not valid UTF-8: {exc}") from exc
+    try:
+        obj = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise RequestError(f"request is not valid JSON: {exc}") from exc
+    if not isinstance(obj, dict):
+        raise RequestError("request must be a JSON object")
+    action = obj.get("action")
+    if not isinstance(action, str) or not action:
+        raise RequestError("missing action")
+    if action not in COMMANDS:
+        raise RequestError(f"unknown action: {action}")
+    params = obj.get("params", {})
+    if not isinstance(params, dict):
+        raise RequestError("params must be an object")
+    _check_depth(params, MAX_PARAM_DEPTH)
+    rid = obj.get("request_id")
+    if rid is not None and not isinstance(rid, str):
+        raise RequestError("request_id must be a string if present")
+    return {
+        "action": action,
+        "params": params,
+        "request_id": rid or str(uuid.uuid4()),
+    }
+
+
+def _check_depth(obj: Any, remaining: int) -> None:
+    if remaining < 0:
+        raise RequestError("params nesting too deep")
+    if isinstance(obj, dict):
+        for v in obj.values():
+            _check_depth(v, remaining - 1)
+    elif isinstance(obj, list):
+        for v in obj:
+            _check_depth(v, remaining - 1)
+
+
+# ---------------------------------------------------------------------------
+# Socket plumbing
+# ---------------------------------------------------------------------------
+
+class _ConnectionHandler(socketserver.BaseRequestHandler):
+    """Handle one client connection: read a single request line, dispatch,
+    stream events back, close the socket."""
+
+    server: "_HelperServer"
+
+    def handle(self) -> None:
+        sock: socket.socket = self.request
+        sock.settimeout(DEFAULT_REQUEST_TIMEOUT_S)
+        peer_creds = _get_peer_creds(sock)
+        peer_label = f"pid={peer_creds[0]} uid={peer_creds[1]} gid={peer_creds[2]}" if peer_creds else "unknown"
+
+        try:
+            raw = _read_line(sock, MAX_REQUEST_BYTES)
+        except Exception as exc:
+            LOG.warning("[%s] failed to read request: %s", peer_label, exc)
+            _send_event(sock, {"type": "result", "ok": False, "exit_code": 1, "error": str(exc)})
+            return
+
+        try:
+            req = _validate_request(raw)
+        except RequestError as exc:
+            LOG.warning("[%s] rejected request: %s", peer_label, exc)
+            _send_event(sock, {"type": "result", "ok": False, "exit_code": 22, "error": str(exc)})
+            return
+
+        rid = req["request_id"]
+        action = req["action"]
+        LOG.info("[%s] action=%s request_id=%s", peer_label, action, rid)
+
+        def emit(channel: str, data: str) -> None:
+            if channel not in ("stdout", "stderr"):
+                channel = "stdout"
+            try:
+                _send_event(sock, {"type": channel, "data": data, "request_id": rid})
+            except Exception as exc:
+                LOG.debug("emit failed: %s", exc)
+
+        handler = COMMANDS[action]
+        try:
+            result = handler(req["params"], emit)
+        except Exception as exc:
+            LOG.exception("[%s] action=%s raised: %s", peer_label, action, exc)
+            result = {
+                "ok": False,
+                "exit_code": 1,
+                "error": f"{type(exc).__name__}: {exc}",
+                "traceback": traceback.format_exc(limit=3),
+            }
+
+        result.setdefault("ok", False)
+        result.setdefault("exit_code", 1)
+        result["type"] = "result"
+        result["request_id"] = rid
+        _send_event(sock, result)
+
+
+class _HelperServer(socketserver.ThreadingUnixStreamServer):
+    """Threaded Unix-socket server. Each connection is a one-shot
+    request/response so threading is just there to keep one client from
+    blocking another."""
+
+    daemon_threads = True
+    allow_reuse_address = True
+
+
+def _get_peer_creds(sock: socket.socket) -> Optional[tuple]:
+    """Return ``(pid, uid, gid)`` of the connected peer via SO_PEERCRED.
+
+    Used purely for log enrichment — access control is enforced by the
+    socket's filesystem permissions, not by trusting the peer's claimed
+    identity.
+    """
+    try:
+        SO_PEERCRED = 17  # Linux constant; not exposed on all stdlibs
+        creds = sock.getsockopt(socket.SOL_SOCKET, SO_PEERCRED, 12)
+        import struct
+        pid, uid, gid = struct.unpack("=III", creds)
+        return pid, uid, gid
+    except Exception:
+        return None
+
+
+def _read_line(sock: socket.socket, max_bytes: int) -> bytes:
+    """Read until newline or EOF, with a hard byte cap."""
+    chunks = []
+    received = 0
+    while True:
+        chunk = sock.recv(4096)
+        if not chunk:
+            break
+        chunks.append(chunk)
+        received += len(chunk)
+        if received > max_bytes:
+            raise RequestError(f"request exceeds {max_bytes} bytes")
+        if b"\n" in chunk:
+            break
+    data = b"".join(chunks)
+    nl = data.find(b"\n")
+    if nl >= 0:
+        data = data[:nl]
+    return data.strip()
+
+
+def _send_event(sock: socket.socket, event: Dict[str, Any]) -> None:
+    line = (json.dumps(event, ensure_ascii=False) + "\n").encode("utf-8")
+    try:
+        sock.sendall(line)
+    except (BrokenPipeError, ConnectionResetError):
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Daemon entry point
+# ---------------------------------------------------------------------------
+
+def _ensure_socket_dir(path: str) -> None:
+    parent = os.path.dirname(path) or "/"
+    if parent and not os.path.isdir(parent):
+        os.makedirs(parent, mode=0o755, exist_ok=True)
+
+
+def _set_socket_perms(path: str, group: str, mode: int) -> None:
+    """Chgrp + chmod the socket so only ``group`` members can connect."""
+    try:
+        gid = grp.getgrnam(group).gr_gid
+    except KeyError:
+        LOG.warning("group %r not found; leaving socket group as default", group)
+        gid = -1
+    try:
+        os.chown(path, 0, gid)
+    except PermissionError as exc:
+        LOG.warning("failed to chown %s to root:%s: %s", path, group, exc)
+    try:
+        os.chmod(path, mode)
+    except PermissionError as exc:
+        LOG.warning("failed to chmod %s to %#o: %s", path, mode, exc)
+    st = os.stat(path)
+    if not stat.S_ISSOCK(st.st_mode):
+        raise RuntimeError(f"{path} is not a socket")
+
+
+def _setup_logging(verbose: bool) -> None:
+    level = logging.DEBUG if verbose else logging.INFO
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        stream=sys.stderr,
+    )
+    # Also log to syslog when available so audit events survive a restart.
+    try:
+        handler = logging.handlers.SysLogHandler(address="/dev/log")
+        handler.setFormatter(logging.Formatter(
+            "eas-station-hwsetup[%(process)d]: %(levelname)s %(message)s"
+        ))
+        LOG.addHandler(handler)
+    except Exception as exc:
+        LOG.debug("syslog handler unavailable: %s", exc)
+
+
+def main(argv: Optional[list] = None) -> int:
+    parser = argparse.ArgumentParser(
+        prog="eas-station-hwsetup",
+        description="Privileged GPS HAT setup helper for EAS Station.",
+    )
+    parser.add_argument("--socket", default=DEFAULT_SOCKET_PATH,
+                        help=f"Unix socket path (default: {DEFAULT_SOCKET_PATH})")
+    parser.add_argument("--group", default=DEFAULT_OWNER_GROUP,
+                        help=f"Group allowed to connect (default: {DEFAULT_OWNER_GROUP})")
+    parser.add_argument("--mode", default="0660",
+                        help="Octal socket mode (default: 0660)")
+    parser.add_argument("--verbose", "-v", action="store_true")
+    args = parser.parse_args(argv)
+
+    _setup_logging(args.verbose)
+
+    if os.geteuid() != 0:
+        LOG.error("must run as root (effective uid=%d)", os.geteuid())
+        return 1
+
+    _ensure_socket_dir(args.socket)
+    # Remove a stale socket from a previous crash
+    if os.path.exists(args.socket):
+        try:
+            os.unlink(args.socket)
+        except OSError as exc:
+            LOG.error("failed to remove stale socket %s: %s", args.socket, exc)
+            return 1
+
+    server = _HelperServer(args.socket, _ConnectionHandler)
+    _set_socket_perms(args.socket, args.group, int(args.mode, 8))
+    LOG.info("listening on %s as root:%s mode=%s", args.socket, args.group, args.mode)
+
+    try:
+        server.serve_forever(poll_interval=1.0)
+    except KeyboardInterrupt:
+        LOG.info("shutdown requested")
+    finally:
+        server.server_close()
+        try:
+            os.unlink(args.socket)
+        except OSError:
+            pass
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

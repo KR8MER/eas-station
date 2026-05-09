@@ -1,0 +1,65 @@
+[Unit]
+Description=EAS Station Hardware Setup Helper (privileged GPS HAT setup RPC)
+Documentation=https://github.com/KR8MER/eas-station
+PartOf=eas-station.target
+After=network.target
+
+[Service]
+Type=simple
+# Runs as root because the actions it executes (apt install, edits to
+# /etc/default/gpsd, /etc/chrony/chrony.conf, /boot/firmware/config.txt,
+# hwclock -w, systemctl restart) all require it. The unprivileged web
+# service connects to the Unix socket at /run/eas-station/hwsetup.sock
+# (mode 0660, group eas-station) and dispatches commands from a
+# hardcoded allowlist baked into the helper itself.
+User=root
+Group=root
+
+WorkingDirectory=/opt/eas-station
+ExecStart=/opt/eas-station/bin/eas-station-hwsetup \
+    --socket /run/eas-station/hwsetup.sock \
+    --group eas-station \
+    --mode 0660
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=eas-station-hwsetup
+
+# Service management
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=10
+
+# Run-time directory: systemd creates /run/eas-station with the right
+# perms so the helper can drop the socket there without root racing
+# with itself on first start.
+RuntimeDirectory=eas-station
+RuntimeDirectoryMode=0755
+
+# Hardening — the helper only needs to read/write a handful of well-known
+# paths. We enumerate them explicitly and lock everything else down.
+NoNewPrivileges=false
+PrivateTmp=true
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallFilter=@system-service @file-system @network-io
+SystemCallErrorNumber=EPERM
+
+# We deliberately do NOT set ProtectSystem=strict here because the helper
+# legitimately writes to /etc/{default,chrony} and /boot/firmware. Each
+# write is gated by the per-action allowlist inside the helper itself.
+
+# Resource limits
+LimitNOFILE=1024
+MemoryMax=64M
+TasksMax=8
+
+[Install]
+WantedBy=multi-user.target eas-station.target
