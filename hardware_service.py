@@ -63,6 +63,14 @@ from app_utils.network import (
     HOSTNAME_PATTERN,
 )
 
+# On-demand memory diagnostic hooks (SIGUSR1 → tracemalloc snapshot,
+# SIGUSR2 → all-threads traceback).  See app_utils/memdiag.py for the
+# operator workflow.  Added because the previous attempt at fixing the
+# python_hardware_service ~13 GB RES growth (PR #2062) explicitly punted
+# and recommended this hook so a real heap snapshot can be captured from
+# the live host.
+from app_utils.memdiag import install_memdiag_handlers
+
 # Configure logging early
 logging.basicConfig(
     level=logging.INFO,
@@ -2770,6 +2778,13 @@ def main():
     # Register signal handlers
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
+
+    # Install on-demand memory diagnostic hooks.  Operators trigger a
+    # snapshot with `kill -USR1 <pid>` (memory) or `kill -USR2 <pid>`
+    # (all-thread Python traceback); dumps land in /tmp.  Tracemalloc is
+    # off by default — set MEMDIAG_TRACEMALLOC=1 in the unit env when
+    # actively investigating a leak.
+    install_memdiag_handlers("hardware")
 
     try:
         # Initialize Redis
