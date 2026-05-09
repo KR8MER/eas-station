@@ -1021,9 +1021,14 @@ class GPSManager:
                 "snr":       s.get("ss") if isinstance(s.get("ss"), (int, float)) else None,
                 "used":      bool(s.get("used")),
                 # Map gpsd's gnssid (0=GPS, 1=SBAS, 2=Galileo, 3=BeiDou,
-                # 5=QZSS, 6=GLONASS) to the talker-id strings the UI
-                # already groups by.
-                "talker": _gpsd_gnssid_to_talker(s.get("gnssid")),
+                # 5=QZSS, 6=GLONASS) to the NMEA talker-id strings the UI
+                # already groups by. The direct-NMEA path emits this same
+                # field as "constellation"; using the same key here is what
+                # lets the sky-plot and satellite table colour-code by
+                # constellation in gpsd mode (otherwise every sat falls
+                # back to neutral grey because sat.constellation is
+                # undefined).
+                "constellation": _gpsd_gnssid_to_talker(s.get("gnssid")),
             }
             in_view.append(entry)
             if entry["used"]:

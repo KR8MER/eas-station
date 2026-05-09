@@ -6,6 +6,22 @@ tracks releases under the 2.x series.
 
 ## [Unreleased]
 
+### Added
+- **GPS &amp; Time Dashboard** at `/admin/gps-dashboard` — a dense, single-page status page modelled visually on [W0CHP's chrogps-dash](https://w0chp.radio/chrogps-dash/) and reachable from the Admin → Hardware tab. Surfaces, all in one place: a header banner with the station hostname, a live "GPS LOCKED / ACQUIRING / NO GPS" pill, a fix-mode pill (2D/3D), and a colour-graded "STRATUM N" pill; a **System Tracking** card that renders every field of `chronyc -c tracking` (Reference ID, Stratum, Ref time, System / Last / RMS offsets, Frequency, Residual freq, Skew, Root delay/dispersion, Update interval, Leap status) plus a logarithmic Sync-Health bar that maps |offset| → 0-100 % so a sub-microsecond stratum-1 lock visibly pegs the meter; a **Satellite Skyview** card with a polar sky plot (cardinal cross-hair, 30°/60° elevation rings, dots coloured by constellation, alpha by SNR, glowing outer rings on used-in-fix sats), a Signal-Integrity bar (avg-SNR-scaled), GPS position (lat/lon/alt), DOP block (HDOP/VDOP/PDOP), serial port + baud, and Constellation Breakdown chips (e.g. *GPS 9/9, GLONASS 4/5, Galileo 7/7, BeiDou 17/21*); an **Individual Signal Levels** per-PRN bar chart sorted by constellation then PRN; a **Chrony Sources** table parsing `chronyc -c sources` (mode/state glyph, source name, stratum, poll, octal reach, last-sample age, current offset with sign-coloured cells); a **Satellite Data** table (PRN coloured by constellation, EL, AZ, SNR with the existing 6-stop colour scale, ACTIVE/VIEW status) with click-to-filter constellation chips. The page polls a single new endpoint, `/admin/api/gps-dashboard/data`, on a configurable 3 / 5 / 10 / 30 s interval (or paused). All styling uses the existing theme CSS variables so it adapts to every dark and light theme — no fixed palette.
+- New backend endpoints in `webapp/admin/hardware.py`: `gps_dashboard_page` (HTML route, gated by `system.configure`) and `gps_dashboard_data` (JSON aggregation route). The JSON route composes the live GPS fix from the hardware service's `/api/hardware/gps/status` (tolerant of an unreachable hardware service so the chrony half still renders during a service restart) with locally-collected `chronyc -c tracking` and `chronyc -c sources` output. The CSV parsers themselves live in a new pure module, `app_utils/chrony_parser.py` (`parse_chronyc_tracking_csv`, `parse_chronyc_sources_csv`) — split out of the route file so they're testable without the Flask stack and reusable from any future timing view. New "GPS &amp; Time Dashboard" tile in `templates/admin.html` Hardware tab links to the page. Regression coverage in `tests/test_gps_dashboard_chrony_parser.py` (8 cases covering full records, blank fields, truncated CSVs, sign-preserving offsets, mixed mode/state rows, short-row skipping, empty input, and non-numeric "-"/"?" sentinels in numeric columns).
+- Time-series performance graphs from the chrogps-dash reference (PPS Drift, Clock Stability, Frequency Steering &amp; Skew, Root Dispersion, NTP Measurements, Satellite Visibility History, GPS SNR Trend, DOP History, Satellite SNR by Constellation) are intentionally deferred: they require a historical time-series store this codebase does not yet maintain. The dashboard's footer calls this out.
+
+### Fixed
+- **Constellation colour-coding restored on the GPS sky plot and satellite tables (Hardware Settings + System Health) when running in gpsd mode.** The direct-NMEA path emits each satellite with a `"constellation"` key (the 2-letter NMEA talker — `GP`, `GL`, `GA`, `GB`, `GQ`, `GI`); the gpsd path was emitting the same value but under the key `"talker"`. The frontend (`templates/admin/hardware_settings.html` `constellationInfo()` and `templates/system_health.html` `gpsConstInfo()`) only reads `sat.constellation`, so in gpsd mode every dot, badge, and legend chip silently fell back to neutral grey. Renamed the gpsd-side key to `"constellation"` in `app_core/gps/gps_manager.py::_handle_gpsd_sky` so both ingest paths produce identically-shaped satellite records and the UI colours by constellation again. Crucially this is the *recommended* mode for stratum-1 timing (gpsd → chrony refclock), so the regression was hitting exactly the deployments that should look the best.
+
+### Documentation
+- **Stratum 1 GPS time server documented as a first-class feature.** The repository previously documented the GPS HAT only as a hardware-setup procedure; the resulting *capability* — a true stratum 1 NTP server, GPS-disciplined via PPS, with a battery-backed RTC and one-click admin-UI setup — was not surfaced where new users decide whether to deploy the platform. Updated the marketing/feature surfaces to call this out: a new "🛰️ Built-In Stratum 1 NTP Time Source" section in `README.md` (between Hardware Integration and the Modern Web Dashboard), a new "Stratum 1 GPS-Disciplined Time" section card on the public About page (`templates/about.html`) with six feature cards (multi-GNSS receiver, hardware PPS edge, true stratum 1 NTP, battery-backed RTC, air-gap friendly, one-click setup), an additional "Stratum 1 Time" hero chip and "Stratum 1 GPS Time Source" Key Features bullet, and a new sentence in the reference build description in `docs/reference/ABOUT.md`. No code changes; existing GPS HAT setup guide at `docs/hardware/GPS_HAT_SETUP.md` remains the authoritative procedural reference.
+
+### Changed
+- Backfill completed for recent release metadata; new changes should be documented here going forward.
+
+## [2.73.5] - 2026-05-09 - Backfill changelog/version history
+
 ### Fixed
 - **Phantom whitespace below the page footer on every page (PR #2040 follow-up)**:
   Three independent bugs were combining to leave a band of empty space below the
@@ -92,6 +108,14 @@ tracks releases under the 2.x series.
 
 ### Dependencies
 - **Added (frontend, vendored under `static/vendor/jspdf/`):** `jspdf` 4.2.1 and `html2canvas` 1.4.1 (both MIT) — used by the Statistics dashboard for client-side PDF report generation. No new server-side dependencies; PDF generation runs entirely in the browser.
+
+## [2.73.4] - 2026-05-09 - Enforce VERSION/CHANGELOG guardrails in CI
+
+### Added
+- **Release metadata CI workflow** — Added `.github/workflows/release-metadata.yml` to run `tests/test_release_metadata.py` on pull requests and pushes to `main`/`develop`. This enforces the existing contributor requirement to keep `VERSION` and `docs/reference/CHANGELOG.md` aligned for behavioral changes.
+
+### Fixed
+- **Missed version/changelog updates no longer slip through review** — The repository previously had no workflow running release-governance checks, so instructions in `docs/development/AGENTS.md` / `docs/process/CONTRIBUTING.md` were advisory only. CI now blocks regressions when release metadata is not updated.
 
 ## [2.71.74] - 2026-04-29 - FM stereo decoding, per-source decoder streams, WebSocket alerts
 

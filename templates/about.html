@@ -21,6 +21,7 @@
                         <span class="about-chip"><i class="fas fa-flask"></i> Research Platform</span>
                         <span class="about-chip"><i class="fas fa-code-branch"></i> Open Source</span>
                         <span class="about-chip"><i class="fas fa-microchip"></i> Pi &amp; SDR</span>
+                        <span class="about-chip"><i class="fas fa-satellite-dish"></i> Stratum 1 Time</span>
                         <span class="about-chip"><i class="fas fa-shield-halved"></i> Non-Commercial</span>
                     </div>
                 </div>
@@ -93,7 +94,8 @@
                             <li class="mb-2"><i class="fas fa-circle-check text-success me-2"></i>Automatic RWT Scheduling</li>
                             <li class="mb-2"><i class="fas fa-circle-check text-success me-2"></i>LED Sign Integration</li>
                             <li class="mb-2"><i class="fas fa-circle-check text-success me-2"></i>Custom Display Screens &amp; VFD Graphics</li>
-                            <li class="mb-0"><i class="fas fa-circle-check text-success me-2"></i>MDC1200 Selective Calling</li>
+                            <li class="mb-2"><i class="fas fa-circle-check text-success me-2"></i>MDC1200 Selective Calling</li>
+                            <li class="mb-0"><i class="fas fa-circle-check text-success me-2"></i>Stratum 1 GPS Time Source</li>
                         </ul>
                     </div>
                 </div>
@@ -349,6 +351,72 @@
                     <div>
                         <strong>Designed for LMR integration.</strong> Wire EAS Station's audio output into a base-station radio's auxiliary input — MDC1200 handles the PTT-ID signalling automatically so the dispatch console sees a clean, identified, full-featured EAS call. No extra hardware, no separate signalling controller.
                         See the <a href="/docs/reference/protocols/MDC1200" class="alert-link">MDC1200 protocol reference</a> for encoder internals, op-code tables, and verification instructions.
+                    </div>
+                </div>
+            </section>
+
+            <!-- Stratum 1 Time Source -->
+            <section class="about-card" id="stratum-1-time">
+                <div class="about-section-head">
+                    <span class="about-section-icon ico-info"><i class="fas fa-satellite-dish"></i></span>
+                    <div>
+                        <h2 class="about-section-title">Stratum 1 GPS-Disciplined Time</h2>
+                        <p class="about-section-sub">Real broadcast-grade timing hardware — the station <em>is</em> the reference clock, not a client of one.</p>
+                    </div>
+                </div>
+
+                <p class="mb-3">EAS Station ships with first-class support for a <strong>GPS/PPS HAT</strong> that turns the station itself into a <strong>true stratum 1 NTP server</strong>. <code>chrony</code> consumes a multi-GNSS NMEA fix and the hardware <strong>Pulse-Per-Second</strong> edge as a kernel refclock, so every alert timestamp, every audit log entry, and every SAME header <code>JJJHHMM</code> field is locked to the satellites — accurate to sub-microsecond, with no upstream internet time required and no drift when the WAN is down.</p>
+
+                <div class="row g-3 mb-4">
+                    <div class="col-md-6 col-lg-4">
+                        <div class="feature-card fc-blue h-100">
+                            <div class="feature-card-icon"><i class="fas fa-satellite"></i></div>
+                            <h5 class="feature-card-title">Multi-GNSS Receiver</h5>
+                            <p class="feature-card-text">Uputronics GPS/RTC HAT with the u-blox <strong>MAX-M8Q</strong> tracks <strong>GPS, GLONASS, Galileo and BeiDou</strong> concurrently — fast cold-start, robust urban-canyon performance, and a clean 1 Hz NMEA stream at 9600 baud over the Pi UART.</p>
+                        </div>
+                    </div>
+                    <div class="col-md-6 col-lg-4">
+                        <div class="feature-card fc-purple h-100">
+                            <div class="feature-card-icon"><i class="fas fa-bolt"></i></div>
+                            <h5 class="feature-card-title">Hardware PPS Edge</h5>
+                            <p class="feature-card-text">A discrete <strong>Pulse-Per-Second</strong> line wired to <code>BCM 18</code> (Uputronics) or <code>BCM 4</code> (Adafruit) is exposed to the kernel as a <code>/dev/pps0</code> device and consumed by chrony as a refclock. Sub-microsecond rising-edge accuracy beats any internet NTP source.</p>
+                        </div>
+                    </div>
+                    <div class="col-md-6 col-lg-4">
+                        <div class="feature-card fc-green h-100">
+                            <div class="feature-card-icon"><i class="fas fa-server"></i></div>
+                            <h5 class="feature-card-title">True Stratum 1 NTP</h5>
+                            <p class="feature-card-text">With GPS time as the reference and PPS as the on-time marker, <code>chronyc tracking</code> reports <strong>Stratum: 1</strong> and offsets in the microseconds. The dashboard's GPS card surfaces fix mode, satellite count, HDOP, and a live PPS pill so the lock can be proven at a glance.</p>
+                        </div>
+                    </div>
+                    <div class="col-md-6 col-lg-4">
+                        <div class="feature-card fc-orange h-100">
+                            <div class="feature-card-icon"><i class="fas fa-battery-full"></i></div>
+                            <h5 class="feature-card-title">Battery-Backed RTC</h5>
+                            <p class="feature-card-text">An on-HAT <strong>RV-3028-C7</strong> (current revisions) or <strong>DS3231</strong> (older boards) keeps the system clock disciplined across power cycles even before GPS lock returns. The kernel's `rtc0` is sourced from the HAT, not the SBC's bus, so cold-boots come up with a sane wall clock.</p>
+                        </div>
+                    </div>
+                    <div class="col-md-6 col-lg-4">
+                        <div class="feature-card fc-teal h-100">
+                            <div class="feature-card-icon"><i class="fas fa-network-wired"></i></div>
+                            <h5 class="feature-card-title">Air-Gap Friendly</h5>
+                            <p class="feature-card-text">The reference is the <em>sky</em>, not <code>pool.ntp.org</code>. EAS Station holds stratum 1 with no internet at all — critical for field deployments, EOC roll-outs, COW trailers, and any site that loses transit during the very emergency the station is meant to cover.</p>
+                        </div>
+                    </div>
+                    <div class="col-md-6 col-lg-4">
+                        <div class="feature-card fc-pink h-100">
+                            <div class="feature-card-icon"><i class="fas fa-wand-magic-sparkles"></i></div>
+                            <h5 class="feature-card-title">One-Click Setup</h5>
+                            <p class="feature-card-text"><strong>Admin → Hardware Settings → GPS</strong> probes every prerequisite — RTC overlay, PPS device, gpsd / chrony / <code>util-linux-extra</code> packages, <code>/boot/firmware/config.txt</code> overlays, chrony's selected source — and offers a <em>Run</em> button per remediation step. Even seeding the RTC after a coin-cell change is a single click.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="alert alert-info d-flex align-items-start mb-0" role="alert">
+                    <i class="fas fa-circle-info me-2 mt-1 flex-shrink-0"></i>
+                    <div>
+                        <strong>Why timing is treated as first-class infrastructure.</strong> Every EAS event is timestamped, geofenced, and audited — and every CAP message carries <code>sent</code>, <code>effective</code>, <code>expires</code> and <code>onset</code> fields whose math has to match the wall clock. A station that drifts seconds against NIST is a station whose RWT logs and compliance trail eventually cease to match the real world. EAS Station owns its time at the hardware level.
+                        See the <a href="/docs/hardware/GPS_HAT_SETUP" class="alert-link">GPS HAT Setup guide</a> for board options, wiring, and the manual configuration steps the admin UI automates.
                     </div>
                 </div>
             </section>

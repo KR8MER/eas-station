@@ -23,7 +23,10 @@ from __future__ import annotations
 
 import json
 import logging
+import shutil
+import socket
 import subprocess
+from datetime import datetime, timezone
 from typing import Any, Dict
 
 from flask import Blueprint, flash, jsonify, redirect, render_template, request, url_for
@@ -36,6 +39,10 @@ from app_core.hardware_settings import (
     get_hardware_settings,
     update_hardware_settings,
     invalidate_hardware_settings_cache,
+)
+from app_utils.chrony_parser import (
+    parse_chronyc_tracking_csv as _parse_chronyc_tracking_csv,
+    parse_chronyc_sources_csv as _parse_chronyc_sources_csv,
 )
 from app_utils.gps_hat import collect_gps_hat_diagnostics
 from app_utils.hwsetup_client import (
@@ -624,3 +631,131 @@ def restart_hardware_services():
         logger.error(f"Failed to restart services: {exc}")
         flash(f"Error restarting services: {exc}", "error")
         return jsonify({"success": False, "error": str(exc)}), 500
+
+
+# ---------------------------------------------------------------------------
+# GPS & Time Dashboard — chrogps-dash style page.
+#
+# Surfaces the live GPS fix and chrony state on a dedicated page modelled on
+# https://w0chp.radio/chrogps-dash/ — System Tracking, Satellite Skyview,
+# per-PRN signal levels, Chrony Sources table, Satellite SNR table.  All data
+# is read-only; the page is purely observational and reuses the existing
+# /api/hardware/gps/status endpoint plus the chrony CSV parsers in
+# app_utils.chrony_parser (kept as a pure module so they're testable
+# without the Flask stack).
+# ---------------------------------------------------------------------------
+
+
+def _collect_chrony_dashboard_data() -> Dict[str, Any]:
+    """Run ``chronyc -c tracking`` and ``chronyc -c sources``, parse both.
+
+    Returns a dict with ``tool_present``, ``tracking_ok``, ``tracking``
+    (parsed dict, possibly empty), and ``sources`` (list).  Failures are
+    tolerated — the dashboard renders the partial information rather than
+    erroring out the whole page.
+    """
+    out: Dict[str, Any] = {
+        "tool_present": shutil.which("chronyc") is not None,
+        "tracking_ok": False,
+        "tracking": {},
+        "sources": [],
+    }
+    if not out["tool_present"]:
+        return out
+    try:
+        rc = subprocess.run(
+            ["chronyc", "-c", "tracking"],
+            capture_output=True, text=True, timeout=2.5,
+        )
+        if rc.returncode == 0 and rc.stdout.strip():
+            out["tracking"] = _parse_chronyc_tracking_csv(rc.stdout)
+            out["tracking_ok"] = True
+    except (subprocess.TimeoutExpired, OSError):
+        pass
+    try:
+        rc = subprocess.run(
+            ["chronyc", "-c", "sources"],
+            capture_output=True, text=True, timeout=2.5,
+        )
+        if rc.returncode == 0 and rc.stdout.strip():
+            out["sources"] = _parse_chronyc_sources_csv(rc.stdout)
+    except (subprocess.TimeoutExpired, OSError):
+        pass
+    return out
+
+
+@hardware_bp.route('/gps-dashboard')
+@require_permission('system.configure')
+def gps_dashboard_page():
+    """Render the chrogps-dash style GPS & Time dashboard page.
+
+    The template fetches its live data from
+    ``/admin/api/gps-dashboard/data`` and re-polls on a configurable
+    interval (3/5/10/30 s).
+    """
+    try:
+        gps_settings = get_gps_settings() or {}
+        return render_template(
+            'admin/gps_dashboard.html',
+            gps_settings=gps_settings,
+        )
+    except Exception as exc:
+        logger.error(f"Failed to load GPS dashboard: {exc}")
+        flash(f"Error loading GPS dashboard: {exc}", "error")
+        return redirect(url_for('hardware.hardware_settings_page'))
+
+
+@hardware_bp.route('/api/gps-dashboard/data', methods=['GET'])
+@require_permission('system.configure')
+def gps_dashboard_data():
+    """Aggregate GPS fix + chrony state + host info for the GPS dashboard.
+
+    Composition:
+      * ``gps`` — live status from the hardware-service
+        ``/api/hardware/gps/status`` endpoint (proxied via
+        ``call_hardware_service``).  Falls back to ``{}`` if the
+        hardware service is unreachable so the chrony half of the
+        dashboard still renders.
+      * ``chrony`` — parsed ``chronyc -c tracking`` + ``chronyc -c
+        sources`` output; collected locally because chronyc is normally
+        installed on the same host as the webapp.
+      * ``host`` — hostname/uptime so the header banner can show the
+        node identity (chrogps-dash convention).
+    """
+    # Imported here (rather than at module top) to avoid a circular
+    # import: webapp.admin.network → app_core.config → … → admin.__init__
+    # which itself imports this module.  This is the documented pattern
+    # already used elsewhere in the admin package.
+    from webapp.admin.network import call_hardware_service
+
+    # GPS fix from the hardware service.  Tolerant of an unreachable
+    # service so the dashboard's chrony half still works during a
+    # hardware-service crash or restart.
+    try:
+        gps_payload = call_hardware_service('/api/hardware/gps/status', method='GET') or {}
+        if isinstance(gps_payload, dict) and gps_payload.get('success') is False:
+            # call_hardware_service returns {'success': False, ...} on
+            # failure; surface a generic error rather than the upstream
+            # error string so we don't risk leaking implementation
+            # details (paths, internal hostnames) to the browser.
+            gps_payload = {"_error": "hardware_service_unavailable"}
+    except Exception:  # defensive — must never 500 the dashboard
+        # Log the full exception server-side for the operator while
+        # returning a generic, fixed string to the client.  Avoids the
+        # stack-trace-exposure pattern flagged by CodeQL.
+        logger.warning("GPS dashboard: hardware service call failed", exc_info=True)
+        gps_payload = {"_error": "hardware_service_unavailable"}
+
+    chrony_payload = _collect_chrony_dashboard_data()
+
+    host_info: Dict[str, Any] = {
+        "hostname": socket.gethostname(),
+        "now_utc": datetime.now(timezone.utc).isoformat(),
+    }
+
+    return jsonify({
+        "ok": True,
+        "gps": gps_payload,
+        "chrony": chrony_payload,
+        "host": host_info,
+    })
