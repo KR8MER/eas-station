@@ -137,7 +137,9 @@
     }
     .gps-snr-bar {
         flex: 0 0 22px;
-        display: flex; flex-direction: column; align-items: center; gap: 4px;
+        align-self: stretch;
+        display: flex; flex-direction: column;
+        justify-content: flex-end; align-items: center; gap: 4px;
         position: relative;
     }
     .gps-snr-bar .bar {
@@ -234,6 +236,42 @@
     .gps-snr-s3 { color: #d29922; }
     .gps-snr-s4 { color: #84cc16; }
     .gps-snr-s5 { color: #3fb950; }
+
+    /* Time-series sparkline chart cards (PPS drift, clock stability,
+       frequency steering, DOP history, SNR history).  Buffer is a
+       client-side ring fed from the existing dashboard poll, so the
+       traces start empty and grow with each refresh. */
+    .gps-chart-card { display: flex; flex-direction: column; gap: 6px; }
+    .gps-chart-card .chart-meta {
+        display: flex; flex-wrap: wrap; gap: 10px;
+        font-family: var(--font-mono, ui-monospace, monospace);
+        font-size: 0.78rem; color: var(--text-muted);
+    }
+    .gps-chart-card .chart-meta .label { color: var(--text-muted); }
+    .gps-chart-card .chart-meta .value { color: var(--text-color); font-weight: 600; }
+    .gps-chart-card .chart-meta .swatch {
+        display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+        margin-right: 4px; vertical-align: middle;
+    }
+    .gps-chart-canvas-wrap {
+        position: relative;
+        height: 110px;
+        border: 1px solid var(--border-color, rgba(127,127,127,.18));
+        border-radius: 6px;
+        background: var(--bg-tertiary, rgba(127,127,127,.05));
+        overflow: hidden;
+    }
+    .gps-chart-canvas-wrap canvas {
+        position: absolute; inset: 0;
+        width: 100%; height: 100%;
+        display: block;
+    }
+    .gps-chart-empty {
+        position: absolute; inset: 0;
+        display: flex; align-items: center; justify-content: center;
+        color: var(--text-muted); font-size: 0.78rem; font-style: italic;
+        pointer-events: none;
+    }
 </style>
 {% endblock %}
 
@@ -436,12 +474,124 @@
         </div>
     </div>
 
+    <!-- ============================================================
+         TIME-SERIES PERFORMANCE GRAPHS — fed from a client-side ring
+         buffer of the dashboard poll.  10 minutes of history at the
+         default 5 s refresh; resets on page reload (no historical
+         backend store yet — see footer note).
+         ============================================================ -->
+    <div class="row g-3 mt-0">
+        <div class="col-12 col-xl-6">
+            <div class="gps-card h-100 gps-chart-card">
+                <div class="gps-card-head">
+                    <h3><i class="fas fa-wave-square me-1"></i> PPS Drift</h3>
+                    <div class="badge-area">
+                        <span class="text-muted small">last offset · seconds</span>
+                    </div>
+                </div>
+                <div class="chart-meta">
+                    <span><span class="swatch" style="background:#58a6ff;"></span><span class="label">Now</span> <span id="ts-pps-now" class="value">—</span></span>
+                    <span><span class="label">min</span> <span id="ts-pps-min" class="value">—</span></span>
+                    <span><span class="label">max</span> <span id="ts-pps-max" class="value">—</span></span>
+                    <span><span class="label">samples</span> <span id="ts-pps-n" class="value">0</span></span>
+                </div>
+                <div class="gps-chart-canvas-wrap">
+                    <canvas id="ts-pps-canvas" width="600" height="110" aria-label="PPS drift sparkline"></canvas>
+                    <div id="ts-pps-empty" class="gps-chart-empty">Collecting samples…</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-xl-6">
+            <div class="gps-card h-100 gps-chart-card">
+                <div class="gps-card-head">
+                    <h3><i class="fas fa-stopwatch-20 me-1"></i> Clock Stability</h3>
+                    <div class="badge-area">
+                        <span class="text-muted small">RMS offset · seconds</span>
+                    </div>
+                </div>
+                <div class="chart-meta">
+                    <span><span class="swatch" style="background:#bc8cff;"></span><span class="label">Now</span> <span id="ts-rms-now" class="value">—</span></span>
+                    <span><span class="label">min</span> <span id="ts-rms-min" class="value">—</span></span>
+                    <span><span class="label">max</span> <span id="ts-rms-max" class="value">—</span></span>
+                    <span><span class="label">samples</span> <span id="ts-rms-n" class="value">0</span></span>
+                </div>
+                <div class="gps-chart-canvas-wrap">
+                    <canvas id="ts-rms-canvas" width="600" height="110" aria-label="Clock stability sparkline"></canvas>
+                    <div id="ts-rms-empty" class="gps-chart-empty">Collecting samples…</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-xl-6">
+            <div class="gps-card h-100 gps-chart-card">
+                <div class="gps-card-head">
+                    <h3><i class="fas fa-sliders me-1"></i> Frequency Steering</h3>
+                    <div class="badge-area">
+                        <span class="text-muted small">ppm — corrected vs residual</span>
+                    </div>
+                </div>
+                <div class="chart-meta">
+                    <span><span class="swatch" style="background:#84cc16;"></span><span class="label">Frequency</span> <span id="ts-freq-now" class="value">—</span></span>
+                    <span><span class="swatch" style="background:#d29922;"></span><span class="label">Residual</span> <span id="ts-resid-now" class="value">—</span></span>
+                    <span><span class="label">samples</span> <span id="ts-freq-n" class="value">0</span></span>
+                </div>
+                <div class="gps-chart-canvas-wrap">
+                    <canvas id="ts-freq-canvas" width="600" height="110" aria-label="Frequency steering sparkline"></canvas>
+                    <div id="ts-freq-empty" class="gps-chart-empty">Collecting samples…</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-xl-6">
+            <div class="gps-card h-100 gps-chart-card">
+                <div class="gps-card-head">
+                    <h3><i class="fas fa-diagram-project me-1"></i> DOP History</h3>
+                    <div class="badge-area">
+                        <span class="text-muted small">geometric · lower is better</span>
+                    </div>
+                </div>
+                <div class="chart-meta">
+                    <span><span class="swatch" style="background:#58a6ff;"></span><span class="label">H</span> <span id="ts-hdop-now" class="value">—</span></span>
+                    <span><span class="swatch" style="background:#f85149;"></span><span class="label">V</span> <span id="ts-vdop-now" class="value">—</span></span>
+                    <span><span class="swatch" style="background:#bc8cff;"></span><span class="label">P</span> <span id="ts-pdop-now" class="value">—</span></span>
+                    <span><span class="label">samples</span> <span id="ts-dop-n" class="value">0</span></span>
+                </div>
+                <div class="gps-chart-canvas-wrap">
+                    <canvas id="ts-dop-canvas" width="600" height="110" aria-label="DOP history sparkline"></canvas>
+                    <div id="ts-dop-empty" class="gps-chart-empty">Collecting samples…</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12">
+            <div class="gps-card h-100 gps-chart-card">
+                <div class="gps-card-head">
+                    <h3><i class="fas fa-signal me-1"></i> SNR History</h3>
+                    <div class="badge-area">
+                        <span class="text-muted small">average dBHz across satellites in view</span>
+                    </div>
+                </div>
+                <div class="chart-meta">
+                    <span><span class="swatch" style="background:#3fb950;"></span><span class="label">Avg</span> <span id="ts-snr-now" class="value">—</span></span>
+                    <span><span class="label">min</span> <span id="ts-snr-min" class="value">—</span></span>
+                    <span><span class="label">max</span> <span id="ts-snr-max" class="value">—</span></span>
+                    <span><span class="label">samples</span> <span id="ts-snr-n" class="value">0</span></span>
+                </div>
+                <div class="gps-chart-canvas-wrap">
+                    <canvas id="ts-snr-canvas" width="1200" height="110" aria-label="SNR history sparkline"></canvas>
+                    <div id="ts-snr-empty" class="gps-chart-empty">Collecting samples…</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <p class="text-muted small mt-3">
         Modelled visually on
         <a href="https://w0chp.radio/chrogps-dash/" target="_blank" rel="noopener">W0CHP's chrogps-dash</a>;
         all data is sourced live from this station's GPS receiver and local <code>chronyc</code>.
-        Time-series performance graphs (PPS drift, clock stability, frequency steering, DOP history,
-        SNR history) are planned for a future release once the historical store is in place.
+        Time-series graphs above accumulate in-browser from each dashboard refresh and reset on
+        page reload — a persistent historical store is planned for a future release.
     </p>
 </div>
 {% endblock %}
@@ -507,6 +657,22 @@
     function fmtSeconds2(v) {
         if (v === null || v === undefined || isNaN(v)) return '—';
         return v.toFixed(1) + ' s';
+    }
+    // chronyc -c tracking emits "ref time" as a Unix timestamp string
+    // (e.g. "1778355459.498333426").  Render it as a human-readable UTC
+    // datetime — chrogps-dash convention — while leaving non-numeric
+    // values (e.g. blank, "?") alone.
+    function fmtRefTime(v) {
+        if (v === null || v === undefined || v === '') return '—';
+        var num = Number(v);
+        if (!isFinite(num) || num <= 0) return String(v);
+        var d = new Date(num * 1000);
+        if (isNaN(d.getTime())) return String(v);
+        // YYYY-MM-DD HH:MM:SS UTC — fixed-width, mono-friendly.
+        var pad = function (n) { return n < 10 ? '0' + n : '' + n; };
+        return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate())
+            + ' ' + pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes()) + ':' + pad(d.getUTCSeconds())
+            + ' UTC';
     }
     function signClass(v) {
         if (v === null || v === undefined || isNaN(v)) return '';
@@ -836,7 +1002,7 @@
             : (t.reference_id_hex || '—');
         setText('t-ref-id', refId);
         setText('t-stratum', t.stratum === null || t.stratum === undefined ? '—' : String(t.stratum));
-        setText('t-ref-time', t.ref_time || '—');
+        setText('t-ref-time', fmtRefTime(t.ref_time));
         setText('t-sys-offset', fmtSeconds(t.system_time_offset_s));
         setText('t-last-offset', fmtSeconds(t.last_offset_s));
         setText('t-rms-offset', fmtSeconds(t.rms_offset_s));
@@ -894,6 +1060,258 @@
         setText('gps-dash-avg-snr', avg === null ? '—' : avg.toFixed(1));
     }
 
+    // ── Time-series ring buffers + sparkline drawing.
+    //    Capacity = 720 samples → 1 hour at the 5 s default refresh,
+    //    36 min at the 3 s minimum, 6 hours at the 30 s slow setting.
+    //    Each series holds parallel arrays of timestamps + values (or
+    //    null for "missing sample" — we render those as gaps rather
+    //    than connecting through).
+    var TS_CAPACITY = 720;
+    function makeRing() {
+        return { t: [], v: [] };
+    }
+    function ringPush(buf, ts, value) {
+        buf.t.push(ts);
+        buf.v.push((value === null || value === undefined || isNaN(value)) ? null : value);
+        if (buf.t.length > TS_CAPACITY) {
+            buf.t.splice(0, buf.t.length - TS_CAPACITY);
+            buf.v.splice(0, buf.v.length - TS_CAPACITY);
+        }
+    }
+    function ringStats(buf) {
+        var min = null, max = null, last = null, count = 0;
+        for (var i = 0; i < buf.v.length; i++) {
+            var x = buf.v[i];
+            if (x === null || x === undefined || isNaN(x)) continue;
+            if (min === null || x < min) min = x;
+            if (max === null || x > max) max = x;
+            last = x;
+            count++;
+        }
+        return { min: min, max: max, last: last, count: count };
+    }
+
+    // Resize a canvas to its CSS box at devicePixelRatio so traces stay
+    // crisp on HiDPI displays.  Returns the logical (CSS) width/height
+    // the caller should plot into.
+    function fitCanvas(canvas) {
+        var dpr = window.devicePixelRatio || 1;
+        var rect = canvas.getBoundingClientRect();
+        var w = Math.max(1, Math.round(rect.width));
+        var h = Math.max(1, Math.round(rect.height));
+        if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
+            canvas.width = w * dpr;
+            canvas.height = h * dpr;
+        }
+        var ctx = canvas.getContext('2d');
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        return { ctx: ctx, w: w, h: h };
+    }
+
+    // Generic multi-series sparkline.  `series` is an array of
+    //   { buffer, color, dashed }
+    // where buffer is one of the ring buffers above.  yDomain forces a
+    // fixed y range when supplied; otherwise we auto-fit to the data
+    // (with a small margin so flat lines aren't pinned to the rim).
+    // emptyEl is the overlay shown until the first non-null sample
+    // arrives.
+    function drawSparkline(canvasId, series, opts) {
+        var canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+        var fit = fitCanvas(canvas);
+        var ctx = fit.ctx, W = fit.w, H = fit.h;
+        ctx.clearRect(0, 0, W, H);
+
+        opts = opts || {};
+        var pad = { l: 4, r: 4, t: 6, b: 6 };
+        var plotW = W - pad.l - pad.r;
+        var plotH = H - pad.t - pad.b;
+
+        // Aggregate range across all series.
+        var anyData = false;
+        var lo = Infinity, hi = -Infinity, n = 0;
+        series.forEach(function (s) {
+            for (var i = 0; i < s.buffer.v.length; i++) {
+                var x = s.buffer.v[i];
+                if (x === null || x === undefined || isNaN(x)) continue;
+                if (x < lo) lo = x;
+                if (x > hi) hi = x;
+                anyData = true;
+            }
+            if (s.buffer.v.length > n) n = s.buffer.v.length;
+        });
+
+        var emptyEl = opts.emptyEl ? document.getElementById(opts.emptyEl) : null;
+        if (!anyData) {
+            if (emptyEl) emptyEl.style.display = '';
+            return;
+        }
+        if (emptyEl) emptyEl.style.display = 'none';
+
+        if (opts.yDomain) { lo = opts.yDomain[0]; hi = opts.yDomain[1]; }
+        if (opts.includeZero) { lo = Math.min(lo, 0); hi = Math.max(hi, 0); }
+        if (lo === hi) { lo -= 1; hi += 1; }
+        // 5 % top/bottom margin.
+        var span = hi - lo;
+        lo -= span * 0.05; hi += span * 0.05;
+
+        // Faint horizontal mid-line.
+        ctx.strokeStyle = 'rgba(127,127,127,0.18)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        var midY = pad.t + plotH / 2;
+        ctx.moveTo(pad.l, midY); ctx.lineTo(pad.l + plotW, midY);
+        ctx.stroke();
+
+        // Zero-line if it falls inside the plotted range.
+        if (lo < 0 && hi > 0) {
+            var zy = pad.t + plotH * (1 - (0 - lo) / (hi - lo));
+            ctx.strokeStyle = 'rgba(127,127,127,0.35)';
+            ctx.beginPath();
+            ctx.moveTo(pad.l, zy); ctx.lineTo(pad.l + plotW, zy);
+            ctx.stroke();
+        }
+
+        // Plot each series.
+        series.forEach(function (s) {
+            var buf = s.buffer;
+            var len = buf.v.length;
+            if (len < 1) return;
+            ctx.save();
+            ctx.strokeStyle = s.color;
+            ctx.lineWidth = 1.6;
+            if (s.dashed) ctx.setLineDash([4, 3]);
+            // Even with one sample we still drop a marker so the user sees
+            // something is being collected.
+            ctx.beginPath();
+            var started = false;
+            for (var i = 0; i < len; i++) {
+                var v = buf.v[i];
+                var x = pad.l + (len === 1 ? plotW / 2 : (i / (len - 1)) * plotW);
+                if (v === null || v === undefined || isNaN(v)) {
+                    started = false;
+                    continue;
+                }
+                var y = pad.t + plotH * (1 - (v - lo) / (hi - lo));
+                if (!started) { ctx.moveTo(x, y); started = true; }
+                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // Dot marker on the latest sample for a clear "live" cue.
+            for (var j = len - 1; j >= 0; j--) {
+                var lv = buf.v[j];
+                if (lv === null || lv === undefined || isNaN(lv)) continue;
+                var lx = pad.l + (len === 1 ? plotW / 2 : (j / (len - 1)) * plotW);
+                var ly = pad.t + plotH * (1 - (lv - lo) / (hi - lo));
+                ctx.fillStyle = s.color;
+                ctx.beginPath();
+                ctx.arc(lx, ly, 2.5, 0, Math.PI * 2);
+                ctx.fill();
+                break;
+            }
+            ctx.restore();
+        });
+    }
+
+    // Buffers for the five time-series charts (PPS drift, clock
+    // stability, frequency steering, DOP history, SNR history).
+    // Re-rendered on every poll, also redrawn on resize so they stay
+    // sharp when the browser window changes.
+    var ts = {
+        pps:   makeRing(),  // chrony last_offset_s          (seconds)
+        rms:   makeRing(),  // chrony rms_offset_s           (seconds)
+        freq:  makeRing(),  // chrony frequency_ppm          (ppm)
+        resid: makeRing(),  // chrony residual_freq_ppm      (ppm)
+        hdop:  makeRing(),  // gps hdop                      (unitless)
+        vdop:  makeRing(),  // gps vdop                      (unitless)
+        pdop:  makeRing(),  // gps pdop                      (unitless)
+        snr:   makeRing()   // average SNR across in-view    (dBHz)
+    };
+
+    function ingestTimeSeries(snapshot) {
+        var now = Date.now();
+        var t = (snapshot.chrony && snapshot.chrony.tracking) || {};
+        var g = snapshot.gps || {};
+
+        ringPush(ts.pps,   now, typeof t.last_offset_s === 'number' ? t.last_offset_s : null);
+        ringPush(ts.rms,   now, typeof t.rms_offset_s  === 'number' ? t.rms_offset_s  : null);
+        ringPush(ts.freq,  now, typeof t.frequency_ppm === 'number' ? t.frequency_ppm : null);
+        ringPush(ts.resid, now, typeof t.residual_freq_ppm === 'number' ? t.residual_freq_ppm : null);
+        ringPush(ts.hdop,  now, typeof g.hdop === 'number' ? g.hdop : null);
+        ringPush(ts.vdop,  now, typeof g.vdop === 'number' ? g.vdop : null);
+        ringPush(ts.pdop,  now, typeof g.pdop === 'number' ? g.pdop : null);
+
+        // Average SNR for the SNR-history series.
+        var sats = (g.satellites_in_view || []).filter(function (s) { return typeof s.snr === 'number'; });
+        var avg = sats.length
+            ? sats.reduce(function (a, s) { return a + s.snr; }, 0) / sats.length
+            : null;
+        ringPush(ts.snr, now, avg);
+    }
+
+    // Same fmtSeconds-style formatter we use elsewhere, but typed for
+    // the chart sidebar so flat lines around 0 read meaningfully.
+    function fmtPpmTight(v)     { return (v === null || v === undefined) ? '—' : v.toFixed(3) + ' ppm'; }
+    function fmtUnitlessTight(v) { return (v === null || v === undefined) ? '—' : v.toFixed(2); }
+    function fmtDbhzTight(v)    { return (v === null || v === undefined) ? '—' : v.toFixed(1) + ' dBHz'; }
+
+    function renderTimeSeriesCharts() {
+        // PPS drift — chrony last_offset_s.
+        var pps = ringStats(ts.pps);
+        setText('ts-pps-now', fmtSeconds(pps.last));
+        setText('ts-pps-min', fmtSeconds(pps.min));
+        setText('ts-pps-max', fmtSeconds(pps.max));
+        setText('ts-pps-n', pps.count);
+        drawSparkline('ts-pps-canvas', [
+            { buffer: ts.pps, color: '#58a6ff' }
+        ], { emptyEl: 'ts-pps-empty', includeZero: true });
+
+        // Clock stability — chrony rms_offset_s.
+        var rms = ringStats(ts.rms);
+        setText('ts-rms-now', fmtSeconds(rms.last));
+        setText('ts-rms-min', fmtSeconds(rms.min));
+        setText('ts-rms-max', fmtSeconds(rms.max));
+        setText('ts-rms-n', rms.count);
+        drawSparkline('ts-rms-canvas', [
+            { buffer: ts.rms, color: '#bc8cff' }
+        ], { emptyEl: 'ts-rms-empty' });
+
+        // Frequency steering — frequency_ppm + residual_freq_ppm.
+        var freq = ringStats(ts.freq);
+        var resid = ringStats(ts.resid);
+        setText('ts-freq-now',  fmtPpmTight(freq.last));
+        setText('ts-resid-now', fmtPpmTight(resid.last));
+        setText('ts-freq-n', Math.max(freq.count, resid.count));
+        drawSparkline('ts-freq-canvas', [
+            { buffer: ts.freq,  color: '#84cc16' },
+            { buffer: ts.resid, color: '#d29922', dashed: true }
+        ], { emptyEl: 'ts-freq-empty', includeZero: true });
+
+        // DOP history — H/V/P (unitless).  Lower is better.
+        var hd = ringStats(ts.hdop), vd = ringStats(ts.vdop), pd = ringStats(ts.pdop);
+        setText('ts-hdop-now', fmtUnitlessTight(hd.last));
+        setText('ts-vdop-now', fmtUnitlessTight(vd.last));
+        setText('ts-pdop-now', fmtUnitlessTight(pd.last));
+        setText('ts-dop-n', Math.max(hd.count, vd.count, pd.count));
+        drawSparkline('ts-dop-canvas', [
+            { buffer: ts.hdop, color: '#58a6ff' },
+            { buffer: ts.vdop, color: '#f85149' },
+            { buffer: ts.pdop, color: '#bc8cff' }
+        ], { emptyEl: 'ts-dop-empty', includeZero: true });
+
+        // SNR history — average dBHz across satellites in view.
+        var sn = ringStats(ts.snr);
+        setText('ts-snr-now', fmtDbhzTight(sn.last));
+        setText('ts-snr-min', fmtDbhzTight(sn.min));
+        setText('ts-snr-max', fmtDbhzTight(sn.max));
+        setText('ts-snr-n', sn.count);
+        drawSparkline('ts-snr-canvas', [
+            { buffer: ts.snr, color: '#3fb950' }
+        ], { emptyEl: 'ts-snr-empty' });
+    }
+
     // ── Render everything from a single snapshot.  Tolerates missing
     //    sub-fields so a partial server response (e.g. chronyc not
     //    installed) renders meaningfully instead of erroring.
@@ -930,6 +1348,10 @@
         renderSourcesTable(chrony.sources || []);
         renderSatFilters(gps.satellites_in_view || []);
         renderSatTable(gps);
+
+        // Time-series sparklines — push into ring buffers then redraw.
+        ingestTimeSeries(snapshot);
+        renderTimeSeriesCharts();
     }
 
     // ── Polling.  Configurable interval; "0" means paused.
@@ -954,6 +1376,13 @@
             });
             schedule(parseInt(sel.value, 10) || 0);
         }
+        // Redraw sparklines on viewport resize so HiDPI / responsive
+        // layout changes don't leave stale low-res traces.
+        var resizeTimer = null;
+        window.addEventListener('resize', function () {
+            if (resizeTimer) clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(renderTimeSeriesCharts, 120);
+        });
         fetchOnce();
     });
 })();
