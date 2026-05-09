@@ -766,6 +766,21 @@ if [ -d "$INSTALL_DIR/systemd" ]; then
     systemctl daemon-reload
     echo_success "Service files updated"
 
+    # Ensure eas-station-hwsetup.service (the privileged GPS HAT setup
+    # helper) is enabled and active on existing installs that predate it.
+    # systemctl enable --now is idempotent — already-enabled units are a
+    # no-op — so this is safe to run on every update.
+    if [ -f /etc/systemd/system/eas-station-hwsetup.service ]; then
+        echo_progress "Ensuring eas-station-hwsetup.service is enabled..."
+        if systemctl enable --now eas-station-hwsetup.service 2>&1 | grep -E "Created|enabled" >/dev/null \
+           || systemctl is-active --quiet eas-station-hwsetup.service; then
+            echo_success "eas-station-hwsetup.service active (one-click GPS HAT fixes available)"
+        else
+            echo_warning "eas-station-hwsetup.service did not start — one-click GPS HAT fixes will be unavailable"
+            echo_info "Diagnose with: sudo systemctl status eas-station-hwsetup.service"
+        fi
+    fi
+
     # Update sudoers configuration for certbot/nginx management
     echo_progress "Updating sudoers configuration for SSL certificate management..."
     if [ -f "$INSTALL_DIR/config/sudoers-eas-station" ]; then

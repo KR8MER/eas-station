@@ -2324,6 +2324,12 @@ echo_step "Start EAS Station Services"
 echo_progress "Enabling services for automatic startup..."
 systemctl enable eas-station.target > /dev/null 2>&1
 systemctl enable nginx > /dev/null 2>&1
+# eas-station-hwsetup is a privileged setup helper used by the GPS HAT
+# admin UI. The umbrella target wants it, but explicit enablement is
+# what creates the boot-time symlink — without this, an operator pulling
+# a fresh checkout would see "Privileged helper not reachable" in the UI.
+systemctl enable --now eas-station-hwsetup.service > /dev/null 2>&1 || \
+    echo_warning "eas-station-hwsetup.service failed to enable (one-click GPS HAT fixes will be unavailable)"
 echo_success "Services enabled"
 
 # Start the services automatically

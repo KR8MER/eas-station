@@ -943,38 +943,11 @@
                         </div>
                     </div>
 
-                    <!-- ──────────────────────────────────────────────────
-                         Modal that hosts privileged-helper output for
-                         every action button. Reused by all action runs;
-                         only the title and body content change.
-                         ────────────────────────────────────────────────── -->
-                    <div class="modal fade" id="gps-hat-action-modal" tabindex="-1" aria-hidden="true">
-                        <div class="modal-dialog modal-lg modal-dialog-scrollable">
-                            <div class="modal-content">
-                                <div class="modal-header">
-                                    <h5 class="modal-title">
-                                        <i class="fas fa-bolt me-1"></i>
-                                        <span id="gps-hat-modal-title">Run action</span>
-                                    </h5>
-                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                                </div>
-                                <div class="modal-body">
-                                    <div id="gps-hat-modal-summary" class="mb-2"></div>
-                                    <div id="gps-hat-modal-extra-params" class="mb-2"></div>
-                                    <pre id="gps-hat-modal-output"
-                                         class="small bg-dark text-light p-2 rounded"
-                                         style="white-space:pre-wrap; max-height:400px; min-height:120px; overflow-y:auto;"></pre>
-                                    <div id="gps-hat-modal-status" class="small mt-2 text-muted"></div>
-                                </div>
-                                <div class="modal-footer">
-                                    <button type="button" class="btn btn-secondary"
-                                            data-bs-dismiss="modal">Close</button>
-                                    <button type="button" class="btn btn-primary"
-                                            id="gps-hat-modal-run-btn">Run</button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                    <!-- The action-runner modal is rendered at the bottom of
+                         this template, outside every tab/panel container, so
+                         that Bootstrap's position-fixed overlay doesn't get
+                         clipped by an ancestor's overflow:hidden / transform. -->
+
 
                     <div class="card mb-3">
                         <div class="card-body">
@@ -2458,12 +2431,16 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
         document.getElementById('gps-hat-modal-output').textContent = '';
-        setModalStatus('Ready to run. Press the Run button below.', 'text-muted');
+        var btnLabel = action.runner.button_label || 'Run';
+        setModalStatus(
+            'Ready to run. Press <strong>' + escapeHtml(btnLabel)
+            + '</strong> below to apply this fix, or Close to cancel.',
+            'text-muted'
+        );
         var runBtn = document.getElementById('gps-hat-modal-run-btn');
         if (runBtn) {
             runBtn.disabled = false;
-            runBtn.innerHTML = '<i class="fas fa-play me-1"></i>'
-                + escapeHtml(action.runner.button_label || 'Run');
+            runBtn.innerHTML = '<i class="fas fa-play me-1"></i>' + escapeHtml(btnLabel);
         }
         modal.show();
     }
@@ -2620,4 +2597,40 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 })();
 </script>
+
+<!-- ──────────────────────────────────────────────────────────────────
+     GPS HAT action-runner modal. Lives at the bottom of the content
+     block — NOT inside the GPS panel — because Bootstrap modals rely
+     on position:fixed and are clipped by any ancestor that sets
+     overflow:hidden or transform. The hardware-settings tab containers
+     do both, so a nested modal renders inline (and the buttons can
+     fall outside the viewport).
+     ────────────────────────────────────────────────────────────────── -->
+<div class="modal fade" id="gps-hat-action-modal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-bolt me-1"></i>
+                    <span id="gps-hat-modal-title">Run action</span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="gps-hat-modal-summary" class="mb-2"></div>
+                <div id="gps-hat-modal-extra-params" class="mb-2"></div>
+                <pre id="gps-hat-modal-output"
+                     class="small bg-dark text-light p-2 rounded"
+                     style="white-space:pre-wrap; max-height:400px; min-height:120px; overflow-y:auto;"></pre>
+                <div id="gps-hat-modal-status" class="small mt-2 text-muted"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary"
+                        data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary"
+                        id="gps-hat-modal-run-btn">Run</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
