@@ -258,6 +258,60 @@
                             </div>
                         </div>
 
+                        <!-- Display Units -->
+                        <div class="accordion-item" id="display-units">
+                            <h2 class="accordion-header" id="displayUnitsHeading">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#displayUnitsCollapse">
+                                    <i class="fas fa-ruler me-2"></i>Display Units (lat/lon, altitude, speed, distance)
+                                </button>
+                            </h2>
+                            <div id="displayUnitsCollapse" class="accordion-collapse collapse" data-bs-parent="#operationsAccordion">
+                                <div class="accordion-body">
+                                    <p>
+                                        EAS Station lets each operator pick how positional and motion values are
+                                        displayed across the UI.  Selections are saved in your browser's
+                                        <code>localStorage</code> (per-device, per-browser) and apply
+                                        immediately wherever the affected values appear.
+                                    </p>
+
+                                    <h5 class="mt-3">Configurable units</h5>
+                                    <ul>
+                                        <li><strong>Coordinates:</strong> <code>D.dddd</code> (decimal degrees, e.g. <code>41.450123°</code>) or <code>DMS</code> (degrees / minutes / seconds, e.g. <code>41°27'00.4&quot;N</code>).</li>
+                                        <li><strong>Altitude:</strong> meters (<code>m</code>) or feet (<code>ft</code>).</li>
+                                        <li><strong>Speed:</strong> knots (<code>kn</code>), miles per hour (<code>mph</code>), kilometers per hour (<code>km/h</code>) or meters per second (<code>m/s</code>).</li>
+                                        <li><strong>Distance:</strong> meters (<code>m</code>), feet (<code>ft</code>), miles (<code>mi</code>) or nautical miles (<code>nmi</code>).</li>
+                                    </ul>
+
+                                    <h5 class="mt-3">Where to change them</h5>
+                                    <ol>
+                                        <li><strong>Settings → Personalization → Display Units</strong> in the top navigation bar opens the global picker from any page.</li>
+                                        <li><strong>Help → Display Units</strong> exposes the same picker even when not signed in.</li>
+                                        <li>Each affected page also has an inline <em>Units</em> button:
+                                            <ul>
+                                                <li><a href="/admin/gps-dashboard">GPS &amp; Time Dashboard</a> — header, right-hand side.</li>
+                                                <li><a href="/system_health">System Health</a> — page header, top-right.</li>
+                                            </ul>
+                                        </li>
+                                    </ol>
+
+                                    <div class="alert alert-light mt-3">
+                                        <i class="fas fa-lightbulb me-2"></i>
+                                        <strong>Tip:</strong> Changes take effect instantly — every dashboard with cached
+                                        telemetry re-renders the moment you flip a unit, so you don't need to wait for
+                                        the next poll or reload the page.
+                                    </div>
+
+                                    <div class="alert alert-info mt-2 mb-0">
+                                        <i class="fas fa-circle-info me-2"></i>
+                                        <strong>Scope:</strong> the preference is stored in your browser only — it's not
+                                        synced server-side, so each browser/device you use can have its own setting,
+                                        and clearing site data will reset to defaults
+                                        (<code>D.dddd</code>, <code>m</code>, <code>kn</code>, <code>m</code>).
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Monitoring Live Alerts -->
                         <div class="accordion-item">
                             <h2 class="accordion-header" id="alertsHeading">

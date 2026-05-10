@@ -348,6 +348,49 @@
         </div>
     </div>
 
+    <!-- Global Display Units modal — accessible from any page via the
+         Settings or Help dropdown.  The selector itself is built and
+         re-bound each time the modal opens so it always reflects the
+         currently-stored preferences. -->
+    <div class="modal fade" id="globalUnitsModal" tabindex="-1" aria-labelledby="globalUnitsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="globalUnitsModalLabel">
+                        <i class="fas fa-ruler me-2"></i>Display Units
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-3">
+                        Choose how lat/lon, altitude, speed, and distance values are shown across the
+                        EAS Station UI.  Your choices are saved in this browser only and apply
+                        immediately wherever those values appear (GPS Dashboard, System Health, and
+                        related panels).
+                    </p>
+                    <div id="globalUnitsModalPanel"></div>
+                </div>
+                <div class="modal-footer">
+                    <a href="{{ url_for('help_page') }}#display-units" class="me-auto small text-muted">
+                        <i class="fas fa-circle-info me-1"></i>Documentation
+                    </a>
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Done</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        (function () {
+            var modalEl = document.getElementById('globalUnitsModal');
+            if (!modalEl) return;
+            modalEl.addEventListener('show.bs.modal', function () {
+                if (window.EASUnits) {
+                    window.EASUnits.attachSelector(document.getElementById('globalUnitsModalPanel'));
+                }
+            });
+        })();
+    </script>
+
     <!-- Global EAS Broadcast Timer Overlay (corner badge)
          Persistent ambient indicator that mirrors the modal overlay above. -->
     <div id="globalBroadcastTimer" style="display:none;position:fixed;bottom:1.5rem;right:1.5rem;z-index:9990;width:320px;pointer-events:none;animation:gbcSlideIn .3s ease-out;">

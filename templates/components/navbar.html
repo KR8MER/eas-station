@@ -242,6 +242,14 @@
                             <li><hr class="dropdown-divider"></li>
                             {% endif %}
 
+                            <li><h6 class="dropdown-header">Personalization</h6></li>
+                            <li>
+                                <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#globalUnitsModal">
+                                    <i class="fas fa-ruler"></i> Display Units
+                                </button>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+
                             <li><h6 class="dropdown-header">Observability</h6></li>
                             <li>
                                 <a class="dropdown-item" href="/diagnostics">
@@ -372,6 +380,11 @@
                                 <a class="dropdown-item" href="{{ url_for('site_navigation') }}">
                                     <i class="fas fa-sitemap"></i> Site Navigation
                                 </a>
+                            </li>
+                            <li>
+                                <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#globalUnitsModal">
+                                    <i class="fas fa-ruler"></i> Display Units
+                                </button>
                             </li>
                             <li><hr class="dropdown-divider"></li>
                             <li>
