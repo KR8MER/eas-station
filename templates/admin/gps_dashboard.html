@@ -271,6 +271,67 @@
     .gps-skyview-help .hb-dot.green  { background: #84cc16; box-shadow: 0 0 6px #84cc16; }
     .gps-skyview-help .hb-dot.tip    { background: #84cc16; box-shadow: 0 0 6px #84cc16; opacity: 0.85; }
 
+    /* Hover/click tooltip for satellite sprites — glassy panel that
+       pins to a sat on click and follows the cursor on hover. */
+    .gps-sat-tooltip {
+        position: absolute;
+        z-index: 30;
+        pointer-events: none;
+        min-width: 180px;
+        max-width: 240px;
+        padding: 10px 12px;
+        background: rgba(8, 14, 28, 0.92);
+        border: 1px solid rgba(120, 150, 200, 0.30);
+        border-radius: 10px;
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        color: #d8e3f5;
+        font-size: 0.78rem;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    }
+    .gps-sat-tooltip .head {
+        display: flex; align-items: center; gap: 8px;
+        margin-bottom: 6px;
+        padding-bottom: 6px;
+        border-bottom: 1px solid rgba(120, 150, 200, 0.18);
+    }
+    .gps-sat-tooltip .head .dot {
+        width: 12px; height: 12px; border-radius: 50%;
+        box-shadow: 0 0 6px currentColor;
+        flex-shrink: 0;
+    }
+    .gps-sat-tooltip .head strong {
+        color: #ffffff; font-size: 0.92rem;
+        font-variant-numeric: tabular-nums;
+    }
+    .gps-sat-tooltip .head .cn {
+        margin-left: auto;
+        font-size: 0.72rem;
+        opacity: 0.70;
+    }
+    .gps-sat-tooltip .row {
+        display: flex; justify-content: space-between; gap: 12px;
+        padding: 2px 0;
+    }
+    .gps-sat-tooltip .row span { color: rgba(216, 227, 245, 0.65); }
+    .gps-sat-tooltip .row b {
+        color: #ffffff;
+        font-variant-numeric: tabular-nums;
+        font-weight: 600;
+    }
+    .gps-sat-tooltip .status {
+        margin-top: 6px;
+        font-size: 0.74rem;
+    }
+    .gps-sat-tooltip .status .used    { color: #84cc16; font-weight: 600; }
+    .gps-sat-tooltip .status .tracked { color: rgba(216, 227, 245, 0.55); }
+    .gps-sat-tooltip .hint {
+        margin-top: 4px;
+        font-size: 0.66rem;
+        font-style: italic;
+        opacity: 0.55;
+    }
+
     @media (max-width: 900px) {
         .gps-skyview-stage { height: 460px; }
         .gps-overlay-tl { max-width: 220px; }
@@ -1071,6 +1132,8 @@
         var ready = false, failed = false;
         var stage, renderer, scene, camera;
         var satGroup, prnTextureCache = {};
+        var raycaster, mouseNDC;
+        var tooltipEl, pinnedPrn = null;
 
         var DOME_R = 1.0;
 
@@ -1250,19 +1313,26 @@
         }
 
         function addCardinalLabels() {
+            // sizeAttenuation:false keeps every cardinal at the same pixel
+            // size regardless of camera distance — without it the near-side
+            // S label balloons while the far-side N label shrinks.
+            // Sit them right on the horizon ring (radius 1.0) at a small
+            // positive height so they read as signs at the rim of the
+            // visible ground.
             [['N', 0], ['E', Math.PI / 2], ['S', Math.PI], ['W', -Math.PI / 2]].forEach(function (lbl) {
                 var name = lbl[0], azR = lbl[1];
-                var rOut = DOME_R * 1.13;
+                var rOut = DOME_R * 1.0;
                 var x = rOut * Math.sin(azR);
                 var z = -rOut * Math.cos(azR);
                 var tex = makeTextTexture(name, {
                     fontSize: 64, color: '#ffffff', shadow: true, w: 128, h: 96
                 });
                 var sp = new THREE.Sprite(new THREE.SpriteMaterial({
-                    map: tex, depthWrite: false, depthTest: false, transparent: true
+                    map: tex, depthWrite: false, depthTest: false,
+                    transparent: true, sizeAttenuation: false
                 }));
-                sp.scale.set(0.18, 0.13, 1);
-                sp.position.set(x, 0.025, z);
+                sp.scale.set(0.060, 0.045, 1);
+                sp.position.set(x, 0.045, z);
                 scene.add(sp);
             });
             // ZENITH cap label.
@@ -1270,9 +1340,10 @@
                 fontSize: 40, color: '#ffffff', shadow: true, w: 320, h: 64
             });
             var zsp = new THREE.Sprite(new THREE.SpriteMaterial({
-                map: ztex, depthWrite: false, depthTest: false, transparent: true
+                map: ztex, depthWrite: false, depthTest: false,
+                transparent: true, sizeAttenuation: false
             }));
-            zsp.scale.set(0.46, 0.10, 1);
+            zsp.scale.set(0.150, 0.030, 1);
             zsp.position.set(0, DOME_R + 0.07, 0);
             scene.add(zsp);
         }
@@ -1293,9 +1364,9 @@
                 });
                 var sp = new THREE.Sprite(new THREE.SpriteMaterial({
                     map: tex, depthWrite: false, depthTest: false,
-                    transparent: true, opacity: 0.92
+                    transparent: true, opacity: 0.92, sizeAttenuation: false
                 }));
-                sp.scale.set(0.14, 0.07, 1);
+                sp.scale.set(0.055, 0.028, 1);
                 sp.position.set(x, y + 0.005, z);
                 scene.add(sp);
             });
@@ -1324,10 +1395,11 @@
                 bg: 'rgba(8,14,28,0.88)', w: 144, h: 72
             });
             var sp = new THREE.Sprite(new THREE.SpriteMaterial({
-                map: tex, depthWrite: false, depthTest: false, transparent: true
+                map: tex, depthWrite: false, depthTest: false,
+                transparent: true, sizeAttenuation: false
             }));
-            sp.scale.set(0.22, 0.11, 1);
-            sp.position.set(0.22, 0.13, 0.06);
+            sp.scale.set(0.075, 0.038, 1);
+            sp.position.set(0.13, 0.10, 0.04);
             scene.add(sp);
         }
 
@@ -1368,10 +1440,119 @@
             satGroup = new THREE.Group();
             scene.add(satGroup);
 
+            setupHover();
             window.addEventListener('resize', onResize);
             requestAnimationFrame(loop);
             ready = true;
             return true;
+        }
+
+        // ── Hover / click tooltip ─────────────────────────────────────
+        // Raycaster against the satellite sprites only.  Hover follows
+        // the cursor; a click pins the tooltip to a satellite until the
+        // user clicks it again or anywhere off a sat.
+        function setupHover() {
+            raycaster = new THREE.Raycaster();
+            mouseNDC = new THREE.Vector2();
+            tooltipEl = document.createElement('div');
+            tooltipEl.className = 'gps-sat-tooltip';
+            tooltipEl.style.display = 'none';
+            stage.appendChild(tooltipEl);
+
+            var canvas = renderer.domElement;
+            canvas.addEventListener('mousemove', onPointerMove);
+            canvas.addEventListener('mouseleave', onPointerLeave);
+            canvas.addEventListener('click', onCanvasClick);
+        }
+
+        function pickSat(clientX, clientY) {
+            if (!raycaster || !satGroup) return null;
+            var rect = renderer.domElement.getBoundingClientRect();
+            mouseNDC.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+            mouseNDC.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+            raycaster.setFromCamera(mouseNDC, camera);
+            var sprites = [];
+            satGroup.children.forEach(function (o) {
+                if (o.isSprite && o.userData && o.userData.isSat) sprites.push(o);
+            });
+            var hits = raycaster.intersectObjects(sprites, false);
+            return hits.length ? hits[0].object : null;
+        }
+
+        function onPointerMove(ev) {
+            if (pinnedPrn != null) return;  // don't override a pinned tooltip
+            var hit = pickSat(ev.clientX, ev.clientY);
+            if (hit) {
+                showTooltipAt(hit.userData, ev.clientX, ev.clientY);
+                renderer.domElement.style.cursor = 'pointer';
+            } else {
+                hideTooltip();
+                renderer.domElement.style.cursor = '';
+            }
+        }
+
+        function onPointerLeave() {
+            if (pinnedPrn == null) hideTooltip();
+            renderer.domElement.style.cursor = '';
+        }
+
+        function onCanvasClick(ev) {
+            var hit = pickSat(ev.clientX, ev.clientY);
+            if (hit) {
+                var prn = hit.userData.sat.prn;
+                if (pinnedPrn === prn) {
+                    pinnedPrn = null;
+                    hideTooltip();
+                } else {
+                    pinnedPrn = prn;
+                    showTooltipAt(hit.userData, ev.clientX, ev.clientY);
+                }
+            } else if (pinnedPrn != null) {
+                pinnedPrn = null;
+                hideTooltip();
+            }
+        }
+
+        function showTooltipAt(data, clientX, clientY) {
+            if (!tooltipEl) return;
+            var sat = data.sat;
+            var info = { color: data.color, label: data.label };
+            var az = (sat.azimuth != null) ? sat.azimuth.toFixed(0) + '°' : '—';
+            var el = (sat.elevation != null) ? sat.elevation.toFixed(0) + '°' : '—';
+            var snr = (sat.snr != null) ? sat.snr.toFixed(0) + ' dBHz' : '—';
+            var statusHtml = data.used
+                ? '<span class="used"><i class="fas fa-check-circle"></i> Used in fix</span>'
+                : '<span class="tracked">Tracked, not used</span>';
+            tooltipEl.innerHTML =
+                '<div class="head">' +
+                    '<span class="dot" style="background:' + info.color + '; color:' + info.color + '"></span>' +
+                    '<strong>PRN ' + escapeHtml(String(sat.prn)) + '</strong>' +
+                    '<span class="cn">' + escapeHtml(info.label) + '</span>' +
+                '</div>' +
+                '<div class="row"><span>Azimuth</span><b>' + az + '</b></div>' +
+                '<div class="row"><span>Elevation</span><b>' + el + '</b></div>' +
+                '<div class="row"><span>SNR</span><b>' + snr + '</b></div>' +
+                '<div class="status">' + statusHtml + '</div>' +
+                (pinnedPrn != null ? '<div class="hint">Click to unpin</div>'
+                                   : '<div class="hint">Click to pin</div>');
+            tooltipEl.style.display = 'block';
+
+            var stageRect = stage.getBoundingClientRect();
+            var ttRect = tooltipEl.getBoundingClientRect();
+            var pad = 14;
+            var x = (clientX - stageRect.left) + pad;
+            var y = (clientY - stageRect.top)  + pad;
+            // Flip to the other side if we'd overflow the stage.
+            if (x + ttRect.width  > stageRect.width  - 8) x = (clientX - stageRect.left) - ttRect.width  - pad;
+            if (y + ttRect.height > stageRect.height - 8) y = (clientY - stageRect.top)  - ttRect.height - pad;
+            if (x < 8) x = 8;
+            if (y < 8) y = 8;
+            tooltipEl.style.left = x + 'px';
+            tooltipEl.style.top  = y + 'px';
+        }
+
+        function hideTooltip() {
+            if (tooltipEl) tooltipEl.style.display = 'none';
         }
 
         function clearSats() {
@@ -1421,8 +1602,24 @@
                 }));
                 sp.scale.set(0.115, 0.115, 1);
                 sp.position.copy(satPos);
+                // Store enough metadata for the hover tooltip to render the
+                // satellite's full record without re-querying snapshot state.
+                sp.userData = {
+                    isSat: true,
+                    sat: sat,
+                    used: !!activeSet[sat.prn],
+                    color: info.color,
+                    label: info.label
+                };
                 satGroup.add(sp);
             });
+
+            // If a tooltip is pinned to a sat that just disappeared from the
+            // snapshot, drop the pin so it doesn't keep showing stale data.
+            if (pinnedPrn != null) {
+                var stillThere = (satsInView || []).some(function (s) { return s.prn === pinnedPrn; });
+                if (!stillThere) { pinnedPrn = null; hideTooltip(); }
+            }
         }
 
         function onResize() {
