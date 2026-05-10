@@ -162,12 +162,6 @@
         color: #ffffff;
         margin-bottom: 4px;
     }
-    .gps-skyview-desc {
-        font-size: 0.78rem; line-height: 1.35;
-        color: rgba(216, 227, 245, 0.78);
-        margin: 0 0 12px 0;
-        max-width: 200px;
-    }
     .gps-skyview-legend {
         display: inline-flex; flex-direction: column; gap: 6px;
         padding: 10px 14px;
@@ -219,62 +213,6 @@
     }
     .gps-skyview-info dt { color: rgba(216,227,245,0.65); font-weight: 400; }
     .gps-skyview-info dd { margin: 0; color: #ffffff; font-variant-numeric: tabular-nums; }
-
-    .gps-elev-legend {
-        display: flex; flex-direction: column; gap: 8px;
-        padding: 12px 14px;
-        background: rgba(8, 14, 28, 0.70);
-        border: 1px solid rgba(120, 150, 200, 0.20);
-        border-radius: 10px;
-        backdrop-filter: blur(6px);
-        -webkit-backdrop-filter: blur(6px);
-    }
-    .gps-elev-legend .row {
-        display: flex; align-items: center; gap: 10px;
-        margin: 0;
-    }
-    .gps-elev-legend .row > div { display: flex; flex-direction: column; line-height: 1.15; }
-    .gps-elev-legend strong { font-size: 0.78rem; color: #ffffff; }
-    .gps-elev-legend em {
-        font-style: normal;
-        font-size: 0.68rem;
-        color: rgba(216,227,245,0.60);
-    }
-    .gps-elev-legend .line {
-        width: 22px; height: 0;
-        border-top: 2px dashed currentColor;
-        flex-shrink: 0;
-    }
-    .gps-elev-legend .zenith { color: #58a6ff; }
-    .gps-elev-legend .mid    { color: #f6c343; }
-    .gps-elev-legend .horiz  { color: #84cc16; }
-
-    .gps-skyview-help {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 6px 28px;
-        padding: 14px 22px 18px;
-        border-top: 1px solid rgba(120,150,200,0.18);
-        background: rgba(5, 9, 18, 0.6);
-    }
-    .gps-skyview-help ul {
-        list-style: none; padding: 0; margin: 0;
-        display: flex; flex-direction: column; gap: 5px;
-    }
-    .gps-skyview-help li {
-        display: flex; align-items: center; gap: 8px;
-        font-size: 0.78rem;
-        color: rgba(216,227,245,0.85);
-    }
-    .gps-skyview-help strong { color: #ffffff; font-weight: 600; }
-    .gps-skyview-help .hb-dot {
-        width: 7px; height: 7px; border-radius: 50%;
-        flex-shrink: 0;
-    }
-    .gps-skyview-help .hb-dot.blue   { background: #58a6ff; box-shadow: 0 0 6px #58a6ff; }
-    .gps-skyview-help .hb-dot.yellow { background: #f6c343; box-shadow: 0 0 6px #f6c343; }
-    .gps-skyview-help .hb-dot.green  { background: #84cc16; box-shadow: 0 0 6px #84cc16; }
-    .gps-skyview-help .hb-dot.tip    { background: #84cc16; box-shadow: 0 0 6px #84cc16; opacity: 0.85; }
 
     /* Hover/click tooltip for satellite sprites — glassy panel that
        pins to a sat on click and follows the cursor on hover. */
@@ -340,13 +278,11 @@
     @media (max-width: 900px) {
         .gps-skyview-stage { height: 460px; }
         .gps-overlay-tl { max-width: 220px; }
-        .gps-skyview-help { grid-template-columns: 1fr; }
     }
     @media (max-width: 640px) {
         .gps-skyview-stage { height: 380px; }
         .gps-overlay { font-size: 0.74rem; }
         .gps-overlay-tl, .gps-overlay-bl, .gps-overlay-br { max-width: 180px; }
-        .gps-skyview-desc { display: none; }
     }
 
     /* ── Mobile (<= 575.98px) ─────────────────────────────────────────
@@ -432,8 +368,7 @@
         .gps-skyview-title { font-size: 0.95rem; margin-bottom: 6px; }
         .gps-skyview-legend,
         .gps-skyview-counts-card,
-        .gps-skyview-info,
-        .gps-elev-legend {
+        .gps-skyview-info {
             display: flex;
             flex-direction: row;
             flex-wrap: wrap;
@@ -448,10 +383,8 @@
         }
         .gps-skyview-info { display: grid; grid-template-columns: max-content 1fr; column-gap: 12px; row-gap: 2px; }
         .gps-skyview-info dt,
-        .gps-skyview-counts-card,
-        .gps-elev-legend strong { color: var(--text-color); }
+        .gps-skyview-counts-card { color: var(--text-color); }
         .gps-skyview-info dd { color: var(--text-color); }
-        .gps-elev-legend .row { gap: 8px; }
 
         /* Key/value tracking grid: stack label above value when squeezed */
         .gps-kv {
@@ -480,10 +413,6 @@
         /* Chart cards: shorter so the page doesn't become endless */
         .gps-chart-canvas-wrap { height: 96px; }
         .gps-chart-card .chart-meta { gap: 6px 12px; font-size: 0.72rem; }
-
-        /* Help block at the bottom of the skyview hero */
-        .gps-skyview-help { padding: 10px 12px 14px; gap: 4px 12px; }
-        .gps-skyview-help li { font-size: 0.74rem; }
 
         /* NMEA inspector: make sure controls don't blow out the row */
         .gps-nmea-controls { gap: 8px; }
@@ -1230,7 +1159,6 @@
 
             <div class="gps-overlay gps-overlay-tl">
                 <div class="gps-skyview-title">3D GPS SKYVIEW</div>
-                <p class="gps-skyview-desc">A 3D view of satellites relative to your GPS receiver on Earth.</p>
                 <div id="gps-skyview-legend" class="gps-skyview-legend"></div>
                 <div class="gps-skyview-counts-card">
                     <div><strong id="gps-dash-total-count">—</strong> total satellites</div>
@@ -1250,14 +1178,6 @@
                 </div>
             </div>
 
-            <div class="gps-overlay gps-overlay-br">
-                <div class="gps-elev-legend">
-                    <div class="row"><span class="line zenith"></span><div><strong>ZENITH (90°)</strong><em>Directly Overhead</em></div></div>
-                    <div class="row"><span class="line mid"></span><div><strong>45°</strong><em>Mid Elevation</em></div></div>
-                    <div class="row"><span class="line horiz"></span><div><strong>HORIZON (0°)</strong><em>At the Horizon</em></div></div>
-                </div>
-            </div>
-
             <div class="gps-overlay gps-overlay-bl">
                 <dl class="gps-skyview-info">
                     <dt>Position</dt>   <dd id="g-pos">—</dd>
@@ -1266,19 +1186,6 @@
                     <dt>Hardware</dt>   <dd id="g-hw">—</dd>
                 </dl>
             </div>
-        </div>
-
-        <div class="gps-skyview-help">
-            <ul>
-                <li><span class="hb-dot blue"></span><strong>Center (Zenith):</strong> Satellites nearly overhead</li>
-                <li><span class="hb-dot yellow"></span><strong>Middle:</strong> Satellites at medium elevation</li>
-                <li><span class="hb-dot green"></span><strong>Edge (Horizon):</strong> Satellites low in the sky</li>
-            </ul>
-            <ul>
-                <li><span class="hb-dot tip"></span>More satellites and wider spread = better accuracy</li>
-                <li><span class="hb-dot tip"></span>Your receiver uses the best satellites for the fix</li>
-                <li><span class="hb-dot tip"></span>Lower DOP values = better positioning accuracy</li>
-            </ul>
         </div>
     </div>
 
@@ -1949,6 +1856,14 @@
         var satGroup, prnTextureCache = {};
         var raycaster, mouseNDC;
         var tooltipEl, pinnedPrn = null;
+        // Per-frame animation state.  clock drives all time-based
+        // effects (sat pulse, sight-line dash-flow, receiver pulse,
+        // starfield twinkle); animSats/animLines hold quick refs to
+        // the dynamic objects so we don't traverse the scene each
+        // frame.
+        var clock = null;
+        var animSats = [], animLines = [];
+        var receiverPulses = [], starField = null;
 
         var DOME_R = 1.0;
 
@@ -2254,6 +2169,81 @@
             scene.add(sp);
         }
 
+        function addStarfield() {
+            // A sparse cloud of tiny twinkling stars on a sphere far
+            // behind the dome.  Sells the "open sky" feel and gives
+            // the scene depth without competing with the satellites.
+            var starCount = 360;
+            var positions = new Float32Array(starCount * 3);
+            var phases = new Float32Array(starCount);
+            for (var i = 0; i < starCount; i++) {
+                // Random direction biased toward the upper hemisphere
+                // (most stars above the horizon).
+                var u = Math.random();
+                var v = Math.random() * 0.85 + 0.05;     // 0.05..0.90 → keep some below horizon for depth
+                var theta = u * Math.PI * 2;
+                var phi = Math.acos(1 - 2 * v);
+                var r = 8 + Math.random() * 2;
+                positions[i * 3]     = r * Math.sin(phi) * Math.cos(theta);
+                positions[i * 3 + 1] = r * Math.cos(phi) * 0.55 + 1.5;  // squash so the bowl sits above the dome
+                positions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
+                phases[i] = Math.random() * Math.PI * 2;
+            }
+            var starGeo = new THREE.BufferGeometry();
+            starGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+            // Soft round point texture for nicer-looking stars than a
+            // square 1-pixel default.
+            var sc = document.createElement('canvas');
+            sc.width = 32; sc.height = 32;
+            var sctx = sc.getContext('2d');
+            var sgrad = sctx.createRadialGradient(16, 16, 0, 16, 16, 16);
+            sgrad.addColorStop(0,   'rgba(255,255,255,1.0)');
+            sgrad.addColorStop(0.4, 'rgba(220,232,255,0.55)');
+            sgrad.addColorStop(1,   'rgba(180,200,255,0.0)');
+            sctx.fillStyle = sgrad;
+            sctx.fillRect(0, 0, 32, 32);
+            var starTex = new THREE.CanvasTexture(sc);
+            starTex.minFilter = THREE.LinearFilter;
+
+            var starMat = new THREE.PointsMaterial({
+                map: starTex, color: 0xffffff,
+                size: 0.06, sizeAttenuation: true,
+                transparent: true, depthWrite: false,
+                opacity: 0.85, blending: THREE.AdditiveBlending
+            });
+            starField = new THREE.Points(starGeo, starMat);
+            starField.userData.phases = phases;
+            // Render before the dome so the dome's translucency blends
+            // over the starfield instead of occluding it.
+            starField.renderOrder = -1;
+            scene.add(starField);
+        }
+
+        function addReceiverPulse() {
+            // Two soft expanding rings at the antenna base — visual
+            // cue that the receiver is "live" and listening.  Each
+            // ring fades out as it grows, then resets, offset in
+            // phase so there's always one visible.
+            var ringMat;
+            for (var i = 0; i < 2; i++) {
+                var geo = new THREE.RingGeometry(0.12, 0.135, 64);
+                ringMat = new THREE.MeshBasicMaterial({
+                    color: 0x6fb0ff,
+                    transparent: true, opacity: 0.0,
+                    side: THREE.DoubleSide,
+                    depthWrite: false,
+                    blending: THREE.AdditiveBlending
+                });
+                var ring = new THREE.Mesh(geo, ringMat);
+                ring.rotation.x = -Math.PI / 2;
+                ring.position.y = 0.004;
+                ring.userData.phase = i * 0.5;       // 0.0 and 0.5 — half-cycle apart
+                scene.add(ring);
+                receiverPulses.push(ring);
+            }
+        }
+
         function init() {
             if (ready || failed) return ready;
             if (typeof THREE === 'undefined') { failed = true; return false; }
@@ -2283,14 +2273,17 @@
             scene.add(dl);
 
             addDome();
+            addStarfield();
             addGrid();
             addCardinalLabels();
             addElevationLabels();
             addReceiver();
+            addReceiverPulse();
 
             satGroup = new THREE.Group();
             scene.add(satGroup);
 
+            clock = new THREE.Clock();
             setupHover();
             window.addEventListener('resize', onResize);
             requestAnimationFrame(loop);
@@ -2424,6 +2417,8 @@
                 if (o.geometry) o.geometry.dispose();
                 if (o.material) o.material.dispose();
             }
+            animSats = [];
+            animLines = [];
         }
 
         function renderSats(satsInView, activePrns) {
@@ -2442,39 +2437,48 @@
                 // the surface instead of poking through the lat/lon lines.
                 var satPos = pos.clone().multiplyScalar(0.985);
 
+                var isUsed = !!activeSet[sat.prn];
+
                 // Dashed sight-line from receiver to satellite.
                 var lineGeo = new THREE.BufferGeometry().setFromPoints([
                     new THREE.Vector3(0, 0.07, 0),
                     satPos
                 ]);
+                var baseLineOpacity = isUsed ? 0.85 : 0.42;
                 var lineMat = new THREE.LineDashedMaterial({
                     color: new THREE.Color(info.color),
                     transparent: true,
-                    opacity: activeSet[sat.prn] ? 0.85 : 0.42,
+                    opacity: baseLineOpacity,
                     dashSize: 0.045,
                     gapSize: 0.030
                 });
                 var line = new THREE.Line(lineGeo, lineMat);
                 line.computeLineDistances();
+                line.userData = { used: isUsed, baseOpacity: baseLineOpacity, phase: Math.random() * Math.PI * 2 };
                 satGroup.add(line);
+                animLines.push(line);
 
                 // Satellite sprite (dot + PRN number).
                 var tex = makeSatTexture(sat.prn, info.color);
                 var sp = new THREE.Sprite(new THREE.SpriteMaterial({
                     map: tex, depthWrite: false, transparent: true
                 }));
-                sp.scale.set(0.115, 0.115, 1);
+                var baseScale = 0.115;
+                sp.scale.set(baseScale, baseScale, 1);
                 sp.position.copy(satPos);
                 // Store enough metadata for the hover tooltip to render the
                 // satellite's full record without re-querying snapshot state.
                 sp.userData = {
                     isSat: true,
                     sat: sat,
-                    used: !!activeSet[sat.prn],
+                    used: isUsed,
                     color: info.color,
-                    label: info.label
+                    label: info.label,
+                    baseScale: baseScale,
+                    phase: Math.random() * Math.PI * 2
                 };
                 satGroup.add(sp);
+                animSats.push(sp);
             });
 
             // If a tooltip is pinned to a sat that just disappeared from the
@@ -2494,8 +2498,54 @@
             camera.updateProjectionMatrix();
         }
 
+        function animateScene(t) {
+            // Pulse satellites used in the fix — gentle ~6% breathing
+            // scale so the fix-locked birds stand out from the merely
+            // tracked ones at a glance.
+            for (var i = 0; i < animSats.length; i++) {
+                var s = animSats[i];
+                if (!s.userData || !s.userData.used) continue;
+                var base = s.userData.baseScale;
+                var k = 1 + 0.085 * Math.sin(t * 2.4 + s.userData.phase);
+                s.scale.set(base * k, base * k, 1);
+            }
+
+            // Animated dash-flow on sight lines — shimmer the opacity
+            // so the lines feel alive (data flowing toward each sat).
+            // Used-in-fix lines pulse harder than tracked-only ones.
+            for (var j = 0; j < animLines.length; j++) {
+                var ln = animLines[j];
+                var ud = ln.userData || {};
+                var amp = ud.used ? 0.18 : 0.08;
+                var op = ud.baseOpacity + amp * Math.sin(t * 3.0 + (ud.phase || 0));
+                if (op < 0.05) op = 0.05;
+                if (op > 1.0)  op = 1.0;
+                if (ln.material) ln.material.opacity = op;
+            }
+
+            // Receiver pulse rings — each ring expands from the antenna
+            // base and fades out, then resets.  Two rings, half-cycle
+            // offset, so there's always one visible.
+            for (var k2 = 0; k2 < receiverPulses.length; k2++) {
+                var ring = receiverPulses[k2];
+                var period = 2.4;                                   // seconds per pulse
+                var p = ((t / period) + (ring.userData.phase || 0)) % 1;
+                var scl = 1 + p * 4.5;                              // grow ~5×
+                ring.scale.set(scl, scl, 1);
+                var o = (1 - p) * 0.55;                             // fade out as it grows
+                if (ring.material) ring.material.opacity = o;
+            }
+
+            // Subtle starfield twinkle.
+            if (starField && starField.material) {
+                starField.material.opacity = 0.78 + 0.10 * Math.sin(t * 0.9);
+            }
+        }
+
         function loop() {
             if (!ready) return;
+            var t = clock ? clock.getElapsedTime() : 0;
+            animateScene(t);
             renderer.render(scene, camera);
             requestAnimationFrame(loop);
         }
