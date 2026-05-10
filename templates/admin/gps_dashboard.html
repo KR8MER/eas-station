@@ -1446,15 +1446,30 @@
     <div class="gps-section-head" data-view="engineering">
         <h2>Engineering · Time-series</h2>
         <span class="rule"></span>
-        <span class="hint">≈ 1 hour rolling · 5 s refresh</span>
+        <label class="hint" style="display:flex;align-items:center;gap:6px;margin:0;">
+            <span>data window</span>
+            <select id="ts-window-select" class="form-select form-select-sm" style="width:auto;min-width:7em;">
+                <option value="1h">1 hour</option>
+                <option value="6h">6 hours</option>
+                <option value="24h">24 hours</option>
+                <option value="7d">7 days</option>
+                <option value="30d">30 days</option>
+                <option value="90d">90 days</option>
+            </select>
+            <span id="ts-window-resolution" class="text-muted small">resolution: 5 s</span>
+        </label>
     </div>
 
     <!-- ============================================================
-         TIME-SERIES PERFORMANCE GRAPHS — client-side ring buffer fed
-         from each dashboard poll, seeded on first load from the
-         Redis-backed /admin/api/gps-dashboard/trends endpoint so a
-         page reload doesn't lose prior history.  Capacity is 720
-         samples (≈ 1 hour at the default 5 s refresh).
+         TIME-SERIES PERFORMANCE GRAPHS — driven by the multi-resolution
+         archive at /admin/api/gps-dashboard/trends?window=...  Tier
+         selection (raw 5 s / 1 min / 10 min / 1 h buckets) is picked
+         server-side from the operator's data-window choice above; the
+         hardware service publishes one row per closed bucket regardless
+         of whether this page is open, so the heatmap and sparklines
+         survive page closures.  The page also keeps a small live tail
+         on top of the seeded history so the right-edge of each chart
+         updates smoothly between fetches.
          ============================================================ -->
     <div class="row g-3 mt-0" data-view="engineering">
         <div class="col-12 col-xl-6">
@@ -1680,7 +1695,7 @@
                 <div class="gps-card-head">
                     <h3><i class="fas fa-grip me-1"></i> Per-PRN SNR Heatmap</h3>
                     <div class="badge-area">
-                        <span class="text-muted small">rolling · last hour · cell colour = dBHz bucket</span>
+                        <span class="text-muted small">selected window · cell colour = dBHz bucket</span>
                     </div>
                 </div>
                 <div class="chart-meta">
@@ -1721,10 +1736,10 @@
 
         <!-- ============================================================
              JAMMING & SPOOFING TIME-SERIES — UBX-MON-HW noise/AGC/state
-             over the same 1-hour window the rest of the trend charts
-             use.  The colour strip below the sparkline shows the
-             receiver's own jamming-state classification at each
-             sample so the eye finds problem windows quickly.
+             over the operator-selected data window.  The colour strip
+             below the sparkline shows the receiver's own jamming-state
+             classification at each sample so the eye finds problem
+             windows quickly.
              ============================================================ -->
         <div class="col-12 col-xl-6">
             <div class="gps-card h-100 gps-chart-card">
@@ -3554,16 +3569,37 @@
     }
 
     // ── Time-series ring buffers + sparkline drawing.
-    //    Capacity = 720 samples → 1 hour at the 5 s server-side sampler
-    //    cadence (the dashboard JS only acts as a live tail; persistent
-    //    history comes from the hardware service's Redis-backed ring
-    //    buffer at /admin/api/gps-dashboard/trends, which we seed on
-    //    page load so sparklines repaint with whatever history was
-    //    collected while the page was closed).  Each series holds
-    //    parallel arrays of timestamps + values (or null for "missing
-    //    sample" — we render those as gaps rather than connecting
-    //    through).
-    var TS_CAPACITY = 720;
+    //    The dashboard now reads from a multi-resolution archive on the
+    //    backend: raw 5 s ticks for the live "1 h" window, plus rolled-
+    //    up 1-min / 10-min / 1-h buckets for "24 h", "7 d", "30 d" etc.
+    //    See /admin/api/gps-dashboard/trends?window=...; the hardware
+    //    service publishes one row per closed bucket regardless of
+    //    whether this page is open.  TS_CAPACITY here is the *client-
+    //    side* cap on samples per chart — it just needs to be large
+    //    enough to hold the biggest archive tier (~2200 hourly buckets
+    //    at the 90-day window) without truncating in the middle of a
+    //    fetch.  The hardware service is the source of truth for
+    //    history.  Each series holds parallel arrays of timestamps +
+    //    values (or null for "missing sample" — we render those as
+    //    gaps rather than connecting through).
+    var TS_CAPACITY = 2400;
+    // Currently selected data window — drives the trends fetch and is
+    // shown in the per-chart caption.  Updated by the window selector
+    // in the Engineering · Time-series header.  Defaults to the live
+    // 1-hour window so first paint matches the legacy behaviour.
+    var TS_CURRENT_WINDOW = '1h';
+    var TS_CURRENT_TIER = 'raw';
+    var TS_CURRENT_BUCKET_S = 5;
+    // Map of window → human-friendly resolution caption.  Mirrors the
+    // server-side GPS_TRENDS_WINDOW_TO_TIER table; kept in sync there.
+    var TS_WINDOW_LABELS = {
+        '1h':  { label: '1 hour',   resolution: '5 s' },
+        '6h':  { label: '6 hours',  resolution: '1 min' },
+        '24h': { label: '24 hours', resolution: '1 min' },
+        '7d':  { label: '7 days',   resolution: '10 min' },
+        '30d': { label: '30 days',  resolution: '1 hour' },
+        '90d': { label: '90 days',  resolution: '1 hour' }
+    };
     function makeRing() {
         return { t: [], v: [] };
     }
@@ -3575,37 +3611,83 @@
             buf.v.splice(0, buf.v.length - TS_CAPACITY);
         }
     }
+    function ringReset(buf) {
+        buf.t.length = 0;
+        buf.v.length = 0;
+    }
+    // Reset every numeric/string ring AND the per-PRN heatmap rings.
+    // Called when the window selector changes so the new tier paints
+    // cleanly instead of stitching incompatible-resolution samples.
+    function resetAllTimeSeriesRings() {
+        Object.keys(ts).forEach(function (key) { ringReset(ts[key]); });
+        prnHistory = {};
+    }
     // Seed every ring buffer from a server-side history payload (the
-    // shape returned by /admin/api/gps-dashboard/trends: {samples: [
-    // {t, last_offset_s, rms_offset_s, frequency_ppm, residual_freq_ppm,
-    //  hdop, vdop, pdop, avg_snr}, ...]}).  Idempotent: callers that
-    // already have data should reset() the rings first if they want a
-    // clean slate, but in practice we only call this once on load
-    // before live polling has had a chance to push anything.
+    // shape returned by /admin/api/gps-dashboard/trends: {samples:
+    // [{t, last_offset_s, rms_offset_s, frequency_ppm,
+    //   residual_freq_ppm, hdop, vdop, pdop, avg_snr, prn_snr,
+    //   ...}, ...], tier, window, bucket_seconds}).  The per-PRN
+    // ``prn_snr`` map is unwound into the same per-PRN ring buffers
+    // that ``ingestTimeSeries`` populates from live polls — that's
+    // what makes the heatmap survive page closures.
     function seedTimeSeriesFromHistory(samples) {
         if (!samples || !samples.length) return;
         function pickNum(v) { return typeof v === 'number' ? v : null; }
+        // Track every PRN observed across the whole seed payload, then
+        // back-fill nulls into rings whose PRN is missing from a given
+        // sample so the heatmap renders gaps the same way ingest does.
+        var allPrnKeys = {};
         for (var i = 0; i < samples.length; i++) {
             var s = samples[i] || {};
-            var sampleTs = typeof s.t === 'number' ? s.t : Date.now();
-            ringPush(ts.pps,   sampleTs, pickNum(s.last_offset_s));
-            ringPush(ts.rms,   sampleTs, pickNum(s.rms_offset_s));
-            ringPush(ts.freq,  sampleTs, pickNum(s.frequency_ppm));
-            ringPush(ts.resid, sampleTs, pickNum(s.residual_freq_ppm));
-            ringPush(ts.hdop,  sampleTs, pickNum(s.hdop));
-            ringPush(ts.vdop,  sampleTs, pickNum(s.vdop));
-            ringPush(ts.pdop,  sampleTs, pickNum(s.pdop));
-            ringPush(ts.snr,   sampleTs, pickNum(s.avg_snr));
-            ringPush(ts.hold,  sampleTs, pickNum(s.holdover_s));
-            ringPush(ts.noise, sampleTs, pickNum(s.noise_level));
-            ringPush(ts.agc,   sampleTs, pickNum(s.agc_count));
+            var prnMap = (s && typeof s.prn_snr === 'object') ? s.prn_snr : null;
+            if (prnMap) {
+                for (var k in prnMap) {
+                    if (Object.prototype.hasOwnProperty.call(prnMap, k)) allPrnKeys[k] = true;
+                }
+            }
+        }
+        for (var i2 = 0; i2 < samples.length; i2++) {
+            var s2 = samples[i2] || {};
+            var sampleTs = typeof s2.t === 'number' ? s2.t : Date.now();
+            ringPush(ts.pps,   sampleTs, pickNum(s2.last_offset_s));
+            ringPush(ts.rms,   sampleTs, pickNum(s2.rms_offset_s));
+            ringPush(ts.freq,  sampleTs, pickNum(s2.frequency_ppm));
+            ringPush(ts.resid, sampleTs, pickNum(s2.residual_freq_ppm));
+            ringPush(ts.hdop,  sampleTs, pickNum(s2.hdop));
+            ringPush(ts.vdop,  sampleTs, pickNum(s2.vdop));
+            ringPush(ts.pdop,  sampleTs, pickNum(s2.pdop));
+            ringPush(ts.snr,   sampleTs, pickNum(s2.avg_snr));
+            ringPush(ts.hold,  sampleTs, pickNum(s2.holdover_s));
+            ringPush(ts.noise, sampleTs, pickNum(s2.noise_level));
+            ringPush(ts.agc,   sampleTs, pickNum(s2.agc_count));
             // Jamming state stored as a raw string; bypass ringPush's
             // numeric coercion so non-numeric values aren't dropped.
             ts.jam.t.push(sampleTs);
-            ts.jam.v.push(typeof s.jamming_state === 'string' ? s.jamming_state : null);
+            ts.jam.v.push(typeof s2.jamming_state === 'string' ? s2.jamming_state : null);
             if (ts.jam.t.length > TS_CAPACITY) {
                 ts.jam.t.splice(0, ts.jam.t.length - TS_CAPACITY);
                 ts.jam.v.splice(0, ts.jam.v.length - TS_CAPACITY);
+            }
+            // ── Per-PRN heatmap seed.  Build the entry on first
+            // sighting, push the bucket's average SNR for every PRN we
+            // know about (null when this row didn't see the PRN — the
+            // heatmap renderer paints those as muted cells instead of
+            // connecting through a multi-bucket outage).
+            var prnMap2 = (s2 && typeof s2.prn_snr === 'object') ? s2.prn_snr : {};
+            for (var key in allPrnKeys) {
+                if (!Object.prototype.hasOwnProperty.call(allPrnKeys, key)) continue;
+                // Decompose "GP05" / "GL12" into talker + numeric PRN.
+                var con = key.replace(/[0-9]+$/, '') || 'GN';
+                var prnNum = parseInt(key.slice(con.length), 10);
+                if (isNaN(prnNum)) prnNum = 0;
+                var entry = prnHistoryEntry({
+                    prn_string: key,
+                    constellation: con,
+                    prn: prnNum
+                });
+                var snrVal = (prnMap2 && typeof prnMap2[key] === 'number') ? prnMap2[key] : null;
+                ringPush(entry.ring, sampleTs, snrVal);
+                if (snrVal !== null) entry.last_seen_at_ms = sampleTs;
             }
         }
     }
@@ -3786,6 +3868,12 @@
     }
 
     function ingestTimeSeries(snapshot) {
+        // Live tail only writes to the raw 5 s tier.  Coarser tiers are
+        // server-aggregated bucket rows and would be visually smeared
+        // by mixing in single-tick samples; the operator gets a fresh
+        // tier payload by re-selecting the window or by the periodic
+        // re-fetch wired up in DOMContentLoaded.
+        if (TS_CURRENT_TIER && TS_CURRENT_TIER !== 'raw') return;
         var now = Date.now();
         var t = (snapshot.chrony && snapshot.chrony.tracking) || {};
         var g = snapshot.gps || {};
@@ -4804,16 +4892,59 @@
         // collected while the page was closed.  We render once after
         // seeding (in case the live fetch is slow / fails) and then
         // kick off the regular live fetch which appends on top.
-        fetch('/admin/api/gps-dashboard/trends', { credentials: 'same-origin' })
-            .then(function (r) { return r.json(); })
-            .then(function (payload) {
-                seedTimeSeriesFromHistory((payload && payload.samples) || []);
-                renderTimeSeriesCharts();
-            })
-            .catch(function (err) {
-                console.warn('GPS dashboard trends seed failed:', err);
-            })
-            .then(fetchOnce);
+        //
+        // ``fetchTrends(window)`` is reusable: the window selector
+        // calls it again whenever the operator picks a new window so
+        // the charts switch tier without a page reload.
+        function fetchTrends(window) {
+            TS_CURRENT_WINDOW = window || TS_CURRENT_WINDOW;
+            var resEl = document.getElementById('ts-window-resolution');
+            var lbl = TS_WINDOW_LABELS[TS_CURRENT_WINDOW] || TS_WINDOW_LABELS['1h'];
+            if (resEl) resEl.textContent = 'resolution: ' + lbl.resolution;
+            return fetch('/admin/api/gps-dashboard/trends?window=' + encodeURIComponent(TS_CURRENT_WINDOW),
+                         { credentials: 'same-origin' })
+                .then(function (r) { return r.json(); })
+                .then(function (payload) {
+                    payload = payload || {};
+                    if (typeof payload.bucket_seconds === 'number') {
+                        TS_CURRENT_BUCKET_S = payload.bucket_seconds;
+                    }
+                    if (typeof payload.tier === 'string') {
+                        TS_CURRENT_TIER = payload.tier;
+                    }
+                    // Reset rings on every (re-)seed so the previous
+                    // tier's resolution doesn't bleed into the new
+                    // chart — different bucket sizes can't share an
+                    // axis sensibly.
+                    resetAllTimeSeriesRings();
+                    seedTimeSeriesFromHistory(payload.samples || []);
+                    renderTimeSeriesCharts();
+                    renderPrnHeatmap();
+                    renderJammingTimeSeries();
+                })
+                .catch(function (err) {
+                    console.warn('GPS dashboard trends seed failed:', err);
+                });
+        }
+        var winSel = document.getElementById('ts-window-select');
+        if (winSel) {
+            winSel.value = TS_CURRENT_WINDOW;
+            winSel.addEventListener('change', function () {
+                fetchTrends(winSel.value);
+            });
+        }
+        // Periodic re-fetch for non-raw tiers so the rightmost edge of
+        // 24 h / 7 d / 30 d charts ticks forward as the backend rolls
+        // up new buckets.  Cadence is one third of the bucket size so
+        // there's always at least one in-flight refresh per closed
+        // bucket; capped at 60 s on the low end and 5 min on the high
+        // end to avoid hammering Redis (or starving the operator of
+        // updates).
+        setInterval(function () {
+            if (!TS_CURRENT_TIER || TS_CURRENT_TIER === 'raw') return;
+            fetchTrends(TS_CURRENT_WINDOW);
+        }, Math.min(300_000, Math.max(60_000, (TS_CURRENT_BUCKET_S * 1000) / 3)));
+        fetchTrends(TS_CURRENT_WINDOW).then(fetchOnce);
     });
 })();
 </script>

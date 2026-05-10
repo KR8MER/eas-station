@@ -766,19 +766,27 @@ def gps_dashboard_data():
 def gps_dashboard_trends():
     """Return the server-side trend ring buffer for the GPS dashboard.
 
-    Proxies ``/api/hardware/gps/trends`` from the hardware service.  The
-    dashboard JS calls this once on page load to seed its in-memory ring
-    buffers, so trend sparklines render with whatever history was
-    collected while the page was closed (the whole point of a trend
-    chart).  The page's normal live polling continues to append fresh
-    samples on top of the seeded history.
+    Proxies ``/api/hardware/gps/trends`` from the hardware service.  A
+    ``?window=`` query parameter is forwarded so the hardware service
+    can pick the appropriate resolution tier (5 s raw → 1 h buckets);
+    the dashboard JS uses this to keep sample count roughly constant
+    regardless of the selected window.  The page's normal live polling
+    continues to append fresh samples on top of the seeded history.
     """
     # Same lazy import pattern used by gps_dashboard_data() above to
     # avoid a circular import via webapp.admin.network.
     from webapp.admin.network import call_hardware_service
 
+    # Whitelist windows so we never forward arbitrary client-supplied
+    # query strings to the internal hardware service.
+    _ALLOWED_WINDOWS = ('1h', '6h', '24h', '7d', '30d', '90d')
+    window = (request.args.get('window') or '1h').lower()
+    if window not in _ALLOWED_WINDOWS:
+        window = '1h'
+    endpoint = f'/api/hardware/gps/trends?window={window}'
+
     try:
-        payload = call_hardware_service('/api/hardware/gps/trends', method='GET') or {}
+        payload = call_hardware_service(endpoint, method='GET') or {}
         if isinstance(payload, dict) and payload.get('success') is False:
             payload = {'samples': []}
         if not isinstance(payload, dict) or 'samples' not in payload:
