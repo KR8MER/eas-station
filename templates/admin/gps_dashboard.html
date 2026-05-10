@@ -389,6 +389,9 @@
                     <dt>Altitude</dt>       <dd id="g-alt" class="num">—</dd>
                     <dt>Geometry (DOP)</dt> <dd id="g-dop" class="num">—</dd>
                     <dt>Hardware</dt>       <dd id="g-hw">—</dd>
+                    <dt>Fix age</dt>        <dd id="g-fix-age" class="num">—</dd>
+                    <dt>Holdover</dt>       <dd id="g-holdover" class="num">—</dd>
+                    <dt>Leap state</dt>     <dd id="g-leap-state">—</dd>
                 </dl>
 
                 <div class="gps-const-row" id="gps-dash-const-chips"></div>
@@ -584,6 +587,111 @@
                 </div>
             </div>
         </div>
+
+        <!-- ============================================================
+             PPS JITTER HISTOGRAM — distribution of inter-pulse intervals
+             relative to the 1 s nominal.  Drawn from the manager's
+             nanosecond ring buffer (sub-µs precision when the pps-gpio
+             kernel device is available).
+             ============================================================ -->
+        <div class="col-12 col-xl-6">
+            <div class="gps-card h-100 gps-chart-card">
+                <div class="gps-card-head">
+                    <h3><i class="fas fa-chart-column me-1"></i> PPS Jitter Histogram</h3>
+                    <div class="badge-area">
+                        <span class="text-muted small">interval Δ vs 1 s nominal</span>
+                    </div>
+                </div>
+                <div class="chart-meta">
+                    <span><span class="label">σ</span> <span id="ts-jitter-stddev" class="value">—</span></span>
+                    <span><span class="label">peak</span> <span id="ts-jitter-peak" class="value">—</span></span>
+                    <span><span class="label">median</span> <span id="ts-jitter-median" class="value">—</span></span>
+                    <span><span class="label">samples</span> <span id="ts-jitter-n" class="value">0</span></span>
+                </div>
+                <div class="gps-chart-canvas-wrap">
+                    <canvas id="ts-jitter-canvas" width="600" height="160" aria-label="PPS jitter histogram"></canvas>
+                    <div id="ts-jitter-empty" class="gps-chart-empty">Waiting for PPS pulses…</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================================
+             ALLAN DEVIATION — overlapping σ_y(τ) at τ = 1, 10, 100 s.
+             Plotted on a log-log axis (the standard frequency-stability
+             chart).  Empty until the manager has at least 3 pulses.
+             ============================================================ -->
+        <div class="col-12 col-xl-6">
+            <div class="gps-card h-100 gps-chart-card">
+                <div class="gps-card-head">
+                    <h3><i class="fas fa-wave-square me-1"></i> Allan Deviation</h3>
+                    <div class="badge-area">
+                        <span class="text-muted small">overlapping σ_y(τ), log-log</span>
+                    </div>
+                </div>
+                <div class="chart-meta">
+                    <span><span class="label">τ=1 s</span> <span id="ts-adev-1" class="value">—</span></span>
+                    <span><span class="label">τ=10 s</span> <span id="ts-adev-10" class="value">—</span></span>
+                    <span><span class="label">τ=100 s</span> <span id="ts-adev-100" class="value">—</span></span>
+                    <span><span class="label">samples</span> <span id="ts-adev-n" class="value">0</span></span>
+                </div>
+                <div class="gps-chart-canvas-wrap">
+                    <canvas id="ts-adev-canvas" width="600" height="160" aria-label="Allan deviation log-log plot"></canvas>
+                    <div id="ts-adev-empty" class="gps-chart-empty">Need ≥3 PPS pulses…</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================================
+             SNR vs ELEVATION — scatter plot of every satellite in view.
+             Diagnostic for antenna obstruction, multipath, and noisy LNAs:
+             a healthy install shows SNR climbing roughly linearly with
+             elevation, with the curve sitting around 35–50 dBHz at
+             zenith.  Outliers under the curve are usually obstruction.
+             ============================================================ -->
+        <div class="col-12 col-xl-6">
+            <div class="gps-card h-100 gps-chart-card">
+                <div class="gps-card-head">
+                    <h3><i class="fas fa-chart-line me-1"></i> SNR vs Elevation</h3>
+                    <div class="badge-area">
+                        <span class="text-muted small">live scatter · all constellations</span>
+                    </div>
+                </div>
+                <div class="chart-meta">
+                    <span><span class="label">visible</span> <span id="ts-elev-n" class="value">0</span></span>
+                    <span><span class="label">avg</span> <span id="ts-elev-avg" class="value">—</span></span>
+                    <span><span class="label">at zenith</span> <span id="ts-elev-zenith" class="value">—</span></span>
+                </div>
+                <div class="gps-chart-canvas-wrap">
+                    <canvas id="ts-elev-canvas" width="600" height="160" aria-label="SNR vs elevation scatter"></canvas>
+                    <div id="ts-elev-empty" class="gps-chart-empty">No satellites in view…</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================================
+             HOLDOVER TIMER — running seconds since the last 3D fix.
+             Stays at 0 while the receiver holds 3D; counts up when it
+             drops out (e.g. antenna unplugged, building shadowing).
+             ============================================================ -->
+        <div class="col-12 col-xl-6">
+            <div class="gps-card h-100 gps-chart-card">
+                <div class="gps-card-head">
+                    <h3><i class="fas fa-hourglass-half me-1"></i> Holdover Timer</h3>
+                    <div class="badge-area">
+                        <span class="text-muted small">seconds since last 3D fix</span>
+                    </div>
+                </div>
+                <div class="chart-meta">
+                    <span><span class="swatch" style="background:#d29922;"></span><span class="label">Now</span> <span id="ts-hold-now" class="value">—</span></span>
+                    <span><span class="label">peak</span> <span id="ts-hold-max" class="value">—</span></span>
+                    <span><span class="label">samples</span> <span id="ts-hold-n" class="value">0</span></span>
+                </div>
+                <div class="gps-chart-canvas-wrap">
+                    <canvas id="ts-hold-canvas" width="600" height="110" aria-label="Holdover history sparkline"></canvas>
+                    <div id="ts-hold-empty" class="gps-chart-empty">Collecting samples…</div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <p class="text-muted small mt-3">
@@ -657,6 +765,33 @@
     function fmtSeconds2(v) {
         if (v === null || v === undefined || isNaN(v)) return '—';
         return v.toFixed(1) + ' s';
+    }
+    // Adaptive duration formatter for fix-age + holdover tiles. Chrogps-dash
+    // convention: stay in the smallest unit that keeps the number readable.
+    function fmtDuration(seconds) {
+        if (seconds === null || seconds === undefined || isNaN(seconds)) return '—';
+        if (seconds < 60)    return seconds.toFixed(1) + ' s';
+        if (seconds < 3600)  return Math.floor(seconds / 60) + 'm ' + Math.round(seconds % 60) + 's';
+        if (seconds < 86400) return Math.floor(seconds / 3600) + 'h ' + Math.floor((seconds % 3600) / 60) + 'm';
+        return Math.floor(seconds / 86400) + 'd ' + Math.floor((seconds % 86400) / 3600) + 'h';
+    }
+    // Render a small ns/µs/ms label for jitter & ADEV chart annotations.
+    function fmtNs(ns) {
+        if (ns === null || ns === undefined || isNaN(ns)) return '—';
+        var abs = Math.abs(ns);
+        if (abs < 1000)       return ns.toFixed(0) + ' ns';
+        if (abs < 1_000_000)  return (ns / 1000).toFixed(2) + ' µs';
+        if (abs < 1_000_000_000) return (ns / 1_000_000).toFixed(3) + ' ms';
+        return (ns / 1_000_000_000).toFixed(3) + ' s';
+    }
+    // ADEV is a dimensionless fractional-frequency quantity; render with
+    // engineering-style scientific notation for compactness.
+    function fmtAdev(v) {
+        if (v === null || v === undefined || isNaN(v)) return '—';
+        if (v === 0) return '0';
+        var exp = Math.floor(Math.log10(Math.abs(v)));
+        var mantissa = v / Math.pow(10, exp);
+        return mantissa.toFixed(2) + 'e' + exp;
     }
     // chronyc -c tracking emits "ref time" as a Unix timestamp string
     // (e.g. "1778355459.498333426").  Render it as a human-readable UTC
@@ -1044,6 +1179,45 @@
             : '—';
         setText('g-hw', hw);
 
+        // Fix age — colour-code so a frozen UART stands out.  Anything
+        // over 5 s without a sentence is suspicious on a 1 Hz receiver.
+        var fixAge = (gps && typeof gps.fix_age_s === 'number') ? gps.fix_age_s : null;
+        var fixAgeEl = document.getElementById('g-fix-age');
+        if (fixAgeEl) {
+            fixAgeEl.classList.remove('pos', 'neg');
+            if (fixAge === null) {
+                fixAgeEl.textContent = '—';
+            } else {
+                fixAgeEl.textContent = fmtDuration(fixAge);
+                if (fixAge > 5) fixAgeEl.classList.add('neg');
+                else if (fixAge < 2) fixAgeEl.classList.add('pos');
+            }
+        }
+
+        // Holdover — 0 while we have a 3D fix; counts up when we don't.
+        var hold = (gps && typeof gps.holdover_s === 'number') ? gps.holdover_s : null;
+        var holdEl = document.getElementById('g-holdover');
+        if (holdEl) {
+            holdEl.classList.remove('pos', 'neg');
+            if (hold === null) {
+                holdEl.textContent = '—';
+            } else if (hold === 0) {
+                holdEl.textContent = '0 s (locked)';
+                holdEl.classList.add('pos');
+            } else {
+                holdEl.textContent = fmtDuration(hold);
+                if (hold > 60) holdEl.classList.add('neg');
+            }
+        }
+
+        // Leap-second state — chrony's leap_status is the authoritative
+        // tell, fall back to the GPS manager's coarse string when chrony
+        // is unavailable (e.g. running this on a host without chronyc).
+        var chronyLeap = (lastSnapshot && lastSnapshot.chrony && lastSnapshot.chrony.tracking
+                          && lastSnapshot.chrony.tracking.leap_status) || null;
+        var gpsLeap = (gps && gps.leap_state) || null;
+        setText('g-leap-state', chronyLeap || gpsLeap || '—');
+
         var sats = (gps && gps.satellites_in_view) || [];
         var active = (gps && gps.active_satellite_prns) || [];
         setText('gps-dash-active-count', active.length);
@@ -1103,6 +1277,7 @@
             ringPush(ts.vdop,  sampleTs, pickNum(s.vdop));
             ringPush(ts.pdop,  sampleTs, pickNum(s.pdop));
             ringPush(ts.snr,   sampleTs, pickNum(s.avg_snr));
+            ringPush(ts.hold,  sampleTs, pickNum(s.holdover_s));
         }
     }
     function ringStats(buf) {
@@ -1254,7 +1429,8 @@
         hdop:  makeRing(),  // gps hdop                      (unitless)
         vdop:  makeRing(),  // gps vdop                      (unitless)
         pdop:  makeRing(),  // gps pdop                      (unitless)
-        snr:   makeRing()   // average SNR across in-view    (dBHz)
+        snr:   makeRing(),  // average SNR across in-view    (dBHz)
+        hold:  makeRing()   // gps holdover_s                (seconds)
     };
 
     function ingestTimeSeries(snapshot) {
@@ -1276,6 +1452,9 @@
             ? sats.reduce(function (a, s) { return a + s.snr; }, 0) / sats.length
             : null;
         ringPush(ts.snr, now, avg);
+        // Holdover history — count of seconds since last 3D fix.  Stays
+        // pinned at 0 while we have a 3D fix; spikes when it drops out.
+        ringPush(ts.hold, now, typeof g.holdover_s === 'number' ? g.holdover_s : null);
     }
 
     // Same fmtSeconds-style formatter we use elsewhere, but typed for
@@ -1337,6 +1516,308 @@
         drawSparkline('ts-snr-canvas', [
             { buffer: ts.snr, color: '#3fb950' }
         ], { emptyEl: 'ts-snr-empty' });
+
+        // Holdover history — sparkline of seconds since last 3D fix.
+        var ho = ringStats(ts.hold);
+        setText('ts-hold-now', fmtDuration(ho.last));
+        setText('ts-hold-max', fmtDuration(ho.max));
+        setText('ts-hold-n', ho.count);
+        drawSparkline('ts-hold-canvas', [
+            { buffer: ts.hold, color: '#d29922' }
+        ], { emptyEl: 'ts-hold-empty', includeZero: true });
+    }
+
+    // ── PPS jitter histogram — vertical bars sized to bucket counts.
+    //    Empty until the manager has reported at least 2 samples.
+    function renderJitterHistogram(jitter) {
+        if (!jitter || !jitter.histogram || !jitter.histogram.length || !jitter.sample_count) {
+            var emptyEl = document.getElementById('ts-jitter-empty');
+            if (emptyEl) emptyEl.style.display = '';
+            setText('ts-jitter-stddev', '—');
+            setText('ts-jitter-peak', '—');
+            setText('ts-jitter-median', '—');
+            setText('ts-jitter-n', 0);
+            return;
+        }
+        setText('ts-jitter-stddev', fmtNs(jitter.stddev_ns));
+        setText('ts-jitter-peak', fmtNs(jitter.peak_ns));
+        setText('ts-jitter-median', fmtNs(jitter.median_ns));
+        setText('ts-jitter-n', jitter.sample_count);
+
+        var canvas = document.getElementById('ts-jitter-canvas');
+        if (!canvas) return;
+        var emptyEl = document.getElementById('ts-jitter-empty');
+        if (emptyEl) emptyEl.style.display = 'none';
+
+        var fit = fitCanvas(canvas);
+        var ctx = fit.ctx, W = fit.w, H = fit.h;
+        ctx.clearRect(0, 0, W, H);
+
+        var pad = { l: 28, r: 8, t: 8, b: 30 };
+        var plotW = W - pad.l - pad.r;
+        var plotH = H - pad.t - pad.b;
+
+        var buckets = jitter.histogram;
+        var maxCount = 0;
+        for (var i = 0; i < buckets.length; i++) {
+            if (buckets[i].count > maxCount) maxCount = buckets[i].count;
+        }
+        if (maxCount === 0) maxCount = 1;
+
+        var barW = plotW / buckets.length;
+        // Centre bucket index — for the layout in _compute_jitter_summary
+        // this is the boundary between negative and positive halves
+        // (buckets 0..5 are ≤0, 6..11 are >0).  Render the centre divider.
+        var centreX = pad.l + barW * (buckets.length / 2);
+
+        // Faint grid lines at 25/50/75/100% of max count.
+        ctx.strokeStyle = 'rgba(127,127,127,0.18)';
+        ctx.lineWidth = 1;
+        for (var g = 1; g <= 4; g++) {
+            var gy = pad.t + plotH * (1 - g / 4);
+            ctx.beginPath();
+            ctx.moveTo(pad.l, gy); ctx.lineTo(pad.l + plotW, gy);
+            ctx.stroke();
+        }
+
+        // Y-axis labels — bucket-count scale.
+        ctx.fillStyle = 'rgba(127,127,127,0.85)';
+        ctx.font = '10px ui-monospace, monospace';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        for (var g2 = 0; g2 <= 4; g2++) {
+            var yLabel = pad.t + plotH * (1 - g2 / 4);
+            ctx.fillText(Math.round(maxCount * g2 / 4).toString(), pad.l - 4, yLabel);
+        }
+
+        // Centre divider (the 0 ns boundary).
+        ctx.strokeStyle = 'rgba(127,127,127,0.45)';
+        ctx.beginPath();
+        ctx.moveTo(centreX, pad.t); ctx.lineTo(centreX, pad.t + plotH);
+        ctx.stroke();
+
+        // Bars.  Colour-code: centre buckets green (low jitter), edges
+        // amber/red so the operator's eye finds outliers at a glance.
+        for (var b = 0; b < buckets.length; b++) {
+            var count = buckets[b].count;
+            if (!count) continue;
+            var h = (count / maxCount) * plotH;
+            var x = pad.l + b * barW + 1;
+            var y = pad.t + plotH - h;
+            // Distance from centre buckets (5 & 6 are the ±200 µs core).
+            var distFromCentre = Math.min(Math.abs(b - 5), Math.abs(b - 6));
+            var color;
+            if (distFromCentre <= 1)      color = '#3fb950';   // green — healthy
+            else if (distFromCentre <= 3) color = '#d29922';   // amber — wide
+            else                          color = '#f85149';   // red — outlier
+            ctx.fillStyle = color;
+            ctx.fillRect(x, y, Math.max(1, barW - 2), h);
+        }
+
+        // X-axis labels — show -1 ms / 0 / +1 ms anchors only (a label
+        // per bucket would overlap on the 600px-wide canvas).
+        ctx.fillStyle = 'rgba(127,127,127,0.85)';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.fillText('-100 µs', pad.l + barW * 1, pad.t + plotH + 4);
+        ctx.fillText('0',       centreX,           pad.t + plotH + 4);
+        ctx.fillText('+100 µs', pad.l + barW * (buckets.length - 1), pad.t + plotH + 4);
+    }
+
+    // ── Allan deviation log-log plot.  Renders the (τ, σ_y) tuples the
+    //    backend computed at τ = 1, 10, 100 s.  Empty until the manager
+    //    has at least 3 PPS pulses.
+    function renderAllanDeviation(adev) {
+        var emptyEl = document.getElementById('ts-adev-empty');
+        if (!adev || !adev.tau_s || !adev.tau_s.length) {
+            if (emptyEl) emptyEl.style.display = '';
+            setText('ts-adev-1', '—');
+            setText('ts-adev-10', '—');
+            setText('ts-adev-100', '—');
+            setText('ts-adev-n', adev && adev.sample_count ? adev.sample_count : 0);
+            return;
+        }
+        setText('ts-adev-n', adev.sample_count);
+
+        var bytTau = {};
+        for (var i = 0; i < adev.tau_s.length; i++) {
+            bytTau[adev.tau_s[i]] = adev.sigma_y[i];
+        }
+        setText('ts-adev-1',   fmtAdev(bytTau[1]   != null ? bytTau[1]   : null));
+        setText('ts-adev-10',  fmtAdev(bytTau[10]  != null ? bytTau[10]  : null));
+        setText('ts-adev-100', fmtAdev(bytTau[100] != null ? bytTau[100] : null));
+
+        var canvas = document.getElementById('ts-adev-canvas');
+        if (!canvas) return;
+        if (emptyEl) emptyEl.style.display = 'none';
+
+        var fit = fitCanvas(canvas);
+        var ctx = fit.ctx, W = fit.w, H = fit.h;
+        ctx.clearRect(0, 0, W, H);
+
+        var pad = { l: 56, r: 12, t: 10, b: 28 };
+        var plotW = W - pad.l - pad.r;
+        var plotH = H - pad.t - pad.b;
+
+        // X axis: log10(τ) over [0, 2] — i.e. 1 s to 100 s.  Y axis:
+        // log10(σ_y) auto-fit with at least 2 decades of range so a
+        // single-point plot still has somewhere to sit.
+        var logTauMin = 0;
+        var logTauMax = 2;
+        var sigmaMin = Infinity, sigmaMax = -Infinity;
+        for (var j = 0; j < adev.sigma_y.length; j++) {
+            var s = adev.sigma_y[j];
+            if (!isFinite(s) || s <= 0) continue;
+            if (s < sigmaMin) sigmaMin = s;
+            if (s > sigmaMax) sigmaMax = s;
+        }
+        if (!isFinite(sigmaMin) || !isFinite(sigmaMax)) return;
+        var logSigMin = Math.floor(Math.log10(sigmaMin) - 0.5);
+        var logSigMax = Math.ceil(Math.log10(sigmaMax) + 0.5);
+        if (logSigMax - logSigMin < 2) {
+            logSigMax = logSigMin + 2;
+        }
+
+        function xOf(tau) {
+            return pad.l + plotW * ((Math.log10(tau) - logTauMin) / (logTauMax - logTauMin));
+        }
+        function yOf(sigma) {
+            return pad.t + plotH * (1 - (Math.log10(sigma) - logSigMin) / (logSigMax - logSigMin));
+        }
+
+        // Grid (decade lines on both axes).
+        ctx.strokeStyle = 'rgba(127,127,127,0.18)';
+        ctx.lineWidth = 1;
+        ctx.font = '10px ui-monospace, monospace';
+        ctx.fillStyle = 'rgba(127,127,127,0.85)';
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'right';
+        for (var ly = logSigMin; ly <= logSigMax; ly++) {
+            var yy = yOf(Math.pow(10, ly));
+            ctx.beginPath();
+            ctx.moveTo(pad.l, yy); ctx.lineTo(pad.l + plotW, yy);
+            ctx.stroke();
+            ctx.fillText('1e' + ly, pad.l - 4, yy);
+        }
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        for (var lx = logTauMin; lx <= logTauMax; lx++) {
+            var xx = xOf(Math.pow(10, lx));
+            ctx.strokeStyle = 'rgba(127,127,127,0.18)';
+            ctx.beginPath();
+            ctx.moveTo(xx, pad.t); ctx.lineTo(xx, pad.t + plotH);
+            ctx.stroke();
+            ctx.fillText(Math.pow(10, lx) + ' s', xx, pad.t + plotH + 4);
+        }
+
+        // Trace.
+        ctx.strokeStyle = '#bc8cff';
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        var started = false;
+        for (var k = 0; k < adev.tau_s.length; k++) {
+            var sigma = adev.sigma_y[k];
+            if (!isFinite(sigma) || sigma <= 0) continue;
+            var px = xOf(adev.tau_s[k]);
+            var py = yOf(sigma);
+            if (!started) { ctx.moveTo(px, py); started = true; }
+            else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+
+        // Markers.
+        ctx.fillStyle = '#bc8cff';
+        for (var m = 0; m < adev.tau_s.length; m++) {
+            var sm = adev.sigma_y[m];
+            if (!isFinite(sm) || sm <= 0) continue;
+            ctx.beginPath();
+            ctx.arc(xOf(adev.tau_s[m]), yOf(sm), 3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    // ── SNR-vs-elevation scatter.  Each visible satellite plotted as a
+    //    coloured dot keyed to its constellation; X = elevation in
+    //    degrees [0, 90], Y = SNR in dBHz [0, 55].
+    function renderElevationScatter(sats) {
+        var canvas = document.getElementById('ts-elev-canvas');
+        if (!canvas) return;
+        var emptyEl = document.getElementById('ts-elev-empty');
+
+        var usable = (sats || []).filter(function (s) {
+            return typeof s.elevation === 'number'
+                && typeof s.snr === 'number'
+                && s.elevation >= 0;
+        });
+
+        setText('ts-elev-n', usable.length);
+        if (!usable.length) {
+            if (emptyEl) emptyEl.style.display = '';
+            setText('ts-elev-avg', '—');
+            setText('ts-elev-zenith', '—');
+            return;
+        }
+        if (emptyEl) emptyEl.style.display = 'none';
+
+        var avg = usable.reduce(function (a, s) { return a + s.snr; }, 0) / usable.length;
+        setText('ts-elev-avg', avg.toFixed(1) + ' dBHz');
+
+        // Highest-elevation satellite — a useful single-number summary
+        // of "what does the antenna look like overhead?".
+        var highest = usable.reduce(function (best, s) {
+            return s.elevation > best.elevation ? s : best;
+        }, usable[0]);
+        setText('ts-elev-zenith', highest.elevation + '° / ' + highest.snr + ' dBHz');
+
+        var fit = fitCanvas(canvas);
+        var ctx = fit.ctx, W = fit.w, H = fit.h;
+        ctx.clearRect(0, 0, W, H);
+
+        var pad = { l: 36, r: 10, t: 10, b: 28 };
+        var plotW = W - pad.l - pad.r;
+        var plotH = H - pad.t - pad.b;
+
+        function xOf(elev) { return pad.l + plotW * (Math.max(0, Math.min(90, elev)) / 90); }
+        function yOf(snr)  { return pad.t + plotH * (1 - Math.max(0, Math.min(55, snr)) / 55); }
+
+        // Grid: elevation gridlines at 30°/60°, SNR gridlines at 20/35/50.
+        ctx.strokeStyle = 'rgba(127,127,127,0.18)';
+        ctx.lineWidth = 1;
+        ctx.font = '10px ui-monospace, monospace';
+        ctx.fillStyle = 'rgba(127,127,127,0.85)';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        [20, 35, 50].forEach(function (val) {
+            var y = yOf(val);
+            ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + plotW, y); ctx.stroke();
+            ctx.fillText(val, pad.l - 4, y);
+        });
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        [0, 30, 60, 90].forEach(function (deg) {
+            var x = xOf(deg);
+            ctx.beginPath(); ctx.moveTo(x, pad.t); ctx.lineTo(x, pad.t + plotH); ctx.stroke();
+            ctx.fillText(deg + '°', x, pad.t + plotH + 4);
+        });
+
+        // Reference curve — typical "good install" trend (rough heuristic):
+        // SNR rises from ~20 dBHz at 0° to ~45 dBHz at 90° on a clean roof.
+        ctx.strokeStyle = 'rgba(127,127,127,0.30)';
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath();
+        ctx.moveTo(xOf(0),  yOf(20));
+        ctx.lineTo(xOf(90), yOf(45));
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Plot each satellite.
+        usable.forEach(function (s) {
+            var info = constInfo(s.constellation || (s.prn_string ? s.prn_string.slice(0, 2) : null));
+            ctx.fillStyle = info.color;
+            ctx.beginPath();
+            ctx.arc(xOf(s.elevation), yOf(s.snr), 3.5, 0, Math.PI * 2);
+            ctx.fill();
+        });
     }
 
     // ── Render everything from a single snapshot.  Tolerates missing
@@ -1379,6 +1860,14 @@
         // Time-series sparklines — push into ring buffers then redraw.
         ingestTimeSeries(snapshot);
         renderTimeSeriesCharts();
+
+        // Phase 1 panels: jitter histogram, Allan deviation, SNR-vs-
+        // elevation scatter.  These all read directly from the latest
+        // GPS payload (no client-side ring buffer) because the manager
+        // already owns the rolling window we'd otherwise build here.
+        renderJitterHistogram(gps.pps_jitter || null);
+        renderAllanDeviation(gps.allan_deviation || null);
+        renderElevationScatter(gps.satellites_in_view || []);
     }
 
     // ── Polling.  Configurable interval; "0" means paused.

@@ -47,6 +47,7 @@ import ctypes
 import ctypes.util
 import json
 import logging
+import math
 import os
 import socket
 import subprocess
@@ -55,7 +56,7 @@ import time
 from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Deque, Dict, Optional, Set
+from typing import Any, Deque, Dict, List, Optional, Set, Tuple
 
 # ---------------------------------------------------------------------------
 # clock_settime(2) helpers — used by _apply_system_time to set CLOCK_REALTIME
@@ -208,6 +209,17 @@ class GPSManager:
         self._pps_kernel_device: Optional[str] = None  # e.g. "/sys/class/pps/pps0"
         self._pps_kernel_baseline_seq: Optional[int] = None
         self._pps_kernel_thread: Optional[threading.Thread] = None
+
+        # Inter-pulse intervals in nanoseconds, captured from the kernel
+        # PPS device's nanosecond-precision assert timestamp. Used by
+        # get_status() to derive a jitter histogram and overlapping Allan
+        # deviation at τ = 1/10/100 s. Capacity sized for ~17 minutes of
+        # 1 Hz pulses, which is more than enough for ADEV at τ=100s.
+        self._pps_interval_ns: Deque[int] = deque(maxlen=1024)
+        # Captured at last 3D fix (from GSA fix_mode==3) so the dashboard
+        # can compute a holdover timer when the receiver loses lock but
+        # we're still steering chrony from the host clock.
+        self._last_3d_fix_at: Optional[datetime] = None
 
         # Recent raw NMEA sentences (protected by _lock).  Sized for ~20s of
         # traffic on a multi-GNSS receiver so the UI's filter/pause UX has
@@ -434,22 +446,257 @@ class GPSManager:
         self._logger.info("GPS reader stopped")
 
     def get_status(self) -> Dict[str, Any]:
-        """Return the most-recently parsed GPS fix as a dictionary."""
+        """Return the most-recently parsed GPS fix as a dictionary.
+
+        In addition to the raw fix fields the dict carries a handful of
+        derived values that the GPS dashboard renders directly:
+
+        * ``pps_pulse_age_s`` — seconds since the last PPS rising edge.
+        * ``pps_jitter`` — ``{histogram, mean_ns, stddev_ns, peak_ns,
+          sample_count}`` summarising the inter-pulse interval ring buffer.
+        * ``allan_deviation`` — overlapping ADEV at τ = 1, 10, 100 s
+          (returned as ``{tau_s: σ_y}`` with float values; entries omitted
+          when the buffer is too short for that τ).
+        * ``fix_age_s`` — seconds since the last NMEA sentence carrying a
+          fix updated the manager.
+        * ``holdover_s`` — seconds since the last 3D fix (None until we
+          have ever seen one).  When a 3D fix is currently held this is
+          ``0``.
+        * ``leap_state`` — best-effort leap-second annunciator from the
+          NMEA path; chrony's ``leap_status`` is the authoritative
+          source on the dashboard, this is just a fallback.
+        """
         with self._lock:
             data = dict(self._fix)
             data["recent_sentences"] = list(self._recent_sentences)
+            interval_samples = list(self._pps_interval_ns)
+            last_3d = self._last_3d_fix_at
+        now_utc = datetime.now(timezone.utc)
+
         # Compute age of the last PPS pulse so the UI can colour the blinkenlite
         last_pulse = data.get("pps_last_pulse_at")
         if last_pulse:
             try:
                 pulse_dt = datetime.fromisoformat(last_pulse)
-                age = (datetime.now(timezone.utc) - pulse_dt).total_seconds()
+                age = (now_utc - pulse_dt).total_seconds()
                 data["pps_pulse_age_s"] = round(age, 2)
             except Exception:
                 data["pps_pulse_age_s"] = None
         else:
             data["pps_pulse_age_s"] = None
+
+        # Jitter histogram & Allan deviation from the interval buffer.
+        # Both helpers tolerate empty input and return JSON-friendly dicts.
+        data["pps_jitter"] = self._compute_jitter_summary(interval_samples)
+        data["allan_deviation"] = self._compute_allan_deviation(interval_samples)
+
+        # Fix age — drives the "GPS Fix Age" tile.  When we have an active
+        # fix this tracks NMEA freshness; when we don't, it's the time
+        # since the last sentence (handy for spotting a frozen UART).
+        last_sentence = data.get("last_sentence_at")
+        if last_sentence:
+            try:
+                sentence_dt = datetime.fromisoformat(last_sentence)
+                data["fix_age_s"] = round(
+                    (now_utc - sentence_dt).total_seconds(), 2
+                )
+            except Exception:
+                data["fix_age_s"] = None
+        else:
+            data["fix_age_s"] = None
+
+        # Holdover timer — wall-clock seconds since the last 3D fix.
+        # ``0`` while we currently hold a 3D fix; ``None`` when we have
+        # never seen one (e.g. cold start with no antenna).
+        if last_3d is None:
+            data["holdover_s"] = None
+            data["last_3d_fix_at"] = None
+        else:
+            data["last_3d_fix_at"] = last_3d.isoformat()
+            if data.get("fix_mode") == 3:
+                data["holdover_s"] = 0.0
+            else:
+                data["holdover_s"] = round(
+                    (now_utc - last_3d).total_seconds(), 2
+                )
+
+        # Leap-second annunciator — Phase 2 will replace this with a
+        # UBX-NAV-TIMELS poll; for now we surface a best-effort string
+        # so the UI tile has something to display.  Chrony's leap_status
+        # remains the authoritative source on the dashboard.
+        data["leap_state"] = self._derive_leap_state(data)
+
         return data
+
+    @staticmethod
+    def _compute_jitter_summary(intervals_ns: List[int]) -> Dict[str, Any]:
+        """Summarise inter-pulse intervals as a histogram + scalars.
+
+        The histogram spans ``±100 µs`` (10 buckets of 20 µs each, plus
+        an under/over-flow bucket on each side).  That matches what we
+        actually see on a Raspberry Pi reading the pps-gpio kernel
+        device: the IRQ-handler timestamping path adds ~10–30 µs of
+        host-side jitter to the receiver's own ~ns-scale PPS edge,
+        with rare scheduling outliers landing in the overflow bucket.
+        For receivers feeding chrony directly we'd want ns-scale buckets,
+        but the overhead of histogramming at that resolution isn't worth
+        it when the kernel itself has already smeared the edge.
+
+        Returns ``{}`` when the buffer holds fewer than two samples.
+        """
+        if not intervals_ns or len(intervals_ns) < 2:
+            return {
+                "sample_count": len(intervals_ns or []),
+                "histogram": [],
+                "mean_ns": None,
+                "stddev_ns": None,
+                "peak_ns": None,
+                "median_ns": None,
+            }
+
+        nominal_ns = 1_000_000_000  # 1 second
+        deltas_ns = [v - nominal_ns for v in intervals_ns]
+
+        n = len(deltas_ns)
+        mean = sum(deltas_ns) / n
+        var = sum((d - mean) * (d - mean) for d in deltas_ns) / n
+        stddev = math.sqrt(var)
+        peak = max(abs(d) for d in deltas_ns)
+        sorted_deltas = sorted(deltas_ns)
+        median = sorted_deltas[n // 2]
+
+        # Histogram bucket layout:
+        #   bucket 0     : delta < -100 µs              (underflow)
+        #   buckets 1-10 : 20 µs wide, spanning -100 µs to +100 µs
+        #   bucket 11    : delta > +100 µs              (overflow)
+        # Each bucket entry is {label, count, lo_ns, hi_ns} so the JS
+        # side can render the label without knowing the layout.
+        bucket_count = 12
+        edges_ns = [-100_000, -80_000, -60_000, -40_000, -20_000,
+                    0, 20_000, 40_000, 60_000, 80_000, 100_000]
+        counts = [0] * bucket_count
+        for d in deltas_ns:
+            if d < edges_ns[0]:
+                counts[0] += 1
+            elif d >= edges_ns[-1]:
+                counts[-1] += 1
+            else:
+                # Find the first edge that exceeds d (linear scan; only
+                # ~10 edges, not worth bisect).
+                placed = False
+                for i in range(len(edges_ns) - 1):
+                    if edges_ns[i] <= d < edges_ns[i + 1]:
+                        counts[i + 1] += 1
+                        placed = True
+                        break
+                if not placed:
+                    counts[-1] += 1
+
+        def _label(lo: Optional[int], hi: Optional[int]) -> str:
+            if lo is None:
+                return f"<{hi // 1000} µs"
+            if hi is None:
+                return f"≥{lo // 1000} µs"
+            return f"{lo // 1000} to {hi // 1000} µs"
+
+        histogram: List[Dict[str, Any]] = []
+        for i, c in enumerate(counts):
+            if i == 0:
+                lo, hi = None, edges_ns[0]
+            elif i == bucket_count - 1:
+                lo, hi = edges_ns[-1], None
+            else:
+                lo, hi = edges_ns[i - 1], edges_ns[i]
+            histogram.append({
+                "label": _label(lo, hi),
+                "lo_ns": lo,
+                "hi_ns": hi,
+                "count": c,
+            })
+
+        return {
+            "sample_count": n,
+            "histogram": histogram,
+            "mean_ns": round(mean, 1),
+            "stddev_ns": round(stddev, 1),
+            "peak_ns": int(peak),
+            "median_ns": int(median),
+        }
+
+    @staticmethod
+    def _compute_allan_deviation(intervals_ns: List[int]) -> Dict[str, Any]:
+        """Overlapping Allan deviation σ_y(τ) at τ = 1, 10, 100 s.
+
+        Reconstructs the phase sequence from inter-pulse intervals
+        (x_i = cumulative interval error vs. the 1 s nominal) and
+        applies the standard overlapping ADEV estimator:
+
+            σ²_y(τ) = sum_i (x_{i+2m} - 2·x_{i+m} + x_i)²
+                      ───────────────────────────────────────
+                              2 · τ² · (N − 2m)
+
+        where m = τ / τ₀ and τ₀ = 1 s.  Returned as a flat
+        ``{tau_s: σ_y}`` dict; entries are omitted when the buffer is
+        too short to estimate ADEV at that τ.
+        """
+        if not intervals_ns or len(intervals_ns) < 4:
+            return {"tau_s": [], "sigma_y": [], "sample_count": len(intervals_ns or [])}
+
+        nominal_ns = 1_000_000_000
+        # Phase samples in seconds (cumulative timing error vs. ideal).
+        phase = []
+        running = 0.0
+        for v in intervals_ns:
+            running += (v - nominal_ns) / 1e9
+            phase.append(running)
+
+        n = len(phase)
+        results_tau: List[int] = []
+        results_sigma: List[float] = []
+
+        for tau_s in (1, 10, 100):
+            m = tau_s  # τ₀ = 1 s
+            # Need at least 2m + 1 samples for a single ADEV term.
+            if n < 2 * m + 1:
+                continue
+            tau = float(m)
+            acc = 0.0
+            count = 0
+            for i in range(n - 2 * m):
+                d = phase[i + 2 * m] - 2.0 * phase[i + m] + phase[i]
+                acc += d * d
+                count += 1
+            if count <= 0:
+                continue
+            sigma_sq = acc / (2.0 * tau * tau * count)
+            if sigma_sq < 0:
+                continue
+            results_tau.append(tau_s)
+            results_sigma.append(math.sqrt(sigma_sq))
+
+        return {
+            "tau_s": results_tau,
+            "sigma_y": results_sigma,
+            "sample_count": n,
+        }
+
+    @staticmethod
+    def _derive_leap_state(fix: Dict[str, Any]) -> str:
+        """Best-effort leap-second annunciator from current fix state.
+
+        Until the UBX-NAV-TIMELS poll lands in Phase 2 we don't have an
+        authoritative source from the receiver itself — chrony's
+        ``leap_status`` (parsed elsewhere) is what the dashboard tile
+        actually displays.  This helper returns a coarse string so the
+        tile has a fallback when chrony is unavailable.
+        """
+        if not fix.get("has_fix"):
+            return "unknown"
+        # No NMEA standard field carries the leap-second alert; the
+        # u-blox proprietary RMC navigation-status field is too vendor-
+        # specific to rely on here.  Return "normal" while we hold a
+        # fix and let chrony override.
+        return "normal"
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -783,7 +1030,15 @@ class GPSManager:
                     fix_mode_raw = getattr(msg, "mode_fix_type", None)
                     if fix_mode_raw is not None:
                         try:
-                            self._fix["fix_mode"] = int(fix_mode_raw)
+                            mode_int = int(fix_mode_raw)
+                            self._fix["fix_mode"] = mode_int
+                            # Holdover anchor — the wall-clock instant of
+                            # the most recent 3D fix.  Used by get_status()
+                            # to compute holdover_s once the receiver loses
+                            # lock.  We capture at any 3D fix in the stream
+                            # so even brief reacquisitions reset the timer.
+                            if mode_int == 3:
+                                self._last_3d_fix_at = datetime.now(timezone.utc)
                         except (ValueError, TypeError):
                             pass
                     # Position dilution of precision
@@ -1007,6 +1262,9 @@ class GPSManager:
             self._fix["fix_quality"] = quality
             self._fix["has_fix"] = has_fix
             self._fix["fix_mode"] = mode if mode in (1, 2, 3) else None
+            if mode == 3:
+                # Mirror the NMEA path's holdover anchor in gpsd mode.
+                self._last_3d_fix_at = datetime.now(timezone.utc)
             if isinstance(obj.get("lat"), (int, float)):
                 self._fix["latitude"] = float(obj["lat"])
             if isinstance(obj.get("lon"), (int, float)):
@@ -1192,12 +1450,15 @@ class GPSManager:
             self._pps_kernel_baseline_seq,
         )
 
-    def _read_pps_assert(self, device: str) -> Optional[tuple]:
-        """Parse ``<device>/assert`` and return ``(sequence, timestamp_iso)``.
+    def _read_pps_assert(self, device: str) -> Optional[Tuple[int, int, str]]:
+        """Parse ``<device>/assert`` and return ``(sequence, ts_ns, ts_iso)``.
 
         The kernel exports the line as ``<seconds>.<nanoseconds>#<sequence>``
-        (see ``Documentation/ABI/testing/sysfs-pps``). Returns ``None`` if
-        the file is missing or the sequence is zero (no pulse yet seen).
+        (see ``Documentation/ABI/testing/sysfs-pps``).  The integer
+        nanosecond timestamp is what enables sub-microsecond jitter
+        and Allan deviation calculations downstream — float seconds
+        loses ~100 ns of precision near current epoch values.  Returns
+        ``None`` if the file is missing or the sequence is zero.
         """
         try:
             raw = self._safe_read(Path(device) / "assert")
@@ -1210,31 +1471,56 @@ class GPSManager:
             secs_str, _, ns_str = ts_part.partition(".")
             secs = int(secs_str)
             ns = int(ns_str.ljust(9, "0")[:9]) if ns_str else 0
+            ts_ns = secs * 1_000_000_000 + ns
             ts = datetime.fromtimestamp(secs + ns / 1e9, tz=timezone.utc)
-            return seq, ts.isoformat()
+            return seq, ts_ns, ts.isoformat()
         except Exception as exc:
             self._logger.debug("Failed to parse %s/assert: %s", device, exc)
             return None
 
     def _pps_kernel_loop(self) -> None:
-        """Poll the kernel PPS device once a second while the manager runs."""
+        """Poll the kernel PPS device at 10 Hz while the manager runs.
+
+        The 10 Hz cadence is fast enough to never miss a 1 Hz pulse while
+        still being trivially cheap (one sysfs read per 100 ms).  When
+        a new sequence number is observed we append the inter-pulse
+        interval (in nanoseconds) to ``self._pps_interval_ns`` so
+        ``get_status()`` can derive jitter/ADEV later — gaps from
+        missed pulses are skipped (interval > 1.5 s) so a flapping
+        receiver doesn't poison the histogram.
+        """
         last_seq: Optional[int] = self._pps_kernel_baseline_seq
+        last_ts_ns: Optional[int] = None
         device = self._pps_kernel_device or ""
         while self._running and device:
             try:
                 result = self._read_pps_assert(device)
                 if result is not None:
-                    seq, ts_iso = result
+                    seq, ts_ns, ts_iso = result
                     if last_seq is None or seq != last_seq:
+                        # Only count intervals when the sequence advanced
+                        # by exactly one — anything else is a missed pulse
+                        # or a baseline catch-up and would skew jitter.
+                        if (
+                            last_seq is not None
+                            and last_ts_ns is not None
+                            and seq == last_seq + 1
+                        ):
+                            interval_ns = ts_ns - last_ts_ns
+                            # Drop bogus intervals (clock step, rollover).
+                            if 500_000_000 <= interval_ns <= 1_500_000_000:
+                                with self._lock:
+                                    self._pps_interval_ns.append(interval_ns)
                         baseline = self._pps_kernel_baseline_seq or 0
                         count = max(0, seq - baseline)
                         with self._lock:
                             self._fix["pps_last_pulse_at"] = ts_iso
                             self._fix["pps_pulse_count"] = count
                         last_seq = seq
+                        last_ts_ns = ts_ns
             except Exception as exc:
                 self._logger.debug("PPS kernel poll error: %s", exc)
-            time.sleep(1.0)
+            time.sleep(0.1)
 
     def _start_pps_gpio_monitor(self) -> None:
         """Set up an RPi.GPIO rising-edge interrupt to detect PPS pulses.
