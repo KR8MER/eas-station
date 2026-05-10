@@ -1165,23 +1165,51 @@
         }
 
         function addDome() {
-            // Translucent shell + a subtle outer fresnel-ish halo.
+            // Translucent shell — DoubleSide builds up alpha at the limb so
+            // the silhouette reads as a sphere, not a flat disc.
             var domeGeo = new THREE.SphereGeometry(DOME_R, 64, 32, 0, Math.PI * 2, 0, Math.PI / 2);
             var domeMat = new THREE.MeshPhongMaterial({
-                color: 0x4d8fcc,
-                transparent: true, opacity: 0.10,
+                color: 0x5a9fdc,
+                transparent: true, opacity: 0.14,
                 side: THREE.DoubleSide,
                 depthWrite: false,
-                shininess: 70, specular: 0xa8c8ff
+                shininess: 80, specular: 0xb8d0ff
             });
             scene.add(new THREE.Mesh(domeGeo, domeMat));
 
-            var glowGeo = new THREE.SphereGeometry(DOME_R * 1.018, 64, 32, 0, Math.PI * 2, 0, Math.PI / 2);
+            // Outer halo — a slightly larger BackSide shell that lights up
+            // the rim like a soft fresnel glow.
+            var glowGeo = new THREE.SphereGeometry(DOME_R * 1.025, 64, 32, 0, Math.PI * 2, 0, Math.PI / 2);
             var glowMat = new THREE.MeshBasicMaterial({
-                color: 0x6aa9ff, transparent: true, opacity: 0.06,
+                color: 0x6fb0ff, transparent: true, opacity: 0.11,
                 side: THREE.BackSide, depthWrite: false
             });
             scene.add(new THREE.Mesh(glowGeo, glowMat));
+
+            // Faint ground disk inside the horizon ring — anchors the
+            // "ground plane" the receiver sits on, like the wide
+            // foreshortened ellipse in the reference image.
+            var groundCanvas = document.createElement('canvas');
+            groundCanvas.width = 256; groundCanvas.height = 256;
+            var gctx = groundCanvas.getContext('2d');
+            var grad = gctx.createRadialGradient(128, 128, 16, 128, 128, 124);
+            grad.addColorStop(0,    'rgba(110, 160, 220, 0.12)');
+            grad.addColorStop(0.55, 'rgba(70,  110, 180, 0.08)');
+            grad.addColorStop(1,    'rgba(20,  40,  90,  0.00)');
+            gctx.fillStyle = grad;
+            gctx.beginPath(); gctx.arc(128, 128, 124, 0, Math.PI * 2); gctx.fill();
+            var groundTex = new THREE.CanvasTexture(groundCanvas);
+            groundTex.minFilter = THREE.LinearFilter;
+            var ground = new THREE.Mesh(
+                new THREE.CircleGeometry(DOME_R * 0.99, 96),
+                new THREE.MeshBasicMaterial({
+                    map: groundTex, transparent: true, depthWrite: false,
+                    side: THREE.DoubleSide
+                })
+            );
+            ground.rotation.x = -Math.PI / 2;
+            ground.position.y = -0.001;
+            scene.add(ground);
         }
 
         function addGrid() {
@@ -1250,9 +1278,11 @@
         }
 
         function addElevationLabels() {
-            // North-east-ish azimuth so they don't sit on top of satellites
-            // in the viewer's primary view direction.
-            var azR = (60) * Math.PI / 180;
+            // Place along the back-NE meridian (~30° az) — that side of
+            // the dome is foreshortened away from the viewer in the
+            // reference image, so labels read clearly without overlapping
+            // the satellites that tend to cluster overhead.
+            var azR = (30) * Math.PI / 180;
             [{ a: 15, t: '15°' }, { a: 45, t: '45°' }, { a: 75, t: '75°' }].forEach(function (e) {
                 var elR = e.a * Math.PI / 180;
                 var r = Math.cos(elR), y = Math.sin(elR);
@@ -1275,28 +1305,29 @@
             var mat = new THREE.MeshPhongMaterial({
                 color: 0xeeeeee, shininess: 70, specular: 0xffffff
             });
-            var base = new THREE.Mesh(new THREE.CylinderGeometry(0.046, 0.058, 0.040, 24), mat);
-            base.position.y = 0.020;
+            var base = new THREE.Mesh(new THREE.CylinderGeometry(0.060, 0.075, 0.055, 24), mat);
+            base.position.y = 0.028;
             scene.add(base);
-            var puck = new THREE.Mesh(new THREE.CylinderGeometry(0.040, 0.040, 0.026, 24), mat);
-            puck.position.y = 0.053;
+            var puck = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.052, 0.034, 24), mat);
+            puck.position.y = 0.072;
             scene.add(puck);
             var dome = new THREE.Mesh(
-                new THREE.SphereGeometry(0.030, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2),
+                new THREE.SphereGeometry(0.040, 18, 14, 0, Math.PI * 2, 0, Math.PI / 2),
                 mat
             );
-            dome.position.y = 0.066;
+            dome.position.y = 0.088;
             scene.add(dome);
-            // YOU pill label.
+            // YOU pill label, slightly forward of the receiver so the
+            // antenna is the visual anchor, not the label.
             var tex = makeTextTexture('YOU', {
-                fontSize: 36, color: '#ffffff', shadow: false,
-                bg: 'rgba(8,14,28,0.85)', w: 144, h: 72
+                fontSize: 38, color: '#ffffff', shadow: false,
+                bg: 'rgba(8,14,28,0.88)', w: 144, h: 72
             });
             var sp = new THREE.Sprite(new THREE.SpriteMaterial({
                 map: tex, depthWrite: false, depthTest: false, transparent: true
             }));
-            sp.scale.set(0.20, 0.10, 1);
-            sp.position.set(0.18, 0.10, 0.04);
+            sp.scale.set(0.22, 0.11, 1);
+            sp.position.set(0.22, 0.13, 0.06);
             scene.add(sp);
         }
 
@@ -1315,9 +1346,13 @@
             stage.appendChild(renderer.domElement);
 
             scene = new THREE.Scene();
-            camera = new THREE.PerspectiveCamera(42, w / h, 0.05, 50);
-            camera.position.set(0, 0.55, 1.95);
-            camera.lookAt(0, 0.32, 0);
+            // Wider FOV + lower eye + look slightly UP into the dome so
+            // the hemisphere reads with proper perspective (the previous
+            // 42° / look-down setup compressed everything onto a flat
+            // plane).
+            camera = new THREE.PerspectiveCamera(55, w / h, 0.05, 50);
+            camera.position.set(0, 0.30, 1.85);
+            camera.lookAt(0, 0.55, 0);
 
             scene.add(new THREE.AmbientLight(0xffffff, 0.85));
             var dl = new THREE.DirectionalLight(0xc8d8ff, 0.6);
