@@ -811,6 +811,12 @@
             <option value="30000">30s</option>
             <option value="0">Paused</option>
         </select>
+        <details class="eas-units-disclosure" id="gps-dash-units-disclosure">
+            <summary class="btn btn-sm btn-outline-secondary" title="Display units (lat/lon, altitude, speed, distance)">
+                <i class="fas fa-ruler"></i> Units
+            </summary>
+            <div class="eas-units-popover" id="gps-dash-units-panel"></div>
+        </details>
         <a href="{{ url_for('hardware.hardware_settings_page') }}#gps"
            class="btn btn-sm btn-outline-secondary" title="GPS Hardware Settings">
             <i class="fas fa-cog"></i> Settings
@@ -954,6 +960,7 @@
                     <dt>Fix age</dt>          <dd id="g-fix-age" class="num">—</dd>
                     <dt>Last 3D fix</dt>      <dd id="g-last-3d-fix">—</dd>
                     <dt>Holdover</dt>         <dd id="g-holdover" class="num">—</dd>
+                    <dt>Speed / COG</dt>      <dd id="g-speed" class="num">—</dd>
                     <dt>PPS backend</dt>      <dd id="g-pps-backend">—</dd>
                     <dt>Antenna</dt>          <dd id="g-antenna">—</dd>
                     <dt>RF / jamming</dt>     <dd id="g-jamming">—</dd>
@@ -2561,13 +2568,30 @@
 
     // ── GPS hero overlay + receiver-status side card.
     function renderGpsSummary(gps) {
-        var pos = (gps && gps.latitude !== null && gps.longitude !== null && gps.latitude !== undefined)
-            ? gps.latitude.toFixed(6) + ', ' + gps.longitude.toFixed(6)
-            : '—';
+        var U = window.EASUnits;
+        var pos = (U && gps)
+            ? U.fmtCoord(gps.latitude, gps.longitude)
+            : (gps && gps.latitude != null && gps.longitude != null
+                ? gps.latitude.toFixed(6) + '°, ' + gps.longitude.toFixed(6) + '°'
+                : '—');
         setText('g-pos', pos);
-        var alt = gps && gps.altitude_m !== null && gps.altitude_m !== undefined
-            ? gps.altitude_m.toFixed(1) + ' m' : '—';
+        var alt = (U && gps)
+            ? U.fmtAltitude(gps.altitude_m)
+            : (gps && gps.altitude_m != null ? gps.altitude_m.toFixed(1) + ' m' : '—');
         setText('g-alt', alt);
+
+        // Speed / course-over-ground — gpsd / NMEA RMC reports speed in
+        // m/s (.speed_mps) and course in degrees true (.course_deg).
+        var spdMps = gps && (gps.speed_mps != null ? gps.speed_mps
+                            : (gps.speed_m_s != null ? gps.speed_m_s : null));
+        var cog = gps && (gps.course_deg != null ? gps.course_deg
+                          : (gps.track_deg != null ? gps.track_deg : null));
+        var spdLabel = '—';
+        if (spdMps != null && U) {
+            spdLabel = U.fmtSpeed(spdMps);
+            if (cog != null) spdLabel += ' · ' + Number(cog).toFixed(0) + '°';
+        }
+        setText('g-speed', spdLabel);
 
         // Hero overlay uses the slash form (H / V / P) to match the
         // reference image.
@@ -3974,6 +3998,23 @@
         }
         if (nmeaPauseEl)  nmeaPauseEl.addEventListener('change', rerenderNmea);
         if (nmeaFilterEl) nmeaFilterEl.addEventListener('input',  rerenderNmea);
+
+        // Display-units selector — populates the popover and re-renders
+        // the cached snapshot whenever the operator flips a unit so
+        // values update without waiting for the next poll.
+        if (window.EASUnits) {
+            window.EASUnits.attachSelector(document.getElementById('gps-dash-units-panel'));
+            window.addEventListener('eas:units-changed', function () {
+                if (lastSnapshot) {
+                    renderGpsSummary(lastSnapshot.gps || {});
+                }
+            });
+            // Close the disclosure when the operator clicks outside.
+            document.addEventListener('click', function (ev) {
+                var disc = document.getElementById('gps-dash-units-disclosure');
+                if (disc && disc.open && !disc.contains(ev.target)) disc.open = false;
+            });
+        }
         // Seed the trend rings from the server-side history before the
         // first live poll so sparklines repaint with whatever was
         // collected while the page was closed.  We render once after
