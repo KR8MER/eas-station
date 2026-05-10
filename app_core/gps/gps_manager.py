@@ -220,11 +220,13 @@ class GPSManager:
         self._pps_kernel_thread: Optional[threading.Thread] = None
 
         # Inter-pulse intervals in nanoseconds, captured from the kernel
-        # PPS device's nanosecond-precision assert timestamp. Used by
-        # get_status() to derive a jitter histogram and overlapping Allan
-        # deviation at τ = 1/10/100 s. Capacity sized for ~17 minutes of
-        # 1 Hz pulses, which is more than enough for ADEV at τ=100s.
-        self._pps_interval_ns: Deque[int] = deque(maxlen=1024)
+        # PPS device's nanosecond-precision assert timestamp.  Used by
+        # get_status() to derive a jitter histogram and overlapping
+        # Allan deviation at τ = 1 / 10 / 100 / 1000 s.  Capacity is
+        # sized so τ=1000 s ADEV has a meaningful number of overlapping
+        # pairs: ~16 384 1 Hz pulses ≈ 4.5 h, leaving (N − 2m) ≈ 14 384
+        # terms at τ=1000 s while costing ~130 KB of RAM.
+        self._pps_interval_ns: Deque[int] = deque(maxlen=16384)
         # Captured at last 3D fix (from GSA fix_mode==3) so the dashboard
         # can compute a holdover timer when the receiver loses lock but
         # we're still steering chrony from the host clock.
@@ -486,7 +488,7 @@ class GPSManager:
         * ``pps_pulse_age_s`` — seconds since the last PPS rising edge.
         * ``pps_jitter`` — ``{histogram, mean_ns, stddev_ns, peak_ns,
           sample_count}`` summarising the inter-pulse interval ring buffer.
-        * ``allan_deviation`` — overlapping ADEV at τ = 1, 10, 100 s
+        * ``allan_deviation`` — overlapping ADEV at τ = 1, 10, 100, 1000 s
           (returned as ``{tau_s: σ_y}`` with float values; entries omitted
           when the buffer is too short for that τ).
         * ``fix_age_s`` — seconds since the last NMEA sentence carrying a
@@ -679,7 +681,7 @@ class GPSManager:
 
     @staticmethod
     def _compute_allan_deviation(intervals_ns: List[int]) -> Dict[str, Any]:
-        """Overlapping Allan deviation σ_y(τ) at τ = 1, 10, 100 s.
+        """Overlapping Allan deviation σ_y(τ) at τ = 1, 10, 100, 1000 s.
 
         Reconstructs the phase sequence from inter-pulse intervals
         (x_i = cumulative interval error vs. the 1 s nominal) and
@@ -691,7 +693,8 @@ class GPSManager:
 
         where m = τ / τ₀ and τ₀ = 1 s.  Returned as a flat
         ``{tau_s: σ_y}`` dict; entries are omitted when the buffer is
-        too short to estimate ADEV at that τ.
+        too short to estimate ADEV at that τ (e.g. τ=1000 s needs at
+        least 2001 PPS samples in the ring).
         """
         if not intervals_ns or len(intervals_ns) < 4:
             return {"tau_s": [], "sigma_y": [], "sample_count": len(intervals_ns or [])}
@@ -708,7 +711,7 @@ class GPSManager:
         results_tau: List[int] = []
         results_sigma: List[float] = []
 
-        for tau_s in (1, 10, 100):
+        for tau_s in (1, 10, 100, 1000):
             m = tau_s  # τ₀ = 1 s
             # Need at least 2m + 1 samples for a single ADEV term.
             if n < 2 * m + 1:
