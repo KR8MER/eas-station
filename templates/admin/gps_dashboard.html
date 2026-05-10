@@ -349,6 +349,162 @@
         .gps-skyview-desc { display: none; }
     }
 
+    /* ── Mobile (<= 575.98px) ─────────────────────────────────────────
+       At phone widths the four corner overlays collide on top of the
+       small canvas and become an unreadable pile.  Take them out of
+       absolute positioning, hide ones that duplicate info shown
+       elsewhere on the page (position/altitude/DOP live in the
+       Receiver / System Tracking cards already), and stack the rest
+       below the canvas as a normal vertical flow.  Helper sections
+       and controls also collapse to single-column. */
+    @media (max-width: 575.98px) {
+        .gps-dash { font-size: 0.88rem; }
+
+        /* Header: title + node on row 1, pills wrap, controls right-aligned */
+        .gps-dash-header {
+            padding: 8px 10px;
+            gap: 8px;
+        }
+        .gps-dash-header .title { width: 100%; }
+        .gps-dash-header .node {
+            width: 100%;
+            font-size: 0.78rem;
+            margin-top: -2px;
+        }
+        .gps-dash-header .spacer { display: none; }
+        .gps-dash-header select.form-select-sm { flex: 1 1 auto; }
+
+        /* Skyview hero: stage becomes a flex column.  The 3D / 2D
+           canvas region keeps a fixed height at the top, then the
+           overlays (legend, counts, position, elevation key) stack
+           in normal flow underneath instead of dog-piling on top
+           of a tiny canvas. */
+        .gps-skyview-hero { padding: 0; }
+        .gps-skyview-stage {
+            position: relative;
+            height: auto;
+            display: flex;
+            flex-direction: column;
+        }
+        .gps-three-stage {
+            position: relative;
+            inset: auto;
+            height: 300px;
+            flex: 0 0 300px;
+            order: 1;
+        }
+        .gps-2d-canvas {
+            position: absolute;
+            top: 0; left: 50%;
+            transform: translateX(-50%);
+            width: 96%; height: 300px;
+            max-width: 96%;
+            max-height: 300px;
+        }
+        .gps-overlay {
+            position: static;
+            max-width: none !important;
+            width: 100%;
+            color: var(--text-color);
+        }
+        .gps-overlay-tl,
+        .gps-overlay-bl,
+        .gps-overlay-br {
+            padding: 10px 14px;
+            border-top: 1px solid rgba(120, 150, 200, 0.18);
+            background: rgba(5, 9, 18, 0.55);
+        }
+        /* TR (3D / 2D mode toggle) stays floating in the canvas area */
+        .gps-skyview-stage .gps-overlay-tr {
+            position: absolute;
+            top: 8px; right: 8px;
+            width: auto;
+            padding: 0;
+            background: transparent;
+            border: none;
+            z-index: 6;
+            order: 1;
+        }
+        /* Stacking order under the canvas */
+        .gps-overlay-tl { order: 2; }
+        .gps-overlay-bl { order: 3; }
+        .gps-overlay-br { order: 4; }
+        .gps-skyview-title { font-size: 0.95rem; margin-bottom: 6px; }
+        .gps-skyview-legend,
+        .gps-skyview-counts-card,
+        .gps-skyview-info,
+        .gps-elev-legend {
+            display: flex;
+            flex-direction: row;
+            flex-wrap: wrap;
+            gap: 8px 14px;
+            background: transparent;
+            border: none;
+            backdrop-filter: none;
+            -webkit-backdrop-filter: none;
+            padding: 0;
+            margin: 0 0 6px;
+            font-size: 0.76rem;
+        }
+        .gps-skyview-info { display: grid; grid-template-columns: max-content 1fr; column-gap: 12px; row-gap: 2px; }
+        .gps-skyview-info dt,
+        .gps-skyview-counts-card,
+        .gps-elev-legend strong { color: var(--text-color); }
+        .gps-skyview-info dd { color: var(--text-color); }
+        .gps-elev-legend .row { gap: 8px; }
+
+        /* Key/value tracking grid: stack label above value when squeezed */
+        .gps-kv {
+            grid-template-columns: 1fr;
+            row-gap: 2px;
+        }
+        .gps-kv dt {
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-top: 6px;
+        }
+        .gps-kv dd { font-size: 0.92rem; margin-bottom: 2px; }
+
+        /* Tighter cards & headings */
+        .gps-card { padding: 10px 12px; margin-bottom: 10px; }
+        .gps-card-head { gap: 6px; flex-wrap: wrap; }
+        .gps-card-head h3 { font-size: 0.78rem; }
+        .gps-card-head .badge-area { margin-left: 0; flex-basis: 100%; }
+
+        /* SNR bar chart: scroll horizontally instead of squashing bars */
+        .gps-snr-chart { padding-bottom: 26px; }
+        .gps-snr-bar { flex: 0 0 18px; }
+        .gps-snr-bar .bar { width: 12px; }
+
+        /* Chart cards: shorter so the page doesn't become endless */
+        .gps-chart-canvas-wrap { height: 96px; }
+        .gps-chart-card .chart-meta { gap: 6px 12px; font-size: 0.72rem; }
+
+        /* Help block at the bottom of the skyview hero */
+        .gps-skyview-help { padding: 10px 12px 14px; gap: 4px 12px; }
+        .gps-skyview-help li { font-size: 0.74rem; }
+
+        /* NMEA inspector: make sure controls don't blow out the row */
+        .gps-nmea-controls { gap: 8px; }
+        .gps-nmea-filter-input { min-width: 0; max-width: none; flex: 1 1 100%; }
+        .gps-nmea-stream { font-size: 0.70rem; max-height: 220px; }
+
+        /* Leap-second readout shrinks so it fits inside its card */
+        .gps-leap-readout { font-size: 1.25rem; }
+
+        /* Almanac/staleness rows: stack badge + columns vertically */
+        .gps-staleness-prn-row {
+            grid-template-columns: 56px 1fr 1fr;
+            gap: 6px;
+            font-size: 0.72rem;
+        }
+        .gps-staleness-prn-row > :nth-child(4) {
+            grid-column: 1 / -1;
+            text-align: right;
+        }
+    }
+
     /* 2D / 3D mode toggle — clean segmented control instead of a stray
        Bootstrap pair where the inactive button reads as a solid grey blob. */
     .gps-sky-toolbar {
@@ -1619,21 +1775,57 @@
         }
 
         function addReceiver() {
-            var mat = new THREE.MeshPhongMaterial({
-                color: 0xeeeeee, shininess: 70, specular: 0xffffff
+            // Low-profile puck antenna: a wide flat radome on a
+            // ground-plane plate with a coax pigtail.  The shallow
+            // crown is what stops it reading as a chess piece —
+            // a tall hemisphere on a tapered base looks like a pawn.
+            var radomeMat = new THREE.MeshPhongMaterial({
+                color: 0xe6e9ef, shininess: 60, specular: 0xffffff
             });
-            var base = new THREE.Mesh(new THREE.CylinderGeometry(0.060, 0.075, 0.055, 24), mat);
-            base.position.y = 0.028;
-            scene.add(base);
-            var puck = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.052, 0.034, 24), mat);
-            puck.position.y = 0.072;
-            scene.add(puck);
-            var dome = new THREE.Mesh(
-                new THREE.SphereGeometry(0.040, 18, 14, 0, Math.PI * 2, 0, Math.PI / 2),
-                mat
+            var capMat = new THREE.MeshPhongMaterial({
+                color: 0xc6d2e6, shininess: 95, specular: 0xffffff
+            });
+            var trimMat = new THREE.MeshPhongMaterial({
+                color: 0x2a2f38, shininess: 40, specular: 0x4a5260
+            });
+
+            var plate = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.110, 0.110, 0.006, 36),
+                trimMat
             );
-            dome.position.y = 0.088;
-            scene.add(dome);
+            plate.position.y = 0.003;
+            scene.add(plate);
+
+            var radome = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.100, 0.104, 0.024, 36),
+                radomeMat
+            );
+            radome.position.y = 0.018;
+            scene.add(radome);
+
+            var seam = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.094, 0.094, 0.003, 36),
+                trimMat
+            );
+            seam.position.y = 0.031;
+            scene.add(seam);
+
+            // Shallow spherical cap (not a full hemisphere).
+            var cap = new THREE.Mesh(
+                new THREE.SphereGeometry(0.092, 32, 16, 0, Math.PI * 2, 0, Math.PI * 0.20),
+                capMat
+            );
+            cap.position.y = 0.029;
+            scene.add(cap);
+
+            var coax = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.006, 0.006, 0.075, 12),
+                trimMat
+            );
+            coax.rotation.z = Math.PI / 2;
+            coax.position.set(-0.110, 0.006, 0);
+            scene.add(coax);
+
             // YOU pill label, slightly forward of the receiver so the
             // antenna is the visual anchor, not the label.
             var tex = makeTextTexture('YOU', {
@@ -1645,7 +1837,7 @@
                 transparent: true, sizeAttenuation: false
             }));
             sp.scale.set(0.075, 0.038, 1);
-            sp.position.set(0.13, 0.10, 0.04);
+            sp.position.set(0.15, 0.06, 0.04);
             scene.add(sp);
         }
 
