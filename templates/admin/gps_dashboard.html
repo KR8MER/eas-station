@@ -391,7 +391,10 @@
                     <dt>Hardware</dt>       <dd id="g-hw">—</dd>
                     <dt>Fix age</dt>        <dd id="g-fix-age" class="num">—</dd>
                     <dt>Holdover</dt>       <dd id="g-holdover" class="num">—</dd>
+                    <dt>Antenna</dt>        <dd id="g-antenna">—</dd>
+                    <dt>RF / jamming</dt>   <dd id="g-jamming">—</dd>
                     <dt>Leap state</dt>     <dd id="g-leap-state">—</dd>
+                    <dt>Leap (GPS-UTC)</dt> <dd id="g-leap-seconds" class="num">—</dd>
                 </dl>
 
                 <div class="gps-const-row" id="gps-dash-const-chips"></div>
@@ -1210,13 +1213,87 @@
             }
         }
 
-        // Leap-second state — chrony's leap_status is the authoritative
-        // tell, fall back to the GPS manager's coarse string when chrony
-        // is unavailable (e.g. running this on a host without chronyc).
+        // Antenna status — sourced from UBX-MON-HW (Phase 2).  When
+        // running via gpsd we can't poll, so render an explanatory
+        // placeholder instead of a misleading "—".  When the receiver
+        // hasn't replied yet (cold start, or a non-u-blox HAT that
+        // ignores the poll) we render "polling" until the ubx_poll
+        // _supported flag flips.
+        var antEl = document.getElementById('g-antenna');
+        if (antEl) {
+            antEl.classList.remove('pos', 'neg');
+            var antStatus = gps && gps.antenna_status;
+            var antPower = gps && gps.antenna_power;
+            var pollSupported = gps && gps.ubx_poll_supported;
+            if (pollSupported === false && antStatus === null) {
+                antEl.textContent = 'via gpsd (polls disabled)';
+            } else if (antStatus === null || antStatus === undefined) {
+                antEl.textContent = 'polling…';
+            } else {
+                var label = antStatus.toUpperCase();
+                if (antPower) label += ' · ' + antPower.toUpperCase();
+                antEl.textContent = label;
+                if (antStatus === 'ok')             antEl.classList.add('pos');
+                else if (antStatus === 'short' || antStatus === 'open') antEl.classList.add('neg');
+            }
+        }
+
+        // RF / jamming tile — receiver's broadband interference
+        // monitor.  "ok" is the healthy state; "warning" / "critical"
+        // call attention to a noisy environment without committing to
+        // a root cause.
+        var jamEl = document.getElementById('g-jamming');
+        if (jamEl) {
+            jamEl.classList.remove('pos', 'neg');
+            var jamming = gps && gps.jamming_state;
+            var noise = gps && gps.noise_level;
+            if (jamming === null || jamming === undefined) {
+                jamEl.textContent = '—';
+            } else {
+                var jamLabel = jamming.toUpperCase();
+                if (typeof noise === 'number') jamLabel += ' · noise ' + noise;
+                jamEl.textContent = jamLabel;
+                if (jamming === 'ok')                     jamEl.classList.add('pos');
+                else if (jamming === 'warning' || jamming === 'critical') jamEl.classList.add('neg');
+            }
+        }
+
+        // Leap-second state — UBX-NAV-TIMELS is authoritative; fall
+        // back to chrony's leap_status; finally to the GPS manager's
+        // coarse string.  Insert/delete pending warnings include the
+        // ETA in days when the receiver supplied it.
         var chronyLeap = (lastSnapshot && lastSnapshot.chrony && lastSnapshot.chrony.tracking
                           && lastSnapshot.chrony.tracking.leap_status) || null;
         var gpsLeap = (gps && gps.leap_state) || null;
-        setText('g-leap-state', chronyLeap || gpsLeap || '—');
+        var leapText = chronyLeap || gpsLeap || '—';
+        var leapEl = document.getElementById('g-leap-state');
+        if (leapEl) {
+            leapEl.classList.remove('pos', 'neg');
+            if (gps && gps.leap_pending) {
+                var direction = (gps.leap_change || 0) > 0 ? 'INSERT' : 'DELETE';
+                var etaSecs = gps.leap_seconds_to_event;
+                var etaPart = (typeof etaSecs === 'number' && isFinite(etaSecs))
+                    ? ' in ' + Math.round(etaSecs / 86400) + ' d'
+                    : '';
+                leapEl.textContent = direction + etaPart;
+                leapEl.classList.add('neg');
+            } else {
+                leapEl.textContent = leapText;
+                if (leapText === 'normal' || leapText === 'Normal') leapEl.classList.add('pos');
+            }
+        }
+        // GPS-UTC offset (in seconds) — usually 18 today.  Surfaces
+        // the receiver's authoritative value when present.
+        var leapSecs = gps && gps.leap_seconds;
+        var leapSecEl = document.getElementById('g-leap-seconds');
+        if (leapSecEl) {
+            if (typeof leapSecs === 'number') {
+                var srcSuffix = gps.leap_source ? ' (' + gps.leap_source + ')' : '';
+                leapSecEl.textContent = leapSecs + ' s' + srcSuffix;
+            } else {
+                leapSecEl.textContent = '—';
+            }
+        }
 
         var sats = (gps && gps.satellites_in_view) || [];
         var active = (gps && gps.active_satellite_prns) || [];

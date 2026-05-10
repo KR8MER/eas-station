@@ -58,6 +58,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Deque, Dict, List, Optional, Set, Tuple
 
+from . import ubx
+
 # ---------------------------------------------------------------------------
 # clock_settime(2) helpers — used by _apply_system_time to set CLOCK_REALTIME
 # directly without sudo.  The systemd unit grants CAP_SYS_TIME via
@@ -221,6 +223,23 @@ class GPSManager:
         # we're still steering chrony from the host clock.
         self._last_3d_fix_at: Optional[datetime] = None
 
+        # UBX poll cadence (seconds).  30 s is well below the ~100 ms
+        # NMEA cycle the dashboard reads at, so the antenna and leap
+        # tiles stay fresh, but it's also low enough that we don't add
+        # measurable load to a 9600-baud serial link (a single MON-HW
+        # response is ~70 bytes including the frame).  Set to 0 to
+        # disable; we'll honour that for tests and for gpsd mode where
+        # we can't share the receiver.
+        self._ubx_poll_interval_s: float = 30.0
+        # Monotonic timestamp of the last poll *attempt* (whether or
+        # not the receiver replied) — set in the reader loop so the
+        # cadence stays steady even when the response is slow.
+        self._ubx_last_poll_mono: float = 0.0
+        # Read-side accumulator for the byte-level demuxer.  The
+        # serial reader appends raw bytes here and pulls completed
+        # frames off the front via ubx.find_frame() / NMEA scan.
+        self._ubx_buf: bytearray = bytearray()
+
         # Recent raw NMEA sentences (protected by _lock).  Sized for ~20s of
         # traffic on a multi-GNSS receiver so the UI's filter/pause UX has
         # something to scroll through.
@@ -335,6 +354,12 @@ class GPSManager:
             return False
         self._gpsd_sock = sock
         self._active_source = "gpsd"
+        # In gpsd mode we don't own the serial port and can't send UBX
+        # polls.  Mark the supported flag explicitly so the dashboard
+        # tile renders an informative "via gpsd" placeholder rather
+        # than spinning on "polling…" forever.
+        with self._lock:
+            self._fix["ubx_poll_supported"] = False
         self._running = True
         self._thread = threading.Thread(
             target=self._gpsd_reader_loop,
@@ -684,18 +709,26 @@ class GPSManager:
     def _derive_leap_state(fix: Dict[str, Any]) -> str:
         """Best-effort leap-second annunciator from current fix state.
 
-        Until the UBX-NAV-TIMELS poll lands in Phase 2 we don't have an
-        authoritative source from the receiver itself — chrony's
-        ``leap_status`` (parsed elsewhere) is what the dashboard tile
-        actually displays.  This helper returns a coarse string so the
-        tile has a fallback when chrony is unavailable.
+        Resolution order:
+
+        1. ``UBX-NAV-TIMELS`` (Phase 2) — when ``leap_pending`` is True
+           the receiver knows about a scheduled insert/delete and we
+           surface it directly.  When it's False but ``leap_seconds`` is
+           populated, the receiver has confirmed "no event imminent"
+           and we render that as "normal".
+        2. ``has_fix`` — without UBX data, hold "normal" while we have
+           a fix so the tile isn't permanently grey.
+        3. Otherwise "unknown".
         """
+        leap_seconds = fix.get("leap_seconds")
+        leap_pending = fix.get("leap_pending")
+        if leap_pending:
+            change = fix.get("leap_change") or 0
+            return "insert_pending" if change > 0 else "delete_pending"
+        if leap_seconds is not None:
+            return "normal"
         if not fix.get("has_fix"):
             return "unknown"
-        # No NMEA standard field carries the leap-second alert; the
-        # u-blox proprietary RMC navigation-status field is too vendor-
-        # specific to rely on here.  Return "normal" while we hold a
-        # fix and let chrony override.
         return "normal"
 
     # ------------------------------------------------------------------
@@ -750,10 +783,49 @@ class GPSManager:
             "sentence_errors": 0,
             # Raw NMEA sentences (populated separately, not stored in _fix)
             "recent_sentences": [],
+            # UBX-MON-HW telemetry (Phase 2).  All None until the first
+            # successful MON-HW response is parsed; the dashboard
+            # renders "—" / "polling" when unset.
+            "antenna_status": None,         # init|unknown|ok|short|open
+            "antenna_power": None,          # off|on|unknown
+            "jamming_state": None,          # unknown|ok|warning|critical
+            "noise_level": None,            # raw 16-bit "noise per ms"
+            "agc_count": None,              # raw 16-bit AGC count
+            "ubx_last_poll_at": None,       # ISO timestamp of last reply
+            "ubx_poll_supported": None,     # True after first reply,
+                                            # False after timeout or
+                                            # explicit "skip in gpsd"
+            # UBX-NAV-TIMELS telemetry — authoritative leap-second
+            # state from the receiver (overrides chrony's leap_status
+            # on the dashboard when present).
+            "leap_seconds": None,
+            "leap_source": None,
+            "leap_pending": None,
+            "leap_seconds_to_event": None,
+            "leap_event_gps_week": None,
+            "leap_event_gps_dow": None,
         }
 
     def _reader_loop(self) -> None:
-        """Main NMEA reader loop — runs in background thread."""
+        """Main reader loop — demuxes NMEA + UBX from the serial stream.
+
+        The loop pulls raw bytes (rather than line-buffered text) so it
+        can interleave UBX poll responses with NMEA sentences.  A small
+        state machine in ``_drain_buffer()`` extracts whichever message
+        type comes off the front of ``self._ubx_buf`` next:
+
+        * Bytes leading up to ``$`` are treated as NMEA (terminated by
+          ``\\n``) and dispatched to :py:meth:`_handle_sentence`.
+        * Bytes leading with the ``B5 62`` sync pair are framed as UBX
+          and dispatched to :py:meth:`_handle_ubx`.
+        * Anything else is junk; we drop a single byte and retry so a
+          stray binary byte can't desync the parser permanently.
+
+        Periodically (every ``self._ubx_poll_interval_s``) we write a
+        ``UBX-MON-HW`` and a ``UBX-NAV-TIMELS`` poll request; the
+        receiver's responses come back through the same stream and are
+        captured by the demuxer.
+        """
         try:
             import pynmea2  # type: ignore[import]
         except ImportError:
@@ -770,44 +842,49 @@ class GPSManager:
             self._fix["status"] = "reading"
 
         consecutive_errors = 0
+        # Cap the buffer so a malicious / corrupted stream can't OOM
+        # the service.  16 KiB is ~17 s of 9600-baud traffic — anything
+        # larger means we're not draining and we're better off dropping.
+        MAX_BUF = 16 * 1024
 
         while self._running:
             try:
                 if not self._ser or not self._ser.is_open:
                     break
 
-                raw = self._ser.readline()
-                if not raw:
-                    continue
+                # Pull whatever's currently in the kernel buffer.  read(1)
+                # blocks for up to the serial timeout (2 s, set in
+                # _start_serial_only); follow it with an in_waiting drain
+                # so a burst of bytes is consumed in a single syscall
+                # batch instead of one byte per readline iteration.
+                chunk = self._ser.read(1)
+                if chunk:
+                    waiting = getattr(self._ser, "in_waiting", 0)
+                    if waiting:
+                        chunk += self._ser.read(waiting)
+                    self._ubx_buf.extend(chunk)
+                    if len(self._ubx_buf) > MAX_BUF:
+                        # Drop the oldest half rather than the whole
+                        # buffer so a partial NMEA or UBX frame at the
+                        # tail still has a chance of completing.
+                        del self._ubx_buf[: len(self._ubx_buf) // 2]
 
-                line = raw.decode("ascii", errors="replace").strip()
-                if not line.startswith("$"):
-                    continue
+                # Drain whatever framed messages are now available.
+                self._drain_buffer(pynmea2)
 
-                # Store raw sentence for UI display
-                with self._lock:
-                    self._recent_sentences.append(line)
-
-                consecutive_errors = 0
-
-                try:
-                    msg = pynmea2.parse(line)
-                except pynmea2.ParseError:
-                    # pynmea2 validates the NMEA checksum during parse; this
-                    # branch is a useful health signal for noisy UART wiring.
-                    with self._lock:
-                        self._fix["sentence_errors"] = (
-                            self._fix.get("sentence_errors", 0) + 1
-                        )
-                    continue
-
-                self._handle_sentence(msg)
+                # Send the next UBX poll if it's due.  Writes are
+                # independent of reads, so there's no risk of stalling
+                # the NMEA stream.
+                self._maybe_send_ubx_polls()
 
                 # Apply system time if a sync was queued (outside lock)
                 if self._pending_time_sync is not None:
                     pending = self._pending_time_sync
                     self._pending_time_sync = None
                     self._apply_system_time(pending)
+
+                if chunk:
+                    consecutive_errors = 0
 
             except Exception as exc:
                 consecutive_errors += 1
@@ -824,6 +901,135 @@ class GPSManager:
             self._fix["status"] = "stopped"
         self._publish_status("stopped")
         self._logger.info("GPS reader loop exited")
+
+    def _drain_buffer(self, pynmea2_mod) -> None:
+        """Pull complete NMEA lines and UBX frames off ``self._ubx_buf``.
+
+        Runs in the reader thread.  Each iteration looks at the first
+        byte: ``$`` starts an NMEA sentence (terminated by ``\\n``);
+        ``0xB5`` is the first UBX sync byte (followed by ``0x62``).
+        Anything else is dropped one byte at a time so the parser can
+        re-sync on the next valid header.
+        """
+        buf = self._ubx_buf
+        while buf:
+            head = buf[0]
+            if head == ord("$"):
+                # NMEA: find the terminating \n.  If none yet, we need
+                # more bytes — leave the partial line in the buffer.
+                nl = buf.find(b"\n")
+                if nl < 0:
+                    return
+                line_bytes = bytes(buf[:nl]).rstrip(b"\r")
+                del buf[: nl + 1]
+                try:
+                    line = line_bytes.decode("ascii", errors="replace").strip()
+                except Exception:
+                    continue
+                if not line.startswith("$"):
+                    continue
+                with self._lock:
+                    self._recent_sentences.append(line)
+                try:
+                    msg = pynmea2_mod.parse(line)
+                except pynmea2_mod.ParseError:
+                    with self._lock:
+                        self._fix["sentence_errors"] = (
+                            self._fix.get("sentence_errors", 0) + 1
+                        )
+                    continue
+                self._handle_sentence(msg)
+            elif head == ubx.UBX_SYNC_1:
+                # UBX: try to extract a complete frame.  None means we
+                # need more bytes (the frame isn't fully arrived yet) —
+                # break and let the next read top up the buffer.
+                # Note that find_frame() consumes any leading garbage
+                # AND the frame itself when successful, so we don't
+                # need to del[] here.
+                if len(buf) < 2:
+                    return
+                if buf[1] != ubx.UBX_SYNC_2:
+                    # False sync — drop the lone B5 and keep scanning.
+                    del buf[0]
+                    continue
+                result = ubx.find_frame(buf)
+                if result is None:
+                    return
+                _leading, cls, mid, payload = result
+                self._handle_ubx(cls, mid, payload)
+            else:
+                # Stray byte — drop it and re-evaluate.  Common after a
+                # partial UBX frame whose checksum failed: find_frame
+                # leaves the remainder of the discarded frame in the
+                # buffer for us to skip past.
+                del buf[0]
+
+    def _maybe_send_ubx_polls(self) -> None:
+        """Issue MON-HW + NAV-TIMELS polls when the cadence elapses.
+
+        Called from the reader thread only.  Writes are best-effort: a
+        failed write is logged at debug and the next attempt happens
+        on schedule.  ``ubx_poll_supported`` is set to True the first
+        time we get a reply (see :py:meth:`_handle_ubx`); until then
+        the dashboard tile shows "polling…" instead of "—".
+        """
+        if self._ubx_poll_interval_s <= 0:
+            return
+        if self._active_source != "serial":
+            # gpsd owns the port in gpsd mode; we'd have to teach
+            # gpsd to forward our writes which is a much bigger
+            # rabbit hole (Phase 3 territory).  Surface that we're
+            # not polling so the UI tile can explain why.
+            with self._lock:
+                self._fix["ubx_poll_supported"] = False
+            return
+        if not self._ser or not self._ser.is_open:
+            return
+
+        now = time.monotonic()
+        if now - self._ubx_last_poll_mono < self._ubx_poll_interval_s:
+            return
+        self._ubx_last_poll_mono = now
+        try:
+            self._ser.write(ubx.POLL_MON_HW)
+            self._ser.write(ubx.POLL_NAV_TIMELS)
+            try:
+                self._ser.flush()
+            except Exception:
+                pass
+        except Exception as exc:
+            self._logger.debug("UBX poll write failed: %s", exc)
+
+    def _handle_ubx(self, class_id: int, msg_id: int, payload: bytes) -> None:
+        """Decode a UBX response and merge it into the live fix dict.
+
+        Unknown class/id combinations are silently ignored — receivers
+        will sometimes emit other UBX messages we never asked for
+        (e.g. ``UBX-NAV-PVT`` if a previous session enabled it via
+        ``CFG-MSG``), and we don't want those to look like errors.
+        """
+        try:
+            if class_id == ubx.CLASS_MON and msg_id == ubx.ID_MON_HW:
+                fields = ubx.parse_mon_hw(payload)
+            elif class_id == ubx.CLASS_NAV and msg_id == ubx.ID_NAV_TIMELS:
+                fields = ubx.parse_nav_timels(payload)
+            else:
+                return
+        except Exception as exc:
+            self._logger.debug(
+                "UBX parse error for class=0x%02X id=0x%02X: %s",
+                class_id, msg_id, exc,
+            )
+            return
+        if not fields:
+            return
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        with self._lock:
+            for key, value in fields.items():
+                self._fix[key] = value
+            self._fix["ubx_last_poll_at"] = now_iso
+            self._fix["ubx_poll_supported"] = True
 
     def _handle_sentence(self, msg) -> None:
         """Update internal fix state from a parsed NMEA sentence."""
