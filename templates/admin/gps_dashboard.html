@@ -784,26 +784,311 @@
     }
     .gps-nmea-stream .nmea-line { display: block; }
     .gps-nmea-stream .nmea-line.muted { color: var(--text-muted); }
+
+    /* ============================================================
+       APPLIANCE-STYLE TOP STATUS STRIP
+       Persistent 7-tile bar showing system health at a glance.
+       Telecom / broadcast master-control aesthetic: hard severity
+       colours, large primary readouts, tight uppercase labels.
+       ============================================================ */
+    .gps-status-strip {
+        display: grid;
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+        gap: 8px;
+        margin: 0 0 14px 0;
+    }
+    .gps-status-tile {
+        position: relative;
+        padding: 10px 12px;
+        border: 1px solid var(--border-color, rgba(127,127,127,.22));
+        border-left: 3px solid var(--text-muted, #8b949e);
+        border-radius: 6px;
+        background: var(--bg-secondary, rgba(127,127,127,.04));
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 0;
+    }
+    .gps-status-tile .lbl {
+        font-size: 0.66rem;
+        font-weight: 700;
+        letter-spacing: 0.10em;
+        text-transform: uppercase;
+        color: var(--text-muted, #8b949e);
+        display: flex; align-items: center; gap: 5px;
+    }
+    .gps-status-tile .lbl i { font-size: 0.74rem; opacity: 0.7; }
+    .gps-status-tile .val {
+        font-family: var(--font-mono, ui-monospace, monospace);
+        font-size: 1.18rem;
+        font-weight: 700;
+        line-height: 1.05;
+        color: var(--text-color);
+        font-variant-numeric: tabular-nums;
+        letter-spacing: 0.02em;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .gps-status-tile .sub {
+        font-size: 0.68rem;
+        color: var(--text-muted, #8b949e);
+        font-family: var(--font-mono, ui-monospace, monospace);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    /* Severity tinting — strong, broadcast-style colour cues. */
+    .gps-status-tile.sev-ok    { border-left-color: #3fb950; }
+    .gps-status-tile.sev-ok    .val { color: #3fb950; }
+    .gps-status-tile.sev-warn  { border-left-color: #d29922; background: rgba(210,153,34,0.06); }
+    .gps-status-tile.sev-warn  .val { color: #f6c343; }
+    .gps-status-tile.sev-fault { border-left-color: #f85149; background: rgba(248,81,73,0.07); }
+    .gps-status-tile.sev-fault .val { color: #f85149; }
+    .gps-status-tile.sev-info  { border-left-color: #58a6ff; }
+    .gps-status-tile.sev-info  .val { color: #58a6ff; }
+    .gps-status-tile.sev-unknown .val { color: var(--text-muted, #8b949e); }
+
+    @media (max-width: 1100px) {
+        .gps-status-strip { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    }
+    @media (max-width: 720px) {
+        .gps-status-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+        .gps-status-tile { padding: 8px 10px; }
+        .gps-status-tile .val { font-size: 1.02rem; }
+    }
+
+    /* ============================================================
+       VIEW MODE (Simple / Engineering) toggle in the header
+       ============================================================ */
+    .gps-view-toggle {
+        display: inline-flex;
+        border: 1px solid var(--border-color, rgba(127,127,127,.30));
+        border-radius: 999px;
+        overflow: hidden;
+        background: var(--bg-tertiary, rgba(127,127,127,.10));
+    }
+    .gps-view-toggle button {
+        border: none; background: transparent;
+        padding: 4px 14px;
+        font-size: 0.75rem; font-weight: 600;
+        letter-spacing: 0.06em; text-transform: uppercase;
+        color: var(--text-muted, #8b949e);
+        cursor: pointer;
+    }
+    .gps-view-toggle button + button {
+        border-left: 1px solid var(--border-color, rgba(127,127,127,.30));
+    }
+    .gps-view-toggle button:hover { color: var(--text-color); }
+    .gps-view-toggle button.active {
+        background: linear-gradient(135deg, #58a6ff, #bc8cff);
+        color: #fff;
+    }
+
+    /* Hide engineering-only sections when the dashboard is in Simple mode. */
+    .gps-dash[data-mode="simple"] [data-view="engineering"] { display: none !important; }
+
+    /* ============================================================
+       CLOCK QUALITY / TIMING INTEGRITY card
+       Headline operator card. Five large metrics + grade badge.
+       ============================================================ */
+    .gps-quality-card .quality-head {
+        display: flex; align-items: center; flex-wrap: wrap;
+        gap: 12px;
+        margin-bottom: 12px;
+    }
+    .gps-quality-card .quality-title {
+        font-size: 0.78rem; font-weight: 700;
+        letter-spacing: 0.14em; text-transform: uppercase;
+        color: var(--text-muted, #8b949e);
+        margin: 0;
+    }
+    .gps-quality-grade {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 4px 12px;
+        font-family: var(--font-mono, ui-monospace, monospace);
+        font-size: 0.84rem; font-weight: 800;
+        letter-spacing: 0.10em;
+        border-radius: 4px;
+        border: 1px solid currentColor;
+        background: rgba(63, 185, 80, 0.08);
+    }
+    .gps-quality-grade.sev-ok    { color: #3fb950; background: rgba(63, 185, 80, 0.10); }
+    .gps-quality-grade.sev-warn  { color: #f6c343; background: rgba(210, 153, 34, 0.10); }
+    .gps-quality-grade.sev-fault { color: #f85149; background: rgba(248, 81, 73, 0.10); }
+    .gps-quality-grade.sev-unknown { color: var(--text-muted, #8b949e); background: transparent; }
+    .gps-quality-grid {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 14px;
+    }
+    .gps-quality-metric {
+        padding: 10px 12px;
+        border: 1px solid var(--border-color, rgba(127,127,127,.18));
+        border-radius: 6px;
+        background: var(--bg-tertiary, rgba(127,127,127,.05));
+        display: flex; flex-direction: column; gap: 4px;
+        min-width: 0;
+    }
+    .gps-quality-metric .metric-lbl {
+        font-size: 0.66rem; font-weight: 700;
+        letter-spacing: 0.10em; text-transform: uppercase;
+        color: var(--text-muted, #8b949e);
+    }
+    .gps-quality-metric .metric-val {
+        font-family: var(--font-mono, ui-monospace, monospace);
+        font-size: 1.45rem; font-weight: 700;
+        line-height: 1.05;
+        color: var(--text-color);
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .gps-quality-metric .metric-sub {
+        font-size: 0.66rem; color: var(--text-muted, #8b949e);
+    }
+    .gps-quality-metric.sev-ok    .metric-val { color: #3fb950; }
+    .gps-quality-metric.sev-warn  .metric-val { color: #f6c343; }
+    .gps-quality-metric.sev-fault .metric-val { color: #f85149; }
+    @media (max-width: 1100px) {
+        .gps-quality-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    }
+    @media (max-width: 600px) {
+        .gps-quality-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+        .gps-quality-metric .metric-val { font-size: 1.15rem; }
+    }
+
+    /* ============================================================
+       EVENT / ALARM TIMELINE
+       SCADA-style monotonic event log. Newest at top.
+       ============================================================ */
+    .gps-events-card .events-head {
+        display: flex; justify-content: space-between; align-items: center;
+        gap: 10px;
+    }
+    .gps-events-list {
+        margin: 8px 0 0 0;
+        padding: 0;
+        list-style: none;
+        max-height: 220px;
+        overflow-y: auto;
+        font-family: var(--font-mono, ui-monospace, monospace);
+        font-size: 0.80rem;
+        border-top: 1px solid var(--border-color, rgba(127,127,127,.15));
+    }
+    .gps-events-list li {
+        display: grid;
+        grid-template-columns: 86px 92px 1fr;
+        gap: 10px;
+        padding: 5px 6px;
+        border-bottom: 1px solid var(--border-color, rgba(127,127,127,.10));
+        align-items: baseline;
+    }
+    .gps-events-list .ts {
+        color: var(--text-muted, #8b949e);
+        font-variant-numeric: tabular-nums;
+    }
+    .gps-events-list .sev {
+        font-size: 0.66rem; font-weight: 800;
+        letter-spacing: 0.10em; text-transform: uppercase;
+        text-align: center;
+        padding: 1px 6px;
+        border: 1px solid currentColor;
+        border-radius: 3px;
+    }
+    .gps-events-list .sev.sev-ok    { color: #3fb950; }
+    .gps-events-list .sev.sev-warn  { color: #f6c343; }
+    .gps-events-list .sev.sev-fault { color: #f85149; }
+    .gps-events-list .sev.sev-info  { color: #58a6ff; }
+    .gps-events-list .msg { color: var(--text-color); }
+    .gps-events-empty {
+        padding: 12px 6px;
+        color: var(--text-muted, #8b949e);
+        font-style: italic;
+        font-size: 0.80rem;
+        text-align: center;
+    }
+    @media (max-width: 600px) {
+        .gps-events-list li { grid-template-columns: 70px 70px 1fr; gap: 6px; font-size: 0.74rem; }
+    }
+
+    /* ============================================================
+       Section heading dividers — tighten visual hierarchy by
+       grouping related cards under uppercase rule headings.
+       ============================================================ */
+    .gps-section-head {
+        display: flex; align-items: baseline; gap: 10px;
+        margin: 4px 0 8px 0;
+    }
+    .gps-section-head h2 {
+        font-size: 0.74rem; font-weight: 700;
+        letter-spacing: 0.18em; text-transform: uppercase;
+        color: var(--text-muted, #8b949e);
+        margin: 0;
+    }
+    .gps-section-head .rule {
+        flex: 1 1 auto;
+        height: 1px;
+        background: var(--border-color, rgba(127,127,127,.18));
+    }
+    .gps-section-head .hint {
+        font-size: 0.70rem;
+        color: var(--text-muted, #8b949e);
+    }
+
+    /* Wrap the engineering-only diagnostics behind a <details> on
+       all viewports — operators rarely need raw NMEA / staleness. */
+    .gps-diag-details {
+        margin-top: 6px;
+        border: 1px solid var(--border-color, rgba(127,127,127,.18));
+        border-radius: 6px;
+        background: var(--bg-secondary, rgba(127,127,127,.03));
+    }
+    .gps-diag-details > summary {
+        list-style: none;
+        cursor: pointer;
+        padding: 10px 14px;
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--text-color);
+        display: flex; align-items: center; gap: 8px;
+    }
+    .gps-diag-details > summary::-webkit-details-marker { display: none; }
+    .gps-diag-details > summary::before {
+        content: "▸";
+        font-size: 0.85rem;
+        color: var(--text-muted, #8b949e);
+        transition: transform 0.15s ease;
+        display: inline-block;
+    }
+    .gps-diag-details[open] > summary::before { transform: rotate(90deg); }
+    .gps-diag-details > .diag-body { padding: 4px 12px 12px; }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid py-3 gps-dash">
+<div class="container-fluid py-3 gps-dash" id="gps-dash-root" data-mode="simple">
 
-    <!-- Header banner: node id + GPS lock state + refresh control -->
+    <!-- ============================================================
+         APPLIANCE HEADER — title, node id, refresh, units, view mode.
+         Severity is communicated by the persistent status strip below,
+         not by a handful of pills crammed into the header.
+         ============================================================ -->
     <div class="gps-dash-header" role="region" aria-label="GPS dashboard header">
         <span class="title">
             <i class="fas fa-satellite-dish"></i>
-            GPS &amp; Time
+            GNSS / TIME APPLIANCE
         </span>
         <span class="node">NTP Node:&nbsp;<span id="gps-dash-node">…</span></span>
-        <span id="gps-dash-lock-pill" class="gps-pill muted" aria-live="polite">
-            <i class="fas fa-circle"></i> CONNECTING
-        </span>
-        <span id="gps-dash-fix-pill" class="gps-pill muted" aria-live="polite">— FIX</span>
-        <span id="gps-dash-stratum-pill" class="gps-pill muted" aria-live="polite">STRATUM —</span>
         <span class="spacer"></span>
-        <label for="gps-dash-refresh" class="text-muted small mb-0 me-1">Refresh</label>
+        <div class="gps-view-toggle" role="group" aria-label="View mode">
+            <button type="button" id="gps-view-simple" class="active" aria-pressed="true">Simple</button>
+            <button type="button" id="gps-view-engineering" aria-pressed="false">Engineering</button>
+        </div>
+        <label for="gps-dash-refresh" class="text-muted small mb-0 ms-2 me-1">Refresh</label>
         <select id="gps-dash-refresh" class="form-select form-select-sm">
             <option value="3000">3s</option>
             <option value="5000" selected>5s</option>
@@ -821,6 +1106,112 @@
            class="btn btn-sm btn-outline-secondary" title="GPS Hardware Settings">
             <i class="fas fa-cog"></i> Settings
         </a>
+    </div>
+
+    <!-- ============================================================
+         PERSISTENT TOP STATUS STRIP — at-a-glance system health.
+         Seven tiles, severity-tinted (green/amber/red/blue), each
+         showing a primary value and a one-line context sub-string.
+         ============================================================ -->
+    <section class="gps-status-strip" aria-label="System health at a glance">
+        <div class="gps-status-tile sev-unknown" id="strip-sync">
+            <div class="lbl"><i class="fas fa-bolt"></i> Sync</div>
+            <div class="val">—</div>
+            <div class="sub" id="strip-sync-sub">awaiting data…</div>
+        </div>
+        <div class="gps-status-tile sev-unknown" id="strip-stratum">
+            <div class="lbl"><i class="fas fa-layer-group"></i> Stratum</div>
+            <div class="val">—</div>
+            <div class="sub" id="strip-stratum-sub">no chrony tracking</div>
+        </div>
+        <div class="gps-status-tile sev-unknown" id="strip-pps">
+            <div class="lbl"><i class="fas fa-wave-square"></i> PPS Lock</div>
+            <div class="val">—</div>
+            <div class="sub" id="strip-pps-sub">no pulse data</div>
+        </div>
+        <div class="gps-status-tile sev-unknown" id="strip-gnss">
+            <div class="lbl"><i class="fas fa-satellite"></i> GNSS</div>
+            <div class="val">—</div>
+            <div class="sub" id="strip-gnss-sub">no fix</div>
+        </div>
+        <div class="gps-status-tile sev-unknown" id="strip-rms">
+            <div class="lbl"><i class="fas fa-stopwatch"></i> RMS Offset</div>
+            <div class="val">—</div>
+            <div class="sub" id="strip-rms-sub">offset unknown</div>
+        </div>
+        <div class="gps-status-tile sev-unknown" id="strip-sats">
+            <div class="lbl"><i class="fas fa-satellite-dish"></i> Satellites</div>
+            <div class="val">—</div>
+            <div class="sub" id="strip-sats-sub">— used / — visible</div>
+        </div>
+        <div class="gps-status-tile sev-unknown" id="strip-holdover">
+            <div class="lbl"><i class="fas fa-hourglass-half"></i> Holdover</div>
+            <div class="val">—</div>
+            <div class="sub" id="strip-holdover-sub">disciplined</div>
+        </div>
+    </section>
+
+    <!-- ============================================================
+         CLOCK QUALITY / TIMING INTEGRITY — operator headline card.
+         Five large monospace metrics + a single-letter stability grade.
+         Aimed at simple-view users / mobile / quick check-ins.
+         ============================================================ -->
+    <div class="gps-card gps-quality-card" aria-label="Timing integrity summary">
+        <div class="quality-head">
+            <h3 class="quality-title"><i class="fas fa-shield-halved me-1"></i> Timing Integrity</h3>
+            <span class="gps-quality-grade sev-unknown" id="quality-grade" title="Composite stability grade">— / —</span>
+            <span class="text-muted small ms-auto" id="quality-summary">awaiting telemetry…</span>
+        </div>
+        <div class="gps-quality-grid">
+            <div class="gps-quality-metric sev-unknown" id="qm-rms">
+                <div class="metric-lbl">RMS Offset</div>
+                <div class="metric-val">—</div>
+                <div class="metric-sub">chrony tracking</div>
+            </div>
+            <div class="gps-quality-metric sev-unknown" id="qm-jitter">
+                <div class="metric-lbl">Peak Jitter</div>
+                <div class="metric-val">—</div>
+                <div class="metric-sub">PPS interval Δ</div>
+            </div>
+            <div class="gps-quality-metric sev-unknown" id="qm-freq">
+                <div class="metric-lbl">Freq Error</div>
+                <div class="metric-val">—</div>
+                <div class="metric-sub">residual ppm</div>
+            </div>
+            <div class="gps-quality-metric sev-unknown" id="qm-utc">
+                <div class="metric-lbl">UTC Confidence</div>
+                <div class="metric-val">—</div>
+                <div class="metric-sub">based on offset</div>
+            </div>
+            <div class="gps-quality-metric sev-unknown" id="qm-stability">
+                <div class="metric-lbl">Stability</div>
+                <div class="metric-val">—</div>
+                <div class="metric-sub">σ_y(τ=10s)</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================
+         EVENT / ALARM TIMELINE — newest at top, monotonic.  Derived
+         client-side by watching state transitions between polls so
+         this works without backend changes.
+         ============================================================ -->
+    <div class="gps-card gps-events-card" aria-label="Active alarms and recent events">
+        <div class="events-head">
+            <h3 style="font-size:0.82rem; font-weight:700; letter-spacing:0.12em;
+                       text-transform:uppercase; margin:0; color:var(--text-color);">
+                <i class="fas fa-bell me-1"></i> Events &amp; Alarms
+            </h3>
+            <span class="text-muted small">latest first · client-derived</span>
+        </div>
+        <ul class="gps-events-list" id="gps-events-list">
+            <li class="gps-events-empty">No events recorded — system steady.</li>
+        </ul>
+    </div>
+
+    <div class="gps-section-head">
+        <h2>Tracking &amp; Receiver</h2>
+        <span class="rule"></span>
     </div>
 
     <!-- ============================================================
@@ -1052,6 +1443,12 @@
         </div>
     </div>
 
+    <div class="gps-section-head" data-view="engineering">
+        <h2>Engineering · Time-series</h2>
+        <span class="rule"></span>
+        <span class="hint">≈ 1 hour rolling · 5 s refresh</span>
+    </div>
+
     <!-- ============================================================
          TIME-SERIES PERFORMANCE GRAPHS — client-side ring buffer fed
          from each dashboard poll, seeded on first load from the
@@ -1059,7 +1456,7 @@
          page reload doesn't lose prior history.  Capacity is 720
          samples (≈ 1 hour at the default 5 s refresh).
          ============================================================ -->
-    <div class="row g-3 mt-0">
+    <div class="row g-3 mt-0" data-view="engineering">
         <div class="col-12 col-xl-6">
             <div class="gps-card h-100 gps-chart-card">
                 <div class="gps-card-head">
@@ -1349,71 +1746,65 @@
                 <canvas id="ts-jam-strip-canvas" width="600" height="14" aria-label="Jamming-state colour strip" style="display:block; width:100%; height:14px; margin-top:4px;"></canvas>
             </div>
         </div>
-
-        <!-- ============================================================
-             ALMANAC / EPHEMERIS STALENESS — per-PRN tracking history.
-             We don't have direct ephemeris-age telemetry from the NMEA
-             path; what we *can* show is how long each satellite has
-             been visible and when it last contributed to a fix, which
-             is the closest practical proxy for "is the receiver still
-             listening to this PRN's broadcast nav data?".
-             ============================================================ -->
-        <div class="col-12">
-            <div class="gps-card h-100">
-                <div class="gps-card-head">
-                    <h3><i class="fas fa-clock-rotate-left me-1"></i> Almanac &amp; Ephemeris Staleness</h3>
-                    <div class="badge-area">
-                        <span class="text-muted small">per-PRN tracking age · "used" = currently in fix</span>
-                    </div>
-                </div>
-                <div id="ts-staleness-summary" class="chart-meta">
-                    <span><span class="label">UBX poll</span> <span id="ts-staleness-ubx" class="value">—</span></span>
-                    <span><span class="label">PRNs known</span> <span id="ts-staleness-known" class="value">0</span></span>
-                    <span><span class="label">PRNs in view</span> <span id="ts-staleness-inview" class="value">0</span></span>
-                    <span><span class="label">Used in fix</span> <span id="ts-staleness-used" class="value">0</span></span>
-                </div>
-                <div id="ts-staleness-list" class="gps-staleness-list"></div>
-                <div id="ts-staleness-empty" class="gps-chart-empty" style="position:static; padding:12px 0;">No PRN history yet…</div>
-            </div>
-        </div>
-
-        <!-- ============================================================
-             NMEA SENTENCE INSPECTOR — live tail of the last ~100 raw
-             sentences seen by the GPS manager.  Useful when the dashboard
-             tiles say "no fix" or a sentence type is missing — being
-             able to peek at the raw stream beats SSH-ing in to run cat.
-             ============================================================ -->
-        <div class="col-12">
-            <div class="gps-card h-100">
-                <div class="gps-card-head">
-                    <h3><i class="fas fa-terminal me-1"></i> NMEA Sentence Inspector</h3>
-                    <div class="badge-area">
-                        <span class="text-muted small">live tail · last ~100 sentences from the receiver</span>
-                    </div>
-                </div>
-                <div class="gps-nmea-controls">
-                    <label>
-                        <input type="checkbox" id="ts-nmea-pause"> Pause
-                    </label>
-                    <input type="text" id="ts-nmea-filter" placeholder="filter (e.g. GGA, GP, $GN…)" class="gps-nmea-filter-input">
-                    <span class="text-muted small">
-                        <span id="ts-nmea-shown">0</span> shown ·
-                        <span id="ts-nmea-total">0</span> total
-                    </span>
-                </div>
-                <pre id="ts-nmea-stream" class="gps-nmea-stream" aria-label="Recent NMEA sentences">No sentences yet…</pre>
-            </div>
-        </div>
     </div>
 
-    <p class="text-muted small mt-3">
-        Modelled visually on
-        <a href="https://w0chp.radio/chrogps-dash/" target="_blank" rel="noopener">W0CHP's chrogps-dash</a>;
-        all data is sourced live from this station's GPS receiver and local <code>chronyc</code>.
-        Time-series graphs above are seeded on first load from the Redis-backed
-        <code>/admin/api/gps-dashboard/trends</code> endpoint and topped up live from each poll,
-        so a page reload no longer loses your accumulated history.
-    </p>
+    <!-- ============================================================
+         LOW-LEVEL DIAGNOSTICS — collapsed by default; engineering only.
+         Holds raw NMEA tail and per-PRN almanac/ephemeris staleness.
+         ============================================================ -->
+    <details class="gps-diag-details" data-view="engineering">
+        <summary><i class="fas fa-screwdriver-wrench"></i> Low-Level Diagnostics</summary>
+        <div class="diag-body">
+            <div class="row g-3">
+                <!-- ============================================================
+                     ALMANAC / EPHEMERIS STALENESS — per-PRN tracking history.
+                     ============================================================ -->
+                <div class="col-12">
+                    <div class="gps-card h-100">
+                        <div class="gps-card-head">
+                            <h3><i class="fas fa-clock-rotate-left me-1"></i> Almanac &amp; Ephemeris Staleness</h3>
+                            <div class="badge-area">
+                                <span class="text-muted small">per-PRN tracking age · "used" = currently in fix</span>
+                            </div>
+                        </div>
+                        <div id="ts-staleness-summary" class="chart-meta">
+                            <span><span class="label">UBX poll</span> <span id="ts-staleness-ubx" class="value">—</span></span>
+                            <span><span class="label">PRNs known</span> <span id="ts-staleness-known" class="value">0</span></span>
+                            <span><span class="label">PRNs in view</span> <span id="ts-staleness-inview" class="value">0</span></span>
+                            <span><span class="label">Used in fix</span> <span id="ts-staleness-used" class="value">0</span></span>
+                        </div>
+                        <div id="ts-staleness-list" class="gps-staleness-list"></div>
+                        <div id="ts-staleness-empty" class="gps-chart-empty" style="position:static; padding:12px 0;">No PRN history yet…</div>
+                    </div>
+                </div>
+
+                <!-- ============================================================
+                     NMEA SENTENCE INSPECTOR — live tail of recent sentences.
+                     ============================================================ -->
+                <div class="col-12">
+                    <div class="gps-card h-100">
+                        <div class="gps-card-head">
+                            <h3><i class="fas fa-terminal me-1"></i> NMEA Sentence Inspector</h3>
+                            <div class="badge-area">
+                                <span class="text-muted small">live tail · last ~100 sentences from the receiver</span>
+                            </div>
+                        </div>
+                        <div class="gps-nmea-controls">
+                            <label>
+                                <input type="checkbox" id="ts-nmea-pause"> Pause
+                            </label>
+                            <input type="text" id="ts-nmea-filter" placeholder="filter (e.g. GGA, GP, $GN…)" class="gps-nmea-filter-input">
+                            <span class="text-muted small">
+                                <span id="ts-nmea-shown">0</span> shown ·
+                                <span id="ts-nmea-total">0</span> total
+                            </span>
+                        </div>
+                        <pre id="ts-nmea-stream" class="gps-nmea-stream" aria-label="Recent NMEA sentences">No sentences yet…</pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </details>
 </div>
 {% endblock %}
 
@@ -2510,6 +2901,377 @@
             pill.className = 'gps-pill danger';
             pill.textContent = 'STRATUM ' + s;
         }
+    }
+
+    // ── Severity helper.  Returns 'ok' | 'warn' | 'fault' | 'info' |
+    //    'unknown' so all dashboard chrome (status strip, quality
+    //    metrics, event log) speaks the same colour vocabulary.
+    function setTileSeverity(tile, sev) {
+        if (!tile) return;
+        tile.classList.remove('sev-ok', 'sev-warn', 'sev-fault', 'sev-info', 'sev-unknown');
+        tile.classList.add('sev-' + (sev || 'unknown'));
+    }
+
+    function setStripTile(id, sev, val, sub) {
+        var tile = document.getElementById(id);
+        if (!tile) return;
+        setTileSeverity(tile, sev);
+        var valEl = tile.querySelector('.val');
+        if (valEl) valEl.textContent = (val === null || val === undefined || val === '') ? '—' : val;
+        if (sub !== undefined) {
+            var subEl = document.getElementById(id + '-sub');
+            if (subEl) subEl.textContent = (sub === null || sub === undefined) ? '' : sub;
+        }
+    }
+
+    // ── Persistent top status strip (the broadcast-appliance bar).
+    //    Reads the same fields used elsewhere on the page so it stays
+    //    in lock-step with the detail cards below.
+    function renderStatusStrip(snapshot) {
+        var gps = (snapshot && snapshot.gps) || {};
+        var tracking = (snapshot && snapshot.chrony && snapshot.chrony.tracking) || {};
+        var hasFix = !!gps.has_fix;
+        var running = !!gps.running;
+        var sats = gps.satellites_in_view || [];
+        var active = gps.active_satellite_prns || [];
+        var visibleCount = sats.length;
+        var usedCount = active.length;
+        var sysOffset = tracking.system_time_offset_s;
+        var rms = tracking.rms_offset_s;
+        var holdover = (typeof gps.holdover_s === 'number') ? gps.holdover_s : null;
+
+        // SYNC tile — composite of running+fix+offset.
+        if (!running) {
+            setStripTile('strip-sync', 'fault', 'NO GPS', 'receiver not running');
+        } else if (typeof sysOffset === 'number' && Math.abs(sysOffset) <= 1e-4 && hasFix) {
+            setStripTile('strip-sync', 'ok', 'IN SYNC',
+                'offset ' + fmtSeconds(sysOffset));
+        } else if (hasFix) {
+            setStripTile('strip-sync', 'warn', 'DEGRADED',
+                typeof sysOffset === 'number' ? 'offset ' + fmtSeconds(sysOffset) : 'offset unknown');
+        } else {
+            setStripTile('strip-sync', 'warn', 'ACQUIRING', 'no fix yet');
+        }
+
+        // STRATUM tile.
+        var s = tracking.stratum;
+        if (s === null || s === undefined) {
+            setStripTile('strip-stratum', 'unknown', '—', 'chrony not tracking');
+        } else if (s === 1) {
+            setStripTile('strip-stratum', 'ok', 'S1', 'reference clock');
+        } else if (s <= 4) {
+            setStripTile('strip-stratum', 'warn', 'S' + s, 'downstream of S1');
+        } else {
+            setStripTile('strip-stratum', 'fault', 'S' + s, 'far from reference');
+        }
+
+        // PPS LOCK tile.
+        var ppsBackend = gps.pps_backend;
+        var ppsAge = (typeof gps.pps_pulse_age_s === 'number') ? gps.pps_pulse_age_s : null;
+        if (!ppsBackend || ppsBackend === 'none') {
+            setStripTile('strip-pps', 'fault', 'NO PPS', 'no pulse source');
+        } else if (ppsAge === null) {
+            setStripTile('strip-pps', 'warn', ppsBackend.toUpperCase(), 'awaiting pulse');
+        } else if (ppsAge > 2) {
+            setStripTile('strip-pps', 'fault', 'LOST', 'last pulse ' + ppsAge.toFixed(1) + 's ago');
+        } else {
+            setStripTile('strip-pps', 'ok', 'LOCKED', ppsBackend + ' · ' + ppsAge.toFixed(1) + 's');
+        }
+
+        // GNSS tile (fix mode + jamming).
+        var fixMode = gps.fix_mode;
+        var jamming = gps.jamming_state;
+        if (fixMode === 3) {
+            var sub = '3D fix';
+            if (jamming && jamming !== 'ok') sub = 'RF ' + jamming;
+            setStripTile('strip-gnss',
+                (jamming && jamming !== 'ok') ? 'warn' : 'ok',
+                '3D FIX', sub);
+        } else if (fixMode === 2) {
+            setStripTile('strip-gnss', 'warn', '2D FIX', 'horizontal only');
+        } else if (hasFix) {
+            setStripTile('strip-gnss', 'warn', 'FIX', 'limited');
+        } else {
+            setStripTile('strip-gnss', 'fault', 'NO FIX', 'no GNSS lock');
+        }
+
+        // RMS OFFSET tile.
+        if (typeof rms === 'number' && !isNaN(rms)) {
+            var rmsAbs = Math.abs(rms);
+            var rmsSev = rmsAbs <= 1e-5 ? 'ok'
+                       : rmsAbs <= 1e-3 ? 'warn'
+                       : 'fault';
+            setStripTile('strip-rms', rmsSev, fmtSeconds(rms), 'rolling RMS');
+        } else {
+            setStripTile('strip-rms', 'unknown', '—', 'no chrony data');
+        }
+
+        // SATELLITES tile.
+        if (visibleCount === 0) {
+            setStripTile('strip-sats', 'fault', '0', 'no satellites visible');
+        } else {
+            var satSev = (usedCount >= 4) ? 'ok' : (usedCount >= 1 ? 'warn' : 'fault');
+            setStripTile('strip-sats', satSev, String(usedCount) + '/' + String(visibleCount),
+                usedCount + ' used · ' + visibleCount + ' visible');
+        }
+
+        // HOLDOVER tile.
+        if (holdover === null) {
+            setStripTile('strip-holdover', 'unknown', '—', 'unknown');
+        } else if (holdover === 0) {
+            setStripTile('strip-holdover', 'ok', 'NONE', 'disciplined');
+        } else if (holdover < 60) {
+            setStripTile('strip-holdover', 'warn', fmtDuration(holdover), 'recently lost fix');
+        } else {
+            setStripTile('strip-holdover', 'fault', fmtDuration(holdover), 'free-running');
+        }
+    }
+
+    // ── Clock Quality / Timing Integrity card (large headline metrics).
+    function renderClockQuality(snapshot) {
+        var tracking = (snapshot && snapshot.chrony && snapshot.chrony.tracking) || {};
+        var gps = (snapshot && snapshot.gps) || {};
+        var rms = tracking.rms_offset_s;
+        var sysOffset = tracking.system_time_offset_s;
+        var residPpm = tracking.residual_freq_ppm;
+        if (residPpm === null || residPpm === undefined) residPpm = tracking.frequency_ppm;
+        var jitter = gps.pps_jitter || null;
+        // jitter object usually carries .peak_ns / .stddev_ns / .median_ns
+        var jitterPeakNs = jitter && (typeof jitter.peak_ns === 'number' ? jitter.peak_ns
+                                       : (typeof jitter.peak === 'number' ? jitter.peak : null));
+        var adev = gps.allan_deviation || null;
+        var adev10 = null;
+        if (adev) {
+            // Tolerate either an array of {tau, sigma} or {tau_10, ...}.
+            if (Array.isArray(adev.points)) {
+                for (var i = 0; i < adev.points.length; i++) {
+                    var p = adev.points[i];
+                    if (p && (p.tau === 10 || p.tau_s === 10)) { adev10 = p.sigma || p.dev || p.adev; break; }
+                }
+            }
+            if (adev10 === null) adev10 = adev.tau_10 || adev.adev_10 || null;
+        }
+
+        var rootEl = document.getElementById('qm-rms');
+        var v = (typeof rms === 'number') ? Math.abs(rms) : null;
+        var sev = (v === null) ? 'unknown'
+                : (v <= 1e-5) ? 'ok'
+                : (v <= 1e-3) ? 'warn'
+                : 'fault';
+        setTileSeverity(rootEl, sev);
+        if (rootEl) rootEl.querySelector('.metric-val').textContent = (rms !== null && rms !== undefined) ? fmtSeconds(rms) : '—';
+
+        // Peak jitter.
+        var jEl = document.getElementById('qm-jitter');
+        var jSev = (jitterPeakNs === null) ? 'unknown'
+                 : (jitterPeakNs <= 500) ? 'ok'
+                 : (jitterPeakNs <= 5000) ? 'warn'
+                 : 'fault';
+        setTileSeverity(jEl, jSev);
+        if (jEl) jEl.querySelector('.metric-val').textContent = (jitterPeakNs !== null) ? fmtNs(jitterPeakNs) : '—';
+
+        // Frequency error (residual ppm).
+        var fEl = document.getElementById('qm-freq');
+        var fAbs = (typeof residPpm === 'number') ? Math.abs(residPpm) : null;
+        var fSev = (fAbs === null) ? 'unknown'
+                 : (fAbs <= 0.1) ? 'ok'
+                 : (fAbs <= 1.0) ? 'warn'
+                 : 'fault';
+        setTileSeverity(fEl, fSev);
+        if (fEl) fEl.querySelector('.metric-val').textContent = (residPpm !== null && residPpm !== undefined) ? residPpm.toFixed(3) + ' ppm' : '—';
+
+        // UTC confidence — derived from system offset (log scale).
+        var uEl = document.getElementById('qm-utc');
+        var pct = null;
+        if (typeof sysOffset === 'number' && !isNaN(sysOffset)) {
+            var oa = Math.abs(sysOffset);
+            if (oa <= 1e-5) pct = 100;
+            else if (oa >= 1) pct = 5;
+            else pct = Math.max(5, Math.min(100, Math.round(100 * (1 - (Math.log10(oa) + 5) / 5))));
+        }
+        var uSev = (pct === null) ? 'unknown'
+                 : (pct >= 90) ? 'ok'
+                 : (pct >= 60) ? 'warn'
+                 : 'fault';
+        setTileSeverity(uEl, uSev);
+        if (uEl) uEl.querySelector('.metric-val').textContent = (pct !== null) ? pct + '%' : '—';
+
+        // Stability (Allan dev at τ=10s).
+        var sEl = document.getElementById('qm-stability');
+        var sSev = (adev10 === null) ? 'unknown'
+                 : (adev10 <= 1e-9) ? 'ok'
+                 : (adev10 <= 1e-7) ? 'warn'
+                 : 'fault';
+        setTileSeverity(sEl, sSev);
+        if (sEl) sEl.querySelector('.metric-val').textContent = (adev10 !== null) ? fmtAdev(adev10) : '—';
+
+        // Composite grade — worst-of severity translated to a letter.
+        var sevs = [sev, jSev, fSev, uSev, sSev];
+        var worst = 'ok';
+        for (var k = 0; k < sevs.length; k++) {
+            if (sevs[k] === 'fault') { worst = 'fault'; break; }
+            if (sevs[k] === 'warn') worst = 'warn';
+            if (sevs[k] === 'unknown' && worst === 'ok') worst = 'unknown';
+        }
+        var gradeEl = document.getElementById('quality-grade');
+        if (gradeEl) {
+            setTileSeverity(gradeEl, worst);
+            var letter = worst === 'ok' ? 'A' : worst === 'warn' ? 'B' : worst === 'fault' ? 'D' : '—';
+            var label = worst === 'ok' ? 'Stratum-1 healthy'
+                      : worst === 'warn' ? 'Degraded'
+                      : worst === 'fault' ? 'Fault'
+                      : 'Unknown';
+            gradeEl.textContent = letter + ' / ' + label;
+        }
+        var summaryEl = document.getElementById('quality-summary');
+        if (summaryEl) {
+            var summaryParts = [];
+            if (typeof tracking.stratum === 'number') summaryParts.push('stratum ' + tracking.stratum);
+            if (typeof rms === 'number') summaryParts.push('rms ' + fmtSeconds(rms));
+            if (jitterPeakNs !== null) summaryParts.push('peak ' + fmtNs(jitterPeakNs));
+            summaryEl.textContent = summaryParts.length ? summaryParts.join(' · ') : 'awaiting telemetry…';
+        }
+    }
+
+    // ── Event / Alarm timeline.  Pure client-side state-transition
+    //    detector: every poll, compare a small slice of the snapshot
+    //    to the previous one and emit a row when something interesting
+    //    happens.  No backend changes required.
+    var EVENT_LOG = [];
+    var EVENT_LOG_MAX = 60;
+    var prevEventState = null;
+
+    function pushEvent(sev, msg) {
+        var d = new Date();
+        var pad = function (n) { return n < 10 ? '0' + n : '' + n; };
+        var ts = pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes()) + ':' + pad(d.getUTCSeconds());
+        EVENT_LOG.unshift({ ts: ts, sev: sev, msg: msg });
+        if (EVENT_LOG.length > EVENT_LOG_MAX) EVENT_LOG.length = EVENT_LOG_MAX;
+        renderEventList();
+    }
+
+    function renderEventList() {
+        var ul = document.getElementById('gps-events-list');
+        if (!ul) return;
+        if (!EVENT_LOG.length) {
+            ul.innerHTML = '<li class="gps-events-empty">No events recorded — system steady.</li>';
+            return;
+        }
+        var html = EVENT_LOG.map(function (e) {
+            return '<li>' +
+                   '<span class="ts">' + escapeHtml(e.ts) + '</span>' +
+                   '<span class="sev sev-' + escapeHtml(e.sev) + '">' + escapeHtml(e.sev) + '</span>' +
+                   '<span class="msg">' + escapeHtml(e.msg) + '</span>' +
+                   '</li>';
+        }).join('');
+        ul.innerHTML = html;
+    }
+
+    function detectEvents(snapshot) {
+        var gps = (snapshot && snapshot.gps) || {};
+        var tracking = (snapshot && snapshot.chrony && snapshot.chrony.tracking) || {};
+        var ppsBackend = gps.pps_backend;
+        var ppsAge = (typeof gps.pps_pulse_age_s === 'number') ? gps.pps_pulse_age_s : null;
+        var state = {
+            ppsLocked: !!(ppsBackend && ppsBackend !== 'none' && ppsAge !== null && ppsAge <= 2),
+            hasFix: !!gps.has_fix,
+            fixMode: gps.fix_mode || 0,
+            holdover: (typeof gps.holdover_s === 'number') ? gps.holdover_s : null,
+            jamming: gps.jamming_state || null,
+            stratum: tracking.stratum,
+            antenna: gps.antenna_status || null,
+            leapPending: !!gps.leap_pending,
+            running: !!gps.running
+        };
+        if (!prevEventState) {
+            prevEventState = state;
+            return;
+        }
+        var p = prevEventState;
+        if (state.ppsLocked !== p.ppsLocked) {
+            if (state.ppsLocked) pushEvent('ok', 'PPS LOCK RESTORED');
+            else pushEvent('fault', 'PPS LOST');
+        }
+        if (state.hasFix !== p.hasFix) {
+            if (state.hasFix) pushEvent('ok', 'GPS RECOVERED');
+            else pushEvent('fault', 'GPS FIX LOST');
+        }
+        if (state.fixMode !== p.fixMode && p.fixMode !== 0 && state.fixMode !== 0) {
+            pushEvent('warn', 'FIX MODE CHANGED ' + p.fixMode + 'D → ' + state.fixMode + 'D');
+        }
+        // Holdover transitions: 0 → >0 means we've entered holdover.
+        var enteredHoldover = (p.holdover === 0 || p.holdover === null) && state.holdover && state.holdover > 0;
+        var exitedHoldover = p.holdover && p.holdover > 0 && state.holdover === 0;
+        if (enteredHoldover) pushEvent('warn', 'HOLDOVER ENTERED');
+        if (exitedHoldover) pushEvent('ok', 'HOLDOVER CLEARED');
+        if (state.jamming !== p.jamming && state.jamming) {
+            if (state.jamming === 'ok' && p.jamming && p.jamming !== 'ok') {
+                pushEvent('ok', 'RF INTERFERENCE CLEARED');
+            } else if (state.jamming !== 'ok') {
+                pushEvent(state.jamming === 'critical' ? 'fault' : 'warn',
+                          'RF INTERFERENCE: ' + state.jamming.toUpperCase());
+            }
+        }
+        if (state.antenna !== p.antenna && state.antenna) {
+            if (state.antenna === 'ok' && p.antenna && p.antenna !== 'ok') {
+                pushEvent('ok', 'ANTENNA OK');
+            } else if (state.antenna === 'short' || state.antenna === 'open') {
+                pushEvent('fault', 'ANTENNA FAULT: ' + state.antenna.toUpperCase());
+            }
+        }
+        if (state.leapPending && !p.leapPending) {
+            pushEvent('info', 'LEAP SECOND PENDING');
+        } else if (!state.leapPending && p.leapPending) {
+            pushEvent('info', 'LEAP SECOND CLEARED');
+        }
+        if (state.stratum !== p.stratum && state.stratum !== null && state.stratum !== undefined) {
+            var sev = (state.stratum === 1) ? 'ok' : (state.stratum <= 4 ? 'warn' : 'fault');
+            pushEvent(sev, 'STRATUM ' + (p.stratum !== null && p.stratum !== undefined ? p.stratum : '—')
+                          + ' → ' + state.stratum);
+        }
+        if (state.running !== p.running) {
+            if (state.running) pushEvent('ok', 'GPS SERVICE STARTED');
+            else pushEvent('fault', 'GPS SERVICE STOPPED');
+        }
+        prevEventState = state;
+    }
+
+    // ── Simple / Engineering view toggle.  Persisted in localStorage
+    //    so an operator who picks "Simple" on a phone keeps it next time.
+    function applyViewMode(mode) {
+        var root = document.getElementById('gps-dash-root');
+        if (!root) return;
+        if (mode !== 'engineering') mode = 'simple';
+        root.setAttribute('data-mode', mode);
+        var simpleBtn = document.getElementById('gps-view-simple');
+        var engBtn = document.getElementById('gps-view-engineering');
+        if (simpleBtn) {
+            simpleBtn.classList.toggle('active', mode === 'simple');
+            simpleBtn.setAttribute('aria-pressed', mode === 'simple' ? 'true' : 'false');
+        }
+        if (engBtn) {
+            engBtn.classList.toggle('active', mode === 'engineering');
+            engBtn.setAttribute('aria-pressed', mode === 'engineering' ? 'true' : 'false');
+        }
+        try { localStorage.setItem('eas-gps-view', mode); } catch (e) { /* sandboxed */ }
+        // Re-render charts when switching to engineering so canvases sized
+        // while hidden pick up correct dimensions.
+        if (mode === 'engineering' && typeof renderTimeSeriesCharts === 'function') {
+            setTimeout(function () {
+                try { renderTimeSeriesCharts(); } catch (e) {}
+                try { renderPrnHeatmap && renderPrnHeatmap(); } catch (e) {}
+                try { renderJammingTimeSeries && renderJammingTimeSeries(); } catch (e) {}
+            }, 30);
+        }
+    }
+    function initialViewMode() {
+        try {
+            var saved = localStorage.getItem('eas-gps-view');
+            if (saved === 'engineering' || saved === 'simple') return saved;
+        } catch (e) {}
+        // Default to Simple on small viewports, Engineering on large ones —
+        // matches the mobile-first redesign goal.
+        return (window.matchMedia && window.matchMedia('(min-width: 992px)').matches) ? 'engineering' : 'simple';
     }
 
     // ── Sync-health bar — translate the system-time offset into a
@@ -3887,6 +4649,14 @@
         setFixPill(gps);
         setStratumPill(chrony.tracking || {});
 
+        // New appliance-style chrome: top status strip, clock-quality
+        // headline card, and event/alarm timeline (state-transition
+        // detector).  These all read the same snapshot so they stay
+        // in lock-step with the detail cards below.
+        renderStatusStrip(snapshot);
+        renderClockQuality(snapshot);
+        detectEvents(snapshot);
+
         // Clocks — prefer the server's now_utc (sampled at the same
         // instant as the rest of the snapshot) over the browser's
         // Date.now(), which would drift if the browser clock isn't
@@ -3957,6 +4727,15 @@
         if (intervalMs > 0) timer = setInterval(fetchOnce, intervalMs);
     }
     document.addEventListener('DOMContentLoaded', function () {
+        // Simple / Engineering view mode — apply persisted (or media-
+        // query default) choice immediately so engineering panels are
+        // hidden before the first paint on phones.
+        applyViewMode(initialViewMode());
+        var simpleBtn = document.getElementById('gps-view-simple');
+        var engBtn = document.getElementById('gps-view-engineering');
+        if (simpleBtn) simpleBtn.addEventListener('click', function () { applyViewMode('simple'); });
+        if (engBtn)    engBtn.addEventListener('click', function () { applyViewMode('engineering'); });
+
         var sel = document.getElementById('gps-dash-refresh');
         if (sel) {
             sel.addEventListener('change', function () {
