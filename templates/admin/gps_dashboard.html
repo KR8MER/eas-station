@@ -113,19 +113,175 @@
         transition: width 0.4s ease;
     }
 
-    /* Sky plot area */
-    .gps-sky-wrap {
-        display: flex; flex-direction: column; align-items: center; gap: 8px;
+    /* ── Hero 3D Skyview card ───────────────────────────────────────────
+       Full-width card holding a Three.js stage with HTML overlays at
+       the four corners for legend / counts / position / elevation key. */
+    .gps-skyview-hero {
+        padding: 0;
+        overflow: hidden;
+        background: radial-gradient(ellipse at 50% 18%, #0d1626 0%, #060b18 70%, #03060d 100%);
     }
-    #gps-dash-sky-canvas {
-        width: 280px; height: 280px;
-        max-width: 100%;
+    .gps-skyview-stage {
+        position: relative;
+        width: 100%;
+        height: 580px;
+        overflow: hidden;
     }
-    .gps-sky-counts {
-        display: flex; gap: 14px; font-size: 0.82rem;
-        color: var(--text-muted);
+    .gps-three-stage {
+        position: absolute; inset: 0;
     }
-    .gps-sky-counts strong { color: var(--text-color); font-weight: 700; }
+    .gps-three-stage canvas { display: block; width: 100%; height: 100%; }
+    .gps-2d-canvas {
+        position: absolute;
+        top: 50%; left: 50%;
+        transform: translate(-50%, -50%);
+        width: 520px; height: 520px;
+        max-width: 92%; max-height: 92%;
+    }
+    .gps-overlay {
+        position: absolute;
+        z-index: 5;
+        pointer-events: none;
+        color: #d8e3f5;
+        font-size: 0.82rem;
+    }
+    .gps-overlay > * { pointer-events: auto; }
+    .gps-overlay-tl { top: 18px; left: 22px; max-width: 280px; }
+    .gps-overlay-tr { top: 18px; right: 22px; }
+    .gps-overlay-bl { bottom: 18px; left: 22px; max-width: 320px; }
+    .gps-overlay-br { bottom: 18px; right: 22px; }
+
+    .gps-skyview-title {
+        font-size: 1.05rem; font-weight: 700;
+        letter-spacing: 0.10em;
+        color: #ffffff;
+        margin-bottom: 4px;
+    }
+    .gps-skyview-desc {
+        font-size: 0.78rem; line-height: 1.35;
+        color: rgba(216, 227, 245, 0.78);
+        margin: 0 0 12px 0;
+        max-width: 200px;
+    }
+    .gps-skyview-legend {
+        display: inline-flex; flex-direction: column; gap: 6px;
+        padding: 10px 14px;
+        background: rgba(8, 14, 28, 0.65);
+        border: 1px solid rgba(120, 150, 200, 0.20);
+        border-radius: 10px;
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
+        margin-bottom: 12px;
+    }
+    .gps-skyview-legend .lg-row {
+        display: flex; align-items: center; gap: 8px;
+        font-size: 0.78rem; font-weight: 600;
+    }
+    .gps-skyview-legend .lg-dot {
+        width: 14px; height: 14px; border-radius: 50%;
+        box-shadow: 0 0 6px currentColor;
+    }
+    .gps-skyview-counts-card {
+        display: inline-flex; flex-direction: column; gap: 3px;
+        padding: 10px 14px;
+        background: rgba(8, 14, 28, 0.65);
+        border: 1px solid rgba(120, 150, 200, 0.20);
+        border-radius: 10px;
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
+        font-size: 0.85rem;
+    }
+    .gps-skyview-counts-card strong {
+        color: #ffffff; font-weight: 700;
+        font-variant-numeric: tabular-nums;
+    }
+    .gps-skyview-counts-card .used { color: #84cc16; }
+    .gps-skyview-counts-card .used strong { color: #84cc16; }
+
+    .gps-skyview-info {
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        column-gap: 14px; row-gap: 3px;
+        margin: 0;
+        padding: 12px 16px;
+        background: rgba(8, 14, 28, 0.70);
+        border: 1px solid rgba(120, 150, 200, 0.20);
+        border-radius: 10px;
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
+        font-family: var(--font-mono, ui-monospace, monospace);
+        font-size: 0.80rem;
+    }
+    .gps-skyview-info dt { color: rgba(216,227,245,0.65); font-weight: 400; }
+    .gps-skyview-info dd { margin: 0; color: #ffffff; font-variant-numeric: tabular-nums; }
+
+    .gps-elev-legend {
+        display: flex; flex-direction: column; gap: 8px;
+        padding: 12px 14px;
+        background: rgba(8, 14, 28, 0.70);
+        border: 1px solid rgba(120, 150, 200, 0.20);
+        border-radius: 10px;
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
+    }
+    .gps-elev-legend .row {
+        display: flex; align-items: center; gap: 10px;
+        margin: 0;
+    }
+    .gps-elev-legend .row > div { display: flex; flex-direction: column; line-height: 1.15; }
+    .gps-elev-legend strong { font-size: 0.78rem; color: #ffffff; }
+    .gps-elev-legend em {
+        font-style: normal;
+        font-size: 0.68rem;
+        color: rgba(216,227,245,0.60);
+    }
+    .gps-elev-legend .line {
+        width: 22px; height: 0;
+        border-top: 2px dashed currentColor;
+        flex-shrink: 0;
+    }
+    .gps-elev-legend .zenith { color: #58a6ff; }
+    .gps-elev-legend .mid    { color: #f6c343; }
+    .gps-elev-legend .horiz  { color: #84cc16; }
+
+    .gps-skyview-help {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px 28px;
+        padding: 14px 22px 18px;
+        border-top: 1px solid rgba(120,150,200,0.18);
+        background: rgba(5, 9, 18, 0.6);
+    }
+    .gps-skyview-help ul {
+        list-style: none; padding: 0; margin: 0;
+        display: flex; flex-direction: column; gap: 5px;
+    }
+    .gps-skyview-help li {
+        display: flex; align-items: center; gap: 8px;
+        font-size: 0.78rem;
+        color: rgba(216,227,245,0.85);
+    }
+    .gps-skyview-help strong { color: #ffffff; font-weight: 600; }
+    .gps-skyview-help .hb-dot {
+        width: 7px; height: 7px; border-radius: 50%;
+        flex-shrink: 0;
+    }
+    .gps-skyview-help .hb-dot.blue   { background: #58a6ff; box-shadow: 0 0 6px #58a6ff; }
+    .gps-skyview-help .hb-dot.yellow { background: #f6c343; box-shadow: 0 0 6px #f6c343; }
+    .gps-skyview-help .hb-dot.green  { background: #84cc16; box-shadow: 0 0 6px #84cc16; }
+    .gps-skyview-help .hb-dot.tip    { background: #84cc16; box-shadow: 0 0 6px #84cc16; opacity: 0.85; }
+
+    @media (max-width: 900px) {
+        .gps-skyview-stage { height: 460px; }
+        .gps-overlay-tl { max-width: 220px; }
+        .gps-skyview-help { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 640px) {
+        .gps-skyview-stage { height: 380px; }
+        .gps-overlay { font-size: 0.74rem; }
+        .gps-overlay-tl, .gps-overlay-bl, .gps-overlay-br { max-width: 180px; }
+        .gps-skyview-desc { display: none; }
+    }
 
     /* 2D / 3D mode toggle — clean segmented control instead of a stray
        Bootstrap pair where the inactive button reads as a solid grey blob. */
@@ -334,6 +490,74 @@
         </a>
     </div>
 
+    <!-- ============================================================
+         HERO 3D SKYVIEW — translucent dome with satellites positioned
+         on the celestial hemisphere, dashed sight-lines from the
+         receiver, lat/lon grid, cardinal labels.  2D polar plot is
+         still available via the toggle (and as a WebGL fallback).
+         ============================================================ -->
+    <div class="gps-card gps-skyview-hero">
+        <div class="gps-skyview-stage" id="gps-skyview-stage">
+            <div id="gps-three-stage" class="gps-three-stage" aria-hidden="true"></div>
+            <canvas id="gps-dash-sky-canvas" class="gps-2d-canvas"
+                    width="600" height="600"
+                    aria-label="Sky plot of satellites in view"
+                    style="display:none;"></canvas>
+
+            <div class="gps-overlay gps-overlay-tl">
+                <div class="gps-skyview-title">3D GPS SKYVIEW</div>
+                <p class="gps-skyview-desc">A 3D view of satellites relative to your GPS receiver on Earth.</p>
+                <div id="gps-skyview-legend" class="gps-skyview-legend"></div>
+                <div class="gps-skyview-counts-card">
+                    <div><strong id="gps-dash-total-count">—</strong> total satellites</div>
+                    <div><strong id="gps-dash-visible-count">—</strong> visible</div>
+                    <div class="used"><strong id="gps-dash-active-count">—</strong> used in fix</div>
+                </div>
+            </div>
+
+            <div class="gps-overlay gps-overlay-tr">
+                <div class="gps-sky-toolbar" role="group" aria-label="Sky plot mode">
+                    <button type="button" id="gps-dash-sky-mode-3d"
+                            class="btn btn-sm active"
+                            title="Translucent dome with sight-lines">3D</button>
+                    <button type="button" id="gps-dash-sky-mode-2d"
+                            class="btn btn-sm"
+                            title="Top-down polar plot">2D</button>
+                </div>
+            </div>
+
+            <div class="gps-overlay gps-overlay-br">
+                <div class="gps-elev-legend">
+                    <div class="row"><span class="line zenith"></span><div><strong>ZENITH (90°)</strong><em>Directly Overhead</em></div></div>
+                    <div class="row"><span class="line mid"></span><div><strong>45°</strong><em>Mid Elevation</em></div></div>
+                    <div class="row"><span class="line horiz"></span><div><strong>HORIZON (0°)</strong><em>At the Horizon</em></div></div>
+                </div>
+            </div>
+
+            <div class="gps-overlay gps-overlay-bl">
+                <dl class="gps-skyview-info">
+                    <dt>Position</dt>   <dd id="g-pos-hero">—</dd>
+                    <dt>Altitude</dt>   <dd id="g-alt-hero">—</dd>
+                    <dt>DOP(H/V/P)</dt> <dd id="g-dop-hero">—</dd>
+                    <dt>Hardware</dt>   <dd id="g-hw-hero">—</dd>
+                </dl>
+            </div>
+        </div>
+
+        <div class="gps-skyview-help">
+            <ul>
+                <li><span class="hb-dot blue"></span><strong>Center (Zenith):</strong> Satellites nearly overhead</li>
+                <li><span class="hb-dot yellow"></span><strong>Middle:</strong> Satellites at medium elevation</li>
+                <li><span class="hb-dot green"></span><strong>Edge (Horizon):</strong> Satellites low in the sky</li>
+            </ul>
+            <ul>
+                <li><span class="hb-dot tip"></span>More satellites and wider spread = better accuracy</li>
+                <li><span class="hb-dot tip"></span>Your receiver uses the best satellites for the fix</li>
+                <li><span class="hb-dot tip"></span>Lower DOP values = better positioning accuracy</li>
+            </ul>
+        </div>
+    </div>
+
     <div class="row g-3">
         <!-- ============================================================
              SYSTEM TRACKING — chronyc tracking dump
@@ -400,28 +624,6 @@
                         <span>Avg SNR: <span id="gps-dash-avg-snr" class="num">—</span> dBHz</span>
                     </div>
                 </div>
-
-                <div class="gps-sky-wrap">
-                    <div style="display:flex; justify-content:flex-end; width:100%; margin-bottom:4px;">
-                        <div class="gps-sky-toolbar" role="group" aria-label="Sky plot mode">
-                            <button type="button" id="gps-dash-sky-mode-2d"
-                                    class="btn btn-sm active"
-                                    title="Polar sky plot (top-down)">2D</button>
-                            <button type="button" id="gps-dash-sky-mode-3d"
-                                    class="btn btn-sm"
-                                    title="Shaded sphere view">3D</button>
-                        </div>
-                    </div>
-                    <canvas id="gps-dash-sky-canvas" width="280" height="280"
-                            aria-label="Sky plot of satellites in view"></canvas>
-                    <div class="gps-sky-counts">
-                        <span><strong id="gps-dash-active-count">—</strong> active fix</span>
-                        <span><strong id="gps-dash-visible-count">—</strong> visible</span>
-                        <span><strong id="gps-dash-total-count">—</strong> total</span>
-                    </div>
-                </div>
-
-                <hr class="my-3" style="border-color: var(--border-color, rgba(127,127,127,.2));">
 
                 <dl class="gps-kv">
                     <dt>Position</dt>       <dd id="g-pos">—</dd>
@@ -747,6 +949,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='vendor/three/three.min.js') }}"></script>
 <script>
 (function () {
     'use strict';
@@ -857,6 +1060,363 @@
         if (v < 0) return 'neg';
         return '';
     }
+
+    // ── 3D sky view — Three.js translucent dome with the receiver at the
+    //    origin, satellites placed on the celestial hemisphere, and dashed
+    //    sight-lines from the receiver to each sat.  Lazy-initialised on
+    //    first render so we don't pay for WebGL setup until it's needed,
+    //    and gracefully fails over to the 2D polar plot if WebGL or the
+    //    Three.js bundle isn't available.
+    var Sky3D = (function () {
+        var ready = false, failed = false;
+        var stage, renderer, scene, camera;
+        var satGroup, prnTextureCache = {};
+
+        var DOME_R = 1.0;
+
+        function azelToVec(azDeg, elDeg) {
+            var az = azDeg * Math.PI / 180;
+            var el = elDeg * Math.PI / 180;
+            var r = Math.cos(el);
+            // +X east, +Y up, +Z south  (so N = -Z, away from camera)
+            return new THREE.Vector3(r * Math.sin(az), Math.sin(el), -r * Math.cos(az));
+        }
+
+        function ringPoints(elevRad, segments) {
+            segments = segments || 96;
+            var r = Math.cos(elevRad), y = Math.sin(elevRad);
+            var pts = [];
+            for (var i = 0; i <= segments; i++) {
+                var t = (i / segments) * Math.PI * 2;
+                pts.push(new THREE.Vector3(r * Math.sin(t), y, -r * Math.cos(t)));
+            }
+            return pts;
+        }
+
+        function makeTextTexture(text, opts) {
+            opts = opts || {};
+            var w = opts.w || 256, h = opts.h || 96;
+            var canvas = document.createElement('canvas');
+            canvas.width = w; canvas.height = h;
+            var ctx = canvas.getContext('2d');
+            if (opts.bg) {
+                ctx.fillStyle = opts.bg;
+                var rad = 14, x = 4, y = 4, ww = w - 8, hh = h - 8;
+                ctx.beginPath();
+                ctx.moveTo(x + rad, y);
+                ctx.arcTo(x + ww, y, x + ww, y + hh, rad);
+                ctx.arcTo(x + ww, y + hh, x, y + hh, rad);
+                ctx.arcTo(x, y + hh, x, y, rad);
+                ctx.arcTo(x, y, x + ww, y, rad);
+                ctx.closePath();
+                ctx.fill();
+            }
+            ctx.font = (opts.weight || 'bold') + ' ' + (opts.fontSize || 56) + 'px ' +
+                       (opts.font || 'system-ui, -apple-system, sans-serif');
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            if (opts.shadow) {
+                ctx.shadowColor = 'rgba(0,0,0,0.75)';
+                ctx.shadowBlur = 6;
+            }
+            ctx.fillStyle = opts.color || '#ffffff';
+            ctx.fillText(text, w / 2, h / 2);
+            var tex = new THREE.CanvasTexture(canvas);
+            tex.minFilter = THREE.LinearFilter;
+            tex.magFilter = THREE.LinearFilter;
+            return tex;
+        }
+
+        function makeSatTexture(prn, hexColor) {
+            var key = prn + '|' + hexColor;
+            if (prnTextureCache[key]) return prnTextureCache[key];
+            var canvas = document.createElement('canvas');
+            canvas.width = 128; canvas.height = 128;
+            var ctx = canvas.getContext('2d');
+            // Soft outer glow.
+            var grad = ctx.createRadialGradient(64, 64, 28, 64, 64, 60);
+            grad.addColorStop(0, hexColor);
+            grad.addColorStop(1, hexColor + '00');
+            ctx.globalAlpha = 0.55;
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, 128, 128);
+            ctx.globalAlpha = 1;
+            // Core dot.
+            ctx.beginPath();
+            ctx.arc(64, 64, 30, 0, Math.PI * 2);
+            ctx.fillStyle = hexColor;
+            ctx.fill();
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+            ctx.stroke();
+            // PRN text.
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 28px system-ui, -apple-system, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.shadowColor = 'rgba(0,0,0,0.65)';
+            ctx.shadowBlur = 4;
+            ctx.fillText(String(prn), 64, 65);
+            var tex = new THREE.CanvasTexture(canvas);
+            tex.minFilter = THREE.LinearFilter;
+            tex.magFilter = THREE.LinearFilter;
+            prnTextureCache[key] = tex;
+            return tex;
+        }
+
+        function addDome() {
+            // Translucent shell + a subtle outer fresnel-ish halo.
+            var domeGeo = new THREE.SphereGeometry(DOME_R, 64, 32, 0, Math.PI * 2, 0, Math.PI / 2);
+            var domeMat = new THREE.MeshPhongMaterial({
+                color: 0x4d8fcc,
+                transparent: true, opacity: 0.10,
+                side: THREE.DoubleSide,
+                depthWrite: false,
+                shininess: 70, specular: 0xa8c8ff
+            });
+            scene.add(new THREE.Mesh(domeGeo, domeMat));
+
+            var glowGeo = new THREE.SphereGeometry(DOME_R * 1.018, 64, 32, 0, Math.PI * 2, 0, Math.PI / 2);
+            var glowMat = new THREE.MeshBasicMaterial({
+                color: 0x6aa9ff, transparent: true, opacity: 0.06,
+                side: THREE.BackSide, depthWrite: false
+            });
+            scene.add(new THREE.Mesh(glowGeo, glowMat));
+        }
+
+        function addGrid() {
+            // Bright horizon ring.
+            var horizonGeo = new THREE.BufferGeometry().setFromPoints(ringPoints(0));
+            scene.add(new THREE.LineLoop(
+                horizonGeo,
+                new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55 })
+            ));
+            // Latitude rings at 15°/45°/75°.
+            [15, 45, 75].forEach(function (eDeg) {
+                var pts = ringPoints(eDeg * Math.PI / 180);
+                var geo = new THREE.BufferGeometry().setFromPoints(pts);
+                var mat = new THREE.LineDashedMaterial({
+                    color: 0x8eb4f0, transparent: true, opacity: 0.32,
+                    dashSize: 0.05, gapSize: 0.04
+                });
+                var line = new THREE.Line(geo, mat);
+                line.computeLineDistances();
+                scene.add(line);
+            });
+            // Meridians at 0/90/180/270.
+            for (var azDeg = 0; azDeg < 360; azDeg += 90) {
+                var pts = [];
+                for (var i = 0; i <= 32; i++) {
+                    var elR = (i / 32) * Math.PI / 2;
+                    var rr = Math.cos(elR), yy = Math.sin(elR);
+                    var azR = azDeg * Math.PI / 180;
+                    pts.push(new THREE.Vector3(rr * Math.sin(azR), yy, -rr * Math.cos(azR)));
+                }
+                scene.add(new THREE.Line(
+                    new THREE.BufferGeometry().setFromPoints(pts),
+                    new THREE.LineBasicMaterial({
+                        color: 0x8eb4f0, transparent: true, opacity: 0.18
+                    })
+                ));
+            }
+        }
+
+        function addCardinalLabels() {
+            [['N', 0], ['E', Math.PI / 2], ['S', Math.PI], ['W', -Math.PI / 2]].forEach(function (lbl) {
+                var name = lbl[0], azR = lbl[1];
+                var rOut = DOME_R * 1.13;
+                var x = rOut * Math.sin(azR);
+                var z = -rOut * Math.cos(azR);
+                var tex = makeTextTexture(name, {
+                    fontSize: 64, color: '#ffffff', shadow: true, w: 128, h: 96
+                });
+                var sp = new THREE.Sprite(new THREE.SpriteMaterial({
+                    map: tex, depthWrite: false, depthTest: false, transparent: true
+                }));
+                sp.scale.set(0.18, 0.13, 1);
+                sp.position.set(x, 0.025, z);
+                scene.add(sp);
+            });
+            // ZENITH cap label.
+            var ztex = makeTextTexture('ZENITH', {
+                fontSize: 40, color: '#ffffff', shadow: true, w: 320, h: 64
+            });
+            var zsp = new THREE.Sprite(new THREE.SpriteMaterial({
+                map: ztex, depthWrite: false, depthTest: false, transparent: true
+            }));
+            zsp.scale.set(0.46, 0.10, 1);
+            zsp.position.set(0, DOME_R + 0.07, 0);
+            scene.add(zsp);
+        }
+
+        function addElevationLabels() {
+            // North-east-ish azimuth so they don't sit on top of satellites
+            // in the viewer's primary view direction.
+            var azR = (60) * Math.PI / 180;
+            [{ a: 15, t: '15°' }, { a: 45, t: '45°' }, { a: 75, t: '75°' }].forEach(function (e) {
+                var elR = e.a * Math.PI / 180;
+                var r = Math.cos(elR), y = Math.sin(elR);
+                var x = r * 1.04 * Math.sin(azR);
+                var z = -r * 1.04 * Math.cos(azR);
+                var tex = makeTextTexture(e.t, {
+                    fontSize: 38, color: '#cfe0ff', shadow: true, w: 128, h: 64
+                });
+                var sp = new THREE.Sprite(new THREE.SpriteMaterial({
+                    map: tex, depthWrite: false, depthTest: false,
+                    transparent: true, opacity: 0.92
+                }));
+                sp.scale.set(0.14, 0.07, 1);
+                sp.position.set(x, y + 0.005, z);
+                scene.add(sp);
+            });
+        }
+
+        function addReceiver() {
+            var mat = new THREE.MeshPhongMaterial({
+                color: 0xeeeeee, shininess: 70, specular: 0xffffff
+            });
+            var base = new THREE.Mesh(new THREE.CylinderGeometry(0.046, 0.058, 0.040, 24), mat);
+            base.position.y = 0.020;
+            scene.add(base);
+            var puck = new THREE.Mesh(new THREE.CylinderGeometry(0.040, 0.040, 0.026, 24), mat);
+            puck.position.y = 0.053;
+            scene.add(puck);
+            var dome = new THREE.Mesh(
+                new THREE.SphereGeometry(0.030, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2),
+                mat
+            );
+            dome.position.y = 0.066;
+            scene.add(dome);
+            // YOU pill label.
+            var tex = makeTextTexture('YOU', {
+                fontSize: 36, color: '#ffffff', shadow: false,
+                bg: 'rgba(8,14,28,0.85)', w: 144, h: 72
+            });
+            var sp = new THREE.Sprite(new THREE.SpriteMaterial({
+                map: tex, depthWrite: false, depthTest: false, transparent: true
+            }));
+            sp.scale.set(0.20, 0.10, 1);
+            sp.position.set(0.18, 0.10, 0.04);
+            scene.add(sp);
+        }
+
+        function init() {
+            if (ready || failed) return ready;
+            if (typeof THREE === 'undefined') { failed = true; return false; }
+            stage = document.getElementById('gps-three-stage');
+            if (!stage) { failed = true; return false; }
+            var w = stage.clientWidth || 600, h = stage.clientHeight || 580;
+            try {
+                renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            } catch (e) { failed = true; return false; }
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+            renderer.setSize(w, h);
+            renderer.setClearColor(0x000000, 0);
+            stage.appendChild(renderer.domElement);
+
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(42, w / h, 0.05, 50);
+            camera.position.set(0, 0.55, 1.95);
+            camera.lookAt(0, 0.32, 0);
+
+            scene.add(new THREE.AmbientLight(0xffffff, 0.85));
+            var dl = new THREE.DirectionalLight(0xc8d8ff, 0.6);
+            dl.position.set(-1.2, 1.6, 1.4);
+            scene.add(dl);
+
+            addDome();
+            addGrid();
+            addCardinalLabels();
+            addElevationLabels();
+            addReceiver();
+
+            satGroup = new THREE.Group();
+            scene.add(satGroup);
+
+            window.addEventListener('resize', onResize);
+            requestAnimationFrame(loop);
+            ready = true;
+            return true;
+        }
+
+        function clearSats() {
+            while (satGroup.children.length) {
+                var o = satGroup.children.pop();
+                if (o.geometry) o.geometry.dispose();
+                if (o.material) o.material.dispose();
+            }
+        }
+
+        function renderSats(satsInView, activePrns) {
+            if (!satGroup) return;
+            clearSats();
+            var activeSet = {};
+            (activePrns || []).forEach(function (p) { activeSet[p] = true; });
+
+            (satsInView || []).forEach(function (sat) {
+                if (sat.elevation === null || sat.elevation === undefined ||
+                    sat.azimuth === null || sat.azimuth === undefined) return;
+                var info = constInfo(sat.constellation);
+                var elev = Math.max(0, Math.min(90, sat.elevation));
+                var pos = azelToVec(sat.azimuth, elev);
+                // Pull just inside the dome so the sprite visually sits on
+                // the surface instead of poking through the lat/lon lines.
+                var satPos = pos.clone().multiplyScalar(0.985);
+
+                // Dashed sight-line from receiver to satellite.
+                var lineGeo = new THREE.BufferGeometry().setFromPoints([
+                    new THREE.Vector3(0, 0.07, 0),
+                    satPos
+                ]);
+                var lineMat = new THREE.LineDashedMaterial({
+                    color: new THREE.Color(info.color),
+                    transparent: true,
+                    opacity: activeSet[sat.prn] ? 0.85 : 0.42,
+                    dashSize: 0.045,
+                    gapSize: 0.030
+                });
+                var line = new THREE.Line(lineGeo, lineMat);
+                line.computeLineDistances();
+                satGroup.add(line);
+
+                // Satellite sprite (dot + PRN number).
+                var tex = makeSatTexture(sat.prn, info.color);
+                var sp = new THREE.Sprite(new THREE.SpriteMaterial({
+                    map: tex, depthWrite: false, transparent: true
+                }));
+                sp.scale.set(0.115, 0.115, 1);
+                sp.position.copy(satPos);
+                satGroup.add(sp);
+            });
+        }
+
+        function onResize() {
+            if (!stage || !renderer) return;
+            var w = stage.clientWidth, h = stage.clientHeight;
+            if (!w || !h) return;
+            renderer.setSize(w, h);
+            camera.aspect = w / h;
+            camera.updateProjectionMatrix();
+        }
+
+        function loop() {
+            if (!ready) return;
+            renderer.render(scene, camera);
+            requestAnimationFrame(loop);
+        }
+
+        return {
+            init: init,
+            render: function (sats, active) {
+                if (!ready && !init()) return false;
+                renderSats(sats, active);
+                return true;
+            },
+            isReady: function () { return ready; },
+            hasFailed: function () { return failed; },
+            resize: onResize
+        };
+    })();
 
     // ── 2D sky plot — top-down polar view.  Shaded as the underside of a
     //    dome (centre bright = zenith above the viewer, rim dark = horizon)
@@ -1177,31 +1737,51 @@
     function getSkyMode() {
         try {
             var v = localStorage.getItem(SKY_MODE_KEY);
-            return v === '3d' ? '3d' : '2d';
-        } catch (e) { return '2d'; }
+            // Default to 3D — the new translucent-dome view is the hero.
+            return v === '2d' ? '2d' : '3d';
+        } catch (e) { return '3d'; }
     }
-    function setSkyMode(mode) {
-        try { localStorage.setItem(SKY_MODE_KEY, mode); } catch (e) {}
+    function applySkyModeUI(mode) {
         var btn2 = document.getElementById('gps-dash-sky-mode-2d');
         var btn3 = document.getElementById('gps-dash-sky-mode-3d');
         if (btn2) btn2.classList.toggle('active', mode === '2d');
         if (btn3) btn3.classList.toggle('active', mode === '3d');
+        var stage = document.getElementById('gps-three-stage');
+        var canvas = document.getElementById('gps-dash-sky-canvas');
+        if (stage)  stage.style.display  = (mode === '3d') ? '' : 'none';
+        if (canvas) canvas.style.display = (mode === '3d') ? 'none' : 'block';
+    }
+    function setSkyMode(mode) {
+        try { localStorage.setItem(SKY_MODE_KEY, mode); } catch (e) {}
+        applySkyModeUI(mode);
+        if (mode === '3d') {
+            // Initialise (and seed with empty data) so the empty dome
+            // shows up before the first poll lands.  Fall back to 2D if
+            // WebGL/Three.js aren't usable.
+            if (!Sky3D.render([], [])) {
+                applySkyModeUI('2d');
+            } else {
+                Sky3D.resize();
+            }
+        }
         // Re-render immediately so the toggle feels snappy even
         // between live polls.
         if (lastSnapshot) {
             var canvas = document.getElementById('gps-dash-sky-canvas');
-            if (canvas) {
-                var gps = lastSnapshot.gps || {};
-                drawSkyPlotAuto(canvas, gps.satellites_in_view || [], gps.active_satellite_prns || []);
-            }
+            var gps = lastSnapshot.gps || {};
+            drawSkyPlotAuto(canvas, gps.satellites_in_view || [], gps.active_satellite_prns || []);
         }
     }
     function drawSkyPlotAuto(canvas, satsInView, activePrns) {
-        if (getSkyMode() === '3d') {
-            drawSkyPlot3D(canvas, satsInView, activePrns);
-        } else {
-            drawSkyPlot(canvas, satsInView, activePrns);
+        var mode = getSkyMode();
+        if (mode === '3d') {
+            // Try the WebGL dome.  If it can't initialise (no THREE, no
+            // WebGL, missing stage), silently fall through to the 2D
+            // polar canvas so the dashboard still works.
+            if (Sky3D.render(satsInView, activePrns)) return;
+            applySkyModeUI('2d');
         }
+        if (canvas) drawSkyPlot(canvas, satsInView, activePrns);
     }
 
     // ── Per-PRN SNR bar chart — flexbox of fixed-height bars.  Sorted by
@@ -1246,7 +1826,8 @@
             groups[c].total += 1;
             if (activeSet[s.prn]) groups[c].used += 1;
         });
-        var html = Object.keys(groups).sort().map(function (code) {
+        var codes = Object.keys(groups).sort();
+        var html = codes.map(function (code) {
             var info = constInfo(code);
             var g = groups[code];
             return '<span class="gps-const-chip" title="' + escapeHtml(info.label) + ' — '
@@ -1257,6 +1838,18 @@
                 + '</span>';
         }).join('');
         host.innerHTML = html;
+
+        // Mirror into the hero overlay legend as a colour-coded list.
+        var legend = document.getElementById('gps-skyview-legend');
+        if (legend) {
+            legend.innerHTML = codes.map(function (code) {
+                var info = constInfo(code);
+                return '<div class="lg-row" style="color:' + info.color + '">'
+                    +    '<span class="lg-dot" style="background:' + info.color + '"></span>'
+                    +    '<span style="color:#ffffff">' + escapeHtml(info.label) + '</span>'
+                    +  '</div>';
+            }).join('');
+        }
     }
 
     // ── Constellation filter chips above the satellite table.
@@ -1485,19 +2078,32 @@
             ? gps.latitude.toFixed(6) + ', ' + gps.longitude.toFixed(6)
             : '—';
         setText('g-pos', pos);
-        setText('g-alt', gps && gps.altitude_m !== null && gps.altitude_m !== undefined
-            ? gps.altitude_m.toFixed(1) + ' m' : '—');
+        setText('g-pos-hero', pos);
+        var alt = gps && gps.altitude_m !== null && gps.altitude_m !== undefined
+            ? gps.altitude_m.toFixed(1) + ' m' : '—';
+        setText('g-alt', alt);
+        setText('g-alt-hero', alt);
 
         var dopBits = [];
         if (gps && gps.hdop !== null && gps.hdop !== undefined) dopBits.push('H ' + gps.hdop);
         if (gps && gps.vdop !== null && gps.vdop !== undefined) dopBits.push('V ' + gps.vdop);
         if (gps && gps.pdop !== null && gps.pdop !== undefined) dopBits.push('P ' + gps.pdop);
-        setText('g-dop', dopBits.length ? dopBits.join(' · ') : '—');
+        var dop = dopBits.length ? dopBits.join(' · ') : '—';
+        setText('g-dop', dop);
+        // Hero overlay uses the slash form (H/V/P) to match the mockup.
+        var heroDop = '—';
+        if (gps && (gps.hdop != null || gps.vdop != null || gps.pdop != null)) {
+            heroDop = (gps.hdop != null ? gps.hdop : '—') + ' / '
+                    + (gps.vdop != null ? gps.vdop : '—') + ' / '
+                    + (gps.pdop != null ? gps.pdop : '—');
+        }
+        setText('g-dop-hero', heroDop);
 
         var hw = (gps && gps.serial_port)
             ? (gps.serial_port + (gps.baudrate ? ' @ ' + gps.baudrate + ' bd' : ''))
             : '—';
         setText('g-hw', hw);
+        setText('g-hw-hero', hw);
 
         // Fix age — colour-code so a frozen UART stands out.  Anything
         // over 5 s without a sentence is suspicious on a 1 Hz receiver.
