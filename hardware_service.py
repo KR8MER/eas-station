@@ -903,11 +903,25 @@ def _collect_gps_for_trends() -> dict:
     ]
     avg_snr = (sum(snrs) / len(snrs)) if snrs else None
 
+    # PPS jitter (1σ in nanoseconds) — included in the trend ring so
+    # the GPS dashboard can plot a "Receiver Stability" sparkline
+    # alongside chrony's RMS offset.  Empty when the manager hasn't
+    # accumulated enough PPS pulses yet for a stddev to mean anything.
+    jitter = status.get("pps_jitter") or {}
+    jitter_stddev_ns = jitter.get("stddev_ns") if isinstance(jitter, dict) else None
+
+    # Holdover seconds for the holdover-timer trend.  ``0`` while we
+    # have a 3D fix; counts upward when we don't.
+    holdover_s = status.get("holdover_s")
+
     return {
-        "hdop":    _num(status.get("hdop")),
-        "vdop":    _num(status.get("vdop")),
-        "pdop":    _num(status.get("pdop")),
-        "avg_snr": avg_snr,
+        "hdop":            _num(status.get("hdop")),
+        "vdop":            _num(status.get("vdop")),
+        "pdop":            _num(status.get("pdop")),
+        "avg_snr":         avg_snr,
+        "fix_age_s":       _num(status.get("fix_age_s")),
+        "holdover_s":      _num(holdover_s),
+        "pps_jitter_ns":   _num(jitter_stddev_ns),
     }
 
 
