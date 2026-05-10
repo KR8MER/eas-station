@@ -145,7 +145,12 @@
         color: #d8e3f5;
         font-size: 0.82rem;
     }
-    .gps-overlay > * { pointer-events: auto; }
+    /* Only restore pointer events on overlay children that genuinely
+       need them — the sky-mode toolbar.  Static info panels (legend,
+       counts, position info, elevation key) stay click-through so
+       satellites tucked behind a corner are still hoverable through
+       the overlay. */
+    .gps-overlay-tr .gps-sky-toolbar { pointer-events: auto; }
     .gps-overlay-tl { top: 18px; left: 22px; max-width: 280px; }
     .gps-overlay-tr { top: 18px; right: 22px; }
     .gps-overlay-bl { bottom: 18px; left: 22px; max-width: 320px; }
@@ -466,9 +471,14 @@
     .gps-filter-chip {
         padding: 2px 9px; border-radius: 999px;
         font-size: 0.74rem; cursor: pointer; user-select: none;
+        font-family: inherit; line-height: 1.4;
         background: var(--bg-tertiary, rgba(127,127,127,.12));
         border: 1px solid var(--border-color, rgba(127,127,127,.25));
         color: var(--text-color);
+    }
+    .gps-filter-chip:focus-visible {
+        outline: 2px solid var(--bs-focus-ring-color, #58a6ff);
+        outline-offset: 1px;
     }
     .gps-filter-chip.active {
         outline: 2px solid currentColor;
@@ -531,11 +541,11 @@
             GPS &amp; Time
         </span>
         <span class="node">NTP Node:&nbsp;<span id="gps-dash-node">…</span></span>
-        <span id="gps-dash-lock-pill" class="gps-pill muted">
+        <span id="gps-dash-lock-pill" class="gps-pill muted" aria-live="polite">
             <i class="fas fa-circle"></i> CONNECTING
         </span>
-        <span id="gps-dash-fix-pill" class="gps-pill muted">— FIX</span>
-        <span id="gps-dash-stratum-pill" class="gps-pill muted">STRATUM —</span>
+        <span id="gps-dash-fix-pill" class="gps-pill muted" aria-live="polite">— FIX</span>
+        <span id="gps-dash-stratum-pill" class="gps-pill muted" aria-live="polite">STRATUM —</span>
         <span class="spacer"></span>
         <label for="gps-dash-refresh" class="text-muted small mb-0 me-1">Refresh</label>
         <select id="gps-dash-refresh" class="form-select form-select-sm">
@@ -579,10 +589,10 @@
             <div class="gps-overlay gps-overlay-tr">
                 <div class="gps-sky-toolbar" role="group" aria-label="Sky plot mode">
                     <button type="button" id="gps-dash-sky-mode-3d"
-                            class="btn btn-sm active"
+                            class="btn btn-sm active" aria-pressed="true"
                             title="Translucent dome with sight-lines">3D</button>
                     <button type="button" id="gps-dash-sky-mode-2d"
-                            class="btn btn-sm"
+                            class="btn btn-sm" aria-pressed="false"
                             title="Top-down polar plot">2D</button>
                 </div>
             </div>
@@ -597,10 +607,10 @@
 
             <div class="gps-overlay gps-overlay-bl">
                 <dl class="gps-skyview-info">
-                    <dt>Position</dt>   <dd id="g-pos-hero">—</dd>
-                    <dt>Altitude</dt>   <dd id="g-alt-hero">—</dd>
-                    <dt>DOP(H/V/P)</dt> <dd id="g-dop-hero">—</dd>
-                    <dt>Hardware</dt>   <dd id="g-hw-hero">—</dd>
+                    <dt>Position</dt>   <dd id="g-pos">—</dd>
+                    <dt>Altitude</dt>   <dd id="g-alt">—</dd>
+                    <dt>DOP(H/V/P)</dt> <dd id="g-dop">—</dd>
+                    <dt>Hardware</dt>   <dd id="g-hw">—</dd>
                 </dl>
             </div>
         </div>
@@ -664,15 +674,13 @@
         </div>
 
         <!-- ============================================================
-             SATELLITE SKYVIEW — sky plot + position + DOP + hardware
+             RECEIVER STATUS — signal integrity + the bits that don't fit
+             into the Skyview hero (fix age, holdover, antenna, leap, RF).
              ============================================================ -->
         <div class="col-12 col-xl-6">
             <div class="gps-card h-100">
                 <div class="gps-card-head">
-                    <h3><i class="fas fa-satellite me-1"></i> Satellite Skyview</h3>
-                    <div class="badge-area">
-                        <span id="gps-dash-fix-pill-skyview" class="gps-pill muted">— FIX</span>
-                    </div>
+                    <h3><i class="fas fa-satellite me-1"></i> Receiver Status</h3>
                 </div>
 
                 <div class="gps-sync-health" title="Average SNR across all satellites in view">
@@ -687,16 +695,15 @@
                 </div>
 
                 <dl class="gps-kv">
-                    <dt>Position</dt>       <dd id="g-pos">—</dd>
-                    <dt>Altitude</dt>       <dd id="g-alt" class="num">—</dd>
-                    <dt>Geometry (DOP)</dt> <dd id="g-dop" class="num">—</dd>
-                    <dt>Hardware</dt>       <dd id="g-hw">—</dd>
-                    <dt>Fix age</dt>        <dd id="g-fix-age" class="num">—</dd>
-                    <dt>Holdover</dt>       <dd id="g-holdover" class="num">—</dd>
-                    <dt>Antenna</dt>        <dd id="g-antenna">—</dd>
-                    <dt>RF / jamming</dt>   <dd id="g-jamming">—</dd>
-                    <dt>Leap state</dt>     <dd id="g-leap-state">—</dd>
-                    <dt>Leap (GPS-UTC)</dt> <dd id="g-leap-seconds" class="num">—</dd>
+                    <dt>Fix age</dt>          <dd id="g-fix-age" class="num">—</dd>
+                    <dt>Last 3D fix</dt>      <dd id="g-last-3d-fix">—</dd>
+                    <dt>Holdover</dt>         <dd id="g-holdover" class="num">—</dd>
+                    <dt>PPS backend</dt>      <dd id="g-pps-backend">—</dd>
+                    <dt>Antenna</dt>          <dd id="g-antenna">—</dd>
+                    <dt>RF / jamming</dt>     <dd id="g-jamming">—</dd>
+                    <dt>Leap state</dt>       <dd id="g-leap-state">—</dd>
+                    <dt>Leap (GPS-UTC)</dt>   <dd id="g-leap-seconds" class="num">—</dd>
+                    <dt>NMEA traffic</dt>     <dd id="g-nmea-traffic" class="num">—</dd>
                 </dl>
 
                 <div class="gps-const-row" id="gps-dash-const-chips"></div>
@@ -783,10 +790,11 @@
     </div>
 
     <!-- ============================================================
-         TIME-SERIES PERFORMANCE GRAPHS — fed from a client-side ring
-         buffer of the dashboard poll.  10 minutes of history at the
-         default 5 s refresh; resets on page reload (no historical
-         backend store yet — see footer note).
+         TIME-SERIES PERFORMANCE GRAPHS — client-side ring buffer fed
+         from each dashboard poll, seeded on first load from the
+         Redis-backed /admin/api/gps-dashboard/trends endpoint so a
+         page reload doesn't lose prior history.  Capacity is 720
+         samples (≈ 1 hour at the default 5 s refresh).
          ============================================================ -->
     <div class="row g-3 mt-0">
         <div class="col-12 col-xl-6">
@@ -1003,8 +1011,9 @@
         Modelled visually on
         <a href="https://w0chp.radio/chrogps-dash/" target="_blank" rel="noopener">W0CHP's chrogps-dash</a>;
         all data is sourced live from this station's GPS receiver and local <code>chronyc</code>.
-        Time-series graphs above accumulate in-browser from each dashboard refresh and reset on
-        page reload — a persistent historical store is planned for a future release.
+        Time-series graphs above are seeded on first load from the Redis-backed
+        <code>/admin/api/gps-dashboard/trends</code> endpoint and topped up live from each poll,
+        so a page reload no longer loses your accumulated history.
     </p>
 </div>
 {% endblock %}
@@ -1460,9 +1469,21 @@
             stage.appendChild(tooltipEl);
 
             var canvas = renderer.domElement;
+            // Make the canvas keyboard-focusable so Escape can clear a
+            // pinned tooltip without forcing the user to chase the mouse.
+            canvas.setAttribute('tabindex', '0');
+            canvas.setAttribute('aria-label',
+                'Satellite skyview. The full satellite list is in the table below this card.');
             canvas.addEventListener('mousemove', onPointerMove);
             canvas.addEventListener('mouseleave', onPointerLeave);
             canvas.addEventListener('click', onCanvasClick);
+            canvas.addEventListener('keydown', function (ev) {
+                if (ev.key === 'Escape' && pinnedPrn != null) {
+                    pinnedPrn = null;
+                    hideTooltip();
+                    ev.preventDefault();
+                }
+            });
         }
 
         function pickSat(clientX, clientY) {
@@ -1745,223 +1766,6 @@
         });
     }
 
-    // ── 3D sky view — tilted orthographic projection of the celestial
-    //    hemisphere onto the canvas.  Pure-canvas (no Three.js); the
-    //    tilt is fixed (no orbit / drag) so we don't have to handle
-    //    pointer events.  Z-sort the satellites back-to-front so the
-    //    front hemisphere occludes the back like you'd expect.
-    //
-    //    Coordinate convention:
-    //       elev=90°  → straight up      (zenith, top of view)
-    //       elev=0°   → on the horizon ring
-    //       az=0°     → North            (away from viewer when tilted)
-    //       az=90°    → East             (right)
-    //       az=180°   → South            (toward viewer when tilted)
-    //       az=270°   → West             (left)
-    var SKY3D_TILT_DEG = 35;  // tilt the hemisphere forward this much
-
-    function project3d(elevDeg, azDeg) {
-        var el = elevDeg * Math.PI / 180;
-        var az = azDeg * Math.PI / 180;
-        // Sphere coordinates with +y pointing North, +x pointing East,
-        // +z pointing up.
-        var x = Math.cos(el) * Math.sin(az);
-        var y = Math.cos(el) * Math.cos(az);
-        var z = Math.sin(el);
-        // Tilt around the X axis: rotate the +y axis down toward the
-        // viewer so the north horizon recedes upward and the south
-        // horizon comes forward.  Standard rotation matrix.
-        var t = SKY3D_TILT_DEG * Math.PI / 180;
-        var yp = y * Math.cos(t) - z * Math.sin(t);
-        var zp = y * Math.sin(t) + z * Math.cos(t);
-        return { sx: x, sy: -yp, depth: zp };  // -yp because canvas Y grows down
-    }
-
-    function drawSkyPlot3D(canvas, satsInView, activePrns) {
-        var ctx = canvas.getContext('2d');
-        var W = canvas.width, H = canvas.height;
-        ctx.clearRect(0, 0, W, H);
-        var cx = W / 2, cy = H / 2;
-        // Leave a little margin so labels at the rim don't clip.
-        var R = Math.min(cx, cy) - 14;
-
-        function screen(p) {
-            return { x: cx + p.sx * R, y: cy + p.sy * R };
-        }
-
-        // The horizon, after a 35° tilt around the X axis, projects to an
-        // ellipse with semi-axes (R, R·cos(tilt)).  We need that for the
-        // sphere fill, the atmospheric halo, and the rim stroke.
-        var tilt = SKY3D_TILT_DEG * Math.PI / 180;
-        var Rx = R, Ry = R * Math.cos(tilt);
-
-        // ── Atmospheric halo: a slightly larger ellipse than the horizon,
-        //    with a soft radial-blue gradient that fades to transparent.
-        ctx.save();
-        ctx.translate(cx, cy);
-        ctx.scale(1, Ry / Rx);
-        var halo = ctx.createRadialGradient(0, 0, R * 0.92, 0, 0, R + 16);
-        halo.addColorStop(0, 'rgba(88,166,255,0.22)');
-        halo.addColorStop(1, 'rgba(88,166,255,0)');
-        ctx.fillStyle = halo;
-        ctx.beginPath(); ctx.arc(0, 0, R + 16, 0, Math.PI * 2); ctx.fill();
-        ctx.restore();
-
-        // ── Sphere body: fill the projected horizon ellipse with a
-        //    radial gradient offset to the upper-left so the dome reads
-        //    as a lit-from-above ball.  Limb darkening at the rim sells
-        //    the curvature.
-        ctx.save();
-        ctx.translate(cx, cy);
-        ctx.scale(1, Ry / Rx);
-        var lightX = -R * 0.35, lightY = -R * 0.35;
-        var sphere = ctx.createRadialGradient(lightX, lightY, R * 0.05, 0, 0, R);
-        sphere.addColorStop(0,    'rgba(150,180,225,0.32)');
-        sphere.addColorStop(0.45, 'rgba(70, 100,160,0.18)');
-        sphere.addColorStop(0.85, 'rgba(20, 30, 55, 0.30)');
-        sphere.addColorStop(1,    'rgba(5, 8, 16,  0.55)');
-        ctx.fillStyle = sphere;
-        ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.fill();
-        // Specular highlight — small bright blob at the lit pole.
-        var spec = ctx.createRadialGradient(lightX, lightY, 0, lightX, lightY, R * 0.55);
-        spec.addColorStop(0, 'rgba(220,235,255,0.18)');
-        spec.addColorStop(1, 'rgba(220,235,255,0)');
-        ctx.fillStyle = spec;
-        ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.fill();
-        ctx.restore();
-
-        // ── Horizon ellipse rim.  Slightly brighter on the lit (upper)
-        //    half — gives the sphere a defined silhouette.
-        ctx.strokeStyle = 'rgba(180,200,230,0.40)';
-        ctx.lineWidth = 1.2;
-        ctx.beginPath();
-        for (var az = 0; az <= 360; az += 4) {
-            var p = screen(project3d(0, az));
-            if (az === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
-        }
-        ctx.stroke();
-
-        // ── Latitude rings at elev = 30° and 60°.  Front half bright,
-        //    back half faint so the curvature reads through.
-        function drawLatRing(elev) {
-            ctx.lineWidth = 1;
-            for (var az = 0; az < 360; az += 4) {
-                var p1 = project3d(elev, az);
-                var p2 = project3d(elev, az + 4);
-                var s1 = screen(p1), s2 = screen(p2);
-                var avgDepth = (p1.depth + p2.depth) / 2;
-                ctx.strokeStyle = (avgDepth > 0)
-                    ? 'rgba(180,200,230,0.10)'
-                    : 'rgba(180,200,230,0.28)';
-                ctx.beginPath();
-                ctx.moveTo(s1.x, s1.y); ctx.lineTo(s2.x, s2.y);
-                ctx.stroke();
-            }
-        }
-        drawLatRing(30);
-        drawLatRing(60);
-
-        // ── Meridian arcs at the four cardinal azimuths, rim → zenith.
-        function drawMeridian(azDeg) {
-            ctx.lineWidth = 1;
-            for (var elev = 0; elev < 90; elev += 4) {
-                var p1 = project3d(elev, azDeg);
-                var p2 = project3d(elev + 4, azDeg);
-                var s1 = screen(p1), s2 = screen(p2);
-                var avgDepth = (p1.depth + p2.depth) / 2;
-                ctx.strokeStyle = (avgDepth > 0)
-                    ? 'rgba(180,200,230,0.09)'
-                    : 'rgba(180,200,230,0.22)';
-                ctx.beginPath();
-                ctx.moveTo(s1.x, s1.y); ctx.lineTo(s2.x, s2.y);
-                ctx.stroke();
-            }
-        }
-        [0, 90, 180, 270].forEach(drawMeridian);
-
-        // Zenith dot — small marker so you can see "straight up" at a
-        // glance even before any sats render.
-        var zen = screen(project3d(90, 0));
-        ctx.beginPath(); ctx.arc(zen.x, zen.y, 1.6, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(220,230,250,0.65)';
-        ctx.fill();
-
-        // Cardinal labels — placed slightly outside the horizon ellipse.
-        ctx.fillStyle = 'rgba(200,210,230,0.78)';
-        ctx.font = '11px sans-serif';
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        function cardinal(label, az, padPx) {
-            var p3 = project3d(0, az);
-            var len = Math.hypot(p3.sx, p3.sy) || 1;
-            var dx = p3.sx / len, dy = p3.sy / len;
-            var screenR = R * len;
-            ctx.fillText(label, cx + dx * (screenR + padPx), cy + dy * (screenR + padPx));
-        }
-        cardinal('N', 0,   10);
-        cardinal('E', 90,  10);
-        cardinal('S', 180, 10);
-        cardinal('W', 270, 10);
-
-        // ── Satellites: project, sort by depth (back-to-front), draw.
-        var activeSet = {};
-        (activePrns || []).forEach(function (p) { activeSet[p] = true; });
-
-        var sats = [];
-        (satsInView || []).forEach(function (sat) {
-            if (sat.elevation === null || sat.azimuth === null ||
-                sat.elevation === undefined || sat.azimuth === undefined) return;
-            var elev = Math.max(0, Math.min(90, sat.elevation));
-            var p3 = project3d(elev, sat.azimuth);
-            var s = screen(p3);
-            sats.push({ sat: sat, sx: s.x, sy: s.y, depth: p3.depth });
-        });
-        // Larger depth = farther away → draw first.
-        sats.sort(function (a, b) { return b.depth - a.depth; });
-
-        sats.forEach(function (entry) {
-            var sat = entry.sat;
-            var info = constInfo(sat.constellation);
-            var alpha = (sat.snr === null || sat.snr === undefined)
-                ? 0.75
-                : Math.max(0.6, Math.min(1, 0.55 + sat.snr / 60));
-            if (entry.depth > 0) alpha *= 0.55;
-
-            // Perspective: front sats grow, back sats shrink.  depth ∈
-            // roughly [-1, 1]; map to a 0.78–1.18 size multiplier.
-            var sizeMul = 1 - entry.depth * 0.20;
-            var dotR = 5 * sizeMul;
-
-            if (activeSet[sat.prn]) {
-                ctx.beginPath();
-                ctx.arc(entry.sx, entry.sy, dotR + 3.5, 0, Math.PI * 2);
-                ctx.strokeStyle = info.color;
-                ctx.lineWidth = 1.5;
-                ctx.globalAlpha = (entry.depth > 0) ? 0.25 : 0.55;
-                ctx.stroke();
-                ctx.globalAlpha = 1;
-            }
-            // Drop shadow on the sphere — only for front-facing sats.
-            if (entry.depth <= 0) {
-                ctx.beginPath();
-                ctx.arc(entry.sx + 0.6, entry.sy + 0.9, dotR * 1.05, 0, Math.PI * 2);
-                ctx.fillStyle = 'rgba(0,0,0,0.40)';
-                ctx.fill();
-            }
-            ctx.beginPath();
-            ctx.arc(entry.sx, entry.sy, dotR, 0, Math.PI * 2);
-            ctx.fillStyle = info.color;
-            ctx.globalAlpha = alpha;
-            ctx.fill();
-            ctx.globalAlpha = 1;
-            ctx.strokeStyle = 'rgba(255,255,255,0.65)';
-            ctx.lineWidth = 0.8;
-            ctx.stroke();
-
-            ctx.fillStyle = '#fff';
-            ctx.font = 'bold 8px sans-serif';
-            ctx.fillText(String(sat.prn), entry.sx, entry.sy);
-        });
-    }
 
     // Pick the renderer based on the current toggle state.  Persisted
     // in localStorage so the operator's preference survives a reload.
@@ -1976,8 +1780,14 @@
     function applySkyModeUI(mode) {
         var btn2 = document.getElementById('gps-dash-sky-mode-2d');
         var btn3 = document.getElementById('gps-dash-sky-mode-3d');
-        if (btn2) btn2.classList.toggle('active', mode === '2d');
-        if (btn3) btn3.classList.toggle('active', mode === '3d');
+        if (btn2) {
+            btn2.classList.toggle('active', mode === '2d');
+            btn2.setAttribute('aria-pressed', mode === '2d' ? 'true' : 'false');
+        }
+        if (btn3) {
+            btn3.classList.toggle('active', mode === '3d');
+            btn3.setAttribute('aria-pressed', mode === '3d' ? 'true' : 'false');
+        }
         var stage = document.getElementById('gps-three-stage');
         var canvas = document.getElementById('gps-dash-sky-canvas');
         if (stage)  stage.style.display  = (mode === '3d') ? '' : 'none';
@@ -2094,23 +1904,26 @@
         });
         var codes = Object.keys(present).sort();
         if (!codes.length) { host.innerHTML = ''; return; }
-        var html = '<span class="gps-filter-chip ' + (activeFilter === null ? 'active' : '') + '" '
-                + 'data-code="">All</span>';
+        var allActive = activeFilter === null;
+        var html = '<button type="button" class="gps-filter-chip ' + (allActive ? 'active' : '') + '" '
+                + 'data-code="" aria-pressed="' + (allActive ? 'true' : 'false') + '">All</button>';
         codes.forEach(function (code) {
             var info = constInfo(code);
-            html += '<span class="gps-filter-chip' + (activeFilter === code ? ' active' : '') + '" '
+            var isActive = activeFilter === code;
+            html += '<button type="button" class="gps-filter-chip' + (isActive ? ' active' : '') + '" '
                 +  'data-code="' + escapeHtml(code) + '" '
+                +  'aria-pressed="' + (isActive ? 'true' : 'false') + '" '
                 +  'style="color:' + info.color + ';">'
-                +  escapeHtml(info.label) + '</span>';
+                +  escapeHtml(info.label) + '</button>';
         });
         host.innerHTML = html;
         host.querySelectorAll('.gps-filter-chip').forEach(function (chip) {
-            chip.onclick = function () {
+            chip.addEventListener('click', function () {
                 var c = chip.getAttribute('data-code');
                 activeFilter = c ? c : null;
                 lastSnapshot && renderSatTable(lastSnapshot.gps);
                 renderSatFilters((lastSnapshot && lastSnapshot.gps && lastSnapshot.gps.satellites_in_view) || []);
-            };
+            });
         });
     }
 
@@ -2220,16 +2033,29 @@
             pill.innerHTML = '<i class="fas fa-circle-xmark"></i> NO GPS';
         }
     }
+    // fix_quality is the NMEA quality string (gps_fix / dgps_fix / pps_fix /
+    // rtk_fix / float_rtk / dead_reckoning / manual / sim).  Surface it as
+    // a short suffix on the FIX pill so RTK / DGPS / PPS fixes are
+    // distinguishable from a plain 3D fix.
+    var FIX_QUALITY_SUFFIX = {
+        'rtk_fix':       'RTK',
+        'float_rtk':     'RTK·F',
+        'dgps_fix':      'DGPS',
+        'pps_fix':       'PPS',
+        'dead_reckoning':'DR',
+        'manual':        'MAN',
+        'sim':           'SIM'
+    };
     function setFixPill(gps) {
         var label = '— FIX';
         var cls = 'muted';
         if (gps && gps.fix_mode === 3) { label = '3D FIX'; cls = 'ok'; }
         else if (gps && gps.fix_mode === 2) { label = '2D FIX'; cls = 'warn'; }
         else if (gps && gps.has_fix) { label = 'FIX'; cls = 'ok'; }
-        ['gps-dash-fix-pill', 'gps-dash-fix-pill-skyview'].forEach(function (id) {
-            var el = document.getElementById(id);
-            if (el) { el.className = 'gps-pill ' + cls; el.textContent = label; }
-        });
+        var suffix = (gps && FIX_QUALITY_SUFFIX[gps.fix_quality]) || '';
+        if (suffix) label = label.replace(/ FIX$/, ' ' + suffix);
+        var el = document.getElementById('gps-dash-fix-pill');
+        if (el) { el.className = 'gps-pill ' + cls; el.textContent = label; }
     }
     function setStratumPill(tracking) {
         var pill = document.getElementById('gps-dash-stratum-pill');
@@ -2304,38 +2130,79 @@
         });
     }
 
-    // ── GPS skyview side-card details (position, altitude, DOP, hardware).
+    // ── GPS hero overlay + receiver-status side card.
     function renderGpsSummary(gps) {
         var pos = (gps && gps.latitude !== null && gps.longitude !== null && gps.latitude !== undefined)
             ? gps.latitude.toFixed(6) + ', ' + gps.longitude.toFixed(6)
             : '—';
         setText('g-pos', pos);
-        setText('g-pos-hero', pos);
         var alt = gps && gps.altitude_m !== null && gps.altitude_m !== undefined
             ? gps.altitude_m.toFixed(1) + ' m' : '—';
         setText('g-alt', alt);
-        setText('g-alt-hero', alt);
 
-        var dopBits = [];
-        if (gps && gps.hdop !== null && gps.hdop !== undefined) dopBits.push('H ' + gps.hdop);
-        if (gps && gps.vdop !== null && gps.vdop !== undefined) dopBits.push('V ' + gps.vdop);
-        if (gps && gps.pdop !== null && gps.pdop !== undefined) dopBits.push('P ' + gps.pdop);
-        var dop = dopBits.length ? dopBits.join(' · ') : '—';
-        setText('g-dop', dop);
-        // Hero overlay uses the slash form (H/V/P) to match the mockup.
+        // Hero overlay uses the slash form (H / V / P) to match the
+        // reference image.
         var heroDop = '—';
         if (gps && (gps.hdop != null || gps.vdop != null || gps.pdop != null)) {
             heroDop = (gps.hdop != null ? gps.hdop : '—') + ' / '
                     + (gps.vdop != null ? gps.vdop : '—') + ' / '
                     + (gps.pdop != null ? gps.pdop : '—');
         }
-        setText('g-dop-hero', heroDop);
+        setText('g-dop', heroDop);
 
         var hw = (gps && gps.serial_port)
             ? (gps.serial_port + (gps.baudrate ? ' @ ' + gps.baudrate + ' bd' : ''))
             : '—';
         setText('g-hw', hw);
-        setText('g-hw-hero', hw);
+
+        // PPS backend ("kernel" → IRQ-driven /dev/pps0, "gpio" → polled
+        // GPIO edge, "none" → no PPS source).  Append the pulse age so a
+        // dead PPS (kernel mode but no pulses for >2 s) is visible.
+        var ppsBackend = gps && gps.pps_backend;
+        var ppsAge = (gps && typeof gps.pps_pulse_age_s === 'number') ? gps.pps_pulse_age_s : null;
+        var ppsEl = document.getElementById('g-pps-backend');
+        if (ppsEl) {
+            ppsEl.classList.remove('pos', 'neg');
+            if (!ppsBackend || ppsBackend === 'none') {
+                ppsEl.textContent = 'none';
+                ppsEl.classList.add('neg');
+            } else {
+                var label = ppsBackend;
+                if (ppsAge !== null) label += ' · ' + ppsAge.toFixed(1) + ' s ago';
+                ppsEl.textContent = label;
+                if (ppsAge !== null && ppsAge > 2) ppsEl.classList.add('neg');
+                else if (ppsBackend === 'kernel') ppsEl.classList.add('pos');
+            }
+        }
+
+        // Last 3D fix — absolute timestamp, complements the relative
+        // holdover counter.
+        var lastFix = gps && gps.last_3d_fix_at;
+        setText('g-last-3d-fix', lastFix ? lastFix.replace('T', ' ').replace('Z', ' UTC') : '—');
+
+        // NMEA traffic — total parsed sentences and parse errors so a
+        // stuck UART or noisy line is obvious without opening a separate
+        // inspector page.
+        var sentCounts = (gps && gps.sentence_counts) || null;
+        var sentErrors = (gps && gps.sentence_errors) || null;
+        var nmeaEl = document.getElementById('g-nmea-traffic');
+        if (nmeaEl) {
+            nmeaEl.classList.remove('pos', 'neg');
+            if (!sentCounts) {
+                nmeaEl.textContent = '—';
+            } else {
+                var total = 0;
+                Object.keys(sentCounts).forEach(function (k) { total += sentCounts[k] || 0; });
+                var errs = 0;
+                if (sentErrors) Object.keys(sentErrors).forEach(function (k) { errs += sentErrors[k] || 0; });
+                nmeaEl.textContent = total.toLocaleString() + ' sentences · ' + errs + ' err';
+                nmeaEl.title = Object.keys(sentCounts).sort().map(function (k) {
+                    return k + ': ' + sentCounts[k];
+                }).join(' · ');
+                if (errs > 0) nmeaEl.classList.add('neg');
+                else if (total > 0) nmeaEl.classList.add('pos');
+            }
+        }
 
         // Fix age — colour-code so a frozen UART stands out.  Anything
         // over 5 s without a sentence is suspicious on a 1 Hz receiver.
@@ -3068,10 +2935,22 @@
         setFixPill(gps);
         setStratumPill(chrony.tracking || {});
 
-        // Clocks
-        var now = new Date();
-        setText('gps-dash-clock-utc',   'UTC ' + now.toISOString().slice(11, 19));
-        setText('gps-dash-clock-local', 'Local ' + now.toTimeString().slice(0, 8));
+        // Clocks — prefer the server's now_utc (sampled at the same
+        // instant as the rest of the snapshot) over the browser's
+        // Date.now(), which would drift if the browser clock isn't
+        // synced to the GPS-disciplined host.
+        var serverIso = host.now_utc;
+        var nowServer = serverIso ? new Date(serverIso) : null;
+        var nowLocal  = serverIso ? new Date(serverIso) : new Date();
+        var pad2 = function (n) { return n < 10 ? '0' + n : '' + n; };
+        if (nowServer && !isNaN(nowServer.getTime())) {
+            setText('gps-dash-clock-utc',
+                'UTC ' + pad2(nowServer.getUTCHours()) + ':' + pad2(nowServer.getUTCMinutes()) + ':' + pad2(nowServer.getUTCSeconds()));
+        } else {
+            setText('gps-dash-clock-utc', 'UTC ' + new Date().toISOString().slice(11, 19));
+        }
+        setText('gps-dash-clock-local',
+            'Local ' + pad2(nowLocal.getHours()) + ':' + pad2(nowLocal.getMinutes()) + ':' + pad2(nowLocal.getSeconds()));
 
         // Tracking + sync-health bar
         renderTracking(chrony);
