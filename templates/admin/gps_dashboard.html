@@ -528,6 +528,106 @@
         color: var(--text-muted); font-size: 0.78rem; font-style: italic;
         pointer-events: none;
     }
+
+    /* ── Leap-second countdown big-readout — same monospace look used
+          for the headline clock displays elsewhere on the page. */
+    .gps-leap-readout {
+        font-family: var(--font-mono, ui-monospace, monospace);
+        font-size: 1.6rem;
+        font-weight: 700;
+        text-align: center;
+        padding: 10px 4px 4px;
+        letter-spacing: 0.04em;
+    }
+    .gps-leap-readout.warn { color: #f97316; }
+    .gps-leap-readout.crit { color: #f85149; }
+    .gps-leap-readout.ok   { color: var(--text-muted); }
+
+    /* ── Almanac / ephemeris staleness — per-PRN list grouped by
+          constellation.  Compact two-line entries with the PRN badge,
+          last-seen age, and a colour-coded "used" pip. */
+    .gps-staleness-list {
+        display: flex; flex-direction: column; gap: 8px;
+        margin-top: 8px;
+        font-family: var(--font-mono, ui-monospace, monospace);
+        font-size: 0.78rem;
+    }
+    .gps-staleness-group {
+        border: 1px solid var(--border-color, rgba(127,127,127,.18));
+        border-radius: 6px;
+        padding: 8px 10px;
+        background: var(--bg-tertiary, rgba(127,127,127,.05));
+    }
+    .gps-staleness-group-head {
+        display: flex; justify-content: space-between; align-items: baseline;
+        font-weight: 700;
+        margin-bottom: 4px;
+    }
+    .gps-staleness-prn-row {
+        display: grid;
+        grid-template-columns: 64px 1fr 1fr 80px;
+        gap: 8px;
+        padding: 2px 0;
+        align-items: baseline;
+    }
+    .gps-staleness-prn-badge {
+        display: inline-block;
+        min-width: 56px;
+        padding: 1px 6px;
+        border-radius: 3px;
+        text-align: center;
+        font-weight: 700;
+        color: #0d1117;
+    }
+    .gps-staleness-pip {
+        display: inline-block;
+        width: 10px; height: 10px;
+        border-radius: 50%;
+        margin-right: 4px;
+        vertical-align: middle;
+        background: #484f58;
+    }
+    .gps-staleness-pip.used { background: #3fb950; }
+    .gps-staleness-pip.recent { background: #d29922; }
+    .gps-staleness-pip.stale { background: #f85149; }
+
+    /* ── NMEA sentence inspector — terminal-style live tail. */
+    .gps-nmea-controls {
+        display: flex; flex-wrap: wrap; gap: 12px;
+        align-items: center;
+        font-size: 0.78rem;
+        margin-top: 6px;
+        margin-bottom: 6px;
+    }
+    .gps-nmea-controls label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+    .gps-nmea-filter-input {
+        flex: 1 1 200px;
+        min-width: 160px;
+        max-width: 320px;
+        padding: 3px 8px;
+        border-radius: 4px;
+        border: 1px solid var(--border-color, rgba(127,127,127,.25));
+        background: var(--bg-tertiary, rgba(127,127,127,.05));
+        color: var(--text-color);
+        font-family: var(--font-mono, ui-monospace, monospace);
+        font-size: 0.78rem;
+    }
+    .gps-nmea-stream {
+        max-height: 280px;
+        overflow-y: auto;
+        margin: 0;
+        padding: 8px 10px;
+        border: 1px solid var(--border-color, rgba(127,127,127,.18));
+        border-radius: 6px;
+        background: var(--bg-tertiary, rgba(127,127,127,.05));
+        font-family: var(--font-mono, ui-monospace, monospace);
+        font-size: 0.74rem;
+        line-height: 1.35;
+        white-space: pre;
+        color: var(--text-color);
+    }
+    .gps-nmea-stream .nmea-line { display: block; }
+    .gps-nmea-stream .nmea-line.muted { color: var(--text-muted); }
 </style>
 {% endblock %}
 
@@ -1005,6 +1105,142 @@
                 </div>
             </div>
         </div>
+
+        <!-- ============================================================
+             PER-PRN SNR HEATMAP — rolling history of every PRN we've
+             tracked recently.  Rows = PRN (one per visible satellite),
+             columns = time bucket (newest on the right), cell colour
+             keyed to the same SNR palette used by the per-PRN bar chart.
+             Lets the operator spot a satellite that's slowly fading
+             (multipath, blocked azimuth) without having to watch the
+             live SNR bars for minutes at a time.
+             ============================================================ -->
+        <div class="col-12">
+            <div class="gps-card h-100 gps-chart-card">
+                <div class="gps-card-head">
+                    <h3><i class="fas fa-grip me-1"></i> Per-PRN SNR Heatmap</h3>
+                    <div class="badge-area">
+                        <span class="text-muted small">rolling · last hour · cell colour = dBHz bucket</span>
+                    </div>
+                </div>
+                <div class="chart-meta">
+                    <span><span class="label">PRNs</span> <span id="ts-heatmap-rows" class="value">0</span></span>
+                    <span><span class="label">cols</span> <span id="ts-heatmap-cols" class="value">0</span></span>
+                    <span><span class="label">window</span> <span id="ts-heatmap-window" class="value">—</span></span>
+                </div>
+                <div class="gps-chart-canvas-wrap">
+                    <canvas id="ts-heatmap-canvas" width="1200" height="320" aria-label="Per-PRN SNR heatmap"></canvas>
+                    <div id="ts-heatmap-empty" class="gps-chart-empty">Collecting per-PRN samples…</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================================
+             LEAP-SECOND COUNTDOWN — surfaces UBX-NAV-TIMELS so the
+             operator sees a pending insert/delete coming, not just the
+             final flip.  Counts down at 1 Hz on the client between
+             receiver polls so the readout is monotonic.
+             ============================================================ -->
+        <div class="col-12 col-xl-6">
+            <div class="gps-card h-100 gps-chart-card">
+                <div class="gps-card-head">
+                    <h3><i class="fas fa-stopwatch me-1"></i> Leap-Second Countdown</h3>
+                    <div class="badge-area">
+                        <span class="text-muted small">UBX-NAV-TIMELS · receiver-authoritative</span>
+                    </div>
+                </div>
+                <div class="chart-meta">
+                    <span><span class="label">GPS-UTC</span> <span id="ts-leap-current" class="value">—</span></span>
+                    <span><span class="label">Direction</span> <span id="ts-leap-direction" class="value">—</span></span>
+                    <span><span class="label">Source</span> <span id="ts-leap-source" class="value">—</span></span>
+                </div>
+                <div id="ts-leap-countdown" class="gps-leap-readout">—</div>
+                <div id="ts-leap-eta" class="text-muted small text-center" style="margin-top:6px;">No scheduled event reported</div>
+            </div>
+        </div>
+
+        <!-- ============================================================
+             JAMMING & SPOOFING TIME-SERIES — UBX-MON-HW noise/AGC/state
+             over the same 1-hour window the rest of the trend charts
+             use.  The colour strip below the sparkline shows the
+             receiver's own jamming-state classification at each
+             sample so the eye finds problem windows quickly.
+             ============================================================ -->
+        <div class="col-12 col-xl-6">
+            <div class="gps-card h-100 gps-chart-card">
+                <div class="gps-card-head">
+                    <h3><i class="fas fa-shield-halved me-1"></i> Jamming &amp; Spoofing</h3>
+                    <div class="badge-area">
+                        <span class="text-muted small">noise · AGC · receiver-reported state</span>
+                    </div>
+                </div>
+                <div class="chart-meta">
+                    <span><span class="swatch" style="background:#f85149;"></span><span class="label">Noise</span> <span id="ts-jam-noise" class="value">—</span></span>
+                    <span><span class="swatch" style="background:#d29922;"></span><span class="label">AGC</span> <span id="ts-jam-agc" class="value">—</span></span>
+                    <span><span class="label">State</span> <span id="ts-jam-state" class="value">—</span></span>
+                </div>
+                <div class="gps-chart-canvas-wrap">
+                    <canvas id="ts-jam-canvas" width="600" height="120" aria-label="Jamming and spoofing time-series"></canvas>
+                    <div id="ts-jam-empty" class="gps-chart-empty">Collecting samples…</div>
+                </div>
+                <canvas id="ts-jam-strip-canvas" width="600" height="14" aria-label="Jamming-state colour strip" style="display:block; width:100%; height:14px; margin-top:4px;"></canvas>
+            </div>
+        </div>
+
+        <!-- ============================================================
+             ALMANAC / EPHEMERIS STALENESS — per-PRN tracking history.
+             We don't have direct ephemeris-age telemetry from the NMEA
+             path; what we *can* show is how long each satellite has
+             been visible and when it last contributed to a fix, which
+             is the closest practical proxy for "is the receiver still
+             listening to this PRN's broadcast nav data?".
+             ============================================================ -->
+        <div class="col-12">
+            <div class="gps-card h-100">
+                <div class="gps-card-head">
+                    <h3><i class="fas fa-clock-rotate-left me-1"></i> Almanac &amp; Ephemeris Staleness</h3>
+                    <div class="badge-area">
+                        <span class="text-muted small">per-PRN tracking age · "used" = currently in fix</span>
+                    </div>
+                </div>
+                <div id="ts-staleness-summary" class="chart-meta">
+                    <span><span class="label">UBX poll</span> <span id="ts-staleness-ubx" class="value">—</span></span>
+                    <span><span class="label">PRNs known</span> <span id="ts-staleness-known" class="value">0</span></span>
+                    <span><span class="label">PRNs in view</span> <span id="ts-staleness-inview" class="value">0</span></span>
+                    <span><span class="label">Used in fix</span> <span id="ts-staleness-used" class="value">0</span></span>
+                </div>
+                <div id="ts-staleness-list" class="gps-staleness-list"></div>
+                <div id="ts-staleness-empty" class="gps-chart-empty" style="position:static; padding:12px 0;">No PRN history yet…</div>
+            </div>
+        </div>
+
+        <!-- ============================================================
+             NMEA SENTENCE INSPECTOR — live tail of the last ~100 raw
+             sentences seen by the GPS manager.  Useful when the dashboard
+             tiles say "no fix" or a sentence type is missing — being
+             able to peek at the raw stream beats SSH-ing in to run cat.
+             ============================================================ -->
+        <div class="col-12">
+            <div class="gps-card h-100">
+                <div class="gps-card-head">
+                    <h3><i class="fas fa-terminal me-1"></i> NMEA Sentence Inspector</h3>
+                    <div class="badge-area">
+                        <span class="text-muted small">live tail · last ~100 sentences from the receiver</span>
+                    </div>
+                </div>
+                <div class="gps-nmea-controls">
+                    <label>
+                        <input type="checkbox" id="ts-nmea-pause"> Pause
+                    </label>
+                    <input type="text" id="ts-nmea-filter" placeholder="filter (e.g. GGA, GP, $GN…)" class="gps-nmea-filter-input">
+                    <span class="text-muted small">
+                        <span id="ts-nmea-shown">0</span> shown ·
+                        <span id="ts-nmea-total">0</span> total
+                    </span>
+                </div>
+                <pre id="ts-nmea-stream" class="gps-nmea-stream" aria-label="Recent NMEA sentences">No sentences yet…</pre>
+            </div>
+        </div>
     </div>
 
     <p class="text-muted small mt-3">
@@ -1020,34 +1256,35 @@
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='vendor/three/three.min.js') }}"></script>
+<!-- Shared GPS constellation palette — single source of truth for
+     colours used across the three GPS panels (this dashboard, the
+     hardware-settings GPS card, and the system-health GPS card). -->
+<script src="{{ url_for('static', filename='js/gps_constellation_palette.js') }}"></script>
 <script>
 (function () {
     'use strict';
 
-    // ── Constellation palette — mirrors the existing GPS panels
-    //    (templates/admin/hardware_settings.html, templates/system_health.html)
-    //    so colours stay consistent across the three places we plot satellites.
-    var CONSTELLATION_INFO = {
-        'GP': { color: '#58a6ff', label: 'GPS' },
-        'GL': { color: '#f85149', label: 'GLONASS' },
-        'GA': { color: '#bc8cff', label: 'Galileo' },
-        'GB': { color: '#ffa657', label: 'BeiDou' },
-        'GQ': { color: '#79c0ff', label: 'QZSS' },
-        'GI': { color: '#84cc16', label: 'NavIC' },
-        'SB': { color: '#a78bfa', label: 'SBAS' }
-    };
+    // ── Constellation palette — pulled from the shared bundle in
+    //    static/js/gps_constellation_palette.js (loaded just above) so
+    //    the three GPS panels in the UI stay colour-consistent.
+    var _GPS_PALETTE = window.EAS_GPS_PALETTE || null;
+    var CONSTELLATION_INFO = _GPS_PALETTE
+        ? _GPS_PALETTE.CONSTELLATION_INFO
+        : {};
     function constInfo(code) {
-        return CONSTELLATION_INFO[code] || { color: '#8b949e', label: code || 'Unknown' };
+        return _GPS_PALETTE
+            ? _GPS_PALETTE.constInfo(code)
+            : { color: '#8b949e', label: code || 'Unknown' };
     }
 
-    // SNR → palette class.  Same stops as the legacy GPS panels.
+    // SNR → palette class.  We prefix the shared bucket with
+    // ``gps-`` because this template's CSS lives in the ``gps-snr-*``
+    // namespace; hex colours come straight from the shared palette.
     function snrClass(snr) {
-        if (snr === null || snr === undefined) return 'gps-snr-s0';
-        if (snr < 15) return 'gps-snr-s1';
-        if (snr < 25) return 'gps-snr-s2';
-        if (snr < 35) return 'gps-snr-s3';
-        if (snr < 45) return 'gps-snr-s4';
-        return 'gps-snr-s5';
+        return 'gps-snr-' + (_GPS_PALETTE ? _GPS_PALETTE.snrBucket(snr) : 's0');
+    }
+    function snrHex(snr) {
+        return _GPS_PALETTE ? _GPS_PALETTE.snrHex(snr) : '#484f58';
     }
 
     // Active filter — null means "all", else a 2-letter talker code.
@@ -2377,6 +2614,16 @@
             ringPush(ts.pdop,  sampleTs, pickNum(s.pdop));
             ringPush(ts.snr,   sampleTs, pickNum(s.avg_snr));
             ringPush(ts.hold,  sampleTs, pickNum(s.holdover_s));
+            ringPush(ts.noise, sampleTs, pickNum(s.noise_level));
+            ringPush(ts.agc,   sampleTs, pickNum(s.agc_count));
+            // Jamming state stored as a raw string; bypass ringPush's
+            // numeric coercion so non-numeric values aren't dropped.
+            ts.jam.t.push(sampleTs);
+            ts.jam.v.push(typeof s.jamming_state === 'string' ? s.jamming_state : null);
+            if (ts.jam.t.length > TS_CAPACITY) {
+                ts.jam.t.splice(0, ts.jam.t.length - TS_CAPACITY);
+                ts.jam.v.splice(0, ts.jam.v.length - TS_CAPACITY);
+            }
         }
     }
     function ringStats(buf) {
@@ -2529,8 +2776,31 @@
         vdop:  makeRing(),  // gps vdop                      (unitless)
         pdop:  makeRing(),  // gps pdop                      (unitless)
         snr:   makeRing(),  // average SNR across in-view    (dBHz)
-        hold:  makeRing()   // gps holdover_s                (seconds)
+        hold:  makeRing(),  // gps holdover_s                (seconds)
+        noise: makeRing(),  // UBX-MON-HW noise_level        (raw 16-bit)
+        agc:   makeRing(),  // UBX-MON-HW agc_count          (raw 16-bit)
+        jam:   makeRing()   // jamming_state string per sample
     };
+
+    // ── Per-PRN SNR history.  Map of ``"<prn_string>" → { meta, ring }``.
+    //    The ring is parallel to ``ts.snr`` (same TS_CAPACITY); per-poll
+    //    we push a value per PRN currently in view, and ``null`` for any
+    //    PRN we knew about but isn't visible right now (so the heatmap
+    //    renders gaps as muted cells, not broken history).
+    var prnHistory = {};
+    function prnHistoryEntry(meta) {
+        var key = meta.prn_string;
+        if (!prnHistory[key]) {
+            prnHistory[key] = {
+                key: key,
+                constellation: meta.constellation || 'GN',
+                prn: meta.prn || 0,
+                ring: makeRing(),
+                last_seen_at_ms: null
+            };
+        }
+        return prnHistory[key];
+    }
 
     function ingestTimeSeries(snapshot) {
         var now = Date.now();
@@ -2554,6 +2824,44 @@
         // Holdover history — count of seconds since last 3D fix.  Stays
         // pinned at 0 while we have a 3D fix; spikes when it drops out.
         ringPush(ts.hold, now, typeof g.holdover_s === 'number' ? g.holdover_s : null);
+
+        // Jamming / spoofing trend — receiver's UBX-MON-HW telemetry.
+        ringPush(ts.noise, now, typeof g.noise_level === 'number' ? g.noise_level : null);
+        ringPush(ts.agc,   now, typeof g.agc_count   === 'number' ? g.agc_count   : null);
+        // Categorical state pushed alongside as a string so the strip
+        // chart can colour-code each sample.  Stored on .v with
+        // ringPush's NaN-coercion bypassed by treating the deque as a
+        // value bag.
+        ts.jam.t.push(now);
+        ts.jam.v.push(typeof g.jamming_state === 'string' ? g.jamming_state : null);
+        if (ts.jam.t.length > TS_CAPACITY) {
+            ts.jam.t.splice(0, ts.jam.t.length - TS_CAPACITY);
+            ts.jam.v.splice(0, ts.jam.v.length - TS_CAPACITY);
+        }
+
+        // Per-PRN SNR rings — one ring per PRN we've ever seen since the
+        // page loaded.  Each poll: push current SNR for visible PRNs,
+        // null for known-but-not-visible PRNs (so the heatmap renders a
+        // gap rather than connecting through a multi-minute outage).
+        var seenKeys = {};
+        (g.satellites_in_view || []).forEach(function (s) {
+            if (typeof s.prn !== 'number') return;
+            var con = s.constellation || 'GN';
+            var key = con + (s.prn < 10 ? '0' : '') + s.prn;
+            seenKeys[key] = true;
+            var entry = prnHistoryEntry({
+                prn_string: key,
+                constellation: con,
+                prn: s.prn
+            });
+            ringPush(entry.ring, now, typeof s.snr === 'number' ? s.snr : null);
+            entry.last_seen_at_ms = now;
+        });
+        Object.keys(prnHistory).forEach(function (key) {
+            if (!seenKeys[key]) {
+                ringPush(prnHistory[key].ring, now, null);
+            }
+        });
     }
 
     // Same fmtSeconds-style formatter we use elsewhere, but typed for
@@ -2919,6 +3227,434 @@
         });
     }
 
+    // ── Per-PRN SNR heatmap.  Rows = PRN keys we've seen since page
+    //    load (sorted by constellation then PRN), columns = the same
+    //    time grid the other sparklines use.  Cell colour = the SNR
+    //    bucket from the shared palette.  The widget grows naturally as
+    //    new PRNs come into view, so receivers running in single-
+    //    constellation mode show a compact map; multi-GNSS receivers
+    //    fill out a much taller one.
+    var SNR_BUCKET_COLORS = (window.EAS_GPS_PALETTE && window.EAS_GPS_PALETTE.SNR_COLORS) || {
+        s0: '#484f58', s1: '#f85149', s2: '#f97316',
+        s3: '#d29922', s4: '#84cc16', s5: '#3fb950'
+    };
+    function snrBucket(snr) {
+        return (window.EAS_GPS_PALETTE ? window.EAS_GPS_PALETTE.snrBucket(snr) : 's0');
+    }
+    function renderPrnHeatmap() {
+        var canvas = document.getElementById('ts-heatmap-canvas');
+        if (!canvas) return;
+        var emptyEl = document.getElementById('ts-heatmap-empty');
+
+        var keys = Object.keys(prnHistory).sort(function (a, b) {
+            var ea = prnHistory[a], eb = prnHistory[b];
+            if (ea.constellation !== eb.constellation) {
+                return ea.constellation < eb.constellation ? -1 : 1;
+            }
+            return ea.prn - eb.prn;
+        });
+
+        if (!keys.length) {
+            if (emptyEl) emptyEl.style.display = '';
+            setText('ts-heatmap-rows', '0');
+            setText('ts-heatmap-cols', '0');
+            setText('ts-heatmap-window', '—');
+            var fitEarly = fitCanvas(canvas);
+            fitEarly.ctx.clearRect(0, 0, fitEarly.w, fitEarly.h);
+            return;
+        }
+        if (emptyEl) emptyEl.style.display = 'none';
+
+        // Resize canvas to fit row count (cap height so a heavy multi-GNSS
+        // session doesn't blow up the page; rows compact below 14 px).
+        var ROW_H = Math.max(10, Math.min(20, Math.floor(280 / Math.max(8, keys.length))));
+        var H_TARGET = Math.max(120, Math.min(420, ROW_H * keys.length + 40));
+        canvas.style.height = H_TARGET + 'px';
+        var fit = fitCanvas(canvas);
+        var ctx = fit.ctx, W = fit.w, H = fit.h;
+        ctx.clearRect(0, 0, W, H);
+
+        var pad = { l: 56, r: 8, t: 6, b: 22 };
+        var plotW = W - pad.l - pad.r;
+        var plotH = H - pad.t - pad.b;
+        if (plotW <= 0 || plotH <= 0) return;
+
+        // Determine the time-window across the union of all PRN rings.
+        var tMin = Infinity, tMax = -Infinity, maxLen = 0;
+        keys.forEach(function (k) {
+            var r = prnHistory[k].ring;
+            if (r.t.length > maxLen) maxLen = r.t.length;
+            for (var i = 0; i < r.t.length; i++) {
+                if (r.t[i] < tMin) tMin = r.t[i];
+                if (r.t[i] > tMax) tMax = r.t[i];
+            }
+        });
+        if (!isFinite(tMin) || !isFinite(tMax)) return;
+        if (tMax === tMin) tMax = tMin + 1;
+
+        var rowH = Math.max(2, Math.floor(plotH / keys.length));
+        var COLS = Math.max(40, Math.min(maxLen, Math.floor(plotW)));
+        var colW = plotW / COLS;
+
+        setText('ts-heatmap-rows', keys.length);
+        setText('ts-heatmap-cols', COLS);
+        var spanMs = tMax - tMin;
+        setText('ts-heatmap-window', fmtDuration(spanMs / 1000));
+
+        // Row labels (PRN strings) — drawn on the left margin.
+        ctx.font = '10px ui-monospace, monospace';
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'right';
+        keys.forEach(function (key, idx) {
+            var entry = prnHistory[key];
+            var info = constInfo(entry.constellation);
+            ctx.fillStyle = info.color;
+            ctx.fillText(key, pad.l - 4, pad.t + idx * rowH + rowH / 2);
+        });
+
+        // Cells.  For each (row, col) bin map the bin's [tStart,tEnd]
+        // window onto the ring's nearest sample.
+        keys.forEach(function (key, rowIdx) {
+            var ring = prnHistory[key].ring;
+            if (!ring.t.length) return;
+            var rowY = pad.t + rowIdx * rowH;
+            var ringIdx = 0;
+            for (var c = 0; c < COLS; c++) {
+                var binStart = tMin + (c / COLS) * spanMs;
+                var binEnd = tMin + ((c + 1) / COLS) * spanMs;
+                // Advance ring pointer to the first sample in this bin.
+                while (ringIdx < ring.t.length && ring.t[ringIdx] < binStart) {
+                    ringIdx++;
+                }
+                // Take the latest sample within [binStart, binEnd) so
+                // sparse rings don't get aliased into a solid block.
+                var pickIdx = -1;
+                while (ringIdx < ring.t.length && ring.t[ringIdx] < binEnd) {
+                    pickIdx = ringIdx;
+                    ringIdx++;
+                }
+                if (pickIdx < 0) {
+                    // Nothing in the bin — leave the cell as background.
+                    continue;
+                }
+                var v = ring.v[pickIdx];
+                if (v === null || v === undefined || isNaN(v)) {
+                    ctx.fillStyle = SNR_BUCKET_COLORS.s0;
+                } else {
+                    ctx.fillStyle = SNR_BUCKET_COLORS[snrBucket(v)] || SNR_BUCKET_COLORS.s0;
+                }
+                ctx.fillRect(pad.l + c * colW, rowY, Math.max(1, colW), Math.max(1, rowH - 1));
+            }
+        });
+
+        // X-axis legend (oldest / newest).
+        ctx.fillStyle = 'rgba(127,127,127,0.85)';
+        ctx.font = '10px ui-monospace, monospace';
+        ctx.textBaseline = 'top';
+        ctx.textAlign = 'left';
+        ctx.fillText('older', pad.l, pad.t + plotH + 4);
+        ctx.textAlign = 'right';
+        ctx.fillText('newer', pad.l + plotW, pad.t + plotH + 4);
+
+        // SNR legend strip.
+        var legendY = pad.t + plotH + 4;
+        ctx.textAlign = 'center';
+        ctx.fillText('< 15', pad.l + plotW * 0.20, legendY + 14);
+        ctx.fillText('25',   pad.l + plotW * 0.40, legendY + 14);
+        ctx.fillText('35',   pad.l + plotW * 0.60, legendY + 14);
+        ctx.fillText('45+',  pad.l + plotW * 0.80, legendY + 14);
+    }
+
+    // ── Leap-second countdown.  ``leap_seconds_to_event`` is reported
+    //    in seconds by the receiver; we anchor it against the
+    //    snapshot's wall-clock timestamp so a 1 Hz client-side ticker
+    //    can decrement the readout between polls without jumping
+    //    backwards on each refresh.
+    var leapAnchor = null;  // { etaMs, change, source }
+    function ingestLeapAnchor(gps) {
+        if (!gps) { leapAnchor = null; return; }
+        var sec = gps.leap_seconds_to_event;
+        if (typeof sec !== 'number' || !isFinite(sec)) {
+            leapAnchor = null;
+            return;
+        }
+        leapAnchor = {
+            etaMs: Date.now() + sec * 1000,
+            change: gps.leap_change || 0,
+            source: gps.leap_change_source || gps.leap_source || null,
+            currentLs: typeof gps.leap_seconds === 'number' ? gps.leap_seconds : null,
+            pending: !!gps.leap_pending
+        };
+    }
+    function fmtCountdown(ms) {
+        if (ms == null || !isFinite(ms)) return '—';
+        var sign = ms < 0 ? '-' : '';
+        var s = Math.floor(Math.abs(ms) / 1000);
+        var d = Math.floor(s / 86400); s -= d * 86400;
+        var h = Math.floor(s / 3600);  s -= h * 3600;
+        var m = Math.floor(s / 60);    s -= m * 60;
+        function pad(n){ return n < 10 ? '0' + n : '' + n; }
+        if (d > 0) return sign + d + 'd ' + pad(h) + ':' + pad(m) + ':' + pad(s);
+        return sign + pad(h) + ':' + pad(m) + ':' + pad(s);
+    }
+    function renderLeapCountdown() {
+        var bigEl = document.getElementById('ts-leap-countdown');
+        var etaEl = document.getElementById('ts-leap-eta');
+        var dirEl = document.getElementById('ts-leap-direction');
+        var srcEl = document.getElementById('ts-leap-source');
+        var curEl = document.getElementById('ts-leap-current');
+
+        if (curEl) {
+            curEl.textContent = (leapAnchor && leapAnchor.currentLs != null)
+                ? leapAnchor.currentLs + ' s'
+                : '—';
+        }
+
+        if (!leapAnchor) {
+            if (bigEl) {
+                bigEl.textContent = '—';
+                bigEl.classList.remove('warn', 'crit', 'ok');
+                bigEl.classList.add('ok');
+            }
+            if (etaEl) etaEl.textContent = 'No scheduled event reported';
+            if (dirEl) dirEl.textContent = '—';
+            if (srcEl) srcEl.textContent = '—';
+            return;
+        }
+
+        if (dirEl) {
+            var dir = leapAnchor.change > 0 ? 'INSERT (+1 s)'
+                    : leapAnchor.change < 0 ? 'DELETE (−1 s)'
+                    : 'none';
+            dirEl.textContent = dir;
+        }
+        if (srcEl) srcEl.textContent = leapAnchor.source || '—';
+
+        var remainMs = leapAnchor.etaMs - Date.now();
+        if (bigEl) {
+            bigEl.textContent = fmtCountdown(remainMs);
+            bigEl.classList.remove('warn', 'crit', 'ok');
+            if (remainMs <= 0) {
+                bigEl.classList.add('crit');
+            } else if (leapAnchor.pending && leapAnchor.change !== 0 && remainMs < 7 * 86400 * 1000) {
+                bigEl.classList.add('crit');
+            } else if (leapAnchor.pending && leapAnchor.change !== 0 && remainMs < 30 * 86400 * 1000) {
+                bigEl.classList.add('warn');
+            } else {
+                bigEl.classList.add('ok');
+            }
+        }
+        if (etaEl) {
+            if (leapAnchor.pending && leapAnchor.change !== 0) {
+                var when = new Date(leapAnchor.etaMs);
+                etaEl.textContent = 'Scheduled for ' + when.toUTCString();
+            } else {
+                etaEl.textContent = 'Receiver reports no imminent leap-second event.';
+            }
+        }
+    }
+
+    // ── Jamming & spoofing time-series.  Plots noise & AGC sparklines
+    //    along with a per-sample colour strip from ``jamming_state``.
+    function renderJammingTimeSeries() {
+        var noiseStats = ringStats(ts.noise);
+        var agcStats   = ringStats(ts.agc);
+        setText('ts-jam-noise', noiseStats.last == null ? '—' : Math.round(noiseStats.last));
+        setText('ts-jam-agc',   agcStats.last   == null ? '—' : Math.round(agcStats.last));
+
+        // Resolve "current state" from the most recent non-null sample.
+        var stateLabel = '—';
+        for (var i = ts.jam.v.length - 1; i >= 0; i--) {
+            if (ts.jam.v[i]) { stateLabel = ts.jam.v[i].toUpperCase(); break; }
+        }
+        setText('ts-jam-state', stateLabel);
+
+        drawSparkline('ts-jam-canvas', [
+            { buffer: ts.noise, color: '#f85149' },
+            { buffer: ts.agc,   color: '#d29922', dashed: true }
+        ], { emptyEl: 'ts-jam-empty', includeZero: true });
+
+        // Colour strip for the categorical jamming_state series.
+        var strip = document.getElementById('ts-jam-strip-canvas');
+        if (!strip) return;
+        var fit = fitCanvas(strip);
+        var ctx = fit.ctx, W = fit.w, H = fit.h;
+        ctx.clearRect(0, 0, W, H);
+        var n = ts.jam.v.length;
+        if (!n) return;
+        var colW = W / n;
+        for (var k = 0; k < n; k++) {
+            var st = ts.jam.v[k];
+            var col;
+            if (st === 'ok')              col = '#3fb950';
+            else if (st === 'warning')    col = '#d29922';
+            else if (st === 'critical')   col = '#f85149';
+            else                          col = 'rgba(127,127,127,0.30)';
+            ctx.fillStyle = col;
+            ctx.fillRect(k * colW, 0, Math.max(1, colW), H);
+        }
+    }
+
+    // ── Almanac / ephemeris staleness.  Renders per-PRN tracking ages
+    //    grouped by constellation.  "Used in fix" pip is green for sats
+    //    contributing to the current solution, amber when last seen
+    //    recently but not in fix, red when haven't been seen for a
+    //    while (likely lost track / set below the horizon).
+    function renderStaleness(gps) {
+        var listEl = document.getElementById('ts-staleness-list');
+        var emptyEl = document.getElementById('ts-staleness-empty');
+        if (!listEl) return;
+
+        var history = (gps && gps.satellite_history) || [];
+        var sats = (gps && gps.satellites_in_view) || [];
+        var activePrns = (gps && gps.active_satellite_prns) || [];
+
+        // UBX poll freshness — closest proxy we have to "ephemeris age"
+        // because the receiver re-issues MON-HW / NAV-TIMELS at the
+        // poll cadence.  When this goes silent the rest of the
+        // ephemeris-derived telemetry is going stale too.
+        var ubxAt = gps && gps.ubx_last_poll_at;
+        var ubxLabel = '—';
+        if (ubxAt) {
+            try {
+                var age = (Date.now() - new Date(ubxAt).getTime()) / 1000;
+                ubxLabel = fmtDuration(age) + ' ago';
+            } catch (e) {
+                ubxLabel = '—';
+            }
+        } else if (gps && gps.ubx_poll_supported === false) {
+            ubxLabel = 'via gpsd';
+        }
+        setText('ts-staleness-ubx', ubxLabel);
+        setText('ts-staleness-known', history.length);
+        setText('ts-staleness-inview', sats.length);
+        setText('ts-staleness-used', activePrns.length);
+
+        if (!history.length) {
+            listEl.innerHTML = '';
+            if (emptyEl) emptyEl.style.display = '';
+            return;
+        }
+        if (emptyEl) emptyEl.style.display = 'none';
+
+        // Group by constellation.
+        var groups = {};
+        history.forEach(function (entry) {
+            var con = entry.constellation || 'GN';
+            if (!groups[con]) groups[con] = [];
+            groups[con].push(entry);
+        });
+
+        var nowMs = Date.now();
+        function ageStr(iso) {
+            if (!iso) return '—';
+            try {
+                var ms = nowMs - new Date(iso).getTime();
+                if (ms < 0) ms = 0;
+                return fmtDuration(ms / 1000) + ' ago';
+            } catch (e) {
+                return '—';
+            }
+        }
+        function pipClassForUsed(iso) {
+            if (!iso) return 'stale';
+            try {
+                var ms = nowMs - new Date(iso).getTime();
+                if (ms < 60 * 1000) return 'used';        // currently in fix
+                if (ms < 5 * 60 * 1000) return 'recent';  // dropped within 5m
+                return 'stale';
+            } catch (e) {
+                return 'stale';
+            }
+        }
+
+        var html = '';
+        Object.keys(groups).sort().forEach(function (con) {
+            var info = constInfo(con);
+            var entries = groups[con].sort(function (a, b) { return (a.prn || 0) - (b.prn || 0); });
+            html += '<div class="gps-staleness-group">';
+            html += '<div class="gps-staleness-group-head">';
+            html += '<span style="color:' + info.color + '">' + escapeHtml(info.label) + '</span>';
+            html += '<span class="text-muted">' + entries.length + ' tracked</span>';
+            html += '</div>';
+            entries.forEach(function (e) {
+                var pip = pipClassForUsed(e.last_used_at);
+                var snr = (e.last_snr == null) ? '—' : e.last_snr + ' dBHz';
+                html += '<div class="gps-staleness-prn-row">';
+                html += '<span class="gps-staleness-prn-badge" style="background:' + info.color + '">' + escapeHtml(e.prn_string) + '</span>';
+                html += '<span><span class="gps-staleness-pip ' + pip + '"></span>seen ' + escapeHtml(ageStr(e.last_seen_at)) + '</span>';
+                html += '<span>used ' + escapeHtml(ageStr(e.last_used_at)) + '</span>';
+                html += '<span class="num">' + escapeHtml(snr) + '</span>';
+                html += '</div>';
+            });
+            html += '</div>';
+        });
+        listEl.innerHTML = html;
+    }
+
+    // ── NMEA sentence inspector.  Live tail of ``recent_sentences``
+    //    from the GPS manager.  We keep the last seen 100 in-place
+    //    when the user pauses so the view doesn't snap when they
+    //    resume mid-debug.
+    var nmeaState = {
+        paused: false,
+        filter: '',
+        lastSentences: []
+    };
+    function renderNmeaInspector(sentences) {
+        var pauseEl  = document.getElementById('ts-nmea-pause');
+        var filterEl = document.getElementById('ts-nmea-filter');
+        var streamEl = document.getElementById('ts-nmea-stream');
+        var shownEl  = document.getElementById('ts-nmea-shown');
+        var totalEl  = document.getElementById('ts-nmea-total');
+        if (!streamEl) return;
+
+        // Refresh state from the inputs (handler hooks are wired once
+        // at DOMContentLoaded; this keeps state in sync each render).
+        if (pauseEl)  nmeaState.paused = !!pauseEl.checked;
+        if (filterEl) nmeaState.filter = (filterEl.value || '').trim();
+
+        if (!nmeaState.paused) {
+            nmeaState.lastSentences = sentences.slice(-100);
+        }
+
+        var lines = nmeaState.lastSentences;
+        var filter = nmeaState.filter;
+        var filtered;
+        if (filter) {
+            var lc = filter.toLowerCase();
+            filtered = lines.filter(function (l) {
+                return l && l.toLowerCase().indexOf(lc) !== -1;
+            });
+        } else {
+            filtered = lines;
+        }
+
+        if (totalEl) totalEl.textContent = lines.length;
+        if (shownEl) shownEl.textContent = filtered.length;
+
+        if (!filtered.length) {
+            streamEl.textContent = lines.length
+                ? 'No sentences match the current filter.'
+                : 'No sentences yet…';
+            return;
+        }
+
+        // Tail-style render with the newest line at the bottom; keep
+        // the scroll position pinned to the bottom unless the user has
+        // scrolled away (heuristic: if the scroll bar isn't at the
+        // bottom we leave it alone so the user can read mid-buffer).
+        var atBottom = streamEl.scrollHeight - streamEl.scrollTop - streamEl.clientHeight < 24;
+        var html = '';
+        filtered.forEach(function (line) {
+            html += '<span class="nmea-line">' + escapeHtml(line) + '</span>\n';
+        });
+        streamEl.innerHTML = html;
+        if (atBottom) {
+            streamEl.scrollTop = streamEl.scrollHeight;
+        }
+    }
+
     // ── Render everything from a single snapshot.  Tolerates missing
     //    sub-fields so a partial server response (e.g. chronyc not
     //    installed) renders meaningfully instead of erroring.
@@ -2979,6 +3715,15 @@
         renderJitterHistogram(gps.pps_jitter || null);
         renderAllanDeviation(gps.allan_deviation || null);
         renderElevationScatter(gps.satellites_in_view || []);
+
+        // New panels (per-PRN heatmap, leap countdown, jamming
+        // time-series, almanac/ephemeris staleness, NMEA inspector).
+        renderPrnHeatmap();
+        ingestLeapAnchor(gps);
+        renderLeapCountdown();
+        renderJammingTimeSeries();
+        renderStaleness(gps);
+        renderNmeaInspector(gps.recent_sentences || []);
     }
 
     // ── Polling.  Configurable interval; "0" means paused.
@@ -3015,8 +3760,28 @@
         var resizeTimer = null;
         window.addEventListener('resize', function () {
             if (resizeTimer) clearTimeout(resizeTimer);
-            resizeTimer = setTimeout(renderTimeSeriesCharts, 120);
+            resizeTimer = setTimeout(function () {
+                renderTimeSeriesCharts();
+                renderPrnHeatmap();
+                renderJammingTimeSeries();
+            }, 120);
         });
+
+        // Leap-second countdown ticker — 1 Hz client-side decrement so
+        // the readout doesn't visibly hiccup between dashboard polls.
+        setInterval(renderLeapCountdown, 1000);
+
+        // NMEA inspector control wiring — re-render on filter/pause
+        // change so the operator sees the effect of toggling immediately
+        // even between polls.
+        var nmeaPauseEl  = document.getElementById('ts-nmea-pause');
+        var nmeaFilterEl = document.getElementById('ts-nmea-filter');
+        function rerenderNmea() {
+            var src = (lastSnapshot && lastSnapshot.gps && lastSnapshot.gps.recent_sentences) || [];
+            renderNmeaInspector(src);
+        }
+        if (nmeaPauseEl)  nmeaPauseEl.addEventListener('change', rerenderNmea);
+        if (nmeaFilterEl) nmeaFilterEl.addEventListener('input',  rerenderNmea);
         // Seed the trend rings from the server-side history before the
         // first live poll so sparklines repaint with whatever was
         // collected while the page was closed.  We render once after

@@ -201,6 +201,13 @@ class GPSManager:
         # start of a new cycle) — reader thread only, no lock needed.
         self._gsa_accumulator: Set[int] = set()
         self._gsa_cycle_started: bool = False
+        # Per-PRN tracking history — keyed by ``"<talker><prn:02d>"`` (e.g.
+        # ``"GP05"``).  Populated whenever a satellite shows up in GSV /
+        # GSA, used by the dashboard's "Almanac & Ephemeris staleness"
+        # tile to colour-code PRNs by how recently they were seen / used
+        # in the fix.  Reader thread only — protected only when published
+        # via :py:meth:`get_status`.
+        self._sat_history: Dict[str, Dict[str, Any]] = {}
         # PPS monitoring state. Two mutually-exclusive backends:
         #   * kernel: poll /sys/class/pps/ppsX/assert (preferred whenever
         #     the pps-gpio overlay is loaded — the overlay owns the pin
@@ -496,6 +503,11 @@ class GPSManager:
             data["recent_sentences"] = list(self._recent_sentences)
             interval_samples = list(self._pps_interval_ns)
             last_3d = self._last_3d_fix_at
+            # Snapshot per-PRN tracking history for the dashboard's
+            # almanac/ephemeris staleness panel.  Copy individual entries
+            # so callers can mutate the result without racing the
+            # reader-thread updates.
+            sat_history = [dict(v) for v in self._sat_history.values()]
         now_utc = datetime.now(timezone.utc)
 
         # Diagnostic: which PPS backend is active and how many
@@ -561,6 +573,12 @@ class GPSManager:
         # so the UI tile has something to display.  Chrony's leap_status
         # remains the authoritative source on the dashboard.
         data["leap_state"] = self._derive_leap_state(data)
+
+        # Per-PRN tracking history for the dashboard's almanac /
+        # ephemeris staleness panel.  Sorted by constellation + PRN so
+        # the UI can render groups without re-sorting client-side.
+        sat_history.sort(key=lambda e: (e.get("constellation") or "", e.get("prn") or 0))
+        data["satellite_history"] = sat_history
 
         return data
 
@@ -716,6 +734,85 @@ class GPSManager:
             "sample_count": n,
         }
 
+    # ------------------------------------------------------------------
+    # Per-PRN tracking history
+    # ------------------------------------------------------------------
+    # Cap on how many PRNs we keep around — even a multi-GNSS receiver
+    # rarely sees more than ~50 distinct SVIDs in a session.  The cap
+    # protects against a flapping receiver that would otherwise grow the
+    # dict unboundedly with phantom PRNs.
+    _SAT_HISTORY_MAX = 200
+
+    @staticmethod
+    def _sat_key(talker: Optional[str], prn: int) -> str:
+        return f"{(talker or 'GN').upper()}{int(prn):02d}"
+
+    def _record_sat_seen(self, talker: Optional[str], prn: int, snr: Optional[int]) -> None:
+        """Record a PRN sighting from GSV.  Tracks first-seen + last-seen
+        timestamps and a running min/max/last SNR.  Called from the GSV
+        parser path under the reader thread; no lock needed because
+        ``_sat_history`` is only mutated here.
+        """
+        try:
+            key = self._sat_key(talker, prn)
+        except Exception:
+            return
+        now_iso = datetime.now(timezone.utc).isoformat()
+        entry = self._sat_history.get(key)
+        if entry is None:
+            if len(self._sat_history) >= self._SAT_HISTORY_MAX:
+                # Drop the oldest seen entry to make room.  Cheap because
+                # the cap is small.
+                oldest_key = min(
+                    self._sat_history,
+                    key=lambda k: self._sat_history[k].get("last_seen_at") or "",
+                )
+                self._sat_history.pop(oldest_key, None)
+            entry = {
+                "prn_string": key,
+                "constellation": (talker or "GN").upper(),
+                "prn": int(prn),
+                "first_seen_at": now_iso,
+                "last_seen_at": now_iso,
+                "last_used_at": None,
+                "last_snr": snr,
+                "max_snr": snr,
+                "min_snr": snr,
+            }
+            self._sat_history[key] = entry
+            return
+        entry["last_seen_at"] = now_iso
+        if isinstance(snr, (int, float)):
+            entry["last_snr"] = snr
+            cur_max = entry.get("max_snr")
+            cur_min = entry.get("min_snr")
+            if cur_max is None or snr > cur_max:
+                entry["max_snr"] = snr
+            if cur_min is None or snr < cur_min:
+                entry["min_snr"] = snr
+
+    def _record_sat_used(self, talker: Optional[str], prn: int) -> None:
+        """Mark a PRN as used-in-fix as of now.  Called from the GSA
+        parser.  Updates only entries that already exist in the history
+        (so a stale GSA referencing a PRN we never saw in GSV doesn't
+        manufacture a phantom record).
+        """
+        try:
+            key = self._sat_key(talker, prn)
+        except Exception:
+            return
+        now_iso = datetime.now(timezone.utc).isoformat()
+        entry = self._sat_history.get(key)
+        if entry is None:
+            # Some receivers emit GSA before GSV; create a thin record so
+            # we don't lose the "first used" anchor.  The next GSV will
+            # populate elevation/azimuth/SNR.
+            self._record_sat_seen(talker, prn, None)
+            entry = self._sat_history.get(key)
+            if entry is None:
+                return
+        entry["last_used_at"] = now_iso
+
     @staticmethod
     def _derive_leap_state(fix: Dict[str, Any]) -> str:
         """Best-effort leap-second annunciator from current fix state.
@@ -815,6 +912,10 @@ class GPSManager:
             "leap_seconds_to_event": None,
             "leap_event_gps_week": None,
             "leap_event_gps_dow": None,
+            # Per-PRN tracking history (filled by the GSV/GSA parsers).
+            # Always present so the dashboard's staleness panel can
+            # render an empty state instead of "undefined".
+            "satellite_history": [],
         }
 
     def _reader_loop(self) -> None:
@@ -1194,6 +1295,7 @@ class GPSManager:
                             prn = int(prn_raw)
                         except (ValueError, TypeError):
                             continue
+                        snr_val = _safe_int(getattr(msg, "snr_%d" % i, None))
                         bucket[prn] = {
                             "prn": prn,
                             "constellation": talker,
@@ -1203,10 +1305,13 @@ class GPSManager:
                             "azimuth": _safe_int(
                                 getattr(msg, "azimuth_%d" % i, None)
                             ),
-                            "snr": _safe_int(
-                                getattr(msg, "snr_%d" % i, None)
-                            ),
+                            "snr": snr_val,
                         }
+                        # Per-PRN history — dashboard's "Almanac &
+                        # Ephemeris staleness" panel reads this to show
+                        # how long each satellite has been visible and
+                        # when it was last contributing to a fix.
+                        self._record_sat_seen(talker, prn, snr_val)
                     if msg_num >= total_msgs:
                         merged: Dict[int, Dict[str, Any]] = {}
                         for tbucket in self._gsv_buffer.values():
@@ -1243,6 +1348,14 @@ class GPSManager:
                     self._fix["active_satellite_prns"] = sorted(
                         self._gsa_accumulator
                     )
+                    # Mark each PRN reported in this GSA as currently
+                    # used-in-fix.  GSA carries the talker that sourced
+                    # it (GPGSA, GLGSA, …) so we can disambiguate in
+                    # the rare case where two constellations re-use the
+                    # same PRN number.
+                    gsa_talker = getattr(msg, "talker", None) or "GN"
+                    for used_prn in this_gsa:
+                        self._record_sat_used(gsa_talker, used_prn)
                     # Fix mode: 1=no fix, 2=2D, 3=3D
                     fix_mode_raw = getattr(msg, "mode_fix_type", None)
                     if fix_mode_raw is not None:
@@ -1544,6 +1657,13 @@ class GPSManager:
             in_view.append(entry)
             if entry["used"]:
                 used_prns.append(prn)
+            # Per-PRN tracking history — same dashboard panel as the
+            # NMEA path.  ``_record_sat_seen`` / ``_record_sat_used``
+            # mutate ``_sat_history`` only; safe to call without the
+            # lock here because gpsd I/O lives on its own thread.
+            self._record_sat_seen(entry["constellation"], prn, entry["snr"])
+            if entry["used"]:
+                self._record_sat_used(entry["constellation"], prn)
         with self._lock:
             self._fix["satellites_in_view"] = in_view
             self._fix["active_satellite_prns"] = used_prns
