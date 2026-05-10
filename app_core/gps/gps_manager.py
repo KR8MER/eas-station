@@ -498,6 +498,17 @@ class GPSManager:
             last_3d = self._last_3d_fix_at
         now_utc = datetime.now(timezone.utc)
 
+        # Diagnostic: which PPS backend is active and how many
+        # intervals have we captured?  Lets the operator self-diagnose
+        # the "Waiting for PPS pulses…" empty state on the dashboard.
+        if self._pps_kernel_device:
+            data["pps_backend"] = "kernel"
+        elif self._pps_gpio_active:
+            data["pps_backend"] = "gpio"
+        else:
+            data["pps_backend"] = "none"
+        data["pps_interval_samples"] = len(interval_samples)
+
         # Compute age of the last PPS pulse so the UI can colour the blinkenlite
         last_pulse = data.get("pps_last_pulse_at")
         if last_pulse:
@@ -1638,9 +1649,11 @@ class GPSManager:
         """Spawn a low-rate poller of ``<device>/assert`` and update the fix."""
         # Capture the current sequence so pps_pulse_count reflects pulses
         # observed since this manager started, matching the existing
-        # RPi.GPIO semantic.
-        seq, _ts = self._read_pps_assert(device) or (None, None)
-        self._pps_kernel_baseline_seq = seq if seq is not None else 0
+        # RPi.GPIO semantic.  ``_read_pps_assert`` returns a 3-tuple
+        # ``(seq, ts_ns, ts_iso)`` — taking just the sequence here is
+        # all we need for the baseline.
+        baseline = self._read_pps_assert(device)
+        self._pps_kernel_baseline_seq = baseline[0] if baseline else 0
         self._pps_kernel_device = device
 
         thread = threading.Thread(
@@ -1759,11 +1772,35 @@ class GPSManager:
             )
 
     def _pps_pulse_callback(self, channel: int) -> None:
-        """Called by the RPi.GPIO interrupt thread on each PPS rising edge."""
-        now = datetime.now(timezone.utc).isoformat()
+        """Called by the RPi.GPIO interrupt thread on each PPS rising edge.
+
+        We also capture the inter-pulse interval here (using
+        ``time.monotonic_ns`` rather than the kernel's ns-precision
+        assert timestamp) so the dashboard's jitter histogram and
+        Allan-deviation panels still render meaningful data on hosts
+        that don't have the ``pps-gpio`` kernel overlay loaded.
+
+        Caveat: monotonic_ns timestamps go through Python's GIL and
+        the RPi.GPIO C extension's IRQ handler, which adds tens of µs
+        of jitter on top of the receiver's actual PPS edge.  That's
+        good enough for the histogram (whose smallest bucket is 20 µs
+        anyway) but the absolute σ value will read higher than the
+        kernel-PPS path would report on the same hardware.
+        """
+        now_mono_ns = time.monotonic_ns()
+        now_iso = datetime.now(timezone.utc).isoformat()
         with self._lock:
-            self._fix["pps_last_pulse_at"] = now
+            last_mono = getattr(self, "_pps_gpio_last_mono_ns", None)
+            self._pps_gpio_last_mono_ns = now_mono_ns
+            self._fix["pps_last_pulse_at"] = now_iso
             self._fix["pps_pulse_count"] = self._fix.get("pps_pulse_count", 0) + 1
+            if last_mono is not None:
+                interval_ns = now_mono_ns - last_mono
+                # Mirror the kernel-loop sanity gate: drop pathological
+                # intervals (clock step, dropped pulse) so they don't
+                # poison the histogram or ADEV calculation.
+                if 500_000_000 <= interval_ns <= 1_500_000_000:
+                    self._pps_interval_ns.append(interval_ns)
 
     def _apply_system_time(self, dt_utc: datetime) -> None:
         """Set the system clock to the GPS-provided UTC time.
