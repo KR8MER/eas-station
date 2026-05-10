@@ -3141,7 +3141,9 @@
     var EVENT_LOG_MAX = 60;
     var prevEventState = null;
 
+    var EVENT_SEV_ALLOWED = { ok: 1, warn: 1, fault: 1, info: 1, unknown: 1 };
     function pushEvent(sev, msg) {
+        if (!EVENT_SEV_ALLOWED[sev]) sev = 'info';
         var d = new Date();
         var pad = function (n) { return n < 10 ? '0' + n : '' + n; };
         var ts = pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes()) + ':' + pad(d.getUTCSeconds());
@@ -3158,9 +3160,12 @@
             return;
         }
         var html = EVENT_LOG.map(function (e) {
+            // Severity is whitelisted in pushEvent(), but defend in depth
+            // here too so a stray value can never inject extra classes.
+            var sev = EVENT_SEV_ALLOWED[e.sev] ? e.sev : 'info';
             return '<li>' +
                    '<span class="ts">' + escapeHtml(e.ts) + '</span>' +
-                   '<span class="sev sev-' + escapeHtml(e.sev) + '">' + escapeHtml(e.sev) + '</span>' +
+                   '<span class="sev sev-' + sev + '">' + sev + '</span>' +
                    '<span class="msg">' + escapeHtml(e.msg) + '</span>' +
                    '</li>';
         }).join('');
