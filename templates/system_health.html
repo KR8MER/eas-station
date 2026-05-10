@@ -483,6 +483,12 @@
                     <p class="page-subtitle mb-0">Comprehensive monitoring of system resources, hardware, and container health</p>
                 </div>
             </div>
+            <details class="eas-units-disclosure" id="sys-health-units-disclosure">
+                <summary class="btn btn-sm btn-outline-light" title="Display units (lat/lon, altitude, speed, distance)">
+                    <i class="fas fa-ruler"></i> Units
+                </summary>
+                <div class="eas-units-popover" id="sys-health-units-panel"></div>
+            </details>
         </div>
     </div>
 </div>
@@ -1888,12 +1894,15 @@
                                     </div>
                                     {% endif %}
                                     {% if has_fix %}
-                                    <div class="metric-row">
+                                    <div class="metric-row"
+                                         data-gps-lat="{{ gps.get('latitude', '') }}"
+                                         data-gps-lon="{{ gps.get('longitude', '') }}"
+                                         data-gps-alt-m="{{ gps.get('altitude_m', '') }}">
                                         <span class="metric-label">Position:</span>
                                         <span class="metric-value">
                                             {{ "%.6f"|format(gps.latitude) ~ '°' if gps.get('latitude') is not none else '—' }},
                                             {{ "%.6f"|format(gps.longitude) ~ '°' if gps.get('longitude') is not none else '—' }}
-                                            <span class="ms-2">Alt {{ "%.0f"|format(gps.altitude_m * 3.28084) ~ ' ft' if gps.get('altitude_m') is not none else '—' }}</span>
+                                            <span class="ms-2">Alt {{ "%.1f"|format(gps.altitude_m) ~ ' m' if gps.get('altitude_m') is not none else '—' }}</span>
                                             <span class="ms-2">HDOP {{ gps.get('hdop') or '—' }}</span>
                                         </span>
                                     </div>
@@ -3936,14 +3945,23 @@
                 : `<div class="metric-row"><span class="metric-label">PPS GPIO:</span>
                     <span class="metric-value">BCM ${escapeHtml(String(gps.pps_gpio_pin ?? '—'))}</span></div>`);
 
-            // Position row
+            // Position row — units routed through EASUnits so the
+            // operator's lat/lon and altitude unit choice is honoured.
             if (hasFix) {
-                const lat = gps.latitude  != null ? gps.latitude.toFixed(6)  + '°' : '—';
-                const lon = gps.longitude != null ? gps.longitude.toFixed(6) + '°' : '—';
-                const alt = gps.altitude_m != null ? (gps.altitude_m * METERS_TO_FEET).toFixed(0) + ' ft' : '—';
+                const U = window.EASUnits;
+                const lat = U ? U.fmtLat(gps.latitude)
+                              : (gps.latitude  != null ? gps.latitude.toFixed(6)  + '°' : '—');
+                const lon = U ? U.fmtLon(gps.longitude)
+                              : (gps.longitude != null ? gps.longitude.toFixed(6) + '°' : '—');
+                const alt = U ? U.fmtAltitude(gps.altitude_m)
+                              : (gps.altitude_m != null ? (gps.altitude_m * METERS_TO_FEET).toFixed(0) + ' ft' : '—');
+                const spdMps = gps.speed_mps != null ? gps.speed_mps
+                              : (gps.speed_m_s != null ? gps.speed_m_s : null);
+                const spdHtml = (spdMps != null && U)
+                    ? `<span>${escapeHtml(U.fmtSpeed(spdMps))}</span>` : '';
                 _gpsHealthSet('gps-h-pos-row',
                     `<div class="metric-row"><span class="metric-label">Position:</span>
-                    <span class="metric-value d-inline-flex flex-wrap gap-2">${escapeHtml(lat)}, ${escapeHtml(lon)}<span>Alt ${escapeHtml(alt)}</span><span>HDOP ${gps.hdop != null ? escapeHtml(String(gps.hdop)) : '—'}</span></span></div>`);
+                    <span class="metric-value d-inline-flex flex-wrap gap-2">${escapeHtml(lat)}, ${escapeHtml(lon)}<span>Alt ${escapeHtml(alt)}</span>${spdHtml}<span>HDOP ${gps.hdop != null ? escapeHtml(String(gps.hdop)) : '—'}</span></span></div>`);
             } else {
                 _gpsHealthSet('gps-h-pos-row', '');
             }
@@ -4088,10 +4106,12 @@
         }
         /* ── end RTC helpers ─────────────────────────────────────────── */
 
+        let lastHealthSnapshot = null;
         function applyHealthData(data) {
             if (!data || typeof data !== 'object') {
                 return;
             }
+            lastHealthSnapshot = data;
 
             updateOverview(data);
 
@@ -4404,6 +4424,20 @@
             setInterval(() => {
                 refreshHealthData(false);
             }, REFRESH_INTERVAL_MS);
+
+            // Display-units selector — re-apply the cached health
+            // snapshot whenever the operator picks a different unit so
+            // lat/lon, altitude, and speed update immediately.
+            if (window.EASUnits) {
+                window.EASUnits.attachSelector(document.getElementById('sys-health-units-panel'));
+                window.addEventListener('eas:units-changed', () => {
+                    if (lastHealthSnapshot) updateGpsCard(lastHealthSnapshot.gps || {});
+                });
+                document.addEventListener('click', (ev) => {
+                    const disc = document.getElementById('sys-health-units-disclosure');
+                    if (disc && disc.open && !disc.contains(ev.target)) disc.open = false;
+                });
+            }
         });
     </script>
 {% endblock %}

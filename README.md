@@ -89,6 +89,7 @@ See the [GPS HAT Setup guide](docs/hardware/GPS_HAT_SETUP.md) for hardware optio
 - **Analytics dashboard** — alert frequency, type breakdown, and geographic distribution charts (Chart.js), with one-click **PDF export** of the full statistics report (jsPDF + html2canvas)
 - **Audio monitoring** — live receive history, source routing view, and playback
 - **System health panel** — CPU, memory, disk, and service status at a glance
+- **Operator-selectable display units** — coords (`D.dddd` / `DMS`), altitude (`m` / `ft`), speed (`kn` / `mph` / `km/h` / `m/s`) and distance (`m` / `ft` / `mi` / `nmi`) chosen per-browser via **Settings → Personalization → Display Units** (also reachable from the Help dropdown and the inline *Units* button on the GPS Dashboard and System Health pages)
 - **Dark-mode-friendly** design with accessible color system
 
 ### 🔒 Security & Access Control

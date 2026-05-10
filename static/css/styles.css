@@ -8363,4 +8363,70 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 
 /* End of RBDS Visualization System */
 
+/* ========================================
+   DISPLAY-UNITS SELECTOR (EASUnits)
+   ======================================== */
+.eas-units-disclosure {
+    position: relative;
+}
+.eas-units-disclosure > summary {
+    list-style: none;
+    cursor: pointer;
+    user-select: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+.eas-units-disclosure > summary::-webkit-details-marker { display: none; }
+.eas-units-disclosure[open] > summary { box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.35); }
+
+.eas-units-popover {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 1000;
+    min-width: 220px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: var(--bg-secondary, rgba(20, 24, 36, 0.96));
+    border: 1px solid var(--border-color, rgba(127, 127, 127, 0.3));
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+.eas-units-selector {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.eas-units-row {
+    display: grid;
+    grid-template-columns: 70px 1fr;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    font-size: 0.82rem;
+}
+.eas-units-row-label {
+    color: var(--text-muted, #8b949e);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    font-size: 0.72rem;
+}
+.eas-units-select {
+    min-width: 0;
+    width: 100%;
+}
+
+@media (max-width: 575.98px) {
+    .eas-units-popover {
+        right: 0;
+        left: auto;
+        min-width: 200px;
+        max-width: calc(100vw - 1.5rem);
+    }
+}
+
 /* End of Consolidated Styles */
