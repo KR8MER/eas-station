@@ -1081,6 +1081,7 @@
     </div>
 </div>
 
+<script src="{{ url_for('static', filename='js/gps_constellation_palette.js') }}"></script>
 <script>
 (function() {
     // Tab switching
@@ -1329,37 +1330,35 @@ function gpsEscapeAttr(s) {
         .replace(/>/g, '&gt;');
 }
 
-/* Map SNR (dBHz) to a CSS class and hex colour for bars / sky plot */
+/* SNR / constellation helpers — pulled from the shared palette in
+   static/js/gps_constellation_palette.js (loaded above) so all three
+   GPS panels stay colour-consistent.  We keep local function names
+   (snrClass / constellationInfo / SNR_COLORS) so the rest of this
+   file doesn't need to change. */
+var _GPS_PALETTE = (typeof window !== 'undefined' && window.EAS_GPS_PALETTE) || null;
 function snrClass(snr) {
-    if (snr === null || snr === undefined) return 'snr-s0';
-    if (snr >= 45) return 'snr-s5';
-    if (snr >= 35) return 'snr-s4';
-    if (snr >= 25) return 'snr-s3';
-    if (snr >= 15) return 'snr-s2';
-    return 'snr-s1';
+    return 'snr-' + (_GPS_PALETTE ? _GPS_PALETTE.snrBucket(snr) : 's0');
 }
-var SNR_COLORS = { 'snr-s0':'#484f58','snr-s1':'#f85149','snr-s2':'#f97316','snr-s3':'#d29922','snr-s4':'#84cc16','snr-s5':'#3fb950' };
-function snrHex(snr) { return SNR_COLORS[snrClass(snr)] || '#484f58'; }
-
-/* Per-constellation colours for sky plot dots and the table PRN badge.
-   Keys are NMEA talker IDs (msg.talker on the backend); unknowns fall
-   back to neutral grey. */
-var CONSTELLATION_INFO = {
-    'GP': { color: '#58a6ff', label: 'GPS' },
-    'GL': { color: '#f85149', label: 'GLONASS' },
-    'GA': { color: '#bc8cff', label: 'Galileo' },
-    'GB': { color: '#ffa657', label: 'BeiDou' },
-    'GQ': { color: '#79c0ff', label: 'QZSS' },
-    'GI': { color: '#84cc16', label: 'NavIC' }
-};
+var SNR_COLORS = (function () {
+    var src = _GPS_PALETTE ? _GPS_PALETTE.SNR_COLORS : {};
+    var out = {};
+    Object.keys(src).forEach(function (k) { out['snr-' + k] = src[k]; });
+    return out;
+})();
+function snrHex(snr) {
+    return _GPS_PALETTE ? _GPS_PALETTE.snrHex(snr) : '#484f58';
+}
+var CONSTELLATION_INFO = _GPS_PALETTE ? _GPS_PALETTE.CONSTELLATION_INFO : {};
 function constellationInfo(code) {
-    return CONSTELLATION_INFO[code] || { color: '#8b949e', label: code || 'Unknown' };
+    return _GPS_PALETTE ? _GPS_PALETTE.constInfo(code)
+                        : { color: '#8b949e', label: code || 'Unknown' };
 }
-/* Map SNR to dot opacity so strong sats glow and weak ones fade,
-   while colour stays locked to constellation. */
 function snrAlpha(snr) {
-    if (snr === null || snr === undefined) return 0.55;
-    return Math.max(0.45, Math.min(0.95, 0.4 + snr / 60));
+    if (!_GPS_PALETTE) {
+        if (snr === null || snr === undefined) return 0.55;
+        return Math.max(0.45, Math.min(0.95, 0.4 + snr / 60));
+    }
+    return _GPS_PALETTE.snrAlpha(snr);
 }
 
 /* Read a CSS custom property from the document root */

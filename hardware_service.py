@@ -914,6 +914,15 @@ def _collect_gps_for_trends() -> dict:
     # have a 3D fix; counts upward when we don't.
     holdover_s = status.get("holdover_s")
 
+    # RF / jamming-spoof telemetry from UBX-MON-HW.  Stored alongside the
+    # DOP/SNR fields so the GPS dashboard can plot a "Jamming & Spoofing"
+    # time-series across the same 1-hour ring buffer.  ``jamming_state``
+    # is a short string (ok|warning|critical|unknown) — preserved as-is
+    # so the chart can colour-code each sample.
+    jamming_state = status.get("jamming_state")
+    if jamming_state is not None:
+        jamming_state = str(jamming_state)
+
     return {
         "hdop":            _num(status.get("hdop")),
         "vdop":            _num(status.get("vdop")),
@@ -922,6 +931,9 @@ def _collect_gps_for_trends() -> dict:
         "fix_age_s":       _num(status.get("fix_age_s")),
         "holdover_s":      _num(holdover_s),
         "pps_jitter_ns":   _num(jitter_stddev_ns),
+        "noise_level":     _num(status.get("noise_level")),
+        "agc_count":       _num(status.get("agc_count")),
+        "jamming_state":   jamming_state,
     }
 
 

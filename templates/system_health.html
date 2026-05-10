@@ -2085,6 +2085,9 @@
 {% block scripts %}
     <!-- Chart.js for visualizations (local to avoid CDN tracking prevention) -->
     <script src="{{ url_for('static', filename='vendor/chartjs/chart.min.js') }}"></script>
+    <!-- Shared GPS constellation palette so colours stay consistent with the
+         hardware-settings GPS panel and the chrogps-style admin dashboard. -->
+    <script src="{{ url_for('static', filename='js/gps_constellation_palette.js') }}"></script>
     <script>
         // Helper to read CSS custom properties at runtime (for Chart.js and canvas contexts)
         function getColorVar(varName) {
@@ -3680,34 +3683,35 @@
             `;
         }
 
-        /* ── GPS sky-plot helpers (mirrored from hardware_settings panel) ── */
+        /* ── GPS sky-plot helpers — read from the shared palette
+              (static/js/gps_constellation_palette.js, loaded in this
+              template's scripts block) so colours match the admin
+              panels.  We keep the local ``gps*`` names so the rest of
+              this file continues to compile without churn. */
+        const _GPS_PAL = (typeof window !== 'undefined' && window.EAS_GPS_PALETTE) || null;
         function gpsSnrClass(snr) {
-            if (snr === null || snr === undefined) return 'snr-s0';
-            if (snr >= 45) return 'snr-s5';
-            if (snr >= 35) return 'snr-s4';
-            if (snr >= 25) return 'snr-s3';
-            if (snr >= 15) return 'snr-s2';
-            return 'snr-s1';
+            return 'snr-' + (_GPS_PAL ? _GPS_PAL.snrBucket(snr) : 's0');
         }
-        const _GPS_SNR_COLORS = { 'snr-s0':'#484f58','snr-s1':'#f85149','snr-s2':'#f97316','snr-s3':'#d29922','snr-s4':'#84cc16','snr-s5':'#3fb950' };
-        function gpsSnrHex(snr) { return _GPS_SNR_COLORS[gpsSnrClass(snr)] || '#484f58'; }
-
-        /* Per-constellation colours for sky plot dots and the table PRN badge.
-           Keys are NMEA talker IDs from msg.talker; unknowns fall back to grey. */
-        const _GPS_CONST_INFO = {
-            'GP': { color: '#58a6ff', label: 'GPS' },
-            'GL': { color: '#f85149', label: 'GLONASS' },
-            'GA': { color: '#bc8cff', label: 'Galileo' },
-            'GB': { color: '#ffa657', label: 'BeiDou' },
-            'GQ': { color: '#79c0ff', label: 'QZSS' },
-            'GI': { color: '#84cc16', label: 'NavIC' }
-        };
+        const _GPS_SNR_COLORS = (function () {
+            const src = _GPS_PAL ? _GPS_PAL.SNR_COLORS : {};
+            const out = {};
+            Object.keys(src).forEach(k => { out['snr-' + k] = src[k]; });
+            return out;
+        })();
+        function gpsSnrHex(snr) {
+            return _GPS_PAL ? _GPS_PAL.snrHex(snr) : '#484f58';
+        }
+        const _GPS_CONST_INFO = _GPS_PAL ? _GPS_PAL.CONSTELLATION_INFO : {};
         function gpsConstInfo(code) {
-            return _GPS_CONST_INFO[code] || { color: '#8b949e', label: code || 'Unknown' };
+            return _GPS_PAL ? _GPS_PAL.constInfo(code)
+                            : { color: '#8b949e', label: code || 'Unknown' };
         }
         function gpsSnrAlpha(snr) {
-            if (snr === null || snr === undefined) return 0.55;
-            return Math.max(0.45, Math.min(0.95, 0.4 + snr / 60));
+            if (!_GPS_PAL) {
+                if (snr === null || snr === undefined) return 0.55;
+                return Math.max(0.45, Math.min(0.95, 0.4 + snr / 60));
+            }
+            return _GPS_PAL.snrAlpha(snr);
         }
 
         function drawGpsSkyPlot(canvas, satsInView, activePrns) {
