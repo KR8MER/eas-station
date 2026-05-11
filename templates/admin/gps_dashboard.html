@@ -3181,7 +3181,7 @@
         var gradeEl = document.getElementById('quality-grade');
         if (gradeEl) {
             setTileSeverity(gradeEl, worst);
-            var letter = worst === 'ok' ? 'A' : worst === 'warn' ? 'B' : worst === 'fault' ? 'D' : '—';
+            var letter = worst === 'ok' ? 'A' : worst === 'warn' ? 'C' : worst === 'fault' ? 'F' : '—';
             var label = worst === 'ok' ? 'Stratum-1 healthy'
                       : worst === 'warn' ? 'Degraded'
                       : worst === 'fault' ? 'Fault'
