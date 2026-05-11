@@ -232,5 +232,54 @@ def test_ffmpeg_analyzeduration_is_2s():
     )
 
 
+# ---------------------------------------------------------------------------
+# Test 6: a source that never produces audio gets escalated to ERROR and
+#         quarantined after _stall_quarantine_threshold consecutive stalls,
+#         rather than restart-looping forever.
+# ---------------------------------------------------------------------------
+def test_persistent_stall_escalates_to_error_and_quarantine():
+    """A stream that always stalls must eventually surface as ERROR + quarantine.
+
+    Regression guard against the original behaviour: ``adapter.restart()``
+    only counts a restart as failed when ``start()`` raises or returns False,
+    so a stream whose ffmpeg launches fine but never delivers audio (dead
+    URL, dead SDR) would otherwise cycle forever.  The monitor must track
+    its own consecutive-stall counter and force ERROR + quarantine.
+    """
+    adapter = SlowStartAdapter("stall-test-escalate")
+    controller = AudioIngestController(
+        enable_monitor=True,
+        monitor_interval=0.2,
+        stall_seconds=2,  # tight so the test runs in seconds, not minutes
+    )
+    controller._monitor_grace_period = 0.5
+    controller._stall_quarantine_threshold = 3
+    controller.add_source(adapter)
+    adapter.start()
+
+    # Each stall cycle takes roughly grace(0.5) + stall(2) + restart_delay ~ 3s
+    # so 3 cycles fit comfortably in ~15s.
+    deadline = time.time() + 20
+    while adapter.status != AudioSourceStatus.ERROR and time.time() < deadline:
+        time.sleep(0.2)
+
+    final_status = adapter.status
+    final_quarantined = adapter.is_quarantined()
+    final_error = adapter.error_message
+
+    controller.stop_all()
+
+    assert final_status == AudioSourceStatus.ERROR, (
+        "Expected adapter to be escalated to ERROR after consecutive stalls, "
+        f"got status={final_status!r}, error={final_error!r}"
+    )
+    assert final_quarantined, (
+        "Expected adapter to be quarantined after ERROR escalation"
+    )
+    assert final_error and "no audio samples" in final_error, (
+        f"Expected error_message to mention missing audio, got {final_error!r}"
+    )
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
