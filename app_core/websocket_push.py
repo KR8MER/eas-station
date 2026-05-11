@@ -288,18 +288,24 @@ def _push_worker_fast(app: 'Flask', socketio: 'SocketIO') -> None:
 
 # Shared audio-source config cache (read by the fast loop's audio_monitoring
 # emit; refreshed by the slow loop because it pulls from the database and the
-# fast loop must stay DB-free).
+# fast loop must stay DB-free).  We use atomic reference swap (rebind the
+# module-level name to a new dict) so the fast loop never observes a
+# partially-updated mapping — no lock required.
 _config_cache: Dict[str, Any] = {}
 _config_cache_loaded_at: float = 0.0
 
 
 def _refresh_config_cache() -> None:
     """Refresh the shared audio-source config cache from the database."""
-    global _config_cache_loaded_at
+    global _config_cache, _config_cache_loaded_at
     try:
         from webapp.admin.audio_ingest import AudioSourceConfigDB
-        _config_cache.clear()
-        _config_cache.update({cfg.name: cfg for cfg in AudioSourceConfigDB.query.all()})
+        # Build a fresh dict, then swap the reference atomically.  CPython
+        # name binding is atomic with respect to other threads, so the fast
+        # loop will see either the old dict or the new one — never a
+        # half-cleared one.
+        new_cache = {cfg.name: cfg for cfg in AudioSourceConfigDB.query.all()}
+        _config_cache = new_cache
         _config_cache_loaded_at = time.time()
     except Exception as e:
         logger.debug(f"Error refreshing audio config cache: {e}")

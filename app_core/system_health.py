@@ -488,12 +488,23 @@ def _resolve_last_audio_activity(logger) -> Optional[datetime]:
         # ManualEASActivation columns at once.  Previously this issued three
         # separate SELECT MAX queries, which the HealthAlertWorker ran on
         # every iteration in addition to the WebSocket-push system-health
-        # snapshot.
+        # snapshot.  COALESCE the subqueries so an empty table doesn't make
+        # GREATEST() collapse the whole expression to NULL.
+        sentinel = datetime(1970, 1, 1, tzinfo=UTC_TZ)
         latest = db.session.query(
             func.greatest(
-                db.session.query(func.max(EASMessage.created_at)).scalar_subquery(),
-                db.session.query(func.max(ManualEASActivation.sent_at)).scalar_subquery(),
-                db.session.query(func.max(ManualEASActivation.created_at)).scalar_subquery(),
+                func.coalesce(
+                    db.session.query(func.max(EASMessage.created_at)).scalar_subquery(),
+                    sentinel,
+                ),
+                func.coalesce(
+                    db.session.query(func.max(ManualEASActivation.sent_at)).scalar_subquery(),
+                    sentinel,
+                ),
+                func.coalesce(
+                    db.session.query(func.max(ManualEASActivation.created_at)).scalar_subquery(),
+                    sentinel,
+                ),
             )
         ).scalar()
     except Exception as exc:  # pragma: no cover - defensive logging
@@ -504,7 +515,13 @@ def _resolve_last_audio_activity(logger) -> Optional[datetime]:
             pass
         return None
 
-    return _ensure_aware(latest)
+    if latest is None:
+        return None
+    aware = _ensure_aware(latest)
+    # Discard the epoch sentinel when every source table was empty.
+    if aware is not None and aware <= datetime(1970, 1, 2, tzinfo=UTC_TZ):
+        return None
+    return aware
 
 
 class HealthAlertWorker:
