@@ -3173,22 +3173,40 @@
         setTileSeverity(sEl, sSev);
         if (sEl) sEl.querySelector('.metric-val').textContent = (adev10 !== null) ? fmtAdev(adev10) : '—';
 
-        // Composite grade — worst-of severity translated to a letter.
+        // Composite grade — letter encodes how many metrics are off-spec.
+        //   A = all ok · B = 1 warn · C = ≥2 warns · D = 1 fault · F = ≥2 faults
+        // Any fault still dominates warns; unknown only shows up if nothing
+        // else has fired yet (we'd rather say "awaiting" than "A" on partial data).
         var sevs = [sev, jSev, fSev, uSev, sSev];
-        var worst = 'ok';
+        var faultCount = 0, warnCount = 0, unknownCount = 0;
         for (var k = 0; k < sevs.length; k++) {
-            if (sevs[k] === 'fault') { worst = 'fault'; break; }
-            if (sevs[k] === 'warn') worst = 'warn';
-            if (sevs[k] === 'unknown' && worst === 'ok') worst = 'unknown';
+            if (sevs[k] === 'fault') faultCount++;
+            else if (sevs[k] === 'warn') warnCount++;
+            else if (sevs[k] === 'unknown') unknownCount++;
+        }
+        var letter, label, badgeSev;
+        if (faultCount >= 2) {
+            letter = 'F'; badgeSev = 'fault';
+            label = faultCount + ' metrics in fault';
+        } else if (faultCount === 1) {
+            letter = 'D'; badgeSev = 'fault';
+            label = warnCount > 0 ? '1 fault · ' + warnCount + ' warn' : '1 metric in fault';
+        } else if (warnCount >= 2) {
+            letter = 'C'; badgeSev = 'warn';
+            label = warnCount + ' metrics degraded';
+        } else if (warnCount === 1) {
+            letter = 'B'; badgeSev = 'warn';
+            label = '1 metric degraded';
+        } else if (unknownCount > 0) {
+            letter = '—'; badgeSev = 'unknown';
+            label = 'awaiting telemetry';
+        } else {
+            letter = 'A'; badgeSev = 'ok';
+            label = 'Stratum-1 healthy';
         }
         var gradeEl = document.getElementById('quality-grade');
         if (gradeEl) {
-            setTileSeverity(gradeEl, worst);
-            var letter = worst === 'ok' ? 'A' : worst === 'warn' ? 'C' : worst === 'fault' ? 'F' : '—';
-            var label = worst === 'ok' ? 'Stratum-1 healthy'
-                      : worst === 'warn' ? 'Degraded'
-                      : worst === 'fault' ? 'Fault'
-                      : 'Unknown';
+            setTileSeverity(gradeEl, badgeSev);
             gradeEl.textContent = letter + ' / ' + label;
         }
         var summaryEl = document.getElementById('quality-summary');
