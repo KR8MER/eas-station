@@ -126,6 +126,58 @@ class AudioSourceConfig:
             self.device_params = {}
 
 
+def _describe_stall(adapter: "AudioSourceAdapter", now: float, last_update: float) -> str:
+    """Summarise an adapter's state for stall diagnostics.
+
+    Designed for one-line operator-facing logs.  Pulls the bits most useful
+    for triage — uptime, restart count, last error, and adapter-specific
+    health signals (ffmpeg process state for streams, capture-handle state
+    for SDR sources) — so root cause is visible without flipping debug logs.
+    """
+    parts: List[str] = []
+
+    uptime = now - adapter._start_time if adapter._start_time else 0.0
+    parts.append(f"uptime={uptime:.1f}s")
+    parts.append(f"restarts={adapter._restart_count}")
+
+    if last_update and last_update > 0:
+        parts.append(f"last_sample_age={now - last_update:.1f}s")
+    else:
+        parts.append("last_sample_age=never")
+
+    last_err = (adapter._last_error or "").strip()
+    if last_err:
+        parts.append(f"last_error={last_err[:120]!r}")
+
+    # Stream-source-specific signals — exposed by StreamSourceAdapter only.
+    process = getattr(adapter, "_ffmpeg_process", None)
+    if process is not None:
+        try:
+            rc = process.poll()
+        except Exception:
+            rc = "poll-error"
+        if rc is None:
+            parts.append(f"ffmpeg_pid={process.pid}(running)")
+        else:
+            parts.append(f"ffmpeg_pid={process.pid}(exit={rc})")
+        attempts = getattr(adapter, "_connection_attempts", None)
+        successes = getattr(adapter, "_successful_connections", None)
+        if attempts is not None:
+            parts.append(f"ffmpeg_connects={successes}/{attempts}")
+        url = getattr(adapter, "_resolved_stream_url", None) or getattr(adapter, "_stream_url", None)
+        if url:
+            parts.append(f"url={url}")
+
+    # SDR-source-specific signals — exposed by SDRSourceAdapter.
+    receiver_id = getattr(adapter, "_receiver_id", None)
+    if receiver_id:
+        parts.append(f"receiver={receiver_id}")
+        if getattr(adapter, "_capture_handle", None) is None:
+            parts.append("capture_handle=none")
+
+    return ", ".join(parts)
+
+
 class AudioSourceAdapter(ABC):
     """Abstract base class for audio source adapters."""
 
@@ -704,6 +756,15 @@ class AudioIngestController:
         self._flask_app = flask_app  # Store Flask app for app context in background threads
         self._metadata_change_callback = None  # Applied to every source (current and future)
         self._source_alert_callback = None  # Optional: called on source events (restart/error/stop)
+        # Tracks how many times in a row a source has stalled without producing a
+        # single fresh sample between restarts.  ``adapter.restart()`` only counts
+        # a restart as failed when ``start()`` raises or returns False, so a stream
+        # whose ffmpeg launches fine but never delivers audio (dead URL, dead SDR)
+        # would otherwise cycle forever.  When this counter exceeds
+        # ``_stall_quarantine_threshold`` the monitor escalates the source to
+        # ERROR and lets the adapter's own quarantine timer back off the loop.
+        self._consecutive_stalls: Dict[str, int] = {}
+        self._stall_quarantine_threshold = 3
         # Headers injected via inject_eas_test_signal() — decoded alerts whose
         # raw_header matches an entry here are known-synthetic and get confidence=1.0.
         self._synthetic_headers: set = set()
@@ -1105,6 +1166,7 @@ class AudioIngestController:
         now: float,
     ) -> None:
         if not adapter.config.enabled:
+            self._consecutive_stalls.pop(name, None)
             return
 
         # Quarantined sources are skipped to break the restart-storm cycle
@@ -1120,8 +1182,60 @@ class AudioIngestController:
                 return
             last_update = adapter._last_metrics_update or (adapter.metrics.timestamp if adapter.metrics else 0.0)
             if last_update == 0.0 or now - last_update > self._monitor_stall_seconds:
+                stalls = self._consecutive_stalls.get(name, 0) + 1
+                self._consecutive_stalls[name] = stalls
+                diagnostics = _describe_stall(adapter, now, last_update)
+                logger.warning(
+                    "%s: stalled capture detected (no audio samples for %.1fs, "
+                    "consecutive=%d/%d) — %s",
+                    name,
+                    now - last_update if last_update else -1.0,
+                    stalls,
+                    self._stall_quarantine_threshold,
+                    diagnostics,
+                )
                 self._fire_source_alert(adapter.config.name, "stall", "stalled capture (no audio samples)")
-                adapter.restart("stalled capture (no audio samples)")
+
+                if stalls >= self._stall_quarantine_threshold:
+                    # adapter.restart() keeps succeeding because ``start()`` only
+                    # checks process/handle creation, not whether samples ever
+                    # arrive.  Force ERROR + quarantine here so the monitor
+                    # stops cycling and operators get a visible failure state
+                    # in the UI instead of an endless WARNING stream.
+                    logger.error(
+                        "%s: escalating to ERROR after %d consecutive stalls — %s",
+                        name,
+                        stalls,
+                        diagnostics,
+                    )
+                    try:
+                        adapter.stop()
+                    except Exception as exc:
+                        logger.error("%s: error stopping stalled source: %s", name, exc, exc_info=True)
+                    adapter.status = AudioSourceStatus.ERROR
+                    adapter.error_message = f"no audio samples after {stalls} restarts ({diagnostics})"
+                    adapter._last_error = adapter.error_message
+                    adapter._quarantined_until = time.time() + adapter._quarantine_seconds
+                    self._fire_source_alert(
+                        adapter.config.name,
+                        "error",
+                        adapter.error_message,
+                    )
+                    self._consecutive_stalls[name] = 0
+                else:
+                    adapter.restart("stalled capture (no audio samples)")
+            else:
+                # Only treat the tick as "healthy" — and reset the stall
+                # counter — when ``_last_metrics_update`` reflects an actual
+                # audio chunk, not the timestamp ``start()`` writes at launch.
+                # Without this guard the counter would clear on every cycle
+                # immediately after ``adapter.restart()``, since the restart
+                # itself bumps ``_last_metrics_update`` to "now" even when no
+                # samples ever flowed — turning the escalation into a no-op
+                # on streams that always stall.
+                started_at = adapter._start_time or 0.0
+                if last_update > started_at + self._monitor_grace_period:
+                    self._consecutive_stalls.pop(name, None)
             return
 
         if status in (AudioSourceStatus.ERROR, AudioSourceStatus.DISCONNECTED):

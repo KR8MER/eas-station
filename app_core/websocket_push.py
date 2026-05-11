@@ -185,6 +185,25 @@ def stop_websocket_push() -> None:
     logger.info("WebSocket push service stopped")
 
 
+def _recover_db_session() -> None:
+    """Roll back the shared SQLAlchemy session after a failed emit.
+
+    The push worker reuses one ``app.app_context()`` for its entire lifetime,
+    so all emits share a single scoped session.  When any DB call inside an
+    emit raises (network blip, query error, etc.) PostgreSQL leaves that
+    session's transaction in the aborted state and every subsequent statement
+    fails with InFailedSqlTransaction — including the ``SELECT version()``
+    probe in the system-health snapshot, which then bubbles up to the UI as
+    a "Critical System Notice".  Rolling back here lets the next emit start
+    clean.
+    """
+    try:
+        from app_core.extensions import db
+        db.session.rollback()
+    except Exception:
+        pass
+
+
 def _push_worker(app: 'Flask', socketio: 'SocketIO') -> None:
     """Background worker that pushes real-time updates via WebSocket.
 
@@ -377,6 +396,13 @@ def _push_worker(app: 'Flask', socketio: 'SocketIO') -> None:
                     last_alerts_emit = now
                 except Exception as e:
                     logger.debug(f"Error emitting alerts_update: {e}")
+
+            # Roll back the shared session once per iteration so a failed
+            # DB call in any emit above doesn't leave the next iteration's
+            # queries running against an aborted PostgreSQL transaction.
+            # SQLAlchemy short-circuits rollback when no transaction is
+            # active, so this is effectively free on the happy path.
+            _recover_db_session()
 
             # Sleep for 250ms (4Hz base loop) — low CPU, smooth VU meters
             _stop_event.wait(AUDIO_MONITORING_INTERVAL)

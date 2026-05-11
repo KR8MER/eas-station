@@ -372,6 +372,15 @@ def build_system_health_snapshot(db, logger) -> SystemHealth:
 
         db_status = "unknown"
         db_info: Dict[str, Any] = {}
+        # If a prior query in the same scoped session left the PostgreSQL
+        # transaction in the aborted state (InFailedSqlTransaction), every
+        # subsequent statement raises until a rollback. The websocket push
+        # loop reuses one session across many emits, so a single failed
+        # query elsewhere would otherwise wedge this probe forever.
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
         try:
             version_result = db.session.execute(text("SELECT version()"))
             if version_result:
@@ -386,6 +395,10 @@ def build_system_health_snapshot(db, logger) -> SystemHealth:
                     if size_result:
                         db_info["size"] = size_result[0]
                 except Exception:
+                    try:
+                        db.session.rollback()
+                    except Exception:
+                        pass
                     db_info["size"] = "Unknown"
 
                 try:
@@ -395,9 +408,19 @@ def build_system_health_snapshot(db, logger) -> SystemHealth:
                     if conn_result:
                         db_info["active_connections"] = conn_result[0]
                 except Exception:
+                    try:
+                        db.session.rollback()
+                    except Exception:
+                        pass
                     db_info["active_connections"] = "Unknown"
         except Exception as exc:
-            db_status = f"error: {exc}"
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
+            logger.warning("Database health probe failed: %s", exc)
+            db_status = "error"
+            db_info["error"] = str(exc)[:200]
 
         systemd_services = _collect_systemd_services(logger)
         services_status: Dict[str, Any] = {
