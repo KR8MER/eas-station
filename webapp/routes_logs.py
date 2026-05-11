@@ -24,6 +24,7 @@ import re
 import os
 from typing import Dict, List, Any
 from app_core.config import get_all_log_services, get_eas_services
+from app_core.cache import cache
 
 logger = logging.getLogger(__name__)
 
@@ -254,6 +255,12 @@ def get_all_logs():
 
 
 @logs_bp.route('/api/logs/recent')
+# Cached for ~5 s.  This endpoint is hit by the real-time log viewer's
+# WebSocket-fallback poll (every 10 s) and ad-hoc dashboard panels.  Even at
+# query-string variations the per-call cost is several DB SELECTs, so
+# collapsing concurrent callers onto a single result for a few seconds keeps
+# the DB pool free for actual user-driven requests.
+@cache.cached(timeout=5, query_string=True, key_prefix='logs_recent')
 def get_recent_logs():
     """
     Fetch recent logs from all sources for real-time display.

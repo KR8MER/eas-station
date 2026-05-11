@@ -296,9 +296,13 @@ document.getElementById('autoScrollBtn').addEventListener('click', function() {
         container.classList.add('auto-scroll');
         container.scrollTop = container.scrollHeight;
         
-        // Auto-refresh every 5 seconds when auto-scroll is on
+        // Auto-refresh every 5 seconds when auto-scroll is on; skip when the
+        // tab is hidden so background tabs don't keep hitting the logs API.
         if (!refreshInterval) {
-            refreshInterval = setInterval(fetchLogs, 5000);
+            refreshInterval = setInterval(function () {
+                if (typeof document !== 'undefined' && document.hidden) return;
+                fetchLogs();
+            }, 5000);
         }
     } else {
         btn.classList.remove('btn-success');

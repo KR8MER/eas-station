@@ -1916,6 +1916,9 @@ function buildErrorHint(d) {
 function refreshGpsStatus() {
     var container = document.getElementById('gps-status-card');
     if (!container) return;
+    // Don't poll when the tab is hidden — the GPS card isn't visible and the
+    // /api/hardware/gps/status request still runs a handler on the server.
+    if (typeof document !== 'undefined' && document.hidden) return;
     fetch('/api/hardware/gps/status')
         .then(function (r) { return r.json(); })
         .then(function (d) {

@@ -895,8 +895,11 @@ document.addEventListener('DOMContentLoaded', function() {
     loadScreens();
     loadRotations();
     fetchHardwareStatus();
-    // Refresh hardware status every 10 seconds
-    setInterval(fetchHardwareStatus, 10000);
+    // Refresh hardware status every 10 seconds; skip when the tab is hidden.
+    setInterval(function () {
+        if (typeof document !== 'undefined' && document.hidden) return;
+        fetchHardwareStatus();
+    }, 10000);
 
     // Add event listeners for filters
     document.getElementById('screen-search')?.addEventListener('input', renderScreens);

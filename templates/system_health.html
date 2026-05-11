@@ -4422,6 +4422,7 @@
             });
 
             setInterval(() => {
+                if (typeof document !== 'undefined' && document.hidden) return;
                 refreshHealthData(false);
             }, REFRESH_INTERVAL_MS);
 

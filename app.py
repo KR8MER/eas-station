@@ -537,18 +537,26 @@ app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Add connection timeout and pool settings to prevent startup hangs
-# Pool settings optimized for robustness and performance
-# Note: With 2 gunicorn workers, total max connections = 2 * (pool_size + max_overflow) = 2 * (5 + 10) = 30
+# Pool settings sized for two gunicorn gevent workers plus several long-lived
+# background threads (WebSocketPush fast/slow, HealthAlertWorker, RWT
+# scheduler, hardware service threads).  At the previous pool_size=3 +
+# max_overflow=5 the app would hit pool_timeout under modest load and request
+# greenlets would queue 10 s waiting for a connection — a major contributor
+# to "snail's pace" page loads.
+# Note: With 2 gunicorn workers, total max connections = 2 * (pool_size + max_overflow) = 2 * (10 + 10) = 40
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
     'connect_args': {
         'connect_timeout': 5,       # 5 second timeout for initial connection (reduced from 10)
         'options': '-c statement_timeout=30s',  # 30 second query timeout
     },
-    'pool_pre_ping': True,          # Verify connections before using them (detect stale connections)
+    # pool_pre_ping was previously True, which issued a SELECT 1 on every
+    # checkout — measurable latency for the many tiny queries the dashboards
+    # fan out.  pool_recycle=3600 already replaces stale connections.
+    'pool_pre_ping': False,
     'pool_recycle': 3600,           # Recycle connections after 1 hour
-    'pool_size': 3,                 # Number of connections per worker (reduced from 10 to avoid exhaustion)
-    'max_overflow': 5,              # Additional connections when pool exhausted (reduced from 20)
-    'pool_timeout': 10,             # Timeout waiting for connection from pool (reduced from 30)
+    'pool_size': 10,                # Steady-state pool per worker
+    'max_overflow': 10,             # Burst capacity per worker
+    'pool_timeout': 10,             # Timeout waiting for connection from pool
     'echo_pool': False,             # Set to True for connection pool debugging
 }
 
