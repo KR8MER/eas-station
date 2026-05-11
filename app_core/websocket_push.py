@@ -194,8 +194,12 @@ def _recover_db_session() -> None:
     session's transaction in the aborted state and every subsequent statement
     fails with InFailedSqlTransaction — including the ``SELECT version()``
     probe in the system-health snapshot, which then bubbles up to the UI as
-    a "Critical System Notice".  Rolling back here lets the next emit start
-    clean.
+    a "Critical System Notice".
+
+    Called from each emit's ``except`` block only — never preemptively in the
+    hot loop, which would touch the long-lived session 4 Hz forever and
+    risk the same identity-map heap creep that PR #2067 fixed by throttling
+    screen_manager._update_rotations from 60 Hz to 1 Hz.
     """
     try:
         from app_core.extensions import db
@@ -252,6 +256,7 @@ def _push_worker(app: 'Flask', socketio: 'SocketIO') -> None:
                     last_audio_monitoring_emit = now
                 except Exception as e:
                     logger.warning(f"Error emitting audio_monitoring_update: {e}")
+                    _recover_db_session()
 
             # Refresh config cache periodically
             if now - config_cache_loaded_at > 30:
@@ -261,6 +266,7 @@ def _push_worker(app: 'Flask', socketio: 'SocketIO') -> None:
                     config_cache_loaded_at = now
                 except Exception as e:
                     logger.debug(f"Error refreshing audio config cache: {e}")
+                    _recover_db_session()
 
             # ================================================================
             # SYSTEM HEALTH UPDATE (every 60s)
@@ -272,6 +278,7 @@ def _push_worker(app: 'Flask', socketio: 'SocketIO') -> None:
                     last_system_health_emit = now
                 except Exception as e:
                     logger.warning(f"Error emitting system_health_update: {e}")
+                    _recover_db_session()
 
             # ================================================================
             # AUDIO SOURCES UPDATE (every 30s)
@@ -283,6 +290,7 @@ def _push_worker(app: 'Flask', socketio: 'SocketIO') -> None:
                     last_audio_sources_emit = now
                 except Exception as e:
                     logger.warning(f"Error emitting audio_sources_update: {e}")
+                    _recover_db_session()
 
             # ================================================================
             # AUDIO HEALTH UPDATE (every 30s)
@@ -294,6 +302,7 @@ def _push_worker(app: 'Flask', socketio: 'SocketIO') -> None:
                     last_audio_health_emit = now
                 except Exception as e:
                     logger.warning(f"Error emitting audio_health_update: {e}")
+                    _recover_db_session()
 
             # ================================================================
             # OPERATION STATUS UPDATE (every 10s)
@@ -305,6 +314,7 @@ def _push_worker(app: 'Flask', socketio: 'SocketIO') -> None:
                     last_operation_status_emit = now
                 except Exception as e:
                     logger.warning(f"Error emitting operation_status_update: {e}")
+                    _recover_db_session()
 
             # ================================================================
             # IPAWS STATUS UPDATE (every 30s)
@@ -316,6 +326,7 @@ def _push_worker(app: 'Flask', socketio: 'SocketIO') -> None:
                     last_ipaws_status_emit = now
                 except Exception as e:
                     logger.warning(f"Error emitting ipaws_status_update: {e}")
+                    _recover_db_session()
 
             # ================================================================
             # GPIO STATUS UPDATE (every 3s)
@@ -327,6 +338,7 @@ def _push_worker(app: 'Flask', socketio: 'SocketIO') -> None:
                     last_gpio_status_emit = now
                 except Exception as e:
                     logger.debug(f"Error emitting gpio_status_update: {e}")
+                    _recover_db_session()
 
             # ================================================================
             # LED STATUS UPDATE (every 30s)
@@ -338,6 +350,7 @@ def _push_worker(app: 'Flask', socketio: 'SocketIO') -> None:
                     last_led_status_emit = now
                 except Exception as e:
                     logger.debug(f"Error emitting led_status_update: {e}")
+                    _recover_db_session()
 
             # ================================================================
             # ANALYTICS UPDATE (every 30s)
@@ -349,6 +362,7 @@ def _push_worker(app: 'Flask', socketio: 'SocketIO') -> None:
                     last_analytics_emit = now
                 except Exception as e:
                     logger.debug(f"Error emitting analytics_update: {e}")
+                    _recover_db_session()
 
             # ================================================================
             # RADIO STATUS UPDATE (every 15s)
@@ -360,6 +374,7 @@ def _push_worker(app: 'Flask', socketio: 'SocketIO') -> None:
                     last_radio_status_emit = now
                 except Exception as e:
                     logger.debug(f"Error emitting radio_status_update: {e}")
+                    _recover_db_session()
 
             # ================================================================
             # LOGS UPDATE (every 10s)
@@ -371,6 +386,7 @@ def _push_worker(app: 'Flask', socketio: 'SocketIO') -> None:
                     last_logs_emit = now
                 except Exception as e:
                     logger.debug(f"Error emitting logs_update: {e}")
+                    _recover_db_session()
 
             # ================================================================
             # BROADCAST STATE UPDATE (1Hz)
@@ -396,13 +412,7 @@ def _push_worker(app: 'Flask', socketio: 'SocketIO') -> None:
                     last_alerts_emit = now
                 except Exception as e:
                     logger.debug(f"Error emitting alerts_update: {e}")
-
-            # Roll back the shared session once per iteration so a failed
-            # DB call in any emit above doesn't leave the next iteration's
-            # queries running against an aborted PostgreSQL transaction.
-            # SQLAlchemy short-circuits rollback when no transaction is
-            # active, so this is effectively free on the happy path.
-            _recover_db_session()
+                    _recover_db_session()
 
             # Sleep for 250ms (4Hz base loop) — low CPU, smooth VU meters
             _stop_event.wait(AUDIO_MONITORING_INTERVAL)
