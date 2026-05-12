@@ -7,69 +7,62 @@
 {% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <div class="container-fluid">
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-            <div>
-                <h1 class="page-title mb-0"><i class="fas fa-cogs me-2"></i>Admin Control Panel</h1>
-                <p class="page-subtitle mb-0">EAS Station — Administrative Dashboard</p>
-            </div>
-            <div class="page-header-actions">
-                <a href="/" class="btn btn-outline-light btn-sm">
-                    <i class="fas fa-home me-1"></i>Dashboard
-                </a>
-                <a href="/alerts" class="btn btn-outline-light btn-sm">
-                    <i class="fas fa-history me-1"></i>Alerts
-                </a>
-                <a href="/stats" class="btn btn-outline-light btn-sm">
-                    <i class="fas fa-chart-bar me-1"></i>Statistics
-                </a>
-                <a href="/system_health" class="btn btn-outline-light btn-sm">
-                    <i class="fas fa-heartbeat me-1"></i>Health
-                </a>
-            </div>
-        </div>
-    </div>
-</div>
-<div class="container-fluid">
+<div class="container-fluid py-3">
+{% with
+    hero_title='Admin Control Panel',
+    hero_lead='EAS Station — Administrative Dashboard',
+    hero_chips=[
+        {'icon': 'fas fa-database',        'label': 'Data'},
+        {'icon': 'fas fa-cog',             'label': 'System'},
+        {'icon': 'fas fa-broadcast-tower', 'label': 'Broadcast'},
+        {'icon': 'fas fa-server',          'label': 'Services'},
+        {'icon': 'fas fa-microchip',       'label': 'Hardware'},
+        {'icon': 'fas fa-shield-alt',      'label': 'Security'},
+        {'icon': 'fas fa-tools',           'label': 'Operations'},
+    ]
+%}
+    {% include 'partials/hero.html' %}
+{% endwith %}
+
         <!-- System Overview -->
-        <div class="card shadow-sm">
-            <div class="card-header">
-                <h5 class="mb-0">
-                    <i class="fas fa-tachometer-alt"></i> System Overview
-                </h5>
-            </div>
-            <div class="card-body">
-                <div class="stats-grid">
-                    <div class="stat-card">
-                        <div class="stat-number">{{ active_alerts or 0 }}</div>
-                        <div class="stat-label">Active Alerts</div>
-                    </div>
-                    <div class="stat-card stat-card-warning">
-                        <div class="stat-number">{{ expired_alerts or 0 }}</div>
-                        <div class="stat-label">Expired Alerts</div>
-                    </div>
-                    <div class="stat-card stat-card-success">
-                        <div class="stat-number">{{ total_boundaries or 0 }}</div>
-                        <div class="stat-label">Total Boundaries</div>
-                    </div>
-                    <div class="stat-card stat-card-info">
-                        <div class="stat-number">{{ total_alerts or 0 }}</div>
-                        <div class="stat-label">Total Alerts</div>
-                    </div>
+        <section class="eas-card mb-4">
+            <div class="eas-section-head">
+                <span class="eas-section-icon ico-primary"><i class="fas fa-tachometer-alt"></i></span>
+                <div>
+                    <h2 class="eas-section-title">System Overview</h2>
                 </div>
             </div>
-        </div>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-number">{{ active_alerts or 0 }}</div>
+                    <div class="stat-label">Active Alerts</div>
+                </div>
+                <div class="stat-card stat-card-warning">
+                    <div class="stat-number">{{ expired_alerts or 0 }}</div>
+                    <div class="stat-label">Expired Alerts</div>
+                </div>
+                <div class="stat-card stat-card-success">
+                    <div class="stat-number">{{ total_boundaries or 0 }}</div>
+                    <div class="stat-label">Total Boundaries</div>
+                </div>
+                <div class="stat-card stat-card-info">
+                    <div class="stat-number">{{ total_alerts or 0 }}</div>
+                    <div class="stat-label">Total Alerts</div>
+                </div>
+            </div>
+        </section>
 
         <!-- Main Admin Interface -->
-        <div class="card shadow-sm">
+        <section class="eas-card admin-tabs-card">
             {% if setup_mode %}
-            <div class="card-header">
-                <h5 class="mb-0">
-                    <i class="fas fa-user-shield"></i> First-Time Administrator Setup
-                </h5>
+            <div class="eas-section-head p-4 pb-0">
+                <span class="eas-section-icon ico-warning"><i class="fas fa-user-shield"></i></span>
+                <div>
+                    <h2 class="eas-section-title">First-Time Administrator Setup</h2>
+                    <p class="eas-section-sub">Create the initial administrator account to unlock the full control panel.</p>
+                </div>
             </div>
-            <div class="card-body">
+            <div class="p-4">
                 <div class="row g-4">
                     <div class="col-xl-6">
                         <div class="alert alert-info mb-4">
@@ -1751,8 +1744,7 @@
             <!-- End of card-body -->
         </div>
         <!-- End of Main Admin Interface card (regular mode) -->
-</div>
-<!-- End of container-fluid -->
+</section>
             {% endif %}
 
         <!-- Operation Status -->
