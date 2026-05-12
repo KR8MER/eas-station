@@ -71,6 +71,14 @@ from app_utils.network import (
 # the live host.
 from app_utils.memdiag import install_memdiag_handlers
 
+# Runtime glibc malloc tuning.  The systemd unit sets MALLOC_ARENA_MAX=2
+# / MALLOC_TRIM_THRESHOLD_=131072 (the fix from eb48eea that cut RSS
+# from 9.68 GB → 320 MB), but those only take effect if the live unit
+# carries them.  Apply the same caps from inside the process so the fix
+# is robust to unit drift, and run a periodic malloc_trim() to actively
+# return free top-of-heap memory to the kernel.
+from app_utils.glibc_tuning import apply_glibc_tuning, start_malloc_trim_thread
+
 # Configure logging early
 logging.basicConfig(
     level=logging.INFO,
@@ -3073,6 +3081,21 @@ def main():
     logger.info("=" * 60)
     logger.info("🔌 EAS Station - Dedicated Hardware Service")
     logger.info("=" * 60)
+
+    # Cap glibc arenas and pin the trim threshold *before* any worker
+    # threads spawn — mallopt(M_ARENA_MAX) only affects arenas created
+    # after the call, so doing this here (before the screen / GPIO /
+    # GPS / Flask threads start below) ensures every thread shares the
+    # capped pool.  Mirrors MALLOC_ARENA_MAX=2 / MALLOC_TRIM_THRESHOLD_
+    # in the systemd unit; applying it from inside the process makes
+    # the fix survive unit-file drift on the live host.
+    apply_glibc_tuning(arena_max=2, trim_threshold=131072)
+    # Start a 60 s malloc_trim() ticker so freed top-of-heap memory
+    # actually returns to the kernel under sustained allocation (the
+    # GPS dashboard polling get_status() copies a 16 K-int deque and
+    # builds a phase array per call — without active trim the freed
+    # blocks linger as arena fragmentation).
+    start_malloc_trim_thread(interval_s=60.0)
 
     # Register signal handlers
     signal.signal(signal.SIGTERM, signal_handler)
