@@ -1872,10 +1872,13 @@
     // Zero-pad a number to at least 2 digits.
     function pad2(n) { return n < 10 ? '0' + n : '' + n; }
     // Brief CSS animation flash on an element — restart-safe via reflow.
+    // Trigger a synchronous reflow before re-adding the class so the
+    // browser sees a genuine add-remove cycle and restarts the animation
+    // even when the element already carries the class (standard technique).
     function flashEl(el) {
         if (!el) return;
         el.classList.remove('ping');
-        void el.offsetWidth; // force reflow so the animation always restarts
+        void el.offsetWidth; // synchronous reflow — forces animation restart
         el.classList.add('ping');
     }
     // Apply a health-based gradient to a progress-bar fill element.
@@ -3028,8 +3031,10 @@
             // colored green/amber/red by how many of the 8 recent polls landed.
             var reachCell = '—';
             if (src.reach !== null && src.reach !== undefined) {
+                // Count set bits (Brian Kernighan's method).
                 var pc = 0, rv = src.reach;
                 while (rv) { pc += rv & 1; rv >>>= 1; }
+                // rClr is always one of three safe hex literals — no escaping needed.
                 var rClr = pc >= 7 ? '#3fb950' : (pc >= 4 ? '#d29922' : '#f85149');
                 var rDots = '';
                 for (var bit = 7; bit >= 0; bit--) {
@@ -5005,7 +5010,8 @@
         // so the 1 Hz ticker in DOMContentLoaded can extrapolate without
         // waiting for the next poll.
         var serverIso = host.now_utc;
-        lastClockAnchorMs = serverIso ? new Date(serverIso).getTime() : null;
+        var d = serverIso ? new Date(serverIso) : null;
+        lastClockAnchorMs = (d && !isNaN(d.getTime())) ? d.getTime() : null;
         lastClockFetchedAt = Date.now();
         tickClocks();
 
