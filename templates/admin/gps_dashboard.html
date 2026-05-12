@@ -1084,6 +1084,205 @@
     }
     .gps-diag-details[open] > summary::before { transform: rotate(90deg); }
     .gps-diag-details > .diag-body { padding: 4px 12px 12px; }
+
+    /* ── Metric help tooltips ────────────────────────────────────────
+       Small ⓘ trigger placed next to a label or in a card heading.
+       Hover or keyboard focus pops a glassy info card explaining what
+       the metric means and what is considered acceptable. */
+    .gps-help-trigger {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 14px; height: 14px;
+        margin-left: 6px;
+        padding: 0;
+        border: 1px solid var(--border-color, rgba(127,127,127,.4));
+        border-radius: 50%;
+        background: transparent;
+        color: var(--text-muted, #8b949e);
+        font-size: 9px; font-weight: 700; line-height: 1;
+        font-family: ui-monospace, monospace;
+        cursor: help;
+        vertical-align: middle;
+        transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+    }
+    .gps-help-trigger:hover,
+    .gps-help-trigger:focus-visible {
+        color: var(--text-color);
+        border-color: var(--text-color);
+        background: var(--bg-tertiary, rgba(127,127,127,.18));
+        outline: none;
+    }
+    /* On the dark Skyview overlay the muted token vanishes; use a pale
+       hint colour matching that overlay's text instead. */
+    .gps-skyview-info .gps-help-trigger {
+        color: rgba(216,227,245,0.70);
+        border-color: rgba(120,150,200,0.45);
+    }
+    .gps-skyview-info .gps-help-trigger:hover,
+    .gps-skyview-info .gps-help-trigger:focus-visible {
+        color: #ffffff;
+        border-color: #ffffff;
+        background: rgba(120,150,200,0.20);
+    }
+
+    .gps-help-card {
+        position: fixed;
+        z-index: 2000;
+        min-width: 240px;
+        max-width: 340px;
+        padding: 12px 14px;
+        background: rgba(8, 14, 28, 0.96);
+        border: 1px solid rgba(120, 150, 200, 0.35);
+        border-radius: 10px;
+        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        color: #d8e3f5;
+        font-size: 0.80rem;
+        line-height: 1.45;
+        font-family: var(--font-base, system-ui, sans-serif);
+        pointer-events: none;
+        opacity: 0;
+        transform: translateY(-2px);
+        transition: opacity 0.12s ease, transform 0.12s ease;
+    }
+    .gps-help-card.is-open { opacity: 1; transform: translateY(0); }
+    .gps-help-card .h-title {
+        font-size: 0.82rem; font-weight: 700;
+        letter-spacing: 0.05em;
+        color: #ffffff;
+        margin: 0 0 6px;
+        padding-bottom: 6px;
+        border-bottom: 1px solid rgba(120, 150, 200, 0.22);
+    }
+    .gps-help-card .h-desc { margin: 0 0 8px; color: rgba(216,227,245,0.85); }
+    .gps-help-card .h-desc:last-child { margin-bottom: 0; }
+    .gps-help-card .h-accept {
+        display: flex; gap: 6px; align-items: flex-start;
+        margin: 0;
+        padding: 6px 8px;
+        background: rgba(63, 185, 80, 0.10);
+        border: 1px solid rgba(63, 185, 80, 0.30);
+        border-radius: 6px;
+        color: #b5e8b8;
+        font-size: 0.76rem;
+    }
+    .gps-help-card .h-accept::before {
+        content: "✓";
+        color: #3fb950; font-weight: 700; flex-shrink: 0;
+    }
+    .gps-help-card .h-accept b { color: #ffffff; font-weight: 600; }
+
+    /* Threshold table inside the help card — compact 2-column list. */
+    .gps-help-card .h-ranges {
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        column-gap: 10px; row-gap: 2px;
+        margin: 0 0 8px;
+        font-size: 0.76rem;
+        font-family: var(--font-mono, ui-monospace, monospace);
+    }
+    .gps-help-card .h-ranges .lvl { font-weight: 700; }
+    .gps-help-card .h-ranges .rng { color: rgba(216,227,245,0.85); }
+    .gps-help-card .h-ranges .lvl-excellent  { color: #3fb950; }
+    .gps-help-card .h-ranges .lvl-good       { color: #84cc16; }
+    .gps-help-card .h-ranges .lvl-acceptable { color: #d29922; }
+    .gps-help-card .h-ranges .lvl-watch      { color: #f0883e; }
+    .gps-help-card .h-ranges .lvl-bad        { color: #f85149; }
+    .gps-help-card .h-causes {
+        margin: 0 0 8px;
+        padding-left: 18px;
+        font-size: 0.76rem;
+        color: rgba(216,227,245,0.80);
+    }
+    .gps-help-card .h-causes li { margin-bottom: 2px; }
+    .gps-help-card .h-current {
+        margin: 0;
+        padding: 6px 8px;
+        background: rgba(120, 150, 200, 0.12);
+        border: 1px solid rgba(120, 150, 200, 0.28);
+        border-radius: 6px;
+        font-size: 0.78rem;
+    }
+    .gps-help-card .h-current b { color: #ffffff; }
+    .gps-help-card .h-section {
+        margin: 0 0 6px;
+        font-size: 0.66rem; font-weight: 700;
+        letter-spacing: 0.10em; text-transform: uppercase;
+        color: rgba(216,227,245,0.55);
+    }
+
+    /* ── Status badges — small colour-coded pills used inline next to
+       live values and inside the Timing Health Summary card. */
+    .gps-status-badge {
+        display: inline-flex; align-items: center;
+        margin-left: 8px;
+        padding: 1px 7px;
+        border: 1px solid currentColor;
+        border-radius: 999px;
+        font-size: 0.66rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        line-height: 1.4;
+        white-space: nowrap;
+        vertical-align: middle;
+        background: transparent;
+    }
+    .gps-status-badge.sev-excellent  { color: #3fb950; }
+    .gps-status-badge.sev-good       { color: #84cc16; }
+    .gps-status-badge.sev-acceptable { color: #d29922; }
+    .gps-status-badge.sev-watch      { color: #f0883e; }
+    .gps-status-badge.sev-bad        { color: #f85149; }
+    .gps-status-badge.sev-unknown    { color: var(--text-muted, #8b949e); }
+
+    /* Inside the Skyview overlay the muted token is too dark; brighten. */
+    .gps-skyview-info .gps-status-badge.sev-unknown { color: rgba(216,227,245,0.55); }
+
+    /* ── Timing Health Summary card ─────────────────────────────────── */
+    .gps-health-summary {
+        margin-bottom: 14px;
+    }
+    .gps-health-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 10px;
+    }
+    .gps-health-cell {
+        border: 1px solid var(--border-color, rgba(127,127,127,.25));
+        border-radius: 8px;
+        background: var(--bg-tertiary, rgba(127,127,127,.06));
+        padding: 10px 12px;
+        display: flex; flex-direction: column; gap: 4px;
+    }
+    .gps-health-cell .hc-lbl {
+        font-size: 0.70rem; font-weight: 700;
+        letter-spacing: 0.10em; text-transform: uppercase;
+        color: var(--text-muted, #8b949e);
+    }
+    .gps-health-cell .hc-verdict { line-height: 1; }
+    .gps-health-cell .hc-verdict .gps-status-badge {
+        margin-left: 0;
+        font-size: 0.74rem;
+        padding: 2px 9px;
+    }
+    .gps-health-cell .hc-detail {
+        font-size: 0.78rem;
+        color: var(--text-color);
+        line-height: 1.4;
+    }
+
+    /* Slight tint by severity on the whole cell so the eye can pick
+       out a problem cluster at a glance. */
+    .gps-health-cell[data-sev="excellent"]  { border-color: rgba(63, 185, 80, 0.45); }
+    .gps-health-cell[data-sev="good"]       { border-color: rgba(132, 204, 22, 0.45); }
+    .gps-health-cell[data-sev="acceptable"] { border-color: rgba(210, 153, 34, 0.45); }
+    .gps-health-cell[data-sev="watch"]      { border-color: rgba(240, 136, 62, 0.55); background: rgba(240, 136, 62, 0.06); }
+    .gps-health-cell[data-sev="bad"]        { border-color: rgba(248, 81, 73, 0.55); background: rgba(248, 81, 73, 0.06); }
+
+    @media (max-width: 575.98px) {
+        .gps-health-grid { grid-template-columns: 1fr; }
+        .gps-help-card { max-width: 92vw; }
+    }
 </style>
 {% endblock %}
 
@@ -1231,6 +1430,58 @@
         </ul>
     </details>
 
+    <!-- ============================================================
+         TIMING HEALTH SUMMARY — plain-English operator verdict.
+         Translates the technical metrics on this page into six
+         categories (reference lock, clock accuracy, signal quality,
+         oscillator stability, holdover state, recommended action)
+         each with a colour-coded verdict word and a one-line
+         explanation.  Updated on every poll from renderHealthSystem().
+         ============================================================ -->
+    <section class="gps-card gps-health-summary" id="gps-health-summary"
+             aria-label="Plain-English timing health summary">
+        <div class="gps-card-head">
+            <h3><i class="fas fa-stethoscope me-1"></i> Timing Health Summary
+                <span class="gps-help-anchor" data-gps-help="health-summary"></span>
+            </h3>
+            <div class="badge-area">
+                <span class="text-muted small">plain-English operator verdict · updates every poll</span>
+            </div>
+        </div>
+        <div class="gps-health-grid">
+            <div class="gps-health-cell" data-health="reference-lock">
+                <div class="hc-lbl">Reference Lock</div>
+                <div class="hc-verdict"><span class="gps-status-badge sev-unknown">—</span></div>
+                <div class="hc-detail">awaiting data…</div>
+            </div>
+            <div class="gps-health-cell" data-health="clock-accuracy">
+                <div class="hc-lbl">Clock Accuracy</div>
+                <div class="hc-verdict"><span class="gps-status-badge sev-unknown">—</span></div>
+                <div class="hc-detail">awaiting data…</div>
+            </div>
+            <div class="gps-health-cell" data-health="signal-quality">
+                <div class="hc-lbl">Signal Quality</div>
+                <div class="hc-verdict"><span class="gps-status-badge sev-unknown">—</span></div>
+                <div class="hc-detail">awaiting data…</div>
+            </div>
+            <div class="gps-health-cell" data-health="oscillator-stability">
+                <div class="hc-lbl">Oscillator Stability</div>
+                <div class="hc-verdict"><span class="gps-status-badge sev-unknown">—</span></div>
+                <div class="hc-detail">awaiting data…</div>
+            </div>
+            <div class="gps-health-cell" data-health="holdover-state">
+                <div class="hc-lbl">Holdover State</div>
+                <div class="hc-verdict"><span class="gps-status-badge sev-unknown">—</span></div>
+                <div class="hc-detail">awaiting data…</div>
+            </div>
+            <div class="gps-health-cell" data-health="recommended-action">
+                <div class="hc-lbl">Recommended Action</div>
+                <div class="hc-verdict"><span class="gps-status-badge sev-unknown">—</span></div>
+                <div class="hc-detail">awaiting data…</div>
+            </div>
+        </div>
+    </section>
+
     <div class="gps-section-head">
         <h2>Tracking &amp; Receiver</h2>
         <span class="rule"></span>
@@ -1273,10 +1524,10 @@
 
             <div class="gps-overlay gps-overlay-bl">
                 <dl class="gps-skyview-info">
-                    <dt>Position</dt>   <dd id="g-pos">—</dd>
-                    <dt>Altitude</dt>   <dd id="g-alt">—</dd>
-                    <dt>DOP(H/V/P)</dt> <dd id="g-dop">—</dd>
-                    <dt>Hardware</dt>   <dd id="g-hw">—</dd>
+                    <dt data-gps-help="position">Position</dt>   <dd id="g-pos">—</dd>
+                    <dt data-gps-help="altitude">Altitude</dt>   <dd id="g-alt">—</dd>
+                    <dt data-gps-help="dop">DOP(H/V/P)</dt> <dd id="g-dop">—</dd>
+                    <dt data-gps-help="hardware">Hardware</dt>   <dd id="g-hw">—</dd>
                 </dl>
             </div>
         </div>
@@ -1289,7 +1540,7 @@
         <div class="col-12 col-xl-6">
             <div class="gps-card h-100">
                 <div class="gps-card-head">
-                    <h3><i class="fas fa-stopwatch me-1"></i> System Tracking</h3>
+                    <h3><i class="fas fa-stopwatch me-1"></i> System Tracking <span class="gps-help-anchor" data-gps-help="system-tracking"></span></h3>
                     <div class="badge-area">
                         <span id="gps-dash-clock-utc"  class="text-muted small me-2"></span>
                         <span id="gps-dash-clock-local" class="text-muted small"></span>
@@ -1298,7 +1549,7 @@
 
                 <div class="gps-sync-health" title="Lower offset → better sync health">
                     <div class="label">
-                        <span>SYNC HEALTH</span>
+                        <span>SYNC HEALTH <span class="gps-help-anchor" data-gps-help="sync-health"></span></span>
                         <span><span id="gps-dash-health-pct" class="pct">—</span></span>
                     </div>
                     <div class="bar"><span id="gps-dash-health-bar" style="width:0%"></span></div>
@@ -1309,19 +1560,19 @@
                 </div>
 
                 <dl class="gps-kv" id="gps-dash-tracking-kv">
-                    <dt>Reference ID</dt>      <dd id="t-ref-id">—</dd>
-                    <dt>Stratum</dt>           <dd id="t-stratum">—</dd>
-                    <dt>Ref time (UTC)</dt>    <dd id="t-ref-time">—</dd>
-                    <dt>System offset</dt>     <dd id="t-sys-offset" class="num">—</dd>
-                    <dt>Last offset</dt>       <dd id="t-last-offset" class="num">—</dd>
-                    <dt>RMS offset</dt>        <dd id="t-rms-offset" class="num">—</dd>
-                    <dt>Frequency</dt>         <dd id="t-frequency" class="num">—</dd>
-                    <dt>Residual freq</dt>     <dd id="t-residual" class="num">—</dd>
-                    <dt>Skew</dt>              <dd id="t-skew" class="num">—</dd>
-                    <dt>Root delay</dt>        <dd id="t-root-delay" class="num">—</dd>
-                    <dt>Root dispersion</dt>   <dd id="t-root-disp" class="num">—</dd>
-                    <dt>Update interval</dt>   <dd id="t-update-int" class="num">—</dd>
-                    <dt>Leap status</dt>       <dd id="t-leap">—</dd>
+                    <dt data-gps-help="reference-id">Reference ID</dt>      <dd id="t-ref-id">—</dd>
+                    <dt data-gps-help="stratum">Stratum</dt>           <dd id="t-stratum">—</dd>
+                    <dt data-gps-help="ref-time">Ref time (UTC)</dt>    <dd id="t-ref-time">—</dd>
+                    <dt data-gps-help="system-offset">System offset</dt>     <dd id="t-sys-offset" class="num">—</dd>
+                    <dt data-gps-help="last-offset">Last offset</dt>       <dd id="t-last-offset" class="num">—</dd>
+                    <dt data-gps-help="rms-offset">RMS offset</dt>        <dd id="t-rms-offset" class="num">—</dd>
+                    <dt data-gps-help="frequency">Frequency</dt>         <dd id="t-frequency" class="num">—</dd>
+                    <dt data-gps-help="residual-freq">Residual freq</dt>     <dd id="t-residual" class="num">—</dd>
+                    <dt data-gps-help="skew">Skew</dt>              <dd id="t-skew" class="num">—</dd>
+                    <dt data-gps-help="root-delay">Root delay</dt>        <dd id="t-root-delay" class="num">—</dd>
+                    <dt data-gps-help="root-dispersion">Root dispersion</dt>   <dd id="t-root-disp" class="num">—</dd>
+                    <dt data-gps-help="update-interval">Update interval</dt>   <dd id="t-update-int" class="num">—</dd>
+                    <dt data-gps-help="leap-status">Leap status</dt>       <dd id="t-leap">—</dd>
                 </dl>
             </div>
         </div>
@@ -1333,12 +1584,12 @@
         <div class="col-12 col-xl-6">
             <div class="gps-card h-100">
                 <div class="gps-card-head">
-                    <h3><i class="fas fa-satellite me-1"></i> Receiver Status</h3>
+                    <h3><i class="fas fa-satellite me-1"></i> Receiver Status <span class="gps-help-anchor" data-gps-help="receiver-status"></span></h3>
                 </div>
 
                 <div class="gps-sync-health" title="Average SNR across all satellites in view">
                     <div class="label">
-                        <span>SIGNAL INTEGRITY</span>
+                        <span>SIGNAL INTEGRITY <span class="gps-help-anchor" data-gps-help="signal-integrity"></span></span>
                         <span><span id="gps-dash-snr-pct" class="pct">—</span></span>
                     </div>
                     <div class="bar"><span id="gps-dash-snr-bar" style="width:0%"></span></div>
@@ -1348,16 +1599,16 @@
                 </div>
 
                 <dl class="gps-kv">
-                    <dt>Fix age</dt>          <dd id="g-fix-age" class="num">—</dd>
-                    <dt>Last 3D fix</dt>      <dd id="g-last-3d-fix">—</dd>
-                    <dt>Holdover</dt>         <dd id="g-holdover" class="num">—</dd>
-                    <dt>Speed / COG</dt>      <dd id="g-speed" class="num">—</dd>
-                    <dt>PPS backend</dt>      <dd id="g-pps-backend">—</dd>
-                    <dt>Antenna</dt>          <dd id="g-antenna">—</dd>
-                    <dt>RF / jamming</dt>     <dd id="g-jamming">—</dd>
-                    <dt>Leap state</dt>       <dd id="g-leap-state">—</dd>
-                    <dt>Leap (GPS-UTC)</dt>   <dd id="g-leap-seconds" class="num">—</dd>
-                    <dt>NMEA traffic</dt>     <dd id="g-nmea-traffic" class="num">—</dd>
+                    <dt data-gps-help="fix-age">Fix age</dt>          <dd id="g-fix-age" class="num">—</dd>
+                    <dt data-gps-help="last-3d-fix">Last 3D fix</dt>      <dd id="g-last-3d-fix">—</dd>
+                    <dt data-gps-help="holdover">Holdover</dt>         <dd id="g-holdover" class="num">—</dd>
+                    <dt data-gps-help="speed-cog">Speed / COG</dt>      <dd id="g-speed" class="num">—</dd>
+                    <dt data-gps-help="pps-backend">PPS backend</dt>      <dd id="g-pps-backend">—</dd>
+                    <dt data-gps-help="antenna">Antenna</dt>          <dd id="g-antenna">—</dd>
+                    <dt data-gps-help="rf-jamming">RF / jamming</dt>     <dd id="g-jamming">—</dd>
+                    <dt data-gps-help="leap-state">Leap state</dt>       <dd id="g-leap-state">—</dd>
+                    <dt data-gps-help="leap-seconds">Leap (GPS-UTC)</dt>   <dd id="g-leap-seconds" class="num">—</dd>
+                    <dt data-gps-help="nmea-traffic">NMEA traffic</dt>     <dd id="g-nmea-traffic" class="num">—</dd>
                 </dl>
 
                 <div class="gps-const-row" id="gps-dash-const-chips"></div>
@@ -1370,7 +1621,7 @@
          ============================================================ -->
     <div class="gps-card">
         <div class="gps-card-head">
-            <h3><i class="fas fa-signal me-1"></i> Individual Signal Levels</h3>
+            <h3><i class="fas fa-signal me-1"></i> Individual Signal Levels <span class="gps-help-anchor" data-gps-help="snr-chart"></span></h3>
             <div class="badge-area">
                 <span class="text-muted small">dBHz · used-in-fix outlined</span>
             </div>
@@ -1385,19 +1636,19 @@
         <div class="col-12 col-xl-6">
             <div class="gps-card h-100">
                 <div class="gps-card-head">
-                    <h3><i class="fas fa-network-wired me-1"></i> Chrony Sources</h3>
+                    <h3><i class="fas fa-network-wired me-1"></i> Chrony Sources <span class="gps-help-anchor" data-gps-help="chrony-sources"></span></h3>
                 </div>
                 <div class="table-responsive">
                     <table class="gps-table" id="gps-dash-sources-table">
                         <thead>
                             <tr>
-                                <th></th>
-                                <th>Source</th>
-                                <th class="num">Strat</th>
-                                <th class="num">Poll</th>
-                                <th class="num" title="an 8-bit shift register in octal — 377 = all 8 recent polls received">Reach</th>
-                                <th class="num">Last</th>
-                                <th class="num">Offset</th>
+                                <th data-gps-help="chrony-mode"></th>
+                                <th data-gps-help="chrony-source">Source</th>
+                                <th class="num" data-gps-help="stratum">Strat</th>
+                                <th class="num" data-gps-help="chrony-poll">Poll</th>
+                                <th class="num" data-gps-help="chrony-reach">Reach</th>
+                                <th class="num" data-gps-help="chrony-last">Last</th>
+                                <th class="num" data-gps-help="chrony-offset">Offset</th>
                             </tr>
                         </thead>
                         <tbody id="gps-dash-sources-body">
@@ -1414,7 +1665,7 @@
         <div class="col-12 col-xl-6">
             <div class="gps-card h-100">
                 <div class="gps-card-head">
-                    <h3><i class="fas fa-list me-1"></i> Satellite Data</h3>
+                    <h3><i class="fas fa-list me-1"></i> Satellite Data <span class="gps-help-anchor" data-gps-help="satellite-data"></span></h3>
                     <div class="badge-area">
                         <span class="text-muted small">
                             <span id="gps-dash-sat-active">—</span> active /
@@ -1427,11 +1678,11 @@
                     <table class="gps-table" id="gps-dash-sat-table">
                         <thead>
                             <tr>
-                                <th>PRN</th>
-                                <th class="num">EL</th>
-                                <th class="num">AZ</th>
-                                <th class="num">SNR</th>
-                                <th>Stat</th>
+                                <th data-gps-help="sat-prn">PRN</th>
+                                <th class="num" data-gps-help="sat-el">EL</th>
+                                <th class="num" data-gps-help="sat-az">AZ</th>
+                                <th class="num" data-gps-help="sat-snr">SNR</th>
+                                <th data-gps-help="sat-stat">Stat</th>
                             </tr>
                         </thead>
                         <tbody id="gps-dash-sat-body">
@@ -1475,7 +1726,7 @@
         <div class="col-12 col-xl-6">
             <div class="gps-card h-100 gps-chart-card">
                 <div class="gps-card-head">
-                    <h3><i class="fas fa-wave-square me-1"></i> PPS Drift</h3>
+                    <h3><i class="fas fa-wave-square me-1"></i> PPS Drift <span class="gps-help-anchor" data-gps-help="pps-drift"></span></h3>
                     <div class="badge-area">
                         <span class="text-muted small">last offset · seconds</span>
                     </div>
@@ -1496,7 +1747,7 @@
         <div class="col-12 col-xl-6">
             <div class="gps-card h-100 gps-chart-card">
                 <div class="gps-card-head">
-                    <h3><i class="fas fa-stopwatch-20 me-1"></i> Clock Stability</h3>
+                    <h3><i class="fas fa-stopwatch-20 me-1"></i> Clock Stability <span class="gps-help-anchor" data-gps-help="clock-stability"></span></h3>
                     <div class="badge-area">
                         <span class="text-muted small">RMS offset · seconds</span>
                     </div>
@@ -1517,7 +1768,7 @@
         <div class="col-12 col-xl-6">
             <div class="gps-card h-100 gps-chart-card">
                 <div class="gps-card-head">
-                    <h3><i class="fas fa-sliders me-1"></i> Frequency Steering</h3>
+                    <h3><i class="fas fa-sliders me-1"></i> Frequency Steering <span class="gps-help-anchor" data-gps-help="frequency-steering"></span></h3>
                     <div class="badge-area">
                         <span class="text-muted small">ppm — corrected vs residual</span>
                     </div>
@@ -1537,7 +1788,7 @@
         <div class="col-12 col-xl-6">
             <div class="gps-card h-100 gps-chart-card">
                 <div class="gps-card-head">
-                    <h3><i class="fas fa-diagram-project me-1"></i> DOP History</h3>
+                    <h3><i class="fas fa-diagram-project me-1"></i> DOP History <span class="gps-help-anchor" data-gps-help="dop-history"></span></h3>
                     <div class="badge-area">
                         <span class="text-muted small">geometric · lower is better</span>
                     </div>
@@ -1558,7 +1809,7 @@
         <div class="col-12">
             <div class="gps-card h-100 gps-chart-card">
                 <div class="gps-card-head">
-                    <h3><i class="fas fa-signal me-1"></i> SNR History</h3>
+                    <h3><i class="fas fa-signal me-1"></i> SNR History <span class="gps-help-anchor" data-gps-help="snr-history"></span></h3>
                     <div class="badge-area">
                         <span class="text-muted small">average dBHz across satellites in view</span>
                     </div>
@@ -1585,7 +1836,7 @@
         <div class="col-12 col-xl-6">
             <div class="gps-card h-100 gps-chart-card">
                 <div class="gps-card-head">
-                    <h3><i class="fas fa-chart-column me-1"></i> PPS Jitter Histogram</h3>
+                    <h3><i class="fas fa-chart-column me-1"></i> PPS Jitter Histogram <span class="gps-help-anchor" data-gps-help="pps-jitter"></span></h3>
                     <div class="badge-area">
                         <span class="text-muted small">interval Δ vs 1 s nominal</span>
                     </div>
@@ -1611,7 +1862,7 @@
         <div class="col-12 col-xl-6">
             <div class="gps-card h-100 gps-chart-card">
                 <div class="gps-card-head">
-                    <h3><i class="fas fa-wave-square me-1"></i> Allan Deviation</h3>
+                    <h3><i class="fas fa-wave-square me-1"></i> Allan Deviation <span class="gps-help-anchor" data-gps-help="allan-deviation"></span></h3>
                     <div class="badge-area">
                         <span class="text-muted small">overlapping σ_y(τ), log-log</span>
                     </div>
@@ -1639,7 +1890,7 @@
         <div class="col-12 col-xl-6">
             <div class="gps-card h-100 gps-chart-card">
                 <div class="gps-card-head">
-                    <h3><i class="fas fa-chart-line me-1"></i> SNR vs Elevation</h3>
+                    <h3><i class="fas fa-chart-line me-1"></i> SNR vs Elevation <span class="gps-help-anchor" data-gps-help="snr-vs-elevation"></span></h3>
                     <div class="badge-area">
                         <span class="text-muted small">live scatter · all constellations</span>
                     </div>
@@ -1664,7 +1915,7 @@
         <div class="col-12 col-xl-6">
             <div class="gps-card h-100 gps-chart-card">
                 <div class="gps-card-head">
-                    <h3><i class="fas fa-hourglass-half me-1"></i> Holdover Timer</h3>
+                    <h3><i class="fas fa-hourglass-half me-1"></i> Holdover Timer <span class="gps-help-anchor" data-gps-help="holdover-timer"></span></h3>
                     <div class="badge-area">
                         <span class="text-muted small">seconds since last 3D fix</span>
                     </div>
@@ -1693,7 +1944,7 @@
         <div class="col-12">
             <div class="gps-card h-100 gps-chart-card">
                 <div class="gps-card-head">
-                    <h3><i class="fas fa-grip me-1"></i> Per-PRN SNR Heatmap</h3>
+                    <h3><i class="fas fa-grip me-1"></i> Per-PRN SNR Heatmap <span class="gps-help-anchor" data-gps-help="prn-heatmap"></span></h3>
                     <div class="badge-area">
                         <span class="text-muted small">selected window · cell colour = dBHz bucket</span>
                     </div>
@@ -1719,7 +1970,7 @@
         <div class="col-12 col-xl-6">
             <div class="gps-card h-100 gps-chart-card">
                 <div class="gps-card-head">
-                    <h3><i class="fas fa-stopwatch me-1"></i> Leap-Second Countdown</h3>
+                    <h3><i class="fas fa-stopwatch me-1"></i> Leap-Second Countdown <span class="gps-help-anchor" data-gps-help="leap-countdown"></span></h3>
                     <div class="badge-area">
                         <span class="text-muted small">UBX-NAV-TIMELS · receiver-authoritative</span>
                     </div>
@@ -1744,7 +1995,7 @@
         <div class="col-12 col-xl-6">
             <div class="gps-card h-100 gps-chart-card">
                 <div class="gps-card-head">
-                    <h3><i class="fas fa-shield-halved me-1"></i> Jamming &amp; Spoofing</h3>
+                    <h3><i class="fas fa-shield-halved me-1"></i> Jamming &amp; Spoofing <span class="gps-help-anchor" data-gps-help="jamming-spoofing"></span></h3>
                     <div class="badge-area">
                         <span class="text-muted small">noise · AGC · receiver-reported state</span>
                     </div>
@@ -1777,7 +2028,7 @@
                 <div class="col-12">
                     <div class="gps-card h-100">
                         <div class="gps-card-head">
-                            <h3><i class="fas fa-clock-rotate-left me-1"></i> Almanac &amp; Ephemeris Staleness</h3>
+                            <h3><i class="fas fa-clock-rotate-left me-1"></i> Almanac &amp; Ephemeris Staleness <span class="gps-help-anchor" data-gps-help="almanac-ephemeris"></span></h3>
                             <div class="badge-area">
                                 <span class="text-muted small">per-PRN tracking age · "used" = currently in fix</span>
                             </div>
@@ -1799,7 +2050,7 @@
                 <div class="col-12">
                     <div class="gps-card h-100">
                         <div class="gps-card-head">
-                            <h3><i class="fas fa-terminal me-1"></i> NMEA Sentence Inspector</h3>
+                            <h3><i class="fas fa-terminal me-1"></i> NMEA Sentence Inspector <span class="gps-help-anchor" data-gps-help="nmea-inspector"></span></h3>
                             <div class="badge-area">
                                 <span class="text-muted small">live tail · last ~100 sentences from the receiver</span>
                             </div>
@@ -5212,7 +5463,1348 @@
             fetchTrends(TS_CURRENT_WINDOW);
         }, Math.min(300_000, Math.max(60_000, (TS_CURRENT_BUCKET_S * 1000) / 3)));
         fetchTrends(TS_CURRENT_WINDOW).then(fetchOnce);
+
+        // ============================================================
+        //  HELP TOOLTIPS + HEALTH SUMMARY
+        //  Adds plain-English hover/focus cards next to cryptic
+        //  metrics, colour-coded status badges on live values, and
+        //  fills the top-level "Timing Health Summary" card by
+        //  evaluating thresholds on the current snapshot.
+        // ============================================================
+        initHelpSystem();
     });
+
+    // Acronym → expanded form lookup, used both inside help cards (as
+    // a subtitle) and as a tooltip on the inline trigger.  Kept small;
+    // only the abbreviations a non-expert is likely to bump into.
+    var GPS_ACRONYMS = {
+        'pps':   'Pulse Per Second',
+        'gnss':  'Global Navigation Satellite System',
+        'gps':   'Global Positioning System',
+        'rms':   'Root Mean Square',
+        'utc':   'Coordinated Universal Time',
+        'dop':   'Dilution of Precision',
+        'hdop':  'Horizontal Dilution of Precision',
+        'vdop':  'Vertical Dilution of Precision',
+        'pdop':  'Position (3-D) Dilution of Precision',
+        'snr':   'Signal-to-Noise Ratio',
+        'pvt':   'Position, Velocity, Time',
+        'ntp':   'Network Time Protocol',
+        'prn':   'Pseudo-Random Noise code (satellite ID)',
+        'cog':   'Course Over Ground',
+        'agc':   'Automatic Gain Control',
+        'lna':   'Low-Noise Amplifier',
+        'mon-hw':'UBX monitoring – hardware status frame',
+        'nav-timels':'UBX navigation – time, leap-second frame',
+        'nmea':  'National Marine Electronics Association (sentence format)',
+        'tcxo':  'Temperature-Compensated Crystal Oscillator',
+        'ocxo':  'Oven-Controlled Crystal Oscillator',
+        'ppm':   'Parts Per Million',
+        'µs':    'microseconds (millionths of a second)',
+        'ns':    'nanoseconds (billionths of a second)'
+    };
+
+    // Help-content registry.  Each entry follows the operator-friendly
+    // five-section template requested for the dashboard:
+    //   means      → plain-English description
+    //   matters    → why an operator should care
+    //   ranges     → ordered array of { level, range } threshold rows
+    //   causes     → array of bullet points listing common problems
+    //   acronyms   → optional space-separated keys looked up in
+    //                GPS_ACRONYMS and rendered as a subtitle
+    //   evaluate   → optional function(snapshot) -> { level, value }
+    //                used to drive inline status badges and the
+    //                "current reading" footer line.
+    //
+    // Severity levels (severityFor / labelFor map both directions):
+    //   excellent, good, acceptable, watch, bad, unknown
+    var SEVERITY_LABEL = {
+        'excellent':  'Excellent',
+        'good':       'Good',
+        'acceptable': 'Acceptable',
+        'watch':      'Watch',
+        'bad':        'Bad',
+        'unknown':    '—'
+    };
+
+    // Helpers for the evaluators ---------------------------------------------
+    function getTracking(s) { return (s && s.chrony && s.chrony.tracking) || {}; }
+    function getGps(s)      { return (s && s.gps) || {}; }
+    // Absolute-value threshold ladder.  ``ladder`` is an ordered list
+    // of {max, level} cut-offs; the first entry whose ``max`` is >= |v|
+    // wins.  Returns {level} or {level:'unknown'} when v is non-finite.
+    function rateAbs(v, ladder) {
+        if (v === null || v === undefined || !isFinite(v)) return { level: 'unknown' };
+        var a = Math.abs(v);
+        for (var i = 0; i < ladder.length; i++) {
+            if (a <= ladder[i].max) return { level: ladder[i].level };
+        }
+        return { level: ladder[ladder.length - 1].level };
+    }
+    // Reverse threshold ladder — bigger is better (e.g. SNR, sat count).
+    function rateAtLeast(v, ladder) {
+        if (v === null || v === undefined || !isFinite(v)) return { level: 'unknown' };
+        for (var i = 0; i < ladder.length; i++) {
+            if (v >= ladder[i].min) return { level: ladder[i].level };
+        }
+        return { level: ladder[ladder.length - 1].level };
+    }
+
+    var GPS_HELP = {
+        // ── Top-level summary -------------------------------------------------
+        'health-summary': {
+            title: 'Timing Health Summary',
+            means: 'A plain-English roll-up of the technical metrics on this page. Each cell translates a cluster of numbers into a single operator verdict (Excellent / Good / Acceptable / Watch / Bad).',
+            matters: 'You don\'t need to understand every metric below to know whether the box is healthy — read this card first, then drill down only if anything is amber or red.',
+            ranges: [
+                { level: 'excellent',  range: 'all six cells green' },
+                { level: 'acceptable', range: 'one or two amber cells' },
+                { level: 'bad',        range: 'any red cell, or holdover active' }
+            ],
+            causes: [
+                'See the individual cell for what to investigate.'
+            ]
+        },
+        'sync-health': {
+            title: 'Sync Health',
+            acronyms: 'rms ntp',
+            means: 'A 0–100 % index derived from how far chrony\'s system-time offset is from true reference time. 100 % means sub-microsecond sync; 0 % means seconds-class error.',
+            matters: 'This is the headline answer to "is the clock good right now?" — every downstream timestamp on this box rides on it.',
+            ranges: [
+                { level: 'excellent',  range: '≥ 95 % (offset under ~1 µs)' },
+                { level: 'good',       range: '80–95 % (offset under ~10 µs)' },
+                { level: 'acceptable', range: '50–80 % (offset under ~1 ms)' },
+                { level: 'watch',      range: '20–50 % (offset under ~100 ms)' },
+                { level: 'bad',        range: '< 20 % (offset over 100 ms)' }
+            ],
+            causes: [
+                'GNSS lock lost or weak antenna feed',
+                'PPS source unavailable or jittery',
+                'CPU under heavy load → scheduler latency',
+                'Upstream NTP peers slow or unreachable'
+            ]
+        },
+        'signal-integrity': {
+            title: 'Signal Integrity',
+            acronyms: 'snr gnss',
+            means: 'A 0–100 % bar derived from the average SNR (Signal-to-Noise Ratio) of every satellite currently in view, scaled to 50 dBHz.',
+            matters: 'Tells you at a glance whether the antenna is hearing the sky well. A weak average usually means an obstruction, bad cable, or LNA problem.',
+            ranges: [
+                { level: 'excellent',  range: '≥ 80 % (avg SNR ≥ 40 dBHz)' },
+                { level: 'good',       range: '60–80 % (avg SNR 30–40 dBHz)' },
+                { level: 'acceptable', range: '40–60 % (avg SNR 20–30 dBHz)' },
+                { level: 'watch',      range: '20–40 % (avg SNR 10–20 dBHz)' },
+                { level: 'bad',        range: '< 20 % (avg SNR < 10 dBHz)' }
+            ],
+            causes: [
+                'Antenna indoors or under metal roof / foliage',
+                'Long or damaged coax / loose connector',
+                'Powered antenna with no DC bias',
+                'Nearby RF interference'
+            ]
+        },
+
+        // ── Skyview overlay --------------------------------------------------
+        'position': {
+            title: 'Position',
+            means: 'Receiver-reported latitude / longitude in decimal degrees, taken from the most recent valid fix.',
+            matters: 'Confirms the box knows where it is. A wildly wrong or jumping position usually means a spoofing attempt or a faulty almanac.',
+            ranges: [
+                { level: 'excellent',  range: 'stable, matches expected site' },
+                { level: 'watch',      range: 'moving more than a few metres while stationary' },
+                { level: 'bad',        range: 'wildly wrong or null' }
+            ],
+            causes: [
+                'No 3D fix yet (cold start)',
+                'Multipath bouncing off nearby buildings',
+                'Spoofing'
+            ]
+        },
+        'altitude': {
+            title: 'Altitude',
+            means: 'Height above the WGS-84 ellipsoid as reported by the receiver. Note: this is geodetic altitude, not the chart-style "height above sea level".',
+            matters: 'A drifting altitude with a stationary antenna usually points at marginal satellite geometry (high VDOP).',
+            ranges: [
+                { level: 'excellent',  range: 'stable within ± a few metres' },
+                { level: 'watch',      range: 'drifting by tens of metres at rest' },
+                { level: 'bad',        range: 'swinging hundreds of metres' }
+            ],
+            causes: [
+                'High VDOP — bad vertical satellite geometry',
+                'Only 2D fix available'
+            ]
+        },
+        'dop': {
+            title: 'DOP (H / V / P)',
+            acronyms: 'dop hdop vdop pdop',
+            means: 'Dilution Of Precision — a unit-less number describing how well the visible satellites are spread across the sky. H = horizontal, V = vertical, P = combined position.',
+            matters: 'Even with strong signals, if the satellites are bunched together the fix is geometrically weak. Lower is better.',
+            ranges: [
+                { level: 'excellent',  range: '< 2' },
+                { level: 'good',       range: '2 – 5' },
+                { level: 'acceptable', range: '5 – 10' },
+                { level: 'watch',      range: '10 – 20' },
+                { level: 'bad',        range: '> 20' }
+            ],
+            causes: [
+                'Antenna with restricted sky view (canyon, window mount)',
+                'Single-constellation receiver in poor geometry',
+                'Most visible sats clustered in one quadrant'
+            ]
+        },
+        'hardware': {
+            title: 'Hardware',
+            means: 'The serial port and baud rate this box uses to talk to the GNSS module. Shown so you can confirm the receiver is on the expected UART.',
+            matters: 'A wrong device path or baud rate is the most common cause of "no fix" after a hardware swap or OS upgrade.',
+            ranges: [],
+            causes: [
+                'gpsd misconfigured / pointed at the wrong device',
+                'USB-to-serial enumeration order changed at boot'
+            ]
+        },
+
+        // ── System Tracking (chrony) -----------------------------------------
+        'system-tracking': {
+            title: 'System Tracking',
+            acronyms: 'ntp utc',
+            means: 'Live output of `chronyc tracking` — the NTP daemon\'s view of how well the system clock follows the reference. Every row in this card is one field of that report.',
+            matters: 'This is the authoritative "is my clock disciplined?" report. Pair with PPS and GNSS panels to find root cause when it goes red.',
+            ranges: [
+                { level: 'excellent',  range: 'Stratum 1, offsets < 10 µs, leap = Normal' },
+                { level: 'bad',        range: 'Stratum 16 or offsets growing unbounded' }
+            ],
+            causes: [
+                'Lost reference (no PPS / no peers)',
+                'Reference unstable — chrony refusing to commit corrections'
+            ]
+        },
+        'reference-id': {
+            title: 'Reference ID',
+            means: 'Identifier of the upstream time source chrony is locked to. For a GNSS+PPS host this should read GPS (or PPS); for a network-only NTP client it shows the peer IP / hostname.',
+            matters: 'Confirms what the box thinks it is following. If a GNSS box drops to an NTP peer, the operator should know.',
+            ranges: [],
+            causes: [
+                'GNSS lost — chrony fell back to network peers',
+                'No sources selected — refclock / peers all rejected'
+            ]
+        },
+        'stratum': {
+            title: 'Stratum',
+            acronyms: 'ntp',
+            means: 'NTP "distance" from a reference clock. Stratum 1 = directly connected to a hardware reference (GPS/PPS/atomic). Each network hop adds 1.',
+            matters: 'A GNSS-disciplined appliance should always be Stratum 1. Drifting to Stratum 2+ means it has fallen back to a network peer.',
+            ranges: [
+                { level: 'excellent',  range: 'Stratum 1 (this box is the reference)' },
+                { level: 'good',       range: 'Stratum 2 (one hop)' },
+                { level: 'acceptable', range: 'Stratum 3 – 5' },
+                { level: 'watch',      range: 'Stratum 6 – 15' },
+                { level: 'bad',        range: 'Stratum 16 (unsynchronised)' }
+            ],
+            causes: [
+                'GNSS lock lost — fell back to internet NTP',
+                'No sources selectable (network down / firewalled)'
+            ]
+        },
+        'ref-time': {
+            title: 'Reference Time (UTC)',
+            acronyms: 'utc',
+            means: 'The UTC timestamp of the most recent measurement chrony used to discipline the system clock. Should tick along at roughly the polling interval.',
+            matters: 'A frozen reference time means the disciplining loop is no longer receiving fresh samples — i.e. the clock is coasting on the local oscillator.',
+            ranges: [
+                { level: 'excellent',  range: 'updated within the last poll interval' },
+                { level: 'watch',      range: 'minutes old' },
+                { level: 'bad',        range: 'hours old or frozen' }
+            ],
+            causes: [
+                'Reference (PPS / GNSS / NTP peer) gone',
+                'chrony in holdover'
+            ]
+        },
+        'system-offset': {
+            title: 'System Offset',
+            acronyms: 'utc',
+            means: 'The current difference between this host\'s system clock and chrony\'s best estimate of true reference time.',
+            matters: 'This is the live "how wrong is the clock right now" number. Anything above 1 ms on a GNSS appliance is suspect.',
+            ranges: [
+                { level: 'excellent',  range: '< 1 µs' },
+                { level: 'good',       range: '1 – 10 µs' },
+                { level: 'acceptable', range: '10 – 100 µs' },
+                { level: 'watch',      range: '100 µs – 1 ms' },
+                { level: 'bad',        range: '> 1 ms' }
+            ],
+            causes: [
+                'PPS lock lost or jittery',
+                'High CPU steal / kernel-mode latency',
+                'Sudden temperature change affecting the oscillator'
+            ],
+            evaluate: function (s) {
+                var v = getTracking(s).system_time_offset_s;
+                return { value: v, status: rateAbs(v, [
+                    { max: 1e-6,  level: 'excellent' },
+                    { max: 1e-5,  level: 'good' },
+                    { max: 1e-4,  level: 'acceptable' },
+                    { max: 1e-3,  level: 'watch' },
+                    { max: Infinity, level: 'bad' }
+                ]) };
+            }
+        },
+        'last-offset': {
+            title: 'Last Offset',
+            means: 'The offset measured at chrony\'s most recent update — i.e. the instantaneous correction it just applied.',
+            matters: 'Spiky last-offset values with a small RMS mean a noisy reference. Consistently large values mean the loop hasn\'t converged yet.',
+            ranges: [
+                { level: 'excellent',  range: '< 1 µs' },
+                { level: 'good',       range: '1 – 10 µs' },
+                { level: 'acceptable', range: '10 – 100 µs' },
+                { level: 'watch',      range: '100 µs – 1 ms' },
+                { level: 'bad',        range: '> 1 ms' }
+            ],
+            causes: [
+                'PPS edge jitter',
+                'Reference time travel (GNSS week rollover, bad NTP peer)'
+            ],
+            evaluate: function (s) {
+                var v = getTracking(s).last_offset_s;
+                return { value: v, status: rateAbs(v, [
+                    { max: 1e-6, level: 'excellent' },
+                    { max: 1e-5, level: 'good' },
+                    { max: 1e-4, level: 'acceptable' },
+                    { max: 1e-3, level: 'watch' },
+                    { max: Infinity, level: 'bad' }
+                ]) };
+            }
+        },
+        'rms-offset': {
+            title: 'RMS Offset',
+            acronyms: 'rms',
+            means: 'Root-Mean-Square average of recent offsets — the long-term timing error after smoothing out short-lived spikes.',
+            matters: 'One of the most important "is my clock good?" numbers. Stays small even if individual samples wobble.',
+            ranges: [
+                { level: 'excellent',  range: '< 1 µs' },
+                { level: 'good',       range: '1 – 10 µs' },
+                { level: 'acceptable', range: '10 – 100 µs' },
+                { level: 'watch',      range: '100 µs – 1 ms' },
+                { level: 'bad',        range: '> 1 ms' }
+            ],
+            causes: [
+                'Weak GNSS reception',
+                'Unstable PPS source',
+                'CPU scheduling latency / kernel preempt off',
+                'Power-supply noise on the PPS line',
+                'Antenna placement compromise (multipath)'
+            ],
+            evaluate: function (s) {
+                var v = getTracking(s).rms_offset_s;
+                return { value: v, status: rateAbs(v, [
+                    { max: 1e-6, level: 'excellent' },
+                    { max: 1e-5, level: 'good' },
+                    { max: 1e-4, level: 'acceptable' },
+                    { max: 1e-3, level: 'watch' },
+                    { max: Infinity, level: 'bad' }
+                ]) };
+            }
+        },
+        'frequency': {
+            title: 'Frequency Correction',
+            acronyms: 'ppm',
+            means: 'How much chrony is having to slew the system clock\'s tick rate — in parts per million — to keep it on the reference.',
+            matters: 'Tells you how far off the bare crystal is. Large absolute values aren\'t fatal, but big jumps are.',
+            ranges: [
+                { level: 'excellent',  range: '|f| < 20 ppm and stable' },
+                { level: 'good',       range: '|f| < 50 ppm' },
+                { level: 'acceptable', range: '|f| < 100 ppm' },
+                { level: 'watch',      range: '|f| 100 – 500 ppm' },
+                { level: 'bad',        range: '|f| > 500 ppm or rapidly changing' }
+            ],
+            causes: [
+                'Cheap or out-of-spec crystal',
+                'Large temperature swing',
+                'Voltage rail drift'
+            ]
+        },
+        'residual-freq': {
+            title: 'Residual Frequency',
+            acronyms: 'ppm',
+            means: 'How much the clock still wants to drift relative to the reference *after* chrony\'s correction is applied. The closer to zero, the better the loop is converged.',
+            matters: 'A persistent non-zero residual means the disciplining loop is fighting a trend (temperature, ageing). A small residual is the goal.',
+            ranges: [
+                { level: 'excellent',  range: '|f| < 0.01 ppm' },
+                { level: 'good',       range: '|f| < 0.1 ppm' },
+                { level: 'acceptable', range: '|f| < 1 ppm' },
+                { level: 'watch',      range: '|f| 1 – 5 ppm' },
+                { level: 'bad',        range: '|f| > 5 ppm' }
+            ],
+            causes: [
+                'Loop still converging (give it 15 – 30 min after restart)',
+                'Temperature ramp (HVAC just cycled)',
+                'Reference jitter masking real drift'
+            ],
+            evaluate: function (s) {
+                var v = getTracking(s).residual_freq_ppm;
+                return { value: v, status: rateAbs(v, [
+                    { max: 0.01, level: 'excellent' },
+                    { max: 0.1,  level: 'good' },
+                    { max: 1.0,  level: 'acceptable' },
+                    { max: 5.0,  level: 'watch' },
+                    { max: Infinity, level: 'bad' }
+                ]) };
+            }
+        },
+        'skew': {
+            title: 'Skew',
+            acronyms: 'ppm',
+            means: 'chrony\'s own estimate of the uncertainty in its frequency correction. Think of it as a "± so many ppm" error bar on the rate of the clock.',
+            matters: 'Plain English: how sure chrony is about the clock\'s rate. Small skew means tight tracking; growing skew means the reference is getting noisier.',
+            ranges: [
+                { level: 'excellent',  range: '< 0.1 ppm' },
+                { level: 'good',       range: '< 1 ppm' },
+                { level: 'acceptable', range: '< 5 ppm' },
+                { level: 'watch',      range: '5 – 20 ppm' },
+                { level: 'bad',        range: '> 20 ppm' }
+            ],
+            causes: [
+                'Reference variance growing (lost PPS)',
+                'Recently restarted — converging'
+            ]
+        },
+        'root-delay': {
+            title: 'Root Delay',
+            means: 'Estimated round-trip delay from this host to the ultimate reference clock, summed across every NTP hop.',
+            matters: 'For a GNSS Stratum-1 box this should be tiny (sub-millisecond). A growing root delay means a network peer is taking over.',
+            ranges: [
+                { level: 'excellent',  range: '< 1 ms' },
+                { level: 'good',       range: '< 10 ms' },
+                { level: 'acceptable', range: '< 100 ms' },
+                { level: 'watch',      range: '100 – 500 ms' },
+                { level: 'bad',        range: '> 500 ms' }
+            ],
+            causes: [
+                'Lost GNSS — chrony following internet NTP',
+                'Wi-Fi or congested WAN'
+            ]
+        },
+        'root-dispersion': {
+            title: 'Root Dispersion',
+            means: 'Estimated maximum error of this host relative to the primary reference. Grows when chrony has no fresh measurements.',
+            matters: 'Lower is better. Growing dispersion is the canonical "I\'m no longer sure about time" signal.',
+            ranges: [
+                { level: 'excellent',  range: '< 1 ms' },
+                { level: 'good',       range: '< 10 ms' },
+                { level: 'acceptable', range: '< 100 ms' },
+                { level: 'watch',      range: '100 ms – 1 s' },
+                { level: 'bad',        range: '> 1 s or rising steadily' }
+            ],
+            causes: [
+                'Reference dropped — no new samples',
+                'In holdover'
+            ]
+        },
+        'update-interval': {
+            title: 'Update Interval',
+            means: 'How often chrony is receiving useful measurements from its sources — the cadence of the disciplining loop.',
+            matters: 'A long or growing interval means samples are being rejected (jittery / unreachable), which starves the loop.',
+            ranges: [
+                { level: 'excellent',  range: '≤ 2 s (PPS refclock at 1 Hz)' },
+                { level: 'good',       range: '< 64 s' },
+                { level: 'acceptable', range: '64 – 256 s' },
+                { level: 'watch',      range: '256 – 1024 s' },
+                { level: 'bad',        range: '> 1024 s or growing' }
+            ],
+            causes: [
+                'Source flapping in and out',
+                'maxpoll set too high in chrony.conf'
+            ]
+        },
+        'leap-status': {
+            title: 'Leap Status',
+            acronyms: 'utc',
+            means: 'NTP leap-second flag. Normal = synchronised with no pending leap; Insert / Delete = a leap will be applied at the next UTC midnight; Not synchronised = no usable time source.',
+            matters: 'You want this to read Normal almost always. Insert/Delete in the last 24 h before a leap is expected; persistent Not-Synchronised is bad.',
+            ranges: [
+                { level: 'excellent',  range: 'Normal' },
+                { level: 'acceptable', range: 'Insert / Delete (only on leap days)' },
+                { level: 'bad',        range: 'Not Synchronised' }
+            ],
+            causes: [
+                'No sources selected',
+                'Leap-second event in progress (briefly expected)'
+            ]
+        },
+
+        // ── Receiver Status --------------------------------------------------
+        'receiver-status': {
+            title: 'Receiver Status',
+            acronyms: 'gnss',
+            means: 'Live state of the GNSS module itself — fix age, antenna, RF environment, PPS source, leap awareness.',
+            matters: 'When chrony goes bad, this card tells you whether the cause is upstream of chrony (antenna, RF, leap) or downstream.',
+            ranges: [],
+            causes: []
+        },
+        'fix-age': {
+            title: 'Fix Age',
+            means: 'Seconds since the receiver last delivered a fresh navigation sentence. A 1 Hz receiver should refresh this every second.',
+            matters: 'Frozen fix age is the canonical "receiver is hung or UART is dead" symptom.',
+            ranges: [
+                { level: 'excellent',  range: '< 2 s' },
+                { level: 'good',       range: '2 – 5 s' },
+                { level: 'watch',      range: '5 – 30 s' },
+                { level: 'bad',        range: '> 30 s' }
+            ],
+            causes: [
+                'UART hung or gpsd crashed',
+                'Receiver in cold-start search',
+                'Antenna disconnected'
+            ]
+        },
+        'last-3d-fix': {
+            title: 'Last 3D Fix',
+            acronyms: 'utc',
+            means: 'UTC timestamp of the most recent fix with all three coordinates (lat, lon, altitude) valid.',
+            matters: 'Pairs with Holdover. If this freezes while Holdover counts up, the receiver has dropped out of 3D.',
+            ranges: [],
+            causes: [
+                'Loss of GNSS reception',
+                '2D-only fix (need 4+ sats with good geometry)'
+            ]
+        },
+        'holdover': {
+            title: 'Holdover',
+            means: 'Seconds since the receiver last had a 3D fix. Holds at 0 s while locked; counts up when it loses the sky.',
+            matters: 'Holdover isn\'t bad by itself — it\'s a fallback — but it means timing is coasting on the local crystal rather than live GNSS.',
+            ranges: [
+                { level: 'excellent',  range: '0 s (locked)' },
+                { level: 'good',       range: '< 60 s' },
+                { level: 'acceptable', range: '< 5 min' },
+                { level: 'watch',      range: '5 – 60 min' },
+                { level: 'bad',        range: '> 60 min' }
+            ],
+            causes: [
+                'Antenna unplugged / obstructed',
+                'Active jamming or spoofing',
+                'Receiver firmware fault'
+            ],
+            evaluate: function (s) {
+                var v = getGps(s).holdover_s;
+                if (v === null || v === undefined) return { value: v, status: { level: 'unknown' } };
+                if (v === 0) return { value: v, status: { level: 'excellent' } };
+                return { value: v, status: rateAbs(v, [
+                    { max: 60,    level: 'good' },
+                    { max: 300,   level: 'acceptable' },
+                    { max: 3600,  level: 'watch' },
+                    { max: Infinity, level: 'bad' }
+                ]) };
+            }
+        },
+        'speed-cog': {
+            title: 'Speed / COG',
+            acronyms: 'cog',
+            means: 'Ground speed and Course Over Ground from the GNSS receiver.',
+            matters: 'For a fixed install this should sit near zero. Persistent non-zero speed at rest indicates noisy fixes.',
+            ranges: [
+                { level: 'excellent',  range: '< 0.1 m/s at rest' },
+                { level: 'watch',      range: '> 0.5 m/s at rest' }
+            ],
+            causes: [
+                'Marginal SNR causing fix wander',
+                'Multipath'
+            ]
+        },
+        'pps-backend': {
+            title: 'PPS Backend',
+            acronyms: 'pps',
+            means: 'How the kernel is receiving the Pulse-Per-Second edge. "kernel" uses a hardware IRQ on /dev/pps0 (best); "gpio" polls a GPIO pin (good); "none" means no PPS available.',
+            matters: 'Kernel PPS gives sub-microsecond timestamps. GPIO polling is jittery. No PPS leaves chrony stuck with NMEA-only accuracy (~10–100 ms).',
+            ranges: [
+                { level: 'excellent',  range: 'kernel · pulse < 2 s old' },
+                { level: 'good',       range: 'gpio · pulse < 2 s old' },
+                { level: 'watch',      range: 'pulse > 2 s old' },
+                { level: 'bad',        range: 'none' }
+            ],
+            causes: [
+                'pps-gpio kernel module not loaded',
+                'PPS line not wired or wrong GPIO pin',
+                'Receiver with PPS disabled in config'
+            ]
+        },
+        'antenna': {
+            title: 'Antenna',
+            acronyms: 'lna mon-hw',
+            means: 'UBX-MON-HW antenna status. OK = healthy. SHORT = DC short on the bias line. OPEN = no antenna current (cable cut / unpowered LNA).',
+            matters: 'A clean OK · ON is the only state you want in production. SHORT or OPEN explains zero satellites instantly.',
+            ranges: [
+                { level: 'excellent',  range: 'OK · ON' },
+                { level: 'bad',        range: 'SHORT or OPEN' }
+            ],
+            causes: [
+                'OPEN: cable broken, connector loose, unpowered active antenna',
+                'SHORT: cable pinched, water ingress, internal LNA failure'
+            ]
+        },
+        'rf-jamming': {
+            title: 'RF / Jamming',
+            acronyms: 'agc mon-hw',
+            means: 'Receiver\'s broadband interference monitor (UBX-MON-HW). Tracks noise floor and AGC and classifies the result OK / WARNING / CRITICAL.',
+            matters: 'Catches deliberate jamming and accidental neighbours (a noisy switch-mode supply, a faulty LED driver, a 2.4 GHz radio) before sats start dropping.',
+            ranges: [
+                { level: 'excellent',  range: 'OK' },
+                { level: 'watch',      range: 'WARNING' },
+                { level: 'bad',        range: 'CRITICAL' }
+            ],
+            causes: [
+                'Cheap unshielded PSU near the antenna',
+                'Wi-Fi / cellular repeater nearby',
+                'Personal-privacy jammer in line of sight (illegal but common)'
+            ]
+        },
+        'leap-state': {
+            title: 'Leap State',
+            means: 'Combined leap-second readout: receiver flag (UBX-NAV-TIMELS) when available, otherwise chrony\'s leap status, otherwise the GPS manager\'s coarse string.',
+            matters: 'Should read "normal" except in the run-up to (rare) leap-second events.',
+            ranges: [
+                { level: 'excellent',  range: 'normal' },
+                { level: 'acceptable', range: 'INSERT / DELETE pending' },
+                { level: 'bad',        range: 'unsynchronised' }
+            ],
+            causes: [
+                'Real leap-second announced (every few years)'
+            ]
+        },
+        'leap-seconds': {
+            title: 'Leap Seconds (GPS-UTC)',
+            acronyms: 'utc gps',
+            means: 'Current integer offset between GPS time and UTC. As of 2017 this has been 18 s; the next change happens whenever IERS announces a leap second.',
+            matters: 'Just a sanity check that the receiver is up-to-date with the leap-second table embedded in the navigation message.',
+            ranges: [
+                { level: 'excellent',  range: '18 s today (matches current standard)' }
+            ],
+            causes: [
+                'Very stale almanac in cold-started receiver'
+            ]
+        },
+        'nmea-traffic': {
+            title: 'NMEA Traffic',
+            acronyms: 'nmea',
+            means: 'Running totals of parsed NMEA sentences and parse errors since this dashboard process started.',
+            matters: 'A growing error count usually means UART line noise, wrong baud rate, or a flaky USB-serial adapter.',
+            ranges: [
+                { level: 'excellent',  range: '0 errors' },
+                { level: 'watch',      range: 'occasional errors (< 0.1 %)' },
+                { level: 'bad',        range: 'rising error rate' }
+            ],
+            causes: [
+                'Wrong baud rate',
+                'Cable too long or unshielded',
+                'Power-supply noise on UART rails'
+            ]
+        },
+
+        // ── SNR chart + tables ----------------------------------------------
+        'snr-chart': {
+            title: 'Individual Signal Levels',
+            acronyms: 'snr prn dop',
+            means: 'Per-satellite SNR bars, coloured by constellation. Outlined bars are satellites currently being used in the fix.',
+            matters: 'Lets you see one weak sat dragging the average down (often a satellite low on the horizon, behind something).',
+            ranges: [
+                { level: 'excellent',  range: '> 40 dBHz' },
+                { level: 'good',       range: '30 – 40 dBHz' },
+                { level: 'acceptable', range: '20 – 30 dBHz' },
+                { level: 'watch',      range: '10 – 20 dBHz' },
+                { level: 'bad',        range: '< 10 dBHz (usually not tracked)' }
+            ],
+            causes: [
+                'Low-elevation satellite (expected)',
+                'Antenna obstruction in that azimuth'
+            ]
+        },
+        'chrony-sources': {
+            title: 'Chrony Sources',
+            acronyms: 'ntp',
+            means: 'Snapshot of `chronyc sources` — every time source chrony knows about, what kind it is, and how it scored on the most recent poll.',
+            matters: 'Tells you whether the GNSS refclock is selected (the ``*`` row) and whether fallback NTP peers are reachable.',
+            ranges: [],
+            causes: []
+        },
+        'chrony-mode': {
+            title: 'Source Mode',
+            means: 'The single-character chronyc state column. ``*`` = current best source; ``+`` = combined; ``-`` = not used; ``x`` = falseticker; ``?`` = unreachable.',
+            matters: 'A row with no ``*`` anywhere means chrony has no source it trusts — the box is unsynchronised.',
+            ranges: [
+                { level: 'excellent',  range: '* on the GNSS / PPS refclock' },
+                { level: 'watch',      range: '* on a network peer' },
+                { level: 'bad',        range: 'no * row at all' }
+            ],
+            causes: [
+                'GNSS refclock not delivering samples',
+                'NTP peers unreachable'
+            ]
+        },
+        'chrony-source': {
+            title: 'Source Name',
+            means: 'The chrony peer or refclock identifier — usually the IP / hostname for network peers or "GPS"/"PPS" for the local refclock.',
+            matters: 'Confirms exactly who chrony is talking to. Surprising entries here may indicate a misconfigured chrony.conf.',
+            ranges: []
+        },
+        'chrony-poll': {
+            title: 'Poll Interval',
+            means: 'Log₂ of the polling interval in seconds. 4 = 16 s, 6 = 64 s, 10 = 1024 s. chrony adjusts this automatically: shorter when the source is jittery, longer when it\'s rock-steady.',
+            matters: 'A poll value rapidly climbing back to its minimum means chrony is having trouble locking on.',
+            ranges: [
+                { level: 'good',       range: '4 – 6 (16 – 64 s)' },
+                { level: 'acceptable', range: '7 – 10 (128 – 1024 s)' }
+            ]
+        },
+        'chrony-reach': {
+            title: 'Reach',
+            means: 'An 8-bit shift register, shown in octal. Each bit records whether one of the last 8 polls returned a usable sample. 377 (= 0b11111111) = perfect 8/8.',
+            matters: 'Anything other than 377 means recent polls were dropped — the source is intermittent.',
+            ranges: [
+                { level: 'excellent',  range: '377 (all 8 received)' },
+                { level: 'acceptable', range: '177 – 377' },
+                { level: 'watch',      range: '< 177' },
+                { level: 'bad',        range: '0 (source down)' }
+            ],
+            causes: [
+                'Network packet loss',
+                'Source process restarting'
+            ]
+        },
+        'chrony-last': {
+            title: 'Last Sample Age',
+            means: 'Seconds since the last successful sample from this source. Should be roughly equal to the poll interval.',
+            matters: 'Stale samples mean the disciplining loop is operating on old data — the longer the gap, the less it can trust the source.',
+            ranges: [
+                { level: 'excellent',  range: 'matches poll interval' },
+                { level: 'watch',      range: '> 2× poll interval' },
+                { level: 'bad',        range: '> 1 h' }
+            ]
+        },
+        'chrony-offset': {
+            title: 'Source Offset',
+            means: 'Per-source estimate of how far that source\'s notion of time is from this host\'s system clock. Tiny is good.',
+            matters: 'Wildly disagreeing peers are how chrony detects falseticking. If the GNSS refclock and the network peers disagree by minutes, something is very wrong.',
+            ranges: [
+                { level: 'excellent',  range: '|Δ| < 1 ms' },
+                { level: 'good',       range: '|Δ| < 10 ms' },
+                { level: 'acceptable', range: '|Δ| < 100 ms' },
+                { level: 'watch',      range: '|Δ| 100 ms – 1 s' },
+                { level: 'bad',        range: '|Δ| > 1 s' }
+            ]
+        },
+        'satellite-data': {
+            title: 'Satellite Data',
+            acronyms: 'prn snr',
+            means: 'Per-satellite breakdown — pseudo-random-noise code, elevation, azimuth, SNR, and tracking status (used in fix / tracked but not used).',
+            matters: 'The diagnostic table for "why is signal integrity poor?" — sort by SNR or filter by constellation to find the culprit.',
+            ranges: [],
+            causes: []
+        },
+        'sat-prn': {
+            title: 'PRN',
+            acronyms: 'prn',
+            means: 'Satellite identifier — Pseudo-Random Noise code number. PRN 1–32 = GPS, 65–96 = GLONASS, etc.',
+            matters: 'Lets you correlate against publicly published satellite-health bulletins.',
+            ranges: []
+        },
+        'sat-el': {
+            title: 'Elevation',
+            means: 'Satellite angle above the horizon (0° = horizon, 90° = directly overhead).',
+            matters: 'Higher-elevation sats give cleaner signals (less atmospheric path, less multipath). A receiver dominated by low-elevation sats has worse fix quality.',
+            ranges: [
+                { level: 'excellent',  range: '> 30°' },
+                { level: 'good',       range: '15° – 30°' },
+                { level: 'watch',      range: '< 15° (often masked out)' }
+            ]
+        },
+        'sat-az': {
+            title: 'Azimuth',
+            means: 'Compass bearing of the satellite (0° = North, 90° = East).',
+            matters: 'If all your weak sats sit in one azimuth, you have a directional obstruction — check the sky in that direction.',
+            ranges: []
+        },
+        'sat-snr': {
+            title: 'Satellite SNR',
+            acronyms: 'snr',
+            means: 'Carrier-to-noise density for that satellite, in dB-Hz.',
+            matters: 'The single best per-satellite quality indicator.',
+            ranges: [
+                { level: 'excellent',  range: '> 40 dBHz' },
+                { level: 'good',       range: '30 – 40 dBHz' },
+                { level: 'acceptable', range: '20 – 30 dBHz' },
+                { level: 'watch',      range: '10 – 20 dBHz' },
+                { level: 'bad',        range: '< 10 dBHz' }
+            ]
+        },
+        'sat-stat': {
+            title: 'Tracking Status',
+            means: '"used" = the receiver is currently using this satellite in its position/time solution. "tracked" = locked but not used (low elevation or excluded by RAIM).',
+            matters: 'A satellite in view but never moving to "used" usually means the receiver excluded it for a reason (cycle slips, integrity failure).',
+            ranges: []
+        },
+
+        // ── Engineering charts ----------------------------------------------
+        'pps-drift': {
+            title: 'PPS Drift',
+            acronyms: 'pps',
+            means: 'Time-series of the *last offset* chrony measured against PPS, in seconds. Each point is one disciplining update.',
+            matters: 'A flat line near zero is the goal. A rising slope means the loop is fighting a trend (often temperature).',
+            ranges: [
+                { level: 'excellent',  range: 'flat, |y| < 1 µs' },
+                { level: 'good',       range: '|y| < 10 µs' },
+                { level: 'watch',      range: '|y| 10 – 100 µs' },
+                { level: 'bad',        range: '|y| > 100 µs or trending' }
+            ],
+            causes: [
+                'Temperature ramp',
+                'PPS source jittery',
+                'Loop unconverged after restart'
+            ]
+        },
+        'clock-stability': {
+            title: 'Clock Stability',
+            acronyms: 'rms',
+            means: 'RMS offset over time — chrony\'s long-term smoothed view of how wrong the clock has been.',
+            matters: 'You want this line to settle low and stay there. Rising stability is the long-form version of "Sync Health going amber".',
+            ranges: [
+                { level: 'excellent',  range: '< 1 µs and flat' },
+                { level: 'good',       range: '< 10 µs' },
+                { level: 'watch',      range: '10 – 100 µs' },
+                { level: 'bad',        range: '> 100 µs' }
+            ]
+        },
+        'frequency-steering': {
+            title: 'Frequency Steering',
+            acronyms: 'ppm',
+            means: 'How chrony is steering the system clock\'s tick rate. Green line = commanded frequency, amber = residual error after steering.',
+            matters: 'You want both lines flat. A wandering residual is the disciplining loop saying "I can\'t quite keep up".',
+            ranges: [
+                { level: 'excellent',  range: 'residual flat, |Δ| < 0.01 ppm' },
+                { level: 'watch',      range: 'residual drifting > 0.1 ppm' }
+            ]
+        },
+        'dop-history': {
+            title: 'DOP History',
+            acronyms: 'dop hdop vdop pdop',
+            means: 'Time-series of horizontal / vertical / position Dilution of Precision. Lower is better — measures satellite geometry, not signal strength.',
+            matters: 'Catches geometry-induced fix wobble even when SNR is fine.',
+            ranges: [
+                { level: 'excellent',  range: '< 2' },
+                { level: 'good',       range: '2 – 5' },
+                { level: 'acceptable', range: '5 – 10' },
+                { level: 'watch',      range: '10 – 20' },
+                { level: 'bad',        range: '> 20' }
+            ]
+        },
+        'snr-history': {
+            title: 'SNR History',
+            acronyms: 'snr',
+            means: 'Average satellite SNR over time. One number per poll, averaged across every sat in view.',
+            matters: 'A slow downward trend usually means rain fade, water in the antenna, or growing nearby RF noise.',
+            ranges: [
+                { level: 'excellent',  range: '≥ 40 dBHz' },
+                { level: 'good',       range: '30 – 40 dBHz' },
+                { level: 'watch',      range: '20 – 30 dBHz' },
+                { level: 'bad',        range: '< 20 dBHz' }
+            ]
+        },
+        'pps-jitter': {
+            title: 'PPS Jitter Histogram',
+            acronyms: 'pps ns',
+            means: 'Distribution of the inter-pulse interval relative to the nominal 1 s. The tighter and more centred the histogram, the cleaner the PPS source.',
+            matters: 'Even a perfect average offset hides ugly cycle-to-cycle jitter. This chart exposes it.',
+            ranges: [
+                { level: 'excellent',  range: 'σ < 100 ns' },
+                { level: 'good',       range: 'σ < 1 µs' },
+                { level: 'acceptable', range: 'σ < 10 µs' },
+                { level: 'watch',      range: 'σ 10 – 100 µs' },
+                { level: 'bad',        range: 'σ > 100 µs' }
+            ],
+            causes: [
+                'GPIO polling instead of kernel PPS',
+                'High system load / scheduler latency',
+                'Power-supply noise on PPS line'
+            ]
+        },
+        'allan-deviation': {
+            title: 'Allan Deviation',
+            means: 'Standard frequency-stability chart — σ_y(τ) plotted on log-log axes at τ = 1, 10, 100 s. The lower the curve sits, the more stable the oscillator and disciplining loop.',
+            matters: 'The gold-standard way to judge a time source. Different τ values illuminate different physical noise types.',
+            ranges: [
+                { level: 'excellent',  range: 'σ_y(1) < 1e-9' },
+                { level: 'good',       range: 'σ_y(1) 1e-9 – 1e-8' },
+                { level: 'watch',      range: 'σ_y(1) > 1e-7 or rising τ-curve' }
+            ],
+            causes: [
+                'Loop not yet converged (need ≥ 30 min of pulses)',
+                'Temperature noise (high σ at long τ)',
+                'Jitter from polled-GPIO PPS (high σ at τ=1)'
+            ]
+        },
+        'snr-vs-elevation': {
+            title: 'SNR vs Elevation',
+            acronyms: 'snr lna',
+            means: 'Live scatter of every satellite in view. X = elevation above horizon, Y = SNR in dBHz.',
+            matters: 'A healthy install plots a clean diagonal — SNR rises with elevation, peaking 35–50 dBHz at zenith. Outliers below the curve are obstructions or multipath.',
+            ranges: [
+                { level: 'excellent',  range: 'zenith ≥ 45 dBHz, clean diagonal' },
+                { level: 'good',       range: 'zenith 35 – 45 dBHz' },
+                { level: 'watch',      range: 'flat curve / many sub-curve outliers' },
+                { level: 'bad',        range: 'zenith < 25 dBHz' }
+            ],
+            causes: [
+                'Foliage or roof overhang above the antenna',
+                'Bad LNA gain',
+                'Long lossy coax'
+            ]
+        },
+        'holdover-timer': {
+            title: 'Holdover Timer',
+            means: 'Sparkline of holdover seconds over the selected window. Sits at zero while the receiver holds 3D; counts up during outages.',
+            matters: 'Frequent short holdover spikes mean intermittent reception. Long flat-zero is what you want.',
+            ranges: [
+                { level: 'excellent',  range: 'flat at 0 s' },
+                { level: 'watch',      range: 'occasional spikes' },
+                { level: 'bad',        range: 'sustained non-zero' }
+            ]
+        },
+        'prn-heatmap': {
+            title: 'Per-PRN SNR Heatmap',
+            acronyms: 'prn snr',
+            means: 'Rolling history of every PRN we\'ve tracked recently. Rows = satellite, columns = time bucket (newest on the right). Cell colour matches the SNR palette.',
+            matters: 'Spots a satellite that\'s slowly fading (multipath, obstruction creeping in) without having to stare at live bars.',
+            ranges: [
+                { level: 'excellent',  range: 'rows mostly green/lime' },
+                { level: 'watch',      range: 'rows trending darker right-to-left' }
+            ]
+        },
+        'leap-countdown': {
+            title: 'Leap-Second Countdown',
+            acronyms: 'utc gps nav-timels',
+            means: 'UBX-NAV-TIMELS countdown to the next scheduled leap-second event (insert or delete). Receiver-authoritative; ticks at 1 Hz client-side between polls.',
+            matters: 'Gives you advance warning of a leap event so you can schedule maintenance windows around it.',
+            ranges: [
+                { level: 'excellent',  range: 'no event reported (most of the time)' },
+                { level: 'watch',      range: 'event scheduled — verify upstream peers agree' }
+            ]
+        },
+        'jamming-spoofing': {
+            title: 'Jamming &amp; Spoofing',
+            acronyms: 'agc mon-hw',
+            means: 'UBX-MON-HW noise floor and AGC over time. The colour strip beneath the sparkline shows the receiver\'s own jamming-state classification at each sample.',
+            matters: 'Catches transient interference (someone driving past with a jammer, or a noisy neighbour switching on) that would otherwise just show up as random fix loss.',
+            ranges: [
+                { level: 'excellent',  range: 'strip stays green' },
+                { level: 'watch',      range: 'occasional amber bursts' },
+                { level: 'bad',        range: 'sustained red strip' }
+            ],
+            causes: [
+                'Deliberate jamming',
+                'Nearby cellular / Wi-Fi repeater',
+                'Faulty SMPS in the rack'
+            ]
+        },
+        'almanac-ephemeris': {
+            title: 'Almanac &amp; Ephemeris Staleness',
+            acronyms: 'prn',
+            means: 'Per-PRN tracking history. "Used" = currently in the fix; staleness counts seconds since each PRN\'s orbital data was refreshed.',
+            matters: 'Stale ephemeris on a sat means the receiver is using extrapolated orbits — accuracy degrades quickly past about 4 hours.',
+            ranges: [
+                { level: 'excellent',  range: '< 30 min' },
+                { level: 'good',       range: '< 2 h' },
+                { level: 'watch',      range: '2 – 4 h' },
+                { level: 'bad',        range: '> 4 h' }
+            ],
+            causes: [
+                'Sat just rose above horizon (will refresh in a few minutes)',
+                'Receiver in pseudo-fix without full message decode'
+            ]
+        },
+        'nmea-inspector': {
+            title: 'NMEA Sentence Inspector',
+            acronyms: 'nmea',
+            means: 'Live tail of the last ~100 sentences emitted by the receiver. Filter box accepts substring matches (e.g. ``GGA``, ``$GN``).',
+            matters: 'When everything looks wrong, raw NMEA is the lowest-level ground truth available without a logic analyser.',
+            ranges: [],
+            causes: []
+        }
+    };
+
+    // ── Help tooltip controller -----------------------------------------------
+    var _helpCard = null;
+    function _ensureHelpCard() {
+        if (_helpCard) return _helpCard;
+        _helpCard = document.createElement('div');
+        _helpCard.className = 'gps-help-card';
+        _helpCard.setAttribute('role', 'tooltip');
+        _helpCard.id = 'gps-help-card';
+        document.body.appendChild(_helpCard);
+        // Hide when the user clicks anywhere outside.
+        document.addEventListener('keydown', function (ev) {
+            if (ev.key === 'Escape') _hideHelp();
+        });
+        return _helpCard;
+    }
+    function _renderAcronyms(spec) {
+        if (!spec) return '';
+        var keys = String(spec).toLowerCase().split(/\s+/).filter(Boolean);
+        var parts = keys.map(function (k) {
+            var v = GPS_ACRONYMS[k];
+            return v ? (k.toUpperCase() + ' = ' + v) : null;
+        }).filter(Boolean);
+        if (!parts.length) return '';
+        return '<div class="h-section">' + escapeHtml(parts.join(' · ')) + '</div>';
+    }
+    function _renderRanges(ranges) {
+        if (!ranges || !ranges.length) return '';
+        var rows = ranges.map(function (r) {
+            var lvl = r.level || 'unknown';
+            return '<span class="lvl lvl-' + lvl + '">' + escapeHtml(SEVERITY_LABEL[lvl] || lvl) + '</span>'
+                 + '<span class="rng">' + escapeHtml(r.range) + '</span>';
+        }).join('');
+        return '<div class="h-section">Healthy range</div><div class="h-ranges">' + rows + '</div>';
+    }
+    function _renderCauses(causes) {
+        if (!causes || !causes.length) return '';
+        var lis = causes.map(function (c) { return '<li>' + escapeHtml(c) + '</li>'; }).join('');
+        return '<div class="h-section">Common causes</div><ul class="h-causes">' + lis + '</ul>';
+    }
+    function _renderCurrent(entry, snapshot) {
+        if (!entry.evaluate || !snapshot) return '';
+        var r;
+        try { r = entry.evaluate(snapshot); } catch (e) { return ''; }
+        if (!r || !r.status || r.status.level === 'unknown') return '';
+        var lvl = r.status.level;
+        var label = SEVERITY_LABEL[lvl] || lvl;
+        var fmt = (typeof r.value === 'number')
+            ? formatValueForSlug(entry, r.value)
+            : (r.value === null || r.value === undefined ? '—' : String(r.value));
+        return '<div class="h-current"><b>Current reading:</b> '
+            + escapeHtml(fmt) + ' &rarr; <span class="lvl-' + lvl + '" style="font-weight:700;">'
+            + escapeHtml(label) + '</span></div>';
+    }
+    // Heuristic formatter — most numeric metrics are seconds or ppm.
+    // Fall back to a sensible string.
+    function formatValueForSlug(entry, v) {
+        var t = (entry && entry.title) || '';
+        if (/offset|delay|dispersion|holdover/i.test(t)) {
+            if (/holdover/i.test(t)) return fmtDuration(v);
+            return fmtSeconds(v);
+        }
+        if (/frequency|ppm|skew|residual/i.test(t)) return fmtPpm(v);
+        return String(v);
+    }
+    function _renderHelpCard(slug, snapshot) {
+        var entry = GPS_HELP[slug];
+        if (!entry) return '<div class="h-title">' + escapeHtml(slug) + '</div>'
+                       + '<div class="h-desc">No help registered for this metric.</div>';
+        var html = '<div class="h-title">' + entry.title + '</div>';
+        html += _renderAcronyms(entry.acronyms);
+        if (entry.means) {
+            html += '<div class="h-section">What it means</div>';
+            html += '<div class="h-desc">' + escapeHtml(entry.means) + '</div>';
+        }
+        if (entry.matters) {
+            html += '<div class="h-section">Why it matters</div>';
+            html += '<div class="h-desc">' + escapeHtml(entry.matters) + '</div>';
+        }
+        html += _renderRanges(entry.ranges);
+        html += _renderCauses(entry.causes);
+        html += _renderCurrent(entry, snapshot);
+        return html;
+    }
+    function _positionHelpCard(anchor) {
+        var card = _ensureHelpCard();
+        var rect = anchor.getBoundingClientRect();
+        var vw = window.innerWidth || document.documentElement.clientWidth;
+        var vh = window.innerHeight || document.documentElement.clientHeight;
+        // Render off-screen first to measure.
+        card.style.left = '-9999px';
+        card.style.top = '-9999px';
+        card.classList.add('is-open');
+        var cw = card.offsetWidth;
+        var ch = card.offsetHeight;
+        var left = rect.left + rect.width + 8;
+        if (left + cw + 8 > vw) left = Math.max(8, rect.left - cw - 8);
+        if (left < 8) left = 8;
+        var top = rect.top;
+        if (top + ch + 8 > vh) top = Math.max(8, vh - ch - 8);
+        card.style.left = left + 'px';
+        card.style.top  = top + 'px';
+    }
+    function _showHelp(anchor) {
+        var slug = anchor.getAttribute('data-gps-help-slug');
+        if (!slug) return;
+        var card = _ensureHelpCard();
+        card.innerHTML = _renderHelpCard(slug, lastSnapshot);
+        _positionHelpCard(anchor);
+    }
+    function _hideHelp() {
+        if (_helpCard) _helpCard.classList.remove('is-open');
+    }
+    function _ensureTrigger(host) {
+        // ``host`` is either the labelled element itself (dt / th) or an
+        // empty .gps-help-anchor span already placed in flow.
+        // We add (or reuse) a single child .gps-help-trigger button.
+        var slug = host.getAttribute('data-gps-help');
+        if (!slug || host.querySelector(':scope > .gps-help-trigger')) return;
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'gps-help-trigger';
+        btn.textContent = 'i';
+        btn.setAttribute('aria-label', 'Help for ' + (host.textContent.trim() || slug));
+        btn.setAttribute('data-gps-help-slug', slug);
+        // Add tooltip text for any acronym in the parent label.
+        var labelText = host.textContent.trim();
+        if (labelText) {
+            var lower = labelText.toLowerCase();
+            for (var key in GPS_ACRONYMS) {
+                if (lower.indexOf(key) !== -1) {
+                    btn.title = labelText + ' — ' + GPS_ACRONYMS[key];
+                    break;
+                }
+            }
+        }
+        btn.addEventListener('mouseenter', function () { _showHelp(btn); });
+        btn.addEventListener('mouseleave', _hideHelp);
+        btn.addEventListener('focus',      function () { _showHelp(btn); });
+        btn.addEventListener('blur',       _hideHelp);
+        btn.addEventListener('click', function (ev) {
+            ev.preventDefault();
+            // Click = pin/unpin; we just toggle.
+            if (_helpCard && _helpCard.classList.contains('is-open')) _hideHelp();
+            else _showHelp(btn);
+        });
+        host.appendChild(btn);
+    }
+    function _scanForHelp() {
+        var nodes = document.querySelectorAll('[data-gps-help]');
+        for (var i = 0; i < nodes.length; i++) _ensureTrigger(nodes[i]);
+    }
+
+    // ── Status badges next to live values ------------------------------------
+    function _setBadge(elId, status) {
+        var el = document.getElementById(elId);
+        if (!el) return;
+        var existing = el.querySelector(':scope > .gps-status-badge');
+        if (!status || !status.level || status.level === 'unknown') {
+            if (existing) existing.remove();
+            return;
+        }
+        var label = SEVERITY_LABEL[status.level] || status.level;
+        if (!existing) {
+            existing = document.createElement('span');
+            existing.className = 'gps-status-badge';
+            el.appendChild(existing);
+        }
+        existing.className = 'gps-status-badge sev-' + status.level;
+        existing.textContent = label;
+    }
+
+    // ── Health summary cells -------------------------------------------------
+    function _setHealthCell(name, level, detail) {
+        var cell = document.querySelector('.gps-health-cell[data-health="' + name + '"]');
+        if (!cell) return;
+        cell.setAttribute('data-sev', level || 'unknown');
+        var badge = cell.querySelector('.gps-status-badge');
+        if (badge) {
+            badge.className = 'gps-status-badge sev-' + (level || 'unknown');
+            badge.textContent = SEVERITY_LABEL[level] || '—';
+        }
+        var det = cell.querySelector('.hc-detail');
+        if (det) det.textContent = detail || '—';
+    }
+    // Pick the worse of two severity levels (excellent < good < accept < watch < bad).
+    var _SEV_RANK = { excellent: 0, good: 1, acceptable: 2, watch: 3, bad: 4, unknown: -1 };
+    function _worse(a, b) {
+        if (_SEV_RANK[a] === undefined) a = 'unknown';
+        if (_SEV_RANK[b] === undefined) b = 'unknown';
+        return (_SEV_RANK[a] >= _SEV_RANK[b]) ? a : b;
+    }
+
+    function _computeHealth(snapshot) {
+        var gps    = (snapshot && snapshot.gps) || {};
+        var chrony = (snapshot && snapshot.chrony) || {};
+        var t      = chrony.tracking || {};
+
+        // Reference Lock — has GPS lock + 3D fix.
+        var locked = gps.has_fix && !gps.holdover_s;
+        var fixMode = gps.fix_mode || (gps.has_fix ? '3D' : 'No fix');
+        var refLev, refDet;
+        if (gps.holdover_s > 0) {
+            refLev = (gps.holdover_s > 300 ? 'bad' : 'watch');
+            refDet = 'Holdover ' + fmtDuration(gps.holdover_s) + ' — no live GNSS lock';
+        } else if (gps.has_fix && /3D/i.test(String(fixMode))) {
+            refLev = 'excellent'; refDet = '3D fix locked';
+        } else if (gps.has_fix) {
+            refLev = 'acceptable'; refDet = fixMode + ' fix (no altitude)';
+        } else {
+            refLev = 'bad'; refDet = 'No GNSS lock';
+        }
+        _setHealthCell('reference-lock', refLev, refDet);
+
+        // Clock Accuracy — RMS offset + stratum.
+        var rms = t.rms_offset_s;
+        var caLev = 'unknown', caDet = 'awaiting chrony data';
+        if (typeof rms === 'number' && isFinite(rms)) {
+            var r = rateAbs(rms, [
+                { max: 1e-6, level: 'excellent' },
+                { max: 1e-5, level: 'good' },
+                { max: 1e-4, level: 'acceptable' },
+                { max: 1e-3, level: 'watch' },
+                { max: Infinity, level: 'bad' }
+            ]);
+            caLev = r.level;
+            caDet = 'RMS offset ' + fmtSeconds(rms);
+        }
+        if (typeof t.stratum === 'number') {
+            var stratumLev = (t.stratum === 1) ? 'excellent'
+                            : (t.stratum <= 3) ? 'good'
+                            : (t.stratum <= 15) ? 'watch' : 'bad';
+            caLev = _worse(caLev, stratumLev);
+            caDet += ' · Stratum ' + t.stratum;
+        }
+        _setHealthCell('clock-accuracy', caLev, caDet);
+
+        // Signal Quality — avg SNR + sat count.
+        var sats = gps.satellites_in_view || [];
+        var active = gps.active_satellite_prns || [];
+        var snrs = sats.filter(function (s) { return typeof s.snr === 'number'; }).map(function (s) { return s.snr; });
+        var avgSnr = snrs.length ? snrs.reduce(function (a, b) { return a + b; }, 0) / snrs.length : null;
+        var sqLev = 'unknown', sqDet = 'awaiting satellite data';
+        if (avgSnr !== null) {
+            sqLev = rateAtLeast(avgSnr, [
+                { min: 40, level: 'excellent' },
+                { min: 30, level: 'good' },
+                { min: 20, level: 'acceptable' },
+                { min: 10, level: 'watch' },
+                { min: -Infinity, level: 'bad' }
+            ]).level;
+            sqDet = 'Avg ' + avgSnr.toFixed(1) + ' dBHz · ' + active.length + ' used / ' + sats.length + ' visible';
+        }
+        // Used-sat floor downgrades the verdict.
+        var usedLev = rateAtLeast(active.length, [
+            { min: 7, level: 'excellent' },
+            { min: 5, level: 'good' },
+            { min: 4, level: 'acceptable' },
+            { min: 1, level: 'watch' },
+            { min: -Infinity, level: 'bad' }
+        ]).level;
+        sqLev = _worse(sqLev, usedLev);
+        _setHealthCell('signal-quality', sqLev, sqDet);
+
+        // Oscillator Stability — residual freq + skew.
+        var resid = t.residual_freq_ppm;
+        var osLev = 'unknown', osDet = 'awaiting chrony data';
+        if (typeof resid === 'number' && isFinite(resid)) {
+            osLev = rateAbs(resid, [
+                { max: 0.01, level: 'excellent' },
+                { max: 0.1,  level: 'good' },
+                { max: 1.0,  level: 'acceptable' },
+                { max: 5.0,  level: 'watch' },
+                { max: Infinity, level: 'bad' }
+            ]).level;
+            osDet = 'Residual ' + fmtPpm(resid);
+            if (typeof t.skew_ppm === 'number') osDet += ' · skew ' + fmtPpm(t.skew_ppm);
+        }
+        _setHealthCell('oscillator-stability', osLev, osDet);
+
+        // Holdover State — present/absent.
+        var hold = gps.holdover_s;
+        var hoLev, hoDet;
+        if (hold === null || hold === undefined) { hoLev = 'unknown'; hoDet = 'awaiting GNSS data'; }
+        else if (hold === 0) { hoLev = 'excellent'; hoDet = 'Not active — locked to live GNSS'; }
+        else if (hold < 60)  { hoLev = 'good';      hoDet = 'Brief — ' + fmtDuration(hold); }
+        else if (hold < 300) { hoLev = 'acceptable'; hoDet = 'Active — ' + fmtDuration(hold); }
+        else if (hold < 3600){ hoLev = 'watch';     hoDet = 'Extended — ' + fmtDuration(hold); }
+        else                 { hoLev = 'bad';       hoDet = 'Long outage — ' + fmtDuration(hold); }
+        _setHealthCell('holdover-state', hoLev, hoDet);
+
+        // Recommended Action — synthesised from the worst contributor.
+        var worstName = '', worstLev = 'excellent';
+        [
+            ['Reference Lock',        refLev,  'check antenna / sky view'],
+            ['Clock Accuracy',        caLev,   'review PPS health and CPU load'],
+            ['Signal Quality',        sqLev,   'check antenna mount / RF environment'],
+            ['Oscillator Stability',  osLev,   'wait for loop to converge / check temperature'],
+            ['Holdover State',        hoLev,   'restore GNSS reception']
+        ].forEach(function (row) {
+            if (_SEV_RANK[row[1]] !== undefined && _SEV_RANK[row[1]] > _SEV_RANK[worstLev]) {
+                worstLev = row[1]; worstName = row[0];
+            }
+        });
+        var actionLev, actionDet;
+        if (worstLev === 'excellent' || worstLev === 'good') {
+            actionLev = worstLev;
+            actionDet = 'None — system is healthy.';
+        } else {
+            actionLev = worstLev;
+            var hints = {
+                'Reference Lock':       'Investigate antenna, cable, and sky view.',
+                'Clock Accuracy':       'Check PPS source and reduce CPU load.',
+                'Signal Quality':       'Inspect antenna placement and nearby RF noise.',
+                'Oscillator Stability': 'Allow disciplining loop to settle or check thermal conditions.',
+                'Holdover State':       'Restore GNSS reception as soon as possible.'
+            };
+            actionDet = worstName + ': ' + (hints[worstName] || 'Investigate this card.');
+        }
+        _setHealthCell('recommended-action', actionLev, actionDet);
+    }
+
+    function renderHealthSystem(snapshot) {
+        if (!snapshot) return;
+        // Inline status badges for each metric that defines an evaluator.
+        var bindings = {
+            't-sys-offset':  'system-offset',
+            't-last-offset': 'last-offset',
+            't-rms-offset':  'rms-offset',
+            't-residual':    'residual-freq',
+            'g-holdover':    'holdover'
+        };
+        Object.keys(bindings).forEach(function (elId) {
+            var entry = GPS_HELP[bindings[elId]];
+            if (!entry || !entry.evaluate) return;
+            try {
+                var r = entry.evaluate(snapshot);
+                _setBadge(elId, r && r.status);
+            } catch (e) { /* swallow per-badge errors */ }
+        });
+        _computeHealth(snapshot);
+    }
+
+    // ── Init -----------------------------------------------------------------
+    function initHelpSystem() {
+        _scanForHelp();
+        // Re-scan if the DOM is mutated later (e.g. when satellite filters
+        // are re-rendered).  Cheap MutationObserver guarded by a flag so
+        // we don't loop on our own button injections.
+        var pending = false;
+        var mo = new MutationObserver(function () {
+            if (pending) return;
+            pending = true;
+            requestAnimationFrame(function () {
+                pending = false;
+                _scanForHelp();
+            });
+        });
+        try {
+            mo.observe(document.body, { childList: true, subtree: true });
+        } catch (e) { /* old browser — fine, initial scan covers the static page */ }
+
+        // Wrap render() so every snapshot also updates the badges and
+        // the Timing Health Summary card.  ``render`` is a function
+        // declaration in this IIFE\'s scope; we reassign the binding
+        // here after the closure has finished defining it.
+        var _origRender = render;
+        render = function (snapshot) {
+            _origRender(snapshot);
+            try { renderHealthSystem(snapshot); }
+            catch (e) { console.warn('GPS health system render failed:', e); }
+        };
+
+        // If there\'s already a snapshot in hand (unlikely on first paint
+        // but possible after a hot reload), seed the summary now.
+        if (lastSnapshot) renderHealthSystem(lastSnapshot);
+    }
 })();
+
 </script>
 {% endblock %}
