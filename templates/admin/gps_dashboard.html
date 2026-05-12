@@ -6292,13 +6292,20 @@
             causes: []
         },
         'chrony-mode': {
-            title: 'Source Mode',
-            means: 'The single-character chronyc state column. ``*`` = current best source; ``+`` = combined; ``-`` = not used; ``x`` = falseticker; ``?`` = unreachable.',
-            matters: 'A row with no ``*`` anywhere means chrony has no source it trusts — the box is unsynchronised.',
+            title: 'State / Mode',
+            means: 'Two glyphs from the chronyc sources table, shown side-by-side in this column. '
+                + 'The coloured letter is the per-source state: '
+                + '"*" = current best source, "+" = combined into the solution, "-" = not used, '
+                + '"x" = falseticker, "?" = unreachable, "~" = highly variable. '
+                + 'The icon next to it is the source mode: '
+                + 'server icon ("^") = network NTP server, arrows ("=") = NTP peer, '
+                + 'chip icon ("#") = local hardware refclock (GPS / PPS).',
+            matters: 'A row with no "*" anywhere means chrony has no source it trusts — the box is unsynchronised. '
+                + 'The mode icon tells you whether the trusted source is the local GPS refclock (best) or a network peer (fallback).',
             ranges: [
-                { level: 'excellent',  range: '* on the GNSS / PPS refclock' },
-                { level: 'watch',      range: '* on a network peer' },
-                { level: 'bad',        range: 'no * row at all' }
+                { level: 'excellent',  range: '"*" on a "#" (GNSS / PPS refclock) row' },
+                { level: 'watch',      range: '"*" on a "^" (network NTP) row — refclock is not steering' },
+                { level: 'bad',        range: 'no "*" on any row — system is unsynchronised' }
             ],
             causes: [
                 'GNSS refclock not delivering samples',
@@ -6322,13 +6329,17 @@
         },
         'chrony-reach': {
             title: 'Reach',
-            means: 'An 8-bit shift register, shown in octal. Each bit records whether one of the last 8 polls returned a usable sample. 377 (= 0b11111111) = perfect 8/8.',
-            matters: 'Anything other than 377 means recent polls were dropped — the source is intermittent.',
+            means: 'An 8-bit shift register tracking the last 8 polls of this source. '
+                + 'The column renders it as eight dots, oldest on the left, newest on the right: '
+                + '"●" = poll returned a usable sample, "○" = poll was dropped. '
+                + 'Hover the cell to see the raw octal value (chronyc\'s native format — "377" = all 8 received).',
+            matters: 'Anything less than a full row of "●" means recent polls were dropped — the source is intermittent. '
+                + 'The dots are colour-coded: green ≥ 7/8, amber ≥ 4/8, red < 4/8.',
             ranges: [
-                { level: 'excellent',  range: '377 (all 8 received)' },
-                { level: 'acceptable', range: '177 – 377' },
-                { level: 'watch',      range: '< 177' },
-                { level: 'bad',        range: '0 (source down)' }
+                { level: 'excellent',  range: '●●●●●●●● — all 8 polls received (octal 377)' },
+                { level: 'acceptable', range: '○●●●●●●● to ●●●●●●●● — 7 of last 8 received (octal 177 – 377)' },
+                { level: 'watch',      range: 'fewer than 7 dots filled (octal < 177)' },
+                { level: 'bad',        range: '○○○○○○○○ — source down (octal 0)' }
             ],
             causes: [
                 'Network packet loss',
