@@ -36,6 +36,13 @@
     color: var(--text-color);
 }
 
+/* Admin tabs wrapper: strip the eas-card padding so nav-tabs and tab-content
+   can be flush with the card edges, and clip content to the rounded border. */
+.admin-tabs-card {
+    padding: 0;
+    overflow: hidden;
+}
+
 /* Prevent compounding padding on nested tab-content (sub-tabs) */
 .tab-content .tab-content {
     padding: 0;

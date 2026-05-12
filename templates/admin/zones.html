@@ -2,6 +2,10 @@
 
 {% block title %}Zone Catalog Management{% endblock %}
 
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+{% endblock %}
+
 {% block content %}
 <div class="admin-page-header header-secondary">
     <div class="container">
