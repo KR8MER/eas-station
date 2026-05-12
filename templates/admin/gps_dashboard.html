@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% block title %}GPS &amp; Time Dashboard | EAS Station{% endblock %}
+{% block title %}GNSS &amp; Time Dashboard | EAS Station{% endblock %}
 
 {# ---------------------------------------------------------------------------
    GPS & Time Dashboard — chrogps-dash inspired
@@ -470,6 +470,17 @@
         padding: 6px 0 22px;
         border-bottom: 1px solid var(--border-color, rgba(127,127,127,.2));
         overflow-x: auto;
+        position: relative;
+    }
+    /* Faint scale reference at the 50 dBHz "full" mark */
+    .gps-snr-chart::before {
+        content: "50 dBHz";
+        position: absolute;
+        top: 6px; left: 2px;
+        font-size: 0.58rem;
+        font-family: var(--font-mono, monospace);
+        color: var(--text-muted, rgba(127,127,127,.5));
+        pointer-events: none; line-height: 1; z-index: 1;
     }
     .gps-snr-bar {
         flex: 0 0 22px;
@@ -895,6 +906,16 @@
        EVENT / ALARM TIMELINE
        SCADA-style monotonic event log. Newest at top.
        ============================================================ */
+    /* Events card rendered as a <details> element so it can collapse
+       when empty and expand when alarms fire.  Remove the browser's
+       built-in disclosure triangle; the existing events-head layout
+       supplies its own visual affordance. */
+    .gps-events-card > summary {
+        list-style: none; cursor: pointer;
+    }
+    .gps-events-card > summary::-webkit-details-marker { display: none; }
+    .gps-events-card:not([open]) .gps-events-list { display: none; }
+
     .gps-events-card .events-head {
         display: flex; justify-content: space-between; align-items: center;
         gap: 10px;
@@ -1015,6 +1036,9 @@
             GNSS / TIME APPLIANCE
         </span>
         <span class="node">NTP Node:&nbsp;<span id="gps-dash-node">…</span></span>
+        <span id="gps-dash-lock-pill"   class="gps-pill muted"><i class="fas fa-circle"></i> —</span>
+        <span id="gps-dash-fix-pill"    class="gps-pill muted">— FIX</span>
+        <span id="gps-dash-stratum-pill" class="gps-pill muted">STRATUM —</span>
         <span class="spacer"></span>
         <div class="gps-view-toggle" role="group" aria-label="View mode">
             <button type="button" id="gps-view-simple" class="active" aria-pressed="true">Simple</button>
@@ -1128,18 +1152,18 @@
          client-side by watching state transitions between polls so
          this works without backend changes.
          ============================================================ -->
-    <div class="gps-card gps-events-card" aria-label="Active alarms and recent events">
-        <div class="events-head">
+    <details class="gps-card gps-events-card" id="gps-events-details" aria-label="Active alarms and recent events">
+        <summary class="events-head">
             <h3 style="font-size:0.82rem; font-weight:700; letter-spacing:0.12em;
                        text-transform:uppercase; margin:0; color:var(--text-color);">
                 <i class="fas fa-bell me-1"></i> Events &amp; Alarms
             </h3>
-            <span class="text-muted small">latest first · client-derived</span>
-        </div>
+            <span class="text-muted small">latest first · state-change log</span>
+        </summary>
         <ul class="gps-events-list" id="gps-events-list">
             <li class="gps-events-empty">No events recorded — system steady.</li>
         </ul>
-    </div>
+    </details>
 
     <div class="gps-section-head">
         <h2>Tracking &amp; Receiver</h2>
@@ -1161,7 +1185,7 @@
                     style="display:none;"></canvas>
 
             <div class="gps-overlay gps-overlay-tl">
-                <div class="gps-skyview-title">3D GPS SKYVIEW</div>
+                <div class="gps-skyview-title" id="gps-skyview-title">3D GNSS SKYVIEW</div>
                 <div id="gps-skyview-legend" class="gps-skyview-legend"></div>
                 <div class="gps-skyview-counts-card">
                     <div><strong id="gps-dash-total-count">—</strong> total satellites</div>
@@ -1305,7 +1329,7 @@
                                 <th>Source</th>
                                 <th class="num">Strat</th>
                                 <th class="num">Poll</th>
-                                <th class="num">Reach</th>
+                                <th class="num" title="8-bit shift register in octal — 377 = all 8 recent polls received">Reach</th>
                                 <th class="num">Last</th>
                                 <th class="num">Offset</th>
                             </tr>
@@ -2704,6 +2728,8 @@
         var canvas = document.getElementById('gps-dash-sky-canvas');
         if (stage)  stage.style.display  = (mode === '3d') ? '' : 'none';
         if (canvas) canvas.style.display = (mode === '3d') ? 'none' : 'block';
+        var titleEl = document.getElementById('gps-skyview-title');
+        if (titleEl) titleEl.textContent = (mode === '3d') ? '3D GNSS SKYVIEW' : '2D GNSS SKYVIEW';
     }
     function setSkyMode(mode) {
         try { localStorage.setItem(SKY_MODE_KEY, mode); } catch (e) {}
@@ -2858,7 +2884,7 @@
             return (a.prn || 0) - (b.prn || 0);
         }).map(function (s) {
             var info = constInfo(s.constellation);
-            var statLabel = activeSet[s.prn] ? 'ACTIVE' : 'VIEW';
+            var statLabel = activeSet[s.prn] ? 'ACTIVE' : 'TRACKED';
             var statColor = activeSet[s.prn] ? '#3fb950' : 'var(--text-muted)';
             var prnCell = '<span style="color:' + info.color + ';font-weight:700;">' + s.prn + '</span>';
             var snr = s.snr;
@@ -3252,6 +3278,10 @@
         var ts = pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes()) + ':' + pad(d.getUTCSeconds());
         EVENT_LOG.unshift({ ts: ts, sev: sev, msg: msg });
         if (EVENT_LOG.length > EVENT_LOG_MAX) EVENT_LOG.length = EVENT_LOG_MAX;
+        // Auto-open the collapsible card when a new event fires so the
+        // operator doesn't miss an alarm that appeared while collapsed.
+        var details = document.getElementById('gps-events-details');
+        if (details && !details.open) details.open = true;
         renderEventList();
     }
 
@@ -3400,7 +3430,16 @@
             }
         }
         var bar = document.getElementById('gps-dash-health-bar');
-        if (bar) bar.style.width = pct + '%';
+        if (bar) {
+            bar.style.width = pct + '%';
+            if (pct >= 70) {
+                bar.style.background = 'linear-gradient(90deg, #3fb950, #84cc16)';
+            } else if (pct >= 30) {
+                bar.style.background = 'linear-gradient(90deg, #d29922, #f6c343)';
+            } else {
+                bar.style.background = 'linear-gradient(90deg, #f85149, #f97316)';
+            }
+        }
         setText('gps-dash-health-pct', pct + '%');
         setText('gps-dash-health-offset', fmtSeconds(offset));
         setText('gps-dash-health-rms', fmtSeconds(tracking && tracking.rms_offset_s));
@@ -3529,7 +3568,10 @@
 
         // Fix age — colour-code so a frozen UART stands out.  Anything
         // over 5 s without a sentence is suspicious on a 1 Hz receiver.
-        var fixAge = (gps && typeof gps.fix_age_s === 'number') ? gps.fix_age_s : null;
+        // When fix_age_s is null but we know we're in holdover, surface
+        // the holdover duration as a proxy so the field is never a bare —.
+        var fixAge = (gps && typeof gps.fix_age_s === 'number') ? gps.fix_age_s
+                   : ((gps && typeof gps.holdover_s === 'number' && gps.holdover_s > 0) ? gps.holdover_s : null);
         var fixAgeEl = document.getElementById('g-fix-age');
         if (fixAgeEl) {
             fixAgeEl.classList.remove('pos', 'neg');
@@ -3651,7 +3693,16 @@
         var avg = validSnrs.length ? validSnrs.reduce(function (a, b) { return a + b; }, 0) / validSnrs.length : null;
         var pct = avg === null ? 0 : Math.max(2, Math.min(100, Math.round((avg / 50) * 100)));
         var bar = document.getElementById('gps-dash-snr-bar');
-        if (bar) bar.style.width = pct + '%';
+        if (bar) {
+            bar.style.width = pct + '%';
+            if (pct >= 70) {
+                bar.style.background = 'linear-gradient(90deg, #3fb950, #84cc16)';
+            } else if (pct >= 40) {
+                bar.style.background = 'linear-gradient(90deg, #d29922, #f6c343)';
+            } else {
+                bar.style.background = 'linear-gradient(90deg, #f85149, #f97316)';
+            }
+        }
         setText('gps-dash-snr-pct', pct + '%');
         setText('gps-dash-avg-snr', avg === null ? '—' : avg.toFixed(1));
     }
@@ -4814,6 +4865,25 @@
         }
     }
 
+    // ── 1 Hz clock ticker.  Extrapolates from the last server timestamp
+    //    so the display ticks every second without waiting for a poll.
+    var lastClockAnchorMs = null;  // server now_utc converted to ms
+    var lastClockFetchedAt = null; // Date.now() when that snapshot landed
+    function tickClocks() {
+        var pad2 = function (n) { return n < 10 ? '0' + n : '' + n; };
+        var nowMs;
+        if (lastClockAnchorMs !== null && lastClockFetchedAt !== null) {
+            nowMs = lastClockAnchorMs + (Date.now() - lastClockFetchedAt);
+        } else {
+            nowMs = Date.now();
+        }
+        var d = new Date(nowMs);
+        setText('gps-dash-clock-utc',
+            'UTC ' + pad2(d.getUTCHours()) + ':' + pad2(d.getUTCMinutes()) + ':' + pad2(d.getUTCSeconds()));
+        setText('gps-dash-clock-local',
+            'Local ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds()));
+    }
+
     // ── Render everything from a single snapshot.  Tolerates missing
     //    sub-fields so a partial server response (e.g. chronyc not
     //    installed) renders meaningfully instead of erroring.
@@ -4841,19 +4911,13 @@
         // Clocks — prefer the server's now_utc (sampled at the same
         // instant as the rest of the snapshot) over the browser's
         // Date.now(), which would drift if the browser clock isn't
-        // synced to the GPS-disciplined host.
+        // synced to the GPS-disciplined host.  Store the server anchor
+        // so the 1 Hz ticker in DOMContentLoaded can extrapolate without
+        // waiting for the next poll.
         var serverIso = host.now_utc;
-        var nowServer = serverIso ? new Date(serverIso) : null;
-        var nowLocal  = serverIso ? new Date(serverIso) : new Date();
-        var pad2 = function (n) { return n < 10 ? '0' + n : '' + n; };
-        if (nowServer && !isNaN(nowServer.getTime())) {
-            setText('gps-dash-clock-utc',
-                'UTC ' + pad2(nowServer.getUTCHours()) + ':' + pad2(nowServer.getUTCMinutes()) + ':' + pad2(nowServer.getUTCSeconds()));
-        } else {
-            setText('gps-dash-clock-utc', 'UTC ' + new Date().toISOString().slice(11, 19));
-        }
-        setText('gps-dash-clock-local',
-            'Local ' + pad2(nowLocal.getHours()) + ':' + pad2(nowLocal.getMinutes()) + ':' + pad2(nowLocal.getSeconds()));
+        lastClockAnchorMs = serverIso ? new Date(serverIso).getTime() : null;
+        lastClockFetchedAt = Date.now();
+        tickClocks();
 
         // Tracking + sync-health bar
         renderTracking(chrony);
@@ -4956,6 +5020,10 @@
         // Leap-second countdown ticker — 1 Hz client-side decrement so
         // the readout doesn't visibly hiccup between dashboard polls.
         setInterval(renderLeapCountdown, 1000);
+
+        // Clock ticker — advance the UTC/Local display every second so
+        // it reads like a live clock rather than a snapshot timestamp.
+        setInterval(tickClocks, 1000);
 
         // NMEA inspector control wiring — re-render on filter/pause
         // change so the operator sees the effect of toggling immediately
