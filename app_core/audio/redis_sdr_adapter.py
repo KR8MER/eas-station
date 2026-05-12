@@ -107,6 +107,15 @@ class RedisSDRSourceAdapter(AudioSourceAdapter):
             enable_rbds_key1 = self.config.device_params.get('enable_rbds', False)
             enable_rbds_key2 = self.config.device_params.get('rbds_enabled', False)
             enable_rbds = bool(enable_rbds_key1) or bool(enable_rbds_key2)
+            interference_enabled_raw = self.config.device_params.get(
+                'rbds_interference_rejection_enabled', False
+            )
+            if isinstance(interference_enabled_raw, str):
+                interference_enabled = (
+                    interference_enabled_raw.strip().lower() in {'true', '1', 'yes', 'on'}
+                )
+            else:
+                interference_enabled = bool(interference_enabled_raw)
 
             deemphasis_us = self.config.device_params.get('deemphasis_us', 75.0)  # 75μs for North America
 
@@ -119,6 +128,11 @@ class RedisSDRSourceAdapter(AudioSourceAdapter):
                 stereo_enabled=stereo_enabled,
                 deemphasis_us=deemphasis_us,
                 enable_rbds=enable_rbds,
+                rbds_pilot_snr_threshold=self.config.device_params.get('rbds_pilot_snr_threshold'),
+                rbds_presync_spacing_tolerance_bits=self.config.device_params.get('rbds_presync_spacing_tolerance_bits'),
+                rbds_burst_fec_suppress_after=self.config.device_params.get('rbds_burst_fec_suppress_after'),
+                rbds_interference_rejection_enabled=interference_enabled,
+                rbds_interference_guard_hz=self.config.device_params.get('rbds_interference_guard_hz'),
             )
 
             self._demodulator = create_demodulator(demod_config)
