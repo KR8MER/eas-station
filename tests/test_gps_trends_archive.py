@@ -260,3 +260,87 @@ class TestAllanDeviationLongTau:
         )
         idx = out["tau_s"].index(1000)
         assert out["sigma_y"][idx] > 0.0
+
+
+class TestGetStatusCaching:
+    """Regression guard: expensive parts of ``get_status()`` must be
+    cached to avoid recomputing the 16384-float ADEV phase array (plus
+    a fresh copy of ``_pps_interval_ns`` and ``_sat_history``) on every
+    dashboard poll.  The dashboard polls /api/hardware/gps/status at
+    1 Hz; without caching, sustained dashboard sessions push ~1 MB/s
+    of short-lived allocations through glibc, which (combined with
+    MALLOC_TRIM_THRESHOLD_=131072 from the hardware-service systemd
+    unit) causes the arena to grow but never trim back."""
+
+    def _build_manager(self):
+        """Minimal manager wired enough that ``get_status()`` runs."""
+        import threading
+        from collections import deque
+        from datetime import datetime, timezone
+
+        m = GPSManager.__new__(GPSManager)
+        m._lock = threading.RLock()
+        m._fix = {
+            "running": True,
+            "has_fix": True,
+            "fix_mode": 3,
+            "last_sentence_at": datetime.now(timezone.utc).isoformat(),
+        }
+        m._recent_sentences = deque(maxlen=100)
+        m._pps_interval_ns = deque(maxlen=16384)
+        for i in range(2500):
+            m._pps_interval_ns.append(1_000_000_000 + (i % 50))
+        m._sat_history = {
+            f"GP{n:02d}": {
+                "prn_string": f"GP{n:02d}",
+                "constellation": "GP",
+                "prn": n,
+                "first_seen_at": "2026-05-11T00:00:00+00:00",
+                "last_seen_at": "2026-05-11T00:00:30+00:00",
+                "last_used_at": None,
+                "last_snr": 40,
+                "max_snr": 40,
+                "min_snr": 40,
+            }
+            for n in range(1, 33)
+        }
+        m._last_3d_fix_at = None
+        m._pps_kernel_device = None
+        m._pps_gpio_active = False
+        m._status_cache_at_mono = 0.0
+        m._status_cache_min_interval_s = 1.0
+        m._cached_jitter = {}
+        m._cached_allan = {}
+        m._cached_sat_history = []
+        m._cached_pps_interval_count = 0
+        return m
+
+    def test_back_to_back_calls_reuse_the_cached_dicts(self):
+        """Two get_status() calls within the cache window must return
+        the SAME cached dicts (identity, not just equal) for the heavy
+        derived fields.  This proves the recompute was skipped."""
+        m = self._build_manager()
+        first = m.get_status()
+        second = m.get_status()
+        assert first["allan_deviation"] is second["allan_deviation"]
+        assert first["pps_jitter"] is second["pps_jitter"]
+        assert first["satellite_history"] is second["satellite_history"]
+
+    def test_cache_expiry_recomputes(self):
+        """After the cache window elapses, the next call recomputes —
+        the cached objects are replaced, not reused."""
+        m = self._build_manager()
+        first = m.get_status()
+        # Force expiry by rewinding the cache timestamp past the window.
+        m._status_cache_at_mono -= 10.0
+        second = m.get_status()
+        assert first["allan_deviation"] is not second["allan_deviation"]
+        assert first["pps_jitter"] is not second["pps_jitter"]
+
+    def test_satellite_history_is_sorted_by_constellation_and_prn(self):
+        m = self._build_manager()
+        out = m.get_status()
+        sats = out["satellite_history"]
+        assert sats, "expected satellite_history to be populated"
+        keys = [(s["constellation"], s["prn"]) for s in sats]
+        assert keys == sorted(keys), "satellite_history must be pre-sorted"

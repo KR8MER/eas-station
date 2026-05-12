@@ -271,6 +271,30 @@ class GPSManager:
         self._last_publish_mono: float = 0.0
         self._publish_min_interval_s: float = 1.0
 
+        # Cache for the expensive parts of get_status().  Every call would
+        # otherwise:
+        #   * copy the full PPS interval ring (up to 16384 ints)
+        #   * walk it again to build a 16384-float phase array for ADEV
+        #   * deep-copy every _sat_history entry (~200 dicts)
+        # That's roughly 250 KB of transient heap per call.  The GPS
+        # dashboard polls /api/hardware/gps/status at 1 Hz and the trend
+        # sampler reads it every 5 s — together that pushes ~1 MB/s of
+        # short-lived allocations through glibc, which sits right at the
+        # MALLOC_TRIM_THRESHOLD_=131072 boundary the hardware-service
+        # systemd unit sets.  Arenas grow but never trim back, so RSS
+        # creeps up while ``tracemalloc.peak`` stays flat — exactly the
+        # signature described in PR #2065.  Caching the derived values
+        # for ``_status_cache_min_interval_s`` collapses repeated polls
+        # to a single compute per cadence, without changing the data the
+        # dashboard sees (ADEV/jitter only shift meaningfully on PPS-ring
+        # turnover, not on 1-second polling cadence).
+        self._status_cache_at_mono: float = 0.0
+        self._status_cache_min_interval_s: float = 1.0
+        self._cached_jitter: Dict[str, Any] = {}
+        self._cached_allan: Dict[str, Any] = {}
+        self._cached_sat_history: List[Dict[str, Any]] = []
+        self._cached_pps_interval_count: int = 0
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -503,14 +527,31 @@ class GPSManager:
         with self._lock:
             data = dict(self._fix)
             data["recent_sentences"] = list(self._recent_sentences)
-            interval_samples = list(self._pps_interval_ns)
             last_3d = self._last_3d_fix_at
-            # Snapshot per-PRN tracking history for the dashboard's
-            # almanac/ephemeris staleness panel.  Copy individual entries
-            # so callers can mutate the result without racing the
-            # reader-thread updates.
-            sat_history = [dict(v) for v in self._sat_history.values()]
         now_utc = datetime.now(timezone.utc)
+        now_mono = time.monotonic()
+
+        # Heavy snapshots / derived stats — throttled.  See
+        # ``_status_cache_min_interval_s`` in __init__ for rationale.
+        # We always serve a result; the cache just decides whether the
+        # current call recomputes or reuses the previous one.
+        if (
+            self._status_cache_at_mono == 0.0
+            or now_mono - self._status_cache_at_mono >= self._status_cache_min_interval_s
+        ):
+            with self._lock:
+                interval_samples = list(self._pps_interval_ns)
+                # Copy individual entries so callers can mutate the
+                # result without racing the reader-thread updates.
+                sat_history = [dict(v) for v in self._sat_history.values()]
+            self._cached_jitter = self._compute_jitter_summary(interval_samples)
+            self._cached_allan = self._compute_allan_deviation(interval_samples)
+            # Sort once at cache time so per-call output is a direct read
+            # of the cached list — no per-call sort, no per-call copy.
+            sat_history.sort(key=lambda e: (e.get("constellation") or "", e.get("prn") or 0))
+            self._cached_sat_history = sat_history
+            self._cached_pps_interval_count = len(interval_samples)
+            self._status_cache_at_mono = now_mono
 
         # Diagnostic: which PPS backend is active and how many
         # intervals have we captured?  Lets the operator self-diagnose
@@ -521,7 +562,7 @@ class GPSManager:
             data["pps_backend"] = "gpio"
         else:
             data["pps_backend"] = "none"
-        data["pps_interval_samples"] = len(interval_samples)
+        data["pps_interval_samples"] = self._cached_pps_interval_count
 
         # Compute age of the last PPS pulse so the UI can colour the blinkenlite
         last_pulse = data.get("pps_last_pulse_at")
@@ -536,9 +577,12 @@ class GPSManager:
             data["pps_pulse_age_s"] = None
 
         # Jitter histogram & Allan deviation from the interval buffer.
-        # Both helpers tolerate empty input and return JSON-friendly dicts.
-        data["pps_jitter"] = self._compute_jitter_summary(interval_samples)
-        data["allan_deviation"] = self._compute_allan_deviation(interval_samples)
+        # Served from cache — see the throttle block earlier in this
+        # method.  Both helpers tolerate empty input and return
+        # JSON-friendly dicts so the dashboard can render without
+        # special-casing the cold-start window.
+        data["pps_jitter"] = self._cached_jitter
+        data["allan_deviation"] = self._cached_allan
 
         # Fix age — drives the "GPS Fix Age" tile.  When we have an active
         # fix this tracks NMEA freshness; when we don't, it's the time
@@ -577,10 +621,9 @@ class GPSManager:
         data["leap_state"] = self._derive_leap_state(data)
 
         # Per-PRN tracking history for the dashboard's almanac /
-        # ephemeris staleness panel.  Sorted by constellation + PRN so
-        # the UI can render groups without re-sorting client-side.
-        sat_history.sort(key=lambda e: (e.get("constellation") or "", e.get("prn") or 0))
-        data["satellite_history"] = sat_history
+        # ephemeris staleness panel.  Cached + pre-sorted; see the
+        # throttle block earlier in this method.
+        data["satellite_history"] = self._cached_sat_history
 
         return data
 
