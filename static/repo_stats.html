@@ -295,7 +295,7 @@
         <div class="hero-section">
             <h1>📊 EAS Station Repository Statistics</h1>
             <p class="timestamp">
-                <i class="far fa-clock"></i> Last Updated: 2026-05-12 11:40:43 UTC
+                <i class="far fa-clock"></i> Last Updated: 2026-05-12 16:28:53 UTC
             </p>
         </div>
         
@@ -313,12 +313,12 @@
             </div>
             <div class="quick-stat-item">
                 <div class="icon">📝</div>
-                <div class="value">693,775</div>
+                <div class="value">693,944</div>
                 <div class="label">Total Lines</div>
             </div>
             <div class="quick-stat-item">
                 <div class="icon">💻</div>
-                <div class="value">527,062</div>
+                <div class="value">527,224</div>
                 <div class="label">Code Lines</div>
             </div>
             <div class="quick-stat-item">
@@ -413,14 +413,14 @@
                             <td class="text-end">100%</td>
                             <td>
                                 <div style="background: #e9ecef; border-radius: 4px; height: 8px; overflow: hidden;">
-                                    <div class="progress-bar-custom" style="width: 18.6%;"></div>
+                                    <div class="progress-bar-custom" style="width: 18.5%;"></div>
                                 </div>
                             </td>
                         </tr>
                         <tr>
                             <td><strong><svg viewBox="0 0 24 24" width="20" height="20" fill="#E34F26" style="vertical-align: middle; margin-right: 6px;"><path d="M1.5 0h21l-1.91 21.563L11.977 24l-8.564-2.438L1.5 0zm7.031 9.75l-.232-2.718 10.059.003.23-2.622L5.412 4.41l.698 8.01h9.126l-.326 3.426-2.91.804-2.955-.81-.188-2.11H6.248l.33 4.171L12 19.351l5.379-1.443.744-8.157H8.531z"/></svg>HTML</strong></td>
-                            <td class="text-end">78,541</td>
-                            <td class="text-end">70,916</td>
+                            <td class="text-end">78,710</td>
+                            <td class="text-end">71,078</td>
                             <td class="text-end">826</td>
                             <td class="text-end">90%</td>
                             <td>
@@ -574,7 +574,7 @@
             data: {
                 labels: ['💻 Code', '💬 Comments', '⬜ Whitespace'],
                 datasets: [{
-                    data: [527062, 108554, 58159],
+                    data: [527224, 108554, 58166],
                     backgroundColor: [
                         'rgba(102, 126, 234, 0.8)',
                         'rgba(118, 75, 162, 0.8)',
@@ -607,7 +607,7 @@
                             label: function(context) {
                                 let label = context.label || '';
                                 let value = context.parsed || 0;
-                                let total = 693775;
+                                let total = 693944;
                                 let percentage = ((value / total) * 100).toFixed(1);
                                 return label + ': ' + value.toLocaleString() + ' lines (' + percentage + '%)';
                             }
@@ -684,7 +684,7 @@
                 labels: ["JSON", "Python", "YAML", "HTML", "Markdown", "CSS", "JavaScript", "SVG"],
                 datasets: [{
                     label: 'Lines of Code',
-                    data: [208171, 64791, 97772, 70916, 33786, 13747, 19450, 8314],
+                    data: [208171, 64791, 97772, 71078, 33786, 13747, 19450, 8314],
                     backgroundColor: 'rgba(118, 75, 162, 0.8)',
                     borderColor: 'rgba(118, 75, 162, 1)',
                     borderWidth: 2,
