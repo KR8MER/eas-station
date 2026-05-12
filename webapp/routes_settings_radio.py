@@ -19,6 +19,7 @@ Repository: https://github.com/KR8MER/eas-station
 
 from __future__ import annotations
 
+import io
 import json
 import logging
 import os
@@ -2092,7 +2093,6 @@ def register(app: Flask, logger) -> None:
             # RADIO_CAPTURE_MAX_SAMPLES (~64 MB) so in-memory streaming is
             # acceptable, and it avoids relying on response.call_on_close
             # firing at the right moment to clean up.
-            import io
             with open(capture_path, "rb") as fh:
                 file_bytes = fh.read()
             try:
