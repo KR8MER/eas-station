@@ -947,6 +947,14 @@ class RBDSWorker:
         # without buffering them the block boundary drifts by ~1 symbol per batch,
         # causing every block to CRC-fail immediately after sync is acquired.
         self._rbds_mm_leftover = np.array([], dtype=np.complex64)
+        # Overshoot: when i_in advances past the end of a batch the next batch must
+        # skip that many positions before extracting a new symbol.  Without this
+        # correction the first symbol of every batch re-samples within the last
+        # symbol of the previous batch, inserting a spurious extra bit into the
+        # differential bitstream (always decoded as 0).  That extra bit accumulates
+        # to a 1-bit block-boundary slip every 2 batches, causing 100% BLER on
+        # every other batch indefinitely.
+        self._rbds_mm_overshoot: int = 0
 
         # Costas loop state
         # Parameters are matched to the 19 kHz sample rate at which the loop now
@@ -1710,7 +1718,9 @@ class RBDSWorker:
             self._rbds_mm_leftover = samples.astype(np.complex64, copy=False)
             return np.array([], dtype=np.complex64)
 
-        # Upsample by 16x for interpolation (python-radio method)
+        # Upsample by 16x for interpolation (python-radio method).
+        # The full combined array (leftover + new batch) is upsampled in one call
+        # so the polyphase filter has complete history at the boundary.
         try:
             from scipy import signal as scipy_signal
             samples_interpolated = scipy_signal.resample_poly(samples, 16, 1)
@@ -1727,9 +1737,42 @@ class RBDSWorker:
         sps = 16  # samples per symbol in interpolated space
         mu = self._rbds_mm_mu if hasattr(self, '_rbds_mm_mu') else 0.01
 
-        # Output should be ~len(samples)/16 symbols (downsampling from 16 sps to 1 sps)
-        # Allocate conservatively
-        max_out = len(samples) // 16 + 100
+        # Apply timing-overshoot correction from the previous batch.
+        #
+        # At 19 000 Hz with sps=16 each batch yields 19 000 / 16 = 1187.5 symbols.
+        # The M&M loop advances i_in by exactly sps after each extracted symbol, so
+        # after 1188 symbols it leaves i_in = 1188 × 16 = 19 008 — eight samples
+        # past the end of the 19 000-sample batch.  The leftover is then empty
+        # (samples[19008:] = []), and the next call restarts at i_in = 0.
+        #
+        # Those eight "virtual" positions belong to the same rectangular-pulse
+        # symbol that was extracted last in the previous batch.  Re-sampling them
+        # at i_in = 0 of the new batch yields an identical symbol value, which
+        # differential-decodes to a spurious 0-bit.  The extra bit accumulates to
+        # a 1-bit block-boundary slip every two batches, causing every block in
+        # every other batch to fail its CRC check (100% BLER on alternating
+        # one-second windows in the field).
+        #
+        # Fix: skip the first `overshoot × sps` interpolated positions so the M&M
+        # starts at the true next-symbol boundary.  The upsampling was done on the
+        # full array, so no filter-transient is introduced at the skip point.
+        overshoot_skip: int = self._rbds_mm_overshoot
+        if overshoot_skip > 0:
+            skip_interp = overshoot_skip * sps
+            if skip_interp < len(samples_interpolated):
+                samples_interpolated = samples_interpolated[skip_interp:]
+            else:
+                # Pathological: the entire batch is consumed by the overshoot.
+                # Carry forward the remaining overshoot and return no symbols.
+                self._rbds_mm_overshoot = overshoot_skip - len(samples_interpolated) // sps
+                self._rbds_mm_leftover = np.array([], dtype=np.complex64)
+                return np.array([], dtype=np.complex64)
+        self._rbds_mm_overshoot = 0
+
+        # Allocate output buffer.  The M&M extracts at most
+        # len(samples_interpolated) // sps symbols; the + 3 accounts for the
+        # two history slots (i_out starts at 2) plus one rounding margin.
+        max_out = len(samples_interpolated) // sps + 3
 
         if _NUMBA_AVAILABLE and len(samples_interpolated) > 50:
             # JIT-compiled inner loop: converts ~n/16 Python iterations to
@@ -1743,10 +1786,10 @@ class RBDSWorker:
         else:
             out = np.zeros(max_out, dtype=np.complex64)
             out_rail = np.zeros(max_out, dtype=np.complex64)
-            i_in = 0  # input sample index (original sample space)
+            i_in = 0  # input sample index (relative to samples_interpolated after skip)
             i_out = 2  # output symbol index (let first two outputs be 0)
 
-            # CRITICAL FIX: Check against interpolated array length, not original length
+            # Check against interpolated array length, not original length.
             while i_out < max_out - 1:
                 # Calculate index into interpolated array
                 interp_idx = i_in * 16 + int(mu * 16)
@@ -1774,9 +1817,21 @@ class RBDSWorker:
                 mu = mu - np.floor(mu)
                 i_out += 1
 
-        # Save unconsumed tail samples so the next call can consume them instead
-        # of silently dropping them and drifting the symbol clock.
-        self._rbds_mm_leftover = samples[i_in:].astype(np.complex64, copy=False)
+        # Compute the consumed position in the original `samples` array.
+        # Note: `i_in` is in ORIGINAL-sample space (the M&M loop advances it by
+        # ~sps original samples per symbol, not by 1 interpolated sample).
+        # `overshoot_skip` is also in original-sample space (symbols × sps).
+        # Their sum gives the total number of original samples consumed.
+        actual_i_in = i_in + overshoot_skip
+        if actual_i_in <= len(samples):
+            # Normal: save remaining unprocessed samples for the next call.
+            self._rbds_mm_leftover = samples[actual_i_in:].astype(np.complex64, copy=False)
+            # overshoot is already 0 (set above)
+        else:
+            # M&M advanced past the end again; record the overshoot so the
+            # next call can skip the corresponding positions.
+            self._rbds_mm_leftover = np.array([], dtype=np.complex64)
+            self._rbds_mm_overshoot = actual_i_in - len(samples)
 
         # Save mu state for next call
         self._rbds_mm_mu = mu
