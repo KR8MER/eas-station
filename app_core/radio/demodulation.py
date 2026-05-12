@@ -544,12 +544,6 @@ class DemodulatorConfig:
     stereo_enabled: bool = True  # Enable FM stereo decoding
     deemphasis_us: float = 75.0  # De-emphasis time constant (75μs NA, 50μs EU, 0 to disable)
     enable_rbds: bool = False  # Extract RBDS data from FM multiplex
-    # Optional RBDS robustness tuning (None = use built-in defaults).
-    rbds_pilot_snr_threshold: Optional[float] = None
-    rbds_presync_spacing_tolerance_bits: Optional[int] = None
-    rbds_burst_fec_suppress_after: Optional[int] = None
-    rbds_interference_rejection_enabled: bool = False
-    rbds_interference_guard_hz: Optional[float] = None
 
 
 @dataclass
@@ -802,7 +796,6 @@ class RBDSWorker:
         self,
         sample_rate: int,
         intermediate_rate: int,
-        rbds_tuning_options: Optional[Dict[str, object]] = None,
     ):
         """Initialize RBDS worker thread.
 
@@ -812,7 +805,6 @@ class RBDSWorker:
         """
         self._sample_rate = sample_rate
         self._intermediate_rate = intermediate_rate
-        self._apply_tuning_options(rbds_tuning_options)
 
         # Thread-safe queue for incoming multiplex samples
         # maxsize=5 means we drop old samples if processing is too slow (never block audio)
@@ -849,40 +841,6 @@ class RBDSWorker:
 
         # Start worker thread
         self._start()
-
-    def _apply_tuning_options(self, options: Optional[Dict[str, object]]) -> None:
-        """Apply optional RBDS tuning overrides with bounds checking."""
-        options = options or {}
-        pilot_snr = options.get('pilot_snr_threshold')
-        spacing_tol = options.get('presync_spacing_tolerance_bits')
-        burst_suppress = options.get('burst_fec_suppress_after')
-        interference_enabled = options.get('interference_rejection_enabled')
-        interference_guard_hz = options.get('interference_guard_hz')
-
-        self._pilot_snr_threshold = (
-            float(pilot_snr)
-            if isinstance(pilot_snr, (float, int)) and float(pilot_snr) >= 1.0
-            else float(self._PILOT_SNR_THRESHOLD)
-        )
-        self._rbds_presync_spacing_tolerance_bits = (
-            int(spacing_tol)
-            if isinstance(spacing_tol, int) and spacing_tol >= 1
-            else int(self._RBDS_PRESYNC_SPACING_TOLERANCE_BITS)
-        )
-        self._rbds_burst_fec_suppress_after = (
-            int(burst_suppress)
-            if isinstance(burst_suppress, int) and burst_suppress >= 0
-            else int(self._BURST_FEC_SUPPRESS_AFTER)
-        )
-        self._rbds_interference_rejection_enabled = bool(interference_enabled)
-        self._rbds_interference_guard_hz = (
-            float(interference_guard_hz)
-            if isinstance(interference_guard_hz, (float, int))
-            and float(interference_guard_hz) >= self._RBDS_INTERFERENCE_MIN_OFFSET_HZ
-            else float(self._RBDS_INTERFERENCE_GUARD_HZ)
-        )
-        self._rbds_interference_min_offset_hz = float(self._RBDS_INTERFERENCE_MIN_OFFSET_HZ)
-        self._rbds_interference_notch_q = float(self._RBDS_INTERFERENCE_NOTCH_Q)
 
     def _init_rbds_state(self) -> None:
         """Initialize all RBDS processing state."""
@@ -1089,7 +1047,7 @@ class RBDSWorker:
         # over the median in this band.
         band = spectrum[mask]
         median = float(np.median(band))
-        if median > 0 and float(spectrum[idx]) < self._pilot_snr_threshold * median:
+        if median > 0 and float(spectrum[idx]) < self._PILOT_SNR_THRESHOLD * median:
             return None
         # Reject obvious nonsense.  At ±4 Hz (~210 ppm at 19 kHz) we're well
         # past anything an even loosely-calibrated SDR produces (typical
@@ -1100,10 +1058,16 @@ class RBDSWorker:
         return peak_hz
 
     def _detect_off_frequency_interferer_hz(self, multiplex: np.ndarray) -> Optional[float]:
-        """Return baseband offset (Hz) of a strong 55–59 kHz spur vs pilot×3."""
+        """Return baseband offset (Hz) of a strong 55–59 kHz spur vs pilot×3.
+
+        Self-gated: returns None unless a peak in the 55–59 kHz band
+        passes the pilot-grade SNR test AND lands inside the guard band
+        offset from the expected ``3 × pilot`` frequency.  No external
+        configuration; the decoder auto-engages the notch only when a
+        real spur is observed.
+        """
         if (
-            not self._rbds_interference_rejection_enabled
-            or self._measured_pilot_freq is None
+            self._measured_pilot_freq is None
             or len(multiplex) < self._PILOT_EST_MIN_SAMPLES
         ):
             return None
@@ -1122,15 +1086,15 @@ class RBDSWorker:
         idx = int(np.where(mask)[0][idx_in_mask])
         peak_amp = float(spectrum[idx])
         median = float(np.median(band))
-        if median <= 0.0 or peak_amp < self._pilot_snr_threshold * median:
+        if median <= 0.0 or peak_amp < self._PILOT_SNR_THRESHOLD * median:
             return None
         peak_hz = float(freqs[idx])
         expected_hz = 3.0 * float(self._measured_pilot_freq)
         offset_hz = peak_hz - expected_hz
         abs_offset = abs(offset_hz)
         if (
-            abs_offset < self._rbds_interference_min_offset_hz
-            or abs_offset > self._rbds_interference_guard_hz
+            abs_offset < self._RBDS_INTERFERENCE_MIN_OFFSET_HZ
+            or abs_offset > self._RBDS_INTERFERENCE_GUARD_HZ
         ):
             return None
         return offset_hz
@@ -1155,7 +1119,7 @@ class RBDSWorker:
             or abs(self._rbds_interference_notch_freq_hz - notch_hz) > 10.0
         ):
             w0 = notch_hz / nyq
-            b, a = scipy_signal.iirnotch(w0, self._rbds_interference_notch_q)
+            b, a = scipy_signal.iirnotch(w0, self._RBDS_INTERFERENCE_NOTCH_Q)
             self._rbds_interference_notch_b = b.astype(np.float64)
             self._rbds_interference_notch_a = a.astype(np.float64)
             self._rbds_interference_notch_freq_hz = notch_hz
@@ -2123,7 +2087,7 @@ class RBDSWorker:
 
                     if (
                         abs(actual_spacing - expected_spacing)
-                        > self._rbds_presync_spacing_tolerance_bits
+                        > self._RBDS_PRESYNC_SPACING_TOLERANCE_BITS
                     ):
                         # Wrong spacing - reset presync and try current block as new first.
                         # Tolerance is ±4 bits (not 0 as in offline python-radio): M&M
@@ -2306,7 +2270,7 @@ class RBDSWorker:
                         # state and is not affected by the current attempt.
                         if (
                             self._rbds_consecutive_crc_failures
-                            >= self._rbds_burst_fec_suppress_after
+                            >= self._BURST_FEC_SUPPRESS_AFTER
                         ):
                             return False, candidate_word, 'fail-suppressed'
                         ok, fixed = _try_correct_burst_error(
@@ -2878,13 +2842,6 @@ class FMDemodulator:
             self._rbds_worker = RBDSWorker(
                 self._rbds_intermediate_rate,
                 self._rbds_intermediate_rate,
-                rbds_tuning_options={
-                    'pilot_snr_threshold': config.rbds_pilot_snr_threshold,
-                    'presync_spacing_tolerance_bits': config.rbds_presync_spacing_tolerance_bits,
-                    'burst_fec_suppress_after': config.rbds_burst_fec_suppress_after,
-                    'interference_rejection_enabled': config.rbds_interference_rejection_enabled,
-                    'interference_guard_hz': config.rbds_interference_guard_hz,
-                },
             )
             logger.info(
                 "RBDS ENABLED: worker at %d Hz (input sample_rate=%d Hz, decim=%d)",

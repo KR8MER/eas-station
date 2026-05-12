@@ -253,13 +253,6 @@ class SDRSourceAdapter(AudioSourceAdapter):
                     stereo_enabled=self._receiver_config.stereo_enabled,
                     deemphasis_us=self._receiver_config.deemphasis_us,
                     enable_rbds=self._receiver_config.enable_rbds,
-                    rbds_pilot_snr_threshold=getattr(self._receiver_config, 'rbds_pilot_snr_threshold', None),
-                    rbds_presync_spacing_tolerance_bits=getattr(self._receiver_config, 'rbds_presync_spacing_tolerance_bits', None),
-                    rbds_burst_fec_suppress_after=getattr(self._receiver_config, 'rbds_burst_fec_suppress_after', None),
-                    rbds_interference_rejection_enabled=bool(
-                        getattr(self._receiver_config, 'rbds_interference_rejection_enabled', False)
-                    ),
-                    rbds_interference_guard_hz=getattr(self._receiver_config, 'rbds_interference_guard_hz', None),
                 )
                 self._demodulator = create_demodulator(demod_config)
                 if self._receiver_config.stereo_enabled:
