@@ -91,7 +91,8 @@ def test_fir_anti_alias_filter_was_built():
     # Linear-phase symmetric FIR: odd tap count, real coefficients.
     assert len(h) % 2 == 1
     assert 127 <= len(h) <= 1025
-    # The tap-count heuristic at 2.5 MHz / 4000 = 625 (odd → 625).
+    # Tap-count heuristic: (sample_rate / 4000) | 1, clamped to [127, 1025].
+    # 2.5 MHz / 4000 = 625, which is already odd, so | 1 is a no-op here.
     assert len(h) == 625
 
 
