@@ -1336,37 +1336,37 @@
          ============================================================ -->
     <section class="gps-status-strip" aria-label="System health at a glance">
         <div class="gps-status-tile sev-unknown" id="strip-sync">
-            <div class="lbl"><i class="fas fa-bolt"></i> Sync</div>
+            <div class="lbl"><i class="fas fa-bolt"></i> Sync <span class="gps-help-anchor" data-gps-help="tile-sync"></span></div>
             <div class="val">—</div>
             <div class="sub" id="strip-sync-sub">awaiting data…</div>
         </div>
         <div class="gps-status-tile sev-unknown" id="strip-stratum">
-            <div class="lbl"><i class="fas fa-layer-group"></i> Stratum</div>
+            <div class="lbl"><i class="fas fa-layer-group"></i> Stratum <span class="gps-help-anchor" data-gps-help="stratum"></span></div>
             <div class="val">—</div>
             <div class="sub" id="strip-stratum-sub">no chrony tracking</div>
         </div>
         <div class="gps-status-tile sev-unknown" id="strip-pps">
-            <div class="lbl"><i class="fas fa-wave-square"></i> PPS Lock</div>
+            <div class="lbl"><i class="fas fa-wave-square"></i> PPS Lock <span class="gps-help-anchor" data-gps-help="pps-lock"></span></div>
             <div class="val">—</div>
             <div class="sub" id="strip-pps-sub">no pulse data</div>
         </div>
         <div class="gps-status-tile sev-unknown" id="strip-gnss">
-            <div class="lbl"><i class="fas fa-satellite"></i> GNSS</div>
+            <div class="lbl"><i class="fas fa-satellite"></i> GNSS <span class="gps-help-anchor" data-gps-help="gnss-fix"></span></div>
             <div class="val">—</div>
             <div class="sub" id="strip-gnss-sub">no fix</div>
         </div>
         <div class="gps-status-tile sev-unknown" id="strip-rms">
-            <div class="lbl"><i class="fas fa-stopwatch"></i> RMS Offset</div>
+            <div class="lbl"><i class="fas fa-stopwatch"></i> RMS Offset <span class="gps-help-anchor" data-gps-help="rms-offset"></span></div>
             <div class="val">—</div>
             <div class="sub" id="strip-rms-sub">offset unknown</div>
         </div>
         <div class="gps-status-tile sev-unknown" id="strip-sats">
-            <div class="lbl"><i class="fas fa-satellite-dish"></i> Satellites</div>
+            <div class="lbl"><i class="fas fa-satellite-dish"></i> Satellites <span class="gps-help-anchor" data-gps-help="satellites-used"></span></div>
             <div class="val">—</div>
             <div class="sub" id="strip-sats-sub">— used / — visible</div>
         </div>
         <div class="gps-status-tile sev-unknown" id="strip-holdover">
-            <div class="lbl"><i class="fas fa-hourglass-half"></i> Holdover</div>
+            <div class="lbl"><i class="fas fa-hourglass-half"></i> Holdover <span class="gps-help-anchor" data-gps-help="holdover"></span></div>
             <div class="val">—</div>
             <div class="sub" id="strip-holdover-sub">disciplined</div>
         </div>
@@ -1379,33 +1379,33 @@
          ============================================================ -->
     <div class="gps-card gps-quality-card" aria-label="Timing integrity summary">
         <div class="quality-head">
-            <h3 class="quality-title"><i class="fas fa-shield-halved me-1"></i> Timing Integrity</h3>
+            <h3 class="quality-title"><i class="fas fa-shield-halved me-1"></i> Timing Integrity <span class="gps-help-anchor" data-gps-help="timing-integrity"></span></h3>
             <span class="gps-quality-grade sev-unknown" id="quality-grade" title="Composite stability grade">— / —</span>
             <span class="text-muted small ms-auto" id="quality-summary">awaiting telemetry…</span>
         </div>
         <div class="gps-quality-grid">
             <div class="gps-quality-metric sev-unknown" id="qm-rms">
-                <div class="metric-lbl">RMS Offset</div>
+                <div class="metric-lbl">RMS Offset <span class="gps-help-anchor" data-gps-help="rms-offset"></span></div>
                 <div class="metric-val">—</div>
                 <div class="metric-sub">chrony tracking</div>
             </div>
             <div class="gps-quality-metric sev-unknown" id="qm-jitter">
-                <div class="metric-lbl">Peak Jitter</div>
+                <div class="metric-lbl">Peak Jitter <span class="gps-help-anchor" data-gps-help="peak-jitter"></span></div>
                 <div class="metric-val">—</div>
                 <div class="metric-sub">PPS interval Δ</div>
             </div>
             <div class="gps-quality-metric sev-unknown" id="qm-freq">
-                <div class="metric-lbl">Freq Error</div>
+                <div class="metric-lbl">Freq Error <span class="gps-help-anchor" data-gps-help="freq-error"></span></div>
                 <div class="metric-val">—</div>
                 <div class="metric-sub">residual ppm</div>
             </div>
             <div class="gps-quality-metric sev-unknown" id="qm-utc">
-                <div class="metric-lbl">UTC Confidence</div>
+                <div class="metric-lbl">UTC Confidence <span class="gps-help-anchor" data-gps-help="utc-confidence"></span></div>
                 <div class="metric-val">—</div>
                 <div class="metric-sub">based on offset</div>
             </div>
             <div class="gps-quality-metric sev-unknown" id="qm-stability">
-                <div class="metric-lbl">Stability</div>
+                <div class="metric-lbl">Stability <span class="gps-help-anchor" data-gps-help="stability-tau10"></span></div>
                 <div class="metric-val">—</div>
                 <div class="metric-sub">σ_y(τ=10s)</div>
             </div>
@@ -5601,6 +5601,173 @@
                 'Long or damaged coax / loose connector',
                 'Powered antenna with no DC bias',
                 'Nearby RF interference'
+            ]
+        },
+
+        // ── Top status strip tiles ------------------------------------------
+        'tile-sync': {
+            title: 'Sync (top tile)',
+            acronyms: 'ntp gnss pps',
+            means: 'Overall "is the clock following its reference right now?" indicator. IN SYNC = chrony has selected a reference and the offset is small; DEGRADED = chrony is tracking but offset / dispersion is unhealthy; ACQUIRING = receiver running but no fix yet; NO GPS = receiver process not running.',
+            matters: 'This is the single most important tile on the page — every other timing card downstream depends on this being green.',
+            ranges: [
+                { level: 'excellent',  range: 'IN SYNC' },
+                { level: 'watch',      range: 'DEGRADED or ACQUIRING' },
+                { level: 'bad',        range: 'NO GPS / NO SYNC' }
+            ],
+            causes: [
+                'gpsd / chrony service not running',
+                'No GNSS antenna signal',
+                'PPS source dropped — chrony deselected the refclock',
+                'Network NTP peers all unreachable'
+            ]
+        },
+        'pps-lock': {
+            title: 'PPS Lock',
+            acronyms: 'pps gnss',
+            means: 'Whether the Pulse-Per-Second hardware pulse from the GNSS receiver is being received and is recent. LOCKED means a pulse arrived within the last few seconds; LOST means the pulse stream stopped.',
+            matters: 'PPS is what gives a GNSS-disciplined clock its sub-microsecond accuracy. Without it you fall back to NMEA timing, which is ~100 ms class — useless for an authoritative time source.',
+            ranges: [
+                { level: 'excellent',  range: 'LOCKED, kernel PPS backend, age < 2 s' },
+                { level: 'good',       range: 'LOCKED, gpsd / userland backend' },
+                { level: 'watch',      range: 'awaiting first pulse' },
+                { level: 'bad',        range: 'LOST or NO PPS' }
+            ],
+            causes: [
+                'PPS line not wired or wrong GPIO',
+                'Kernel PPS driver not loaded (pps-gpio / pps-ldisc)',
+                'GNSS module has no 3D fix yet — many receivers gate PPS on lock',
+                'Cable / connector fault'
+            ]
+        },
+        'gnss-fix': {
+            title: 'GNSS Fix',
+            acronyms: 'gnss',
+            means: 'What kind of position solution the receiver currently has. 3D FIX = lat / lon / altitude all known; 2D FIX = horizontal only (altitude assumed); NO FIX = receiver still searching or signal too weak.',
+            matters: 'A clean 3D fix is the gate that lets the receiver deliver authoritative time. Without 3D the PPS may still tick but its absolute UTC alignment is suspect.',
+            ranges: [
+                { level: 'excellent',  range: '3D FIX' },
+                { level: 'good',       range: '3D FIX with DGPS / SBAS' },
+                { level: 'acceptable', range: '2D FIX' },
+                { level: 'bad',        range: 'NO FIX' }
+            ],
+            causes: [
+                'Antenna obstructed (indoors / under metal roof)',
+                'Cold start — almanac not yet downloaded (allow 10–15 min)',
+                'Damaged coax or open antenna feed',
+                'Receiver awaiting valid time before declaring fix'
+            ]
+        },
+        'satellites-used': {
+            title: 'Satellites (used / visible)',
+            acronyms: 'gnss prn',
+            means: 'Left number = satellites the receiver is actually using in the current fix. Right number = satellites the antenna can hear at all. The gap between the two tells you how many strong sats are being rejected for geometry / signal quality reasons.',
+            matters: 'More used sats = more redundant pseudoranges = a better, more spoof-resistant fix. The visible count alone is misleading: 12 visible but only 3 used means weak fix.',
+            ranges: [
+                { level: 'excellent',  range: '≥ 10 used' },
+                { level: 'good',       range: '7 – 10 used' },
+                { level: 'acceptable', range: '4 – 6 used' },
+                { level: 'watch',      range: '1 – 3 used' },
+                { level: 'bad',        range: '0 used' }
+            ],
+            causes: [
+                'Partial sky obstruction (canyon, building)',
+                'Single-constellation receiver — try enabling Galileo / GLONASS',
+                'Receiver elevation mask set too high',
+                'RF jamming / strong interferer'
+            ]
+        },
+
+        // ── Timing Integrity card -------------------------------------------
+        'timing-integrity': {
+            title: 'Timing Integrity',
+            acronyms: 'rms ppm utc',
+            means: 'Headline operator card. Combines the five most important "is this clock good?" numbers (RMS offset, peak PPS jitter, residual frequency error, UTC confidence, short-term Allan deviation) and grades each one against well-known thresholds.',
+            matters: 'When everything else on this page is noisy or you only have a few seconds to glance at the screen, read this card. The composite letter grade on the right summarises all five into one verdict.',
+            ranges: [
+                { level: 'excellent',  range: 'A grade — all five metrics green' },
+                { level: 'good',       range: 'B grade — minor watch flags' },
+                { level: 'acceptable', range: 'C grade — one or two amber' },
+                { level: 'bad',        range: 'D / F — any red metric' }
+            ],
+            causes: [
+                'See the individual metric tile for root cause.'
+            ]
+        },
+        'peak-jitter': {
+            title: 'Peak Jitter',
+            acronyms: 'pps ns',
+            means: 'Worst-case cycle-to-cycle deviation of the PPS interval from the nominal 1.000000000 s, measured over the recent telemetry window. Distinct from average jitter (σ) — this is the single ugliest pulse seen.',
+            matters: 'Even when the average offset is excellent, a few outlier pulses can ruin downstream time-stamping for protocols that don\'t smooth at the application layer. Peak is what bites you.',
+            ranges: [
+                { level: 'excellent',  range: '< 5 µs' },
+                { level: 'good',       range: '5 – 20 µs' },
+                { level: 'acceptable', range: '20 – 50 µs' },
+                { level: 'watch',      range: '50 – 200 µs' },
+                { level: 'bad',        range: '> 200 µs' }
+            ],
+            causes: [
+                'GPIO-polled PPS instead of kernel PPS',
+                'CPU briefly pegged by an unrelated process (scheduler latency)',
+                'Power-supply noise coupled onto the PPS line',
+                'Long unshielded PPS run from receiver to host'
+            ]
+        },
+        'freq-error': {
+            title: 'Frequency Error',
+            acronyms: 'ppm',
+            means: 'Residual frequency offset between the system clock and the reference, in parts-per-million, after chrony\'s long-term frequency correction has been applied. This is the rate at which the clock would drift if the loop were frozen now.',
+            matters: 'Tells you how much "work" chrony is still doing to keep the clock aligned. Near-zero residual means the loop has fully converged; large values mean the disciplining loop is still chasing the oscillator.',
+            ranges: [
+                { level: 'excellent',  range: '|residual| < 0.01 ppm' },
+                { level: 'good',       range: '< 0.1 ppm' },
+                { level: 'acceptable', range: '< 1 ppm' },
+                { level: 'watch',      range: '< 5 ppm' },
+                { level: 'bad',        range: '≥ 5 ppm' }
+            ],
+            causes: [
+                'Recent reboot — loop has not yet converged (wait 30–60 min)',
+                'Large ambient temperature change disturbing the oscillator',
+                'PPS source intermittently dropping — chrony keeps re-locking',
+                'Failing crystal oscillator on the host'
+            ]
+        },
+        'utc-confidence': {
+            title: 'UTC Confidence',
+            acronyms: 'utc',
+            means: 'Percentage estimate that the time we report to clients really is UTC, derived from chrony\'s current offset against the reference. 100 % means sub-microsecond agreement; 0 % means we have no usable reference at all.',
+            matters: 'This is the operator-friendly translation of "RMS offset" — answer the question: should the consumers of our timestamps trust them?',
+            ranges: [
+                { level: 'excellent',  range: '≥ 99 % (offset < 1 µs)' },
+                { level: 'good',       range: '95 – 99 % (offset < 10 µs)' },
+                { level: 'acceptable', range: '80 – 95 % (offset < 1 ms)' },
+                { level: 'watch',      range: '50 – 80 % (offset < 100 ms)' },
+                { level: 'bad',        range: '< 50 % — do not trust this clock' }
+            ],
+            causes: [
+                'No live GNSS lock — we are in holdover',
+                'PPS jitter elevated — chrony refusing to commit small corrections',
+                'All chrony sources rejected',
+                'System under heavy load'
+            ]
+        },
+        'stability-tau10': {
+            title: 'Stability (σ_y at τ=10 s)',
+            acronyms: 'allan ppm',
+            means: 'Short-term Allan deviation at a 10-second averaging interval. A dimensionless ratio describing how much the clock\'s frequency wanders over 10-second windows. Lower is better.',
+            matters: 'Average offset can look great while the clock wobbles wildly between samples. Allan deviation is the standard way to spot that. The τ=10 s slice catches PPS-line jitter and scheduler noise without being dominated by long-term oscillator drift.',
+            ranges: [
+                { level: 'excellent',  range: '< 1 × 10⁻⁹' },
+                { level: 'good',       range: '1 × 10⁻⁹ – 1 × 10⁻⁸' },
+                { level: 'acceptable', range: '1 × 10⁻⁸ – 1 × 10⁻⁷' },
+                { level: 'watch',      range: '1 × 10⁻⁷ – 1 × 10⁻⁶' },
+                { level: 'bad',        range: '> 1 × 10⁻⁶' }
+            ],
+            causes: [
+                'Disciplining loop has not yet converged after a restart',
+                'PPS jitter (kernel vs. userland backend)',
+                'CPU scheduler latency spikes',
+                'Marginal oscillator on the host board'
             ]
         },
 
