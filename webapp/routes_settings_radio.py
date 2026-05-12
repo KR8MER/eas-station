@@ -68,10 +68,16 @@ _module_logger = logging.getLogger(__name__)
 RADIO_CAPTURE_DIR = os.environ.get(
     "RADIO_CAPTURE_DIR", "/var/log/eas-station/captures"
 )
-# Default capture window in seconds; bounded by the SDR ring buffer (~2 s)
-# and the SDR-service-side RADIO_CAPTURE_MAX_SAMPLES cap (8M samples).
+# Default capture window in seconds; bounded by the SDR ring buffer size
+# (default ~2 s of buffering, but the capture is tapped real-time off the
+# publisher thread so total duration is limited only by wall-clock time
+# and the sample-count cap on the SDR-service side).
 RADIO_CAPTURE_DEFAULT_DURATION_SEC = 1.0
-RADIO_CAPTURE_MAX_DURATION_SEC = 5.0
+RADIO_CAPTURE_MAX_DURATION_SEC = 60.0
+# Extra wall-clock budget added to the requested capture duration when
+# waiting for the SDR service to respond. Covers settling, the publisher
+# thread cadence, and the disk write.
+RADIO_CAPTURE_WAIT_SLACK_SEC = 20.0
 # Redis key prefix for capture metadata (path lookup for the download route).
 RADIO_CAPTURE_REDIS_PREFIX = "radio:diag:capture:"
 RADIO_CAPTURE_REDIS_TTL_SEC = 600
@@ -1939,10 +1945,10 @@ def register(app: Flask, logger) -> None:
             )
             redis_client.rpush("sdr:commands", json.dumps(command))
 
-            # The capture itself is bounded by ring-buffer size so the
-            # sdr-service hand-off is sub-second; allow generous slack for
-            # disk write on slow storage.
-            timeout = 15.0
+            # Wall-clock wait: the SDR service taps the publisher thread
+            # to assemble exactly ``num_samples`` of complex64, which
+            # takes real time. Add slack for settling and the disk write.
+            timeout = duration_sec + RADIO_CAPTURE_WAIT_SLACK_SEC
             start_time = time.time()
             result = None
             while time.time() - start_time < timeout:
@@ -2119,6 +2125,153 @@ def register(app: Flask, logger) -> None:
                 capture_id, exc, exc_info=True,
             )
             return jsonify({"error": "Failed to download capture"}), 500
+
+    @app.route(
+        "/api/radio/diagnostics/auto_gain/<int:receiver_id>", methods=["POST"]
+    )
+    def api_radio_diagnostics_auto_gain(receiver_id: int) -> Any:
+        """Run runtime auto-gain calibration for a receiver.
+
+        Sends an ``auto_gain`` command to sdr-service, which sweeps the
+        device's gain range, measures IQ headroom for each step, and
+        applies the highest setting that stays out of clipping.
+
+        Request body (optional JSON):
+            persist: bool, when true the chosen gain is also written
+                back to the ``radio_receivers.gain`` column so it
+                survives a service restart.
+            target_rms_dbfs: float, target IQ RMS level (default -12).
+            clipping_threshold: float, max acceptable clipping fraction
+                (default 0.01 i.e. 1% of samples at |x| > 0.95).
+        """
+        ensure_radio_tables(route_logger)
+        receiver_record = RadioReceiver.query.get_or_404(receiver_id)
+
+        payload = request.get_json(silent=True) or {}
+        persist = bool(payload.get("persist", False))
+        try:
+            target_rms_dbfs = float(payload.get("target_rms_dbfs", -12.0))
+        except (TypeError, ValueError):
+            target_rms_dbfs = -12.0
+        try:
+            clipping_threshold = float(payload.get("clipping_threshold", 0.01))
+        except (TypeError, ValueError):
+            clipping_threshold = 0.01
+        # Keep the sweep bounded - 80 candidates * 0.3s each = ~24s worst case.
+        try:
+            settle_sec = float(payload.get("settle_sec", 0.2))
+        except (TypeError, ValueError):
+            settle_sec = 0.2
+        try:
+            measure_sec = float(payload.get("measure_sec", 0.1))
+        except (TypeError, ValueError):
+            measure_sec = 0.1
+
+        try:
+            command_id = str(uuid.uuid4())
+            redis_client = get_redis_client()
+
+            command = {
+                "action": "auto_gain",
+                "receiver_id": receiver_record.identifier,
+                "command_id": command_id,
+                "target_rms_dbfs": target_rms_dbfs,
+                "clipping_threshold": clipping_threshold,
+                "settle_sec": settle_sec,
+                "measure_sec": measure_sec,
+            }
+
+            route_logger.info(
+                "Sending auto_gain to sdr-service for receiver %s "
+                "(target=%.1f dBFS, clip<=%.3f, command_id=%s)",
+                receiver_record.identifier, target_rms_dbfs,
+                clipping_threshold, command_id,
+            )
+            redis_client.rpush("sdr:commands", json.dumps(command))
+
+            # 80-candidate sweep * (settle + measure + overhead) bounds
+            # the worst case at ~90 s; we wait that plus slack for slow
+            # devices. Most sweeps complete in <10s.
+            timeout = 90.0
+            start_time = time.time()
+            result = None
+            while time.time() - start_time < timeout:
+                result_json = redis_client.get(
+                    f"sdr:command_result:{command_id}"
+                )
+                if result_json:
+                    result = json.loads(result_json)
+                    break
+                time.sleep(0.2)
+
+            if not result:
+                return jsonify({
+                    "error": "Timeout waiting for sdr-service auto-gain result",
+                    "hint": (
+                        "Check if sdr-service is running: "
+                        "sudo systemctl status eas-station-sdr.service"
+                    ),
+                }), 504
+
+            if not result.get("success"):
+                return jsonify({
+                    "error": "Auto-gain failed",
+                    "hint": result.get("error", "Unknown error"),
+                    "measurements": result.get("measurements", []),
+                }), 503
+
+            selected_gain = result.get("selected_gain_db")
+            previous_gain = result.get("previous_gain_db")
+            persisted = False
+            if persist and selected_gain is not None:
+                try:
+                    receiver_record.gain = float(selected_gain)
+                    db.session.commit()
+                    persisted = True
+                except Exception as exc:
+                    db.session.rollback()
+                    route_logger.error(
+                        "Failed to persist auto-gain value %.1f for receiver %s: %s",
+                        selected_gain, receiver_id, exc, exc_info=True,
+                    )
+
+            _log_radio_event(
+                "INFO",
+                (
+                    f"Auto-gain set {receiver_record.identifier} to "
+                    f"{selected_gain} dB "
+                    f"(was {previous_gain}, decision={result.get('decision')}, "
+                    f"persisted={persisted})"
+                ),
+                module_suffix="diagnostics",
+                details={
+                    "receiver_id": receiver_record.id,
+                    "selected_gain_db": selected_gain,
+                    "previous_gain_db": previous_gain,
+                    "decision": result.get("decision"),
+                    "persisted": persisted,
+                },
+            )
+
+            return jsonify({
+                "success": True,
+                "selected_gain_db": selected_gain,
+                "previous_gain_db": previous_gain,
+                "applied": bool(result.get("applied")),
+                "persisted": persisted,
+                "decision": result.get("decision"),
+                "target_rms_dbfs": result.get("target_rms_dbfs"),
+                "clipping_threshold": result.get("clipping_threshold"),
+                "selected_measurement": result.get("selected_measurement"),
+                "measurements": result.get("measurements", []),
+            })
+
+        except Exception as exc:
+            route_logger.error(
+                "Failed to run auto-gain for receiver %s: %s",
+                receiver_id, exc, exc_info=True,
+            )
+            return jsonify({"error": "Auto-gain request failed"}), 500
 
     @app.route("/admin/radio/diagnostics")
     def radio_diagnostics_page() -> Any:
