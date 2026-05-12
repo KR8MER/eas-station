@@ -1329,7 +1329,7 @@
                                 <th>Source</th>
                                 <th class="num">Strat</th>
                                 <th class="num">Poll</th>
-                                <th class="num" title="8-bit shift register in octal — 377 = all 8 recent polls received">Reach</th>
+                                <th class="num" title="an 8-bit shift register in octal — 377 = all 8 recent polls received">Reach</th>
                                 <th class="num">Last</th>
                                 <th class="num">Offset</th>
                             </tr>
@@ -1802,6 +1802,21 @@
     function setText(id, text) {
         var el = document.getElementById(id);
         if (el) el.textContent = (text === null || text === undefined || text === '') ? '—' : text;
+    }
+    // Zero-pad a number to at least 2 digits.
+    function pad2(n) { return n < 10 ? '0' + n : '' + n; }
+    // Apply a health-based gradient to a progress-bar fill element.
+    // pct 0-100; okThreshold and warnThreshold are the lower limits of
+    // each band (anything below warnThreshold is fault/red).
+    function applyBarGradient(bar, pct, okThreshold, warnThreshold) {
+        if (!bar) return;
+        if (pct >= okThreshold) {
+            bar.style.background = 'linear-gradient(90deg, #3fb950, #84cc16)';
+        } else if (pct >= warnThreshold) {
+            bar.style.background = 'linear-gradient(90deg, #d29922, #f6c343)';
+        } else {
+            bar.style.background = 'linear-gradient(90deg, #f85149, #f97316)';
+        }
     }
     function fmtSeconds(v) {
         // Render an offset/delay value with adaptive units so a sub-microsecond
@@ -3432,13 +3447,7 @@
         var bar = document.getElementById('gps-dash-health-bar');
         if (bar) {
             bar.style.width = pct + '%';
-            if (pct >= 70) {
-                bar.style.background = 'linear-gradient(90deg, #3fb950, #84cc16)';
-            } else if (pct >= 30) {
-                bar.style.background = 'linear-gradient(90deg, #d29922, #f6c343)';
-            } else {
-                bar.style.background = 'linear-gradient(90deg, #f85149, #f97316)';
-            }
+            applyBarGradient(bar, pct, 70, 30);
         }
         setText('gps-dash-health-pct', pct + '%');
         setText('gps-dash-health-offset', fmtSeconds(offset));
@@ -3695,13 +3704,7 @@
         var bar = document.getElementById('gps-dash-snr-bar');
         if (bar) {
             bar.style.width = pct + '%';
-            if (pct >= 70) {
-                bar.style.background = 'linear-gradient(90deg, #3fb950, #84cc16)';
-            } else if (pct >= 40) {
-                bar.style.background = 'linear-gradient(90deg, #d29922, #f6c343)';
-            } else {
-                bar.style.background = 'linear-gradient(90deg, #f85149, #f97316)';
-            }
+            applyBarGradient(bar, pct, 70, 40);
         }
         setText('gps-dash-snr-pct', pct + '%');
         setText('gps-dash-avg-snr', avg === null ? '—' : avg.toFixed(1));
@@ -4870,7 +4873,6 @@
     var lastClockAnchorMs = null;  // server now_utc converted to ms
     var lastClockFetchedAt = null; // Date.now() when that snapshot landed
     function tickClocks() {
-        var pad2 = function (n) { return n < 10 ? '0' + n : '' + n; };
         var nowMs;
         if (lastClockAnchorMs !== null && lastClockFetchedAt !== null) {
             nowMs = lastClockAnchorMs + (Date.now() - lastClockFetchedAt);
