@@ -6336,10 +6336,9 @@
             matters: 'Anything less than a full row of "●" means recent polls were dropped — the source is intermittent. '
                 + 'The dots are colour-coded: green ≥ 7/8, amber ≥ 4/8, red < 4/8.',
             ranges: [
-                { level: 'excellent',  range: '●●●●●●●● — all 8 polls received' },
-                { level: 'acceptable', range: 'at least 7 of the 8 dots filled (e.g. ●●●●●●●○ or ○●●●●●●●) — green in the card' },
-                { level: 'watch',      range: '4 – 6 dots filled — amber in the card' },
-                { level: 'bad',        range: 'fewer than 4 dots filled, or ○○○○○○○○ (source down) — red in the card' }
+                { level: 'excellent',  range: '●●●●●●●● or ●●●●●●●○ — 7 or 8 of 8 polls received (green in the card)' },
+                { level: 'acceptable', range: '●●●●●○○○ — 4 to 6 of 8 polls received (amber in the card)' },
+                { level: 'bad',        range: '○○○○○○○○ — fewer than 4 polls received (red in the card; ○○○○○○○○ = source down)' }
             ],
             causes: [
                 'Network packet loss',
@@ -6635,8 +6634,16 @@
         if (!ranges || !ranges.length) return '';
         var rows = ranges.map(function (r) {
             var lvl = r.level || 'unknown';
+            var rng = escapeHtml(r.range);
+            // If the example contains chrony-reach dot glyphs (● / ○), tint them
+            // with the same legend colour as the row so the example visually
+            // matches the coloured dots actually shown in the source-table card.
+            rng = rng.replace(/[●○]+/g, function (m) {
+                return '<span class="lvl-' + lvl + '" style="font-family:var(--font-mono,monospace);letter-spacing:-0.03em;">'
+                    + m + '</span>';
+            });
             return '<span class="lvl lvl-' + lvl + '">' + escapeHtml(SEVERITY_LABEL[lvl] || lvl) + '</span>'
-                 + '<span class="rng">' + escapeHtml(r.range) + '</span>';
+                 + '<span class="rng">' + rng + '</span>';
         }).join('');
         return '<div class="h-section">Healthy range</div><div class="h-ranges">' + rows + '</div>';
     }
