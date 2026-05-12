@@ -50,6 +50,7 @@
         padding: 2px 9px; border-radius: 999px;
         font-size: 0.78rem; font-weight: 600; letter-spacing: 0.04em;
         border: 1px solid currentColor;
+        transition: color 0.3s ease, border-color 0.3s ease;
     }
     .gps-pill.ok      { color: #3fb950; }
     .gps-pill.warn    { color: #d29922; }
@@ -110,7 +111,7 @@
     .gps-sync-health .bar > span {
         display: block; height: 100%;
         background: linear-gradient(90deg, #3fb950, #84cc16);
-        transition: width 0.4s ease;
+        transition: width 0.4s ease, background 0.35s ease;
     }
 
     /* ── Hero 3D Skyview card ───────────────────────────────────────────
@@ -493,6 +494,7 @@
         width: 14px; min-height: 2px;
         border-radius: 2px 2px 0 0;
         opacity: 0.95;
+        transition: height 0.45s ease;
     }
     .gps-snr-bar.used .bar {
         box-shadow: 0 0 0 1px rgba(255,255,255,0.35) inset;
@@ -560,6 +562,32 @@
     .gps-empty {
         padding: 14px; text-align: center;
         color: var(--text-muted); font-style: italic;
+    }
+
+    /* Constellation-coloured chip badge in the satellite data table PRN column */
+    .gps-prn-badge {
+        display: inline-block;
+        padding: 1px 7px; border-radius: 3px;
+        font-weight: 700; font-size: 0.76rem;
+        color: #fff; line-height: 1.55;
+        white-space: nowrap; letter-spacing: 0.02em;
+    }
+    /* Active (used-in-fix) row: green left accent + tinted background */
+    .gps-table tbody tr.row-active {
+        background: rgba(63, 185, 80, 0.06);
+        box-shadow: inset 3px 0 0 #3fb950;
+    }
+
+    /* Live clock in the System Tracking card header — make it readable
+       at a glance instead of fading into the badge-area muted text. */
+    #gps-dash-clock-utc,
+    #gps-dash-clock-local {
+        font-family: var(--font-mono, ui-monospace, monospace);
+        font-size: 0.80rem;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: 0.04em;
+        color: var(--text-color) !important;
+        font-weight: 600;
     }
 
     /* Constellation filter chips above the satellite table */
@@ -748,6 +776,7 @@
         flex-direction: column;
         gap: 4px;
         min-width: 0;
+        transition: border-left-color 0.45s ease, background-color 0.45s ease;
     }
     .gps-status-tile .lbl {
         font-size: 0.66rem;
@@ -788,6 +817,41 @@
     .gps-status-tile.sev-info  { border-left-color: #58a6ff; }
     .gps-status-tile.sev-info  .val { color: #58a6ff; }
     .gps-status-tile.sev-unknown .val { color: var(--text-muted, #8b949e); }
+
+    /* Stagger fade-in when the page loads — tiles arrive in sequence
+       so the operator's eye is drawn left-to-right across the strip. */
+    @keyframes gps-tile-in {
+        from { opacity: 0; transform: translateY(6px); }
+        to   { opacity: 1; transform: translateY(0);   }
+    }
+    .gps-status-tile           { animation: gps-tile-in 0.35s ease both; }
+    .gps-status-tile:nth-child(2) { animation-delay: 0.05s; }
+    .gps-status-tile:nth-child(3) { animation-delay: 0.10s; }
+    .gps-status-tile:nth-child(4) { animation-delay: 0.15s; }
+    .gps-status-tile:nth-child(5) { animation-delay: 0.20s; }
+    .gps-status-tile:nth-child(6) { animation-delay: 0.25s; }
+    .gps-status-tile:nth-child(7) { animation-delay: 0.30s; }
+    @media (prefers-reduced-motion: reduce) {
+        .gps-status-tile { animation: none; }
+    }
+
+    /* Data-received heartbeat dot — in the dashboard header, pulses
+       green after every successful poll to confirm live telemetry. */
+    .gps-live-dot {
+        display: inline-block;
+        width: 8px; height: 8px;
+        border-radius: 50%;
+        background: var(--text-muted, #8b949e);
+        margin-left: 2px;
+        vertical-align: middle;
+        flex-shrink: 0;
+    }
+    @keyframes gps-data-ping {
+        0%   { box-shadow: 0 0 0 0   rgba(63, 185, 80, 0.80); background: #3fb950; }
+        70%  { box-shadow: 0 0 0 8px rgba(63, 185, 80, 0);    background: #3fb950; }
+        100% { box-shadow: 0 0 0 0   rgba(63, 185, 80, 0);    background: var(--text-muted, #8b949e); }
+    }
+    .gps-live-dot.ping { animation: gps-data-ping 0.75s ease forwards; }
 
     @media (max-width: 1100px) {
         .gps-status-strip { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -869,6 +933,7 @@
         background: var(--bg-tertiary, rgba(127,127,127,.05));
         display: flex; flex-direction: column; gap: 4px;
         min-width: 0;
+        transition: border-color 0.45s ease, background-color 0.45s ease;
     }
     .gps-quality-metric .metric-lbl {
         font-size: 0.66rem; font-weight: 700;
@@ -983,7 +1048,7 @@
     .gps-section-head .rule {
         flex: 1 1 auto;
         height: 1px;
-        background: var(--border-color, rgba(127,127,127,.18));
+        background: linear-gradient(90deg, var(--border-color, rgba(127,127,127,.35)) 0%, transparent 100%);
     }
     .gps-section-head .hint {
         font-size: 0.70rem;
@@ -1039,6 +1104,7 @@
         <span id="gps-dash-lock-pill"   class="gps-pill muted"><i class="fas fa-circle"></i> —</span>
         <span id="gps-dash-fix-pill"    class="gps-pill muted">— FIX</span>
         <span id="gps-dash-stratum-pill" class="gps-pill muted">STRATUM —</span>
+        <span class="gps-live-dot" id="gps-live-dot" title="Last data received"></span>
         <span class="spacer"></span>
         <div class="gps-view-toggle" role="group" aria-label="View mode">
             <button type="button" id="gps-view-simple" class="active" aria-pressed="true">Simple</button>
@@ -1275,7 +1341,7 @@
                         <span>SIGNAL INTEGRITY</span>
                         <span><span id="gps-dash-snr-pct" class="pct">—</span></span>
                     </div>
-                    <div class="bar"><span id="gps-dash-snr-bar" style="width:0%; background:linear-gradient(90deg,#bc8cff,#58a6ff);"></span></div>
+                    <div class="bar"><span id="gps-dash-snr-bar" style="width:0%"></span></div>
                     <div class="label" style="font-size:0.70rem;">
                         <span>Avg SNR: <span id="gps-dash-avg-snr" class="num">—</span> dBHz</span>
                     </div>
@@ -1805,6 +1871,13 @@
     }
     // Zero-pad a number to at least 2 digits.
     function pad2(n) { return n < 10 ? '0' + n : '' + n; }
+    // Brief CSS animation flash on an element — restart-safe via reflow.
+    function flashEl(el) {
+        if (!el) return;
+        el.classList.remove('ping');
+        void el.offsetWidth; // force reflow so the animation always restarts
+        el.classList.add('ping');
+    }
     // Apply a health-based gradient to a progress-bar fill element.
     // pct 0-100; okThreshold and warnThreshold are the lower limits of
     // each band (anything below warnThreshold is fault/red).
@@ -2899,16 +2972,18 @@
             return (a.prn || 0) - (b.prn || 0);
         }).map(function (s) {
             var info = constInfo(s.constellation);
-            var statLabel = activeSet[s.prn] ? 'ACTIVE' : 'TRACKED';
-            var statColor = activeSet[s.prn] ? '#3fb950' : 'var(--text-muted)';
-            var prnCell = '<span style="color:' + info.color + ';font-weight:700;">' + s.prn + '</span>';
+            var isActive = !!activeSet[s.prn];
+            var statLabel = isActive ? 'ACTIVE' : 'TRACKED';
+            var statColor = isActive ? '#3fb950' : 'var(--text-muted)';
+            var prnCell = '<span class="gps-prn-badge" style="background:' + info.color + ';">'
+                        + escapeHtml(String(s.prn)) + '</span>';
             var snr = s.snr;
             var snrCell = snr === null || snr === undefined
                 ? '<span class="text-muted">—</span>'
                 : '<span class="' + snrClass(snr) + '">' + snr + ' dBHz</span>';
             var elev = (s.elevation === null || s.elevation === undefined) ? '—' : (s.elevation + '°');
             var azim = (s.azimuth === null || s.azimuth === undefined) ? '—' : (s.azimuth + '°');
-            return '<tr>'
+            return '<tr' + (isActive ? ' class="row-active"' : '') + '>'
                 + '<td>' + prnCell + '</td>'
                 + '<td class="num">' + elev + '</td>'
                 + '<td class="num">' + azim + '</td>'
@@ -2949,9 +3024,22 @@
                     : src.last_rx_s < 3600 ? Math.round(src.last_rx_s/60) + 'm'
                     : Math.round(src.last_rx_s/3600) + 'h');
             var offsetTxt = fmtSeconds(src.last_sample_offset_s);
-            var reachOctal = (src.reach === null || src.reach === undefined)
-                ? '—'
-                : src.reach.toString(8).padStart(3, '0');
+            // Render reach as 8 Unicode dots (● = poll received, ○ = missed),
+            // colored green/amber/red by how many of the 8 recent polls landed.
+            var reachCell = '—';
+            if (src.reach !== null && src.reach !== undefined) {
+                var pc = 0, rv = src.reach;
+                while (rv) { pc += rv & 1; rv >>>= 1; }
+                var rClr = pc >= 7 ? '#3fb950' : (pc >= 4 ? '#d29922' : '#f85149');
+                var rDots = '';
+                for (var bit = 7; bit >= 0; bit--) {
+                    rDots += (src.reach >> bit) & 1 ? '●' : '○';
+                }
+                reachCell = '<span title="' + escapeHtml(src.reach.toString(8).padStart(3, '0'))
+                    + ' octal · ' + pc + '/8 polls"'
+                    + ' style="font-family:var(--font-mono,monospace);letter-spacing:-0.03em;color:' + rClr + ';">'
+                    + rDots + '</span>';
+            }
             return '<tr>'
                 + '<td><span class="gps-src-state ' + stateClass + '">'
                 +     escapeHtml(src.state || '·')
@@ -2959,7 +3047,7 @@
                 + '<td>' + escapeHtml(src.name || '—') + '</td>'
                 + '<td class="num">' + (src.stratum === null || src.stratum === undefined ? '—' : src.stratum) + '</td>'
                 + '<td class="num">' + (src.poll === null || src.poll === undefined ? '—' : src.poll) + '</td>'
-                + '<td class="num">' + reachOctal + '</td>'
+                + '<td class="num">' + reachCell + '</td>'
                 + '<td class="num">' + lastRx + '</td>'
                 + '<td class="num ' + signClass(src.last_sample_offset_s) + '">' + offsetTxt + '</td>'
                 + '</tr>';
@@ -4969,7 +5057,12 @@
         if (typeof document !== 'undefined' && document.hidden) return;
         fetch('/admin/api/gps-dashboard/data', { credentials: 'same-origin' })
             .then(function (r) { return r.json(); })
-            .then(render)
+            .then(function (data) {
+                render(data);
+                // Pulse the heartbeat dot so the operator can see
+                // that fresh telemetry arrived without any fanfare.
+                flashEl(document.getElementById('gps-live-dot'));
+            })
             .catch(function (err) {
                 console.warn('GPS dashboard fetch failed:', err);
             });
