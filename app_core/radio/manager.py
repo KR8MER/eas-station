@@ -48,6 +48,11 @@ class ReceiverConfig:
     sample_rate: int  # IQ sample rate (MHz range, e.g., 2400000)
     audio_sample_rate: int = 48000  # Audio output rate (kHz range, e.g., 48000)
     gain: Optional[float] = None
+    # External LNA between antenna and SDR, in dB. When non-zero we treat the
+    # SDR's "auto gain" path as unsafe (hardware AGC has no idea about the
+    # outboard amp and will happily drive the front-end into clipping), so we
+    # disable AGC and pick a manual gain biased down by this amount.
+    external_lna_db: float = 0.0
     channel: Optional[int] = None
     serial: Optional[str] = None
     enabled: bool = True

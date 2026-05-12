@@ -946,20 +946,54 @@ class _SoapySDRReceiver(ReceiverInterface):
                 )
             
             # Configure Gain
+            external_lna_db = float(self.config.external_lna_db or 0.0)
             if self.config.gain is not None:
                 try:
                     device.setGain(SoapySDR.SOAPY_SDR_RX, channel, float(self.config.gain))
                     self._interface_logger.info(
-                        "Set gain to %.1f dB for %s", 
-                        float(self.config.gain), 
-                        self.config.identifier
+                        "Set gain to %.1f dB for %s (external LNA: %+.1f dB)",
+                        float(self.config.gain),
+                        self.config.identifier,
+                        external_lna_db,
                     )
                 except Exception as exc:
                     self._interface_logger.warning(
-                        "Failed to set gain to %.1f dB for %s: %s", 
-                        float(self.config.gain), 
+                        "Failed to set gain to %.1f dB for %s: %s",
+                        float(self.config.gain),
                         self.config.identifier,
                         exc
+                    )
+            elif external_lna_db > 0.0:
+                # An external LNA is present and the user didn't pin a gain.
+                # Hardware AGC has no visibility into the outboard amp, so
+                # leaving it on tends to drive the front-end into clipping.
+                # Disable AGC and pick a manual gain biased down by the LNA's
+                # contribution.
+                try:
+                    if device.hasGainMode(SoapySDR.SOAPY_SDR_RX, channel):
+                        device.setGainMode(SoapySDR.SOAPY_SDR_RX, channel, False)
+                    gain_range = device.getGainRange(SoapySDR.SOAPY_SDR_RX, channel)
+                    g_min = float(gain_range.minimum())
+                    g_max = float(gain_range.maximum())
+                    # Aim at the lower-middle of the range, then back off by the
+                    # external LNA's gain. Clamp to the device range.
+                    target = g_min + 0.4 * (g_max - g_min) - external_lna_db
+                    target = max(g_min, min(g_max, target))
+                    device.setGain(SoapySDR.SOAPY_SDR_RX, channel, target)
+                    self._interface_logger.info(
+                        "Disabled AGC for %s and set manual gain to %.1f dB "
+                        "(range %.1f-%.1f, external LNA: %+.1f dB)",
+                        self.config.identifier,
+                        target,
+                        g_min,
+                        g_max,
+                        external_lna_db,
+                    )
+                except Exception as exc:
+                    self._interface_logger.warning(
+                        "Failed to set LNA-compensated gain for %s: %s",
+                        self.config.identifier,
+                        exc,
                     )
             else:
                 # Enable AGC if gain is not specified and device supports it
@@ -967,18 +1001,18 @@ class _SoapySDRReceiver(ReceiverInterface):
                     if device.hasGainMode(SoapySDR.SOAPY_SDR_RX, channel):
                         device.setGainMode(SoapySDR.SOAPY_SDR_RX, channel, True)
                         self._interface_logger.info(
-                            "Enabled Automatic Gain Control (AGC) for %s (no fixed gain specified)", 
+                            "Enabled Automatic Gain Control (AGC) for %s (no fixed gain specified)",
                             self.config.identifier
                         )
                     else:
                         self._interface_logger.debug(
-                            "Device %s does not support AGC and no gain specified", 
+                            "Device %s does not support AGC and no gain specified",
                             self.config.identifier
                         )
                 except Exception as exc:
                     self._interface_logger.debug(
-                        "Failed to enable AGC for %s: %s", 
-                        self.config.identifier, 
+                        "Failed to enable AGC for %s: %s",
+                        self.config.identifier,
                         exc
                     )
 
@@ -1771,8 +1805,9 @@ class AirspyReceiver(_SoapySDRReceiver):
             channel = self.config.channel if self.config.channel is not None else 0
 
             # Configure gain mode based on whether gain is specified
-            if self.config.gain is None:
-                # No gain specified - enable AGC (automatic gain control)
+            external_lna_db = float(self.config.external_lna_db or 0.0)
+            if self.config.gain is None and external_lna_db <= 0.0:
+                # No gain specified and no outboard amp - enable hardware AGC
                 try:
                     handle.device.setGainMode(handle.sdr.SOAPY_SDR_RX, channel, True)  # Enable AGC
                     self._interface_logger.info(
@@ -1792,16 +1827,26 @@ class AirspyReceiver(_SoapySDRReceiver):
                     except Exception:
                         pass
             else:
-                # Gain specified - use manual gain mode with linearity optimization
+                # Either the user pinned a gain, or there's an external LNA in
+                # front of the SDR. In the LNA case, hardware AGC has no idea
+                # the outboard amp exists and will overload the front-end, so
+                # we disable AGC and pick a manual gain biased down by the
+                # LNA's gain. Airspy linearity range is 0-21 dB.
+                if self.config.gain is not None:
+                    requested_gain = float(self.config.gain)
+                else:
+                    # Aim ~10 dB without an LNA; back off as the LNA grows.
+                    requested_gain = 10.0 - external_lna_db
+                actual_gain = max(0.0, min(21.0, requested_gain))
                 try:
                     handle.device.setGainMode(handle.sdr.SOAPY_SDR_RX, channel, False)  # Disable AGC
-                    # Clamp gain to valid Airspy range (0-21 dB)
-                    actual_gain = max(0.0, min(21.0, float(self.config.gain)))
                     handle.device.setGain(handle.sdr.SOAPY_SDR_RX, channel, actual_gain)
                     self._interface_logger.info(
-                        "Set Airspy %s to manual gain %.1f dB (range 0-21)",
+                        "Set Airspy %s to manual gain %.1f dB (range 0-21, "
+                        "external LNA: %+.1f dB)",
                         self.config.identifier,
-                        actual_gain
+                        actual_gain,
+                        external_lna_db,
                     )
                 except Exception as e:
                     self._interface_logger.warning(
