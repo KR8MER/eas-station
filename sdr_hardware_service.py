@@ -126,6 +126,18 @@ FFT_MIN_MAGNITUDE = 1e-10
 SPECTRUM_DB_MIN = -80.0
 SPECTRUM_DB_MAX = 0.0
 
+# IQ capture configuration (capture_iq command)
+# Captures are written as complex64 .npy files for use with
+# scripts/rbds_diagnose.py and other offline analysis tools (GNU Radio,
+# inspectrum, custom Python). Default location is under /var/log so it
+# co-locates with existing eas-station logs; can be overridden via env.
+RADIO_CAPTURE_DIR = os.environ.get(
+    "RADIO_CAPTURE_DIR", "/var/log/eas-station/captures"
+)
+# Hard cap on samples per capture to bound memory/disk:
+# 8e6 complex64 = ~64 MB on disk; ~3.3s @ 2.4 MHz or ~32s @ 250 kHz.
+RADIO_CAPTURE_MAX_SAMPLES = 8_000_000
+
 
 @dataclass
 class SDRServiceState:
@@ -1033,6 +1045,95 @@ def process_commands(redis_client):
                             }
                     except Exception as e:
                         logger.error(f"Failed to get spectrum for receiver {receiver_id}: {e}")
+                        result = {
+                            "command_id": command_id,
+                            "success": False,
+                            "error": str(e)
+                        }
+            elif action == "capture_iq":
+                # Capture raw IQ samples to a .npy file on disk for offline
+                # analysis (rbds_diagnose.py, inspectrum, etc.). The web layer
+                # triggers this and then streams the resulting file back to the
+                # browser via /api/radio/diagnostics/capture/<id>/download.
+                receiver = radio_manager.get_receiver(receiver_id)
+                if not receiver:
+                    result = {
+                        "command_id": command_id,
+                        "success": False,
+                        "error": f"Receiver '{receiver_id}' not found"
+                    }
+                else:
+                    try:
+                        import numpy as np
+
+                        requested = int(command.get("num_samples", 0) or 0)
+                        if requested <= 0:
+                            # Default: ~1 second at the receiver's effective rate.
+                            effective_rate = getattr(
+                                receiver, "_effective_sample_rate", None
+                            ) or getattr(receiver, "sample_rate", 0) or 250_000
+                            requested = int(effective_rate)
+                        num_samples = min(requested, RADIO_CAPTURE_MAX_SAMPLES)
+
+                        iq_samples = receiver.get_samples(num_samples=num_samples)
+
+                        if iq_samples is None or len(iq_samples) == 0:
+                            result = {
+                                "command_id": command_id,
+                                "success": False,
+                                "error": "No samples available from receiver"
+                            }
+                        else:
+                            samples_array = np.asarray(iq_samples, dtype=np.complex64)
+                            actual = int(samples_array.size)
+
+                            effective_rate = int(
+                                getattr(receiver, "_effective_sample_rate", None)
+                                or getattr(receiver, "sample_rate", 0)
+                                or 0
+                            )
+                            frequency_hz = int(
+                                getattr(receiver, "frequency_hz", 0) or 0
+                            )
+
+                            os.makedirs(RADIO_CAPTURE_DIR, exist_ok=True)
+                            safe_receiver_id = "".join(
+                                ch if ch.isalnum() or ch in ("-", "_") else "_"
+                                for ch in str(receiver_id)
+                            )[:64] or "receiver"
+                            filename = (
+                                f"iq_{safe_receiver_id}_"
+                                f"{effective_rate}Hz_"
+                                f"{int(time.time())}_{command_id[:8]}.npy"
+                            )
+                            output_path = os.path.join(RADIO_CAPTURE_DIR, filename)
+                            np.save(output_path, samples_array, allow_pickle=False)
+                            size_bytes = os.path.getsize(output_path)
+
+                            logger.info(
+                                "📼 Captured %d IQ samples (%.2f MB) for %s → %s",
+                                actual,
+                                size_bytes / (1024 * 1024),
+                                receiver_id,
+                                output_path,
+                            )
+
+                            result = {
+                                "command_id": command_id,
+                                "success": True,
+                                "path": output_path,
+                                "filename": filename,
+                                "num_samples": actual,
+                                "sample_rate": effective_rate,
+                                "frequency_hz": frequency_hz,
+                                "size_bytes": size_bytes,
+                                "dtype": "complex64",
+                            }
+                    except Exception as e:
+                        logger.error(
+                            "Failed to capture IQ for receiver %s: %s",
+                            receiver_id, e
+                        )
                         result = {
                             "command_id": command_id,
                             "success": False,
