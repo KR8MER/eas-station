@@ -774,6 +774,7 @@ class RBDSWorker:
     _PARABOLIC_INTERP_MIN_DENOM = 1e-12      # Avoid division-by-zero when peak bins are colinear
     _PILOT_SNR_THRESHOLD = 4.0               # Peak must be ≥ 4× the in-band median to count
     _MAX_PILOT_DEVIATION_HZ = 4.0            # ~210 ppm; beyond this is broken hardware
+    _RBDS_PRESYNC_SPACING_TOLERANCE_BITS = 4
 
     # Periodic pilot re-measurement.  The transmitter's crystal is exact, but
     # cheap-SDR TCXOs drift 1–3 ppm with temperature swings (cold start →
@@ -791,7 +792,11 @@ class RBDSWorker:
     _PILOT_REMEASURE_MAX_DRIFT_HZ = 1.0
     _PILOT_REMEASURE_EMA_ALPHA = 0.3
 
-    def __init__(self, sample_rate: int, intermediate_rate: int):
+    def __init__(
+        self,
+        sample_rate: int,
+        intermediate_rate: int,
+    ):
         """Initialize RBDS worker thread.
 
         Args:
@@ -894,6 +899,11 @@ class RBDSWorker:
         self._rbds_bandpass_zi: Optional[np.ndarray] = None
         self._rbds_lowpass_zi_real: Optional[np.ndarray] = None
         self._rbds_lowpass_zi_imag: Optional[np.ndarray] = None
+        self._rbds_interference_notch_a: Optional[np.ndarray] = None
+        self._rbds_interference_notch_b: Optional[np.ndarray] = None
+        self._rbds_interference_notch_freq_hz: Optional[float] = None
+        self._rbds_interference_notch_zi_real: Optional[np.ndarray] = None
+        self._rbds_interference_notch_zi_imag: Optional[np.ndarray] = None
 
         # CRITICAL: 19 kHz pilot extraction for phase-coherent demodulation
         # Redsea/GNU Radio architecture: Use pilot × 3 to generate 57 kHz carrier
@@ -1046,6 +1056,89 @@ class RBDSWorker:
         if abs(peak_hz - 19000.0) > self._MAX_PILOT_DEVIATION_HZ:
             return None
         return peak_hz
+
+    def _detect_off_frequency_interferer_hz(self, multiplex: np.ndarray) -> Optional[float]:
+        """Return baseband offset (Hz) of a strong 55–59 kHz spur vs pilot×3.
+
+        Self-gated: returns None unless a peak in the 55–59 kHz band
+        passes the pilot-grade SNR test AND lands inside the guard band
+        offset from the expected ``3 × pilot`` frequency.  No external
+        configuration; the decoder auto-engages the notch only when a
+        real spur is observed.
+        """
+        if (
+            self._measured_pilot_freq is None
+            or len(multiplex) < self._PILOT_EST_MIN_SAMPLES
+        ):
+            return None
+        sr = self._sample_rate
+        n_fft = min(1 << int(np.floor(np.log2(len(multiplex)))), self._PILOT_EST_MAX_NFFT)
+        if n_fft < 4096:
+            return None
+        data = multiplex[:n_fft].astype(np.float64)
+        spectrum = np.abs(np.fft.rfft(data * np.hanning(n_fft)))
+        freqs = np.fft.rfftfreq(n_fft, 1.0 / sr)
+        mask = (freqs >= 55000.0) & (freqs <= 59000.0)
+        if not np.any(mask):
+            return None
+        band = spectrum[mask]
+        idx_in_mask = int(np.argmax(band))
+        idx = int(np.where(mask)[0][idx_in_mask])
+        peak_amp = float(spectrum[idx])
+        median = float(np.median(band))
+        if median <= 0.0 or peak_amp < self._PILOT_SNR_THRESHOLD * median:
+            return None
+        peak_hz = float(freqs[idx])
+        expected_hz = 3.0 * float(self._measured_pilot_freq)
+        offset_hz = peak_hz - expected_hz
+        abs_offset = abs(offset_hz)
+        if (
+            abs_offset < self._RBDS_INTERFERENCE_MIN_OFFSET_HZ
+            or abs_offset > self._RBDS_INTERFERENCE_GUARD_HZ
+        ):
+            return None
+        return offset_hz
+
+    def _apply_interference_notch(
+        self, samples: np.ndarray, sample_rate: int, offset_hz: Optional[float]
+    ) -> np.ndarray:
+        """Apply a narrow notch around an off-frequency post-mix interferer."""
+        if offset_hz is None or len(samples) == 0:
+            self._rbds_interference_notch_zi_real = None
+            self._rbds_interference_notch_zi_imag = None
+            return samples
+        from scipy import signal as scipy_signal
+        notch_hz = abs(float(offset_hz))
+        nyq = sample_rate / 2.0
+        if notch_hz <= 0.0 or notch_hz >= nyq:
+            return samples
+        if (
+            self._rbds_interference_notch_b is None
+            or self._rbds_interference_notch_a is None
+            or self._rbds_interference_notch_freq_hz is None
+            or abs(self._rbds_interference_notch_freq_hz - notch_hz) > 10.0
+        ):
+            w0 = notch_hz / nyq
+            b, a = scipy_signal.iirnotch(w0, self._RBDS_INTERFERENCE_NOTCH_Q)
+            self._rbds_interference_notch_b = b.astype(np.float64)
+            self._rbds_interference_notch_a = a.astype(np.float64)
+            self._rbds_interference_notch_freq_hz = notch_hz
+            zi_len = max(len(a), len(b)) - 1
+            self._rbds_interference_notch_zi_real = np.zeros(zi_len, dtype=np.float64)
+            self._rbds_interference_notch_zi_imag = np.zeros(zi_len, dtype=np.float64)
+        real_out, self._rbds_interference_notch_zi_real = scipy_signal.lfilter(
+            self._rbds_interference_notch_b,
+            self._rbds_interference_notch_a,
+            samples.real,
+            zi=self._rbds_interference_notch_zi_real,
+        )
+        imag_out, self._rbds_interference_notch_zi_imag = scipy_signal.lfilter(
+            self._rbds_interference_notch_b,
+            self._rbds_interference_notch_a,
+            samples.imag,
+            zi=self._rbds_interference_notch_zi_imag,
+        )
+        return real_out + 1j * imag_out
 
     def _generate_pilot_reference(self, n: int, sample_offset: int) -> np.ndarray:
         """Generate phase-coherent 19 kHz pilot reference.
@@ -1337,6 +1430,7 @@ class RBDSWorker:
         # the resulting 57 kHz reference phase is completely wrong for every subsequent
         # chunk, making the extracted RBDS bits pure noise.
         n = len(multiplex)
+        interferer_offset_hz = self._detect_off_frequency_interferer_hz(multiplex)
 
         # On the first chunk after a reset, measure the actual recovered pilot
         # frequency.  RTL-SDR dongles often have 25-100 ppm clock error, which
@@ -1441,6 +1535,8 @@ class RBDSWorker:
             phases = self._carrier_phase_57k + phase_increment * np.arange(n, dtype=np.float64)
             x = x * np.exp(-1j * phases)
             self._carrier_phase_57k = (self._carrier_phase_57k + phase_increment * n) % (2.0 * np.pi)
+
+        x = self._apply_interference_notch(x, sample_rate, interferer_offset_hz)
 
         # Step 3: Lowpass filter (7.5 kHz) to remove mixing artifacts and aliases.
         # After the 57 kHz mix x is complex; lfilter keeps real delay lines per
@@ -1989,7 +2085,10 @@ class RBDSWorker:
                     expected_spacing = block_distance * 26
                     actual_spacing = global_i - self._rbds_lastseen_offset_counter
 
-                    if abs(actual_spacing - expected_spacing) > 4:
+                    if (
+                        abs(actual_spacing - expected_spacing)
+                        > self._RBDS_PRESYNC_SPACING_TOLERANCE_BITS
+                    ):
                         # Wrong spacing - reset presync and try current block as new first.
                         # Tolerance is ±4 bits (not 0 as in offline python-radio): M&M
                         # symbol timing jitter accumulates ~1 bit per 26-bit block so
@@ -2461,6 +2560,9 @@ class RBDSWorker:
     # lands (i.e. real signal returns), so legitimate burst saves on a
     # healthy channel are unaffected.
     _BURST_FEC_SUPPRESS_AFTER = 2
+    _RBDS_INTERFERENCE_GUARD_HZ = 2400.0
+    _RBDS_INTERFERENCE_MIN_OFFSET_HZ = 80.0
+    _RBDS_INTERFERENCE_NOTCH_Q = 24.0
 
     # Post-lock quality gate.  After the presync state machine declares a
     # lock we wait through the next 50-block sync-quality window and only
@@ -2738,7 +2840,8 @@ class FMDemodulator:
             # internal filters (bandpass / pilot bandpass / 2.4 kHz post-
             # mix lowpass) are designed against this value.
             self._rbds_worker = RBDSWorker(
-                self._rbds_intermediate_rate, self._rbds_intermediate_rate
+                self._rbds_intermediate_rate,
+                self._rbds_intermediate_rate,
             )
             logger.info(
                 "RBDS ENABLED: worker at %d Hz (input sample_rate=%d Hz, decim=%d)",

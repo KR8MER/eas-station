@@ -78,6 +78,45 @@ def test_rbds_differential_bpsk_decoding():
     assert list(diff) == expected, f"Differential bits {list(diff)} != expected {expected}"
 
 
+def test_rbds_detects_off_frequency_interferer_automatically():
+    sr = 250_000
+    worker = RBDSWorker(sample_rate=sr, intermediate_rate=25_000)
+    try:
+        worker._measured_pilot_freq = 19000.0
+        n = 1 << 16
+        t = np.arange(n, dtype=np.float64) / sr
+        # Strong spur at +150 Hz from pilot×3 (57150 Hz).
+        multiplex = (
+            0.02 * np.sin(2 * np.pi * 19000.0 * t)
+            + 0.08 * np.sin(2 * np.pi * 57150.0 * t)
+            + 0.01 * np.sin(2 * np.pi * 57000.0 * t)
+        ).astype(np.float32)
+        offset = worker._detect_off_frequency_interferer_hz(multiplex)
+        assert offset is not None
+        assert abs(abs(offset) - 150.0) < 8.0
+    finally:
+        worker.stop()
+
+
+def test_rbds_interferer_detector_no_op_without_spur():
+    """Without a real off-frequency spur the auto-detector must stay silent."""
+    sr = 250_000
+    worker = RBDSWorker(sample_rate=sr, intermediate_rate=25_000)
+    try:
+        worker._measured_pilot_freq = 19000.0
+        n = 1 << 16
+        t = np.arange(n, dtype=np.float64) / sr
+        # Only pilot and a clean RBDS subcarrier at pilot×3 — no spur.
+        multiplex = (
+            0.10 * np.sin(2 * np.pi * 19000.0 * t)
+            + 0.05 * np.sin(2 * np.pi * 57000.0 * t)
+        ).astype(np.float32)
+        offset = worker._detect_off_frequency_interferer_hz(multiplex)
+        assert offset is None
+    finally:
+        worker.stop()
+
+
 def test_rbds_differential_bpsk_zero_crossing():
     """Values at 0.0 are decoded as raw bit 0; transitions are still correct."""
     samples = np.array([0.0, -0.01, 0.02], dtype=np.float32)

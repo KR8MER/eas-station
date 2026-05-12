@@ -39,6 +39,16 @@ except ImportError:
     SDRRingBuffer = None
     calculate_buffer_size = None
 
+# SciPy is used to build a proper anti-alias FIR for the early decimator.
+# If unavailable we fall back to the legacy block-average path with a
+# one-shot warning at stream start (preserves operation on minimal hosts).
+try:
+    from scipy import signal as _scipy_signal  # type: ignore
+    _SCIPY_AVAILABLE = True
+except ImportError:  # pragma: no cover - exercised only on minimal hosts
+    _scipy_signal = None
+    _SCIPY_AVAILABLE = False
+
 
 class _SoapySDRHandle:
     """Thin wrapper storing objects needed for a SoapySDR stream."""
@@ -211,6 +221,16 @@ class _SoapySDRReceiver(ReceiverInterface):
         self._early_decim_factor = 1  # Will be calculated on stream start
         self._early_decim_buffer = None  # Accumulator for partial decimation blocks
         self._effective_sample_rate = config.sample_rate  # Effective rate after decimation
+        # Anti-alias FIR for the early decimator.  When SciPy is available
+        # we build a proper linear-phase lowpass at stream start; the
+        # `_zi` state is carried across reads so block boundaries don't
+        # ring up from zero.  When SciPy is unavailable we fall back to
+        # the legacy boxcar (block-average) path and emit a one-shot
+        # warning so operators know RBDS / 38 kHz stereo will see aliased
+        # adjacent-channel energy.
+        self._early_decim_aa_filter = None
+        self._early_decim_aa_zi = None
+        self._early_decim_boxcar_warned = False
 
     # ------------------------------------------------------------------
     # Lifecycle helpers
@@ -695,6 +715,61 @@ class _SoapySDRReceiver(ReceiverInterface):
             self._early_decim_factor = max(1, self.config.sample_rate // self._early_decim_target_rate)
             self._effective_sample_rate = self.config.sample_rate // self._early_decim_factor
             self._early_decim_buffer = numpy_module.array([], dtype=numpy_module.complex64)
+            # Build a proper linear-phase anti-alias FIR sized from the
+            # input rate.  Cutoff preserves the 57 kHz RBDS subcarrier
+            # (upper edge ~60 kHz) and the 38 kHz FM-stereo L-R sideband
+            # while keeping the stopband edge below post-decim Nyquist
+            # so adjacent FM channels at ±200 / ±400 kHz of tune don't
+            # fold back onto the 57 kHz / 38 kHz bands.  Tap-count and
+            # cutoff heuristic mirror the secondary RBDS anti-alias
+            # filter in FMDemodulator.__init__ so the two stages stay
+            # consistent: cap of 1025 bounds CPU even at Airspy's
+            # 10 MHz native rate.
+            self._early_decim_aa_zi = None
+            if _SCIPY_AVAILABLE:
+                post_decim_nyquist = self._effective_sample_rate / 2.0
+                cutoff = min(80_000.0, max(63_000.0, post_decim_nyquist * 0.4 * 2.0))
+                # 0.4 * post-decim Nyquist gives a comfortable transition
+                # band; clamp to [63 kHz, 80 kHz] to keep RBDS / stereo
+                # passband flat regardless of the user's chosen rate.
+                taps = max(127, min(1025, (int(self.config.sample_rate / 4000) | 1)))
+                try:
+                    h = _scipy_signal.firwin(
+                        taps,
+                        cutoff,
+                        window='blackman',
+                        fs=self.config.sample_rate,
+                    )
+                    self._early_decim_aa_filter = numpy_module.asarray(
+                        h, dtype=numpy_module.float32
+                    )
+                    self._interface_logger.info(
+                        "Early-decim anti-alias FIR for %s: %d taps, cutoff %.1f kHz "
+                        "(post-decim Nyquist %.1f kHz)",
+                        self.config.identifier,
+                        taps,
+                        cutoff / 1000.0,
+                        post_decim_nyquist / 1000.0,
+                    )
+                except Exception as exc:  # pragma: no cover - defensive
+                    self._early_decim_aa_filter = None
+                    self._interface_logger.warning(
+                        "Failed to build early-decim FIR for %s (%s); "
+                        "falling back to boxcar averaging",
+                        self.config.identifier,
+                        exc,
+                    )
+            else:
+                self._early_decim_aa_filter = None
+                if not self._early_decim_boxcar_warned:
+                    self._early_decim_boxcar_warned = True
+                    self._interface_logger.warning(
+                        "SciPy not available; early decimation for %s uses "
+                        "boxcar averaging.  Adjacent-channel energy will fold "
+                        "onto the 38 kHz / 57 kHz subcarriers and degrade RBDS "
+                        "and stereo decode.",
+                        self.config.identifier,
+                    )
             self._interface_logger.info(
                 "Early decimation enabled for %s: %dx (%d Hz -> %d Hz)",
                 self.config.identifier,
@@ -706,6 +781,8 @@ class _SoapySDRReceiver(ReceiverInterface):
             self._early_decim_factor = 1
             self._effective_sample_rate = self.config.sample_rate
             self._early_decim_buffer = None
+            self._early_decim_aa_filter = None
+            self._early_decim_aa_zi = None
 
         # Initialize SDRRingBuffer for robust USB reading if enabled
         if self._ring_buffer_enabled and _RING_BUFFER_AVAILABLE:
@@ -1390,8 +1467,14 @@ class _SoapySDRReceiver(ReceiverInterface):
                     raw_samples = buffer[: result.ret]
 
                     # Early decimation to reduce sample rate BEFORE ring buffer
-                    # This is critical for high sample rate SDRs (2.5 MHz+)
-                    # Uses fast integer averaging: reshape + mean along axis
+                    # This is critical for high sample rate SDRs (2.5 MHz+).
+                    # When SciPy is available we use a proper linear-phase
+                    # anti-alias FIR (lfilter + stride downsample) carrying
+                    # `zi` across reads so block boundaries don't ring up
+                    # from zero.  Without SciPy we fall back to the legacy
+                    # boxcar (block-average) path — see warning at stream
+                    # start; this folds adjacent-channel energy onto the
+                    # 38 kHz / 57 kHz subcarriers and degrades RBDS / stereo.
                     decimated_samples = None
                     if self._early_decim_factor > 1:
                         # Accumulate samples with any leftover from previous read
@@ -1399,21 +1482,53 @@ class _SoapySDRReceiver(ReceiverInterface):
                         if self._early_decim_buffer is not None and len(self._early_decim_buffer) > 0:
                             to_decimate = handle.numpy.concatenate([self._early_decim_buffer, raw_samples])
 
-                        # Calculate how many complete decimation blocks we have
                         decim = self._early_decim_factor
-                        n_complete = (len(to_decimate) // decim) * decim
 
-                        if n_complete >= decim:
-                            # Fast decimation using reshape + mean
-                            # This is much faster than convolution or sample-by-sample
-                            decimated_samples = to_decimate[:n_complete].reshape(-1, decim).mean(axis=1)
-                            decimated_samples = decimated_samples.astype(handle.numpy.complex64)
-
-                            # Save leftover samples for next iteration
-                            self._early_decim_buffer = to_decimate[n_complete:].copy()
+                        if self._early_decim_aa_filter is not None and _SCIPY_AVAILABLE:
+                            # Proper anti-alias path: lfilter then stride-N downsample.
+                            if len(to_decimate) > 0:
+                                if self._early_decim_aa_zi is None:
+                                    # Seed the lfilter delay line so the very
+                                    # first chunk doesn't ring up from zero.
+                                    # Same convention used by FMDemodulator's
+                                    # secondary RBDS anti-alias stage.
+                                    zi = _scipy_signal.lfilter_zi(
+                                        self._early_decim_aa_filter, 1.0
+                                    ).astype(handle.numpy.complex64)
+                                    self._early_decim_aa_zi = zi * to_decimate[0]
+                                filtered, self._early_decim_aa_zi = _scipy_signal.lfilter(
+                                    self._early_decim_aa_filter,
+                                    1.0,
+                                    to_decimate,
+                                    zi=self._early_decim_aa_zi,
+                                )
+                                # Stride-N downsample.  Aliasing has just
+                                # been suppressed by the FIR above so
+                                # [::N] is safe.  Keep the residual
+                                # samples that don't land on a stride
+                                # boundary so the next read continues
+                                # at the right phase.
+                                n_complete = (len(filtered) // decim) * decim
+                                if n_complete >= decim:
+                                    decimated_samples = filtered[:n_complete:decim].astype(
+                                        handle.numpy.complex64
+                                    )
+                                    self._early_decim_buffer = to_decimate[n_complete:].copy()
+                                else:
+                                    self._early_decim_buffer = to_decimate.copy()
+                            else:
+                                self._early_decim_buffer = to_decimate.copy()
                         else:
-                            # Not enough samples yet, save for next iteration
-                            self._early_decim_buffer = to_decimate.copy()
+                            # Fallback boxcar (block-average) path.  Used
+                            # only when SciPy is unavailable; warning was
+                            # emitted at stream start.
+                            n_complete = (len(to_decimate) // decim) * decim
+                            if n_complete >= decim:
+                                decimated_samples = to_decimate[:n_complete].reshape(-1, decim).mean(axis=1)
+                                decimated_samples = decimated_samples.astype(handle.numpy.complex64)
+                                self._early_decim_buffer = to_decimate[n_complete:].copy()
+                            else:
+                                self._early_decim_buffer = to_decimate.copy()
                     else:
                         # No decimation needed
                         decimated_samples = raw_samples

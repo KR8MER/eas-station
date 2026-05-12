@@ -252,7 +252,7 @@ class SDRSourceAdapter(AudioSourceAdapter):
                     audio_sample_rate=self.config.sample_rate,
                     stereo_enabled=self._receiver_config.stereo_enabled,
                     deemphasis_us=self._receiver_config.deemphasis_us,
-                    enable_rbds=self._receiver_config.enable_rbds
+                    enable_rbds=self._receiver_config.enable_rbds,
                 )
                 self._demodulator = create_demodulator(demod_config)
                 if self._receiver_config.stereo_enabled:
