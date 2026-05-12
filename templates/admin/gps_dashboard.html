@@ -6336,10 +6336,10 @@
             matters: 'Anything less than a full row of "●" means recent polls were dropped — the source is intermittent. '
                 + 'The dots are colour-coded: green ≥ 7/8, amber ≥ 4/8, red < 4/8.',
             ranges: [
-                { level: 'excellent',  range: '●●●●●●●● — all 8 polls received (octal 377)' },
-                { level: 'acceptable', range: '○●●●●●●● to ●●●●●●●● — 7 of last 8 received (octal 177 – 377)' },
-                { level: 'watch',      range: 'fewer than 7 dots filled (octal < 177)' },
-                { level: 'bad',        range: '○○○○○○○○ — source down (octal 0)' }
+                { level: 'excellent',  range: '●●●●●●●● — all 8 polls received' },
+                { level: 'acceptable', range: 'at least 7 of the 8 dots filled (e.g. ●●●●●●●○ or ○●●●●●●●) — green in the card' },
+                { level: 'watch',      range: '4 – 6 dots filled — amber in the card' },
+                { level: 'bad',        range: 'fewer than 4 dots filled, or ○○○○○○○○ (source down) — red in the card' }
             ],
             causes: [
                 'Network packet loss',
