@@ -46,6 +46,7 @@ class RadioReceiver(db.Model):
     audio_sample_rate = db.Column(db.Integer, nullable=True)  # Audio output rate (kHz range, e.g., 48000)
     frequency_correction_ppm = db.Column(db.Float, nullable=False, default=0.0)  # PPM correction for clock drift
     gain = db.Column(db.Float)
+    external_lna_db = db.Column(db.Float, nullable=False, default=0.0)  # External LNA ahead of SDR (dB)
     channel = db.Column(db.Integer)
     serial = db.Column(db.String(128))
     auto_start = db.Column(db.Boolean, nullable=False, default=True)
@@ -109,6 +110,7 @@ class RadioReceiver(db.Model):
             audio_sample_rate=int(audio_rate),
             frequency_correction_ppm=float(self.frequency_correction_ppm or 0.0),
             gain=self.gain,
+            external_lna_db=float(self.external_lna_db or 0.0),
             channel=self.channel,
             serial=self.serial,
             enabled=bool(self.enabled),

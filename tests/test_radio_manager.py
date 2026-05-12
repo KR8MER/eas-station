@@ -100,6 +100,7 @@ def test_receiver_config_preserves_auto_start_flag():
         audio_sample_rate = None
         frequency_correction_ppm = 0.0
         gain = None
+        external_lna_db = 0.0
         channel = None
         serial = None
         enabled = True
