@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% block title %}GPS &amp; Time Dashboard | EAS Station{% endblock %}
+{% block title %}GNSS &amp; Time Dashboard | EAS Station{% endblock %}
 
 {# ---------------------------------------------------------------------------
    GPS & Time Dashboard — chrogps-dash inspired
@@ -50,6 +50,7 @@
         padding: 2px 9px; border-radius: 999px;
         font-size: 0.78rem; font-weight: 600; letter-spacing: 0.04em;
         border: 1px solid currentColor;
+        transition: color 0.3s ease, border-color 0.3s ease;
     }
     .gps-pill.ok      { color: #3fb950; }
     .gps-pill.warn    { color: #d29922; }
@@ -110,7 +111,7 @@
     .gps-sync-health .bar > span {
         display: block; height: 100%;
         background: linear-gradient(90deg, #3fb950, #84cc16);
-        transition: width 0.4s ease;
+        transition: width 0.4s ease, background 0.35s ease;
     }
 
     /* ── Hero 3D Skyview card ───────────────────────────────────────────
@@ -470,6 +471,17 @@
         padding: 6px 0 22px;
         border-bottom: 1px solid var(--border-color, rgba(127,127,127,.2));
         overflow-x: auto;
+        position: relative;
+    }
+    /* Faint scale reference at the 50 dBHz "full" mark */
+    .gps-snr-chart::before {
+        content: "50 dBHz";
+        position: absolute;
+        top: 6px; left: 2px;
+        font-size: 0.58rem;
+        font-family: var(--font-mono, monospace);
+        color: var(--text-muted, rgba(127,127,127,.5));
+        pointer-events: none; line-height: 1; z-index: 1;
     }
     .gps-snr-bar {
         flex: 0 0 22px;
@@ -482,6 +494,7 @@
         width: 14px; min-height: 2px;
         border-radius: 2px 2px 0 0;
         opacity: 0.95;
+        transition: height 0.45s ease;
     }
     .gps-snr-bar.used .bar {
         box-shadow: 0 0 0 1px rgba(255,255,255,0.35) inset;
@@ -549,6 +562,32 @@
     .gps-empty {
         padding: 14px; text-align: center;
         color: var(--text-muted); font-style: italic;
+    }
+
+    /* Constellation-coloured chip badge in the satellite data table PRN column */
+    .gps-prn-badge {
+        display: inline-block;
+        padding: 1px 7px; border-radius: 3px;
+        font-weight: 700; font-size: 0.76rem;
+        color: #fff; line-height: 1.55;
+        white-space: nowrap; letter-spacing: 0.02em;
+    }
+    /* Active (used-in-fix) row: green left accent + tinted background */
+    .gps-table tbody tr.row-active {
+        background: rgba(63, 185, 80, 0.06);
+        box-shadow: inset 3px 0 0 #3fb950;
+    }
+
+    /* Live clock in the System Tracking card header — make it readable
+       at a glance instead of fading into the badge-area muted text. */
+    #gps-dash-clock-utc,
+    #gps-dash-clock-local {
+        font-family: var(--font-mono, ui-monospace, monospace);
+        font-size: 0.80rem;
+        font-variant-numeric: tabular-nums;
+        letter-spacing: 0.04em;
+        color: var(--text-color) !important;
+        font-weight: 600;
     }
 
     /* Constellation filter chips above the satellite table */
@@ -737,6 +776,7 @@
         flex-direction: column;
         gap: 4px;
         min-width: 0;
+        transition: border-left-color 0.45s ease, background-color 0.45s ease;
     }
     .gps-status-tile .lbl {
         font-size: 0.66rem;
@@ -777,6 +817,41 @@
     .gps-status-tile.sev-info  { border-left-color: #58a6ff; }
     .gps-status-tile.sev-info  .val { color: #58a6ff; }
     .gps-status-tile.sev-unknown .val { color: var(--text-muted, #8b949e); }
+
+    /* Stagger fade-in when the page loads — tiles arrive in sequence
+       so the operator's eye is drawn left-to-right across the strip. */
+    @keyframes gps-tile-in {
+        from { opacity: 0; transform: translateY(6px); }
+        to   { opacity: 1; transform: translateY(0);   }
+    }
+    .gps-status-tile           { animation: gps-tile-in 0.35s ease both; }
+    .gps-status-tile:nth-child(2) { animation-delay: 0.05s; }
+    .gps-status-tile:nth-child(3) { animation-delay: 0.10s; }
+    .gps-status-tile:nth-child(4) { animation-delay: 0.15s; }
+    .gps-status-tile:nth-child(5) { animation-delay: 0.20s; }
+    .gps-status-tile:nth-child(6) { animation-delay: 0.25s; }
+    .gps-status-tile:nth-child(7) { animation-delay: 0.30s; }
+    @media (prefers-reduced-motion: reduce) {
+        .gps-status-tile { animation: none; }
+    }
+
+    /* Data-received heartbeat dot — in the dashboard header, pulses
+       green after every successful poll to confirm live telemetry. */
+    .gps-live-dot {
+        display: inline-block;
+        width: 8px; height: 8px;
+        border-radius: 50%;
+        background: var(--text-muted, #8b949e);
+        margin-left: 2px;
+        vertical-align: middle;
+        flex-shrink: 0;
+    }
+    @keyframes gps-data-ping {
+        0%   { box-shadow: 0 0 0 0   rgba(63, 185, 80, 0.80); background: #3fb950; }
+        70%  { box-shadow: 0 0 0 8px rgba(63, 185, 80, 0);    background: #3fb950; }
+        100% { box-shadow: 0 0 0 0   rgba(63, 185, 80, 0);    background: var(--text-muted, #8b949e); }
+    }
+    .gps-live-dot.ping { animation: gps-data-ping 0.75s ease forwards; }
 
     @media (max-width: 1100px) {
         .gps-status-strip { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -858,6 +933,7 @@
         background: var(--bg-tertiary, rgba(127,127,127,.05));
         display: flex; flex-direction: column; gap: 4px;
         min-width: 0;
+        transition: border-color 0.45s ease, background-color 0.45s ease;
     }
     .gps-quality-metric .metric-lbl {
         font-size: 0.66rem; font-weight: 700;
@@ -895,6 +971,16 @@
        EVENT / ALARM TIMELINE
        SCADA-style monotonic event log. Newest at top.
        ============================================================ */
+    /* Events card rendered as a <details> element so it can collapse
+       when empty and expand when alarms fire.  Remove the browser's
+       built-in disclosure triangle; the existing events-head layout
+       supplies its own visual affordance. */
+    .gps-events-card > summary {
+        list-style: none; cursor: pointer;
+    }
+    .gps-events-card > summary::-webkit-details-marker { display: none; }
+    .gps-events-card:not([open]) .gps-events-list { display: none; }
+
     .gps-events-card .events-head {
         display: flex; justify-content: space-between; align-items: center;
         gap: 10px;
@@ -962,7 +1048,7 @@
     .gps-section-head .rule {
         flex: 1 1 auto;
         height: 1px;
-        background: var(--border-color, rgba(127,127,127,.18));
+        background: linear-gradient(90deg, var(--border-color, rgba(127,127,127,.35)) 0%, transparent 100%);
     }
     .gps-section-head .hint {
         font-size: 0.70rem;
@@ -1015,6 +1101,10 @@
             GNSS / TIME APPLIANCE
         </span>
         <span class="node">NTP Node:&nbsp;<span id="gps-dash-node">…</span></span>
+        <span id="gps-dash-lock-pill"   class="gps-pill muted"><i class="fas fa-circle"></i> —</span>
+        <span id="gps-dash-fix-pill"    class="gps-pill muted">— FIX</span>
+        <span id="gps-dash-stratum-pill" class="gps-pill muted">STRATUM —</span>
+        <span class="gps-live-dot" id="gps-live-dot" title="Last data received"></span>
         <span class="spacer"></span>
         <div class="gps-view-toggle" role="group" aria-label="View mode">
             <button type="button" id="gps-view-simple" class="active" aria-pressed="true">Simple</button>
@@ -1128,18 +1218,18 @@
          client-side by watching state transitions between polls so
          this works without backend changes.
          ============================================================ -->
-    <div class="gps-card gps-events-card" aria-label="Active alarms and recent events">
-        <div class="events-head">
+    <details class="gps-card gps-events-card" id="gps-events-details" aria-label="Active alarms and recent events">
+        <summary class="events-head">
             <h3 style="font-size:0.82rem; font-weight:700; letter-spacing:0.12em;
                        text-transform:uppercase; margin:0; color:var(--text-color);">
                 <i class="fas fa-bell me-1"></i> Events &amp; Alarms
             </h3>
-            <span class="text-muted small">latest first · client-derived</span>
-        </div>
+            <span class="text-muted small">latest first · state-change log</span>
+        </summary>
         <ul class="gps-events-list" id="gps-events-list">
             <li class="gps-events-empty">No events recorded — system steady.</li>
         </ul>
-    </div>
+    </details>
 
     <div class="gps-section-head">
         <h2>Tracking &amp; Receiver</h2>
@@ -1161,7 +1251,7 @@
                     style="display:none;"></canvas>
 
             <div class="gps-overlay gps-overlay-tl">
-                <div class="gps-skyview-title">3D GPS SKYVIEW</div>
+                <div class="gps-skyview-title" id="gps-skyview-title">3D GNSS SKYVIEW</div>
                 <div id="gps-skyview-legend" class="gps-skyview-legend"></div>
                 <div class="gps-skyview-counts-card">
                     <div><strong id="gps-dash-total-count">—</strong> total satellites</div>
@@ -1251,7 +1341,7 @@
                         <span>SIGNAL INTEGRITY</span>
                         <span><span id="gps-dash-snr-pct" class="pct">—</span></span>
                     </div>
-                    <div class="bar"><span id="gps-dash-snr-bar" style="width:0%; background:linear-gradient(90deg,#bc8cff,#58a6ff);"></span></div>
+                    <div class="bar"><span id="gps-dash-snr-bar" style="width:0%"></span></div>
                     <div class="label" style="font-size:0.70rem;">
                         <span>Avg SNR: <span id="gps-dash-avg-snr" class="num">—</span> dBHz</span>
                     </div>
@@ -1305,7 +1395,7 @@
                                 <th>Source</th>
                                 <th class="num">Strat</th>
                                 <th class="num">Poll</th>
-                                <th class="num">Reach</th>
+                                <th class="num" title="an 8-bit shift register in octal — 377 = all 8 recent polls received">Reach</th>
                                 <th class="num">Last</th>
                                 <th class="num">Offset</th>
                             </tr>
@@ -1778,6 +1868,31 @@
     function setText(id, text) {
         var el = document.getElementById(id);
         if (el) el.textContent = (text === null || text === undefined || text === '') ? '—' : text;
+    }
+    // Zero-pad a number to at least 2 digits.
+    function pad2(n) { return n < 10 ? '0' + n : '' + n; }
+    // Brief CSS animation flash on an element — restart-safe via reflow.
+    // Trigger a synchronous reflow before re-adding the class so the
+    // browser sees a genuine add-remove cycle and restarts the animation
+    // even when the element already carries the class (standard technique).
+    function flashEl(el) {
+        if (!el) return;
+        el.classList.remove('ping');
+        void el.offsetWidth; // synchronous reflow — forces animation restart
+        el.classList.add('ping');
+    }
+    // Apply a health-based gradient to a progress-bar fill element.
+    // pct 0-100; okThreshold and warnThreshold are the lower limits of
+    // each band (anything below warnThreshold is fault/red).
+    function applyBarGradient(bar, pct, okThreshold, warnThreshold) {
+        if (!bar) return;
+        if (pct >= okThreshold) {
+            bar.style.background = 'linear-gradient(90deg, #3fb950, #84cc16)';
+        } else if (pct >= warnThreshold) {
+            bar.style.background = 'linear-gradient(90deg, #d29922, #f6c343)';
+        } else {
+            bar.style.background = 'linear-gradient(90deg, #f85149, #f97316)';
+        }
     }
     function fmtSeconds(v) {
         // Render an offset/delay value with adaptive units so a sub-microsecond
@@ -2704,6 +2819,8 @@
         var canvas = document.getElementById('gps-dash-sky-canvas');
         if (stage)  stage.style.display  = (mode === '3d') ? '' : 'none';
         if (canvas) canvas.style.display = (mode === '3d') ? 'none' : 'block';
+        var titleEl = document.getElementById('gps-skyview-title');
+        if (titleEl) titleEl.textContent = (mode === '3d') ? '3D GNSS SKYVIEW' : '2D GNSS SKYVIEW';
     }
     function setSkyMode(mode) {
         try { localStorage.setItem(SKY_MODE_KEY, mode); } catch (e) {}
@@ -2858,16 +2975,18 @@
             return (a.prn || 0) - (b.prn || 0);
         }).map(function (s) {
             var info = constInfo(s.constellation);
-            var statLabel = activeSet[s.prn] ? 'ACTIVE' : 'VIEW';
-            var statColor = activeSet[s.prn] ? '#3fb950' : 'var(--text-muted)';
-            var prnCell = '<span style="color:' + info.color + ';font-weight:700;">' + s.prn + '</span>';
+            var isActive = !!activeSet[s.prn];
+            var statLabel = isActive ? 'ACTIVE' : 'TRACKED';
+            var statColor = isActive ? '#3fb950' : 'var(--text-muted)';
+            var prnCell = '<span class="gps-prn-badge" style="background:' + info.color + ';">'
+                        + escapeHtml(String(s.prn)) + '</span>';
             var snr = s.snr;
             var snrCell = snr === null || snr === undefined
                 ? '<span class="text-muted">—</span>'
                 : '<span class="' + snrClass(snr) + '">' + snr + ' dBHz</span>';
             var elev = (s.elevation === null || s.elevation === undefined) ? '—' : (s.elevation + '°');
             var azim = (s.azimuth === null || s.azimuth === undefined) ? '—' : (s.azimuth + '°');
-            return '<tr>'
+            return '<tr' + (isActive ? ' class="row-active"' : '') + '>'
                 + '<td>' + prnCell + '</td>'
                 + '<td class="num">' + elev + '</td>'
                 + '<td class="num">' + azim + '</td>'
@@ -2908,9 +3027,24 @@
                     : src.last_rx_s < 3600 ? Math.round(src.last_rx_s/60) + 'm'
                     : Math.round(src.last_rx_s/3600) + 'h');
             var offsetTxt = fmtSeconds(src.last_sample_offset_s);
-            var reachOctal = (src.reach === null || src.reach === undefined)
-                ? '—'
-                : src.reach.toString(8).padStart(3, '0');
+            // Render reach as 8 Unicode dots (● = poll received, ○ = missed),
+            // colored green/amber/red by how many of the 8 recent polls landed.
+            var reachCell = '—';
+            if (src.reach !== null && src.reach !== undefined) {
+                // Count set bits (Brian Kernighan's method).
+                var pc = 0, rv = src.reach;
+                while (rv) { pc += rv & 1; rv >>>= 1; }
+                // rClr is always one of three safe hex literals — no escaping needed.
+                var rClr = pc >= 7 ? '#3fb950' : (pc >= 4 ? '#d29922' : '#f85149');
+                var rDots = '';
+                for (var bit = 7; bit >= 0; bit--) {
+                    rDots += (src.reach >> bit) & 1 ? '●' : '○';
+                }
+                reachCell = '<span title="' + escapeHtml(src.reach.toString(8).padStart(3, '0'))
+                    + ' octal · ' + pc + '/8 polls"'
+                    + ' style="font-family:var(--font-mono,monospace);letter-spacing:-0.03em;color:' + rClr + ';">'
+                    + rDots + '</span>';
+            }
             return '<tr>'
                 + '<td><span class="gps-src-state ' + stateClass + '">'
                 +     escapeHtml(src.state || '·')
@@ -2918,7 +3052,7 @@
                 + '<td>' + escapeHtml(src.name || '—') + '</td>'
                 + '<td class="num">' + (src.stratum === null || src.stratum === undefined ? '—' : src.stratum) + '</td>'
                 + '<td class="num">' + (src.poll === null || src.poll === undefined ? '—' : src.poll) + '</td>'
-                + '<td class="num">' + reachOctal + '</td>'
+                + '<td class="num">' + reachCell + '</td>'
                 + '<td class="num">' + lastRx + '</td>'
                 + '<td class="num ' + signClass(src.last_sample_offset_s) + '">' + offsetTxt + '</td>'
                 + '</tr>';
@@ -3252,6 +3386,10 @@
         var ts = pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes()) + ':' + pad(d.getUTCSeconds());
         EVENT_LOG.unshift({ ts: ts, sev: sev, msg: msg });
         if (EVENT_LOG.length > EVENT_LOG_MAX) EVENT_LOG.length = EVENT_LOG_MAX;
+        // Auto-open the collapsible card when a new event fires so the
+        // operator doesn't miss an alarm that appeared while collapsed.
+        var details = document.getElementById('gps-events-details');
+        if (details && !details.open) details.open = true;
         renderEventList();
     }
 
@@ -3400,7 +3538,10 @@
             }
         }
         var bar = document.getElementById('gps-dash-health-bar');
-        if (bar) bar.style.width = pct + '%';
+        if (bar) {
+            bar.style.width = pct + '%';
+            applyBarGradient(bar, pct, 70, 30);
+        }
         setText('gps-dash-health-pct', pct + '%');
         setText('gps-dash-health-offset', fmtSeconds(offset));
         setText('gps-dash-health-rms', fmtSeconds(tracking && tracking.rms_offset_s));
@@ -3529,7 +3670,10 @@
 
         // Fix age — colour-code so a frozen UART stands out.  Anything
         // over 5 s without a sentence is suspicious on a 1 Hz receiver.
-        var fixAge = (gps && typeof gps.fix_age_s === 'number') ? gps.fix_age_s : null;
+        // When fix_age_s is null but we know we're in holdover, surface
+        // the holdover duration as a proxy so the field is never a bare —.
+        var fixAge = (gps && typeof gps.fix_age_s === 'number') ? gps.fix_age_s
+                   : ((gps && typeof gps.holdover_s === 'number' && gps.holdover_s > 0) ? gps.holdover_s : null);
         var fixAgeEl = document.getElementById('g-fix-age');
         if (fixAgeEl) {
             fixAgeEl.classList.remove('pos', 'neg');
@@ -3651,7 +3795,10 @@
         var avg = validSnrs.length ? validSnrs.reduce(function (a, b) { return a + b; }, 0) / validSnrs.length : null;
         var pct = avg === null ? 0 : Math.max(2, Math.min(100, Math.round((avg / 50) * 100)));
         var bar = document.getElementById('gps-dash-snr-bar');
-        if (bar) bar.style.width = pct + '%';
+        if (bar) {
+            bar.style.width = pct + '%';
+            applyBarGradient(bar, pct, 70, 40);
+        }
         setText('gps-dash-snr-pct', pct + '%');
         setText('gps-dash-avg-snr', avg === null ? '—' : avg.toFixed(1));
     }
@@ -4814,6 +4961,24 @@
         }
     }
 
+    // ── 1 Hz clock ticker.  Extrapolates from the last server timestamp
+    //    so the display ticks every second without waiting for a poll.
+    var lastClockAnchorMs = null;  // server now_utc converted to ms
+    var lastClockFetchedAt = null; // Date.now() when that snapshot landed
+    function tickClocks() {
+        var nowMs;
+        if (lastClockAnchorMs !== null && lastClockFetchedAt !== null) {
+            nowMs = lastClockAnchorMs + (Date.now() - lastClockFetchedAt);
+        } else {
+            nowMs = Date.now();
+        }
+        var d = new Date(nowMs);
+        setText('gps-dash-clock-utc',
+            'UTC ' + pad2(d.getUTCHours()) + ':' + pad2(d.getUTCMinutes()) + ':' + pad2(d.getUTCSeconds()));
+        setText('gps-dash-clock-local',
+            'Local ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds()));
+    }
+
     // ── Render everything from a single snapshot.  Tolerates missing
     //    sub-fields so a partial server response (e.g. chronyc not
     //    installed) renders meaningfully instead of erroring.
@@ -4841,19 +5006,14 @@
         // Clocks — prefer the server's now_utc (sampled at the same
         // instant as the rest of the snapshot) over the browser's
         // Date.now(), which would drift if the browser clock isn't
-        // synced to the GPS-disciplined host.
+        // synced to the GPS-disciplined host.  Store the server anchor
+        // so the 1 Hz ticker in DOMContentLoaded can extrapolate without
+        // waiting for the next poll.
         var serverIso = host.now_utc;
-        var nowServer = serverIso ? new Date(serverIso) : null;
-        var nowLocal  = serverIso ? new Date(serverIso) : new Date();
-        var pad2 = function (n) { return n < 10 ? '0' + n : '' + n; };
-        if (nowServer && !isNaN(nowServer.getTime())) {
-            setText('gps-dash-clock-utc',
-                'UTC ' + pad2(nowServer.getUTCHours()) + ':' + pad2(nowServer.getUTCMinutes()) + ':' + pad2(nowServer.getUTCSeconds()));
-        } else {
-            setText('gps-dash-clock-utc', 'UTC ' + new Date().toISOString().slice(11, 19));
-        }
-        setText('gps-dash-clock-local',
-            'Local ' + pad2(nowLocal.getHours()) + ':' + pad2(nowLocal.getMinutes()) + ':' + pad2(nowLocal.getSeconds()));
+        var d = serverIso ? new Date(serverIso) : null;
+        lastClockAnchorMs = (d && !isNaN(d.getTime())) ? d.getTime() : null;
+        lastClockFetchedAt = Date.now();
+        tickClocks();
 
         // Tracking + sync-health bar
         renderTracking(chrony);
@@ -4903,7 +5063,12 @@
         if (typeof document !== 'undefined' && document.hidden) return;
         fetch('/admin/api/gps-dashboard/data', { credentials: 'same-origin' })
             .then(function (r) { return r.json(); })
-            .then(render)
+            .then(function (data) {
+                render(data);
+                // Pulse the heartbeat dot so the operator can see
+                // that fresh telemetry arrived without any fanfare.
+                flashEl(document.getElementById('gps-live-dot'));
+            })
             .catch(function (err) {
                 console.warn('GPS dashboard fetch failed:', err);
             });
@@ -4956,6 +5121,10 @@
         // Leap-second countdown ticker — 1 Hz client-side decrement so
         // the readout doesn't visibly hiccup between dashboard polls.
         setInterval(renderLeapCountdown, 1000);
+
+        // Clock ticker — advance the UTC/Local display every second so
+        // it reads like a live clock rather than a snapshot timestamp.
+        setInterval(tickClocks, 1000);
 
         // NMEA inspector control wiring — re-render on filter/pause
         // change so the operator sees the effect of toggling immediately
