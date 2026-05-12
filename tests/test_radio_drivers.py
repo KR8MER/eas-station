@@ -403,6 +403,50 @@ def test_no_external_lna_keeps_agc_path(monkeypatch):
         monkeypatch.delitem(sys.modules, "SoapySDR", raising=False)
 
 
+def test_airspy_external_lna_biases_gain_down(monkeypatch):
+    """Airspy receivers must also disable AGC and back off gain when an
+    external LNA is present. Airspy uses its own 0-21 dB linearity range
+    rather than the generic getGainRange path."""
+
+    devices: list = []
+    _install_recording_soapysdr_stub(monkeypatch, devices)
+
+    config = ReceiverConfig(
+        identifier="airspy-lna",
+        driver="airspy",
+        frequency_hz=162_550_000,
+        sample_rate=2_500_000,  # Valid Airspy R2 rate
+        gain=None,
+        external_lna_db=5.0,
+        auto_start=True,
+    )
+
+    receiver = AirspyReceiver(config)
+    receiver.start()
+    try:
+        assert devices
+        device = devices[0]
+        # Airspy override runs after the parent path, so we wait until the
+        # parent's setGain has been followed by the Airspy-specific one.
+        assert _wait_for_calls(
+            device,
+            lambda c: sum(1 for n, *_ in c if n == "setGain") >= 2,
+            timeout=3.0,
+        ), f"Airspy override never ran: {device.calls}"
+
+        gain_mode_calls = [v for n, v in device.calls if n == "setGainMode"]
+        set_gain_calls = [v for n, v in device.calls if n == "setGain"]
+
+        # AGC disabled at every step where it's been touched.
+        assert gain_mode_calls, gain_mode_calls
+        assert all(v is False for v in gain_mode_calls), gain_mode_calls
+        # Airspy override is the last setGain call; target = 10 - 5 = 5.0 dB.
+        assert set_gain_calls[-1] == 5.0, set_gain_calls
+    finally:
+        receiver.stop()
+        monkeypatch.delitem(sys.modules, "SoapySDR", raising=False)
+
+
 def test_dynamic_buffer_size_calculation():
     """Test that buffer size is calculated dynamically based on sample rate."""
     # Test with low sample rate (48kHz) - should use minimum buffer
