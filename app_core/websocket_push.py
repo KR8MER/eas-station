@@ -42,6 +42,15 @@ import threading
 import time
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
+try:  # numpy is a hard runtime dependency for the audio stack, but keep this
+    # defensive so the module can still import (e.g. during isolated tests)
+    # when numpy is unavailable.
+    import numpy as np  # type: ignore[import]
+    _HAS_NUMPY = True
+except ImportError:  # pragma: no cover - numpy is part of requirements.txt
+    np = None  # type: ignore[assignment]
+    _HAS_NUMPY = False
+
 if TYPE_CHECKING:
     from flask import Flask
     from flask_socketio import SocketIO
@@ -51,22 +60,20 @@ logger = logging.getLogger(__name__)
 
 def _sanitize_float(value: float) -> float:
     """Sanitize float values to be JSON-safe (no inf/nan, convert numpy types)."""
-    import numpy as np
-    
     # Handle None values
     if value is None:
         return -120.0
-    
+
     # Convert numpy types to regular Python float first
-    if isinstance(value, (np.floating, np.integer)):
+    if _HAS_NUMPY and isinstance(value, (np.floating, np.integer)):
         value = float(value)
-    
+
     # Handle non-numeric types
     try:
         value = float(value)
     except (TypeError, ValueError):
         return -120.0
-    
+
     if math.isinf(value):
         return -120.0 if value < 0 else 120.0
     if math.isnan(value):
@@ -77,29 +84,30 @@ def _sanitize_float(value: float) -> float:
 def _sanitize_for_json(obj):
     """
     Recursively sanitize objects to be JSON-safe.
-    
+
     Converts inf, -inf, nan to valid numbers.
     Handles nested dicts, lists, and numpy types.
     """
     if obj is None:
         return None
-    
+
     if isinstance(obj, bool):
         return obj
-    
+
     if isinstance(obj, (int, str)):
         return obj
-    
+
     if isinstance(obj, float):
         if math.isinf(obj):
             return -120.0 if obj < 0 else 120.0
         if math.isnan(obj):
             return -120.0
         return obj
-    
-    # Handle numpy types
-    try:
-        import numpy as np
+
+    # Handle numpy types (module-level import; previously this was an inline
+    # `import numpy as np` inside the recursive call, which executed for every
+    # leaf at 4 Hz on every WebSocket emit).
+    if _HAS_NUMPY:
         if isinstance(obj, np.floating):
             value = float(obj)
             if math.isinf(value):
@@ -111,8 +119,6 @@ def _sanitize_for_json(obj):
             return int(obj)
         if isinstance(obj, np.bool_):
             return bool(obj)
-    except ImportError:
-        pass
     
     if isinstance(obj, dict):
         return {key: _sanitize_for_json(value) for key, value in obj.items()}
@@ -134,6 +140,7 @@ def _safe_emit(socketio, event_name, data):
     socketio.emit(event_name, sanitized_data)
 
 _push_thread = None
+_slow_push_thread = None
 _stop_event = threading.Event()
 
 # Timing intervals in seconds
@@ -154,8 +161,21 @@ ALERTS_UPDATE_INTERVAL = 5.0       # Active CAP alert list (changes infrequently
 
 
 def start_websocket_push(app: 'Flask', socketio: 'SocketIO') -> None:
-    """Start the WebSocket push service."""
-    global _push_thread
+    """Start the WebSocket push service.
+
+    Two worker threads are spawned:
+
+    * **fast loop** — drives the 4 Hz audio-monitoring (VU meters), the 1 Hz
+      broadcast-state countdown, and the 3 s GPIO pin states.  These emits
+      all read from Redis or in-memory state; none block on the database.
+    * **slow loop** — everything else (system health, audio sources/health,
+      analytics, logs, alerts, IPAWS, LED, radio, operations).  These are
+      DB-backed and historically would stall the fast loop for hundreds of
+      milliseconds (worst case >1 s for the system-health psutil scan),
+      visibly freezing VU meters.  Running them on their own thread means
+      a slow query never delays a meter tick.
+    """
+    global _push_thread, _slow_push_thread
 
     if _push_thread is not None and _push_thread.is_alive():
         logger.warning("WebSocket push thread already running")
@@ -163,25 +183,38 @@ def start_websocket_push(app: 'Flask', socketio: 'SocketIO') -> None:
 
     _stop_event.clear()
     _push_thread = threading.Thread(
-        target=_push_worker,
+        target=_push_worker_fast,
         args=(app, socketio),
         daemon=True,
         name="WebSocketPush"
     )
     _push_thread.start()
-    logger.info("WebSocket push service started")
+
+    _slow_push_thread = threading.Thread(
+        target=_push_worker_slow,
+        args=(app, socketio),
+        daemon=True,
+        name="WebSocketPushSlow"
+    )
+    _slow_push_thread.start()
+
+    logger.info("WebSocket push service started (fast + slow workers)")
 
 
 def stop_websocket_push() -> None:
     """Stop the WebSocket push service."""
-    global _push_thread
+    global _push_thread, _slow_push_thread
 
-    if _push_thread is None:
+    if _push_thread is None and _slow_push_thread is None:
         return
 
     _stop_event.set()
-    _push_thread.join(timeout=5.0)
-    _push_thread = None
+    if _push_thread is not None:
+        _push_thread.join(timeout=5.0)
+        _push_thread = None
+    if _slow_push_thread is not None:
+        _slow_push_thread.join(timeout=5.0)
+        _slow_push_thread = None
     logger.info("WebSocket push service stopped")
 
 
@@ -208,130 +241,30 @@ def _recover_db_session() -> None:
         pass
 
 
-def _push_worker(app: 'Flask', socketio: 'SocketIO') -> None:
-    """Background worker that pushes real-time updates via WebSocket.
+def _push_worker_fast(app: 'Flask', socketio: 'SocketIO') -> None:
+    """Fast push loop: 4 Hz VU meters, 1 Hz broadcast state, 3 s GPIO.
 
-    All events are rate-limited via explicit timers.  The loop itself sleeps
-    for AUDIO_MONITORING_INTERVAL (250 ms / 4 Hz) between iterations, keeping
-    CPU usage low while still delivering smooth VU-meter updates.
+    Only Redis/in-memory data lives here.  Keeping this loop free of any
+    DB-backed emit means a slow query never freezes the meters.
     """
-    logger.info("WebSocket push worker started")
+    logger.info("WebSocket fast push worker started")
 
-    # Cache audio source configs to avoid hammering the database every second
-    config_cache = {}
-    config_cache_loaded_at = 0.0
-
-    # Timers for different event types (last emit time)
     last_audio_monitoring_emit = 0.0
-    last_system_health_emit = 0.0
-    last_audio_sources_emit = 0.0
-    last_audio_health_emit = 0.0
-    last_operation_status_emit = 0.0
-    last_ipaws_status_emit = 0.0
     last_gpio_status_emit = 0.0
-    last_led_status_emit = 0.0
-    last_analytics_emit = 0.0
-    last_radio_status_emit = 0.0
-    last_logs_emit = 0.0
     last_broadcast_state_emit = 0.0
-    last_alerts_emit = 0.0
-    # Cache of last-emitted alert signature so we can short-circuit the JSON
-    # serialization when nothing has changed (most ticks).  Cleared on app
-    # restart only.
-    last_alerts_signature: Optional[str] = None
 
     with app.app_context():
         while not _stop_event.is_set():
             now = time.time()
 
-            # ================================================================
-            # AUDIO MONITORING UPDATE (4Hz - every 250ms)
-            # Real-time VU meters and EAS monitor status.
-            # Previously ran unconditionally at 10Hz, burning CPU with Redis
-            # reads that returned the same stale value 50 times per second.
-            # ================================================================
             if now - last_audio_monitoring_emit >= AUDIO_MONITORING_INTERVAL:
                 try:
-                    _emit_audio_monitoring_update(app, socketio, config_cache)
+                    _emit_audio_monitoring_update(app, socketio, _config_cache)
                     last_audio_monitoring_emit = now
                 except Exception as e:
                     logger.warning(f"Error emitting audio_monitoring_update: {e}")
                     _recover_db_session()
 
-            # Refresh config cache periodically
-            if now - config_cache_loaded_at > 30:
-                try:
-                    from webapp.admin.audio_ingest import AudioSourceConfigDB
-                    config_cache = {cfg.name: cfg for cfg in AudioSourceConfigDB.query.all()}
-                    config_cache_loaded_at = now
-                except Exception as e:
-                    logger.debug(f"Error refreshing audio config cache: {e}")
-                    _recover_db_session()
-
-            # ================================================================
-            # SYSTEM HEALTH UPDATE (every 60s)
-            # System status indicator in header
-            # ================================================================
-            if now - last_system_health_emit >= SYSTEM_HEALTH_INTERVAL:
-                try:
-                    _emit_system_health_update(app, socketio)
-                    last_system_health_emit = now
-                except Exception as e:
-                    logger.warning(f"Error emitting system_health_update: {e}")
-                    _recover_db_session()
-
-            # ================================================================
-            # AUDIO SOURCES UPDATE (every 30s)
-            # Audio source list for monitoring page
-            # ================================================================
-            if now - last_audio_sources_emit >= AUDIO_SOURCES_INTERVAL:
-                try:
-                    _emit_audio_sources_update(app, socketio)
-                    last_audio_sources_emit = now
-                except Exception as e:
-                    logger.warning(f"Error emitting audio_sources_update: {e}")
-                    _recover_db_session()
-
-            # ================================================================
-            # AUDIO HEALTH UPDATE (every 30s)
-            # Audio health dashboard data
-            # ================================================================
-            if now - last_audio_health_emit >= AUDIO_HEALTH_INTERVAL:
-                try:
-                    _emit_audio_health_update(app, socketio)
-                    last_audio_health_emit = now
-                except Exception as e:
-                    logger.warning(f"Error emitting audio_health_update: {e}")
-                    _recover_db_session()
-
-            # ================================================================
-            # OPERATION STATUS UPDATE (every 10s)
-            # Admin operations status
-            # ================================================================
-            if now - last_operation_status_emit >= OPERATION_STATUS_INTERVAL:
-                try:
-                    _emit_operation_status_update(app, socketio)
-                    last_operation_status_emit = now
-                except Exception as e:
-                    logger.warning(f"Error emitting operation_status_update: {e}")
-                    _recover_db_session()
-
-            # ================================================================
-            # IPAWS STATUS UPDATE (every 30s)
-            # IPAWS connection status
-            # ================================================================
-            if now - last_ipaws_status_emit >= IPAWS_STATUS_INTERVAL:
-                try:
-                    _emit_ipaws_status_update(app, socketio)
-                    last_ipaws_status_emit = now
-                except Exception as e:
-                    logger.warning(f"Error emitting ipaws_status_update: {e}")
-                    _recover_db_session()
-
-            # ================================================================
-            # GPIO STATUS UPDATE (every 3s)
-            # GPIO pin states
-            # ================================================================
             if now - last_gpio_status_emit >= GPIO_STATUS_INTERVAL:
                 try:
                     _emit_gpio_status_update(app, socketio)
@@ -340,10 +273,117 @@ def _push_worker(app: 'Flask', socketio: 'SocketIO') -> None:
                     logger.debug(f"Error emitting gpio_status_update: {e}")
                     _recover_db_session()
 
-            # ================================================================
-            # LED STATUS UPDATE (every 30s)
-            # LED controller status
-            # ================================================================
+            if now - last_broadcast_state_emit >= BROADCAST_STATE_INTERVAL:
+                try:
+                    _emit_broadcast_state_update(socketio)
+                    last_broadcast_state_emit = now
+                except Exception as e:
+                    logger.debug(f"Error emitting broadcast_state_update: {e}")
+
+            # 250 ms tick = 4 Hz VU meters
+            _stop_event.wait(AUDIO_MONITORING_INTERVAL)
+
+    logger.info("WebSocket fast push worker stopped")
+
+
+# Shared audio-source config cache (read by the fast loop's audio_monitoring
+# emit; refreshed by the slow loop because it pulls from the database and the
+# fast loop must stay DB-free).  We use atomic reference swap (rebind the
+# module-level name to a new dict) so the fast loop never observes a
+# partially-updated mapping — no lock required.
+_config_cache: Dict[str, Any] = {}
+_config_cache_loaded_at: float = 0.0
+
+
+def _refresh_config_cache() -> None:
+    """Refresh the shared audio-source config cache from the database."""
+    global _config_cache, _config_cache_loaded_at
+    try:
+        from webapp.admin.audio_ingest import AudioSourceConfigDB
+        # Build a fresh dict, then swap the reference atomically.  CPython
+        # name binding is atomic with respect to other threads, so the fast
+        # loop will see either the old dict or the new one — never a
+        # half-cleared one.
+        new_cache = {cfg.name: cfg for cfg in AudioSourceConfigDB.query.all()}
+        _config_cache = new_cache
+        _config_cache_loaded_at = time.time()
+    except Exception as e:
+        logger.debug(f"Error refreshing audio config cache: {e}")
+        _recover_db_session()
+
+
+def _push_worker_slow(app: 'Flask', socketio: 'SocketIO') -> None:
+    """Slow push loop: DB-backed emits with their own cadences.
+
+    Runs at a 1 s base tick because none of these emits need sub-second
+    latency.  Any single slow query here only delays *other* slow emits;
+    the fast loop keeps pushing meter ticks regardless.
+    """
+    logger.info("WebSocket slow push worker started")
+
+    # Timers for the slow emits
+    last_system_health_emit = 0.0
+    last_audio_sources_emit = 0.0
+    last_audio_health_emit = 0.0
+    last_operation_status_emit = 0.0
+    last_ipaws_status_emit = 0.0
+    last_led_status_emit = 0.0
+    last_analytics_emit = 0.0
+    last_radio_status_emit = 0.0
+    last_logs_emit = 0.0
+    last_alerts_emit = 0.0
+    last_alerts_signature: Optional[str] = None
+    last_config_cache_refresh = 0.0
+
+    with app.app_context():
+        while not _stop_event.is_set():
+            now = time.time()
+
+            # Refresh config cache periodically (shared with fast loop)
+            if now - last_config_cache_refresh > 30:
+                _refresh_config_cache()
+                last_config_cache_refresh = now
+
+            if now - last_system_health_emit >= SYSTEM_HEALTH_INTERVAL:
+                try:
+                    _emit_system_health_update(app, socketio)
+                    last_system_health_emit = now
+                except Exception as e:
+                    logger.warning(f"Error emitting system_health_update: {e}")
+                    _recover_db_session()
+
+            if now - last_audio_sources_emit >= AUDIO_SOURCES_INTERVAL:
+                try:
+                    _emit_audio_sources_update(app, socketio)
+                    last_audio_sources_emit = now
+                except Exception as e:
+                    logger.warning(f"Error emitting audio_sources_update: {e}")
+                    _recover_db_session()
+
+            if now - last_audio_health_emit >= AUDIO_HEALTH_INTERVAL:
+                try:
+                    _emit_audio_health_update(app, socketio)
+                    last_audio_health_emit = now
+                except Exception as e:
+                    logger.warning(f"Error emitting audio_health_update: {e}")
+                    _recover_db_session()
+
+            if now - last_operation_status_emit >= OPERATION_STATUS_INTERVAL:
+                try:
+                    _emit_operation_status_update(app, socketio)
+                    last_operation_status_emit = now
+                except Exception as e:
+                    logger.warning(f"Error emitting operation_status_update: {e}")
+                    _recover_db_session()
+
+            if now - last_ipaws_status_emit >= IPAWS_STATUS_INTERVAL:
+                try:
+                    _emit_ipaws_status_update(app, socketio)
+                    last_ipaws_status_emit = now
+                except Exception as e:
+                    logger.warning(f"Error emitting ipaws_status_update: {e}")
+                    _recover_db_session()
+
             if now - last_led_status_emit >= LED_STATUS_INTERVAL:
                 try:
                     _emit_led_status_update(app, socketio)
@@ -352,10 +392,6 @@ def _push_worker(app: 'Flask', socketio: 'SocketIO') -> None:
                     logger.debug(f"Error emitting led_status_update: {e}")
                     _recover_db_session()
 
-            # ================================================================
-            # ANALYTICS UPDATE (every 30s)
-            # Analytics dashboard data
-            # ================================================================
             if now - last_analytics_emit >= ANALYTICS_INTERVAL:
                 try:
                     _emit_analytics_update(app, socketio)
@@ -364,10 +400,6 @@ def _push_worker(app: 'Flask', socketio: 'SocketIO') -> None:
                     logger.debug(f"Error emitting analytics_update: {e}")
                     _recover_db_session()
 
-            # ================================================================
-            # RADIO STATUS UPDATE (every 15s)
-            # Radio diagnostics status
-            # ================================================================
             if now - last_radio_status_emit >= RADIO_STATUS_INTERVAL:
                 try:
                     _emit_radio_status_update(app, socketio)
@@ -376,10 +408,6 @@ def _push_worker(app: 'Flask', socketio: 'SocketIO') -> None:
                     logger.debug(f"Error emitting radio_status_update: {e}")
                     _recover_db_session()
 
-            # ================================================================
-            # LOGS UPDATE (every 10s)
-            # Recent log entries for real-time log viewer
-            # ================================================================
             if now - last_logs_emit >= LOGS_UPDATE_INTERVAL:
                 try:
                     _emit_logs_update(app, socketio)
@@ -388,22 +416,6 @@ def _push_worker(app: 'Flask', socketio: 'SocketIO') -> None:
                     logger.debug(f"Error emitting logs_update: {e}")
                     _recover_db_session()
 
-            # ================================================================
-            # BROADCAST STATE UPDATE (1Hz)
-            # Airchain active state for the global countdown timer overlay.
-            # ================================================================
-            if now - last_broadcast_state_emit >= BROADCAST_STATE_INTERVAL:
-                try:
-                    _emit_broadcast_state_update(socketio)
-                    last_broadcast_state_emit = now
-                except Exception as e:
-                    logger.debug(f"Error emitting broadcast_state_update: {e}")
-
-            # ================================================================
-            # ALERTS UPDATE (every 5s, change-detected)
-            # Active CAP alert summary so the alerts page and dashboard widgets
-            # don't have to poll /api/alerts on a timer.
-            # ================================================================
             if now - last_alerts_emit >= ALERTS_UPDATE_INTERVAL:
                 try:
                     new_sig = _emit_alerts_update(app, socketio, last_alerts_signature)
@@ -414,10 +426,10 @@ def _push_worker(app: 'Flask', socketio: 'SocketIO') -> None:
                     logger.debug(f"Error emitting alerts_update: {e}")
                     _recover_db_session()
 
-            # Sleep for 250ms (4Hz base loop) — low CPU, smooth VU meters
-            _stop_event.wait(AUDIO_MONITORING_INTERVAL)
+            # 1 s base tick — slow emits don't need sub-second timing
+            _stop_event.wait(1.0)
 
-    logger.info("WebSocket push worker stopped")
+    logger.info("WebSocket slow push worker stopped")
 
 
 def _emit_audio_monitoring_update(app: 'Flask', socketio: 'SocketIO', config_cache: dict) -> None:

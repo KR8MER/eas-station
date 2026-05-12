@@ -2367,6 +2367,9 @@ function startLevelPolling() {
     }
 
     levelIntervalHandle = setInterval(async () => {
+        // Don't poll when the tab is hidden — the meters can't be seen and
+        // the request still costs a DB-backed handler on the server.
+        if (typeof document !== 'undefined' && document.hidden) return;
         try {
             const response = await fetch('/api/audio/metrics', { cache: 'no-store' });
             if (response.ok) {
@@ -2391,6 +2394,7 @@ function startEASMonitorPolling() {
     }
 
     easMonitorIntervalHandle = setInterval(async () => {
+        if (typeof document !== 'undefined' && document.hidden) return;
         try {
             await loadEASMonitorStatus();
         } catch (error) {
@@ -2484,8 +2488,12 @@ document.addEventListener('DOMContentLoaded', function() {
         startEASMonitorPolling();
     }
 
-    // Auto-refresh every 30 seconds - only updates metrics, never interrupts playback
-    setInterval(() => loadAudioSources(false), 30000);
+    // Auto-refresh every 30 seconds - only updates metrics, never interrupts playback.
+    // Skip when the tab is hidden so background tabs don't keep poking the API.
+    setInterval(() => {
+        if (typeof document !== 'undefined' && document.hidden) return;
+        loadAudioSources(false);
+    }, 30000);
 });
 
 // Clean up intervals and socket when page unloads

@@ -55,12 +55,50 @@ except Exception:  # pragma: no cover - pysnmp is optional
 _HEALTH_WORKER = None
 _HEALTH_WORKER_LOCK = threading.Lock()
 
+# In-process TTL cache for build_system_health_snapshot.  The snapshot scans
+# every process and every disk partition, so running it on every WebSocket
+# push (and again on every /api/system_health request) put far more load on
+# the box than the underlying data ever changes.  A short TTL collapses all
+# concurrent callers onto a single computation while still feeling live.
+_HEALTH_SNAPSHOT_TTL_SECONDS = 30.0
+_HEALTH_SNAPSHOT_LOCK = threading.Lock()
+_HEALTH_SNAPSHOT_CACHE: Optional[Dict[str, Any]] = None
+_HEALTH_SNAPSHOT_TIMESTAMP: float = 0.0
 
-def get_system_health(logger=None) -> Dict[str, Any]:
-    """Return a structured health snapshot for the running application."""
+
+def get_system_health(logger=None, force_refresh: bool = False) -> Dict[str, Any]:
+    """Return a structured health snapshot for the running application.
+
+    Cached for ``_HEALTH_SNAPSHOT_TTL_SECONDS`` to avoid the multi-hundred-ms
+    psutil scan running back-to-back from the WebSocket push thread and the
+    HTTP API.  Pass ``force_refresh=True`` to bypass the cache (used by the
+    HealthAlertWorker once per ``COMPLIANCE_HEALTH_INTERVAL``).
+    """
+
+    import time as _time
+
+    global _HEALTH_SNAPSHOT_CACHE, _HEALTH_SNAPSHOT_TIMESTAMP
 
     effective_logger = logger or _resolve_logger()
-    return build_system_health_snapshot(db, effective_logger)
+
+    if not force_refresh:
+        cached = _HEALTH_SNAPSHOT_CACHE
+        cached_at = _HEALTH_SNAPSHOT_TIMESTAMP
+        if cached is not None and (_time.time() - cached_at) < _HEALTH_SNAPSHOT_TTL_SECONDS:
+            return cached
+
+    with _HEALTH_SNAPSHOT_LOCK:
+        # Re-check under the lock so concurrent callers collapse to one build.
+        if not force_refresh:
+            cached = _HEALTH_SNAPSHOT_CACHE
+            cached_at = _HEALTH_SNAPSHOT_TIMESTAMP
+            if cached is not None and (_time.time() - cached_at) < _HEALTH_SNAPSHOT_TTL_SECONDS:
+                return cached
+
+        snapshot = build_system_health_snapshot(db, effective_logger)
+        _HEALTH_SNAPSHOT_CACHE = snapshot
+        _HEALTH_SNAPSHOT_TIMESTAMP = _time.time()
+        return snapshot
 
 
 def collect_receiver_health_snapshot(logger=None) -> Dict[str, Any]:
@@ -446,9 +484,29 @@ def _resolve_last_audio_activity(logger) -> Optional[datetime]:
     """Return the most recent audio activity timestamp from automated or manual paths."""
 
     try:
-        latest_auto = db.session.query(func.max(EASMessage.created_at)).scalar()
-        latest_manual_sent = db.session.query(func.max(ManualEASActivation.sent_at)).scalar()
-        latest_manual_created = db.session.query(func.max(ManualEASActivation.created_at)).scalar()
+        # Single round-trip: compute the max across both tables and both
+        # ManualEASActivation columns at once.  Previously this issued three
+        # separate SELECT MAX queries, which the HealthAlertWorker ran on
+        # every iteration in addition to the WebSocket-push system-health
+        # snapshot.  COALESCE the subqueries so an empty table doesn't make
+        # GREATEST() collapse the whole expression to NULL.
+        sentinel = datetime(1970, 1, 1, tzinfo=UTC_TZ)
+        latest = db.session.query(
+            func.greatest(
+                func.coalesce(
+                    db.session.query(func.max(EASMessage.created_at)).scalar_subquery(),
+                    sentinel,
+                ),
+                func.coalesce(
+                    db.session.query(func.max(ManualEASActivation.sent_at)).scalar_subquery(),
+                    sentinel,
+                ),
+                func.coalesce(
+                    db.session.query(func.max(ManualEASActivation.created_at)).scalar_subquery(),
+                    sentinel,
+                ),
+            )
+        ).scalar()
     except Exception as exc:  # pragma: no cover - defensive logging
         logger.error("Failed to inspect audio activity timestamps: %s", exc)
         try:
@@ -457,16 +515,13 @@ def _resolve_last_audio_activity(logger) -> Optional[datetime]:
             pass
         return None
 
-    candidates = [
-        _ensure_aware(value)
-        for value in (latest_auto, latest_manual_sent, latest_manual_created)
-        if value is not None
-    ]
-
-    if not candidates:
+    if latest is None:
         return None
-
-    return max(candidates)
+    aware = _ensure_aware(latest)
+    # Discard the epoch sentinel when every source table was empty.
+    if aware is not None and aware <= datetime(1970, 1, 2, tzinfo=UTC_TZ):
+        return None
+    return aware
 
 
 class HealthAlertWorker:

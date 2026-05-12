@@ -148,14 +148,26 @@ def _collect_dependency_versions(logger) -> List[Dict[str, str]]:
 
 
 def build_system_health_snapshot(db, logger) -> SystemHealth:
-    """Collect detailed system health metrics."""
+    """Collect detailed system health metrics.
+
+    Performance: this function runs on the single WebSocket-push thread and
+    used to block for ~1.3 s every minute (psutil.cpu_percent(interval=1) +
+    time.sleep(0.3) for per-process CPU sampling), stalling the 4 Hz VU-meter
+    push.  Both blocking calls have been removed.  CPU samples are now taken
+    with ``interval=None`` (non-blocking, reporting the delta since the last
+    call); because callers cache the snapshot for ~30 s, the resulting numbers
+    are meaningful 30-second averages without ever blocking the loop.
+    """
 
     try:
         uname = platform.uname()
         boot_time = psutil.boot_time()
 
         cpu_freq = psutil.cpu_freq()
-        cpu_usage_per_core = psutil.cpu_percent(interval=1, percpu=True)
+        # Non-blocking CPU sample: returns the delta since the previous call.
+        # Cached at the get_system_health() layer, so the delta is over the
+        # cache TTL (~30 s) and remains an accurate utilization figure.
+        cpu_usage_per_core = psutil.cpu_percent(interval=None, percpu=True)
         cpu_usage_percent = (
             sum(cpu_usage_per_core) / len(cpu_usage_per_core)
             if cpu_usage_per_core
@@ -286,10 +298,8 @@ def build_system_health_snapshot(db, logger) -> SystemHealth:
                 network_info["primary_interface_name"] = primary_interface["name"]
 
         process_info = {
-            "total_processes": len(psutil.pids()),
-            "running_processes": len(
-                [p for p in psutil.process_iter(["status"]) if p.info["status"] == psutil.STATUS_RUNNING]
-            ),
+            "total_processes": 0,
+            "running_processes": 0,
             "top_processes": [],
             "audio_decoding": {
                 "cpu_percent_total": 0.0,
@@ -298,29 +308,33 @@ def build_system_health_snapshot(db, logger) -> SystemHealth:
         }
 
         try:
-            observed_processes: List[Tuple[psutil.Process, Dict[str, Any]]] = []
-
-            for proc in psutil.process_iter(["pid", "name", "username"]):
-                try:
-                    proc.cpu_percent(None)
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    continue
-
-                observed_processes.append((proc, dict(proc.info)))
-
-            # Allow a short interval so psutil can calculate CPU deltas using the same
-            # Process instances collected above. Using new Process objects here would
-            # reset the internal CPU counters and always report 0%.
-            time.sleep(0.3)
-
+            # Single pass over the process table.  Previously this section
+            # iterated psutil.process_iter() three times and slept for 300 ms
+            # between samples to compute CPU deltas — that 0.3 s stall, run
+            # on the shared WebSocket-push thread, dropped audio-monitoring
+            # ticks every snapshot.  We now call ``cpu_percent(None)`` once
+            # per process which returns the delta since the previous call by
+            # the *same* psutil bookkeeping (process objects keyed by pid).
+            # Because get_system_health() caches the snapshot for ~30 s,
+            # consecutive calls produce a meaningful 30-second average
+            # without any sleep.
             processes: List[Dict[str, Any]] = []
             audio_processes: List[Dict[str, Any]] = []
             audio_cpu_total = 0.0
-            for proc, metadata in observed_processes:
+            total_processes = 0
+            running_processes = 0
+            running_status = psutil.STATUS_RUNNING
+
+            for proc in psutil.process_iter(["pid", "name", "username", "status"]):
+                total_processes += 1
+                info = proc.info
+                if info.get("status") == running_status:
+                    running_processes += 1
+
                 try:
                     cpu_percent = proc.cpu_percent(None)
                     memory_percent = proc.memory_percent()
-                    name = metadata.get("name") or proc.name()
+                    name = info.get("name") or proc.name()
                     cmdline_list = proc.cmdline()
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     continue
@@ -333,9 +347,9 @@ def build_system_health_snapshot(db, logger) -> SystemHealth:
                     memory_percent = 0.0
 
                 process_entry = {
-                    "pid": metadata.get("pid", proc.pid),
+                    "pid": info.get("pid", proc.pid),
                     "name": name,
-                    "username": metadata.get("username"),
+                    "username": info.get("username"),
                     "cpu_percent": cpu_percent,
                     "memory_percent": memory_percent,
                 }
@@ -355,6 +369,8 @@ def build_system_health_snapshot(db, logger) -> SystemHealth:
             processes.sort(key=lambda entry: entry.get("cpu_percent", 0) or 0, reverse=True)
             audio_processes.sort(key=lambda entry: entry.get("cpu_percent", 0) or 0, reverse=True)
 
+            process_info["total_processes"] = total_processes
+            process_info["running_processes"] = running_processes
             process_info["top_processes"] = processes[:10]
             process_info["audio_decoding"] = {
                 "cpu_percent_total": round(audio_cpu_total, 1),

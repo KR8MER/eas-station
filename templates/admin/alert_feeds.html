@@ -612,6 +612,9 @@ function handleAlertFeedsIpawsUpdate(data) {
 
 // Polling fallback function
 async function refreshAlertFeedsIpawsStatus() {
+    // Skip when the tab is hidden — the panel can't be seen and the call
+    // still hits IPAWS connectivity probes on the server.
+    if (typeof document !== 'undefined' && document.hidden) return;
     try {
         const response = await fetch('/api/ipaws/status');
         const result = await response.json();

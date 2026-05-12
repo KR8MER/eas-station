@@ -2921,6 +2921,10 @@ function appendDebugFrames(frames) {
 
 function pollDebugFrames() {
     if (debugPaused) return;
+    // Skip when the tab is hidden — debug terminal updates are visual-only,
+    // so there's nothing to render and no reason to keep hammering the API
+    // (default cadence is 400 ms in burst mode).
+    if (typeof document !== 'undefined' && document.hidden) return;
     fetch(`/api/led/debug/frames?since=${debugLastSeq}`, {
         credentials: 'same-origin',
     })

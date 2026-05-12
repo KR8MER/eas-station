@@ -2547,10 +2547,27 @@
 
         function loop() {
             if (!ready) return;
+            // Skip rendering when the tab is hidden — Three.js + WebGL on a
+            // Pi-class CPU otherwise burns a full core to render frames the
+            // user can't see.  visibilitychange below re-arms the loop.
+            if (typeof document !== 'undefined' && document.hidden) {
+                pendingResume = true;
+                return;
+            }
             var t = clock ? clock.getElapsedTime() : 0;
             animateScene(t);
             renderer.render(scene, camera);
             requestAnimationFrame(loop);
+        }
+
+        var pendingResume = false;
+        if (typeof document !== 'undefined') {
+            document.addEventListener('visibilitychange', function () {
+                if (!document.hidden && pendingResume && ready) {
+                    pendingResume = false;
+                    requestAnimationFrame(loop);
+                }
+            });
         }
 
         return {
@@ -4879,6 +4896,11 @@
     // ── Polling.  Configurable interval; "0" means paused.
     var timer = null;
     function fetchOnce() {
+        // Don't poll when the tab is hidden — the operator can't see the
+        // result, and the request still costs a DB-backed handler on the
+        // server.  The next visibility flip below triggers an immediate
+        // refresh so the dashboard never shows stale data when refocused.
+        if (typeof document !== 'undefined' && document.hidden) return;
         fetch('/admin/api/gps-dashboard/data', { credentials: 'same-origin' })
             .then(function (r) { return r.json(); })
             .then(render)
@@ -4889,6 +4911,11 @@
     function schedule(intervalMs) {
         if (timer) { clearInterval(timer); timer = null; }
         if (intervalMs > 0) timer = setInterval(fetchOnce, intervalMs);
+    }
+    if (typeof document !== 'undefined') {
+        document.addEventListener('visibilitychange', function () {
+            if (!document.hidden) fetchOnce();
+        });
     }
     document.addEventListener('DOMContentLoaded', function () {
         // Simple / Engineering view mode — apply persisted (or media-

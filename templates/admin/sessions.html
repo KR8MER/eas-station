@@ -151,8 +151,12 @@ function escHtml(str) {
     return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// Auto-refresh every 30s when viewing active sessions
-setInterval(() => { if (!showHistory) loadSessions(); }, 30000);
+// Auto-refresh every 30s when viewing active sessions.  Skip when the tab is
+// hidden so background tabs don't keep polling the (DB-backed) sessions API.
+setInterval(() => {
+    if (typeof document !== 'undefined' && document.hidden) return;
+    if (!showHistory) loadSessions();
+}, 30000);
 
 document.addEventListener('DOMContentLoaded', loadSessions);
 </script>
