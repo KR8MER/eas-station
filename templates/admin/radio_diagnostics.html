@@ -46,6 +46,15 @@
                         <label class="form-check-label" for="autoRefresh">Auto-refresh (5s)</label>
                     </div>
                 </div>
+                <div class="col-auto">
+                    <label for="captureDurationSec" class="form-label mb-1 small text-muted">
+                        Capture duration (s)
+                    </label>
+                    <input type="number" class="form-control form-control-sm"
+                           id="captureDurationSec" min="0.1" max="60" step="0.1"
+                           value="1" style="width: 7rem;"
+                           title="How many seconds of IQ to record when 'Capture IQ' is clicked. Max 60 s.">
+                </div>
             </div>
         </div>
     </div>
@@ -151,16 +160,18 @@
             <div class="card-body">
                 <p class="mb-2">
                     <strong>What is it?</strong>
-                    An <em>IQ capture</em> is a short recording of the raw
+                    An <em>IQ capture</em> is a recording of the raw
                     complex baseband samples coming out of the SDR — the
                     same in-phase / quadrature pairs the demodulator sees,
                     one per sample at the receiver's sample rate. Each
-                    <code>"Capture IQ"</code> button below grabs roughly
-                    one second of samples from that receiver and saves them
-                    as a <code>complex64</code> NumPy file
-                    (<code>.npy</code>). At a typical FM rate of
-                    250&nbsp;kHz that's around <strong>2&nbsp;MB</strong>;
-                    at 2.4&nbsp;MHz it's closer to <strong>20&nbsp;MB</strong>.
+                    <code>"Capture IQ"</code> button below grabs the
+                    number of seconds selected in the
+                    <em>Capture duration</em> picker (default 1 s, up to
+                    60 s) and saves them as a <code>complex64</code>
+                    NumPy file (<code>.npy</code>). At a typical FM rate
+                    of 250&nbsp;kHz a 1-second capture is around
+                    <strong>2&nbsp;MB</strong>; a 30-second capture is
+                    about <strong>60&nbsp;MB</strong>.
                 </p>
                 <p class="mb-2">
                     <strong>What is it for?</strong>
@@ -636,8 +647,11 @@ sudo systemctl restart eas-station</code></pre>
                                     <i class="fas fa-vial"></i> Test Spectrum Endpoint
                                 </a>
                                 ${receiver.receiver_id ? `
-                                    <button type="button" class="btn btn-outline-info" data-action="capture-iq" data-receiver-id="${receiver.receiver_id}" title="Record ~1 second of raw IQ samples from this receiver and download as a .npy file. See the 'About IQ Captures' card above for what it is and what to do with the file.">
+                                    <button type="button" class="btn btn-outline-info" data-action="capture-iq" data-receiver-id="${receiver.receiver_id}" title="Record raw IQ samples from this receiver and download as a .npy file. Use the 'Duration' field on the left to control how many seconds are captured.">
                                         <i class="fas fa-download"></i> Capture IQ
+                                    </button>
+                                    <button type="button" class="btn btn-outline-success" data-action="auto-gain" data-receiver-id="${receiver.receiver_id}" title="Sweep this receiver's gain range, measure IQ headroom at each step, and apply the highest non-clipping gain. Hold Shift while clicking to also save the chosen gain to the receiver's persistent configuration.">
+                                        <i class="fas fa-sliders-h"></i> Auto-Calibrate Gain
                                     </button>
                                     <button type="button" class="btn btn-outline-warning" data-action="restart" data-receiver-id="${receiver.receiver_id}">
                                         <i class="fas fa-sync-alt"></i> Restart Receiver
@@ -834,9 +848,23 @@ sudo systemctl restart eas-station</code></pre>
         const receiverId = captureBtn.getAttribute('data-receiver-id');
         if (!receiverId) return;
 
+        // Read the user-selected duration from the picker at the top
+        // of the page (falls back to 1.0 s if the input is missing or
+        // out-of-range). Clamp to the server-side maximum so we don't
+        // round-trip just to be told the value is too large.
+        const durationInput = document.getElementById('captureDurationSec');
+        let durationSec = 1.0;
+        if (durationInput) {
+            const parsed = parseFloat(durationInput.value);
+            if (!Number.isNaN(parsed) && parsed > 0) {
+                durationSec = Math.min(60.0, parsed);
+            }
+        }
+
         const originalHtml = captureBtn.innerHTML;
         captureBtn.disabled = true;
-        captureBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Capturing...';
+        captureBtn.innerHTML =
+            `<i class="fas fa-spinner fa-spin"></i> Capturing ${durationSec.toFixed(1)}s...`;
 
         try {
             const response = await fetch(
@@ -844,7 +872,7 @@ sudo systemctl restart eas-station</code></pre>
                 {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ duration_sec: 1.0 })
+                    body: JSON.stringify({ duration_sec: durationSec })
                 }
             );
             const result = await response.json();
@@ -863,7 +891,12 @@ sudo systemctl restart eas-station</code></pre>
             document.body.removeChild(link);
 
             const sizeMB = (result.size_bytes / (1024 * 1024)).toFixed(2);
-            captureBtn.innerHTML = `<i class="fas fa-check"></i> Captured ${sizeMB} MB`;
+            const actualSec = result.sample_rate
+                ? (result.num_samples / result.sample_rate).toFixed(2)
+                : null;
+            captureBtn.innerHTML = actualSec
+                ? `<i class="fas fa-check"></i> Captured ${actualSec}s / ${sizeMB} MB`
+                : `<i class="fas fa-check"></i> Captured ${sizeMB} MB`;
             setTimeout(() => {
                 captureBtn.disabled = false;
                 captureBtn.innerHTML = originalHtml;
@@ -873,6 +906,68 @@ sudo systemctl restart eas-station</code></pre>
             alert(`IQ capture failed: ${error.message}`);
             captureBtn.disabled = false;
             captureBtn.innerHTML = originalHtml;
+        }
+    });
+
+    // Delegated event listener for "Auto-Calibrate Gain" buttons.
+    // Sweeps the receiver's gain values, picks the highest non-clipping
+    // setting, applies it. Shift-click also persists the value to the
+    // receiver's persistent configuration row.
+    document.addEventListener('click', async (event) => {
+        const gainBtn = event.target.closest('button[data-action="auto-gain"]');
+        if (!gainBtn) return;
+        const receiverId = gainBtn.getAttribute('data-receiver-id');
+        if (!receiverId) return;
+
+        const persist = event.shiftKey === true;
+        const originalHtml = gainBtn.innerHTML;
+        gainBtn.disabled = true;
+        gainBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Calibrating...';
+
+        try {
+            const response = await fetch(
+                `/api/radio/diagnostics/auto_gain/${receiverId}`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ persist })
+                }
+            );
+            const result = await response.json();
+            if (!response.ok || !result.success) {
+                throw new Error(
+                    result.error || result.hint || `HTTP ${response.status}`
+                );
+            }
+            const gain = result.selected_gain_db;
+            const decision = result.decision || 'selected';
+            const persistedLabel = result.persisted ? ' (saved)' : '';
+            gainBtn.innerHTML =
+                `<i class="fas fa-check"></i> ${gain != null ? gain.toFixed(1) : '?'} dB${persistedLabel}`;
+            const measured = result.selected_measurement || {};
+            console.info('auto-gain result', {
+                receiverId,
+                gain,
+                decision,
+                rms_dbfs: measured.rms_dbfs,
+                peak_dbfs: measured.peak_dbfs,
+                clipping_fraction: measured.clipping_fraction,
+                persisted: result.persisted,
+                measurements: result.measurements,
+            });
+            setTimeout(() => {
+                gainBtn.disabled = false;
+                gainBtn.innerHTML = originalHtml;
+                // Re-run diagnostics so the new gain is reflected.
+                if (typeof loadDiagnostics === 'function') {
+                    loadDiagnostics();
+                }
+            }, 3000);
+        } catch (error) {
+            console.error('Auto-gain failed', error);
+            alert(`Auto-gain failed: ${error.message}`);
+            gainBtn.disabled = false;
+            gainBtn.innerHTML = originalHtml;
         }
     });
 

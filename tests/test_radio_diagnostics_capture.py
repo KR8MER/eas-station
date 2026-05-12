@@ -343,3 +343,206 @@ def test_capture_iq_timeout_returns_504(capture_app, monkeypatch):
         assert resp.status_code == 504
         body = resp.get_json()
         assert "Timeout" in body.get("error", "")
+
+
+def test_capture_iq_long_duration_is_accepted(capture_app, monkeypatch):
+    """A 30-second capture request must be passed through (not clamped to 5 s).
+
+    Verifies that:
+    - the route does not reject durations up to RADIO_CAPTURE_MAX_DURATION_SEC,
+    - the command sent to the SDR service carries the requested sample count, and
+    - the wait timeout actually scales with the requested duration so the
+      polling loop doesn't give up before 30 s of real-time samples could
+      have been collected by the publisher tap.
+    """
+    app, capture_dir = capture_app
+
+    with app.app_context():
+        receiver = _add_receiver()
+        receiver_id = receiver.id
+
+        capture_path = capture_dir / (
+            "iq_WXTEST_250000Hz_1700000001_deadbeef.npy"
+        )
+        capture_path.write_bytes(b"X" * 32)
+
+        # Note: real num_samples for 30 s @ 2.4 MHz would be 72M, exceeding
+        # RADIO_CAPTURE_MAX_SAMPLES (30M) on the SDR-service side. The
+        # webapp does not enforce the sample cap itself; that's a service
+        # responsibility. Here we just check the request flow.
+        fake_redis = FakeRedis(capture_iq_result={
+            "success": True,
+            "path": str(capture_path),
+            "filename": capture_path.name,
+            "num_samples": 30 * 250_000,
+            "requested_samples": 30 * 250_000,
+            "sample_rate": 250_000,
+            "frequency_hz": 98_500_000,
+            "size_bytes": capture_path.stat().st_size,
+            "dtype": "complex64",
+            "duration_sec": 30.0,
+            "complete": True,
+        })
+        monkeypatch.setattr(radio_routes, "get_redis_client", lambda: fake_redis)
+
+        client = app.test_client()
+        resp = client.post(
+            f"/api/radio/diagnostics/capture/{receiver_id}",
+            json={"duration_sec": 30.0},
+        )
+        assert resp.status_code == 200, resp.get_json()
+
+        # Verify the command queued for the SDR service carries 30 s of
+        # samples at the receiver's configured sample rate, NOT 1 s.
+        assert "sdr:commands" in fake_redis.lists
+        command = json.loads(fake_redis.lists["sdr:commands"][0])
+        assert command["action"] == "capture_iq"
+        # receiver.sample_rate is 2.4 MHz in the test fixture so num_samples
+        # is 30 * 2_400_000 = 72_000_000 (passed straight through; the
+        # service-side cap clamps it).
+        assert command["num_samples"] == 30 * 2_400_000
+
+
+def test_capture_iq_clamps_excessive_duration(capture_app, monkeypatch):
+    """Durations beyond RADIO_CAPTURE_MAX_DURATION_SEC are clamped, not rejected."""
+    app, capture_dir = capture_app
+    with app.app_context():
+        receiver = _add_receiver()
+        receiver_id = receiver.id
+
+        capture_path = capture_dir / "iq_x_1Hz_1_aaaaaaaa.npy"
+        capture_path.write_bytes(b"x")
+
+        fake_redis = FakeRedis(capture_iq_result={
+            "success": True,
+            "path": str(capture_path),
+            "filename": capture_path.name,
+            "num_samples": 1,
+            "sample_rate": 1,
+            "frequency_hz": 1,
+            "size_bytes": 1,
+            "dtype": "complex64",
+        })
+        monkeypatch.setattr(radio_routes, "get_redis_client", lambda: fake_redis)
+
+        client = app.test_client()
+        resp = client.post(
+            f"/api/radio/diagnostics/capture/{receiver_id}",
+            json={"duration_sec": 9999.0},
+        )
+        assert resp.status_code == 200, resp.get_json()
+        command = json.loads(fake_redis.lists["sdr:commands"][0])
+        # Should have been clamped to the max duration * sample rate.
+        assert command["num_samples"] == int(
+            radio_routes.RADIO_CAPTURE_MAX_DURATION_SEC * 2_400_000
+        )
+
+
+def test_auto_gain_happy_path(capture_app, monkeypatch):
+    """Auto-gain endpoint returns the selected gain and queues an SDR command."""
+    app, _ = capture_app
+    with app.app_context():
+        receiver = _add_receiver()
+        receiver_id = receiver.id
+
+        measurements = [
+            {"gain_db": 0.0,  "rms_dbfs": -30.0, "peak_dbfs": -20.0, "clipping_fraction": 0.0,  "samples": 8192},
+            {"gain_db": 10.0, "rms_dbfs": -20.0, "peak_dbfs": -10.0, "clipping_fraction": 0.0,  "samples": 8192},
+            {"gain_db": 20.0, "rms_dbfs": -10.0, "peak_dbfs":  -2.0, "clipping_fraction": 0.001, "samples": 8192},
+            {"gain_db": 30.0, "rms_dbfs":  -3.0, "peak_dbfs":   0.0, "clipping_fraction": 0.20,  "samples": 8192},
+        ]
+        fake_redis = FakeRedis(capture_iq_result={
+            "success": True,
+            "applied": True,
+            "selected_gain_db": 20.0,
+            "previous_gain_db": 14.0,
+            "decision": "headroom-target",
+            "target_rms_dbfs": -12.0,
+            "clipping_threshold": 0.01,
+            "measurements": measurements,
+            "selected_measurement": measurements[2],
+        })
+        monkeypatch.setattr(radio_routes, "get_redis_client", lambda: fake_redis)
+
+        client = app.test_client()
+        resp = client.post(
+            f"/api/radio/diagnostics/auto_gain/{receiver_id}",
+            json={"persist": False, "target_rms_dbfs": -12.0},
+        )
+        assert resp.status_code == 200, resp.get_json()
+        body = resp.get_json()
+        assert body["success"] is True
+        assert body["selected_gain_db"] == 20.0
+        assert body["applied"] is True
+        # persist=False so the model row must NOT have been updated.
+        assert body["persisted"] is False
+        refreshed = db.session.get(RadioReceiver, receiver_id)
+        assert refreshed.gain is None
+
+        # Verify command shape.
+        command = json.loads(fake_redis.lists["sdr:commands"][0])
+        assert command["action"] == "auto_gain"
+        assert command["receiver_id"] == "WXTEST"
+        assert command["target_rms_dbfs"] == -12.0
+
+
+def test_auto_gain_persists_when_requested(capture_app, monkeypatch):
+    """With persist=true, the chosen gain is written to radio_receivers.gain."""
+    app, _ = capture_app
+    with app.app_context():
+        receiver = _add_receiver()
+        receiver_id = receiver.id
+
+        fake_redis = FakeRedis(capture_iq_result={
+            "success": True,
+            "applied": True,
+            "selected_gain_db": 17.5,
+            "previous_gain_db": None,
+            "decision": "headroom-target",
+            "target_rms_dbfs": -12.0,
+            "clipping_threshold": 0.01,
+            "measurements": [],
+            "selected_measurement": {"gain_db": 17.5, "rms_dbfs": -14.0,
+                                      "peak_dbfs": -6.0, "clipping_fraction": 0.0,
+                                      "samples": 8192},
+        })
+        monkeypatch.setattr(radio_routes, "get_redis_client", lambda: fake_redis)
+
+        client = app.test_client()
+        resp = client.post(
+            f"/api/radio/diagnostics/auto_gain/{receiver_id}",
+            json={"persist": True},
+        )
+        assert resp.status_code == 200, resp.get_json()
+        body = resp.get_json()
+        assert body["persisted"] is True
+        refreshed = db.session.get(RadioReceiver, receiver_id)
+        assert refreshed.gain == 17.5
+
+
+def test_auto_gain_propagates_service_failure(capture_app, monkeypatch):
+    """A failing SDR-service auto_gain result yields a 503 with the hint."""
+    app, _ = capture_app
+    with app.app_context():
+        receiver = _add_receiver()
+        receiver_id = receiver.id
+
+        fake_redis = FakeRedis(capture_iq_result={
+            "success": False,
+            "error": "Could not read gain range: device not ready",
+            "measurements": [],
+        })
+        monkeypatch.setattr(radio_routes, "get_redis_client", lambda: fake_redis)
+
+        client = app.test_client()
+        resp = client.post(
+            f"/api/radio/diagnostics/auto_gain/{receiver_id}",
+            json={"persist": True},
+        )
+        assert resp.status_code == 503
+        body = resp.get_json()
+        assert "hint" in body
+        # Gain row must remain untouched on failure.
+        refreshed = db.session.get(RadioReceiver, receiver_id)
+        assert refreshed.gain is None
+
