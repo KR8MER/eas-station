@@ -262,6 +262,8 @@ def _receiver_to_dict(receiver: RadioReceiver) -> Dict[str, Any]:
         "frequency_hz": receiver.frequency_hz,
         "sample_rate": receiver.sample_rate,
         "gain": receiver.gain,
+        "external_lna_db": float(receiver.external_lna_db or 0.0),
+        "bias_t_enabled": bool(receiver.bias_t_enabled),
         "channel": receiver.channel,
         "serial": receiver.serial,
         "auto_start": receiver.auto_start,
@@ -396,6 +398,25 @@ def _parse_receiver_payload(payload: Dict[str, Any], *, partial: bool = False) -
                 data["gain"] = float(gain)
             except Exception:
                 return None, "Gain must be numeric."
+
+    if "external_lna_db" in payload:
+        lna = payload.get("external_lna_db")
+        if lna in (None, "", []):
+            data["external_lna_db"] = 0.0
+        else:
+            try:
+                lna_val = float(lna)
+            except Exception:
+                return None, "External LNA gain must be numeric."
+            if lna_val < 0.0:
+                return None, "External LNA gain cannot be negative."
+            data["external_lna_db"] = lna_val
+
+    if "bias_t_enabled" in payload:
+        bias = payload.get("bias_t_enabled")
+        if isinstance(bias, str):
+            bias = bias.strip().lower() in ("1", "true", "yes", "on")
+        data["bias_t_enabled"] = bool(bias)
 
     if "channel" in payload:
         channel = payload.get("channel")

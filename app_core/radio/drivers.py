@@ -1074,10 +1074,25 @@ class _SoapySDRReceiver(ReceiverInterface):
                     gain_range = device.getGainRange(SoapySDR.SOAPY_SDR_RX, channel)
                     g_min = float(gain_range.minimum())
                     g_max = float(gain_range.maximum())
-                    # Aim at the lower-middle of the range, then back off by the
-                    # external LNA's gain. Clamp to the device range.
-                    target = g_min + 0.4 * (g_max - g_min) - external_lna_db
-                    target = max(g_min, min(g_max, target))
+                    # Aim at a fixed system-gain operating point (SDR + LNA).
+                    # The previous formula was
+                    #     target = g_min + 0.4*(g_max - g_min) - external_lna_db
+                    # which clamps to g_min for any LNA larger than ~40 % of
+                    # the SDR's range — e.g. a typical RTL-SDR with 0..49 dB
+                    # range plus a 20 dB external LNA gives
+                    #     0 + 0.4*49 - 20 = -0.4 → clamped to 0 dB SDR gain
+                    # i.e. the SDR is pinned to the bottom of its range and
+                    # the system runs ~17 dB under-gained.
+                    #
+                    # A fixed system target keeps the SDR's tuner stage at
+                    # a reasonable operating level whether the LNA is 10 dB
+                    # or 25 dB.  35 dB system gain leaves ~20 dB of headroom
+                    # against typical FM modulation peaks on a 50 dB SDR
+                    # range and produces samples strong enough for RBDS to
+                    # decode on a Class B / local-coverage station, while
+                    # still being well below clipping for nearby stations.
+                    SYSTEM_TARGET_DB = 35.0
+                    target = max(g_min, min(g_max, SYSTEM_TARGET_DB - external_lna_db))
                     device.setGain(SoapySDR.SOAPY_SDR_RX, channel, target)
                     self._interface_logger.info(
                         "Disabled AGC for %s and set manual gain to %.1f dB "
@@ -1113,6 +1128,44 @@ class _SoapySDRReceiver(ReceiverInterface):
                         "Failed to enable AGC for %s: %s",
                         self.config.identifier,
                         exc
+                    )
+
+            # Bias-T: power external LNA via the antenna coax.  Different
+            # device families expose this through different Soapy setting
+            # keys, so we try the known ones in priority order and stop at
+            # the first one the device accepts.  Failures are logged at
+            # WARNING (operator explicitly asked for bias power; if we
+            # can't deliver it the LNA won't work and they need to know).
+            #
+            # SAFETY: a short-to-ground on the antenna feed will fault the
+            # SDR's bias-T regulator or blow a front-end transistor.  We
+            # log loudly when enabling so a tail of the service log makes
+            # the cause of any sudden front-end death obvious.
+            if getattr(self.config, "bias_t_enabled", False):
+                bias_keys = ("biastee", "bias_tx", "bias", "biast")
+                bias_applied = False
+                for key in bias_keys:
+                    try:
+                        device.writeSetting(key, "true")
+                        self._interface_logger.warning(
+                            "BIAS-T ENABLED for %s via setting '%s' — "
+                            "verify the antenna feed is not shorted to "
+                            "ground or the SDR's bias regulator may fault.",
+                            self.config.identifier,
+                            key,
+                        )
+                        bias_applied = True
+                        break
+                    except Exception:
+                        # Try the next key; not every device exposes every key.
+                        continue
+                if not bias_applied:
+                    self._interface_logger.warning(
+                        "Bias-T requested for %s but no known Soapy "
+                        "setting key (%s) was accepted by the device. "
+                        "External LNA will not be powered through the coax.",
+                        self.config.identifier,
+                        ", ".join(bias_keys),
                     )
 
             # Set bandwidth to match sample rate if supported (helps with anti-aliasing)

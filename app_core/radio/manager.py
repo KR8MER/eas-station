@@ -53,6 +53,13 @@ class ReceiverConfig:
     # outboard amp and will happily drive the front-end into clipping), so we
     # disable AGC and pick a manual gain biased down by this amount.
     external_lna_db: float = 0.0
+    # Bias-T: many SDRs (RTL-SDR Blog v3/v4, Airspy R2/Mini, HackRF) can
+    # supply ~4.5 V DC on the antenna coax to power a remote LNA.  When
+    # true the driver enables the device-specific Soapy setting at open;
+    # default false because a short-to-ground on the antenna feed will
+    # fault the SDR's bias-T regulator (or, on cheaper boards, blow a
+    # series fuse / front-end transistor).
+    bias_t_enabled: bool = False
     channel: Optional[int] = None
     serial: Optional[str] = None
     enabled: bool = True
