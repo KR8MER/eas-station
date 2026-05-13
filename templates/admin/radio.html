@@ -323,7 +323,20 @@
                         <div class="col-md-4">
                             <label for="receiverGain" class="form-label">Gain (dB)</label>
                             <input type="number" class="form-control" id="receiverGain" name="gain" step="0.1" placeholder="Auto">
-                            <small class="form-text text-muted">Leave blank for automatic gain</small>
+                            <small class="form-text text-muted">Leave blank for auto / AGC. Use the Auto-Gain button on Radio Diagnostics to measure and persist a calibrated value.</small>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="receiverExternalLna" class="form-label">External LNA (dB)</label>
+                            <input type="number" class="form-control" id="receiverExternalLna" name="external_lna_db" step="0.1" min="0" placeholder="0">
+                            <small class="form-text text-muted">0 = none. Otherwise the LNA's gain — disables hardware AGC and biases manual gain to leave headroom.</small>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label d-block">Bias-T</label>
+                            <div class="form-check form-switch mt-2">
+                                <input class="form-check-input" type="checkbox" id="receiverBiasT" name="bias_t_enabled">
+                                <label class="form-check-label" for="receiverBiasT">Power LNA via antenna coax</label>
+                            </div>
+                            <small class="form-text text-muted">⚠ A short on the antenna feed will fault the SDR's bias regulator. Verify your antenna before enabling.</small>
                         </div>
                         <div class="col-md-4">
                             <label for="receiverNotes" class="form-label">Notes</label>
@@ -1908,6 +1921,8 @@
             document.getElementById('receiverFrequency').value = receiver.frequency_hz;
             document.getElementById('receiverGain').value = receiver.gain ?? '';
             document.getElementById('receiverChannel').value = receiver.channel ?? '';
+            document.getElementById('receiverExternalLna').value = receiver.external_lna_db ?? 0;
+            document.getElementById('receiverBiasT').checked = receiver.bias_t_enabled === true;
             document.getElementById('receiverNotes').value = receiver.notes ?? '';
             document.getElementById('receiverModulation').value = receiver.modulation_type ?? 'IQ';
             document.getElementById('receiverDeemphasis').value = receiver.deemphasis_us ?? '75';
@@ -2199,8 +2214,9 @@
         payload.enable_rbds = formData.get('enable_rbds') !== null;
         payload.squelch_enabled = formData.get('squelch_enabled') !== null;
         payload.squelch_alarm = formData.get('squelch_alarm') !== null;
+        payload.bias_t_enabled = formData.get('bias_t_enabled') !== null;
 
-        ['gain', 'channel'].forEach((key) => {
+        ['gain', 'channel', 'external_lna_db'].forEach((key) => {
             if (payload[key] === '') {
                 payload[key] = null;
             }

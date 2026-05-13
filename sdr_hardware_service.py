@@ -239,7 +239,7 @@ def _auto_gain_calibrate(
     receiver_id: str,
     command_id: str,
     settle_sec: float = 0.20,
-    measure_sec: float = 0.10,
+    measure_sec: float = 0.50,
     target_rms_dbfs: float = -12.0,
     clipping_threshold: float = 0.01,
 ) -> Dict[str, Any]:
@@ -280,6 +280,15 @@ def _auto_gain_calibrate(
     device = handle.device
     sdr_module = handle.sdr
     rx = sdr_module.SOAPY_SDR_RX
+
+    # Read the configured external LNA contribution so the headroom target
+    # represents *system* gain (SDR tuner stage + LNA), not just the SDR's
+    # tuner stage in isolation.  Falls back to 0 dB when the receiver
+    # config is missing or the field is unset.
+    try:
+        external_lna_db = float(getattr(config, "external_lna_db", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        external_lna_db = 0.0
 
     candidate_gains: list = []
     try:
@@ -366,8 +375,18 @@ def _auto_gain_calibrate(
         m for m in measurements
         if "rms_dbfs" in m and m.get("clipping_fraction", 1.0) <= clipping_threshold
     ]
+    # When an external LNA is in front of the SDR, the digital RMS we
+    # measure includes the LNA's gain.  The "leave headroom for FM
+    # modulation peaks" rationale behind ``target_rms_dbfs`` is about
+    # the SDR ADC — the LNA itself can be driven into compression long
+    # before any single ADC sample saturates, because LNAs compress
+    # softly above their P1dB point.  Tighten the headroom target by
+    # half the LNA's contribution so the chosen SDR gain leaves the
+    # same SDR-stage operating point regardless of LNA size.
+    effective_target_dbfs = target_rms_dbfs - max(0.0, external_lna_db) * 0.5
+
     if usable:
-        below_target = [m for m in usable if m["rms_dbfs"] <= target_rms_dbfs]
+        below_target = [m for m in usable if m["rms_dbfs"] <= effective_target_dbfs]
         if below_target:
             chosen = max(below_target, key=lambda m: m["gain_db"])
             decision = "headroom-target"
@@ -425,6 +444,8 @@ def _auto_gain_calibrate(
         "previous_gain_db": starting_gain,
         "decision": decision,
         "target_rms_dbfs": float(target_rms_dbfs),
+        "effective_target_rms_dbfs": float(effective_target_dbfs),
+        "external_lna_db": float(external_lna_db),
         "clipping_threshold": float(clipping_threshold),
         "measurements": measurements,
         "selected_measurement": chosen,
@@ -1467,6 +1488,53 @@ def process_commands(redis_client):
                                 getattr(receiver, "frequency_hz", 0) or 0
                             )
 
+                            # Capture-time provenance.  Recording the active
+                            # SDR gain, the configured external LNA, and the
+                            # bias-T state inside a JSON sidecar lets offline
+                            # analysis answer "was the front end correctly
+                            # gained when this was taken?" without guessing
+                            # from IQ levels.
+                            capture_gain_db: Optional[float] = None
+                            try:
+                                rx_handle = getattr(receiver, "_handle", None)
+                                rx_config = getattr(receiver, "config", None)
+                                rx_channel = (
+                                    getattr(rx_config, "channel", 0)
+                                    if rx_config is not None else 0
+                                ) or 0
+                                if (
+                                    rx_handle is not None
+                                    and hasattr(rx_handle, "device")
+                                    and hasattr(rx_handle, "sdr")
+                                ):
+                                    capture_gain_db = float(
+                                        rx_handle.device.getGain(
+                                            rx_handle.sdr.SOAPY_SDR_RX,
+                                            rx_channel,
+                                        )
+                                    )
+                            except Exception:
+                                capture_gain_db = None
+
+                            try:
+                                capture_external_lna_db = float(
+                                    getattr(
+                                        getattr(receiver, "config", None),
+                                        "external_lna_db",
+                                        0.0,
+                                    ) or 0.0
+                                )
+                            except (TypeError, ValueError):
+                                capture_external_lna_db = 0.0
+
+                            capture_bias_t = bool(
+                                getattr(
+                                    getattr(receiver, "config", None),
+                                    "bias_t_enabled",
+                                    False,
+                                )
+                            )
+
                             os.makedirs(RADIO_CAPTURE_DIR, exist_ok=True)
                             safe_receiver_id = "".join(
                                 ch if ch.isalnum() or ch in ("-", "_") else "_"
@@ -1479,22 +1547,51 @@ def process_commands(redis_client):
                             )
                             output_path = os.path.join(RADIO_CAPTURE_DIR, filename)
                             np.save(output_path, samples_array, allow_pickle=False)
+
+                            sidecar_path = output_path + ".json"
+                            try:
+                                sidecar = {
+                                    "receiver_id": str(receiver_id),
+                                    "command_id": command_id,
+                                    "captured_at_unix": int(time.time()),
+                                    "sample_rate": int(effective_rate),
+                                    "frequency_hz": int(frequency_hz),
+                                    "num_samples": int(actual),
+                                    "duration_sec": actual / max(effective_rate, 1),
+                                    "dtype": "complex64",
+                                    "gain_db": capture_gain_db,
+                                    "external_lna_db": capture_external_lna_db,
+                                    "bias_t_enabled": capture_bias_t,
+                                }
+                                with open(sidecar_path, "w") as fp:
+                                    json.dump(sidecar, fp, indent=2)
+                            except Exception as exc:
+                                logger.debug(
+                                    "Could not write capture sidecar %s: %s",
+                                    sidecar_path, exc,
+                                )
+
                             size_bytes = os.path.getsize(output_path)
 
                             logger.info(
                                 "📼 Captured %d IQ samples (%.2f MB, "
-                                "%.2fs of signal) for %s → %s",
+                                "%.2fs of signal) for %s → %s "
+                                "[gain=%s dB, ext_lna=%+.1f dB, bias-t=%s]",
                                 actual,
                                 size_bytes / (1024 * 1024),
                                 actual / max(effective_rate, 1),
                                 receiver_id,
                                 output_path,
+                                ("%.1f" % capture_gain_db) if capture_gain_db is not None else "?",
+                                capture_external_lna_db,
+                                "on" if capture_bias_t else "off",
                             )
 
                             result = {
                                 "command_id": command_id,
                                 "success": True,
                                 "path": output_path,
+                                "sidecar_path": sidecar_path,
                                 "filename": filename,
                                 "num_samples": actual,
                                 "requested_samples": num_samples,
@@ -1502,6 +1599,9 @@ def process_commands(redis_client):
                                 "frequency_hz": frequency_hz,
                                 "size_bytes": size_bytes,
                                 "dtype": "complex64",
+                                "gain_db": capture_gain_db,
+                                "external_lna_db": capture_external_lna_db,
+                                "bias_t_enabled": capture_bias_t,
                                 "duration_sec": actual / max(effective_rate, 1),
                                 "complete": bool(completed),
                             }
