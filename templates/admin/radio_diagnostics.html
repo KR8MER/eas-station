@@ -650,6 +650,9 @@ sudo systemctl restart eas-station</code></pre>
                                     <button type="button" class="btn btn-outline-info" data-action="capture-iq" data-receiver-id="${receiver.receiver_id}" title="Record raw IQ samples from this receiver and download as a .npy file. Use the 'Duration' field on the left to control how many seconds are captured.">
                                         <i class="fas fa-download"></i> Capture IQ
                                     </button>
+                                    <button type="button" class="btn btn-outline-info" data-action="show-waterfall" data-receiver-id="${receiver.receiver_id}" title="Capture a short IQ window and render a frequency-vs-time waterfall here. Use this to see if the signal is clipping the SDR's front end (a strong nearby station can cause wideband fuzz and saturated peaks even when audio sounds OK).">
+                                        <i class="fas fa-water"></i> Show Waterfall
+                                    </button>
                                     <button type="button" class="btn btn-outline-success" data-action="auto-gain" data-receiver-id="${receiver.receiver_id}" title="Sweep this receiver's gain range, measure IQ headroom at each step, and apply the highest non-clipping gain. Hold Shift while clicking to also save the chosen gain to the receiver's persistent configuration.">
                                         <i class="fas fa-sliders-h"></i> Auto-Calibrate Gain
                                     </button>
