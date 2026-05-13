@@ -701,7 +701,7 @@ def test_rbds_sample_buffer_accumulates_by_chunk_and_flushes_once_per_window():
         worker._process_rbds(chunk, sample_offset=3 * len(chunk))
 
         assert worker._rbds_sample_buffer_samples == 0
-        assert worker._rbds_sample_buffer_chunks == []
+        assert len(worker._rbds_sample_buffer_chunks) == 0
     finally:
         worker.stop()
 

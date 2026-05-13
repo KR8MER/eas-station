@@ -1601,7 +1601,7 @@ class RBDSWorker:
             self._rbds_sample_buffer_chunks = []
             self._rbds_sample_buffer_samples = 0
 
-        x_chunk = x.astype(np.complex64, copy=False)
+        x_chunk = x if x.dtype == np.complex64 else x.astype(np.complex64)
         self._rbds_sample_buffer_chunks.append(x_chunk)
         self._rbds_sample_buffer_samples += len(x_chunk)
 
