@@ -673,6 +673,39 @@ def test_rbds_tentative_sync_does_not_publish_groups_mid_window():
     worker.stop()
 
 
+def test_rbds_sample_buffer_accumulates_by_chunk_and_flushes_once_per_window():
+    """Chunk-list buffering should retain samples until the window then flush/reset."""
+    sr = 250_000
+    worker = _make_worker(sample_rate=sr)
+    try:
+        # Keep this test focused on pre-window buffering behavior.
+        worker._estimate_pilot_frequency = lambda mux: 19000.0  # type: ignore[assignment]
+        worker._detect_off_frequency_interferer_hz = lambda mux: None  # type: ignore[assignment]
+        worker._resample = lambda samples, in_rate, out_rate: samples  # type: ignore[assignment]
+        worker._costas_loop = lambda samples: samples  # type: ignore[assignment]
+        worker._mm_timing_pysdr = lambda samples: np.array([], dtype=np.complex64)  # type: ignore[assignment]
+        worker._decode_rbds_groups = lambda: None  # type: ignore[assignment]
+
+        # Unsynced window at 250 kHz is ~62.5k samples. Feed three smaller
+        # chunks so the worker should buffer only (not flush) so far.
+        chunk = np.zeros(2000, dtype=np.float32)
+        worker._process_rbds(chunk, sample_offset=0)
+        worker._process_rbds(chunk, sample_offset=len(chunk))
+        worker._process_rbds(chunk, sample_offset=2 * len(chunk))
+
+        assert worker._rbds_sample_buffer_samples == 3 * len(chunk)
+        assert len(worker._rbds_sample_buffer_chunks) == 3
+
+        # Force a flush on the next call and verify the buffers reset.
+        worker.RBDS_UNSYNCED_WINDOW = 1
+        worker._process_rbds(chunk, sample_offset=3 * len(chunk))
+
+        assert worker._rbds_sample_buffer_samples == 0
+        assert len(worker._rbds_sample_buffer_chunks) == 0
+    finally:
+        worker.stop()
+
+
 # ---------------------------------------------------------------------------
 # Periodic pilot re-measurement tests
 #
