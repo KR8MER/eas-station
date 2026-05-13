@@ -117,6 +117,64 @@ def test_rbds_interferer_detector_no_op_without_spur():
         worker.stop()
 
 
+def test_rbds_interference_notch_survives_offset_toggle():
+    """Regression: notch must not crash when offset toggles None→value→None.
+
+    Previously the early-return branch in ``_apply_interference_notch``
+    reset ``zi_real``/``zi_imag`` to ``None`` whenever no interferer was
+    detected, but the rebuild branch on the next "detected" call only
+    re-initialised the filter when the b/a cache was empty or the centre
+    frequency had drifted by >10 Hz.  That left ``zi=None`` flowing into
+    ``scipy.signal.lfilter``, which then returned only ``y`` (not a
+    ``(y, zf)`` tuple).  The unpacking ``real_out, self._..._zi_real =``
+    on the next line crashed with::
+
+        ValueError: too many values to unpack (expected 2)
+
+    The crash was swallowed by the worker's try/except so RBDS appeared
+    to keep running but the notch silently broke every time the
+    detector toggled, which is exactly what happens on noisy/marginal
+    captures (the very case the notch exists to handle).
+    """
+    sr = 250_000
+    worker = RBDSWorker(sample_rate=sr, intermediate_rate=25_000)
+    try:
+        # Build a representative complex-baseband chunk (length matches a
+        # production SDR read at 250 kHz).
+        n = 1 << 15
+        t = np.arange(n, dtype=np.float64) / sr
+        chunk = (np.cos(2 * np.pi * 800.0 * t)
+                 + 1j * np.sin(2 * np.pi * 800.0 * t)).astype(np.complex64)
+
+        # 1) First call: a real interferer offset → builds b/a/zi state.
+        out1 = worker._apply_interference_notch(chunk, sr, 800.0)
+        assert out1.shape == chunk.shape
+        zi_real_after_first = worker._rbds_interference_notch_zi_real
+        assert zi_real_after_first is not None
+
+        # 2) Detector goes quiet for a chunk → notch wipes zi to None.
+        out2 = worker._apply_interference_notch(chunk, sr, None)
+        assert out2 is chunk
+        assert worker._rbds_interference_notch_zi_real is None
+        assert worker._rbds_interference_notch_zi_imag is None
+        # Crucially, b/a/freq cache is still populated…
+        assert worker._rbds_interference_notch_b is not None
+        assert worker._rbds_interference_notch_freq_hz is not None
+
+        # 3) Detector flips back to the same offset.  This is where the
+        # bug used to fire: the rebuild branch would short-circuit because
+        # the cached freq matches, leaving zi=None, and lfilter then
+        # returned only ``y`` and broke the unpacking.
+        out3 = worker._apply_interference_notch(chunk, sr, 800.0)
+        assert out3.shape == chunk.shape
+        # Filter state must be restored — not None — so subsequent calls
+        # keep filtering correctly.
+        assert worker._rbds_interference_notch_zi_real is not None
+        assert worker._rbds_interference_notch_zi_imag is not None
+    finally:
+        worker.stop()
+
+
 def test_rbds_differential_bpsk_zero_crossing():
     """Values at 0.0 are decoded as raw bit 0; transitions are still correct."""
     samples = np.array([0.0, -0.01, 0.02], dtype=np.float32)
@@ -1313,6 +1371,28 @@ def test_group_0a_decodes_af_list():
     assert data.af_list is not None
     assert 87.7 in data.af_list
     assert 87.8 in data.af_list
+
+
+def test_group_0a_af_list_capped_at_spec_maximum():
+    """``_af_buffer`` must stop growing at 25 entries (RBDS spec maximum).
+
+    Without a cap, a noisy signal where bad-but-CRC-passing 0A groups keep
+    delivering distinct AF codes would grow this list (and the JSON payload
+    sent to the dashboard) without bound — a slow memory leak.  The RBDS
+    spec limits an AF list to 25 entries (Method A count codes 224..249
+    encode 0..25), so anything beyond that is by definition spurious.
+    """
+    decoder = RBDSDecoder()
+    b = _pack_block_b(group_type=0, version_b=False, tp=False, pty=0, low_bits=0)
+    # Push 60 unique AF codes (1..120, two per group). Without the cap this
+    # would leave 60 entries in af_list; with the cap it stops at 25.
+    for code1 in range(1, 121, 2):
+        code2 = code1 + 1
+        af_c = (code1 << 8) | code2
+        decoder.process_group((0x5862, b, af_c, 0x2020))
+    data = decoder.get_current_data()
+    assert data.af_list is not None
+    assert len(data.af_list) == 25
 
 
 def test_group_1a_decodes_language_code():

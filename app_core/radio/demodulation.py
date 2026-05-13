@@ -1120,10 +1120,24 @@ class RBDSWorker:
         nyq = sample_rate / 2.0
         if notch_hz <= 0.0 or notch_hz >= nyq:
             return samples
+        # ``zi_real``/``zi_imag`` get reset to None whenever ``offset_hz`` was
+        # None on the previous call (see the early-return branch above), so
+        # they must be re-checked here even when the ``b``/``a``/freq cache
+        # is still valid.  Without this check we would feed ``zi=None`` into
+        # ``scipy.signal.lfilter`` — which silently returns ``y`` only (not a
+        # ``(y, zf)`` tuple) — and the unpacking on the next line would
+        # explode with ``ValueError: too many values to unpack (expected 2)``.
+        # The exception is swallowed by the worker's try/except so the RBDS
+        # pipeline keeps "running" but the notch is silently disabled every
+        # time the detector toggles None→value→None→value, which is exactly
+        # what happens with marginal off-frequency spurs (the very case the
+        # notch exists to handle).
         if (
             self._rbds_interference_notch_b is None
             or self._rbds_interference_notch_a is None
             or self._rbds_interference_notch_freq_hz is None
+            or self._rbds_interference_notch_zi_real is None
+            or self._rbds_interference_notch_zi_imag is None
             or abs(self._rbds_interference_notch_freq_hz - notch_hz) > 10.0
         ):
             w0 = notch_hz / nyq
@@ -3699,8 +3713,17 @@ class RBDSDecoder:
                 if new_freqs:
                     prev_len = len(self._af_buffer)
                     for f in new_freqs:
-                        if f not in self._af_buffer:
-                            self._af_buffer.append(f)
+                        # RBDS spec caps an AF list at 25 entries (Method A
+                        # codes 224..249 encode counts 0..25).  Without a
+                        # cap, a bad-CRC-but-presumed-valid block stream on
+                        # a noisy signal can append distinct "frequencies"
+                        # forever, slowly leaking memory and inflating
+                        # serialised payloads sent to the dashboard.
+                        if len(self._af_buffer) >= 25:
+                            break
+                        if f in self._af_buffer:
+                            continue
+                        self._af_buffer.append(f)
                     if len(self._af_buffer) != prev_len:
                         changed = True
 
@@ -3918,7 +3941,12 @@ class RBDSDecoder:
                     af_code = (d >> shift) & 0xFF
                     if 1 <= af_code <= 204:
                         af_mhz = round(87.6 + 0.1 * af_code, 1)
-                        if af_mhz not in eon['af']:
+                        # Cap per-EON AF list at the RBDS spec maximum of
+                        # 25 entries.  Same memory-leak rationale as the
+                        # main station ``_af_buffer`` above: corrupt-but-
+                        # CRC-passing blocks on a noisy signal otherwise
+                        # grow this list unboundedly.
+                        if af_mhz not in eon['af'] and len(eon['af']) < 25:
                             eon['af'].append(af_mhz)
             elif variant == 12:
                 eon['linkage'] = d
