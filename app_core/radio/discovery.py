@@ -532,6 +532,17 @@ def _validate_sample_rate_fallback(driver: str, sample_rate: int) -> tuple[bool,
             return True, None
         return False, f"Sample rate {sample_rate/1e6:.3f} MHz is outside HackRF range (2-20 MHz)"
 
+    # File replay: any positive sample rate is acceptable since we're
+    # just paced reading a .npy at that rate. Reject obviously invalid
+    # values but otherwise let the operator pick whatever the capture
+    # was recorded at.
+    elif driver_lower in {"file", "file_replay", "iq_replay"}:
+        if sample_rate <= 0:
+            return False, "Sample rate must be positive."
+        if sample_rate > 100_000_000:
+            return False, f"Sample rate {sample_rate} Hz is implausibly high for a file replay."
+        return True, None
+
     # Unknown driver - allow any rate but warn
     logger.warning(f"Unknown driver '{driver}' - cannot validate sample rate {sample_rate}")
     return True, None

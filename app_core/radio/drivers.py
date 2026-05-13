@@ -2085,6 +2085,12 @@ def register_builtin_drivers(manager: RadioManager) -> None:
 
     manager.register_driver("airspy", AirspyReceiver)
 
+    # File replay driver: stream a previously-captured complex64 .npy
+    # through the radio pipeline. Useful for decoder regression tests
+    # without live SDR hardware. See app_core/radio/file_replay.py.
+    from .file_replay import register_driver as _register_file_replay
+    _register_file_replay(manager)
+
 
 __all__ = [
     "AirspyReceiver",
