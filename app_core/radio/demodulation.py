@@ -1601,9 +1601,8 @@ class RBDSWorker:
             self._rbds_sample_buffer_chunks = []
             self._rbds_sample_buffer_samples = 0
 
-        x_chunk = x if x.dtype == np.complex64 else x.astype(np.complex64)
-        self._rbds_sample_buffer_chunks.append(x_chunk)
-        self._rbds_sample_buffer_samples += len(x_chunk)
+        self._rbds_sample_buffer_chunks.append(x)
+        self._rbds_sample_buffer_samples += len(x)
 
         # The window thresholds are expressed in samples at the 19 kHz
         # output rate, so scale them up to the current input rate.
