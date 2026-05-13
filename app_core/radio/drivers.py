@@ -728,10 +728,32 @@ class _SoapySDRReceiver(ReceiverInterface):
             self._early_decim_aa_zi = None
             if _SCIPY_AVAILABLE:
                 post_decim_nyquist = self._effective_sample_rate / 2.0
-                cutoff = min(80_000.0, max(63_000.0, post_decim_nyquist * 0.4 * 2.0))
-                # 0.4 * post-decim Nyquist gives a comfortable transition
-                # band; clamp to [63 kHz, 80 kHz] to keep RBDS / stereo
-                # passband flat regardless of the user's chosen rate.
+                # Pass the full broadcast-FM channel.  A fully-modulated
+                # station (±75 kHz peak deviation carrying a 53 kHz
+                # multiplex with stereo + RBDS subcarriers) has
+                # significant RF energy out to ±~95-100 kHz of carrier
+                # (Carson's rule, 2·(75+57)/2 ≈ 132 kHz half-bandwidth).
+                # The previous 80 kHz clamp shaved that shoulder off,
+                # which broke FM's constant-envelope property
+                # (AM-to-PM conversion) and smeared the 38 kHz / 57 kHz
+                # subcarriers — symptom: ~5 % RBDS CRC pass-rate even
+                # though the station was visibly transmitting RBDS.
+                #
+                # The new cutoff is the wider of:
+                #   • post-decim Nyquist minus a transition band, so
+                #     adjacent-channel energy at ±200 kHz still folds
+                #     squarely into the stopband, and
+                #   • 80 kHz, which is the floor that preserves prior
+                #     behaviour on very narrow post-decim rates where a
+                #     wider cutoff isn't Nyquist-safe.
+                # Cap at 110 kHz — no FM channel needs more than that,
+                # and going wider wastes filter slope on noise.
+                transition_band = max(15_000.0, post_decim_nyquist * 0.15)
+                cutoff = min(
+                    post_decim_nyquist - transition_band,
+                    110_000.0,
+                )
+                cutoff = max(80_000.0, cutoff)
                 taps = max(127, min(1025, (int(self.config.sample_rate / 4000) | 1)))
                 try:
                     h = _scipy_signal.firwin(

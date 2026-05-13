@@ -39,6 +39,7 @@ import math
 import pathlib
 import re
 import sys
+from typing import Dict
 
 import numpy as np
 from scipy import signal as scipy_signal
@@ -607,13 +608,72 @@ def diagnose(path: pathlib.Path, sample_rate: int) -> None:
     _section(f"RBDS Pipeline Diagnostic — {path.name}")
 
     # ── Load capture ──────────────────────────────────────────────────────────
-    data = np.load(str(path)).astype(np.float32)
+    # The capture may be either:
+    #   (a) a complex64 IQ recording — what sdr_hardware_service.capture_iq
+    #       writes, named iq_<receiver>_<rate>Hz_<ts>_<id>.npy, or
+    #   (b) a real-valued FM multiplex array — what RBDSWorker dumps via the
+    #       legacy debug hook.
+    # Auto-detect and FM-demodulate IQ to multiplex so the rest of the
+    # pipeline analysis (which is designed for the demodulator output)
+    # has the right input.  Without this, np.load(...).astype(float32)
+    # silently discards the imaginary part of IQ samples and every
+    # downstream measurement becomes garbage.
+    raw = np.load(str(path), allow_pickle=False)
+    if np.iscomplexobj(raw):
+        # === IQ recording — measure IF characteristics, then FM-demodulate. ===
+        iq = raw.astype(np.complex64)
+        _sub("Capture file (complex IQ)")
+        _info(f"Path        : {path}")
+        _info(f"Samples     : {len(iq):,}  at {sample_rate:,} Hz  "
+              f"({len(iq) / sample_rate:.2f} s)")
+        _info(f"IQ |env|    : min={float(np.abs(iq).min()):.4f}  "
+              f"max={float(np.abs(iq).max()):.4f}  "
+              f"mean={float(np.abs(iq).mean()):.4f}")
+
+        # Constant-envelope check: FM should have very small AM ratio.
+        # The early-decim anti-alias filter is the most common culprit
+        # when this ratio explodes — a too-narrow cutoff clips the FM
+        # spectral shoulders and converts the lost spectrum into AM.
+        env = np.abs(iq)
+        env_p99 = float(np.percentile(env, 99))
+        env_p01 = float(np.percentile(env, 1))
+        env_ratio = env_p99 / max(env_p01, 1e-12)
+        _info(f"Envelope P99/P01 ratio = {env_ratio:.1f}  "
+              f"(constant-envelope FM expects ≲ 3)")
+        if env_ratio > 6:
+            _fail(f"Envelope variation {env_ratio:.1f}:1 is too high for "
+                  "constant-envelope FM")
+            _info("Most common cause: an upstream IF / anti-alias filter")
+            _info("with a cutoff narrower than the FM channel "
+                  "(±~100 kHz) is shaving the spectral shoulders and")
+            _info("turning the lost spectrum into AM-to-PM distortion.")
+            _info("Check app_core/radio/drivers.py "
+                  "_initialize_sample_buffer cutoff and")
+            _info("app_core/radio/demodulation.py "
+                  "FMDemodulator._rbds_aa_filter cutoff.")
+        elif env_ratio > 3:
+            _warn(f"Envelope variation {env_ratio:.1f}:1 is slightly "
+                  "elevated (some AM-to-PM distortion possible)")
+        else:
+            _ok("FM signal is constant-envelope (no IF clipping)")
+
+        # FM-demodulate to multiplex.  ``np.angle`` followed by
+        # ``np.unwrap`` then ``np.diff`` is the classic FM discriminator;
+        # we scale to give comparable amplitude to the legacy RBDSWorker
+        # debug dump (which is just the phase derivative, no scaling).
+        data = np.diff(np.unwrap(np.angle(iq))).astype(np.float32)
+    else:
+        # === Already an FM-demodulated multiplex array — use as-is. ===
+        data = raw.astype(np.float32)
+        _sub("Capture file (FM multiplex)")
+        _info(f"Path        : {path}")
+        _info(f"Samples     : {len(data):,}  at {sample_rate:,} Hz  "
+              f"({len(data) / sample_rate:.2f} s)")
+
     duration_s = len(data) / sample_rate
     rms = float(np.sqrt(np.mean(data ** 2)))
-    _sub("Capture file")
-    _info(f"Path        : {path}")
-    _info(f"Samples     : {len(data):,}  at {sample_rate:,} Hz  ({duration_s:.2f} s)")
-    _info(f"Values      : min={data.min():.4f}  max={data.max():.4f}  RMS={rms:.4f}")
+    _info(f"MPX values  : min={data.min():.4f}  max={data.max():.4f}  "
+          f"RMS={rms:.4f}")
     if abs(data.max()) < math.pi * 1.01 and abs(data.min()) < math.pi * 1.01:
         _ok("Values look like a phase-demodulated FM multiplex (range ≈ ±π)")
     else:
@@ -637,6 +697,84 @@ def diagnose(path: pathlib.Path, sample_rate: int) -> None:
 
     pilot_dbfs = _dbfs(pilot_amp)
     rbds_dbfs  = _dbfs(rbds_amp)
+
+    # ── Band-integrated modulation index ─────────────────────────────────────
+    # Per-bin amplitude (the pilot_dbfs / rbds_dbfs values above) compares a
+    # narrow CW tone (pilot) against a 4-kHz-wide modulated subcarrier
+    # (RBDS) in a single FFT bin — which makes RBDS look 20-30 dB weaker
+    # than it actually is even when modulation indices are normal.  The
+    # honest measurement is BAND-INTEGRATED RMS deviation, expressed as
+    # a percentage of ±75 kHz peak deviation.  Broadcast-spec injection
+    # levels are: pilot ~7-9 %, stereo L-R ~0-45 % (program-dependent),
+    # RBDS ~3-6 %.  Any subcarrier well within that range is healthy
+    # regardless of how the per-bin spectrum reads.
+    if len(data) >= 8192:
+        try:
+            from scipy import signal as _sps
+
+            # Welch on the FM-demodulated multiplex, scaled to Hz of
+            # frequency deviation so the integration gives RMS deviation
+            # in Hz directly.  For IQ inputs ``data`` is the phase
+            # derivative in radians/sample; the ``scale_to_hz`` factor
+            # converts to Hz: dev_hz = (dphase / dt) / (2π) =
+            # dphase_per_sample * fs / (2π).  For legacy MPX inputs the
+            # ratio is unknown so we instead express each band as a
+            # percentage of the broadband RMS.
+            scale_to_hz = sample_rate / (2.0 * math.pi)
+            data_hz = data * scale_to_hz
+            f_psd, psd = _sps.welch(
+                data_hz, fs=sample_rate,
+                nperseg=min(65536, len(data_hz)),
+            )
+
+            def _band_rms_dev(lo: float, hi: float) -> float:
+                m = (f_psd >= lo) & (f_psd <= hi)
+                if not np.any(m):
+                    return 0.0
+                # Trapezoidal integration; numpy 2.x renamed trapz→trapezoid
+                if hasattr(np, "trapezoid"):
+                    _integrate = np.trapezoid
+                elif hasattr(np, "trapz"):
+                    _integrate = np.trapz
+                else:
+                    return 0.0
+                band_pwr = float(_integrate(psd[m], f_psd[m]))
+                return math.sqrt(max(band_pwr, 0.0))
+
+            _sub("Band-integrated modulation index (broadcast-spec)")
+            bands = [
+                ("0-15 kHz mono (L+R)",   0.0,      15_000.0,  "any"),
+                ("19 kHz pilot",          18_500.0, 19_500.0, "7-10 %"),
+                ("23-53 kHz stereo L-R",  23_000.0, 53_000.0, "0-45 %"),
+                ("54-60 kHz RBDS",        54_000.0, 60_000.0, "3-6 %"),
+                ("60-75 kHz (above RBDS)", 60_000.0, 75_000.0, "noise floor"),
+            ]
+            band_results: Dict[str, float] = {}
+            for label, lo, hi, target in bands:
+                dev_hz = _band_rms_dev(lo, hi)
+                mod_pct = dev_hz / 75_000.0 * 100.0
+                band_results[label] = mod_pct
+                _info(f"{label:24s} = {dev_hz:6.0f} Hz RMS dev "
+                      f"({mod_pct:5.2f} % mod)   spec: {target}")
+
+            # Verdict
+            rbds_pct = band_results.get("54-60 kHz RBDS", 0.0)
+            if rbds_pct >= 3.0:
+                _ok(f"RBDS modulation index {rbds_pct:.2f} % is within "
+                    "the broadcast-spec band — the station IS transmitting "
+                    "RBDS at a normal level.  If decode is still poor, the "
+                    "issue is downstream of the multiplex (IF clipping, "
+                    "filter response, or noise — not the carrier itself).")
+            elif rbds_pct >= 1.0:
+                _warn(f"RBDS modulation index {rbds_pct:.2f} % is below "
+                      "spec but still detectable.  Check whether an upstream "
+                      "filter is rolling off the 57 kHz region.")
+            else:
+                _info(f"RBDS modulation index {rbds_pct:.2f} % — at or below "
+                      "the noise floor; station likely not broadcasting "
+                      "RBDS, or signal is too weak to recover.")
+        except ImportError:
+            _info("scipy unavailable — skipping band-integrated analysis")
 
     pilot_offset_hz  = 0.0
     pilot_offset_ppm = 0.0

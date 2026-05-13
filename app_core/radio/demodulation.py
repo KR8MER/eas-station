@@ -2862,7 +2862,22 @@ class FMDemodulator:
             # is realistically going to set.
             if self._rbds_decim > 1:
                 post_decim_nyquist = self._rbds_intermediate_rate / 2.0
-                rbds_aa_cutoff = min(80_000.0, max(63_000.0, post_decim_nyquist * 0.85))
+                # See drivers.py:_initialize_sample_buffer for the same
+                # rationale: the FM signal's spectral shoulders extend
+                # to ±~95-100 kHz, so an 80 kHz cutoff (the old value)
+                # clips full-deviation peaks and breaks the constant-
+                # envelope assumption, which smears the 38 kHz and
+                # 57 kHz subcarriers.  Open the cutoff up to whatever
+                # post-decim Nyquist allows (minus a 15 kHz transition
+                # band), capped at 110 kHz and floored at 80 kHz so
+                # the prior contract is honoured on narrow post-decim
+                # rates that can't safely go wider.
+                transition_band = max(15_000.0, post_decim_nyquist * 0.15)
+                rbds_aa_cutoff = min(
+                    post_decim_nyquist - transition_band,
+                    110_000.0,
+                )
+                rbds_aa_cutoff = max(80_000.0, rbds_aa_cutoff)
                 # Tap-count heuristic: scale linearly with input rate to
                 # hold transition bandwidth roughly constant.  Dividing by
                 # 4000 gives ~250 taps at 1 MHz and ~600 taps at 2.4 MHz,
