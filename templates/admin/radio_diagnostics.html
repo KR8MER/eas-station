@@ -661,6 +661,9 @@ sudo systemctl restart eas-station</code></pre>
                                     </button>
                                 ` : ''}
                             </div>
+                            ${receiver.receiver_id ? `
+                                <div class="waterfall-container mt-2" data-waterfall-for="${receiver.receiver_id}" style="display:none;"></div>
+                            ` : ''}
                         </div>
                     </div>
                 </div>
@@ -973,6 +976,213 @@ sudo systemctl restart eas-station</code></pre>
             gainBtn.innerHTML = originalHtml;
         }
     });
+
+    // Delegated event listener for "Show Waterfall" buttons. POSTs to the
+    // diagnostics waterfall endpoint with the user-selected duration,
+    // receives a quantised uint8 spectrogram + dBFS scale + clipping
+    // verdict, and renders both to a canvas appended after the button
+    // group. The whole point of this view is to make front-end overload
+    // visually obvious: a strong nearby station that's clipping the SDR
+    // ADC shows up as wideband "fuzz" plus a saturated peak/RMS, and the
+    // ``verdict`` field gives a one-word summary so operators don't have
+    // to read the dBFS numbers to decide.
+    document.addEventListener('click', async (event) => {
+        const wfBtn = event.target.closest('button[data-action="show-waterfall"]');
+        if (!wfBtn) return;
+        const receiverId = wfBtn.getAttribute('data-receiver-id');
+        if (!receiverId) return;
+
+        // Read the duration picker. The backend caps at 5 s; clamp here
+        // to avoid a wasted round-trip when the operator sets a longer
+        // capture for the regular "Capture IQ" download.
+        const durationInput = document.getElementById('captureDurationSec');
+        let durationSec = 0.5;
+        if (durationInput) {
+            const parsed = parseFloat(durationInput.value);
+            if (!Number.isNaN(parsed) && parsed > 0) {
+                durationSec = Math.min(5.0, parsed);
+            }
+        }
+
+        const container = document.querySelector(
+            // ``CSS.escape`` defends the selector against any non-numeric
+            // receiver ids (existing handlers in this file use the same
+            // pattern without escaping, but new code should be safer).
+            `.waterfall-container[data-waterfall-for="${CSS.escape(receiverId)}"]`
+        );
+        const originalHtml = wfBtn.innerHTML;
+        wfBtn.disabled = true;
+        wfBtn.innerHTML =
+            `<i class="fas fa-spinner fa-spin"></i> Capturing ${durationSec.toFixed(1)}s...`;
+        if (container) {
+            container.style.display = '';
+            container.innerHTML =
+                '<div class="text-muted small"><i class="fas fa-spinner fa-spin me-1"></i>Computing spectrogram&hellip;</div>';
+        }
+
+        try {
+            const response = await fetch(
+                `/api/radio/diagnostics/waterfall/${receiverId}`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ duration_sec: durationSec })
+                }
+            );
+            const result = await response.json();
+            if (!response.ok) {
+                throw new Error(
+                    result.error || result.hint || `HTTP ${response.status}`
+                );
+            }
+            renderWaterfall(container, result);
+            wfBtn.innerHTML =
+                `<i class="fas fa-check"></i> ${result.verdict || 'done'}`;
+            setTimeout(() => {
+                wfBtn.disabled = false;
+                wfBtn.innerHTML = originalHtml;
+            }, 3000);
+        } catch (error) {
+            console.error('Waterfall failed', error);
+            if (container) {
+                // ``error.message`` is the only user-controlled string here
+                // and we route it through ``textContent`` (via the DOM API
+                // below) so an attacker-controlled hint can't inject HTML.
+                container.innerHTML = '';
+                const alert = document.createElement('div');
+                alert.className = 'alert alert-danger alert-sm mb-0';
+                alert.textContent = `Waterfall failed: ${error.message}`;
+                container.appendChild(alert);
+            } else {
+                alert(`Waterfall failed: ${error.message}`);
+            }
+            wfBtn.disabled = false;
+            wfBtn.innerHTML = originalHtml;
+        }
+    });
+
+    // Draw the quantised spectrogram returned by
+    // /api/radio/diagnostics/waterfall into a canvas inside ``container``.
+    // The colour map ramps blue→green→yellow→red across the dB_min..dB_max
+    // range so clipping (top end) jumps out visually. The header text shows
+    // peak/RMS/verdict using the same dBFS convention as Auto-Calibrate
+    // Gain, so the two diagnostic tools agree on what "clipping" means.
+    function renderWaterfall(container, data) {
+        if (!container || !data) return;
+        const nFreq = Number(data.n_freq) || 0;
+        const nTime = Number(data.n_time) || 0;
+        const powerU8 = Array.isArray(data.power_u8) ? data.power_u8 : [];
+        if (nFreq <= 0 || nTime <= 0 || powerU8.length < nFreq * nTime) {
+            container.innerHTML = '';
+            const div = document.createElement('div');
+            div.className = 'alert alert-warning alert-sm mb-0';
+            div.textContent = 'Waterfall returned no data.';
+            container.appendChild(div);
+            return;
+        }
+
+        const verdictClass = ({
+            ok: 'success',
+            warning: 'warning',
+            clipping: 'danger',
+        }[data.verdict] || 'secondary');
+
+        // Build the DOM via createElement + textContent so server-supplied
+        // numbers/strings can't smuggle HTML into the page.
+        container.innerHTML = '';
+        const header = document.createElement('div');
+        header.className = 'd-flex flex-wrap gap-3 mb-1 small';
+        const verdict = document.createElement('span');
+        verdict.className = `badge bg-${verdictClass} text-uppercase`;
+        verdict.textContent = data.verdict || 'unknown';
+        header.appendChild(verdict);
+
+        const fmt = (v, d=1) => (typeof v === 'number' && Number.isFinite(v))
+            ? v.toFixed(d) : '?';
+        const stats = document.createElement('span');
+        stats.className = 'text-muted';
+        stats.textContent =
+            `Peak ${fmt(data.peak_dbfs)} dBFS · RMS ${fmt(data.rms_dbfs)} dBFS · `
+            + `Clipping ${fmt((data.clipping_fraction || 0) * 100, 2)}% · `
+            + `${fmt(data.duration_sec, 2)} s @ ${data.sample_rate || '?'} Hz`;
+        header.appendChild(stats);
+        container.appendChild(header);
+
+        // Canvas sizing: render at native (n_freq × n_time) resolution and
+        // upscale via CSS so the waterfall fits the receiver card without
+        // pixel interpolation cost on every redraw. Time runs top→bottom
+        // (most recent at the bottom) which matches the SDR-software
+        // convention operators are used to.
+        const canvas = document.createElement('canvas');
+        canvas.width = nFreq;
+        canvas.height = nTime;
+        canvas.style.width = '100%';
+        canvas.style.height = `${Math.min(256, nTime * 2)}px`;
+        canvas.style.imageRendering = 'pixelated';
+        canvas.style.border = '1px solid rgba(128,128,128,0.3)';
+        canvas.style.display = 'block';
+        const ctx = canvas.getContext('2d');
+        const img = ctx.createImageData(nFreq, nTime);
+
+        // Five-stop colour map (blue → cyan → green → yellow → red).
+        // ``t`` in [0,1] maps to the dBFS span; >0.95 (near 0 dBFS) shows
+        // red so clipping is obvious at a glance.
+        function colorMap(t) {
+            t = Math.max(0, Math.min(1, t));
+            const stops = [
+                [  0,   0, 64],   // dark blue (noise floor)
+                [  0, 128, 255],  // blue
+                [  0, 255,   0],  // green (mid-band)
+                [255, 255,   0],  // yellow
+                [255,   0,   0],  // red (near clipping)
+            ];
+            const seg = t * (stops.length - 1);
+            const i = Math.min(stops.length - 2, Math.floor(seg));
+            const f = seg - i;
+            const a = stops[i], b = stops[i + 1];
+            return [
+                Math.round(a[0] + (b[0] - a[0]) * f),
+                Math.round(a[1] + (b[1] - a[1]) * f),
+                Math.round(a[2] + (b[2] - a[2]) * f),
+            ];
+        }
+
+        // Backend lays power_u8 row-major over (time, freq) with the most
+        // recent slice last, so we copy directly into the ImageData buffer
+        // in the same order. Each canvas row == one time slice.
+        let p = 0;
+        for (let y = 0; y < nTime; y++) {
+            for (let x = 0; x < nFreq; x++) {
+                const v = powerU8[y * nFreq + x] | 0;
+                const [r, g, b] = colorMap(v / 255);
+                img.data[p++] = r;
+                img.data[p++] = g;
+                img.data[p++] = b;
+                img.data[p++] = 255;
+            }
+        }
+        ctx.putImageData(img, 0, 0);
+        container.appendChild(canvas);
+
+        // Frequency-axis label: the spectrogram is two-sided around the
+        // tuned centre frequency, so the leftmost column is -fs/2 from the
+        // carrier and the rightmost is +fs/2.
+        const freqs = Array.isArray(data.freqs_khz) ? data.freqs_khz : [];
+        if (freqs.length >= 2) {
+            const axis = document.createElement('div');
+            axis.className = 'd-flex justify-content-between text-muted small mt-1';
+            const left = document.createElement('span');
+            left.textContent = `${freqs[0].toFixed(0)} kHz`;
+            const centre = document.createElement('span');
+            centre.textContent = '0 kHz (carrier)';
+            const right = document.createElement('span');
+            right.textContent = `${freqs[freqs.length - 1].toFixed(0)} kHz`;
+            axis.appendChild(left);
+            axis.appendChild(centre);
+            axis.appendChild(right);
+            container.appendChild(axis);
+        }
+    }
 
     // Delegated event listener for restart buttons
     document.addEventListener('click', async (event) => {
