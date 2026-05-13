@@ -52,13 +52,15 @@ def upgrade() -> None:
     if COLUMN_NAME in _existing_columns(bind, TABLE_NAME):
         return
 
-    # server_default="0" so existing rows pick up "bias-T off" without
+    # server_default="false" so existing rows pick up "bias-T off" without
     # needing a backfill UPDATE.  Drop the server default afterwards so
-    # the ORM-side default (False) is authoritative for new inserts —
-    # matches the pattern established by external_lna_db's migration.
+    # the ORM-side default (False) is authoritative for new inserts.
+    # Note: use the SQL literal "false" (not "0") so PostgreSQL accepts
+    # it as a boolean — this matches every other Boolean migration in
+    # this repo (e.g. 20260218_add_neopixel_support, 20251217_add_tts_settings).
     op.add_column(
         TABLE_NAME,
-        sa.Column(COLUMN_NAME, sa.Boolean(), nullable=False, server_default=sa.text("0")),
+        sa.Column(COLUMN_NAME, sa.Boolean(), nullable=False, server_default=sa.text("false")),
     )
     op.alter_column(TABLE_NAME, COLUMN_NAME, server_default=None)
 
