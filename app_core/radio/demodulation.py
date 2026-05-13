@@ -985,6 +985,13 @@ class RBDSWorker:
         self._sample_index: int = 0
         self._carrier_phase_57k: float = 0.0  # Phase of 57kHz carrier for mixing
 
+        # High-rate RBDS sample accumulation before decimate+resample.
+        # Keep chunks in a list and concatenate once per window; repeatedly
+        # np.concatenate()'ing a growing array per incoming chunk is O(n²) in
+        # copy volume and can make the worker fall behind at high chunk rates.
+        self._rbds_sample_buffer_chunks: List[np.ndarray] = []
+        self._rbds_sample_buffer_samples: int = 0
+
     @staticmethod
     def _design_fir_lowpass(cutoff: float, sample_rate: int, taps: int = 101) -> np.ndarray:
         """Thin shim around the module-level :func:`design_fir_lowpass`."""
@@ -1351,6 +1358,8 @@ class RBDSWorker:
             '_rbds_sync_tentative',
             '_rbds_tentative_good_groups',
             '_rbds_sample_buffer',
+            '_rbds_sample_buffer_chunks',
+            '_rbds_sample_buffer_samples',
         ):
             if hasattr(self, attr):
                 delattr(self, attr)
@@ -1588,10 +1597,13 @@ class RBDSWorker:
         # expected 104, got 151, …).  Accumulating BEFORE decim+resample
         # keeps the bit clock continuous within a batch — there's exactly
         # one resample transient per batch instead of 31.
-        if not hasattr(self, '_rbds_sample_buffer'):
-            self._rbds_sample_buffer = np.array([], dtype=np.complex64)
+        if not hasattr(self, '_rbds_sample_buffer_chunks'):
+            self._rbds_sample_buffer_chunks = []
+            self._rbds_sample_buffer_samples = 0
 
-        self._rbds_sample_buffer = np.concatenate([self._rbds_sample_buffer, x])
+        x_chunk = x.astype(np.complex64, copy=False)
+        self._rbds_sample_buffer_chunks.append(x_chunk)
+        self._rbds_sample_buffer_samples += len(x_chunk)
 
         # The window thresholds are expressed in samples at the 19 kHz
         # output rate, so scale them up to the current input rate.
@@ -1599,12 +1611,16 @@ class RBDSWorker:
         locked = getattr(self, '_rbds_synced', False)
         window_19k = self.RBDS_SYNCED_WINDOW if locked else self.RBDS_UNSYNCED_WINDOW
         window = int(window_19k * scale)
-        if len(self._rbds_sample_buffer) < window:
+        if self._rbds_sample_buffer_samples < window:
             return self._decode_rbds_groups()
 
-        # Use buffered samples and reset for next accumulation
-        x = self._rbds_sample_buffer
-        self._rbds_sample_buffer = np.array([], dtype=np.complex64)
+        # Use buffered samples and reset for next accumulation.
+        if len(self._rbds_sample_buffer_chunks) == 1:
+            x = self._rbds_sample_buffer_chunks[0]
+        else:
+            x = np.concatenate(self._rbds_sample_buffer_chunks)
+        self._rbds_sample_buffer_chunks = []
+        self._rbds_sample_buffer_samples = 0
 
         # Step 4: Decimate to intermediate rate (~25 kHz) to reduce processing load
         # Now safe to decimate since we've already extracted and mixed down the
