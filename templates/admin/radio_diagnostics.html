@@ -1077,16 +1077,20 @@ sudo systemctl restart eas-station</code></pre>
                     result.error || result.hint || `HTTP ${response.status}`
                 );
             }
-            renderWaterfall(
-                // Re-query the live container — ``loadDiagnostics`` may have
-                // re-rendered ``#receiversContainer`` during the capture wait,
-                // detaching the original reference. See ``updateReceiverDetails``
-                // for the matching preservation logic.
-                document.querySelector(
-                    `.waterfall-container[data-waterfall-for="${CSS.escape(receiverId)}"]`
-                ) || container,
-                result
+            // Re-query the live container — ``loadDiagnostics`` may have
+            // re-rendered ``#receiversContainer`` during the capture wait,
+            // detaching the original reference. See ``updateReceiverDetails``
+            // for the matching preservation logic. If the live panel is gone
+            // (e.g. receiver removed mid-flight), surface via alert() rather
+            // than writing into a detached node.
+            const liveWfContainer = document.querySelector(
+                `.waterfall-container[data-waterfall-for="${CSS.escape(receiverId)}"]`
             );
+            if (liveWfContainer) {
+                renderWaterfall(liveWfContainer, result);
+            } else {
+                alert(`Waterfall ${result.verdict || 'done'} — receiver panel is no longer visible.`);
+            }
             wfBtn.innerHTML =
                 `<i class="fas fa-check"></i> ${result.verdict || 'done'}`;
             setTimeout(() => {
@@ -1097,7 +1101,7 @@ sudo systemctl restart eas-station</code></pre>
             console.error('Waterfall failed', error);
             const liveContainer = document.querySelector(
                 `.waterfall-container[data-waterfall-for="${CSS.escape(receiverId)}"]`
-            ) || container;
+            );
             if (liveContainer) {
                 // ``error.message`` is the only user-controlled string here
                 // and we route it through ``textContent`` (via the DOM API
@@ -1170,11 +1174,21 @@ sudo systemctl restart eas-station</code></pre>
             // ``#receiversContainer`` during the 2 s capture+analyze wait,
             // detaching the original container reference. The auto-refresh
             // preserves panel content (see ``updateReceiverDetails``) but the
-            // node identity changes, so we must look it up again.
+            // node identity changes, so we must look it up again. If the live
+            // panel is gone (e.g. receiver removed mid-flight) we fall back to
+            // alert() rather than writing into a detached node — that would
+            // reintroduce the very "Run Diagnostic does nothing" bug this code
+            // is fixing.
             const liveContainer = document.querySelector(
                 `.diagnostic-container[data-diagnostic-for="${CSS.escape(receiverId)}"]`,
-            ) || container;
-            renderDiagnostic(liveContainer, result);
+            );
+            if (liveContainer) {
+                renderDiagnostic(liveContainer, result);
+            } else {
+                alert(
+                    `Diagnostic ${result.summary_verdict || 'done'} — receiver panel is no longer visible.`,
+                );
+            }
             diagBtn.innerHTML = '<i class="fas fa-check"></i> Done';
             setTimeout(() => {
                 diagBtn.disabled = false;
@@ -1186,7 +1200,7 @@ sudo systemctl restart eas-station</code></pre>
             // path: an auto-refresh may have detached the original reference.
             const liveContainer = document.querySelector(
                 `.diagnostic-container[data-diagnostic-for="${CSS.escape(receiverId)}"]`,
-            ) || container;
+            );
             if (liveContainer) {
                 liveContainer.style.display = 'block';
                 liveContainer.innerHTML = '';
