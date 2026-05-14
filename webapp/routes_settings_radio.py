@@ -2449,9 +2449,15 @@ def register(app: Flask, logger) -> None:
                 diagnostic_to_dict,
             )
         except ImportError as exc:
+            # Log the underlying ImportError details server-side but don't
+            # echo them back — the exception string can contain filesystem
+            # paths and module-search information that we don't want to
+            # expose on the operator-facing API.
+            route_logger.warning(
+                "Diagnostic analyzer unavailable on this host: %s", exc,
+            )
             return jsonify({
                 "error": "Diagnostic analyzer requires numpy and scipy on the web host",
-                "hint": str(exc),
             }), 503
 
         ensure_radio_tables(route_logger)
