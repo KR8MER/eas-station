@@ -8,110 +8,30 @@ set -e  # Exit on error
 # Log file — all command output is redirected here after root check
 LOG_FILE="/var/log/eas-update.log"
 
-# Color codes used in summary output at the end of the script
-RED=$'\033[1;31m'
-GREEN=$'\033[1;32m'
-YELLOW=$'\033[1;33m'
-CYAN=$'\033[1;36m'
-WHITE=$'\033[1;37m'
-BOLD=$'\033[1m'
-DIM=$'\033[2m'
-NC=$'\033[0m'
-BLUE=$'\033[0;34m'
-MAGENTA=$'\033[0;35m'
-
-# Step tracking
+# Step tracking (must be set before sourcing the UI lib so its defaults pick
+# them up).
 STEP_NUM=0
 TOTAL_STEPS=12
 CURRENT_DESC="Initializing..."
 START_TIME=$(date +%s)
 
-format_duration() {
-    local seconds=$1
-    local hours=$((seconds / 3600))
-    local minutes=$(( (seconds % 3600) / 60 ))
-    local secs=$((seconds % 60))
-    if [ $hours -gt 0 ]; then
-        printf "%dh %dm %ds" $hours $minutes $secs
-    elif [ $minutes -gt 0 ]; then
-        printf "%dm %ds" $minutes $secs
-    else
-        printf "%ds" $secs
-    fi
-}
+# Title used by the shared cleanup_on_exit trap when something fails.
+FAILURE_TITLE="Update Failed"
 
-# Branding footer for whiptail dialogs
-whiptail_footer() {
-    echo "Copyright (c) 2025-2026 Timothy Kramer (KR8MER) | AGPL v3 / Commercial License"
-}
+# Resolve script dir before sourcing the UI library.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Wrapper: force whiptail TUI to /dev/tty so ncurses output is never swallowed
-# by the log redirect (exec 1>>$LOG_FILE 2>&1) below.  Callers that capture
-# user input still use the standard "3>&1 1>&2 2>&3" fd-swap trick; >/dev/tty
-# only overrides fd1 (TUI output), leaving fd2 (the captured result) untouched.
-whiptail() {
-    command whiptail "$@" >/dev/tty
-    local _ret=$?
-    stty sane </dev/tty 2>/dev/null || true
-    return $_ret
-}
-
-# Write a line directly to the terminal, bypassing the log redirect
-_tty() { printf '%s\n' "$1" >/dev/tty; }
-
-echo_step() {
-    STEP_NUM=$((STEP_NUM + 1))
-    CURRENT_DESC="$1"
-    local pct=$((STEP_NUM * 100 / TOTAL_STEPS))
-    echo "--- Step $STEP_NUM/$TOTAL_STEPS: $1 ---"
-    _tty ""
-    _tty "$(printf '\033[1;34m[%d/%d | %d%%]\033[0m \033[1m%s\033[0m' \
-        "$STEP_NUM" "$TOTAL_STEPS" "$pct" "$1")"
-}
-
-echo_info()     { echo "[INFO]  $1"; _tty "$(printf '  \033[0;36m[INFO]\033[0m  %s' "$1")"; }
-echo_success()  { echo "[ OK ]  $1"; _tty "$(printf '  \033[1;32m[ OK ]\033[0m  %s' "$1")"; }
-echo_warning()  { echo "[WARN]  $1"; _tty "$(printf '  \033[1;33m[WARN]\033[0m  %s' "$1")"; }
-echo_error()    { echo "[ERROR] $1"; _tty "$(printf '  \033[1;31m[ERR!]\033[0m  %s' "$1")"; }
-echo_progress() { echo "  >>    $1"; _tty "$(printf '  \033[0;37m  >>  \033[0m  %s' "$1")"; }
-echo_header()   { echo ""; echo "=== $1 ==="; echo ""; _tty "$(printf '\033[1m=== %s ===\033[0m' "$1")"; }
-echo_operation() { echo_progress "${1}${2:+ (~$2)}"; }
-draw_box()       { echo_success "$1"; }
-draw_separator() { :; }
-show_progress_bar() { :; }
-show_spinner()   { wait "$1" 2>/dev/null || true; }
-show_elapsed_time() { :; }
-
-show_celebration() {
-    local elapsed; elapsed=$(format_duration $(( $(date +%s) - START_TIME )))
-    whiptail --title "*** UPDATE COMPLETE ***" \
-             --backtitle "$(whiptail_footer)" \
-             --msgbox "$1\n\nTotal time: $elapsed\nLog: $LOG_FILE" 10 65
-}
-
-cleanup_on_exit() {
-    local exit_code=$?
-    if [ $exit_code -ne 0 ]; then
-        echo "[ERROR] Script exited with code $exit_code"
-        whiptail --title "Update Failed" \
-                 --backtitle "$(whiptail_footer)" \
-                 --msgbox "Script exited with code $exit_code\n\nCheck log for details:\n$LOG_FILE" 10 65 2>/dev/null || true
-    fi
-    stty sane </dev/tty 2>/dev/null || true
-}
-trap cleanup_on_exit EXIT
-trap 'exit 130' INT TERM
+# Shared modern terminal UI primitives (color codes, banner, spinner,
+# progress bars, apt/pip wrappers, whiptail helper, completion card).
+# Falls back to plain text when not run from a TTY.
+# shellcheck source=scripts/lib/ui.sh
+source "$SCRIPT_DIR/scripts/lib/ui.sh"
+ui_install_traps
 
 # ── Startup ──────────────────────────────────────────────────────────────────
 
-# Show splash
-{
-    printf '\033[2J\033[H'
-    printf '\033[1;34m  EAS Station — Update Manager\033[0m\n'
-    printf '  Emergency Alert System\n\n'
-    printf '  Initializing...\n\n'
-    printf '  Log: %s\n' "$LOG_FILE"
-} >/dev/tty
+# Show the modern ASCII banner.
+ui_banner "Update Manager" "" "$LOG_FILE"
 
 # Root check
 if [ "$EUID" -ne 0 ]; then
@@ -1305,7 +1225,7 @@ fi
 echo ""
 
 # Show celebration animation
-show_celebration "Update completed successfully!"
+show_celebration "Update completed successfully!" "*** UPDATE COMPLETE ***"
 
 # Show elapsed time
 show_elapsed_time
