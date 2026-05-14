@@ -30,17 +30,33 @@ import re
 from pathlib import Path
 
 
-def test_git_commit_badge_uses_url_encoding():
-    """Verify the Git Commit badge uses proper URL encoding."""
-    
+def _read_badge_sources() -> str:
+    """Return the concatenated text of every template that participates in
+    rendering the Git Commit badge.
+
+    The badge logic was extracted into ``templates/partials/tech_stack_badges.html``
+    so it could be shared as a single source of truth, but ``base.html`` still
+    {% include %}s it. We search both files together so the legacy assertions
+    keep passing regardless of which file currently owns the markup.
+    """
     project_root = Path(__file__).resolve().parents[1]
     base_template = project_root / 'templates' / 'base.html'
-    
+    badges_partial = project_root / 'templates' / 'partials' / 'tech_stack_badges.html'
+
     assert base_template.exists(), f"base.html not found at {base_template}"
-    
-    with open(base_template, 'r') as f:
-        content = f.read()
-    
+    assert badges_partial.exists(), (
+        f"tech_stack_badges.html partial not found at {badges_partial}. "
+        f"base.html includes this partial; it must exist."
+    )
+
+    return base_template.read_text() + "\n" + badges_partial.read_text()
+
+
+def test_git_commit_badge_uses_url_encoding():
+    """Verify the Git Commit badge uses proper URL encoding."""
+
+    content = _read_badge_sources()
+
     # Check that the badge encoding uses both shields_escape AND urlencode
     pattern = r'{%\s*set\s+commit_badge_encoded\s*=\s*commit_badge_text\s*\|\s*shields_escape\s*\|\s*urlencode\s*%}'
     match = re.search(pattern, content)
@@ -55,13 +71,9 @@ def test_git_commit_badge_uses_url_encoding():
 
 def test_git_commit_badge_url_format():
     """Verify the Git Commit badge URL uses the encoded variable."""
-    
-    project_root = Path(__file__).resolve().parents[1]
-    base_template = project_root / 'templates' / 'base.html'
-    
-    with open(base_template, 'r') as f:
-        content = f.read()
-    
+
+    content = _read_badge_sources()
+
     # Check that the badge URL uses commit_badge_encoded
     pattern = r'https://img\.shields\.io/badge/Git%20Commit-{{\s*commit_badge_encoded\s*}}-181717'
     match = re.search(pattern, content)
@@ -76,13 +88,9 @@ def test_git_commit_badge_url_format():
 
 def test_git_commit_badge_logic():
     """Verify the Git Commit badge displays commit hash or 'DEV BUILD' fallback."""
-    
-    project_root = Path(__file__).resolve().parents[1]
-    base_template = project_root / 'templates' / 'base.html'
-    
-    with open(base_template, 'r') as f:
-        content = f.read()
-    
+
+    content = _read_badge_sources()
+
     # Check that the template has logic to fall back to 'dev build'
     has_dev_build_fallback = re.search(
         r"{%\s*if\s+not\s+commit_label\s+or\s+commit_label\|lower\s*==\s*'unknown'\s*%}"
