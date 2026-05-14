@@ -653,6 +653,9 @@ sudo systemctl restart eas-station</code></pre>
                                     <button type="button" class="btn btn-outline-info" data-action="show-waterfall" data-receiver-id="${receiver.receiver_id}" title="Capture a short IQ window and render a frequency-vs-time waterfall here. Use this to see if the signal is clipping the SDR's front end (a strong nearby station can cause wideband fuzz and saturated peaks even when audio sounds OK).">
                                         <i class="fas fa-water"></i> Show Waterfall
                                     </button>
+                                    <button type="button" class="btn btn-outline-primary" data-action="run-diagnostic" data-receiver-id="${receiver.receiver_id}" title="Capture a 2 s IQ window and run a full diagnostic report: front-end health (saturation, DC offset, click rate, channel-filter rolloff) plus a subcarrier inventory (pilot, stereo, RBDS, SCA #1, DARC, SCA #2). Answers 'is RBDS being suppressed by the rtl-sdr?' and 'what signals are on the air that we're discarding?'">
+                                        <i class="fas fa-microscope"></i> Run Diagnostic
+                                    </button>
                                     <button type="button" class="btn btn-outline-success" data-action="auto-gain" data-receiver-id="${receiver.receiver_id}" title="Sweep this receiver's gain range, measure IQ headroom at each step, and apply the highest non-clipping gain. Hold Shift while clicking to also save the chosen gain to the receiver's persistent configuration.">
                                         <i class="fas fa-sliders-h"></i> Auto-Calibrate Gain
                                     </button>
@@ -663,6 +666,7 @@ sudo systemctl restart eas-station</code></pre>
                             </div>
                             ${receiver.receiver_id ? `
                                 <div class="waterfall-container mt-2" data-waterfall-for="${receiver.receiver_id}" style="display:none;"></div>
+                                <div class="diagnostic-container mt-2" data-diagnostic-for="${receiver.receiver_id}" style="display:none;"></div>
                             ` : ''}
                         </div>
                     </div>
@@ -1060,6 +1064,344 @@ sudo systemctl restart eas-station</code></pre>
             wfBtn.innerHTML = originalHtml;
         }
     });
+
+    // Delegated event listener for "Run Diagnostic" buttons. Captures a
+    // short IQ window via the server-side analyzer and renders a rich
+    // report card with front-end health, subcarrier inventory, and a
+    // summary verdict that answers "is RBDS being suppressed by the
+    // rtl-sdr?".
+    document.addEventListener('click', async (event) => {
+        const diagBtn = event.target.closest('button[data-action="run-diagnostic"]');
+        if (!diagBtn) return;
+
+        const receiverId = diagBtn.getAttribute('data-receiver-id');
+        if (!receiverId) return;
+
+        // 2 s default — long enough for a stable Welch PSD and any
+        // RBDS group cycles, short enough to keep the payload <50 KB.
+        // We do NOT read from #captureDurationSec (which controls
+        // operator-driven captures); the diagnostic always uses a
+        // fixed-duration window so verdicts are comparable across runs.
+        const durationSec = 2.0;
+
+        const container = document.querySelector(
+            `.diagnostic-container[data-diagnostic-for="${CSS.escape(receiverId)}"]`,
+        );
+        if (container) {
+            container.style.display = 'block';
+            container.innerHTML =
+                '<div class="alert alert-secondary mb-0 py-2">' +
+                '<i class="fas fa-spinner fa-spin me-2"></i>' +
+                `Capturing ${durationSec.toFixed(1)} s and analyzing…` +
+                '</div>';
+        }
+
+        const originalHtml = diagBtn.innerHTML;
+        diagBtn.disabled = true;
+        diagBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analyzing…';
+
+        try {
+            const response = await fetch(
+                `/api/radio/diagnostics/analyze/${receiverId}`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ duration_sec: durationSec }),
+                },
+            );
+            const result = await response.json();
+            if (!response.ok) {
+                throw new Error(
+                    result.error || result.hint || `HTTP ${response.status}`,
+                );
+            }
+            renderDiagnostic(container, result);
+            diagBtn.innerHTML = '<i class="fas fa-check"></i> Done';
+            setTimeout(() => {
+                diagBtn.disabled = false;
+                diagBtn.innerHTML = originalHtml;
+            }, 3000);
+        } catch (error) {
+            console.error('Diagnostic analysis failed', error);
+            if (container) {
+                container.innerHTML = '';
+                const alert = document.createElement('div');
+                alert.className = 'alert alert-danger mb-0';
+                alert.textContent = `Diagnostic failed: ${error.message}`;
+                container.appendChild(alert);
+            } else {
+                alert(`Diagnostic failed: ${error.message}`);
+            }
+            diagBtn.disabled = false;
+            diagBtn.innerHTML = originalHtml;
+        }
+    });
+
+    // --- Diagnostic renderer -------------------------------------------------
+    // Takes the JSON payload returned by /api/radio/diagnostics/analyze and
+    // builds three sections in the per-receiver results container:
+    //   1. Summary verdict — overall pass/warning/critical + the answer to
+    //      "is RBDS being suppressed by the rtl-sdr?".
+    //   2. Front-end health — clipping, DC, clicks, envelope, IF rolloff.
+    //   3. Subcarrier inventory — pilot / stereo / RBDS / SCA / DARC each
+    //      with SNR + a note describing what the station does (or does
+    //      not) do with that signal today.
+    function renderDiagnostic(container, data) {
+        if (!container || !data) return;
+        container.style.display = 'block';
+        container.innerHTML = '';
+
+        const verdict = data.summary_verdict || 'unknown';
+        const verdictMap = {
+            ok: { bg: 'success', icon: 'fa-check-circle', label: 'Healthy' },
+            warning: { bg: 'warning', icon: 'fa-exclamation-triangle', label: 'Warnings' },
+            critical: { bg: 'danger', icon: 'fa-times-circle', label: 'Critical' },
+        };
+        const v = verdictMap[verdict] || { bg: 'secondary', icon: 'fa-question-circle', label: verdict };
+
+        const card = document.createElement('div');
+        card.className = `card shadow-sm border-0 border-start border-${v.bg} border-4`;
+        card.style.borderLeftWidth = '6px';
+
+        // Header: summary verdict + RBDS-suppression-risk badge.
+        const riskMap = {
+            none: { bg: 'success', label: 'No RBDS suppression detected' },
+            low: { bg: 'info', label: 'Low RBDS suppression risk' },
+            elevated: { bg: 'warning', label: 'Elevated RBDS suppression risk' },
+            high: { bg: 'danger', label: 'High RBDS suppression risk' },
+        };
+        const risk = riskMap[data.rbds_suppression_risk]
+            || { bg: 'secondary', label: data.rbds_suppression_risk || 'unknown' };
+
+        const messages = Array.isArray(data.summary_messages)
+            ? data.summary_messages : [];
+        const reasons = Array.isArray(data.rbds_suppression_reasons)
+            ? data.rbds_suppression_reasons : [];
+
+        const fe = data.frontend || {};
+        const sc = Array.isArray(data.subcarriers) ? data.subcarriers : [];
+
+        // dBFS / fraction formatters
+        const fmt = (x, digits = 1, suffix = '') =>
+            (x === null || x === undefined || Number.isNaN(Number(x)))
+                ? '—'
+                : `${Number(x).toFixed(digits)}${suffix}`;
+        const fmtPct = (x) =>
+            (x === null || x === undefined) ? '—' : `${(Number(x) * 100).toFixed(2)}%`;
+        const fmtHz = (x) =>
+            (x === null || x === undefined) ? '—' : `${(Number(x) / 1000).toFixed(1)} kHz`;
+
+        // Banner with verdict + risk
+        let headerHtml = `
+            <div class="card-body pb-0">
+                <div class="d-flex align-items-center mb-2">
+                    <i class="fas ${v.icon} text-${v.bg} fa-2x me-3"></i>
+                    <div class="flex-grow-1">
+                        <div class="h5 mb-0">Capture verdict: ${v.label}</div>
+                        <small class="text-muted">${fmt(data.duration_sec, 2, ' s')} captured at ${fmt(data.sample_rate / 1000, 0, ' kHz')}, ${data.num_samples?.toLocaleString() || '—'} samples</small>
+                    </div>
+                    <span class="badge bg-${risk.bg} ms-2">${risk.label}</span>
+                </div>`;
+        if (messages.length) {
+            headerHtml += `<ul class="mb-2 small">${messages.map(m => `<li>${escapeHtml(m)}</li>`).join('')}</ul>`;
+        }
+        if (reasons.length) {
+            headerHtml += `
+                <div class="alert alert-${risk.bg === 'success' ? 'info' : risk.bg} py-2 mb-3 small">
+                    <strong>Why:</strong>
+                    <ul class="mb-0">${reasons.map(r => `<li>${escapeHtml(r)}</li>`).join('')}</ul>
+                </div>`;
+        }
+        headerHtml += '</div>';
+        card.insertAdjacentHTML('beforeend', headerHtml);
+
+        // --- Front-end health tiles ---
+        const tiles = [];
+        // Clipping
+        const clipPct = (fe.clipping_fraction || 0) * 100;
+        let clipColor = 'success';
+        if (clipPct >= 1.0) clipColor = 'danger';
+        else if (clipPct >= 0.1) clipColor = 'warning';
+        tiles.push({
+            label: 'IQ saturation',
+            value: `${clipPct.toFixed(2)}%`,
+            sub: `|I or Q| ≥ 0.95 over ${fe.num_samples?.toLocaleString() || '—'} samples`,
+            color: clipColor,
+            icon: 'fa-wave-square',
+        });
+        // RMS / peak
+        tiles.push({
+            label: 'RMS / peak',
+            value: `${fmt(fe.rms_dbfs, 1, ' dBFS')}`,
+            sub: `peak ${fmt(fe.peak_dbfs, 1, ' dBFS')}`,
+            color: 'info',
+            icon: 'fa-signal',
+        });
+        // DC offset
+        let dcColor = 'success';
+        if ((fe.dc_offset_mag || 0) >= 0.15) dcColor = 'danger';
+        else if ((fe.dc_offset_mag || 0) >= 0.05) dcColor = 'warning';
+        tiles.push({
+            label: 'DC offset',
+            value: fmt(fe.dc_offset_mag, 3),
+            sub: 'RTL-SDR LO leakage',
+            color: dcColor,
+            icon: 'fa-bullseye',
+        });
+        // Click rate
+        let clickColor = 'success';
+        if ((fe.click_rate_pct || 0) >= 5) clickColor = 'danger';
+        else if ((fe.click_rate_pct || 0) >= 1) clickColor = 'warning';
+        tiles.push({
+            label: 'Discriminator clicks',
+            value: `${fmt(fe.click_rate_pct, 2)}%`,
+            sub: '|Δφ| > 0.6π over IQ',
+            color: clickColor,
+            icon: 'fa-bolt',
+        });
+        // Envelope ratio
+        let envColor = 'success';
+        if ((fe.envelope_ratio || 0) >= 6) envColor = 'danger';
+        else if ((fe.envelope_ratio || 0) >= 3) envColor = 'warning';
+        tiles.push({
+            label: 'Envelope flatness',
+            value: fmt(fe.envelope_ratio, 1),
+            sub: 'P99/P01 (FM expects ~1)',
+            color: envColor,
+            icon: 'fa-grip-lines',
+        });
+        // Passband -3 dB
+        let pbColor = 'success';
+        const pb3 = fe.passband_3db_hz;
+        if (pb3 !== null && pb3 !== undefined) {
+            if (pb3 < 50000) pbColor = 'danger';
+            else if (pb3 < 60000) pbColor = 'warning';
+        } else {
+            pbColor = 'secondary';
+        }
+        tiles.push({
+            label: 'IF passband −3 dB',
+            value: fmtHz(pb3),
+            sub: 'RBDS lives at 57 kHz; −3 dB point should be > 60 kHz',
+            color: pbColor,
+            icon: 'fa-broadcast-tower',
+        });
+
+        let feHtml = `
+            <div class="card-body pt-0">
+                <h6 class="text-muted text-uppercase small mb-2">Front-end health</h6>
+                <div class="row g-2 mb-3">`;
+        for (const tile of tiles) {
+            feHtml += `
+                <div class="col-md-4 col-sm-6">
+                    <div class="border rounded p-2 h-100">
+                        <div class="d-flex align-items-center">
+                            <i class="fas ${tile.icon} text-${tile.color} fa-lg me-2"></i>
+                            <div class="flex-grow-1">
+                                <div class="text-muted small">${escapeHtml(tile.label)}</div>
+                                <div class="fw-bold text-${tile.color}">${escapeHtml(tile.value)}</div>
+                            </div>
+                        </div>
+                        <small class="text-muted d-block mt-1" style="font-size: 0.75em;">${escapeHtml(tile.sub)}</small>
+                    </div>
+                </div>`;
+        }
+        feHtml += '</div>';
+
+        // Front-end findings list
+        const findings = Array.isArray(fe.findings) ? fe.findings : [];
+        if (findings.length) {
+            feHtml += '<ul class="list-unstyled mb-3 small">';
+            for (const f of findings) {
+                const map = {
+                    ok: { c: 'success', i: 'fa-check' },
+                    info: { c: 'info', i: 'fa-info-circle' },
+                    warning: { c: 'warning', i: 'fa-exclamation-triangle' },
+                    critical: { c: 'danger', i: 'fa-times-circle' },
+                };
+                const fm = map[f.level] || { c: 'secondary', i: 'fa-question' };
+                feHtml += `<li class="mb-1"><i class="fas ${fm.i} text-${fm.c} me-1"></i> <span class="text-${fm.c}">${escapeHtml(f.message)}</span></li>`;
+            }
+            feHtml += '</ul>';
+        }
+        feHtml += '</div>';
+        card.insertAdjacentHTML('beforeend', feHtml);
+
+        // --- Subcarrier inventory ---
+        let scHtml = `
+            <div class="card-body pt-0">
+                <h6 class="text-muted text-uppercase small mb-2">
+                    Subcarrier inventory
+                    <small class="text-muted ms-1" style="text-transform: none;">— what's on the air vs. what the station decodes</small>
+                </h6>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0 small">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Subcarrier</th>
+                                <th class="text-end">Centre</th>
+                                <th class="text-end">SNR</th>
+                                <th>Status</th>
+                                <th>Station handling</th>
+                            </tr>
+                        </thead>
+                        <tbody>`;
+        const verdictBadge = (vd) => {
+            const m = {
+                strong: { c: 'success', l: 'Strong' },
+                present: { c: 'success', l: 'Present' },
+                marginal: { c: 'warning', l: 'Marginal' },
+                absent: { c: 'secondary', l: 'Absent' },
+                out_of_band: { c: 'dark', l: 'Out of Nyquist' },
+                undetermined: { c: 'secondary', l: 'Undetermined' },
+            };
+            const mm = m[vd] || { c: 'secondary', l: vd || '—' };
+            return `<span class="badge bg-${mm.c}">${mm.l}</span>`;
+        };
+        for (const s of sc) {
+            const handlingCell = s.in_use
+                ? `<span class="text-success"><i class="fas fa-check"></i> ${escapeHtml(s.used_for)}</span>`
+                : `<span class="text-muted"><i class="fas fa-times"></i> ${escapeHtml(s.used_for)}</span>`;
+            // Highlight signals that are PRESENT but NOT USED — these are
+            // the "signals we are throwing out" the operator asked about.
+            const rowClass = (s.present && !s.in_use) ? 'table-warning' : '';
+            scHtml += `
+                <tr class="${rowClass}">
+                    <td>
+                        <strong>${escapeHtml(s.name)}</strong>
+                        <br>
+                        <small class="text-muted">${escapeHtml(s.description || '')}</small>
+                    </td>
+                    <td class="text-end text-nowrap">${fmt(s.center_hz / 1000, 0, ' kHz')}</td>
+                    <td class="text-end text-nowrap">${fmt(s.snr_db, 1, ' dB')}</td>
+                    <td>${verdictBadge(s.verdict)}</td>
+                    <td>${handlingCell}</td>
+                </tr>`;
+        }
+        scHtml += `
+                        </tbody>
+                    </table>
+                </div>
+                <small class="text-muted">
+                    Rows highlighted in yellow are signals that are on the air but
+                    currently discarded by the station — candidates for future
+                    decoders.
+                </small>
+            </div>`;
+        card.insertAdjacentHTML('beforeend', scHtml);
+
+        container.appendChild(card);
+    }
+
+    function escapeHtml(s) {
+        if (s === null || s === undefined) return '';
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
 
     // Draw the quantised spectrogram returned by
     // /api/radio/diagnostics/waterfall into a canvas inside ``container``.
