@@ -15,38 +15,36 @@
 </div>
 
 <div class="container py-4">
-    <div class="d-flex justify-content-end mb-4">
-        <div class="btn-group">
-            <a href="/admin/radio" class="btn btn-outline-secondary">
-                <i class="fas fa-arrow-left"></i> Back to Settings
-            </a>
-            <button class="btn btn-primary" id="refreshBtn">
-                <i class="fas fa-sync"></i> Refresh
-            </button>
-        </div>
+    <div class="d-flex flex-wrap justify-content-end gap-2 mb-4">
+        <a href="/admin/radio" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Settings
+        </a>
+        <button class="btn btn-primary" id="refreshBtn">
+            <i class="fas fa-sync"></i> Refresh
+        </button>
     </div>
 
     <!-- Overall Health Status -->
     <div class="card mb-4 shadow-sm border-0" id="healthCard">
         <div class="card-body">
-            <div class="row align-items-center">
+            <div class="row g-3 align-items-center">
                 <div class="col-auto">
                     <div class="spinner-border text-primary" role="status" id="healthSpinner">
                         <span class="visually-hidden">Loading...</span>
                     </div>
                     <i class="fas fa-heart fa-3x d-none" id="healthIcon"></i>
                 </div>
-                <div class="col">
+                <div class="col-12 col-sm">
                     <h5 class="mb-1" id="healthTitle">Checking system status...</h5>
                     <p class="mb-0 text-muted" id="healthMessage">Please wait while we check the audio pipeline.</p>
                 </div>
-                <div class="col-auto">
+                <div class="col-12 col-sm-auto">
                     <div class="form-check form-switch">
                         <input class="form-check-input" type="checkbox" id="autoRefresh" checked>
                         <label class="form-check-label" for="autoRefresh">Auto-refresh (5s)</label>
                     </div>
                 </div>
-                <div class="col-auto">
+                <div class="col-12 col-sm-auto">
                     <label for="captureDurationSec" class="form-label mb-1 small text-muted">
                         Capture duration (s)
                     </label>
@@ -145,7 +143,7 @@
 
     <!-- About IQ Captures (help for the per-receiver "Capture IQ" button below) -->
     <div class="card mb-4 shadow-sm border-0">
-        <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+        <div class="card-header bg-info text-white d-flex flex-wrap gap-2 justify-content-between align-items-center">
             <span>
                 <i class="fas fa-info-circle me-2" aria-hidden="true"></i>
                 <strong>About IQ Captures</strong>
@@ -642,24 +640,24 @@ sudo systemctl restart eas-station</code></pre>
                             </div>
                         </div>
                         <div class="mt-2">
-                            <div class="btn-group btn-group-sm" role="group">
-                                <a href="/api/radio/spectrum/by-identifier/${identifier}" target="_blank" class="btn btn-outline-primary">
+                            <div class="d-flex flex-wrap gap-2" role="group">
+                                <a href="/api/radio/spectrum/by-identifier/${identifier}" target="_blank" class="btn btn-sm btn-outline-primary">
                                     <i class="fas fa-vial"></i> Test Spectrum Endpoint
                                 </a>
                                 ${receiver.receiver_id ? `
-                                    <button type="button" class="btn btn-outline-info" data-action="capture-iq" data-receiver-id="${receiver.receiver_id}" title="Record raw IQ samples from this receiver and download as a .npy file. Use the 'Duration' field on the left to control how many seconds are captured.">
+                                    <button type="button" class="btn btn-sm btn-outline-info" data-action="capture-iq" data-receiver-id="${receiver.receiver_id}" title="Record raw IQ samples from this receiver and download as a .npy file. Use the 'Duration' field on the left to control how many seconds are captured.">
                                         <i class="fas fa-download"></i> Capture IQ
                                     </button>
-                                    <button type="button" class="btn btn-outline-info" data-action="show-waterfall" data-receiver-id="${receiver.receiver_id}" title="Capture a short IQ window and render a frequency-vs-time waterfall here. Use this to see if the signal is clipping the SDR's front end (a strong nearby station can cause wideband fuzz and saturated peaks even when audio sounds OK).">
+                                    <button type="button" class="btn btn-sm btn-outline-info" data-action="show-waterfall" data-receiver-id="${receiver.receiver_id}" title="Capture a short IQ window and render a frequency-vs-time waterfall here. Use this to see if the signal is clipping the SDR's front end (a strong nearby station can cause wideband fuzz and saturated peaks even when audio sounds OK).">
                                         <i class="fas fa-water"></i> Show Waterfall
                                     </button>
-                                    <button type="button" class="btn btn-outline-primary" data-action="run-diagnostic" data-receiver-id="${receiver.receiver_id}" title="Capture a 2 s IQ window and run a full diagnostic report: front-end health (saturation, DC offset, click rate, channel-filter rolloff) plus a subcarrier inventory (pilot, stereo, RBDS, SCA #1, DARC, SCA #2). Answers 'is RBDS being suppressed by the rtl-sdr?' and 'what signals are on the air that we're discarding?'">
+                                    <button type="button" class="btn btn-sm btn-outline-primary" data-action="run-diagnostic" data-receiver-id="${receiver.receiver_id}" title="Capture a 2 s IQ window and run a full diagnostic report: front-end health (saturation, DC offset, click rate, channel-filter rolloff) plus a subcarrier inventory (pilot, stereo, RBDS, SCA #1, DARC, SCA #2). Answers 'is RBDS being suppressed by the rtl-sdr?' and 'what signals are on the air that we're discarding?'">
                                         <i class="fas fa-microscope"></i> Run Diagnostic
                                     </button>
-                                    <button type="button" class="btn btn-outline-success" data-action="auto-gain" data-receiver-id="${receiver.receiver_id}" title="Sweep this receiver's gain range, measure IQ headroom at each step, and apply the highest non-clipping gain. Hold Shift while clicking to also save the chosen gain to the receiver's persistent configuration.">
+                                    <button type="button" class="btn btn-sm btn-outline-success" data-action="auto-gain" data-receiver-id="${receiver.receiver_id}" title="Sweep this receiver's gain range, measure IQ headroom at each step, and apply the highest non-clipping gain. Hold Shift while clicking to also save the chosen gain to the receiver's persistent configuration.">
                                         <i class="fas fa-sliders-h"></i> Auto-Calibrate Gain
                                     </button>
-                                    <button type="button" class="btn btn-outline-warning" data-action="restart" data-receiver-id="${receiver.receiver_id}">
+                                    <button type="button" class="btn btn-sm btn-outline-warning" data-action="restart" data-receiver-id="${receiver.receiver_id}">
                                         <i class="fas fa-sync-alt"></i> Restart Receiver
                                     </button>
                                 ` : ''}
@@ -1194,13 +1192,13 @@ sudo systemctl restart eas-station</code></pre>
         // Banner with verdict + risk
         let headerHtml = `
             <div class="card-body pb-0">
-                <div class="d-flex align-items-center mb-2">
-                    <i class="fas ${v.icon} text-${v.bg} fa-2x me-3"></i>
-                    <div class="flex-grow-1">
+                <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                    <i class="fas ${v.icon} text-${v.bg} fa-2x me-2"></i>
+                    <div class="flex-grow-1" style="min-width: 0;">
                         <div class="h5 mb-0">Capture verdict: ${v.label}</div>
                         <small class="text-muted">${fmt(data.duration_sec, 2, ' s')} captured at ${fmt(data.sample_rate / 1000, 0, ' kHz')}, ${data.num_samples?.toLocaleString() || '—'} samples</small>
                     </div>
-                    <span class="badge bg-${risk.bg} ms-2">${risk.label}</span>
+                    <span class="badge bg-${risk.bg}">${risk.label}</span>
                 </div>`;
         if (messages.length) {
             headerHtml += `<ul class="mb-2 small">${messages.map(m => `<li>${escapeHtml(m)}</li>`).join('')}</ul>`;
