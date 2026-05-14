@@ -640,6 +640,11 @@ class SDRServiceState:
     flask_app: Optional[Any] = None  # Store Flask app for database access
     last_metrics_time: float = 0.0
     metrics_interval: float = 1.0  # Publish metrics every second
+    # Per-receiver snapshot of total_samples_written at the last metrics
+    # publish.  Used by publish_sdr_metrics() to derive a "samples flowing"
+    # signal from the delta, since the instantaneous ring-buffer fill level
+    # is ~0 immediately after the publisher thread drains it.
+    prev_total_samples_written: Dict[str, int] = field(default_factory=dict)
     lock: threading.Lock = field(default_factory=threading.Lock)
 
 
@@ -1232,22 +1237,61 @@ def publish_sdr_metrics(redis_client):
                     status = receiver.get_status()
                     is_running = receiver._running.is_set() if hasattr(receiver, '_running') else False
 
-                    # Check if samples are available. Read directly from the
-                    # ring buffer stats: this is non-destructive, whereas
-                    # receiver.get_samples() *consumes* from the buffer and
-                    # was racing the publisher loop above (which already
-                    # drained the ring buffer in the same iteration), making
-                    # this block always report 0 / not-available.
+                    # Determine whether samples are actively flowing.
+                    #
+                    # The instantaneous ring-buffer fill_level is misleading
+                    # here: the publisher thread above drains the ring buffer
+                    # on every iteration (via receiver.get_samples()), so by
+                    # the time we read stats the fill level is ~0 even on a
+                    # perfectly healthy receiver.  That produced the "No
+                    # samples" / "Sample Buffer: Not available" badge on the
+                    # SDR Diagnostics dashboard while the downstream RBDS
+                    # decoder was simultaneously reporting a healthy score and
+                    # thousands of group counts on the very same stream.
+                    #
+                    # The non-destructive signal is total_samples_written
+                    # (a monotonic counter the ring buffer increments inside
+                    # write()).  If it has grown since the previous metrics
+                    # publish, samples are flowing.
+                    fill_level = 0
+                    total_written = 0
                     samples_available = False
-                    sample_count = 0
                     if hasattr(receiver, 'get_ring_buffer_stats'):
                         try:
                             ring_stats = receiver.get_ring_buffer_stats()
                             if ring_stats:
-                                sample_count = int(ring_stats.get('samples_available', 0) or 0)
-                                samples_available = sample_count > 0
+                                fill_level = int(ring_stats.get('samples_available', 0) or 0)
+                                total_written = int(ring_stats.get('total_samples_written', 0) or 0)
                         except Exception:
                             pass
+
+                    prev_written = _state.prev_total_samples_written.get(identifier, 0)
+                    if total_written < prev_written:
+                        # Counter went backwards — receiver was restarted /
+                        # re-opened and its ring buffer reset.  Don't clamp
+                        # the delta to 0 (that would falsely report "No
+                        # samples" for one interval); instead resync the
+                        # snapshot and use the fill_level fallback below.
+                        delta_written = 0
+                        prev_written = 0
+                    else:
+                        delta_written = total_written - prev_written
+                    if total_written > 0:
+                        _state.prev_total_samples_written[identifier] = total_written
+
+                    if delta_written > 0:
+                        # Samples have been written to the ring buffer since
+                        # the last metrics publish — the SDR is producing.
+                        samples_available = True
+                        sample_count = delta_written
+                    elif fill_level > 0:
+                        # Producer counter unavailable (e.g. simple buffer
+                        # fallback path that hard-codes total_samples_written
+                        # to 0) — fall back to the instantaneous level.
+                        samples_available = True
+                        sample_count = fill_level
+                    else:
+                        sample_count = 0
 
                     # Build config object (webapp expects nested structure)
                     config = {

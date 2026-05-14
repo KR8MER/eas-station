@@ -163,6 +163,13 @@
                                 </a>
                             </li>
                             {% endif %}
+                            {% if can_manage_receivers %}
+                            <li>
+                                <a class="dropdown-item" href="/admin/radio/diagnostics">
+                                    <i class="fas fa-stethoscope"></i> SDR Diagnostics
+                                </a>
+                            </li>
+                            {% endif %}
                             {% endif %}
                         </ul>
                     </li>
