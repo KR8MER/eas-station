@@ -672,7 +672,47 @@ sudo systemctl restart eas-station</code></pre>
             `;
         }
 
+        // Preserve any in-progress / completed "Run Diagnostic" and "Show
+        // Waterfall" panel content across this re-render. Without this, the
+        // WebSocket-driven auto-refresh (which fires on every ``radio_status_update``,
+        // typically every ~1 s, with a 15 s polling fallback) wipes out the
+        // spinner placed by the click handler before the 2 s capture+analyze
+        // round-trip completes, so the operator sees nothing and the result
+        // ends up rendered into a detached DOM node. Capture the existing
+        // panel HTML keyed by receiver id, then restore it after the
+        // ``container.innerHTML = html`` assignment below.
+        const preservedPanels = [];
+        for (const panel of container.querySelectorAll(
+            '.diagnostic-container, .waterfall-container'
+        )) {
+            // Fast-path: skip empty panels without touching innerHTML.
+            if (!panel.firstChild) continue;
+            const isDiag = panel.classList.contains('diagnostic-container');
+            const recvId = isDiag
+                ? panel.getAttribute('data-diagnostic-for')
+                : panel.getAttribute('data-waterfall-for');
+            if (!recvId) continue;
+            preservedPanels.push({
+                kind: isDiag ? 'diag' : 'wf',
+                recvId,
+                html: panel.innerHTML,
+                display: panel.style.display,
+            });
+        }
+
         container.innerHTML = html;
+
+        // Restore any preserved diagnostic / waterfall panels.
+        for (const state of preservedPanels) {
+            const selector = state.kind === 'diag'
+                ? `.diagnostic-container[data-diagnostic-for="${CSS.escape(state.recvId)}"]`
+                : `.waterfall-container[data-waterfall-for="${CSS.escape(state.recvId)}"]`;
+            const panel = container.querySelector(selector);
+            if (panel) {
+                panel.innerHTML = state.html;
+                if (state.display) panel.style.display = state.display;
+            }
+        }
     }
 
     // ---- RBDS Decoder Health card ---------------------------------------
@@ -1037,7 +1077,20 @@ sudo systemctl restart eas-station</code></pre>
                     result.error || result.hint || `HTTP ${response.status}`
                 );
             }
-            renderWaterfall(container, result);
+            // Re-query the live container — ``loadDiagnostics`` may have
+            // re-rendered ``#receiversContainer`` during the capture wait,
+            // detaching the original reference. See ``updateReceiverDetails``
+            // for the matching preservation logic. If the live panel is gone
+            // (e.g. receiver removed mid-flight), surface via alert() rather
+            // than writing into a detached node.
+            const liveWfContainer = document.querySelector(
+                `.waterfall-container[data-waterfall-for="${CSS.escape(receiverId)}"]`
+            );
+            if (liveWfContainer) {
+                renderWaterfall(liveWfContainer, result);
+            } else {
+                alert(`Waterfall ${result.verdict || 'done'} — receiver panel is no longer visible.`);
+            }
             wfBtn.innerHTML =
                 `<i class="fas fa-check"></i> ${result.verdict || 'done'}`;
             setTimeout(() => {
@@ -1046,15 +1099,19 @@ sudo systemctl restart eas-station</code></pre>
             }, 3000);
         } catch (error) {
             console.error('Waterfall failed', error);
-            if (container) {
+            const liveContainer = document.querySelector(
+                `.waterfall-container[data-waterfall-for="${CSS.escape(receiverId)}"]`
+            );
+            if (liveContainer) {
                 // ``error.message`` is the only user-controlled string here
                 // and we route it through ``textContent`` (via the DOM API
                 // below) so an attacker-controlled hint can't inject HTML.
-                container.innerHTML = '';
+                liveContainer.style.display = '';
+                liveContainer.innerHTML = '';
                 const alert = document.createElement('div');
                 alert.className = 'alert alert-danger alert-sm mb-0';
                 alert.textContent = `Waterfall failed: ${error.message}`;
-                container.appendChild(alert);
+                liveContainer.appendChild(alert);
             } else {
                 alert(`Waterfall failed: ${error.message}`);
             }
@@ -1113,7 +1170,25 @@ sudo systemctl restart eas-station</code></pre>
                     result.error || result.hint || `HTTP ${response.status}`,
                 );
             }
-            renderDiagnostic(container, result);
+            // Re-query the container: ``loadDiagnostics`` may have re-rendered
+            // ``#receiversContainer`` during the 2 s capture+analyze wait,
+            // detaching the original container reference. The auto-refresh
+            // preserves panel content (see ``updateReceiverDetails``) but the
+            // node identity changes, so we must look it up again. If the live
+            // panel is gone (e.g. receiver removed mid-flight) we fall back to
+            // alert() rather than writing into a detached node — that would
+            // reintroduce the very "Run Diagnostic does nothing" bug this code
+            // is fixing.
+            const liveContainer = document.querySelector(
+                `.diagnostic-container[data-diagnostic-for="${CSS.escape(receiverId)}"]`,
+            );
+            if (liveContainer) {
+                renderDiagnostic(liveContainer, result);
+            } else {
+                alert(
+                    `Diagnostic ${result.summary_verdict || 'done'} — receiver panel is no longer visible.`,
+                );
+            }
             diagBtn.innerHTML = '<i class="fas fa-check"></i> Done';
             setTimeout(() => {
                 diagBtn.disabled = false;
@@ -1121,12 +1196,18 @@ sudo systemctl restart eas-station</code></pre>
             }, 3000);
         } catch (error) {
             console.error('Diagnostic analysis failed', error);
-            if (container) {
-                container.innerHTML = '';
+            // Re-query the live container too — same reasoning as the success
+            // path: an auto-refresh may have detached the original reference.
+            const liveContainer = document.querySelector(
+                `.diagnostic-container[data-diagnostic-for="${CSS.escape(receiverId)}"]`,
+            );
+            if (liveContainer) {
+                liveContainer.style.display = 'block';
+                liveContainer.innerHTML = '';
                 const alert = document.createElement('div');
                 alert.className = 'alert alert-danger mb-0';
                 alert.textContent = `Diagnostic failed: ${error.message}`;
-                container.appendChild(alert);
+                liveContainer.appendChild(alert);
             } else {
                 alert(`Diagnostic failed: ${error.message}`);
             }
