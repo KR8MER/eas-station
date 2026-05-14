@@ -110,8 +110,28 @@ REDIS_PORT = get_redis_port()
 REDIS_DB = get_redis_db()
 
 # SDR sample publishing configuration
-# IQ samples are published in chunks to balance latency vs overhead
-SDR_SAMPLE_CHUNK_SIZE = 32768  # Samples per Redis message
+# IQ samples are published in chunks to balance latency vs overhead.
+#
+# SDR_SAMPLE_CHUNK_SIZE is an *upper bound* on samples per Redis message
+# (caps memory / payload size). The actual per-chunk size is computed
+# from the receiver's effective sample rate so that every published
+# chunk represents roughly ``SDR_SAMPLE_CHUNK_DURATION_SEC`` of audio
+# regardless of native SDR rate.
+#
+# Why duration-based sizing matters: Airspy R2 only supports 2.5 MHz /
+# 10 MHz native, both of which trip the early-decimation path
+# (``_SoapySDRReceiver._start_stream`` in app_core/radio/drivers.py)
+# down to a 250 kHz effective rate. A fixed 32768-sample request at
+# 250 kHz is ~131 ms of audio per Redis message — combined with
+# SoapyAirspy's bursty USB transfers this produced audible stutter and
+# starved the RBDS carrier-recovery loop, which has to re-converge
+# across each chunk boundary. RTL-SDR users typically run at higher
+# native rates (240 kHz–2.4 MHz with no early decimation), so the
+# fixed-count chunk represented a much shorter wall-clock interval and
+# the symptom never appeared on RTL-SDR.
+SDR_SAMPLE_CHUNK_SIZE = 32768  # Hard cap on samples per Redis message
+SDR_SAMPLE_CHUNK_DURATION_SEC = 0.032  # Target ~32 ms of audio per message
+SDR_SAMPLE_CHUNK_MIN = 2048  # Floor; must be >= FFT_SIZE so spectrum still works
 SDR_SAMPLE_CHANNEL = "sdr:samples"  # Redis pub/sub channel for IQ data
 SDR_METRICS_KEY = "sdr:metrics"  # Redis hash for SDR health metrics
 SDR_SPECTRUM_KEY_PREFIX = "sdr:spectrum:"  # Per-receiver spectrum data
@@ -915,7 +935,24 @@ def publish_samples_and_metrics():
                     
                     # Get samples from receiver
                     if hasattr(receiver, 'get_samples'):
-                        samples = receiver.get_samples(num_samples=SDR_SAMPLE_CHUNK_SIZE)
+                        # Size the read by *duration*, not a fixed sample
+                        # count, so receivers with low effective rates
+                        # (e.g. Airspy at 250 kHz after early decimation)
+                        # don't emit one fat 131 ms blob per message.
+                        # See SDR_SAMPLE_CHUNK_DURATION_SEC docstring.
+                        if hasattr(receiver, 'get_effective_sample_rate'):
+                            try:
+                                effective_rate_for_chunk = int(receiver.get_effective_sample_rate())
+                            except Exception:
+                                effective_rate_for_chunk = int(receiver.config.sample_rate)
+                        else:
+                            effective_rate_for_chunk = int(receiver.config.sample_rate)
+                        target_chunk = int(effective_rate_for_chunk * SDR_SAMPLE_CHUNK_DURATION_SEC)
+                        chunk_samples = max(
+                            SDR_SAMPLE_CHUNK_MIN,
+                            min(SDR_SAMPLE_CHUNK_SIZE, target_chunk),
+                        )
+                        samples = receiver.get_samples(num_samples=chunk_samples)
                         
                         if samples is not None and len(samples) > 0:
                             # Tap samples into any in-flight capture for this
