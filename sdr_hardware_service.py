@@ -1266,7 +1266,16 @@ def publish_sdr_metrics(redis_client):
                             pass
 
                     prev_written = _state.prev_total_samples_written.get(identifier, 0)
-                    delta_written = max(0, total_written - prev_written)
+                    if total_written < prev_written:
+                        # Counter went backwards — receiver was restarted /
+                        # re-opened and its ring buffer reset.  Don't clamp
+                        # the delta to 0 (that would falsely report "No
+                        # samples" for one interval); instead resync the
+                        # snapshot and use the fill_level fallback below.
+                        delta_written = 0
+                        prev_written = 0
+                    else:
+                        delta_written = total_written - prev_written
                     if total_written > 0:
                         _state.prev_total_samples_written[identifier] = total_written
 
