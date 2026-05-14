@@ -16,7 +16,6 @@
 [![gevent](https://img.shields.io/badge/gevent-25.9.1-1F8B4C?style=flat-square)](https://www.gevent.org/)
 [![Nginx](https://img.shields.io/badge/Nginx-Alpine-009639?style=flat-square&logo=nginx&logoColor=white)](https://nginx.org/)
 [![Let's Encrypt](https://img.shields.io/badge/Let's%20Encrypt-Certbot-003A70?style=flat-square&logo=letsencrypt&logoColor=white)](https://letsencrypt.org/)
-[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker&logoColor=white)](https://www.docker.com/)
 [![Systemd](https://img.shields.io/badge/Systemd-Services-33A9DC?style=flat-square&logo=linux&logoColor=white)](https://systemd.io/)
 [![Icecast](https://img.shields.io/badge/Icecast-2.4.4-1F3B73?style=flat-square)](https://icecast.org/)
 [![SoapySDR](https://img.shields.io/badge/SoapySDR-enabled-FF6600?style=flat-square)](https://github.com/pothosware/SoapySDR)
@@ -459,7 +458,6 @@ EAS Station stands on the shoulders of an enormous open‑source ecosystem. The 
 | Gunicorn | 23.0.0 | MIT | Production WSGI server fronting the Flask app. | https://gunicorn.org/ |
 | gevent | 25.9.1+ | MIT | Async worker class for Gunicorn so Flask‑SocketIO can hold thousands of concurrent WebSocket connections. | https://www.gevent.org/ |
 | Nginx | Alpine | BSD‑2‑Clause | Reverse proxy / TLS terminator / static file server in front of Gunicorn and Icecast. | https://nginx.org/ |
-| Docker / Compose | — | Apache‑2.0 | Optional containerized deployment topology for the web app and supporting services. | https://www.docker.com/ |
 | systemd | system | LGPL‑2.1+ | Process supervisor for `eas-station`, `sdr_hardware_service`, `hardware_service`, `gps_manager`, Icecast, Redis. | https://systemd.io/ |
 | Let's Encrypt / Certbot | — | Apache‑2.0 / ISRG | Automated TLS certificate issuance and renewal for the public HTTPS endpoint. | https://letsencrypt.org/ |
 
@@ -473,7 +471,7 @@ EAS Station stands on the shoulders of an enormous open‑source ecosystem. The 
 | feedparser | 6.0.11 | BSD‑2‑Clause | Parses RSS/Atom feeds used by the LED‑sign news ticker. | https://github.com/kurtmckee/feedparser |
 | orjson | 3.11.5 | Apache‑2.0 / MIT | Fast C‑backed JSON encoder/decoder for the live data feeds and Redis payloads. | https://github.com/ijl/orjson |
 | ujson | 5.11.0 | BSD‑3‑Clause | Fallback fast JSON parser when `orjson` is unavailable. | https://github.com/ultrajson/ultrajson |
-| PyYAML | 6.0.3 | MIT | Reads `docker-compose.yml`, screen editor definitions, and config templates. | https://pyyaml.org/ |
+| PyYAML | 6.0.3 | MIT | Reads screen editor definitions and config templates. | https://pyyaml.org/ |
 | lxml | 6.0.2 | BSD‑3‑Clause | High‑performance XML parser for CAP alert ingestion (5–10× faster than stdlib). | https://lxml.de/ |
 | mistune | 3.1.4 | BSD‑3‑Clause | Renders the in‑app documentation viewer (`/docs/*`) from project markdown. | https://mistune.lepture.com/ |
 | python‑dateutil | 2.9.0.post0 | Apache‑2.0 / BSD‑3 | Robust parsing of CAP timestamp fields with mixed offsets and tz abbreviations. | https://dateutil.readthedocs.io/ |

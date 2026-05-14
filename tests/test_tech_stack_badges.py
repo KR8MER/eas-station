@@ -48,6 +48,7 @@ REQS = ROOT / "requirements.txt"
 README = ROOT / "README.md"
 BADGES_PARTIAL = ROOT / "templates" / "partials" / "tech_stack_badges.html"
 BASE_TEMPLATE = ROOT / "templates" / "base.html"
+ABOUT_TEMPLATE = ROOT / "templates" / "about.html"
 
 # Curated subset: dist-name in requirements.txt -> human label used in the
 # alt/text of the shield. The version pinned in requirements.txt must appear
@@ -78,7 +79,6 @@ CURATED_UNVERSIONED = (
     "FFmpeg",
     "eSpeak",        # may render as "eSpeak NG" — substring match
     "Raspberry Pi",
-    "Docker",
     "Systemd",
     "Redis",         # server is system-managed; Python client version
                      # (requirements.txt redis==7.1.0) is intentionally not
@@ -205,6 +205,31 @@ def test_curated_unversioned_badges_are_attributed_everywhere() -> None:
             )
     assert not failures, (
         "Missing attributions:\n  - " + "\n  - ".join(failures)
+    )
+
+
+def test_about_page_lists_every_curated_library() -> None:
+    """The About page's "Software Stack" section is a user-facing companion
+    to the footer shield strip. Every curated library (both versioned and
+    unversioned) that earns a footer badge must also be named on the About
+    page so the two surfaces cannot drift apart.
+
+    The check is a substring match on the label, mirroring how
+    ``test_curated_unversioned_badges_are_attributed_everywhere`` checks
+    the README and footer partial.
+    """
+    about = ABOUT_TEMPLATE.read_text(encoding="utf-8")
+    failures: list[str] = []
+    for label in list(CURATED_VERSIONED.values()) + list(CURATED_UNVERSIONED):
+        if label not in about:
+            failures.append(
+                f"templates/about.html does not attribute {label!r}. "
+                f"If you added a library to the footer shield strip, add "
+                f"it to the About page's Software Stack section too."
+            )
+    assert not failures, (
+        "About page is out of sync with the footer badge list:\n  - "
+        + "\n  - ".join(failures)
     )
 
 
