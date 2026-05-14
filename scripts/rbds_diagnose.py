@@ -685,8 +685,10 @@ def diagnose(path: pathlib.Path, sample_rate: int) -> None:
                 data_from_iq[:n_check], multiplex_pre[:n_check]
             )[0, 1])
             _sub("IQ-derived vs saved multiplex cross-check")
-            _info(f"Pearson r = {corr:.6f}  (should be ≥ 0.9999 if both use "
-                  "the same FM discriminator)")
+            _info(f"Pearson r = {corr:.6f}  (should be ≥ 0.9999 — both methods are "
+                  "mathematically equivalent for signals without phase wraps; "
+                  "rbds_diagnose uses unwrap+diff, sdr_hardware_service uses "
+                  "angle(x·conj(x-1)))")
             if corr >= 0.9999:
                 _ok("Saved multiplex matches IQ re-demodulation — "
                     "no discriminator distortion")
