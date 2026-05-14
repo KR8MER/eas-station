@@ -681,17 +681,20 @@ sudo systemctl restart eas-station</code></pre>
         // ends up rendered into a detached DOM node. Capture the existing
         // panel HTML keyed by receiver id, then restore it after the
         // ``container.innerHTML = html`` assignment below.
-        const preservedPanels = new Map();
+        const preservedPanels = [];
         for (const panel of container.querySelectorAll(
             '.diagnostic-container, .waterfall-container'
         )) {
+            // Fast-path: skip empty panels without touching innerHTML.
+            if (!panel.firstChild) continue;
             const isDiag = panel.classList.contains('diagnostic-container');
             const recvId = isDiag
                 ? panel.getAttribute('data-diagnostic-for')
                 : panel.getAttribute('data-waterfall-for');
             if (!recvId) continue;
-            if (panel.innerHTML.trim() === '') continue;
-            preservedPanels.set(`${isDiag ? 'diag' : 'wf'}:${recvId}`, {
+            preservedPanels.push({
+                kind: isDiag ? 'diag' : 'wf',
+                recvId,
                 html: panel.innerHTML,
                 display: panel.style.display,
             });
@@ -700,11 +703,10 @@ sudo systemctl restart eas-station</code></pre>
         container.innerHTML = html;
 
         // Restore any preserved diagnostic / waterfall panels.
-        for (const [key, state] of preservedPanels) {
-            const [kind, recvId] = key.split(':');
-            const selector = kind === 'diag'
-                ? `.diagnostic-container[data-diagnostic-for="${CSS.escape(recvId)}"]`
-                : `.waterfall-container[data-waterfall-for="${CSS.escape(recvId)}"]`;
+        for (const state of preservedPanels) {
+            const selector = state.kind === 'diag'
+                ? `.diagnostic-container[data-diagnostic-for="${CSS.escape(state.recvId)}"]`
+                : `.waterfall-container[data-waterfall-for="${CSS.escape(state.recvId)}"]`;
             const panel = container.querySelector(selector);
             if (panel) {
                 panel.innerHTML = state.html;
