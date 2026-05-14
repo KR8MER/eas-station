@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- chrony: NTP daemon. Clock face with broadcast/sync radio waves at the
+       top, reflecting chrony's role as a GPS-disciplined stratum-1 time
+       source. -->
+  <circle cx="12" cy="13" r="7" fill="none" stroke="#FFFFFF" stroke-width="1.6"/>
+  <path d="M12 9v4l3 2" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M8 4.5a5 5 0 0 1 8 0" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M10 2.5a3 3 0 0 1 4 0" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round"/>
+</svg>

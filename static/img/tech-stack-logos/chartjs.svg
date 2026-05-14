@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><!-- Chart.js -->
+  <path d="M12 3a9 9 0 1 1-9 9" fill="none" stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M12 3a9 9 0 0 1 9 9h-9z" fill="#FFFFFF"/>
+  <circle cx="12" cy="12" r="3.5" fill="none" stroke="#FFFFFF" stroke-width="1.6"/>
+</svg>

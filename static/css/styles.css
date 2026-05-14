@@ -7741,6 +7741,15 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
     color: #fff; font-size: 0.85rem;
     background: linear-gradient(135deg, var(--vibrant-blue), var(--vibrant-indigo));
 }
+/* When the icon slot hosts an <img> (e.g. a project logo SVG from
+   static/img/tech-stack-logos/), keep the SVG inside the 34×34 chip
+   and tint it white via CSS filters so single-colour line-art marks
+   stay readable on every gradient background. */
+.stack-item-ico img {
+    width: 22px; height: 22px;
+    object-fit: contain;
+    filter: brightness(0) invert(1);
+}
 .eas-stack-item-name,
 .stack-item-name { font-weight: 700; font-size: 0.88rem; color: var(--text-color); }
 .eas-stack-item-desc,

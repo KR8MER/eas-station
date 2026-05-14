@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><!-- Mermaid -->
+  <path d="M3 14c2-3 4-3 6 0s4 3 6 0 4-3 6 0" fill="none" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round"/>
+  <path d="M3 19c2-3 4-3 6 0s4 3 6 0 4-3 6 0" fill="none" stroke="#FFFFFF" stroke-width="1.4" stroke-linecap="round" opacity="0.7"/>
+  <circle cx="18" cy="7" r="2.5" fill="none" stroke="#FFFFFF" stroke-width="1.6"/>
+  <path d="M16 9c-1 1-2 2-2 4" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round"/>
+</svg>

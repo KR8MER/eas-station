@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><!-- SQLAlchemy -->
+  <ellipse cx="12" cy="6" rx="7" ry="2.2" fill="none" stroke="#FFFFFF" stroke-width="1.6"/>
+  <path d="M5 6v6c0 1.2 3.1 2.2 7 2.2s7-1 7-2.2V6" fill="none" stroke="#FFFFFF" stroke-width="1.6"/>
+  <path d="M5 12v6c0 1.2 3.1 2.2 7 2.2s7-1 7-2.2v-6" fill="none" stroke="#FFFFFF" stroke-width="1.6"/>
+  <path d="M9 9.5h6M9 15.5h6" stroke="#FFFFFF" stroke-width="1.2" stroke-linecap="round"/>
+</svg>

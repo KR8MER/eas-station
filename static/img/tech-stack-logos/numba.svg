@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><!-- Numba -->
+  <path d="M4 18c0-4 4-4 4-8s-4-4-4-4" fill="none" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round"/>
+  <path d="M10 18c0-4 4-4 4-8s-4-4-4-4" fill="none" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round"/>
+  <path d="M16 18c0-4 4-4 4-8s-4-4-4-4" fill="none" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round"/>
+  <circle cx="6" cy="20" r="1" fill="#FFFFFF"/>
+  <circle cx="12" cy="20" r="1" fill="#FFFFFF"/>
+  <circle cx="18" cy="20" r="1" fill="#FFFFFF"/>
+</svg>

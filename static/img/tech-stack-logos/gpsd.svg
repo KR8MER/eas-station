@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- gpsd: GPS daemon. Satellite body with two solar panels + downlink
+       signal cone toward Earth, representing the project's role as the
+       userland multiplexer for GNSS receivers. -->
+  <rect x="9.5" y="3" width="5" height="5" rx="0.6" fill="none" stroke="#FFFFFF" stroke-width="1.6"/>
+  <rect x="3" y="4" width="5" height="3" fill="none" stroke="#FFFFFF" stroke-width="1.6"/>
+  <rect x="16" y="4" width="5" height="3" fill="none" stroke="#FFFFFF" stroke-width="1.6"/>
+  <path d="M12 8v3" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M7 21l5-10 5 10" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M9.5 18h5" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round"/>
+</svg>
