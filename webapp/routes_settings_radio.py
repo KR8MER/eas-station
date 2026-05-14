@@ -2418,6 +2418,192 @@ def register(app: Flask, logger) -> None:
             return jsonify({"error": "Failed to compute waterfall"}), 500
 
     @app.route(
+        "/api/radio/diagnostics/analyze/<int:receiver_id>", methods=["POST"]
+    )
+    def api_radio_diagnostics_analyze(receiver_id: int) -> Any:
+        """Capture a short IQ window and return a full diagnostic report.
+
+        Reuses the existing ``capture_iq`` Redis command flow to obtain
+        a short .npz from the SDR service, then runs the analyzers in
+        ``app_utils.radio_diagnostics`` against it.  Returns the dict
+        produced by ``diagnostic_to_dict`` — the dashboard renders this
+        directly into the "Run Diagnostic" results card.
+
+        The capture file is deleted immediately after analysis (same
+        single-use semantics as the waterfall endpoint) so the capture
+        directory doesn't accumulate stale files.
+
+        Request body (optional JSON):
+            duration_sec: float, capture duration in seconds. Default 2.0,
+                clamped to [0.5, 10.0].  A 2 s window gives the FFT enough
+                resolution to find the 19 kHz pilot and 57 kHz RBDS lobe
+                without ballooning the JSON payload.
+        """
+        try:
+            import numpy as np
+            # Import the analyzer directly so the diagnostics endpoint
+            # works even if the app_utils package __init__ pulls in
+            # optional dependencies that aren't installed on this host.
+            from app_utils.radio_diagnostics import (
+                analyze_capture,
+                diagnostic_to_dict,
+            )
+        except ImportError as exc:
+            return jsonify({
+                "error": "Diagnostic analyzer requires numpy and scipy on the web host",
+                "hint": str(exc),
+            }), 503
+
+        ensure_radio_tables(route_logger)
+        receiver_record = RadioReceiver.query.get_or_404(receiver_id)
+
+        payload = request.get_json(silent=True) or {}
+        try:
+            duration_sec = float(payload.get("duration_sec", 2.0))
+        except (TypeError, ValueError):
+            duration_sec = 2.0
+        # Bound the capture: 0.5 s is the floor below which RBDS detection
+        # becomes unreliable (need a few RBDS group cycles' worth of data);
+        # 10 s caps the JSON payload and the wall-clock wait.
+        duration_sec = max(0.5, min(duration_sec, 10.0))
+
+        effective_rate = receiver_record.sample_rate or 250_000
+        num_samples = int(duration_sec * effective_rate)
+
+        try:
+            command_id = str(uuid.uuid4())
+            redis_client = get_redis_client()
+
+            command = {
+                "action": "capture_iq",
+                "receiver_id": receiver_record.identifier,
+                "command_id": command_id,
+                "num_samples": num_samples,
+            }
+
+            route_logger.info(
+                "Sending capture_iq for diagnostic analysis on receiver %s "
+                "(num_samples=%d, command_id=%s)",
+                receiver_record.identifier, num_samples, command_id,
+            )
+            redis_client.rpush("sdr:commands", json.dumps(command))
+
+            timeout = duration_sec + RADIO_CAPTURE_WAIT_SLACK_SEC
+            start_time = time.time()
+            result = None
+            while time.time() - start_time < timeout:
+                result_json = redis_client.get(
+                    f"sdr:command_result:{command_id}"
+                )
+                if result_json:
+                    result = json.loads(result_json)
+                    break
+                time.sleep(0.1)
+
+            if not result:
+                return jsonify({
+                    "error": "Timeout waiting for sdr-service to write capture",
+                    "hint": (
+                        "Check if sdr-service is running: "
+                        "sudo systemctl status eas-station-sdr.service"
+                    ),
+                }), 504
+
+            if not result.get("success"):
+                return jsonify({
+                    "error": "Capture failed",
+                    "hint": result.get("error", "Unknown error"),
+                }), 503
+
+            capture_path = result.get("path")
+            if not capture_path or not _is_path_within(
+                capture_path, RADIO_CAPTURE_DIR
+            ):
+                # Same defence-in-depth as the download / waterfall
+                # endpoints: refuse to load a capture from outside the
+                # allow-list directory.
+                route_logger.error(
+                    "Refusing diagnostic analysis on out-of-tree capture: %s",
+                    capture_path,
+                )
+                return jsonify({
+                    "error": "Capture stored at unexpected location",
+                }), 500
+            if not os.path.isfile(capture_path):
+                return jsonify({
+                    "error": "Capture file disappeared before analysis",
+                }), 500
+
+            # Load + immediately delete the file.  The analysis result is
+            # self-contained JSON; the raw IQ is single-use.
+            iq = None
+            multiplex = None
+            try:
+                # The SDR service writes .npz with 'iq' (complex64) and
+                # optionally 'multiplex' (float32 FM-demod output).  Fall
+                # back to a plain .npy of complex64 IQ for legacy captures.
+                if capture_path.endswith(".npz"):
+                    with np.load(capture_path, allow_pickle=False) as archive:
+                        if "iq" in archive.files:
+                            iq = archive["iq"].astype(np.complex64)
+                        if "multiplex" in archive.files:
+                            multiplex = archive["multiplex"].astype(np.float32)
+                else:
+                    iq = np.load(capture_path, allow_pickle=False).astype(np.complex64)
+            finally:
+                try:
+                    os.remove(capture_path)
+                except OSError as cleanup_exc:
+                    route_logger.debug(
+                        "Failed to remove diagnostic capture %s: %s",
+                        capture_path, cleanup_exc,
+                    )
+
+            if iq is None or iq.size == 0:
+                return jsonify({
+                    "error": "Capture contained no IQ samples",
+                }), 500
+
+            sample_rate = int(
+                result.get("sample_rate") or effective_rate
+            )
+
+            diag = analyze_capture(iq, sample_rate, multiplex=multiplex)
+            report = diagnostic_to_dict(diag)
+            # Augment with the operator-facing receiver context so the
+            # dashboard can show "which receiver / which frequency".
+            report["receiver"] = {
+                "id": receiver_record.id,
+                "identifier": receiver_record.identifier,
+                "frequency_hz": result.get("frequency_hz"),
+            }
+
+            _log_radio_event(
+                "INFO",
+                f"Diagnostic analysis run on {receiver_record.identifier}: "
+                f"{report['summary_verdict']} verdict, "
+                f"rbds_suppression_risk={report['rbds_suppression_risk']}",
+                module_suffix="diagnostics",
+                details={
+                    "receiver_id": receiver_record.id,
+                    "summary_verdict": report["summary_verdict"],
+                    "rbds_suppression_risk": report["rbds_suppression_risk"],
+                    "clipping_fraction": report["frontend"]["clipping_fraction"],
+                },
+            )
+
+            return jsonify(report)
+
+        except Exception as exc:
+            route_logger.error(
+                "Failed to run diagnostic analysis for receiver %s: %s",
+                receiver_id, exc, exc_info=True,
+            )
+            return jsonify({
+                "error": "Failed to run diagnostic analysis",
+            }), 500
+
+    @app.route(
         "/api/radio/diagnostics/auto_gain/<int:receiver_id>", methods=["POST"]
     )
     def api_radio_diagnostics_auto_gain(receiver_id: int) -> Any:
