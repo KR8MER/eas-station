@@ -1232,20 +1232,20 @@ def publish_sdr_metrics(redis_client):
                     status = receiver.get_status()
                     is_running = receiver._running.is_set() if hasattr(receiver, '_running') else False
 
-                    # Check if samples are available
+                    # Check if samples are available. Read directly from the
+                    # ring buffer stats: this is non-destructive, whereas
+                    # receiver.get_samples() *consumes* from the buffer and
+                    # was racing the publisher loop above (which already
+                    # drained the ring buffer in the same iteration), making
+                    # this block always report 0 / not-available.
                     samples_available = False
                     sample_count = 0
-                    if hasattr(receiver, 'get_samples'):
+                    if hasattr(receiver, 'get_ring_buffer_stats'):
                         try:
-                            # Try to peek at samples without consuming them
-                            test_samples = receiver.get_samples(num_samples=1)
-                            if test_samples is not None and len(test_samples) > 0:
-                                samples_available = True
-                                # Get actual buffer stats for sample count
-                                if hasattr(receiver, 'get_ring_buffer_stats'):
-                                    ring_stats = receiver.get_ring_buffer_stats()
-                                    if ring_stats:
-                                        sample_count = ring_stats.get('samples_available', 0)
+                            ring_stats = receiver.get_ring_buffer_stats()
+                            if ring_stats:
+                                sample_count = int(ring_stats.get('samples_available', 0) or 0)
+                                samples_available = sample_count > 0
                         except Exception:
                             pass
 
