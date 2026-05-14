@@ -1165,7 +1165,14 @@ sudo systemctl restart eas-station</code></pre>
     //     step (which is the hot path at 2 Hz).
     const liveWaterfallState = new Map();
     const LIVE_WF_HEIGHT = 200;       // rows of history
-    const LIVE_WF_POLL_MS = 500;      // tick interval
+    // Poll interval. The SDR service publishes at ~10 Hz (100 ms), so we
+    // deliberately subsample by ~5× here: at 200 rows of history a 100 ms
+    // tick burns through the buffer in 20 s and the scroll looks jittery
+    // (each row only ~1 px tall on a 320 px canvas), whereas 500 ms gives
+    // ~100 s of history and a perceptibly smooth scroll. The endpoint
+    // returns the latest snapshot so subsampling just drops intermediate
+    // frames — there is no backlog.
+    const LIVE_WF_POLL_MS = 500;      // tick interval (deliberate 5× decimation)
     const LIVE_WF_DISPLAY_PX = 320;   // CSS upscale target
 
     // Reuse the same five-stop colour ramp as renderWaterfall() so the
@@ -1443,12 +1450,31 @@ sudo systemctl restart eas-station</code></pre>
     });
 
     // Stop all live waterfalls when the page is hidden / unloaded so we
-    // don't burn server CPU + Redis bandwidth on background tabs.
+    // don't burn server CPU + Redis bandwidth on background tabs. When the
+    // tab becomes visible again, automatically resume the waterfalls that
+    // were running so the operator doesn't have to re-click Start after
+    // every tab switch. We track the prior-running set in a closure-scoped
+    // Set rather than relying on the live state Map (which liveWfStop()
+    // clears).
+    const liveWfPausedOnHide = new Set();
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'hidden') {
+            liveWfPausedOnHide.clear();
             for (const id of Array.from(liveWaterfallState.keys())) {
+                liveWfPausedOnHide.add(id);
                 liveWfStop(id);
             }
+        } else if (document.visibilityState === 'visible' && liveWfPausedOnHide.size) {
+            for (const id of Array.from(liveWfPausedOnHide)) {
+                // Only restart if the DOM still has this receiver's panel
+                // (the operator might have navigated to a different
+                // receiver while the tab was hidden). liveWfFindContainer
+                // returns null when the panel isn't in the DOM.
+                if (liveWfFindContainer(id)) {
+                    liveWfStart(id);
+                }
+            }
+            liveWfPausedOnHide.clear();
         }
     });
     window.addEventListener('beforeunload', () => {
