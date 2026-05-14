@@ -231,6 +231,9 @@ class _SoapySDRReceiver(ReceiverInterface):
         self._early_decim_aa_filter = None
         self._early_decim_aa_zi = None
         self._early_decim_boxcar_warned = False
+        # Actual IF bandwidth accepted by the hardware (Hz).  Set after
+        # setBandwidth is called; None if the hardware does not support it.
+        self._hardware_bandwidth_hz: Optional[int] = None
 
     # ------------------------------------------------------------------
     # Lifecycle helpers
@@ -1171,9 +1174,19 @@ class _SoapySDRReceiver(ReceiverInterface):
             # Set bandwidth to match sample rate if supported (helps with anti-aliasing)
             try:
                 device.setBandwidth(SoapySDR.SOAPY_SDR_RX, channel, self.config.sample_rate)
+                # Read back the bandwidth the hardware actually accepted —
+                # some tuners (e.g. R820T2) round to the nearest discrete
+                # step, so the accepted value can differ from what we asked.
+                # Storing it in the receiver lets the capture sidecar report
+                # the real analogue filter cutoff.
+                try:
+                    accepted = device.getBandwidth(SoapySDR.SOAPY_SDR_RX, channel)
+                    self._hardware_bandwidth_hz = int(accepted) if accepted else None
+                except Exception:
+                    self._hardware_bandwidth_hz = None
             except Exception:
                 # Not all devices support setting bandwidth, which is fine
-                pass
+                self._hardware_bandwidth_hz = None
 
             # Log available antennas for diagnostics
             try:
