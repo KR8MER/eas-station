@@ -451,6 +451,18 @@ class SDRSourceAdapter(AudioSourceAdapter):
                         metadata['rf_signal_strength'] = float(demod_status.signal_strength)
                         metadata['rf_signal_strength_updated'] = time.time()
 
+                        # Discriminator click telemetry — fraction of
+                        # samples this chunk that the magnitude-aware
+                        # click suppressor replaced.  Lets operators see
+                        # "decoder noise-limited" vs "RF noise-limited"
+                        # at a glance: a strong RSSI paired with a high
+                        # click_rate (>0.05) means multipath fades, not a
+                        # weak station.
+                        metadata['fm_click_rate'] = float(getattr(demod_status, 'click_rate', 0.0))
+                        metadata['fm_click_suppression_enabled'] = bool(
+                            getattr(demod_status, 'click_suppression_enabled', False)
+                        )
+
                         # RBDS decoder state.  Mirrors what redis_sdr_adapter
                         # publishes so the audio monitor can render the same
                         # LOCKED / LOCKING / DISABLED badge for in-process SDR

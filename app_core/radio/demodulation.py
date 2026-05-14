@@ -933,6 +933,17 @@ class DemodulatorStatus:
     # split, and group-type histogram.  None until an RBDS worker is
     # running; otherwise updated each frame.
     rbds_decoder_stats: Optional[RBDSDecoderStats] = None
+    # Fraction (0.0–1.0) of discriminator output samples in this chunk
+    # that the magnitude-aware click suppressor replaced.  High values
+    # (>0.05) indicate impulse-noise-limited reception — typically deep
+    # multipath fades on otherwise strong signals — and explain RBDS
+    # decoder stalls that aren't visible in the simple RSSI meter.
+    # 0.0 when suppression is disabled or no samples were suppressed.
+    click_rate: float = 0.0
+    # True if the magnitude-aware click suppressor is active on this
+    # demodulator.  Lets the UI distinguish "0% clicks because suppressor
+    # is off" from "0% clicks because the signal is clean".
+    click_suppression_enabled: bool = False
 
 
 class RBDSWorker:
@@ -2963,6 +2974,14 @@ class FMDemodulator:
         self._prev_sample: Optional[np.complex64] = None
         self._sample_index: int = 0
 
+        # Magnitude-aware click suppressor state.  _declick_last_phase
+        # carries the last good discriminator output across chunks so a
+        # click at sample 0 of a new chunk doesn't have to wait for the
+        # next good sample — same purpose as _prev_sample, but for the
+        # post-discriminator domain.
+        self._declick_last_phase: float = 0.0
+        self._click_rate: float = 0.0
+
         # Calculate decimation factor for efficient processing
         # We want to get from SDR rate down to ~250 kHz for audio processing
         self._decimation_factor = 1
@@ -3266,7 +3285,27 @@ class FMDemodulator:
         # Phase discriminator - uses Numba JIT if available (50-100x faster)
         # This is the core FM demodulation algorithm
         # Output is the FM multiplex signal containing L+R, stereo (L-R at 38kHz), and RBDS (at 57kHz)
-        multiplex = fm_discriminator(iq_array)
+        #
+        # On a Class B station at 7 mi with light multipath the *signal*
+        # is plenty strong, but the IQ envelope dips momentarily during
+        # fades and atan2 emits uniform phase noise during those dips.
+        # That noise spreads as a flat impulse floor across the whole
+        # MPX and buries the 57 kHz RBDS subcarrier.  When the user
+        # enables click suppression we use the magnitude-aware variant
+        # which forward-fills the last good phase during envelope
+        # collapses.
+        if self.config.enable_click_suppression and self.config.click_suppression_threshold > 0.0:
+            multiplex, click_count, self._declick_last_phase = fm_discriminator_declick(
+                iq_array,
+                suppression_fraction=self.config.click_suppression_threshold,
+                prev_phase=self._declick_last_phase,
+            )
+            self._click_rate = (
+                click_count / len(multiplex) if len(multiplex) > 0 else 0.0
+            )
+        else:
+            multiplex = fm_discriminator(iq_array)
+            self._click_rate = 0.0
 
         # Detect stereo pilot tone (19 kHz) and RBDS extraction
         # Must happen BEFORE audio decimation destroys the subcarriers
@@ -3448,6 +3487,11 @@ class FMDemodulator:
             ),
             rbds_enabled=self._rbds_enabled,
             rbds_decoder_stats=decoder_stats,
+            click_rate=self._click_rate,
+            click_suppression_enabled=(
+                bool(self.config.enable_click_suppression)
+                and self.config.click_suppression_threshold > 0.0
+            ),
         )
 
         return audio.astype(np.float32), status
