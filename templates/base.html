@@ -221,57 +221,8 @@
                 <div class="tech-stack-title">
                     <i class="fas fa-layer-group me-2"></i>Built With Modern Technologies
                 </div>
-                {% set icecast_logo = shield_logos.get('icecast') %}
-                {% set soapysdr_logo = shield_logos.get('soapysdr') %}
-                {% set commit_value = git_commit | default('', true) %}
-                {% set commit_label = commit_value %}
-                {% if not commit_label or commit_label|lower == 'unknown' %}
-                    {% set commit_label = 'dev build' %}
-                {% endif %}
-                {% set commit_badge_text = commit_label | upper %}
-                {% set commit_badge_encoded = commit_badge_text | shields_escape | urlencode %}
                 <div class="tech-stack-card">
-                <div class="tech-stack-badges">
-                    <a href="https://github.com/KR8MER/eas-station" target="_blank" rel="noopener noreferrer" class="tech-badge">
-                        <img src="https://img.shields.io/badge/Git%20Commit-{{ commit_badge_encoded }}-181717?style=for-the-badge&logo=github&logoColor=white" alt="Git commit {{ commit_badge_text }}">
-                    </a>
-                    <a href="https://www.python.org/" target="_blank" rel="noopener noreferrer" class="tech-badge">
-                        <img src="https://img.shields.io/badge/Python-3.13-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.13">
-                    </a>
-                    <a href="https://flask.palletsprojects.com/" target="_blank" rel="noopener noreferrer" class="tech-badge">
-                        <img src="https://img.shields.io/badge/Flask-3.1.2-000000?style=for-the-badge&logo=flask&logoColor=white" alt="Flask 3.1.2">
-                    </a>
-                    <a href="https://www.postgresql.org/" target="_blank" rel="noopener noreferrer" class="tech-badge">
-                        <img src="https://img.shields.io/badge/PostgreSQL-17%20%2B%20PostGIS-0093D0?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL + PostGIS">
-                    </a>
-                    <a href="https://redis.io/" target="_blank" rel="noopener noreferrer" class="tech-badge">
-                        <img src="https://img.shields.io/badge/Redis-7.1-DC382D?style=for-the-badge&logo=redis&logoColor=white" alt="Redis 7.1">
-                    </a>
-                    <a href="https://www.sqlalchemy.org/" target="_blank" rel="noopener noreferrer" class="tech-badge">
-                        <img src="https://img.shields.io/badge/SQLAlchemy-2.0.45-CA2C39?style=for-the-badge&logo=sqlalchemy&logoColor=white" alt="SQLAlchemy 2.0.45">
-                    </a>
-                    <a href="https://socket.io/" target="_blank" rel="noopener noreferrer" class="tech-badge">
-                        <img src="https://img.shields.io/badge/Socket.IO-5.15.0-010101?style=for-the-badge&logo=socketdotio&logoColor=white" alt="Socket.IO 5.15.0">
-                    </a>
-                    <a href="https://gunicorn.org/" target="_blank" rel="noopener noreferrer" class="tech-badge">
-                        <img src="https://img.shields.io/badge/Gunicorn-23.0.0-499848?style=for-the-badge&logo=gunicorn&logoColor=white" alt="Gunicorn">
-                    </a>
-                    <a href="https://nginx.org/" target="_blank" rel="noopener noreferrer" class="tech-badge">
-                        <img src="https://img.shields.io/badge/Nginx-Alpine-009639?style=for-the-badge&logo=nginx&logoColor=white" alt="Nginx">
-                    </a>
-                    <a href="https://icecast.org/" target="_blank" rel="noopener noreferrer" class="tech-badge">
-                        <img src="https://img.shields.io/badge/Icecast-2.4.4-1F3B73?style=for-the-badge{% if icecast_logo %}&logo={{ icecast_logo | urlencode }}{% endif %}" alt="Icecast">
-                    </a>
-                    <a href="https://getbootstrap.com/" target="_blank" rel="noopener noreferrer" class="tech-badge">
-                        <img src="https://img.shields.io/badge/Bootstrap-5.3.0-7952B3?style=for-the-badge&logo=bootstrap&logoColor=white" alt="Bootstrap">
-                    </a>
-                    <a href="https://leafletjs.com/" target="_blank" rel="noopener noreferrer" class="tech-badge">
-                        <img src="https://img.shields.io/badge/Leaflet-1.9.4-199900?style=for-the-badge&logo=leaflet&logoColor=white" alt="Leaflet">
-                    </a>
-                    <a href="https://github.com/pothosware/SoapySDR" target="_blank" rel="noopener noreferrer" class="tech-badge">
-                        <img src="https://img.shields.io/badge/SoapySDR-enabled-FF6600?style=for-the-badge{% if soapysdr_logo %}&logo={{ soapysdr_logo | urlencode }}{% endif %}" alt="SoapySDR">
-                    </a>
-                </div>
+                    {% include 'partials/tech_stack_badges.html' %}
                 </div>
             </div>
 

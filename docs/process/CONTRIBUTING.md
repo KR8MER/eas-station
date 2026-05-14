@@ -35,7 +35,12 @@ If you contribute on behalf of an organization, ensure you have the necessary au
 2. **Follow the development guidelines** in [`AGENTS.md`](../development/AGENTS) and existing code patterns.
 3. **Add tests or documentation** that cover your changes when possible.
 4. **Update release metadata.** Append notes under the `[Unreleased]` heading in [`CHANGELOG.md`](../reference/CHANGELOG) and bump the root [`VERSION`](../../VERSION) file (plus `.env.example`) when behaviour changes. The guardrail test `tests/test_release_metadata.py` enforces this alignment.
-5. **Run the test suite or targeted regression checks** (alert ingest, SAME generation, GPIO control, audio playout) before opening a pull request so reviewers know nothing critical regressed.
-6. **Submit a pull request** describing the change, its motivation, and any verification steps performed.
+5. **Keep tech-stack attributions in sync.** If you bump or add a Python dependency in [`requirements.txt`](../../requirements.txt), also update the matching shield in **both** of the canonical surfaces below — they cannot be allowed to drift:
+   - `templates/partials/tech_stack_badges.html` — the live page footer badge strip (single source of truth, included by `templates/base.html`).
+   - `README.md` — the curated badge block at the top **and** the exhaustive `## 📚 Attributions & Open-Source Credits` table further down.
+
+   The drift guard `tests/test_tech_stack_badges.py` enforces that a curated subset of versioned shields matches the version pinned in `requirements.txt`, and that system-level dependencies (chrony, gpsd, FFmpeg, eSpeak NG, Icecast, Nginx, Docker, …) remain attributed in both places. Do not inline the badge list back into `base.html`; the partial is the single source of truth.
+6. **Run the test suite or targeted regression checks** (alert ingest, SAME generation, GPIO control, audio playout) before opening a pull request so reviewers know nothing critical regressed.
+7. **Submit a pull request** describing the change, its motivation, and any verification steps performed.
 
 We encourage proposals and discussion via GitHub issues before major changes. Thanks for helping build EAS Station!
