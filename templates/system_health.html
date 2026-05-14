@@ -1448,6 +1448,7 @@
                                             {# Column 1: Identity & Capacity #}
                                             <div class="col-md-4 col-sm-6 mb-3">
                                                 <h6 class="smart-section-label">Device Information</h6>
+                                                <div class="table-responsive">
                                                 <table class="table table-sm table-borderless smart-attr-table mb-0">
                                                     <tbody>
                                                         {% if device.firmware_version %}
@@ -1473,11 +1474,13 @@
                                                         {% endif %}
                                                     </tbody>
                                                 </table>
+                                                </div>
                                             </div>
 
                                             {# Column 2: Temperature & Power #}
                                             <div class="col-md-4 col-sm-6 mb-3">
                                                 <h6 class="smart-section-label">Temperature &amp; Power</h6>
+                                                <div class="table-responsive">
                                                 <table class="table table-sm table-borderless smart-attr-table mb-0">
                                                     <tbody>
                                                         <tr>
@@ -1526,11 +1529,13 @@
                                                         {% endif %}
                                                     </tbody>
                                                 </table>
+                                                </div>
                                             </div>
 
                                             {# Column 3: Health & Wear #}
                                             <div class="col-md-4 col-sm-12 mb-3">
                                                 <h6 class="smart-section-label">Health &amp; Wear</h6>
+                                                <div class="table-responsive">
                                                 <table class="table table-sm table-borderless smart-attr-table mb-0">
                                                     <tbody>
                                                         {% if device.percentage_used is not none %}
@@ -1592,6 +1597,7 @@
                                                         {% endif %}
                                                     </tbody>
                                                 </table>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -2902,15 +2908,15 @@
                         <div class="row">
                             <div class="col-md-4 col-sm-6 mb-3">
                                 <h6 class="smart-section-label">Device Information</h6>
-                                <table class="table table-sm table-borderless smart-attr-table mb-0"><tbody>${col1 || '<tr><td class="text-muted" colspan="2">No device info available</td></tr>'}</tbody></table>
+                                <div class="table-responsive"><table class="table table-sm table-borderless smart-attr-table mb-0"><tbody>${col1 || '<tr><td class="text-muted" colspan="2">No device info available</td></tr>'}</tbody></table></div>
                             </div>
                             <div class="col-md-4 col-sm-6 mb-3">
                                 <h6 class="smart-section-label">Temperature &amp; Power</h6>
-                                <table class="table table-sm table-borderless smart-attr-table mb-0"><tbody>${col2}</tbody></table>
+                                <div class="table-responsive"><table class="table table-sm table-borderless smart-attr-table mb-0"><tbody>${col2}</tbody></table></div>
                             </div>
                             <div class="col-md-4 col-sm-12 mb-3">
                                 <h6 class="smart-section-label">Health &amp; Wear</h6>
-                                <table class="table table-sm table-borderless smart-attr-table mb-0"><tbody>${col3 || '<tr><td class="text-muted" colspan="2">No health data available</td></tr>'}</tbody></table>
+                                <div class="table-responsive"><table class="table table-sm table-borderless smart-attr-table mb-0"><tbody>${col3 || '<tr><td class="text-muted" colspan="2">No health data available</td></tr>'}</tbody></table></div>
                             </div>
                         </div>
                     </div>
@@ -3835,7 +3841,7 @@
                 ? `<div class="snr-legend" style="margin-top:2px">${constLegend}</div>`
                 : '';
 
-            return `<table class="gps-sat-table">
+            return `<div class="table-responsive"><table class="gps-sat-table">
                 <thead><tr>
                     <th style="text-align:right">Sv</th>
                     <th style="text-align:right">El&deg;</th>
@@ -3844,7 +3850,7 @@
                     <th style="text-align:center">Fix</th>
                 </tr></thead>
                 <tbody>${rows}</tbody>
-            </table>
+            </table></div>
             <div class="snr-legend">
                 <span><span class="snr-dot snr-s5"></span>&ge;45</span>
                 <span><span class="snr-dot snr-s4"></span>35&ndash;44</span>

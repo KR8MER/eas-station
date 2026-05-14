@@ -535,6 +535,7 @@
         <div class="chart-title">
             <i class="fas fa-table"></i> Top Affected Boundaries
         </div>
+        <div class="table-responsive">
         <table class="data-table">
             <thead>
                 <tr>
@@ -563,6 +564,7 @@
                 {% endfor %}
             </tbody>
         </table>
+        </div>
     </div>
     {% endif %}
 
@@ -643,6 +645,7 @@
         <div class="chart-title">
             <i class="fas fa-bolt"></i> Broadcast Latency Details
         </div>
+        <div class="table-responsive">
         <table class="data-table">
             <thead>
                 <tr>
@@ -669,6 +672,7 @@
                 </tr>
             </tbody>
         </table>
+        </div>
     </div>
     {% endif %}
 
@@ -695,6 +699,7 @@
             <div class="chart-title">
                 <i class="fas fa-table"></i> Relay Breakdown
             </div>
+            <div class="table-responsive">
             <table class="data-table">
                 <thead>
                     <tr>
@@ -713,6 +718,7 @@
                     {% endfor %}
                 </tbody>
             </table>
+            </div>
             <div style="padding: 1rem; border-top: 1px solid var(--border-color); display:flex; gap:2rem; font-size:0.85rem;">
                 <div><strong>Total:</strong> {{ relay_stats.total }}</div>
                 <div><strong>Success Rate:</strong> {{ relay_stats.success_rate }}%</div>

@@ -1535,6 +1535,7 @@ function buildSatTable(satsInView, activePrns) {
         : '';
 
     return almanacNote
+        + '<div class="table-responsive">'
         + '<table class="gps-sat-table">'
         + '<thead><tr>'
         + '<th style="text-align:right">Sv</th>'
@@ -1545,6 +1546,7 @@ function buildSatTable(satsInView, activePrns) {
         + '</tr></thead>'
         + '<tbody>' + rows + '</tbody>'
         + '</table>'
+        + '</div>'
         + '<div class="snr-legend">'
         + '<span><span class="snr-dot snr-s5"></span>&ge;45</span>'
         + '<span><span class="snr-dot snr-s4"></span>35&ndash;44</span>'
