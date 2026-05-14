@@ -50,6 +50,9 @@
         background: var(--light-color);
         font-size: 0.85rem;
         margin: 0 0.4rem 0.4rem 0;
+        max-width: 100%;
+        overflow-wrap: anywhere;
+        word-break: break-word;
     }
 
     .same-chip code {
@@ -255,6 +258,12 @@
     @media (max-width: 767px) {
         .workflow-hero {
             padding: 2rem 1.5rem;
+        }
+        .workflow-card .card-body {
+            padding: 1.25rem;
+        }
+        .send-countdown-overlay .countdown-number {
+            font-size: 4rem;
         }
     }
 </style>
