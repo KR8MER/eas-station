@@ -26,8 +26,9 @@ be identified without needing a running SDR.
 
 Usage
 -----
-    python3 scripts/rbds_diagnose.py /var/log/eas-station/rbds_capture_256000.npy
-    python3 scripts/rbds_diagnose.py /path/to/rbds_capture_RATE.npy --sample-rate RATE
+    python3 scripts/rbds_diagnose.py /var/log/eas-station/captures/iq_sdr_256000Hz_*.npz
+    python3 scripts/rbds_diagnose.py /path/to/capture.npz --sample-rate 256000
+    python3 scripts/rbds_diagnose.py /path/to/legacy_multiplex.npy --sample-rate 256000
 
 Output is written to stdout as plain text; redirect to a file if needed.
 """
@@ -619,9 +620,26 @@ def diagnose(path: pathlib.Path, sample_rate: int) -> None:
     # silently discards the imaginary part of IQ samples and every
     # downstream measurement becomes garbage.
     raw = np.load(str(path), allow_pickle=False)
-    if np.iscomplexobj(raw):
-        # === IQ recording — measure IF characteristics, then FM-demodulate. ===
+
+    # .npz archive — contains 'iq' and optionally 'multiplex'
+    if hasattr(raw, "files"):
+        _sub("Capture file (.npz archive)")
+        _info(f"Path    : {path}")
+        _info(f"Arrays  : {', '.join(raw.files)}")
+        iq = raw["iq"].astype(np.complex64) if "iq" in raw.files else None
+        multiplex_pre = raw["multiplex"].astype(np.float32) if "multiplex" in raw.files else None
+        if iq is None and multiplex_pre is None:
+            _fail("Archive contains neither 'iq' nor 'multiplex' array — cannot diagnose.")
+            return
+    elif np.iscomplexobj(raw):
         iq = raw.astype(np.complex64)
+        multiplex_pre = None
+    else:
+        iq = None
+        multiplex_pre = raw.astype(np.float32)
+
+    if iq is not None:
+        # === IQ recording — measure IF characteristics, then FM-demodulate. ===
         _sub("Capture file (complex IQ)")
         _info(f"Path        : {path}")
         _info(f"Samples     : {len(iq):,}  at {sample_rate:,} Hz  "
@@ -657,14 +675,37 @@ def diagnose(path: pathlib.Path, sample_rate: int) -> None:
         else:
             _ok("FM signal is constant-envelope (no IF clipping)")
 
-        # FM-demodulate to multiplex.  ``np.angle`` followed by
-        # ``np.unwrap`` then ``np.diff`` is the classic FM discriminator;
-        # we scale to give comparable amplitude to the legacy RBDSWorker
-        # debug dump (which is just the phase derivative, no scaling).
-        data = np.diff(np.unwrap(np.angle(iq))).astype(np.float32)
+        # FM-demodulate to multiplex via instantaneous-phase discriminator.
+        data_from_iq = np.diff(np.unwrap(np.angle(iq))).astype(np.float32)
+
+        # If the .npz also has a pre-computed multiplex, cross-check them.
+        if multiplex_pre is not None:
+            n_check = min(len(data_from_iq), len(multiplex_pre))
+            corr = float(np.corrcoef(
+                data_from_iq[:n_check], multiplex_pre[:n_check]
+            )[0, 1])
+            _sub("IQ-derived vs saved multiplex cross-check")
+            _info(f"Pearson r = {corr:.6f}  (should be ≥ 0.9999 if both use "
+                  "the same FM discriminator)")
+            if corr >= 0.9999:
+                _ok("Saved multiplex matches IQ re-demodulation — "
+                    "no discriminator distortion")
+            elif corr >= 0.999:
+                _warn("Small divergence between saved and re-derived multiplex "
+                      "(minor numerical difference)")
+            else:
+                _fail("Saved multiplex diverges from IQ re-demodulation — "
+                      "the software discriminator may be distorting the signal")
+            # Use the pre-saved multiplex (what the RBDS worker actually sees)
+            # so the rest of the analysis reflects the live pipeline exactly.
+            data = multiplex_pre
+            _info("Using saved multiplex for downstream analysis "
+                  "(reflects live RBDS worker input)")
+        else:
+            data = data_from_iq
     else:
         # === Already an FM-demodulated multiplex array — use as-is. ===
-        data = raw.astype(np.float32)
+        data = multiplex_pre if multiplex_pre is not None else raw.astype(np.float32)
         _sub("Capture file (FM multiplex)")
         _info(f"Path        : {path}")
         _info(f"Samples     : {len(data):,}  at {sample_rate:,} Hz  "
@@ -1102,7 +1143,7 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("capture", type=pathlib.Path,
-                        help="Path to the .npy capture file")
+                        help="Path to the .npz or .npy capture file")
     parser.add_argument("--sample-rate", "-r", type=int, default=None,
                         help="Sample rate in Hz (default: guessed from filename)")
     args = parser.parse_args()

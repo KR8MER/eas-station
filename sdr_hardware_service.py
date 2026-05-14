@@ -220,6 +220,157 @@ def _capture_tap_append(identifier: str, samples) -> None:
                 event.set()
 
 
+def _compute_capture_spectral_diagnostics(
+    samples: "np.ndarray",
+    sample_rate: int,
+) -> tuple:
+    """FM-demodulate *samples* and return ``(diag_dict, multiplex_array)``.
+
+    ``diag_dict`` contains band-level SNR figures that immediately reveal
+    whether the 19 kHz pilot, 38 kHz stereo subcarrier, and 57 kHz RBDS
+    subcarrier are present in the capture, together with an estimate of where
+    the IQ passband rolls off (which exposes narrow hardware bandwidth settings
+    that can silently kill RBDS decoding even though the nominal sample rate
+    looks adequate).
+
+    ``multiplex_array`` is the float32 FM discriminator output (rad/sample)
+    at *sample_rate*.  Saving it alongside the raw IQ means the capture gives
+    two independent diagnostic angles:
+
+    * The IQ file shows whether the hardware IF analogue filter is already
+      rolling off the 57 kHz band *before* any software runs.
+    * The multiplex file shows what the RBDS worker actually receives after
+      FM demodulation — if 57 kHz is missing here but present in the IQ,
+      the fault is in the software FM discriminator or early-decimation path.
+
+    Both return values are best-effort; any unexpected error returns
+    ``({}, None)`` so the capture is never blocked.
+    """
+    try:
+        import numpy as _np
+        from scipy import signal as _sig
+    except ImportError:
+        return {}, None
+    try:
+        diag: Dict[str, Any] = {}
+        iq = samples.astype(_np.complex64)
+        n = len(iq)
+
+        # ── 1. IQ passband rolloff estimate ──────────────────────────────────
+        # Use Welch PSD of the raw IQ to find where the hardware's analogue
+        # IF filter starts to roll off.  A setBandwidth(256000) on an R820T2
+        # produces a -3 dB point near ±115 kHz rather than ±128 kHz; this
+        # shows up clearly in the IQ PSD and explains why RBDS is filtered
+        # even though the Nyquist is nominally sufficient.
+        nperseg = min(4096, n // 4)
+        if nperseg >= 64:
+            f_w, psd_w = _sig.welch(
+                iq, fs=sample_rate, nperseg=nperseg, return_onesided=False
+            )
+            psd_w = _np.fft.fftshift(psd_w)
+            f_w = _np.fft.fftshift(f_w)
+            # Reference: median power of the central ±30 kHz (flat FM body)
+            ref_mask = _np.abs(f_w) <= 30_000
+            if _np.any(ref_mask):
+                ref_db = float(10 * _np.log10(_np.median(psd_w[ref_mask]) + 1e-30))
+                # Walk outward from 0 Hz and find the highest frequency where
+                # PSD is still within 20 dB of the central reference.
+                pos_mask = f_w >= 0
+                f_pos = f_w[pos_mask]
+                p_pos = psd_w[pos_mask]
+                valid = p_pos > 0
+                if _np.any(valid):
+                    db_pos = 10 * _np.log10(p_pos + 1e-30) - ref_db
+                    in_band = db_pos >= -20.0
+                    if _np.any(in_band):
+                        diag["iq_passband_20db_hz"] = int(
+                            f_pos[_np.where(in_band)[0][-1]]
+                        )
+
+        # ── 2. FM discriminator → multiplex ──────────────────────────────────
+        multiplex = _np.angle(iq[1:] * _np.conj(iq[:-1])).astype(_np.float32)
+        sr = sample_rate
+        n_mp = len(multiplex)
+        if n_mp < 4096 or sr < 60_000:
+            return diag, multiplex
+
+        # ── 3. Spectral analysis of multiplex ────────────────────────────────
+        # Use a large power-of-2 FFT for sub-Hz resolution on long captures.
+        n_fft = min(1 << 18, 1 << int(_np.floor(_np.log2(n_mp))))
+        window = _np.hanning(n_fft)
+        spectrum = _np.abs(_np.fft.rfft(multiplex[:n_fft] * window))
+        freqs = _np.fft.rfftfreq(n_fft, d=1.0 / sr)
+
+        def _band_snr(center: float, half_bw: float, noise_lo: float, noise_hi: float):
+            """Peak amplitude in [center±half_bw] vs median of [noise_lo, noise_hi]."""
+            sig_mask = (freqs >= center - half_bw) & (freqs <= center + half_bw)
+            noise_mask = (freqs >= noise_lo) & (freqs <= noise_hi)
+            if not (_np.any(sig_mask) and _np.any(noise_mask)):
+                return None, None
+            sig_amp = float(_np.max(spectrum[sig_mask]))
+            noise_med = float(_np.median(spectrum[noise_mask]))
+            if noise_med <= 0:
+                return None, None
+            snr_db = float(20 * _np.log10(sig_amp / noise_med + 1e-12))
+            peak_freq = float(freqs[sig_mask][_np.argmax(spectrum[sig_mask])])
+            return round(snr_db, 1), round(peak_freq, 2)
+
+        # Noise reference: 28–32 kHz (above stereo pilot, below stereo sideband)
+        noise_lo, noise_hi = 28_000.0, 32_000.0
+
+        # 19 kHz pilot (pure tone; use ±200 Hz window)
+        pilot_snr, pilot_hz = _band_snr(19_000, 200, noise_lo, noise_hi)
+        if pilot_snr is not None:
+            diag["pilot_snr_db"] = pilot_snr
+            diag["pilot_hz"] = pilot_hz
+
+        # 38 kHz stereo DSB-SC envelope (±500 Hz around 38 kHz)
+        stereo_snr, _ = _band_snr(38_000, 500, noise_lo, noise_hi)
+        if stereo_snr is not None:
+            diag["stereo_38k_snr_db"] = stereo_snr
+
+        # 57 kHz RBDS subcarrier.  BPSK spreads ±1.2 kHz around 57 kHz so use
+        # ±1.5 kHz window; noise reference stays at 28–32 kHz.
+        rbds_snr, _ = _band_snr(57_000, 1_500, noise_lo, noise_hi)
+        if rbds_snr is not None:
+            diag["rbds_57k_snr_db"] = rbds_snr
+
+        # Also measure at 57 kHz from the IQ directly (before FM discriminator)
+        # so we can compare IQ-domain vs multiplex-domain 57 kHz presence.
+        if nperseg >= 64:
+            try:
+                f_iq, psd_iq = _sig.welch(
+                    iq, fs=sample_rate, nperseg=min(4096, n // 4),
+                    return_onesided=False,
+                )
+                psd_iq = _np.fft.fftshift(psd_iq)
+                f_iq = _np.fft.fftshift(f_iq)
+                # IQ power at +57 kHz vs central reference
+                ref_iq_mask = _np.abs(f_iq) <= 20_000
+                rbds_iq_mask = (_np.abs(f_iq) >= 55_000) & (_np.abs(f_iq) <= 59_000)
+                if _np.any(ref_iq_mask) and _np.any(rbds_iq_mask):
+                    ref_iq = float(_np.median(psd_iq[ref_iq_mask]))
+                    rbds_iq = float(_np.max(psd_iq[rbds_iq_mask]))
+                    if ref_iq > 0:
+                        diag["iq_57k_vs_center_db"] = round(
+                            10 * _np.log10(rbds_iq / ref_iq + 1e-30), 1
+                        )
+            except Exception:
+                pass
+
+        # Overall multiplex noise floor (median of 28–50 kHz)
+        mid_mask = (freqs >= 28_000) & (freqs <= 50_000)
+        if _np.any(mid_mask):
+            diag["multiplex_noise_floor_db"] = round(
+                float(20 * _np.log10(_np.median(spectrum[mid_mask]) + 1e-30)), 1
+            )
+
+        return diag, multiplex
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("capture spectral diagnostics failed: %s", exc)
+        return {}, None
+
+
 def _measure_iq_levels(receiver, num_samples: int = 8192) -> Optional[Dict[str, float]]:
     """Briefly drain the receiver and return RMS / peak / clipping stats.
 
@@ -1577,28 +1728,177 @@ def process_commands(redis_client):
                                 ch if ch.isalnum() or ch in ("-", "_") else "_"
                                 for ch in str(receiver_id)
                             )[:64] or "receiver"
+                            # .npz — numpy zip archive holding both the raw IQ
+                            # and the FM-demodulated multiplex in one file.
+                            # Load with: data = np.load(f); iq = data['iq'];
+                            #            multiplex = data['multiplex']
                             filename = (
                                 f"iq_{safe_receiver_id}_"
                                 f"{effective_rate}Hz_"
-                                f"{int(time.time())}_{command_id[:8]}.npy"
+                                f"{int(time.time())}_{command_id[:8]}.npz"
                             )
                             output_path = os.path.join(RADIO_CAPTURE_DIR, filename)
-                            np.save(output_path, samples_array, allow_pickle=False)
+
+                            # ── Compute multiplex + spectral diagnostics ──
+                            # Done before the sidecar write so the spectral
+                            # results can be embedded in the JSON at the same
+                            # time the .npz is written.
+                            spectral, multiplex_array = (
+                                _compute_capture_spectral_diagnostics(
+                                    samples_array, effective_rate
+                                )
+                            )
+
+                            # Save both arrays in a single .npz archive.
+                            # 'iq'        — complex64, post-hardware-IF-filter,
+                            #               post-early-decim (if any). No FM
+                            #               demodulation applied.
+                            # 'multiplex' — float32, FM discriminator output
+                            #               (rad/sample). Same signal the RBDS
+                            #               worker sees. If 57 kHz is absent
+                            #               here but present in 'iq', the fault
+                            #               is in the software FM discriminator.
+                            save_kwargs: Dict[str, Any] = {
+                                "iq": samples_array,
+                            }
+                            if multiplex_array is not None:
+                                save_kwargs["multiplex"] = multiplex_array
+                            np.savez(output_path, **save_kwargs)
 
                             sidecar_path = output_path + ".json"
                             try:
+                                cfg = getattr(receiver, "config", None)
+
+                                # ── Hardware sample rate (before any software
+                                # decimation).  The tap fires *after* the early
+                                # decimation FIR that high-rate SDRs (Airspy
+                                # 10 MHz) use to reduce data to ~250 kHz, so
+                                # sample_rate == effective_rate for all current
+                                # captures.  We record both so it is obvious
+                                # when they differ.
+                                hw_sample_rate = int(
+                                    getattr(cfg, "sample_rate", effective_rate)
+                                    or effective_rate
+                                )
+                                early_decim = int(
+                                    getattr(receiver, "_early_decim_factor", 1) or 1
+                                )
+
+                                # ── Signal path note ─────────────────────────
+                                # The capture tap fires in publish_samples_and_metrics
+                                # immediately after receiver.get_samples().
+                                # get_samples() returns IQ that has already passed
+                                # through the early-decimation anti-alias FIR (if
+                                # early_decim_factor > 1) and the hardware IF
+                                # analogue filter set by setBandwidth().  No FM
+                                # demodulation or audio processing has been applied.
+                                # All software RBDS / audio filters run downstream
+                                # in eas_monitoring_service, NOT in this file.
+                                signal_path = (
+                                    "post_hardware_if_filter"
+                                    if early_decim == 1
+                                    else "post_hardware_if_filter+post_early_decim_fir"
+                                )
+
+                                # ── Frequency correction applied ─────────────
+                                ppm = float(
+                                    getattr(cfg, "frequency_correction_ppm", 0.0) or 0.0
+                                )
+                                applied_offset_hz = (
+                                    round(frequency_hz * ppm / 1_000_000.0, 3)
+                                    if ppm else 0.0
+                                )
+
+                                # ── Hardware-accepted analogue bandwidth ──────
+                                hw_bw = getattr(receiver, "_hardware_bandwidth_hz", None)
+
+                                # ── Demodulator / RBDS config ─────────────────
+                                modulation = str(
+                                    getattr(cfg, "modulation_type", None) or "unknown"
+                                ).upper()
+                                rbds_enabled = bool(
+                                    getattr(cfg, "enable_rbds", False)
+                                )
+                                stereo_enabled = bool(
+                                    getattr(cfg, "stereo_enabled", False)
+                                )
+                                deemphasis_us = float(
+                                    getattr(cfg, "deemphasis_us", 75.0) or 75.0
+                                )
+                                driver = str(
+                                    getattr(cfg, "driver", None) or "unknown"
+                                )
+                                channel_index = int(
+                                    getattr(cfg, "channel_index", 0) or 0
+                                )
+
+                                # ── Spectral diagnostics (best-effort) ────────
+                                # Already computed above; embedded here.
+
                                 sidecar = {
+                                    # ── Identity / timing ─────────────────────
                                     "receiver_id": str(receiver_id),
                                     "command_id": command_id,
                                     "captured_at_unix": int(time.time()),
-                                    "sample_rate": int(effective_rate),
-                                    "frequency_hz": int(frequency_hz),
+
+                                    # ── Signal provenance ──────────────────────
+                                    # Explains exactly what processing has (and
+                                    # has not) been applied to these samples.
+                                    "signal_path": signal_path,
+                                    "signal_path_note": (
+                                        "IQ captured after hardware IF analogue filter "
+                                        "and (if early_decim_factor>1) software anti-alias "
+                                        "FIR decimation. FM demodulation, RBDS, and audio "
+                                        "filters have NOT been applied."
+                                    ),
+
+                                    # ── Sample geometry ────────────────────────
+                                    "dtype": "complex64",
                                     "num_samples": int(actual),
                                     "duration_sec": actual / max(effective_rate, 1),
-                                    "dtype": "complex64",
+
+                                    # ── Frequency ──────────────────────────────
+                                    "frequency_hz": int(frequency_hz),
+                                    "frequency_correction_ppm": ppm,
+                                    "applied_frequency_offset_hz": applied_offset_hz,
+
+                                    # ── Sample rates ───────────────────────────
+                                    "sample_rate": int(effective_rate),
+                                    "hardware_sample_rate": hw_sample_rate,
+                                    "early_decim_factor": early_decim,
+
+                                    # ── Hardware analogue IF bandwidth ─────────
+                                    # The value setBandwidth() asked for equals
+                                    # hardware_sample_rate.  hardware_bandwidth_hz
+                                    # is what the tuner actually accepted (e.g.
+                                    # R820T2 rounds to discrete steps).  A value
+                                    # much narrower than sample_rate/2 will roll
+                                    # off the FM multiplex before 57 kHz and
+                                    # silently kill RBDS even though Nyquist looks
+                                    # fine on paper.
+                                    "requested_bandwidth_hz": hw_sample_rate,
+                                    "hardware_bandwidth_hz": hw_bw,
+
+                                    # ── RF gain chain ──────────────────────────
                                     "gain_db": capture_gain_db,
                                     "external_lna_db": capture_external_lna_db,
                                     "bias_t_enabled": capture_bias_t,
+
+                                    # ── Driver / hardware ──────────────────────
+                                    "driver": driver,
+                                    "channel_index": channel_index,
+
+                                    # ── Demodulator config ─────────────────────
+                                    "modulation_type": modulation,
+                                    "enable_rbds": rbds_enabled,
+                                    "stereo_enabled": stereo_enabled,
+                                    "deemphasis_us": deemphasis_us,
+
+                                    # ── Spectral diagnostics ───────────────────
+                                    # Computed from this capture's IQ; gives an
+                                    # immediate read on pilot / stereo / RBDS
+                                    # signal presence without loading the .npy.
+                                    "spectral": spectral,
                                 }
                                 with open(sidecar_path, "w") as fp:
                                     json.dump(sidecar, fp, indent=2)
@@ -1611,17 +1911,25 @@ def process_commands(redis_client):
                             size_bytes = os.path.getsize(output_path)
 
                             logger.info(
-                                "📼 Captured %d IQ samples (%.2f MB, "
-                                "%.2fs of signal) for %s → %s "
-                                "[gain=%s dB, ext_lna=%+.1f dB, bias-t=%s]",
+                                "📼 Captured %d IQ samples (%.2f MB, %.2fs) for %s → %s "
+                                "[%s @ %.3f MHz | gain=%s dB, ext_lna=%+.1f dB, "
+                                "bias-t=%s | hw_bw=%s kHz | ppm=%+.1f | "
+                                "modulation=%s rbds=%s | %s]",
                                 actual,
                                 size_bytes / (1024 * 1024),
                                 actual / max(effective_rate, 1),
                                 receiver_id,
                                 output_path,
+                                driver,
+                                frequency_hz / 1_000_000.0,
                                 ("%.1f" % capture_gain_db) if capture_gain_db is not None else "?",
                                 capture_external_lna_db,
                                 "on" if capture_bias_t else "off",
+                                ("%d" % hw_bw) if hw_bw else "?",
+                                ppm,
+                                modulation,
+                                "on" if rbds_enabled else "off",
+                                signal_path,
                             )
 
                             result = {
@@ -1633,14 +1941,24 @@ def process_commands(redis_client):
                                 "num_samples": actual,
                                 "requested_samples": num_samples,
                                 "sample_rate": effective_rate,
+                                "hardware_sample_rate": hw_sample_rate,
+                                "early_decim_factor": early_decim,
                                 "frequency_hz": frequency_hz,
+                                "frequency_correction_ppm": ppm,
+                                "applied_frequency_offset_hz": applied_offset_hz,
+                                "hardware_bandwidth_hz": hw_bw,
                                 "size_bytes": size_bytes,
                                 "dtype": "complex64",
                                 "gain_db": capture_gain_db,
                                 "external_lna_db": capture_external_lna_db,
                                 "bias_t_enabled": capture_bias_t,
+                                "driver": driver,
+                                "modulation_type": modulation,
+                                "enable_rbds": rbds_enabled,
+                                "signal_path": signal_path,
                                 "duration_sec": actual / max(effective_rate, 1),
                                 "complete": bool(completed),
+                                "spectral": spectral,
                             }
                     except Exception as e:
                         # On any unexpected error, detach the tap so the
