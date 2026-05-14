@@ -656,8 +656,11 @@ sudo systemctl restart eas-station</code></pre>
                                     <button type="button" class="btn btn-sm btn-outline-info" data-action="capture-iq" data-receiver-id="${receiver.receiver_id}" title="Record raw IQ samples from this receiver and download as a .npy file. Use the 'Duration' field on the left to control how many seconds are captured.">
                                         <i class="fas fa-download"></i> Capture IQ
                                     </button>
-                                    <button type="button" class="btn btn-sm btn-outline-info" data-action="show-waterfall" data-receiver-id="${receiver.receiver_id}" title="Capture a short IQ window and render a frequency-vs-time waterfall here. Use this to see if the signal is clipping the SDR's front end (a strong nearby station can cause wideband fuzz and saturated peaks even when audio sounds OK).">
-                                        <i class="fas fa-water"></i> Show Waterfall
+                                    <button type="button" class="btn btn-sm btn-outline-info" data-action="show-waterfall" data-receiver-id="${receiver.receiver_id}" title="Capture a short IQ window and render a frequency-vs-time waterfall snapshot here. Use this to see if the signal is clipping the SDR's front end (a strong nearby station can cause wideband fuzz and saturated peaks even when audio sounds OK). Also returns a peak/RMS/clipping verdict.">
+                                        <i class="fas fa-camera"></i> Snapshot Waterfall
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-info" data-action="live-waterfall" data-receiver-id="${receiver.receiver_id}" title="Start/stop a live, continuously-updating waterfall. New FFT rows scroll down every ~500 ms, using the same blue→green→yellow→red dBFS colour ramp as the Snapshot view. Useful for watching a signal change in real time (e.g. fades, drift, interference). Data source: /api/radio/spectrum/&lt;id&gt; (published by the SDR service).">
+                                        <i class="fas fa-water"></i> <span data-live-wf-label="${receiver.receiver_id}">Live Waterfall</span>
                                     </button>
                                     <button type="button" class="btn btn-sm btn-outline-primary" data-action="run-diagnostic" data-receiver-id="${receiver.receiver_id}" title="Capture a 2 s IQ window and run a full diagnostic report: front-end health (saturation, DC offset, click rate, channel-filter rolloff) plus a subcarrier inventory (pilot, stereo, RBDS, SCA #1, DARC, SCA #2). Answers 'is RBDS being suppressed by the rtl-sdr?' and 'what signals are on the air that we're discarding?'">
                                         <i class="fas fa-microscope"></i> Run Diagnostic
@@ -1027,7 +1030,7 @@ sudo systemctl restart eas-station</code></pre>
         }
     });
 
-    // Delegated event listener for "Show Waterfall" buttons. POSTs to the
+    // Delegated event listener for "Snapshot Waterfall" buttons. POSTs to the
     // diagnostics waterfall endpoint with the user-selected duration,
     // receives a quantised uint8 spectrogram + dBFS scale + clipping
     // verdict, and renders both to a canvas appended after the button
@@ -1125,6 +1128,332 @@ sudo systemctl restart eas-station</code></pre>
             }
             wfBtn.disabled = false;
             wfBtn.innerHTML = originalHtml;
+        }
+    });
+
+    // ---- Live Waterfall -------------------------------------------------
+    //
+    // The Snapshot button above grabs a single short IQ window, runs it
+    // through the server-side analyser, and renders one static spectrogram
+    // with a clipping verdict. That answers "is my front-end being
+    // saturated *right now*?" but it is not a waterfall in the usual SDR
+    // sense — the display does not scroll, and the operator has to keep
+    // clicking to get fresh data.
+    //
+    // This handler implements a true live, rolling waterfall. The SDR
+    // hardware service already publishes an FFT to Redis (~10 Hz) for each
+    // active receiver, and the web layer exposes it via
+    // /api/radio/spectrum/<id>. We poll that endpoint on a 500 ms cadence,
+    // append one row per refresh to a fixed-height canvas (most recent at
+    // the bottom, matching SDR-software convention), and re-use the same
+    // blue→green→yellow→red dBFS colour ramp as renderWaterfall() so the
+    // two views read identically.
+    //
+    // State management notes:
+    //   * The receiver-detail panel is re-rendered roughly once a second
+    //     by the WebSocket-driven `radio_status_update` listener (with a
+    //     15 s polling fallback). updateReceiverDetails() preserves
+    //     `.waterfall-container` innerHTML across re-renders, but that
+    //     only restores the *pixels* — the JS interval handle and ImageData
+    //     buffer live in this closure-scoped Map and survive the DOM swap.
+    //     On each tick we look up the live canvas by selector and, if the
+    //     DOM node was replaced, the resurrected one is empty so we
+    //     re-paint our entire history buffer onto it before drawing the
+    //     new row.
+    //   * History is stored as a single Uint8ClampedArray rather than a
+    //     list of rows so we can `set()` whole slices for the scroll-up
+    //     step (which is the hot path at 2 Hz).
+    const liveWaterfallState = new Map();
+    const LIVE_WF_HEIGHT = 200;       // rows of history
+    const LIVE_WF_POLL_MS = 500;      // tick interval
+    const LIVE_WF_DISPLAY_PX = 320;   // CSS upscale target
+
+    // Reuse the same five-stop colour ramp as renderWaterfall() so the
+    // Snapshot and Live views are visually identical. Kept inline here
+    // (rather than hoisted) to avoid touching renderWaterfall()'s closure.
+    function liveWfColorMap(t) {
+        t = Math.max(0, Math.min(1, t));
+        const stops = [
+            [  0,   0, 64],
+            [  0, 128, 255],
+            [  0, 255,   0],
+            [255, 255,   0],
+            [255,   0,   0],
+        ];
+        const seg = t * (stops.length - 1);
+        const i = Math.min(stops.length - 2, Math.floor(seg));
+        const f = seg - i;
+        const a = stops[i], b = stops[i + 1];
+        return [
+            Math.round(a[0] + (b[0] - a[0]) * f),
+            Math.round(a[1] + (b[1] - a[1]) * f),
+            Math.round(a[2] + (b[2] - a[2]) * f),
+        ];
+    }
+
+    function liveWfBuildPanel(state) {
+        // Build the panel DOM (header, canvas, axis labels, status line)
+        // from scratch. Called both on first start and when the receiver
+        // panel re-render strips our DOM out from under us.
+        const container = state.container;
+        container.innerHTML = '';
+        container.style.display = '';
+
+        const header = document.createElement('div');
+        header.className = 'd-flex flex-wrap gap-2 mb-1 small align-items-center';
+        const live = document.createElement('span');
+        live.className = 'badge bg-info text-uppercase';
+        live.textContent = 'Live';
+        header.appendChild(live);
+        state.statusEl = document.createElement('span');
+        state.statusEl.className = 'text-muted';
+        state.statusEl.textContent = 'Waiting for spectrum…';
+        header.appendChild(state.statusEl);
+        container.appendChild(header);
+
+        const canvas = document.createElement('canvas');
+        canvas.width = state.nFreq || 1;
+        canvas.height = LIVE_WF_HEIGHT;
+        canvas.style.width = '100%';
+        canvas.style.height = `${LIVE_WF_DISPLAY_PX}px`;
+        canvas.style.imageRendering = 'pixelated';
+        canvas.style.border = '1px solid rgba(128,128,128,0.3)';
+        canvas.style.display = 'block';
+        container.appendChild(canvas);
+        state.canvas = canvas;
+        state.ctx = canvas.getContext('2d');
+
+        state.axisEl = document.createElement('div');
+        state.axisEl.className = 'd-flex justify-content-between text-muted small mt-1';
+        container.appendChild(state.axisEl);
+    }
+
+    function liveWfResizeBuffer(state, nFreq) {
+        // Allocate (or reallocate, when the FFT size changes mid-stream)
+        // the row-major RGBA buffer. Allocations happen at most once per
+        // sample-rate change so the per-tick cost stays at a single
+        // typed-array set().
+        state.nFreq = nFreq;
+        state.buffer = new Uint8ClampedArray(nFreq * LIVE_WF_HEIGHT * 4);
+        // Paint initial frame fully black-blue so the canvas isn't
+        // transparent before the first row arrives.
+        for (let p = 3; p < state.buffer.length; p += 4) {
+            state.buffer[p] = 255;
+        }
+        for (let i = 0; i < nFreq * LIVE_WF_HEIGHT; i++) {
+            state.buffer[i * 4 + 2] = 32;  // dim blue noise floor
+        }
+    }
+
+    function liveWfRepaint(state) {
+        // Push the off-DOM buffer onto the canvas wholesale. Called
+        // immediately after a re-create so the operator sees the previous
+        // history instead of an empty canvas flicker.
+        if (!state.canvas || !state.ctx || !state.buffer) return;
+        const img = new ImageData(state.buffer.slice(), state.nFreq, LIVE_WF_HEIGHT);
+        state.ctx.putImageData(img, 0, 0);
+    }
+
+    function liveWfPushRow(state, spectrum) {
+        // Scroll all rows up by one and paint the new spectrum onto the
+        // bottom row. `spectrum` is a 0..1 normalised power array from
+        // the server (compute_spectrum() in sdr_hardware_service.py).
+        const nFreq = state.nFreq;
+        const buf = state.buffer;
+        const rowBytes = nFreq * 4;
+        // Slide rows 1..N-1 down into 0..N-2 (this is the scroll-up step
+        // in display terms because row 0 is at the top).
+        buf.copyWithin(0, rowBytes, rowBytes * LIVE_WF_HEIGHT);
+        // Paint new row at the bottom.
+        const base = (LIVE_WF_HEIGHT - 1) * rowBytes;
+        const n = Math.min(spectrum.length, nFreq);
+        for (let x = 0; x < n; x++) {
+            const v = Math.max(0, Math.min(1, Number(spectrum[x]) || 0));
+            const [r, g, b] = liveWfColorMap(v);
+            const p = base + x * 4;
+            buf[p] = r;
+            buf[p + 1] = g;
+            buf[p + 2] = b;
+            buf[p + 3] = 255;
+        }
+        liveWfRepaint(state);
+    }
+
+    function liveWfFindContainer(receiverId) {
+        return document.querySelector(
+            `.waterfall-container[data-waterfall-for="${CSS.escape(receiverId)}"]`
+        );
+    }
+
+    function liveWfFindLabel(receiverId) {
+        return document.querySelector(
+            `span[data-live-wf-label="${CSS.escape(receiverId)}"]`
+        );
+    }
+
+    function liveWfUpdateAxis(state, payload) {
+        if (!state.axisEl) return;
+        const fMin = Number(payload.freq_min);
+        const fMax = Number(payload.freq_max);
+        const fCtr = Number(payload.center_frequency);
+        if (!Number.isFinite(fMin) || !Number.isFinite(fMax)) {
+            state.axisEl.textContent = '';
+            return;
+        }
+        // Show MHz at the edges and the carrier in the middle, matching
+        // renderWaterfall()'s axis but in absolute frequency (the live
+        // endpoint returns absolute Hz, not deltas).
+        state.axisEl.innerHTML = '';
+        const fmt = (hz) => Number.isFinite(hz)
+            ? `${(hz / 1e6).toFixed(3)} MHz` : '—';
+        const left = document.createElement('span');
+        left.textContent = fmt(fMin);
+        const centre = document.createElement('span');
+        centre.textContent = Number.isFinite(fCtr) ? `${fmt(fCtr)} (carrier)` : '';
+        const right = document.createElement('span');
+        right.textContent = fmt(fMax);
+        state.axisEl.appendChild(left);
+        state.axisEl.appendChild(centre);
+        state.axisEl.appendChild(right);
+    }
+
+    async function liveWfTick(receiverId) {
+        const state = liveWaterfallState.get(receiverId);
+        if (!state || !state.running) return;
+
+        // If the receiver panel was re-rendered, our canvas is gone — find
+        // the resurrected container and rebuild the panel in place.
+        const container = liveWfFindContainer(receiverId);
+        if (!container) {
+            // Receiver card is no longer visible (e.g. filtered out or
+            // removed). Stop silently; the user can re-click to resume.
+            liveWfStop(receiverId);
+            return;
+        }
+        if (container !== state.container || !state.canvas || !state.canvas.isConnected) {
+            state.container = container;
+            liveWfBuildPanel(state);
+            if (state.buffer) {
+                liveWfRepaint(state);
+            }
+        }
+
+        try {
+            const response = await fetch(`/api/radio/spectrum/${receiverId}`, {
+                headers: { 'Accept': 'application/json' },
+                cache: 'no-store',
+            });
+            const payload = await response.json();
+            if (!response.ok) {
+                state.statusEl.textContent =
+                    `HTTP ${response.status}: ${payload.error || 'spectrum unavailable'}`;
+                return;
+            }
+            if (payload.status && payload.status !== 'available') {
+                state.statusEl.textContent =
+                    `${payload.status}: ${payload.error || 'no samples'}`;
+                return;
+            }
+            const spectrum = Array.isArray(payload.spectrum) ? payload.spectrum : [];
+            if (spectrum.length === 0) {
+                state.statusEl.textContent = 'Empty spectrum payload';
+                return;
+            }
+            // Skip stale frames so we don't re-push the same row 5× in a
+            // row if the SDR service stalls. The server timestamps each
+            // payload at publication time.
+            const ts = Number(payload.timestamp) || 0;
+            if (ts && ts === state.lastTimestamp) {
+                return;
+            }
+            state.lastTimestamp = ts;
+
+            if (!state.buffer || state.nFreq !== spectrum.length) {
+                liveWfResizeBuffer(state, spectrum.length);
+                // Canvas width follows the FFT size; resize and repaint.
+                state.canvas.width = spectrum.length;
+                liveWfRepaint(state);
+            }
+            liveWfPushRow(state, spectrum);
+            state.rowCount = (state.rowCount || 0) + 1;
+            liveWfUpdateAxis(state, payload);
+            const ageMs = ts ? Math.max(0, Date.now() - ts * 1000) : 0;
+            state.statusEl.textContent =
+                `${spectrum.length}-bin FFT · ${state.rowCount} rows · `
+                + `latency ${ageMs.toFixed(0)} ms`;
+        } catch (err) {
+            // Network blip — keep the loop running. The next tick will
+            // try again. Show the most recent error in the status line.
+            if (state.statusEl) {
+                state.statusEl.textContent = `Fetch error: ${err.message}`;
+            }
+        }
+    }
+
+    function liveWfStart(receiverId) {
+        const container = liveWfFindContainer(receiverId);
+        if (!container) return;
+        const state = {
+            receiverId,
+            container,
+            running: true,
+            rowCount: 0,
+            lastTimestamp: 0,
+            nFreq: 0,
+            buffer: null,
+            canvas: null,
+            ctx: null,
+            statusEl: null,
+            axisEl: null,
+            intervalId: null,
+        };
+        liveWaterfallState.set(receiverId, state);
+        liveWfBuildPanel(state);
+        // Kick off an immediate tick so the operator sees feedback within
+        // the first 500 ms even if the poll interval hasn't elapsed.
+        liveWfTick(receiverId);
+        state.intervalId = window.setInterval(
+            () => liveWfTick(receiverId),
+            LIVE_WF_POLL_MS
+        );
+        const label = liveWfFindLabel(receiverId);
+        if (label) label.textContent = 'Stop Live Waterfall';
+    }
+
+    function liveWfStop(receiverId) {
+        const state = liveWaterfallState.get(receiverId);
+        if (state && state.intervalId) {
+            window.clearInterval(state.intervalId);
+        }
+        liveWaterfallState.delete(receiverId);
+        const label = liveWfFindLabel(receiverId);
+        if (label) label.textContent = 'Live Waterfall';
+    }
+
+    document.addEventListener('click', (event) => {
+        const btn = event.target.closest('button[data-action="live-waterfall"]');
+        if (!btn) return;
+        const receiverId = btn.getAttribute('data-receiver-id');
+        if (!receiverId) return;
+        if (liveWaterfallState.has(receiverId)) {
+            liveWfStop(receiverId);
+        } else {
+            liveWfStart(receiverId);
+        }
+    });
+
+    // Stop all live waterfalls when the page is hidden / unloaded so we
+    // don't burn server CPU + Redis bandwidth on background tabs.
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') {
+            for (const id of Array.from(liveWaterfallState.keys())) {
+                liveWfStop(id);
+            }
+        }
+    });
+    window.addEventListener('beforeunload', () => {
+        for (const id of Array.from(liveWaterfallState.keys())) {
+            liveWfStop(id);
         }
     });
 
