@@ -50,7 +50,21 @@
         opacity: 0.95;
     }
 
-    /* Timeline styles */
+    /* Timeline styles
+     *
+     * The version page predates the project's theme tokens and was originally
+     * authored against a "design system" naming scheme (--color-surface,
+     * --color-text-primary, --color-border, etc.) that was never wired up in
+     * static/css/styles.css. With those variables undefined, var() fell
+     * through to the comma-fallback for backgrounds (white) but had no
+     * fallback for text colors — so every text rule inherited the body's
+     * theme-driven --text-color. On all 7 dark themes (midnight, obsidian,
+     * charcoal, slate, etc.) that meant white-ish text on a white card,
+     * making the Changelog and Features tabs unreadable.
+     *
+     * The fix is to use the variables that actually exist on every theme
+     * (--surface-color, --text-color, --border-color, --bg-color) and to
+     * pin explicit foregrounds on text that sits on solid white surfaces. */
     .timeline {
         position: relative;
         padding: 2rem 0;
@@ -60,7 +74,7 @@
         position: relative;
         padding-left: 3rem;
         padding-bottom: 2rem;
-        border-left: 2px solid var(--color-border, #dee2e6);
+        border-left: 2px solid var(--border-color, #dee2e6);
     }
 
     .timeline-item:last-child {
@@ -75,8 +89,8 @@
         height: 18px;
         border-radius: 50%;
         background: var(--primary-color);
-        border: 3px solid var(--color-surface, white);
-        box-shadow: 0 0 0 4px var(--color-border-light, #e9ecef);
+        border: 3px solid var(--surface-color, white);
+        box-shadow: 0 0 0 4px var(--border-color, #e9ecef);
     }
 
     .timeline-item.current .timeline-marker {
@@ -88,13 +102,18 @@
     }
 
     @keyframes pulse {
-        0%, 100% { box-shadow: 0 0 0 4px var(--color-border-light, #e9ecef); }
+        0%, 100% { box-shadow: 0 0 0 4px var(--border-color, #e9ecef); }
         50% { box-shadow: 0 0 0 8px rgba(16, 185, 129, 0.2); }
     }
 
     .timeline-content {
-        background: var(--color-surface, white);
-        border: 1px solid var(--color-border, #dee2e6);
+        background: var(--surface-color, #ffffff);
+        /* Explicit dark foreground because --surface-color is white on the
+         * majority of themes and the body --text-color is light on dark
+         * themes; without this the body color bleeds in and the card is
+         * unreadable. */
+        color: #0d1b2a;
+        border: 1px solid var(--border-color, #dee2e6);
         border-radius: var(--radius-md, 0.375rem);
         padding: 1.5rem;
         box-shadow: var(--shadow-sm);
@@ -114,12 +133,12 @@
     }
 
     .timeline-item.current .version-tag {
-        color: var(--success-color);
+        color: #198754; /* Bootstrap success green; --success-color is theme-tinted and may not contrast on white */
     }
 
     .version-date {
         font-size: 0.875rem;
-        color: var(--color-text-secondary);
+        color: #495057;
         margin-bottom: 1rem;
     }
 
@@ -132,6 +151,7 @@
     .change-list li {
         padding: 0.5rem 0 0.5rem 1.75rem;
         position: relative;
+        color: #212529;
     }
 
     .change-list li::before {
@@ -142,12 +162,12 @@
         width: 4px;
         height: 4px;
         border-radius: 50%;
-        background: var(--color-text-secondary);
+        background: #6c757d;
     }
 
     .change-category {
         font-weight: 600;
-        color: var(--color-text-primary);
+        color: #212529;
         margin-top: 1rem;
         margin-bottom: 0.5rem;
         display: flex;
@@ -155,10 +175,10 @@
         gap: 0.5rem;
     }
 
-    .change-category.added { color: var(--success-color); }
-    .change-category.fixed { color: var(--danger-color); }
-    .change-category.changed { color: var(--info-color); }
-    .change-category.removed { color: var(--color-text-muted); }
+    .change-category.added { color: #198754; }
+    .change-category.fixed { color: #dc3545; }
+    .change-category.changed { color: #0d6efd; }
+    .change-category.removed { color: #6c757d; }
 
     /* Tab styles */
     .nav-tabs .nav-link {
@@ -167,11 +187,27 @@
     }
 
     .tab-content {
-        background: var(--color-surface, white);
-        border: 1px solid var(--color-border, #dee2e6);
+        background: var(--surface-color, #ffffff);
+        /* Force a dark text color on the white tab body so dark-theme
+         * --text-color (white-ish) does not bleed through and erase the
+         * content. Cards inside re-assert their own colors. */
+        color: #0d1b2a;
+        border: 1px solid var(--border-color, #dee2e6);
         border-top: none;
         border-radius: 0 0 var(--radius-md, 0.375rem) var(--radius-md, 0.375rem);
         padding: 2rem;
+    }
+
+    /* Section headers on the tab body — Bootstrap h3 inherits color, which
+     * was the body's --text-color before this fix, making the "Release
+     * History" / "Installed Features" / "Documentation Links" headings
+     * disappear on dark themes. Pin them dark explicitly. */
+    .tab-content h3,
+    .tab-content h4,
+    .tab-content h5,
+    .tab-content p,
+    .tab-content .lead {
+        color: #0d1b2a;
     }
 
     /* Feature matrix */
@@ -187,8 +223,9 @@
         align-items: center;
         gap: 0.75rem;
         padding: 1rem;
-        background: var(--color-surface, white);
-        border: 1px solid var(--color-border, #dee2e6);
+        background: var(--surface-color, #ffffff);
+        color: #0d1b2a;
+        border: 1px solid var(--border-color, #dee2e6);
         border-radius: var(--radius-md, 0.375rem);
     }
 
@@ -204,13 +241,13 @@
     }
 
     .feature-icon.available {
-        background: var(--color-success-light, #d1fae5);
-        color: var(--success-color, #10b981);
+        background: #d1fae5;
+        color: #198754;
     }
 
     .feature-icon.unavailable {
-        background: var(--color-neutral-100, #f1f3f5);
-        color: var(--color-text-muted, #adb5bd);
+        background: #f1f3f5;
+        color: #6c757d;
     }
 
     .feature-info {
@@ -219,13 +256,13 @@
 
     .feature-name {
         font-weight: 600;
-        color: var(--color-text-primary);
+        color: #212529;
         margin-bottom: 0.25rem;
     }
 
     .feature-version {
         font-size: 0.75rem;
-        color: var(--color-text-secondary);
+        color: #495057;
     }
 </style>
 {% endblock %}

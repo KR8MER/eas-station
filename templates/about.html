@@ -5,6 +5,26 @@
    `.eas-*` class names (with `.about-*` aliases). See the
    "EAS Shared Visual System" section of that file. #}
 {% endblock %}
+{# ------------------------------------------------------------------ #}
+{# Software Stack icon helper.                                          #}
+{#                                                                      #}
+{# Renders the 34x34 gradient chip next to each library name. When a    #}
+{# matching project logo SVG exists under                               #}
+{# `static/img/tech-stack-logos/<slug>.svg` (declared in the            #}
+{# `shield_logos` context-processor dict), the chip shows the actual    #}
+{# project mark; otherwise it falls back to the supplied Font Awesome   #}
+{# class. The white-tinting CSS filter is applied via .stack-item-ico   #}
+{# img in styles.css so all marks stay readable on every gradient.      #}
+{# ------------------------------------------------------------------ #}
+{%- macro stack_icon(slug, fa, gradient, label='') -%}
+<span class="stack-item-ico" style="background: linear-gradient({{ gradient }});">
+{%- if shield_logos and shield_logos.get(slug) -%}
+    <img src="{{ url_for('static', filename='img/tech-stack-logos/' ~ slug ~ '.svg') }}" alt="{{ label }} logo">
+{%- else -%}
+    <i class="{{ fa }}"></i>
+{%- endif -%}
+</span>
+{%- endmacro %}
 {% block content %}
 <div class="about-page container py-4">
     <div class="row justify-content-center">
@@ -124,23 +144,23 @@
                 <h6 class="text-uppercase text-muted small fw-bold mb-2" style="letter-spacing: 0.06em;">Application Framework</h6>
                 <div class="stack-grid mb-3">
                     <div class="stack-item">
-                        <span class="stack-item-ico" style="background: linear-gradient(135deg, #3776AB, #FFD43B); color: #1a1a1a;"><i class="fab fa-python"></i></span>
+                        {{ stack_icon('python', 'fab fa-python', '135deg, #3776AB, #FFD43B', 'Python') }}
                         <div><div class="stack-item-name">Python 3.13</div><div class="stack-item-desc">Language runtime for the entire application</div></div>
                     </div>
                     <div class="stack-item">
-                        <span class="stack-item-ico" style="background: linear-gradient(135deg, #000, #444);"><i class="fas fa-flask"></i></span>
+                        {{ stack_icon('flask', 'fas fa-flask', '135deg, #000, #444', 'Flask') }}
                         <div><div class="stack-item-name">Flask</div><div class="stack-item-desc">Web framework powering every route &amp; API</div></div>
                     </div>
                     <div class="stack-item">
-                        <span class="stack-item-ico" style="background: linear-gradient(135deg, #000, #666);"><i class="fas fa-network-wired"></i></span>
+                        {{ stack_icon('werkzeug', 'fas fa-network-wired', '135deg, #000, #666', 'Werkzeug') }}
                         <div><div class="stack-item-name">Werkzeug</div><div class="stack-item-desc">WSGI plumbing under Flask (routing, requests)</div></div>
                     </div>
                     <div class="stack-item">
-                        <span class="stack-item-ico" style="background: linear-gradient(135deg, #B41717, #7a0f0f);"><i class="fas fa-scroll"></i></span>
+                        {{ stack_icon('jinja2', 'fas fa-scroll', '135deg, #B41717, #7a0f0f', 'Jinja2') }}
                         <div><div class="stack-item-name">Jinja2</div><div class="stack-item-desc">Server-side template engine for every HTML page</div></div>
                     </div>
                     <div class="stack-item">
-                        <span class="stack-item-ico" style="background: linear-gradient(135deg, #010101, #333);"><i class="fas fa-plug"></i></span>
+                        {{ stack_icon('socketio', 'fas fa-plug', '135deg, #010101, #333', 'Socket.IO') }}
                         <div><div class="stack-item-name">Socket.IO</div><div class="stack-item-desc">WebSocket channel for live alert/radio/GPS updates</div></div>
                     </div>
                     <div class="stack-item">
@@ -148,26 +168,26 @@
                         <div><div class="stack-item-name">Bootstrap 5</div><div class="stack-item-desc">Mobile-first responsive UI</div></div>
                     </div>
                     <div class="stack-item">
-                        <span class="stack-item-ico" style="background: linear-gradient(135deg, #333, #111);"><i class="fas fa-cogs"></i></span>
+                        {{ stack_icon('systemd', 'fas fa-cogs', '135deg, #333, #111', 'systemd') }}
                         <div><div class="stack-item-name">Systemd</div><div class="stack-item-desc">Native service orchestration</div></div>
                     </div>
                 </div>
                 <h6 class="text-uppercase text-muted small fw-bold mb-2" style="letter-spacing: 0.06em;">Data &amp; Spatial Layer</h6>
                 <div class="stack-grid mb-3">
                     <div class="stack-item">
-                        <span class="stack-item-ico" style="background: linear-gradient(135deg, #0093D0, #1F3B73);"><i class="fas fa-database"></i></span>
+                        {{ stack_icon('postgresql', 'fas fa-database', '135deg, #0093D0, #1F3B73', 'PostgreSQL') }}
                         <div><div class="stack-item-name">PostgreSQL + PostGIS</div><div class="stack-item-desc">Spatial database · geographic filtering</div></div>
                     </div>
                     <div class="stack-item">
-                        <span class="stack-item-ico" style="background: linear-gradient(135deg, #DC382D, #8B0000);"><i class="fas fa-bolt"></i></span>
+                        {{ stack_icon('redis', 'fas fa-bolt', '135deg, #DC382D, #8B0000', 'Redis') }}
                         <div><div class="stack-item-name">Redis</div><div class="stack-item-desc">Metrics cache · inter-service pub/sub</div></div>
                     </div>
                     <div class="stack-item">
-                        <span class="stack-item-ico" style="background: linear-gradient(135deg, #CA2C39, #7a1820);"><i class="fas fa-table"></i></span>
+                        {{ stack_icon('sqlalchemy', 'fas fa-table', '135deg, #CA2C39, #7a1820', 'SQLAlchemy') }}
                         <div><div class="stack-item-name">SQLAlchemy</div><div class="stack-item-desc">ORM behind every persisted entity</div></div>
                     </div>
                     <div class="stack-item">
-                        <span class="stack-item-ico" style="background: linear-gradient(135deg, #6BA3BE, #3d6675);"><i class="fas fa-code-branch"></i></span>
+                        {{ stack_icon('alembic', 'fas fa-code-branch', '135deg, #6BA3BE, #3d6675', 'Alembic') }}
                         <div><div class="stack-item-name">Alembic</div><div class="stack-item-desc">Schema migrations · runs on every install/update</div></div>
                     </div>
                     <div class="stack-item">
@@ -190,87 +210,87 @@
                 <h6 class="text-uppercase text-muted small fw-bold mb-2" style="letter-spacing: 0.06em;">Servers &amp; Deployment</h6>
                 <div class="stack-grid mb-3">
                     <div class="stack-item">
-                        <span class="stack-item-ico" style="background: linear-gradient(135deg, #499848, #2a5a29);"><i class="fas fa-server"></i></span>
+                        {{ stack_icon('gunicorn', 'fas fa-server', '135deg, #499848, #2a5a29', 'Gunicorn') }}
                         <div><div class="stack-item-name">Gunicorn</div><div class="stack-item-desc">Production WSGI server fronting Flask</div></div>
                     </div>
                     <div class="stack-item">
-                        <span class="stack-item-ico" style="background: linear-gradient(135deg, #1F8B4C, #0e4525);"><i class="fas fa-bolt-lightning"></i></span>
+                        {{ stack_icon('gevent', 'fas fa-bolt-lightning', '135deg, #1F8B4C, #0e4525', 'gevent') }}
                         <div><div class="stack-item-name">gevent</div><div class="stack-item-desc">Async worker class for thousands of WebSocket clients</div></div>
                     </div>
                     <div class="stack-item">
-                        <span class="stack-item-ico" style="background: linear-gradient(135deg, #009639, #00521f);"><i class="fas fa-shield-halved"></i></span>
+                        {{ stack_icon('nginx', 'fas fa-shield-halved', '135deg, #009639, #00521f', 'Nginx') }}
                         <div><div class="stack-item-name">Nginx</div><div class="stack-item-desc">Reverse proxy · TLS terminator · static files</div></div>
                     </div>
                     <div class="stack-item">
-                        <span class="stack-item-ico" style="background: linear-gradient(135deg, #003A70, #001f3f);"><i class="fas fa-lock"></i></span>
+                        {{ stack_icon('letsencrypt', 'fas fa-lock', '135deg, #003A70, #001f3f', "Let's Encrypt") }}
                         <div><div class="stack-item-name">Let's Encrypt</div><div class="stack-item-desc">Certbot-driven automated TLS issuance</div></div>
                     </div>
                 </div>
                 <h6 class="text-uppercase text-muted small fw-bold mb-2" style="letter-spacing: 0.06em;">Streaming, SDR &amp; Audio</h6>
                 <div class="stack-grid mb-3">
                     <div class="stack-item">
-                        <span class="stack-item-ico" style="background: linear-gradient(135deg, #1F3B73, #0c1d3d);"><i class="fas fa-tower-broadcast"></i></span>
+                        {{ stack_icon('icecast', 'fas fa-tower-broadcast', '135deg, #1F3B73, #0c1d3d', 'Icecast') }}
                         <div><div class="stack-item-name">Icecast</div><div class="stack-item-desc">Streams demodulated FM/AM audio over HTTP</div></div>
                     </div>
                     <div class="stack-item">
-                        <span class="stack-item-ico" style="background: linear-gradient(135deg, #FF6600, #a13d00);"><i class="fas fa-satellite-dish"></i></span>
+                        {{ stack_icon('soapysdr', 'fas fa-satellite-dish', '135deg, #FF6600, #a13d00', 'SoapySDR') }}
                         <div><div class="stack-item-name">SoapySDR</div><div class="stack-item-desc">Vendor-agnostic SDR abstraction (RTL/Airspy/SDRplay)</div></div>
                     </div>
                     <div class="stack-item">
-                        <span class="stack-item-ico" style="background: linear-gradient(135deg, #007808, #003c04);"><i class="fas fa-film"></i></span>
+                        {{ stack_icon('ffmpeg', 'fas fa-film', '135deg, #007808, #003c04', 'FFmpeg') }}
                         <div><div class="stack-item-name">FFmpeg</div><div class="stack-item-desc">Codec backend for MP3/AAC stream decode</div></div>
                     </div>
                     <div class="stack-item">
-                        <span class="stack-item-ico" style="background: linear-gradient(135deg, #FF8A65, #b04a2c);"><i class="fas fa-waveform-lines"></i></span>
+                        {{ stack_icon('pydub', 'fas fa-waveform-lines', '135deg, #FF8A65, #b04a2c', 'pydub') }}
                         <div><div class="stack-item-name">pydub</div><div class="stack-item-desc">Decodes Icecast streams into PCM for monitoring</div></div>
                     </div>
                     <div class="stack-item">
-                        <span class="stack-item-ico" style="background: linear-gradient(135deg, #5C2D91, #2e1648);"><i class="fas fa-microphone-lines"></i></span>
+                        {{ stack_icon('espeak-ng', 'fas fa-microphone-lines', '135deg, #5C2D91, #2e1648', 'eSpeak NG') }}
                         <div><div class="stack-item-name">eSpeak NG</div><div class="stack-item-desc">System TTS narrating CAP alert summaries</div></div>
                     </div>
                 </div>
                 <h6 class="text-uppercase text-muted small fw-bold mb-2" style="letter-spacing: 0.06em;">Scientific &amp; Signal Processing</h6>
                 <div class="stack-grid mb-3">
                     <div class="stack-item">
-                        <span class="stack-item-ico" style="background: linear-gradient(135deg, #013243, #4dabcf);"><i class="fas fa-square-root-variable"></i></span>
+                        {{ stack_icon('numpy', 'fas fa-square-root-variable', '135deg, #013243, #4dabcf', 'NumPy') }}
                         <div><div class="stack-item-name">NumPy</div><div class="stack-item-desc">Foundation for every IQ buffer, FFT, &amp; bit slicer</div></div>
                     </div>
                     <div class="stack-item">
-                        <span class="stack-item-ico" style="background: linear-gradient(135deg, #8CAAE6, #4f6ca8);"><i class="fas fa-wave-square"></i></span>
+                        {{ stack_icon('scipy', 'fas fa-wave-square', '135deg, #8CAAE6, #4f6ca8', 'SciPy') }}
                         <div><div class="stack-item-name">SciPy</div><div class="stack-item-desc">DSP filter design (notch, deemphasis, channel)</div></div>
                     </div>
                     <div class="stack-item">
-                        <span class="stack-item-ico" style="background: linear-gradient(135deg, #00A3E0, #006a92);"><i class="fas fa-gauge-high"></i></span>
+                        {{ stack_icon('numba', 'fas fa-gauge-high', '135deg, #00A3E0, #006a92', 'Numba') }}
                         <div><div class="stack-item-name">Numba</div><div class="stack-item-desc">JIT-compiles SAME &amp; RBDS workers (~6× faster)</div></div>
                     </div>
                     <div class="stack-item">
-                        <span class="stack-item-ico" style="background: linear-gradient(135deg, #4A7EBB, #1f3f6a);"><i class="fas fa-file-code"></i></span>
+                        {{ stack_icon('lxml', 'fas fa-file-code', '135deg, #4A7EBB, #1f3f6a', 'lxml') }}
                         <div><div class="stack-item-name">lxml</div><div class="stack-item-desc">High-performance XML parser for CAP ingestion</div></div>
                     </div>
                     <div class="stack-item">
-                        <span class="stack-item-ico" style="background: linear-gradient(135deg, #3776AB, #1c3e5e);"><i class="fas fa-image"></i></span>
+                        {{ stack_icon('pillow', 'fas fa-image', '135deg, #3776AB, #1c3e5e', 'Pillow') }}
                         <div><div class="stack-item-name">Pillow</div><div class="stack-item-desc">Rasterizes glyphs/bitmaps for VFD &amp; OLED frames</div></div>
                     </div>
                 </div>
                 <h6 class="text-uppercase text-muted small fw-bold mb-2" style="letter-spacing: 0.06em;">Authentication &amp; Notifications</h6>
                 <div class="stack-grid mb-3">
                     <div class="stack-item">
-                        <span class="stack-item-ico" style="background: linear-gradient(135deg, #2E7D32, #14431a);"><i class="fas fa-key"></i></span>
+                        {{ stack_icon('pyotp', 'fas fa-key', '135deg, #2E7D32, #14431a', 'PyOTP') }}
                         <div><div class="stack-item-name">PyOTP</div><div class="stack-item-desc">TOTP generation/verification for MFA login</div></div>
                     </div>
                     <div class="stack-item">
-                        <span class="stack-item-ico" style="background: linear-gradient(135deg, #F22F46, #8d1a28);"><i class="fas fa-comment-sms"></i></span>
+                        {{ stack_icon('twilio', 'fas fa-comment-sms', '135deg, #F22F46, #8d1a28', 'Twilio') }}
                         <div><div class="stack-item-name">Twilio</div><div class="stack-item-desc">SMS delivery for alert forwarding &amp; health alerts</div></div>
                     </div>
                 </div>
                 <h6 class="text-uppercase text-muted small fw-bold mb-2" style="letter-spacing: 0.06em;">Timekeeping (Stratum 1)</h6>
                 <div class="stack-grid mb-3">
                     <div class="stack-item">
-                        <span class="stack-item-ico" style="background: linear-gradient(135deg, #1F4E79, #0c2640);"><i class="fas fa-clock"></i></span>
+                        {{ stack_icon('chrony', 'fas fa-clock', '135deg, #1F4E79, #0c2640', 'chrony') }}
                         <div><div class="stack-item-name">chrony</div><div class="stack-item-desc">NTP daemon · serves stratum-1 from GPS + PPS</div></div>
                     </div>
                     <div class="stack-item">
-                        <span class="stack-item-ico" style="background: linear-gradient(135deg, #2E86AB, #114159);"><i class="fas fa-location-crosshairs"></i></span>
+                        {{ stack_icon('gpsd', 'fas fa-location-crosshairs', '135deg, #2E86AB, #114159', 'gpsd') }}
                         <div><div class="stack-item-name">gpsd</div><div class="stack-item-desc">Multiplexes GPS UART for chrony &amp; dashboards</div></div>
                     </div>
                 </div>
@@ -284,11 +304,11 @@
                 <h6 class="text-uppercase text-muted small fw-bold mb-2 mt-3" style="letter-spacing: 0.06em;">Frontend Libraries (vendored locally)</h6>
                 <div class="stack-grid">
                     <div class="stack-item">
-                        <span class="stack-item-ico" style="background: linear-gradient(135deg, #FF6384, #36A2EB);"><i class="fas fa-chart-line"></i></span>
+                        {{ stack_icon('chartjs', 'fas fa-chart-line', '135deg, #FF6384, #36A2EB', 'Chart.js') }}
                         <div><div class="stack-item-name">Chart.js 3</div><div class="stack-item-desc">Dashboards · datalabels, matrix &amp; date-fns adapter plugins</div></div>
                     </div>
                     <div class="stack-item">
-                        <span class="stack-item-ico" style="background: linear-gradient(135deg, #199900, #4caf50);"><i class="fas fa-map"></i></span>
+                        {{ stack_icon('leaflet', 'fas fa-map', '135deg, #199900, #4caf50', 'Leaflet') }}
                         <div><div class="stack-item-name">Leaflet</div><div class="stack-item-desc">Interactive maps for alert areas and boundaries</div></div>
                     </div>
                     <div class="stack-item">
@@ -296,11 +316,11 @@
                         <div><div class="stack-item-name">Font Awesome</div><div class="stack-item-desc">Iconography across the entire UI</div></div>
                     </div>
                     <div class="stack-item">
-                        <span class="stack-item-ico" style="background: linear-gradient(135deg, #0769AD, #1572B6);"><i class="fab fa-js-square"></i></span>
+                        {{ stack_icon('jquery', 'fab fa-js-square', '135deg, #0769AD, #1572B6', 'jQuery') }}
                         <div><div class="stack-item-name">jQuery</div><div class="stack-item-desc">Legacy DOM helpers used by some admin pages</div></div>
                     </div>
                     <div class="stack-item">
-                        <span class="stack-item-ico" style="background: linear-gradient(135deg, #ff3670, #ff6f6f);"><i class="fas fa-diagram-project"></i></span>
+                        {{ stack_icon('mermaid', 'fas fa-diagram-project', '135deg, #ff3670, #ff6f6f', 'Mermaid') }}
                         <div><div class="stack-item-name">Mermaid</div><div class="stack-item-desc">In-browser diagram rendering for docs pages</div></div>
                     </div>
                     <div class="stack-item">

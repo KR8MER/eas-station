@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- PyOTP: TOTP / one-time password library. Shield (security) with a
+       clock face inside (time-based) — the canonical "rotating 2FA code"
+       visual. -->
+  <path d="M12 2.5l8 3v6c0 5-3.4 8.6-8 10-4.6-1.4-8-5-8-10v-6z" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linejoin="round"/>
+  <circle cx="12" cy="12" r="3.6" fill="none" stroke="#FFFFFF" stroke-width="1.6"/>
+  <path d="M12 10v2l1.6 1" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

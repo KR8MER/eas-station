@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- Alembic: schema migration tool, named after the laboratory distillation
+       apparatus. A round-bottom flask with a curved condenser arm — the
+       project's traditional motif. -->
+  <path d="M10 3h4" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M10.5 3v5l-4 9a2.5 2.5 0 0 0 2.3 3.5h6.4a2.5 2.5 0 0 0 2.3-3.5l-4-9V3" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linejoin="round"/>
+  <path d="M15 9c2 0 4 1.5 4 4v3" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M7.6 15.5h8.8" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round"/>
+</svg>

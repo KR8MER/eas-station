@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- Werkzeug: "tools" in German; the Pallets project's Werkzeug mark
+       is a wagon wheel. Hub, rim, and six spokes. -->
+  <circle cx="12" cy="12" r="9" fill="none" stroke="#FFFFFF" stroke-width="1.6"/>
+  <circle cx="12" cy="12" r="2" fill="none" stroke="#FFFFFF" stroke-width="1.6"/>
+  <path d="M12 3v6"   fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M12 15v6"  fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M3 12h6"   fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M15 12h6"  fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M5.6 5.6l4.2 4.2"  fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M14.2 14.2l4.2 4.2" fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round"/>
+</svg>
