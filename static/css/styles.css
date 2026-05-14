@@ -1439,6 +1439,8 @@
 html {
     font-size: 16px;
     scroll-behavior: smooth;
+    overflow-x: hidden;
+    max-width: 100%;
 }
 
 body {
@@ -1468,6 +1470,64 @@ body {
     /* Flexbox sticky footer pattern - ensures footer sticks to bottom */
     display: flex;
     flex-direction: column;
+}
+
+/* ------------------------------------------------------------------
+   Mobile overflow defenses
+   ------------------------------------------------------------------
+   These rules keep every page from scrolling horizontally on narrow
+   viewports (≥320px wide).  They cap intrinsic-sized embedded media,
+   force code/log blocks to wrap on phones, give stray tables a local
+   scroll container, and expose a small text-break utility for long
+   unbreakable strings (FIPS codes, hex IDs, URLs, etc.).  Desktop
+   styling is preserved – mobile-only rules sit behind a media query.
+   ------------------------------------------------------------------ */
+
+/* Cap embedded media so wide images / iframes can never push the page
+   past the viewport.  height:auto only applies to bitmaps & video so
+   SVG / canvas with explicit drawing sizes are left alone. */
+img, video {
+    max-width: 100%;
+    height: auto;
+}
+svg, canvas, iframe, embed, object {
+    max-width: 100%;
+}
+
+/* Utility: opt-in line-breaking for long unbreakable strings (FIPS
+   codes, hex hashes, JSON payloads, URLs).  Use sparingly – this is
+   meant for value cells / code spans, not flowing prose. */
+.text-break-anywhere {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+@media (max-width: 767.98px) {
+    /* Wrap long lines inside code / log blocks on phones so they stop
+       pushing the page sideways.  Desktops keep the original look. */
+    pre, code, kbd, samp {
+        max-width: 100%;
+        overflow-x: auto;
+        overflow-wrap: anywhere;
+    }
+    pre {
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+
+    /* Safety net for any stray <table> that wasn't wrapped in a
+       .table-responsive container.  Turning the table itself into a
+       block-level scroll container keeps the surrounding card from
+       being forced wider than the viewport.  Selectors are scoped to
+       common content areas so we don't disturb tables that are
+       already inside .table-responsive (which lives in <main>). */
+    .card-body > table,
+    .modal-body > table,
+    main > table {
+        display: block;
+        max-width: 100%;
+        overflow-x: auto;
+    }
 }
 
 

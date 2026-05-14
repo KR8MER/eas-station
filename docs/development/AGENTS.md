@@ -479,6 +479,16 @@ def downgrade() -> None:
 - **Support all themes** - EAS Station has multiple built-in themes (Cosmo, Dark, Coffee, Spring, and color-based themes)
 - **Test in multiple themes** - Always test in both light (Cosmo) and dark themes at minimum
 - **Be responsive** - Use Bootstrap 5 grid classes for mobile support
+- **Mobile-friendly is required** - Every page MUST render without horizontal scrolling at viewport widths ≥320px. Specifically:
+  - **Wrap every `<table>` in `<div class="table-responsive">`** — including JS-injected tables built from template strings. The global mobile safety-net CSS in `static/css/styles.css` provides a fallback, but explicit wrappers are required.
+  - **Cap embedded media** — `img`/`video`/`svg`/`iframe`/`canvas` must not have intrinsic widths that exceed the viewport. The global rule already applies `max-width: 100%`; don't override it with a fixed pixel width unless the element is inside a horizontally scrollable container.
+  - **Wrap long unbreakable strings** — apply `.text-break-anywhere` (defined in `static/css/styles.css`) to cells/spans that may hold FIPS codes, hex IDs, URLs, JSON payloads, file paths, or secrets.
+  - **Avoid fixed pixel widths** on layout containers; use Bootstrap responsive utilities (`col-sm-*`, `d-none d-sm-table-cell`, etc.) to stack or hide low-value columns on small screens.
+  - **`<pre>` / `<code>` blocks** — desktop styling can stay as-is. The mobile-only block in `styles.css` handles wrapping for viewports ≤767.98px.
+  - **Verify before merging** — at 360×800 *and* 320×568 (Chromium devtools), no element should exceed `document.documentElement.clientWidth`. Quick check:
+    ```js
+    [...document.querySelectorAll('*')].filter(el => el.scrollWidth > document.documentElement.clientWidth + 1)
+    ```
 - **Theme Variable Categories**:
   - **Colors**: `--primary-color`, `--secondary-color`, `--accent-color`
   - **Status**: `--success-color`, `--danger-color`, `--warning-color`, `--info-color`

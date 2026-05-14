@@ -435,6 +435,7 @@ const ZigbeeMonitor = {
             if (data.config) {
                 infoDiv.innerHTML = `
                     <h4 style="margin-top: 1.5rem; margin-bottom: 1rem;">Configuration</h4>
+                    <div class="table-responsive">
                     <table class="config-table">
                         <tr>
                             <td>Serial Port</td>
@@ -453,6 +454,7 @@ const ZigbeeMonitor = {
                             <td>${data.config.pan_id}</td>
                         </tr>
                     </table>
+                    </div>
                 `;
 
                 // Available ports

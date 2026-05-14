@@ -204,6 +204,7 @@
                 <div class="card-body p-0">
                     <div id="states-table-container">
                         {% if loaded_states %}
+                        <div class="table-responsive">
                         <table class="table table-sm table-hover mb-0">
                             <thead>
                                 <tr>
@@ -232,6 +233,7 @@
                                 {% endfor %}
                             </tbody>
                         </table>
+                        </div>
                         {% else %}
                         <div class="p-4 text-center text-muted">
                             <i class="fas fa-database fa-2x mb-2 d-block"></i>
@@ -353,6 +355,7 @@
                                 A 6-digit code: <code>0&thinsp;SS&thinsp;CCC</code> where <code>SS</code> is the
                                 2-digit state FIPS and <code>CCC</code> the 3-digit county FIPS.
                             </p>
+                            <div class="table-responsive">
                             <table class="table table-sm table-bordered small">
                                 <thead><tr><th>SAME Code</th><th>State FIPS</th><th>County FIPS</th><th>Census GEOID</th><th>County</th></tr></thead>
                                 <tbody>
@@ -362,6 +365,7 @@
                                     <tr><td><code>039000</code></td><td>39</td><td>000</td><td>–</td><td><em>All of Ohio (statewide)</em></td></tr>
                                 </tbody>
                             </table>
+                            </div>
                         </div>
                         <div class="col-md-6">
                             <h6><i class="fas fa-download text-primary"></i> How to load the data</h6>

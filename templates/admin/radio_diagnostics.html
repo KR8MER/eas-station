@@ -102,6 +102,7 @@
         <div class="card-body">
             <div class="row">
                 <div class="col-md-6">
+                    <div class="table-responsive">
                     <table class="table table-sm">
                         <tbody>
                             <tr>
@@ -118,8 +119,10 @@
                             </tr>
                         </tbody>
                     </table>
+                    </div>
                 </div>
                 <div class="col-md-6">
+                    <div class="table-responsive">
                     <table class="table table-sm">
                         <tbody>
                             <tr>
@@ -136,6 +139,7 @@
                             </tr>
                         </tbody>
                     </table>
+                    </div>
                 </div>
             </div>
         </div>
@@ -572,6 +576,7 @@ sudo systemctl restart eas-station</code></pre>
                                     ${statusBadge}
                                     ${samplesBadge}
                                 </h5>
+                                <div class="table-responsive">
                                 <table class="table table-sm">
                                     <tbody>
                                         <tr>
@@ -592,9 +597,11 @@ sudo systemctl restart eas-station</code></pre>
                                         </tr>
                                     </tbody>
                                 </table>
+                                </div>
                             </div>
                             <div class="col-md-6">
                                 <h6 class="text-muted mb-2">Status Details</h6>
+                                <div class="table-responsive">
                                 <table class="table table-sm">
                                     <tbody>
                                         <tr>
@@ -615,6 +622,7 @@ sudo systemctl restart eas-station</code></pre>
                                         </tr>
                                     </tbody>
                                 </table>
+                                </div>
                                 ${receiver.last_error ? (receiver.error_decoded && receiver.error_decoded.code !== null ? `
                                     <div class="alert alert-danger mb-0">
                                         <div class="d-flex align-items-start">
