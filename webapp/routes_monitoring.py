@@ -38,6 +38,19 @@ from app_core.models import RadioReceiver
 from app_core.radio import ensure_radio_tables
 from app_core.led import LED_AVAILABLE
 from app_core.location import get_location_settings
+
+try:
+    from app_core.vfd import VFD_AVAILABLE
+except Exception:  # pragma: no cover - defensive: optional hardware module
+    VFD_AVAILABLE = False
+try:
+    from app_core.oled import OLED_AVAILABLE
+except Exception:  # pragma: no cover - defensive: optional hardware module
+    OLED_AVAILABLE = False
+try:
+    from app_core.audio.sources import RADIO_AVAILABLE
+except Exception:  # pragma: no cover - defensive: optional hardware module
+    RADIO_AVAILABLE = False
 from app_utils import get_location_timezone_name, local_now, utc_now
 from app_utils.versioning import get_git_metadata, get_git_tree_state
 
@@ -339,6 +352,9 @@ def register(app: Flask, logger) -> None:
     def help_version():
         """Version information page with user-friendly HTML display."""
         import json
+        import platform as _platform
+        import socket as _socket
+        import sys as _sys
         from app_utils.changelog_parser import parse_all_changelogs
 
         # Get repository root
@@ -356,6 +372,10 @@ def register(app: Flask, logger) -> None:
             changelogs = {}
 
         location = get_location_settings()
+        try:
+            _hostname = _socket.gethostname()
+        except Exception:  # pragma: no cover - defensive
+            _hostname = "unknown"
         version_data = {
             "version": current_version,
             "name": "NOAA CAP Alerts System",
@@ -366,6 +386,12 @@ def register(app: Flask, logger) -> None:
             ),
             "timezone": get_location_timezone_name(),
             "led_available": LED_AVAILABLE,
+            "vfd_available": bool(VFD_AVAILABLE),
+            "oled_available": bool(OLED_AVAILABLE),
+            "radio_available": bool(RADIO_AVAILABLE),
+            "python_version": _sys.version.split()[0],
+            "platform": _platform.platform(terse=True),
+            "hostname": _hostname,
             "timestamp": utc_now().isoformat(),
             "local_timestamp": local_now().isoformat(),
         }
