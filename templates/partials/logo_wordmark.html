@@ -1,43 +1,19 @@
+{# ─────────────────────────────────────────────────────────────────────────
+   EAS Station brand logo partial.
+
+   This renders the single canonical brand asset:
+
+       static/img/eas-station-logo.png
+
+   The same file is used by favicons, on-page brand placements (navbar,
+   hero, footer), and the alert share-image renderer.  To change the
+   logo across the entire product, replace that ONE file — no template
+   edits required.
+   ───────────────────────────────────────────────────────────────────────── #}
 {% set logo_classes = logo_classes | default('brand-logo') %}
 {% set logo_style = logo_style | default('') %}
 {% set logo_label = logo_label | default('EAS Station logo') %}
-{# Modern sleek waveform design with animated bars #}
-<svg class="logo-wordmark{% if logo_classes %} {{ logo_classes }}{% endif %}"
-     role="img"
-     aria-label="{{ logo_label }}"
-     viewBox="0 0 800 180"
-     xmlns="http://www.w3.org/2000/svg"
-     focusable="false"
+<img class="logo-wordmark{% if logo_classes %} {{ logo_classes }}{% endif %}"
+     src="{{ url_for('static', filename='img/eas-station-logo.png') }}"
+     alt="{{ logo_label }}"
      {% if logo_style %}style="{{ logo_style }}"{% endif %}>
-    <title>{{ logo_label }}</title>
-    <defs>
-        <linearGradient id="sleekGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" style="stop-color:var(--primary-color, #204885);stop-opacity:1" />
-            <stop offset="50%" style="stop-color:var(--accent-color, #4f6fb3);stop-opacity:1" />
-            <stop offset="100%" style="stop-color:var(--secondary-color, #872a96);stop-opacity:1" />
-        </linearGradient>
-        <filter id="subtleGlow" x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur in="SourceGraphic" stdDeviation="1.5" result="blur"/>
-            <feComponentTransfer in="blur" result="glow">
-                <feFuncA type="linear" slope="0.8"/>
-            </feComponentTransfer>
-            <feMerge>
-                <feMergeNode in="glow"/>
-                <feMergeNode in="SourceGraphic"/>
-            </feMerge>
-        </filter>
-    </defs>
-    
-    <g class="logo-icon" transform="translate(25, 60)" aria-hidden="true">
-        <rect x="0" y="25" width="12" height="30" rx="6" fill="url(#sleekGradient)" opacity="0.4" class="logo-bar logo-bar-1"/>
-        <rect x="18" y="15" width="12" height="50" rx="6" fill="url(#sleekGradient)" opacity="0.6" class="logo-bar logo-bar-2"/>
-        <rect x="36" y="20" width="12" height="40" rx="6" fill="url(#sleekGradient)" opacity="0.8" class="logo-bar logo-bar-3"/>
-        <rect x="54" y="10" width="12" height="60" rx="6" fill="url(#sleekGradient)" class="logo-bar logo-bar-4"/>
-        <rect x="72" y="20" width="12" height="40" rx="6" fill="url(#sleekGradient)" opacity="0.8" class="logo-bar logo-bar-5"/>
-        <rect x="90" y="28" width="12" height="24" rx="6" fill="url(#sleekGradient)" opacity="0.6" class="logo-bar logo-bar-6"/>
-    </g>
-    
-    <text x="150" y="110" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="68" font-weight="800" letter-spacing="-1" fill="white" stroke="rgba(0, 0, 0, 0.3)" stroke-width="1" class="logo-text logo-text-primary" filter="url(#subtleGlow)">EAS</text>
-    <text x="295" y="110" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="68" font-weight="300" letter-spacing="4" fill="rgba(255, 255, 255, 0.85)" stroke="rgba(0, 0, 0, 0.25)" stroke-width="0.8" class="logo-text logo-text-secondary">STATION</text>
-    <line x1="150" y1="125" x2="630" y2="125" stroke="url(#sleekGradient)" stroke-width="2" opacity="0.3" stroke-linecap="round" class="logo-underline"/>
-</svg>
