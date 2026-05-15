@@ -79,6 +79,12 @@ _TEXT_SEC   = (155, 165, 190)
 _TEXT_MUT   = ( 95, 108, 132)
 WHITE       = (255, 255, 255)
 
+# Corner radius used for the outer canvas and inner panels — anything ≥ 10
+# rounds enough to read as "designed" instead of "screenshot" on a feed.
+CORNER_R    = 22
+MAP_CORNER_R    = 14
+CARD_CORNER_R   = 6
+
 _SEVERITY: Dict[str, Tuple[int, int, int]] = {
     'extreme':  (220,  53,  69),
     'severe':   (253, 126,  20),
@@ -93,10 +99,338 @@ _THREAT_CLR: Dict[str, Tuple[int, int, int]] = {
     'none':     ( 80,  95, 120),
 }
 
+# ─── Event theming ───────────────────────────────────────────────────────────
+# Each theme drives the header gradient, accent colour (section headers,
+# polygon stroke, callouts) and the decorative particle layer painted
+# behind the title. Particle styles: 'bolts' | 'snow' | 'rain' | 'sun' |
+# 'embers' | 'wind' | 'haze' | 'none'.
+#
+# Themes are keyed off the CAP event name (lowercased substring match).
+# This is intentionally data-driven so adding a new event type is one line.
+_Theme = Dict[str, Any]
+
+# Generic fallback themes derived from severity so unfamiliar events still
+# get a reasonable look.  Tone-mapped from the original severity palette.
+_THEME_DEFAULT: _Theme = {
+    'top':       ( 25,  30,  55),
+    'bottom':    ( 70,  95, 150),
+    'accent':    ( 70, 130, 200),
+    'particles': 'bolts',
+    'particle_intensity': 0.7,
+}
+
+# Event → theme map.  Keys are lowercase substrings tested against the CAP
+# event name.  Order matters — first match wins, so list specific events
+# before generic ones (e.g. "winter storm" before "storm").
+_THEMES: List[Tuple[str, _Theme]] = [
+    # ── Convective / severe storms ──────────────────────────────────────
+    ('tornado', {
+        'top':       ( 70,   0,   0),
+        'bottom':    (180,  25,  35),
+        'accent':    (220,  53,  69),
+        'particles': 'bolts',
+        'particle_intensity': 1.1,
+    }),
+    ('severe thunderstorm', {
+        'top':       ( 35,  20,  60),
+        'bottom':    (220, 110,  30),
+        'accent':    (253, 126,  20),
+        'particles': 'bolts',
+        'particle_intensity': 1.0,
+    }),
+    ('thunderstorm', {
+        'top':       ( 30,  35,  70),
+        'bottom':    ( 95, 110, 180),
+        'accent':    (110, 140, 220),
+        'particles': 'bolts',
+        'particle_intensity': 0.95,
+    }),
+    # ── Wind / hurricane ────────────────────────────────────────────────
+    # NOTE: 'wind chill' must be matched *before* the winter section,
+    # otherwise 'cold' or 'wind' would steal it.  All wind-family keys
+    # are ordered most-specific → least-specific.
+    ('wind chill', {
+        'top':       ( 20,  50,  85),
+        'bottom':    ( 75, 125, 180),
+        'accent':    (155, 200, 235),
+        'particles': 'snow',
+        'particle_intensity': 0.6,
+    }),
+    ('hurricane', {
+        'top':       ( 60,   0,  60),
+        'bottom':    (190,  60, 120),
+        'accent':    (220,  90, 150),
+        'particles': 'wind',
+        'particle_intensity': 1.0,
+    }),
+    ('tropical', {
+        'top':       ( 40,  20,  70),
+        'bottom':    (160,  70, 140),
+        'accent':    (200,  90, 160),
+        'particles': 'wind',
+        'particle_intensity': 0.9,
+    }),
+    ('high wind', {
+        'top':       ( 30,  45,  75),
+        'bottom':    (110, 135, 175),
+        'accent':    (140, 170, 210),
+        'particles': 'wind',
+        'particle_intensity': 0.95,
+    }),
+    ('wind', {
+        'top':       ( 35,  50,  80),
+        'bottom':    (120, 150, 190),
+        'accent':    (160, 190, 220),
+        'particles': 'wind',
+        'particle_intensity': 0.8,
+    }),
+    # ── Winter / cold ───────────────────────────────────────────────────
+    ('blizzard', {
+        'top':       ( 20,  35,  70),
+        'bottom':    (100, 145, 200),
+        'accent':    (170, 215, 245),
+        'particles': 'snow',
+        'particle_intensity': 1.2,
+    }),
+    ('winter', {
+        'top':       ( 25,  45,  85),
+        'bottom':    ( 95, 145, 200),
+        'accent':    (170, 215, 245),
+        'particles': 'snow',
+        'particle_intensity': 1.0,
+    }),
+    ('ice', {
+        'top':       ( 30,  55,  90),
+        'bottom':    (110, 165, 210),
+        'accent':    (180, 220, 245),
+        'particles': 'snow',
+        'particle_intensity': 0.9,
+    }),
+    ('snow', {
+        'top':       ( 30,  55,  95),
+        'bottom':    (105, 155, 205),
+        'accent':    (175, 220, 245),
+        'particles': 'snow',
+        'particle_intensity': 1.0,
+    }),
+    ('freeze', {
+        'top':       ( 20,  50,  90),
+        'bottom':    ( 80, 130, 185),
+        'accent':    (160, 210, 240),
+        'particles': 'snow',
+        'particle_intensity': 0.8,
+    }),
+    ('frost', {
+        'top':       ( 25,  60,  95),
+        'bottom':    ( 90, 140, 195),
+        'accent':    (170, 215, 245),
+        'particles': 'snow',
+        'particle_intensity': 0.7,
+    }),
+    ('cold', {
+        'top':       ( 20,  45,  80),
+        'bottom':    ( 80, 130, 185),
+        'accent':    (160, 210, 240),
+        'particles': 'snow',
+        'particle_intensity': 0.7,
+    }),
+    # ── Water ───────────────────────────────────────────────────────────
+    ('flash flood', {
+        'top':       (  5,  35,  60),
+        'bottom':    ( 35, 110, 145),
+        'accent':    ( 45, 165, 200),
+        'particles': 'rain',
+        'particle_intensity': 1.1,
+    }),
+    ('flood', {
+        'top':       ( 10,  45,  70),
+        'bottom':    ( 30, 115, 150),
+        'accent':    ( 50, 170, 205),
+        'particles': 'rain',
+        'particle_intensity': 0.95,
+    }),
+    ('coastal', {
+        'top':       ( 10,  50,  80),
+        'bottom':    ( 35, 130, 165),
+        'accent':    ( 60, 180, 215),
+        'particles': 'rain',
+        'particle_intensity': 0.7,
+    }),
+    ('marine', {
+        'top':       ( 10,  50,  80),
+        'bottom':    ( 35, 130, 165),
+        'accent':    ( 60, 180, 215),
+        'particles': 'rain',
+        'particle_intensity': 0.6,
+    }),
+    ('rip current', {
+        'top':       ( 15,  60,  90),
+        'bottom':    ( 40, 145, 185),
+        'accent':    ( 65, 195, 225),
+        'particles': 'rain',
+        'particle_intensity': 0.5,
+    }),
+    ('rain', {
+        'top':       ( 15,  45,  70),
+        'bottom':    ( 50, 120, 160),
+        'accent':    ( 65, 180, 215),
+        'particles': 'rain',
+        'particle_intensity': 0.85,
+    }),
+    # ── Heat ────────────────────────────────────────────────────────────
+    ('excessive heat', {
+        'top':       (110,   0,   0),
+        'bottom':    (245, 145,   0),
+        'accent':    (255, 200,  60),
+        'particles': 'sun',
+        'particle_intensity': 1.1,
+    }),
+    ('heat', {
+        'top':       (130,  20,   0),
+        'bottom':    (240, 165,  20),
+        'accent':    (255, 210,  80),
+        'particles': 'sun',
+        'particle_intensity': 1.0,
+    }),
+    # ── Fire ────────────────────────────────────────────────────────────
+    ('red flag', {
+        'top':       ( 40,   0,   0),
+        'bottom':    (200,  50,  20),
+        'accent':    (255, 130,  40),
+        'particles': 'embers',
+        'particle_intensity': 1.0,
+    }),
+    ('fire weather', {
+        'top':       ( 30,   0,   0),
+        'bottom':    (190,  40,  10),
+        'accent':    (255, 120,  30),
+        'particles': 'embers',
+        'particle_intensity': 1.0,
+    }),
+    ('fire', {
+        'top':       ( 30,   0,   0),
+        'bottom':    (180,  35,   5),
+        'accent':    (255, 115,  25),
+        'particles': 'embers',
+        'particle_intensity': 1.0,
+    }),
+    ('smoke', {
+        'top':       ( 35,  30,  35),
+        'bottom':    (130, 110, 100),
+        'accent':    (210, 180, 140),
+        'particles': 'embers',
+        'particle_intensity': 0.6,
+    }),
+    # ── Visibility / atmosphere ─────────────────────────────────────────
+    ('fog', {
+        'top':       ( 55,  60,  70),
+        'bottom':    (140, 150, 165),
+        'accent':    (180, 200, 220),
+        'particles': 'haze',
+        'particle_intensity': 1.0,
+    }),
+    ('dense fog', {
+        'top':       ( 50,  55,  65),
+        'bottom':    (130, 140, 155),
+        'accent':    (175, 195, 215),
+        'particles': 'haze',
+        'particle_intensity': 1.1,
+    }),
+    ('dust', {
+        'top':       ( 70,  55,  35),
+        'bottom':    (190, 155,  95),
+        'accent':    (220, 185, 130),
+        'particles': 'haze',
+        'particle_intensity': 0.9,
+    }),
+    # ── Civil / non-weather ─────────────────────────────────────────────
+    ('amber', {
+        'top':       ( 90,  60,   0),
+        'bottom':    (235, 175,  30),
+        'accent':    (255, 205,  70),
+        'particles': 'none',
+        'particle_intensity': 0.0,
+    }),
+    ('civil', {
+        'top':       ( 50,   0,   5),
+        'bottom':    (180,  40,  50),
+        'accent':    (220,  70,  90),
+        'particles': 'none',
+        'particle_intensity': 0.0,
+    }),
+    ('evacuation', {
+        'top':       ( 70,   0,   0),
+        'bottom':    (210,  60,  35),
+        'accent':    (245, 120,  60),
+        'particles': 'none',
+        'particle_intensity': 0.0,
+    }),
+    ('hazardous materials', {
+        'top':       ( 50,  60,   0),
+        'bottom':    (175, 195,  50),
+        'accent':    (215, 230,  90),
+        'particles': 'none',
+        'particle_intensity': 0.0,
+    }),
+    ('shelter', {
+        'top':       ( 60,  40,   0),
+        'bottom':    (200, 145,  40),
+        'accent':    (240, 180,  70),
+        'particles': 'none',
+        'particle_intensity': 0.0,
+    }),
+    # Catch-all storm before plain 'storm'
+    ('storm', {
+        'top':       ( 30,  35,  70),
+        'bottom':    ( 95, 110, 180),
+        'accent':    (110, 140, 220),
+        'particles': 'bolts',
+        'particle_intensity': 0.9,
+    }),
+]
+
+
+def _resolve_theme(event_name: str, severity: str) -> _Theme:
+    """Return the theme that best fits *event_name*; fall back to severity."""
+    name = (event_name or '').lower()
+    for key, theme in _THEMES:
+        if key in name:
+            return theme
+    # Fall back: tint the default theme with the severity colour so we
+    # still get event-appropriate gradients for unknown events.
+    sev_clr = _SEVERITY.get((severity or '').lower(), _SEVERITY['unknown'])
+    return {
+        'top':       _darken(sev_clr, 0.65),
+        'bottom':    sev_clr,
+        'accent':    sev_clr,
+        'particles': 'bolts',
+        'particle_intensity': 0.6,
+    }
+
+
+def _theme_supports_storm_motion(theme: _Theme) -> bool:
+    """Storm-motion overlay only makes sense for convective/wind events."""
+    return theme.get('particles') in ('bolts', 'wind', 'rain')
+
 
 # ─── Font loading ────────────────────────────────────────────────────────────
+# Cached at module level so repeated calls (e.g. _render_map → labels → main
+# generator) share one font set instead of paying truetype open cost each time.
+_FONT_CACHE: Optional[Dict[str, ImageFont.FreeTypeFont]] = None
+
+
 def _load_fonts() -> Dict[str, ImageFont.FreeTypeFont]:
-    """Return a dict of sized fonts; falls back to Pillow built-in."""
+    """Return a dict of sized fonts; falls back to Pillow built-in.
+
+    Result is memoized in ``_FONT_CACHE`` so subsequent calls skip the
+    truetype file lookups — this is the "pre-render assets" hook: the
+    expensive font setup runs once at first share and is reused for
+    every subsequent render in the process.
+    """
+    global _FONT_CACHE
+    if _FONT_CACHE is not None:
+        return _FONT_CACHE
+
     _reg = [
         '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
         '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
@@ -116,7 +450,7 @@ def _load_fonts() -> Dict[str, ImageFont.FreeTypeFont]:
                 pass
         return ImageFont.load_default(size=size)
 
-    return {
+    _FONT_CACHE = {
         'title':  _load(_bold, 30),
         'head':   _load(_bold, 18),
         'bold':   _load(_bold, 15),
@@ -127,6 +461,7 @@ def _load_fonts() -> Dict[str, ImageFont.FreeTypeFont]:
         'threat': _load(_bold, 15),
         'mono':   _load(_reg,  11),
     }
+    return _FONT_CACHE
 
 
 # ─── Colour helpers ──────────────────────────────────────────────────────────
@@ -303,6 +638,288 @@ def _draw_lightning_bolts(target: Image.Image, region: Tuple[int, int, int, int]
     _paste(core)
 
 
+# ─── Other particle styles (event-specific) ─────────────────────────────────
+def _composite(target: Image.Image, region: Tuple[int, int, int, int],
+               layer: Image.Image) -> None:
+    """Composite *layer* (RGBA) at *region*'s top-left over *target* (RGB/RGBA)."""
+    x0, y0, _rw, _rh = region
+    if target.mode != 'RGBA':
+        base = target.convert('RGBA')
+        base.alpha_composite(layer, dest=(x0, y0))
+        target.paste(base.convert('RGB'))
+    else:
+        target.alpha_composite(layer, dest=(x0, y0))
+
+
+def _draw_snow(target: Image.Image, region: Tuple[int, int, int, int],
+               *, seed: int = 0, intensity: float = 1.0) -> None:
+    """Snowflake particles — drifting white dots and 6-armed stars."""
+    x0, y0, rw, rh = region
+    if rw <= 0 or rh <= 0:
+        return
+    rng = random.Random(seed ^ 0xA5A5)
+    layer = Image.new('RGBA', (rw, rh), (0, 0, 0, 0))
+    ld = ImageDraw.Draw(layer)
+    flake_count = int(45 * intensity)
+    for _ in range(flake_count):
+        fx = rng.uniform(0, rw)
+        fy = rng.uniform(0, rh)
+        r = rng.uniform(1.4, 3.6)
+        alpha = int(rng.uniform(110, 220) * intensity)
+        ld.ellipse((fx - r, fy - r, fx + r, fy + r),
+                   fill=(255, 255, 255, min(255, alpha)))
+    # A few larger stylised flakes with arms
+    for _ in range(int(7 * intensity)):
+        fx = rng.uniform(rw * 0.05, rw * 0.95)
+        fy = rng.uniform(rh * 0.10, rh * 0.85)
+        r = rng.uniform(4.0, 6.5)
+        alpha = int(rng.uniform(180, 240) * intensity)
+        col = (255, 255, 255, min(255, alpha))
+        for k in range(6):
+            ang = math.radians(k * 60)
+            ex = fx + math.cos(ang) * r
+            ey = fy + math.sin(ang) * r
+            ld.line([(fx, fy), (ex, ey)], fill=col, width=1)
+        ld.ellipse((fx - 1, fy - 1, fx + 1, fy + 1), fill=col)
+    layer = layer.filter(ImageFilter.GaussianBlur(radius=0.6))
+    _composite(target, region, layer)
+
+
+def _draw_rain(target: Image.Image, region: Tuple[int, int, int, int],
+               *, seed: int = 0, intensity: float = 1.0) -> None:
+    """Diagonal rain streaks."""
+    x0, y0, rw, rh = region
+    if rw <= 0 or rh <= 0:
+        return
+    rng = random.Random(seed ^ 0x3C3C)
+    layer = Image.new('RGBA', (rw, rh), (0, 0, 0, 0))
+    ld = ImageDraw.Draw(layer)
+    streak_count = int(55 * intensity)
+    slant = 4   # x-offset per streak length
+    for _ in range(streak_count):
+        sx = rng.uniform(-rw * 0.1, rw)
+        sy = rng.uniform(-rh * 0.3, rh)
+        length = rng.uniform(rh * 0.20, rh * 0.55)
+        alpha = int(rng.uniform(100, 200) * intensity)
+        col = (200, 225, 255, min(255, alpha))
+        ld.line([(sx, sy),
+                 (sx + slant, sy + length)],
+                fill=col, width=1)
+    layer = layer.filter(ImageFilter.GaussianBlur(radius=0.5))
+    _composite(target, region, layer)
+
+
+def _draw_sun_rays(target: Image.Image, region: Tuple[int, int, int, int],
+                   *, seed: int = 0, intensity: float = 1.0) -> None:
+    """Radial rays + warm glow ball — heat-advisory visual."""
+    x0, y0, rw, rh = region
+    if rw <= 0 or rh <= 0:
+        return
+    rng = random.Random(seed ^ 0x5E11)
+    layer = Image.new('RGBA', (rw, rh), (0, 0, 0, 0))
+    ld = ImageDraw.Draw(layer)
+    # Place sun centre off the right edge so rays sweep across the header
+    cx = rw - rng.randint(40, 110)
+    cy = rng.randint(-int(rh * 0.4), int(rh * 0.2))
+    # Bright halo
+    for r in range(120, 25, -8):
+        a = int(8 * intensity * (1 - (r - 25) / 100))
+        if a <= 0:
+            continue
+        ld.ellipse((cx - r, cy - r, cx + r, cy + r),
+                   fill=(255, 230, 130, max(0, min(255, a))))
+    # Rays
+    n_rays = 14
+    for k in range(n_rays):
+        ang = 2 * math.pi * k / n_rays + rng.uniform(-0.05, 0.05)
+        length = rng.uniform(rw * 0.45, rw * 0.85)
+        ex = cx + math.cos(ang) * length
+        ey = cy + math.sin(ang) * length
+        alpha = int(rng.uniform(60, 160) * intensity)
+        ld.line([(cx, cy), (ex, ey)],
+                fill=(255, 220, 110, min(255, alpha)), width=2)
+    layer = layer.filter(ImageFilter.GaussianBlur(radius=2.0))
+    # Bright core on top of the blur
+    ld2 = ImageDraw.Draw(layer)
+    ld2.ellipse((cx - 22, cy - 22, cx + 22, cy + 22),
+                fill=(255, 240, 170, int(220 * intensity)))
+    _composite(target, region, layer)
+
+
+def _draw_embers(target: Image.Image, region: Tuple[int, int, int, int],
+                 *, seed: int = 0, intensity: float = 1.0) -> None:
+    """Rising hot embers — orange dots with glow, sparser at the top."""
+    x0, y0, rw, rh = region
+    if rw <= 0 or rh <= 0:
+        return
+    rng = random.Random(seed ^ 0xE3B5)
+    layer = Image.new('RGBA', (rw, rh), (0, 0, 0, 0))
+    ld = ImageDraw.Draw(layer)
+    count = int(55 * intensity)
+    for _ in range(count):
+        # Embers concentrate near the bottom — bias toward higher y
+        fy = rh - (rng.random() ** 1.8) * rh
+        fx = rng.uniform(0, rw)
+        r = rng.uniform(1.0, 3.0)
+        # Colour ramp: deep red at bottom → bright yellow toward top
+        t = fy / max(1, rh)   # 0 top → 1 bottom
+        red   = int(255)
+        green = int(80 + (1 - t) * 150)
+        blue  = int(20 + (1 - t) * 40)
+        alpha = int(rng.uniform(120, 230) * intensity)
+        ld.ellipse((fx - r, fy - r, fx + r, fy + r),
+                   fill=(red, green, blue, min(255, alpha)))
+    layer = layer.filter(ImageFilter.GaussianBlur(radius=1.2))
+    # A few crisp sparks on top
+    ld2 = ImageDraw.Draw(layer)
+    for _ in range(int(10 * intensity)):
+        fx = rng.uniform(0, rw)
+        fy = rh - (rng.random() ** 1.6) * rh
+        ld2.ellipse((fx - 1, fy - 1, fx + 1, fy + 1),
+                    fill=(255, 245, 180, int(230 * intensity)))
+    _composite(target, region, layer)
+
+
+def _draw_wind_streaks(target: Image.Image, region: Tuple[int, int, int, int],
+                       *, seed: int = 0, intensity: float = 1.0) -> None:
+    """Horizontal motion streaks — wind/hurricane visual."""
+    x0, y0, rw, rh = region
+    if rw <= 0 or rh <= 0:
+        return
+    rng = random.Random(seed ^ 0x7777)
+    layer = Image.new('RGBA', (rw, rh), (0, 0, 0, 0))
+    ld = ImageDraw.Draw(layer)
+    streak_count = int(28 * intensity)
+    for _ in range(streak_count):
+        sy = rng.uniform(0, rh)
+        sx = rng.uniform(-rw * 0.1, rw * 0.4)
+        length = rng.uniform(rw * 0.20, rw * 0.55)
+        width = rng.choice([1, 1, 2])
+        alpha = int(rng.uniform(80, 180) * intensity)
+        col = (235, 240, 255, min(255, alpha))
+        # Slight upward curve to feel "blown"
+        mx = sx + length * 0.5
+        my = sy - rng.uniform(0, 4)
+        ex = sx + length
+        ey = sy
+        # Quadratic-ish — approximate with two line segments
+        ld.line([(sx, sy), (mx, my)], fill=col, width=width)
+        ld.line([(mx, my), (ex, ey)], fill=col, width=width)
+    layer = layer.filter(ImageFilter.GaussianBlur(radius=0.7))
+    _composite(target, region, layer)
+
+
+def _draw_haze(target: Image.Image, region: Tuple[int, int, int, int],
+               *, seed: int = 0, intensity: float = 1.0) -> None:
+    """Soft horizontal fog/haze bands."""
+    x0, y0, rw, rh = region
+    if rw <= 0 or rh <= 0:
+        return
+    rng = random.Random(seed ^ 0x4ADE)
+    layer = Image.new('RGBA', (rw, rh), (0, 0, 0, 0))
+    ld = ImageDraw.Draw(layer)
+    bands = 5
+    for _ in range(bands):
+        cy_ = rng.uniform(rh * 0.15, rh * 0.85)
+        band_h = rng.uniform(rh * 0.15, rh * 0.35)
+        alpha = int(rng.uniform(35, 70) * intensity)
+        # Ellipse much wider than tall = horizontal smear
+        ld.ellipse((-rw * 0.1, cy_ - band_h / 2,
+                    rw * 1.1, cy_ + band_h / 2),
+                   fill=(230, 235, 245, min(255, alpha)))
+    layer = layer.filter(ImageFilter.GaussianBlur(radius=8.0))
+    _composite(target, region, layer)
+
+
+_PARTICLE_FNS = {
+    'bolts':  lambda t, r, **kw: _draw_lightning_bolts(t, r, count=3, **kw),
+    'snow':   _draw_snow,
+    'rain':   _draw_rain,
+    'sun':    _draw_sun_rays,
+    'embers': _draw_embers,
+    'wind':   _draw_wind_streaks,
+    'haze':   _draw_haze,
+    'none':   None,
+}
+
+
+def _draw_themed_header(img: Image.Image, theme: _Theme,
+                        seed: int = 0) -> None:
+    """Paint a themed header: diagonal gradient + event-appropriate particles.
+
+    Replaces the older single-colour vertical gradient + always-bolts
+    combo.  The gradient runs diagonally (top-left → bottom-right) for
+    a more dynamic feel, and the particle layer is event-specific:
+    snowflakes for winter advisories, raindrops for floods, sun rays for
+    heat, etc.  See ``_THEMES`` for the full mapping.
+    """
+    top = theme['top']
+    bot = theme['bottom']
+    d = ImageDraw.Draw(img)
+    # Diagonal gradient — compute t from a normal vector pointing from
+    # the top-left corner to the bottom-right of the header.  Drawing per
+    # row is fast enough and lets us shade left→right per row by sampling
+    # the diagonal coordinate at line midpoint.
+    diag = HEADER_H + FB_WIDTH * 0.35   # how far along the diagonal we go
+    for y in range(HEADER_H):
+        # Two-stop interpolation with per-row x sweep so the right side
+        # of the image runs ahead of the left — diagonal feel.
+        row = Image.new('RGB', (FB_WIDTH, 1), bot)
+        rd = ImageDraw.Draw(row)
+        for x in range(0, FB_WIDTH, 8):   # step by 8 px — visually smooth, fast
+            t = (y + x * 0.35) / diag
+            t = max(0.0, min(1.0, t))
+            r = int(top[0] * (1 - t) + bot[0] * t)
+            g = int(top[1] * (1 - t) + bot[1] * t)
+            b = int(top[2] * (1 - t) + bot[2] * t)
+            rd.line([(x, 0), (min(FB_WIDTH, x + 8), 0)], fill=(r, g, b))
+        img.paste(row, (0, y))
+    # Slight darkening at the very top edge so the title reads clearly
+    # against the brighter parts of the gradient.
+    shade = Image.new('RGBA', (FB_WIDTH, HEADER_H), (0, 0, 0, 0))
+    sd = ImageDraw.Draw(shade)
+    for y in range(28):
+        a = int(60 * (1 - y / 28))
+        sd.line([(0, y), (FB_WIDTH, y)], fill=(0, 0, 0, a))
+    base = img.convert('RGBA')
+    base.alpha_composite(shade)
+    img.paste(base.convert('RGB'))
+    # Particle layer
+    particle = theme.get('particles', 'bolts')
+    intensity = float(theme.get('particle_intensity', 1.0))
+    fn = _PARTICLE_FNS.get(particle)
+    if fn is not None and intensity > 0.01:
+        fn(img, (0, 0, FB_WIDTH, HEADER_H), seed=seed, intensity=intensity)
+
+
+# ─── Rounded-corner helpers ─────────────────────────────────────────────────
+def _round_image_corners(img: Image.Image, radius: int,
+                         bg: Optional[Tuple[int, int, int]] = None
+                         ) -> Image.Image:
+    """Return *img* with its outer corners rounded to *radius* pixels.
+
+    The mask is built with ``ImageDraw.rounded_rectangle`` and applied to
+    the alpha channel.  When *bg* is ``None`` the result is RGBA with
+    fully transparent corners (preferred for social feeds that respect
+    PNG alpha).  When *bg* is a colour tuple the result is flattened RGB
+    against that background — used for nested elements that get pasted
+    back into a parent canvas (e.g. the map inset).
+    """
+    if radius <= 0:
+        return img
+    w, h = img.size
+    mask = Image.new('L', (w, h), 0)
+    md = ImageDraw.Draw(mask)
+    md.rounded_rectangle((0, 0, w - 1, h - 1), radius=radius, fill=255)
+    rgba = img.convert('RGBA')
+    rgba.putalpha(mask)
+    if bg is None:
+        return rgba
+    out = Image.new('RGB', (w, h), bg)
+    out.paste(rgba, (0, 0), mask)
+    return out
+
+
 # ─── OSM tile helpers ────────────────────────────────────────────────────────
 def _lon_to_tx(lon: float, z: int) -> float:
     return (lon + 180.0) / 360.0 * (2 ** z)
@@ -380,11 +997,32 @@ def _fetch_tile(tx: int, ty: int, z: int) -> Optional[Image.Image]:
     return None
 
 
-def _draw_storm_track(od: ImageDraw.ImageDraw, storm: Dict,
-                      z: int, tx_min: int, ty_min: int) -> None:
-    """Draw the storm motion track line and directional arrowhead on *od*."""
+def _draw_storm_track(canvas: Image.Image, storm: Dict,
+                      z: int, tx_min: int, ty_min: int,
+                      accent: Optional[Tuple[int, int, int]] = None,
+                      fonts: Optional[Dict] = None) -> None:
+    """Draw a redesigned storm-motion overlay onto *canvas*.
+
+    Replaces the old thin yellow line with:
+
+    * A translucent forecast **cone of uncertainty** projected from the
+      newest waypoint along ``toward_deg`` with a half-angle that
+      widens with track speed (slower storms → tighter cone).
+    * A tapered, glowing arrow with a wider tail and a sharp tip so the
+      direction reads instantly even at thumbnail size.
+    * Fading "ghost" waypoints for the historical track so motion
+      history is visible without competing with the cone.
+    * A small floating callout card ("SE @ 35 mph") anchored near the
+      arrow tip, drawn only when speed/heading data is present.
+
+    The cone and arrow are rendered onto an RGBA layer then composited
+    so the translucent fill works correctly over the basemap.  All
+    drawing is clipped to the canvas before composite to avoid Pillow
+    polygon-fill artefacts when the cone extends past the edge.
+    """
     track      = storm.get('track', [])
     toward_deg = storm.get('toward_deg')
+    speed_mph  = storm.get('speed_mph')
 
     pts: List[Tuple[int, int]] = []
     for point in track:
@@ -399,56 +1037,196 @@ def _draw_storm_track(od: ImageDraw.ImageDraw, storm: Dict,
     if not pts:
         return
 
-    _TRACK   = (255, 230,   0)   # bright yellow
-    _SHADOW  = (  0,   0,   0)   # black drop-shadow for contrast
+    cw, ch = canvas.size
+    layer = Image.new('RGBA', (cw, ch), (0, 0, 0, 0))
+    ld = ImageDraw.Draw(layer)
 
-    # Track line (shadow then yellow)
+    arrow_fill = accent if accent is not None else (255, 220, 50)
+    shadow     = (  0,   0,   0)
+
+    # ── Ghost waypoints (oldest = faintest) ───────────────────────────────
     if len(pts) >= 2:
-        od.line(pts, fill=_SHADOW, width=5)
-        od.line(pts, fill=_TRACK,  width=3)
+        n = len(pts)
+        for i in range(n - 1):
+            t = i / max(1, n - 1)
+            alpha = int(50 + t * 130)   # 50 (oldest) → 180 (recent)
+            r = 3
+            px, py = pts[i]
+            ld.ellipse((px - r - 1, py - r - 1, px + r + 1, py + r + 1),
+                       fill=(0, 0, 0, alpha))
+            ld.ellipse((px - r, py - r, px + r, py + r),
+                       fill=(*arrow_fill, alpha))
+            # Connecting hair-line shadow
+            if i > 0:
+                pp = pts[i - 1]
+                ld.line([pp, (px, py)], fill=(0, 0, 0, 90), width=2)
+                ld.line([pp, (px, py)], fill=(*arrow_fill, alpha), width=1)
 
-    # Waypoint circles (larger circle at newest / last point)
-    for i, (px, py) in enumerate(pts):
-        r = 5 if i == len(pts) - 1 else 3
-        od.ellipse((px - r - 1, py - r - 1, px + r + 1, py + r + 1), fill=_SHADOW)
-        od.ellipse((px - r,     py - r,     px + r,     py + r),     fill=_TRACK)
+    last_x, last_y = pts[-1]
 
-    # Arrowhead at the newest track point pointing in the direction of travel
+    # ── Cone of uncertainty ───────────────────────────────────────────────
+    cone_drawn = False
     if toward_deg is not None:
-        last_x, last_y = pts[-1]
         ang = math.radians(toward_deg)
-        dx  =  math.sin(ang)          # eastward screen component
-        dy  = -math.cos(ang)          # screen y grows downward → negate
+        dx  =  math.sin(ang)
+        dy  = -math.cos(ang)
 
-        arrow_len = 24
-        wing_len  = 11
-        wing_ang  = 0.45   # ~26°
+        # Cone length scales loosely with speed: slow storms get a short
+        # cone, fast storms get a long one. Capped so it doesn't dominate.
+        try:
+            mph = float(speed_mph) if speed_mph not in (None, '') else 25.0
+        except (TypeError, ValueError):
+            mph = 25.0
+        cone_len = int(max(60, min(180, 60 + mph * 2.4)))
+        # Half-angle: ~22° for typical motion, narrower if very fast,
+        # wider if very slow (low confidence).
+        half_deg = 26.0 if mph < 20 else (20.0 if mph < 40 else 16.0)
+        half = math.radians(half_deg)
 
-        tip_x = last_x + int(dx * arrow_len)
-        tip_y = last_y + int(dy * arrow_len)
+        # Cone fan apex at last point, base along the forecast vector.
+        # Use the rotation-of-direction trick: rotate (dx,dy) by ±half.
+        def _rot(vx: float, vy: float, theta: float) -> Tuple[float, float]:
+            c, s = math.cos(theta), math.sin(theta)
+            return (vx * c - vy * s, vx * s + vy * c)
 
-        def _wing(sign: int) -> Tuple[int, int]:
-            wx = tip_x - int((dx * math.cos(sign * wing_ang)
-                              - dy * math.sin(sign * wing_ang)) * wing_len)
-            wy = tip_y - int((dy * math.cos(sign * wing_ang)
-                              + dx * math.sin(sign * wing_ang)) * wing_len)
-            return (wx, wy)
+        # Build a smooth fan with intermediate samples for a curved base
+        fan: List[Tuple[int, int]] = [(last_x, last_y)]
+        steps = 9
+        for i in range(steps + 1):
+            theta = -half + (2 * half) * (i / steps)
+            rx, ry = _rot(dx, dy, theta)
+            fan.append((int(last_x + rx * cone_len),
+                        int(last_y + ry * cone_len)))
 
-        lw = _wing(+1)
-        rw = _wing(-1)
+        # Translucent fill + soft outline
+        ld.polygon(fan, fill=(*arrow_fill, 55))
+        ld.polygon(fan, outline=(*arrow_fill, 180))
 
-        # Shadow
-        so = 2
-        od.polygon([(tip_x + so, tip_y + so), (lw[0] + so, lw[1] + so),
-                    (rw[0] + so, rw[1] + so)], fill=_SHADOW)
-        # Arrow fill
-        od.polygon([(tip_x, tip_y), lw, rw], fill=_TRACK)
+        # Dashed centreline along the forecast vector
+        tip_x = last_x + int(dx * cone_len)
+        tip_y = last_y + int(dy * cone_len)
+        dash_len = 8
+        gap_len = 6
+        seg = dash_len + gap_len
+        total = int(math.hypot(tip_x - last_x, tip_y - last_y))
+        for i in range(0, total, seg):
+            sx0 = last_x + int(dx * i)
+            sy0 = last_y + int(dy * i)
+            sx1 = last_x + int(dx * min(total, i + dash_len))
+            sy1 = last_y + int(dy * min(total, i + dash_len))
+            ld.line([(sx0, sy0), (sx1, sy1)],
+                    fill=(*arrow_fill, 200), width=2)
+
+        # ── Tapered arrow from "now" position toward forecast tip ─────────
+        # Draw three stacked polylines: shadow, glow, core.
+        arrow_len = min(60, max(36, cone_len // 2))
+        atip_x = last_x + int(dx * arrow_len)
+        atip_y = last_y + int(dy * arrow_len)
+
+        # Tail vector (perpendicular)
+        nx, ny = -dy, dx       # 90° rotation
+        tail_w = 7
+        head_w = 14
+        # Tail base corners
+        tlx = int(last_x + nx * tail_w)
+        tly = int(last_y + ny * tail_w)
+        trx = int(last_x - nx * tail_w)
+        tryy = int(last_y - ny * tail_w)
+        # Mid waist (where the head meets the shaft)
+        mid_x = last_x + int(dx * arrow_len * 0.55)
+        mid_y = last_y + int(dy * arrow_len * 0.55)
+        mlx = int(mid_x + nx * tail_w * 0.6)
+        mly = int(mid_y + ny * tail_w * 0.6)
+        mrx = int(mid_x - nx * tail_w * 0.6)
+        mry = int(mid_y - ny * tail_w * 0.6)
+        # Head wings
+        hlx = int(mid_x + nx * head_w)
+        hly = int(mid_y + ny * head_w)
+        hrx = int(mid_x - nx * head_w)
+        hry = int(mid_y - ny * head_w)
+
+        arrow_poly = [
+            (tlx, tly), (mlx, mly), (hlx, hly),
+            (atip_x, atip_y),
+            (hrx, hry), (mrx, mry), (trx, tryy),
+        ]
+        # Shadow offset
+        sh = [(p[0] + 2, p[1] + 2) for p in arrow_poly]
+        ld.polygon(sh, fill=(0, 0, 0, 180))
+        ld.polygon(arrow_poly, fill=(*arrow_fill, 240),
+                   outline=(255, 255, 255, 200))
+
+        cone_drawn = True
+
+    # ── "Now" marker — bright disc at the newest waypoint ─────────────────
+    r = 6
+    ld.ellipse((last_x - r - 2, last_y - r - 2,
+                last_x + r + 2, last_y + r + 2), fill=(0, 0, 0, 220))
+    ld.ellipse((last_x - r, last_y - r,
+                last_x + r, last_y + r), fill=(255, 255, 255, 240))
+    ld.ellipse((last_x - 3, last_y - 3,
+                last_x + 3, last_y + 3), fill=arrow_fill + (255,))
+
+    # Composite the storm layer onto the basemap.
+    base = canvas.convert('RGBA')
+    base.alpha_composite(layer)
+    composite = base.convert('RGB')
+    canvas.paste(composite)
+
+    # ── Callout card ("SE @ 35 mph") near the arrow tip ───────────────────
+    if cone_drawn and fonts is not None:
+        compass = storm.get('compass_toward') or ''
+        speed_txt = ''
+        if speed_mph not in (None, ''):
+            try:
+                speed_txt = f'{int(round(float(speed_mph)))} mph'
+            except (TypeError, ValueError):
+                speed_txt = ''
+        if compass or speed_txt:
+            label = ' @ '.join([s for s in (compass, speed_txt) if s])
+            f = fonts.get('label', fonts.get('small'))
+            cd = ImageDraw.Draw(canvas)
+            pad_x, pad_y = 7, 4
+            tw_ = _tw(f, label)
+            th_ = _th(f, label)
+            box_w = tw_ + pad_x * 2
+            box_h = th_ + pad_y * 2 + 2
+
+            # Default: place to the right of the tip; flip if off-canvas.
+            anchor_x = last_x + int(dx * (arrow_len + 14)) if toward_deg is not None else last_x + 14
+            anchor_y = last_y + int(dy * (arrow_len + 14)) if toward_deg is not None else last_y - box_h - 8
+
+            bx = anchor_x - box_w // 2
+            by = anchor_y - box_h // 2
+            # Clamp to canvas
+            bx = max(4, min(cw - box_w - 4, bx))
+            by = max(4, min(ch - box_h - 4, by))
+
+            # Card background — pill-shaped, dark with accent border
+            cd.rounded_rectangle((bx, by, bx + box_w, by + box_h),
+                                 radius=box_h // 2,
+                                 fill=(15, 20, 30),
+                                 outline=arrow_fill, width=2)
+            # Leader line from arrow tip to box edge
+            if toward_deg is not None:
+                cd.line([(last_x + int(dx * arrow_len),
+                          last_y + int(dy * arrow_len)),
+                         (bx + box_w // 2, by + box_h // 2)],
+                        fill=(*arrow_fill, 200) if False else arrow_fill,
+                        width=1)
+            cd.text((bx + pad_x, by + pad_y - 1),
+                    label, font=f, fill=(255, 255, 255))
 
 
 def _render_map(geom: Dict, severity: str,
                 storm_motion: Optional[Dict] = None,
-                boundary_features: Optional[List[Dict]] = None) -> Image.Image:
-    """Return a MAP_W×MAP_H RGB map image with the alert polygon overlaid."""
+                boundary_features: Optional[List[Dict]] = None,
+                theme: Optional[_Theme] = None) -> Image.Image:
+    """Return a MAP_W×MAP_H RGB map image with the alert polygon overlaid.
+
+    *theme* drives the polygon stroke / storm-motion accent colours; if
+    omitted we fall back to the severity palette (legacy behaviour).
+    """
     fallback = Image.new('RGB', (MAP_W, MAP_H), (35, 42, 62))
     fd = ImageDraw.Draw(fallback)
     msg = 'Map not available'
@@ -487,8 +1265,11 @@ def _render_map(geom: Dict, severity: str,
             if tile:
                 canvas.paste(tile, ((tx - tx_min) * TILE_SIZE, (ty - ty_min) * TILE_SIZE))
 
-    # Build polygon pixel-coordinate lists
-    alr_clr = _SEVERITY.get(severity.lower(), _SEVERITY['unknown'])
+    # Polygon colour: theme accent (event-aware) with severity as fallback.
+    if theme is not None:
+        alr_clr = tuple(theme.get('accent', _SEVERITY['unknown']))  # type: ignore[assignment]
+    else:
+        alr_clr = _SEVERITY.get(severity.lower(), _SEVERITY['unknown'])
 
     def _to_px(ring: List) -> List[Tuple[int, int]]:
         pts = []
@@ -506,26 +1287,44 @@ def _render_map(geom: Dict, severity: str,
     elif gtype == 'MultiPolygon':
         rings = [r for poly in raw_coords for r in poly]
 
-    # Semi-transparent fill via RGBA overlay
+    # ── Polygon glow ──────────────────────────────────────────────────────
+    # A blurred wider stroke sits behind the crisp outline so the affected
+    # area "lifts" off the basemap and is unmistakable at thumbnail size.
+    glow = Image.new('RGBA', canvas.size, (0, 0, 0, 0))
+    gd = ImageDraw.Draw(glow)
+    for ring in rings:
+        pts = _to_px(ring)
+        if len(pts) >= 2:
+            gd.line(pts + [pts[0]], fill=(*alr_clr, 230), width=9)
+    glow = glow.filter(ImageFilter.GaussianBlur(radius=6))
+
+    # Semi-transparent fill
     overlay = Image.new('RGBA', canvas.size, (0, 0, 0, 0))
     ov = ImageDraw.Draw(overlay)
     for ring in rings:
         pts = _to_px(ring)
         if len(pts) >= 3:
-            ov.polygon(pts, fill=(*alr_clr, 65))
+            ov.polygon(pts, fill=(*alr_clr, 70))
 
-    canvas = Image.alpha_composite(canvas.convert('RGBA'), overlay).convert('RGB')
+    base_rgba = canvas.convert('RGBA')
+    base_rgba.alpha_composite(glow)
+    base_rgba.alpha_composite(overlay)
+    canvas = base_rgba.convert('RGB')
 
-    # Solid outline on top
+    # Solid outline on top (white casing for visibility, then accent core)
     od = ImageDraw.Draw(canvas)
     for ring in rings:
         pts = _to_px(ring)
         if len(pts) >= 2:
-            od.line(pts + [pts[0]], fill=alr_clr, width=3)
+            closed = pts + [pts[0]]
+            od.line(closed, fill=(255, 255, 255), width=5)
+            od.line(closed, fill=alr_clr,         width=3)
 
-    # Storm motion track + arrowhead
+    # Storm motion overlay (new cone + tapered arrow + callout)
     if storm_motion:
-        _draw_storm_track(od, storm_motion, z, tx_min, ty_min)
+        _draw_storm_track(canvas, storm_motion, z, tx_min, ty_min,
+                          accent=alr_clr, fonts=fonts)
+        od = ImageDraw.Draw(canvas)
 
     # ── Boundary overlays ─────────────────────────────────────────────────────
     # Draw county boundaries thicker/brighter; other service boundaries thinner.
@@ -633,19 +1432,6 @@ def _card_row(draw: ImageDraw.ImageDraw, ix: int, iy: int, iw: int, h: int) -> N
     draw.rectangle((ix, iy, ix + iw, iy + h - 1), fill=_CARD)
 
 
-def _draw_header_gradient(img: Image.Image, alr_clr: Tuple[int, int, int]) -> None:
-    """Paint a top→bottom gradient across the header for a stormy-cloud look."""
-    top = _darken(alr_clr, 0.55)
-    bot = alr_clr
-    d = ImageDraw.Draw(img)
-    for y in range(HEADER_H):
-        t = y / max(1, HEADER_H - 1)
-        r = int(top[0] * (1 - t) + bot[0] * t)
-        g = int(top[1] * (1 - t) + bot[1] * t)
-        b = int(top[2] * (1 - t) + bot[2] * t)
-        d.line([(0, y), (FB_WIDTH, y)], fill=(r, g, b))
-
-
 # ─── Main public function ─────────────────────────────────────────────────────
 def generate_alert_image(
     alert: Any,
@@ -667,35 +1453,41 @@ def generate_alert_image(
     fonts = _load_fonts()
 
     severity    = (getattr(alert, 'severity', '') or '').lower()
-    alr_clr     = _SEVERITY.get(severity, _SEVERITY['unknown'])
     event_name  = (getattr(alert, 'event', '') or 'Alert').upper()
     county_name = (location_settings or {}).get('county_name', 'County') or 'County'
 
-    # Stable per-alert seed so each alert's bolt pattern is reproducible.
+    # Event-aware theme drives the header gradient, particle style, and
+    # accent colour used for section headers + the polygon stroke.  We
+    # keep the legacy ``alr_clr`` symbol pointing at the theme accent so
+    # downstream draw helpers don't need signature changes.
+    theme   = _resolve_theme(event_name, severity)
+    alr_clr = tuple(theme['accent'])  # type: ignore[assignment]
+
+    # Stable per-alert seed so each alert's bolt/snow/etc pattern is
+    # reproducible across re-renders.
     alert_seed = hash((getattr(alert, 'id', 0) or 0, event_name)) & 0xFFFFFFFF
 
     # ── Base canvas ──────────────────────────────────────────────────────────
     img  = Image.new('RGB', (FB_WIDTH, FB_HEIGHT), _BG)
     draw = ImageDraw.Draw(img)
 
-    # ── Header bar (stormy sky with lightning) ────────────────────────────────
-    # Vertical gradient from darkened-severity → severity so the header reads
-    # as an illuminated storm cloud rather than a flat colour block.
-    _draw_header_gradient(img, alr_clr)
-    # Glowing lightning bolts behind the title — matches the site's lightning
-    # theme so the share card feels like a still frame from the UI.
-    _draw_lightning_bolts(img, (0, 0, FB_WIDTH, HEADER_H),
-                          count=3, seed=alert_seed, intensity=1.0)
-    # Soft scrim under the text for legibility after the flash.
+    # ── Header bar (event-themed gradient + particles) ───────────────────────
+    # Diagonal gradient + event-specific particle layer (bolts for storms,
+    # snowflakes for winter, raindrops for floods, sun rays for heat, ...).
+    _draw_themed_header(img, theme, seed=alert_seed)
+    # Soft scrim under the title text for legibility against the particle
+    # layer.  Only the left ~half — the right side is reserved for branding
+    # and shows the particles clearly.
     scrim = Image.new('RGBA', (FB_WIDTH, HEADER_H), (0, 0, 0, 0))
     sd = ImageDraw.Draw(scrim)
-    sd.rectangle((0, 0, 560, HEADER_H), fill=(0, 0, 0, 70))
+    sd.rectangle((0, 0, 560, HEADER_H), fill=(0, 0, 0, 75))
     base = img.convert('RGBA')
     base.alpha_composite(scrim)
     img.paste(base.convert('RGB'))
     draw = ImageDraw.Draw(img)
 
-    draw.rectangle((0, HEADER_H - 2, FB_WIDTH, HEADER_H), fill=_darken(alr_clr, 0.45))
+    draw.rectangle((0, HEADER_H - 2, FB_WIDTH, HEADER_H),
+                   fill=_darken(alr_clr, 0.45))
 
     # Event name (left)
     draw.text((16, 10), event_name, font=fonts['title'], fill=WHITE)
@@ -726,7 +1518,13 @@ def generate_alert_image(
         pass
 
     # ── Map (left side) ──────────────────────────────────────────────────────
+    # Storm motion is only meaningful for convective / wind / water events.
+    # Suppress it on advisories like FROST / HEAT / FOG where the IPAWS
+    # blob may still carry a stale motion vector — it adds noise without
+    # information for non-convective events.
     storm_motion = (ipaws_data or {}).get('storm_motion')
+    if storm_motion and not _theme_supports_storm_motion(theme):
+        storm_motion = None
     map_img: Optional[Image.Image] = None
     try:
         from app_core.extensions import db
@@ -764,7 +1562,8 @@ def generate_alert_image(
             if geom_json:
                 map_img = _render_map(json.loads(geom_json), severity,
                                       storm_motion=storm_motion,
-                                      boundary_features=boundary_features)
+                                      boundary_features=boundary_features,
+                                      theme=theme)
     except Exception:
         pass
 
@@ -775,6 +1574,9 @@ def generate_alert_image(
         md.text(((MAP_W - _tw(fonts['small'], lbl)) // 2, MAP_H // 2 - 8),
                 lbl, font=fonts['small'], fill=_TEXT_MUT)
 
+    # Round the map's corners so it sits visually inside the rounded
+    # canvas instead of butting up against sharp 90° edges.
+    map_img = _round_image_corners(map_img, MAP_CORNER_R, bg=_BG)
     img.paste(map_img, (0, HEADER_H))
 
     # Thin vertical separator
@@ -826,9 +1628,16 @@ def generate_alert_image(
     draw.text((FB_WIDTH - _tw(fonts['small'], credit) - 12, cy_pos),
               credit, font=fonts['small'], fill=_TEXT_MUT)
 
-    # ── Serialise ────────────────────────────────────────────────────────────
+    # ── Round outer corners and serialise ────────────────────────────────────
+    # Soft rounded corners across the whole share card — matches modern
+    # feed cards and stops the image looking like a screenshot.  PNG keeps
+    # the corner pixels fully transparent so renderers that respect alpha
+    # show a true rounded shape; renderers that flatten get the matte
+    # they composite against (usually white on social feeds).
+    img_rounded = _round_image_corners(img, CORNER_R, bg=None)
+
     buf = io.BytesIO()
-    img.save(buf, format='PNG', optimize=True)
+    img_rounded.save(buf, format='PNG', optimize=True)
     return buf.getvalue()
 
 
