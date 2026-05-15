@@ -6,8 +6,8 @@
 
         logos.forEach(logo => {
             // The brand logo is now an <img> referencing the canonical
-            // file at static/img/eas-station-logo.png — injecting SVG
-            // <defs> only makes sense on inline SVG elements.  Skip
+            // wordmark at static/img/eas-system-wordmark.svg — injecting
+            // SVG <defs> only makes sense on inline SVG elements.  Skip
             // anything else so we don't throw on <img> tags.
             if (logo.tagName.toLowerCase() !== 'svg') return;
             if (logo.querySelector('defs')) return;
