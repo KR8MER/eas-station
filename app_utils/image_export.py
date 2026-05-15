@@ -1131,7 +1131,7 @@ def _draw_storm_track(canvas: Image.Image, storm: Dict,
         tlx = int(last_x + nx * tail_w)
         tly = int(last_y + ny * tail_w)
         trx = int(last_x - nx * tail_w)
-        tryy = int(last_y - ny * tail_w)
+        try_ = int(last_y - ny * tail_w)
         # Mid waist (where the head meets the shaft)
         mid_x = last_x + int(dx * arrow_len * 0.55)
         mid_y = last_y + int(dy * arrow_len * 0.55)
@@ -1148,7 +1148,7 @@ def _draw_storm_track(canvas: Image.Image, storm: Dict,
         arrow_poly = [
             (tlx, tly), (mlx, mly), (hlx, hly),
             (atip_x, atip_y),
-            (hrx, hry), (mrx, mry), (trx, tryy),
+            (hrx, hry), (mrx, mry), (trx, try_),
         ]
         # Shadow offset
         sh = [(p[0] + 2, p[1] + 2) for p in arrow_poly]
