@@ -49,12 +49,37 @@ Usage::
 import io
 import json
 import math
+import os
 import random
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests as _http
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
+
+# ─── Canonical brand logo ──────────────────────────────────────────────────
+# Single source of truth for the EAS Station brand logo image.  Update the
+# file at this path and every consumer — favicons, on-page <img> tags, this
+# share-image renderer — picks it up automatically.
+_LOGO_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    'static', 'img', 'eas-station-logo.png',
+)
+_LOGO_CACHE: Optional[Image.Image] = None
+
+
+def _load_logo() -> Optional[Image.Image]:
+    """Load the canonical EAS Station logo PNG (cached, RGBA)."""
+    global _LOGO_CACHE
+    if _LOGO_CACHE is not None:
+        return _LOGO_CACHE
+    try:
+        with Image.open(_LOGO_PATH) as im:
+            _LOGO_CACHE = im.convert('RGBA').copy()
+        return _LOGO_CACHE
+    except Exception:
+        return None
+
 
 # ─── Canvas dimensions (Facebook recommended: 1200×630) ────────────────────
 FB_WIDTH    = 1200
@@ -1220,12 +1245,17 @@ def _draw_storm_track(canvas: Image.Image, storm: Dict,
 
 def _render_map(geom: Dict, severity: str,
                 storm_motion: Optional[Dict] = None,
-                boundary_features: Optional[List[Dict]] = None,
                 theme: Optional[_Theme] = None) -> Image.Image:
     """Return a MAP_W×MAP_H RGB map image with the alert polygon overlaid.
 
     *theme* drives the polygon stroke / storm-motion accent colours; if
     omitted we fall back to the severity palette (legacy behaviour).
+
+    The map intentionally renders only the alert polygon (plus optional
+    storm-motion overlay) on top of OSM tiles — county/zone boundary
+    outlines and centroid name labels were removed because they made
+    the share image cluttered and unreadable when multiple boundaries
+    overlapped.
     """
     fallback = Image.new('RGB', (MAP_W, MAP_H), (35, 42, 62))
     fd = ImageDraw.Draw(fallback)
@@ -1327,28 +1357,10 @@ def _render_map(geom: Dict, severity: str,
         od = ImageDraw.Draw(canvas)
 
     # ── Boundary overlays ─────────────────────────────────────────────────────
-    # Draw county boundaries thicker/brighter; other service boundaries thinner.
-    for feat in (boundary_features or []):
-        bgeom   = feat.get('geometry', {})
-        btype   = feat.get('type', '').lower()
-        bgt     = bgeom.get('type', '')
-        bcoords = bgeom.get('coordinates', [])
-        brings: List[List] = []
-        if bgt == 'Polygon':
-            brings = bcoords
-        elif bgt == 'MultiPolygon':
-            brings = [r for poly in bcoords for r in poly]
-
-        is_county = (btype == 'county')
-        lw = 2 if is_county else 1
-        line_clr = (255, 255, 255) if is_county else (210, 220, 235)
-
-        for ring in brings:
-            bpts = _to_px(ring)
-            if len(bpts) >= 2:
-                closed = bpts + [bpts[0]]
-                od.line(closed, fill=(0, 0, 0),   width=lw + 2)   # shadow
-                od.line(closed, fill=line_clr,     width=lw)        # outline
+    # Boundary outlines and centroid name labels were intentionally removed:
+    # when multiple county / zone boundaries overlapped (or sat close to the
+    # alert polygon) the labels collided and produced a cluttered, unreadable
+    # share image.  Only the alert polygon and storm-motion overlay are drawn.
 
     # Crop to MAP_W × MAP_H centred on the padded bbox
     cx = int((_lon_to_tx((min_lon + max_lon) / 2, z) - tx_min) * TILE_SIZE)
@@ -1368,42 +1380,7 @@ def _render_map(geom: Dict, severity: str,
     if cropped.size != (MAP_W, MAP_H):
         cropped = cropped.resize((MAP_W, MAP_H), Image.LANCZOS)
 
-    # ── Post-crop: boundary name labels ───────────────────────────────────────
-    cd       = ImageDraw.Draw(cropped)
-    lbl_font = fonts['small']
-
-    # Gather labels — county boundaries get the name shown; other types get a
-    # shorter label only when no county is present (avoids clutter).
-    has_county_feat = any(f.get('type', '').lower() == 'county'
-                          for f in (boundary_features or []))
-    seen_labels: set = set()
-
-    for feat in (boundary_features or []):
-        name  = (feat.get('name') or '').strip()
-        btype = feat.get('type', '').lower()
-        if not name or name in seen_labels:
-            continue
-        if has_county_feat and btype != 'county':
-            continue   # skip non-county when county data is available
-        cent = _geojson_centroid(feat.get('geometry', {}))
-        if cent is None:
-            continue
-        clon, clat = cent
-        lx = int((_lon_to_tx(clon, z) - tx_min) * TILE_SIZE) - x1
-        ly = int((_lat_to_ty(clat, z) - ty_min) * TILE_SIZE) - y1
-        lw_ = _tw(lbl_font, name)
-        lh_ = _th(lbl_font, name)
-        # Only render if centroid falls inside the viewport with some margin
-        if lw_ // 2 + 4 <= lx <= MAP_W - lw_ // 2 - 4 and lh_ + 4 <= ly <= MAP_H - 4:
-            tx0, ty0 = lx - lw_ // 2, ly - lh_ // 2
-            # Pill background for readability
-            pad = 3
-            cd.rounded_rectangle(
-                (tx0 - pad, ty0 - pad, tx0 + lw_ + pad, ty0 + lh_ + pad),
-                radius=3, fill=(0, 0, 0),
-            )
-            cd.text((tx0, ty0), name, font=lbl_font, fill=(255, 255, 255))
-            seen_labels.add(name)
+    cd = ImageDraw.Draw(cropped)
 
     # ── OSM attribution (required by tile usage policy) ───────────────────────
     attr     = '\u00a9 OpenStreetMap contributors'
@@ -1502,10 +1479,29 @@ def generate_alert_image(
     sub_text = '  |  '.join(sub_parts)
     draw.text((18, 52), sub_text, font=fonts['small'], fill=(*WHITE, 200))  # type: ignore[arg-type]
 
-    # Branding (top-right)
-    brand = 'EAS STATION'
-    draw.text((FB_WIDTH - _tw(fonts['head'], brand) - 16, 10),
-              brand, font=fonts['head'], fill=WHITE)
+    # Branding (top-right) — render the canonical EAS Station logo image so
+    # updating the brand asset is just a matter of swapping the file at
+    # static/img/eas-station-logo.png.  Fall back to the legacy text mark
+    # only if the file is missing or fails to load.
+    logo = _load_logo()
+    brand_right = FB_WIDTH - 16
+    if logo is not None:
+        logo_h = HEADER_H - 16
+        # Preserve aspect ratio
+        ratio = logo_h / float(logo.height)
+        logo_w = max(1, int(round(logo.width * ratio)))
+        logo_resized = logo.resize((logo_w, logo_h), Image.LANCZOS)
+        lx = brand_right - logo_w
+        ly = (HEADER_H - logo_h) // 2
+        # Paste with the logo's own alpha so the header gradient shows through
+        base_rgba = img.convert('RGBA')
+        base_rgba.alpha_composite(logo_resized, dest=(lx, ly))
+        img.paste(base_rgba.convert('RGB'))
+        draw = ImageDraw.Draw(img)
+    else:
+        brand = 'EAS STATION'
+        draw.text((brand_right - _tw(fonts['head'], brand), 10),
+                  brand, font=fonts['head'], fill=WHITE)
 
     # Sent time (right, lower)
     try:
@@ -1528,7 +1524,7 @@ def generate_alert_image(
     map_img: Optional[Image.Image] = None
     try:
         from app_core.extensions import db
-        from app_core.models import CAPAlert as _CA, Boundary as _Bdy, Intersection as _Isect
+        from app_core.models import CAPAlert as _CA
         from sqlalchemy import func as _func
         alert_id = getattr(alert, 'id', None)
         if alert_id is not None:
@@ -1537,32 +1533,9 @@ def generate_alert_image(
                 .filter(_CA.id == alert_id)
                 .scalar()
             )
-            # Query intersecting boundary geometries for county outlines + labels
-            boundary_features: List[Dict[str, Any]] = []
-            try:
-                rows = (
-                    db.session.query(
-                        _Bdy.name,
-                        _Bdy.type,
-                        _func.ST_AsGeoJSON(_Bdy.geom).label('geom_json'),
-                    )
-                    .join(_Isect, _Isect.boundary_id == _Bdy.id)
-                    .filter(_Isect.cap_alert_id == alert_id)
-                    .all()
-                )
-                for row in rows:
-                    if row.geom_json:
-                        boundary_features.append({
-                            'name':     row.name or '',
-                            'type':     (row.type or '').lower(),
-                            'geometry': json.loads(row.geom_json),
-                        })
-            except Exception:
-                pass
             if geom_json:
                 map_img = _render_map(json.loads(geom_json), severity,
                                       storm_motion=storm_motion,
-                                      boundary_features=boundary_features,
                                       theme=theme)
     except Exception:
         pass

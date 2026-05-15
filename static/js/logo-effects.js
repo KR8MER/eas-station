@@ -5,6 +5,11 @@
         const logos = document.querySelectorAll('.logo-wordmark, .brand-logo');
 
         logos.forEach(logo => {
+            // The brand logo is now an <img> referencing the canonical
+            // file at static/img/eas-station-logo.png — injecting SVG
+            // <defs> only makes sense on inline SVG elements.  Skip
+            // anything else so we don't throw on <img> tags.
+            if (logo.tagName.toLowerCase() !== 'svg') return;
             if (logo.querySelector('defs')) return;
 
             const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
