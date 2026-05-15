@@ -4843,11 +4843,51 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 
 /* 12. LOGO ENHANCEMENTS - VISIBILITY & CONTRAST */
 
-/* Base logo styling with enhanced visibility */
+/* Base logo styling with enhanced visibility.
+   The canonical wordmark is shipped as a static SVG referenced via <img>
+   (see templates/partials/logo_wordmark.html), so internal SVG classes
+   like .logo-text-primary can't be restyled from this stylesheet. The
+   SVG bakes in dark slate text (#1e293b / #64748b) which disappears
+   against dark navbars/page backgrounds. To restore contrast on every
+   theme without re-rasterizing the PNG companion, we apply a soft
+   drop-shadow "halo" to the <img> itself; the filter uses the rendered
+   alpha mask, so it traces the glyphs and the icon bars. Each theme can
+   tune the halo via the --logo-halo custom property below. */
 .logo-wordmark,
 .brand-logo {
+    /* Default halo: subtle dark shadow for light/colored navbars. */
+    --logo-halo:
+        drop-shadow(0 1px 1px rgba(255, 255, 255, 0.55))
+        drop-shadow(0 0 2px rgba(0, 0, 0, 0.25));
+    filter: var(--logo-halo);
     transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
     will-change: transform, filter;
+}
+
+/* Dark themes: swap to a light halo so the dark slate glyphs in the
+   SVG pop against dark backgrounds instead of blending in. */
+[data-theme="dark"] .logo-wordmark,
+[data-theme="dark"] .brand-logo,
+[data-theme="coffee"] .logo-wordmark,
+[data-theme="coffee"] .brand-logo,
+[data-theme="aurora"] .logo-wordmark,
+[data-theme="aurora"] .brand-logo,
+[data-theme="nebula"] .logo-wordmark,
+[data-theme="nebula"] .brand-logo,
+[data-theme="midnight"] .logo-wordmark,
+[data-theme="midnight"] .brand-logo,
+[data-theme="charcoal"] .logo-wordmark,
+[data-theme="charcoal"] .brand-logo,
+[data-theme="obsidian"] .logo-wordmark,
+[data-theme="obsidian"] .brand-logo,
+[data-theme="slate"] .logo-wordmark,
+[data-theme="slate"] .brand-logo,
+[data-theme="lightning"] .logo-wordmark,
+[data-theme="lightning"] .brand-logo {
+    --logo-halo:
+        drop-shadow(0 0 1px rgba(255, 255, 255, 0.95))
+        drop-shadow(0 0 4px rgba(255, 255, 255, 0.75))
+        drop-shadow(0 0 10px rgba(255, 255, 255, 0.35));
 }
 
 /* Logo text with strong shadows for visibility on all backgrounds */
