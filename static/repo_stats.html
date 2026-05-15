@@ -295,7 +295,7 @@
         <div class="hero-section">
             <h1>📊 EAS Station Repository Statistics</h1>
             <p class="timestamp">
-                <i class="far fa-clock"></i> Last Updated: 2026-05-15 11:32:02 UTC
+                <i class="far fa-clock"></i> Last Updated: 2026-05-15 12:14:16 UTC
             </p>
         </div>
         
@@ -313,17 +313,17 @@
             </div>
             <div class="quick-stat-item">
                 <div class="icon">📝</div>
-                <div class="value">704,549</div>
+                <div class="value">704,589</div>
                 <div class="label">Total Lines</div>
             </div>
             <div class="quick-stat-item">
                 <div class="icon">💻</div>
-                <div class="value">531,935</div>
+                <div class="value">531,960</div>
                 <div class="label">Code Lines</div>
             </div>
             <div class="quick-stat-item">
                 <div class="icon">💬</div>
-                <div class="value">113,472</div>
+                <div class="value">113,486</div>
                 <div class="label">Comments</div>
             </div>
             <div class="quick-stat-item">
@@ -443,9 +443,9 @@
                         </tr>
                         <tr>
                             <td><strong><svg viewBox="0 0 24 24" width="20" height="20" fill="#1572B6" style="vertical-align: middle; margin-right: 6px;"><path d="M1.5 0h21l-1.91 21.563L11.977 24l-8.565-2.438L1.5 0zm17.09 4.413L5.41 4.41l.213 2.622 10.125.002-.255 2.716h-6.64l.24 2.573h6.182l-.366 3.523-2.91.804-2.956-.81-.188-2.11h-2.61l.29 3.855L12 19.288l5.373-1.53L18.59 4.414z"/></svg>CSS</strong></td>
-                            <td class="text-end">29,603</td>
-                            <td class="text-end">13,789</td>
-                            <td class="text-end">8,835</td>
+                            <td class="text-end">29,643</td>
+                            <td class="text-end">13,814</td>
+                            <td class="text-end">8,849</td>
                             <td class="text-end">47%</td>
                             <td>
                                 <div style="background: #e9ecef; border-radius: 4px; height: 8px; overflow: hidden;">
@@ -574,7 +574,7 @@
             data: {
                 labels: ['💻 Code', '💬 Comments', '⬜ Whitespace'],
                 datasets: [{
-                    data: [531935, 113472, 59142],
+                    data: [531960, 113486, 59143],
                     backgroundColor: [
                         'rgba(102, 126, 234, 0.8)',
                         'rgba(118, 75, 162, 0.8)',
@@ -607,7 +607,7 @@
                             label: function(context) {
                                 let label = context.label || '';
                                 let value = context.parsed || 0;
-                                let total = 704549;
+                                let total = 704589;
                                 let percentage = ((value / total) * 100).toFixed(1);
                                 return label + ': ' + value.toLocaleString() + ' lines (' + percentage + '%)';
                             }
@@ -684,7 +684,7 @@
                 labels: ["JSON", "Python", "YAML", "HTML", "Markdown", "CSS", "JavaScript", "SVG"],
                 datasets: [{
                     label: 'Lines of Code',
-                    data: [208171, 66222, 97772, 74332, 33944, 13789, 19451, 8002],
+                    data: [208171, 66222, 97772, 74332, 33944, 13814, 19451, 8002],
                     backgroundColor: 'rgba(118, 75, 162, 0.8)',
                     borderColor: 'rgba(118, 75, 162, 1)',
                     borderWidth: 2,
@@ -741,7 +741,7 @@
         new Chart(routesByModuleCtx, {
             type: 'bar',
             data: {
-                labels: ["routes_led", "routes_settings_radio", "routes_screens", "routes_public", "routes_audio_archive", "routes_vfd", "routes_analytics", "routes_backups", "routes_setup", "routes_monitoring", "routes_stream_profiles", "eas/workflow", "routes/system_controls", "routes/alert_verification", "documentation"],
+                labels: ["routes_led", "routes_settings_radio", "routes_screens", "routes_public", "routes_audio_archive", "routes_analytics", "routes_vfd", "routes_monitoring", "routes_setup", "routes_backups", "routes_stream_profiles", "eas/workflow", "routes/system_controls", "routes/alert_verification", "documentation"],
                 datasets: [{
                     label: 'Number of Routes',
                     data: [25, 21, 17, 16, 14, 12, 12, 11, 11, 11, 9, 9, 8, 7, 6],
