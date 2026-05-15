@@ -128,3 +128,9 @@ pyproj==3.7.1  # CRS reprojection from shapefile .prj to WGS84 (optional, gracef
 
 # Audio processing - audioop replacement for Python 3.13+
 audioop-lts==0.2.2  # Drop-in replacement for audioop (removed in Python 3.13)
+
+# Cryptography - Ed25519 signatures for the tamper-evident audit-log chain
+# (see app_core/auth/audit.py AuditLogger.verify_chain).  Pinned >=46.0.5 to
+# avoid GHSA on SECT-curve subgroup validation (we use Ed25519, which is
+# unaffected, but the same library exposes the affected curves).
+cryptography>=46.0.5

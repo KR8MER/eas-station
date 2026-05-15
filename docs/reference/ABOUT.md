@@ -56,6 +56,7 @@ The application combines open-source tooling and optional cloud integrations. Ve
 - pytz 2024.2 timezone utilities
 - psutil 6.1.1 system health and receiver monitoring
 - python-dotenv 1.0.1 configuration loading
+- cryptography ≥ 46.0.5 — Ed25519 signing and SHA-256 hashing backing the tamper-evident `audit_logs` chain (see `app_core/auth/audit.py::AuditLogger.verify_chain`)
 
 ### Front-End Tooling
 - Bootstrap 5 UI framework

@@ -32,6 +32,7 @@
 [![Leaflet](https://img.shields.io/badge/Leaflet-1.9.4-199900?style=flat-square&logo=leaflet&logoColor=white)](https://leafletjs.com/)
 [![Chart.js](https://img.shields.io/badge/Chart.js-3.9.1-FF6384?style=flat-square&logo=chartdotjs&logoColor=white)](https://www.chartjs.org/)
 [![PyOTP](https://img.shields.io/badge/PyOTP-2.9.0-2E7D32?style=flat-square)](https://pyauth.github.io/pyotp/)
+[![cryptography](https://img.shields.io/badge/cryptography-46.0.5-2c5282?style=flat-square)](https://cryptography.io/)
 [![Twilio](https://img.shields.io/badge/Twilio-SMS-F22F46?style=flat-square&logo=twilio&logoColor=white)](https://www.twilio.com/)
 [![chrony](https://img.shields.io/badge/chrony-NTP-1F4E79?style=flat-square)](https://chrony-project.org/)
 [![gpsd](https://img.shields.io/badge/gpsd-3.x-2E86AB?style=flat-square)](https://gpsd.gitlab.io/gpsd/)
@@ -520,6 +521,7 @@ EAS Station stands on the shoulders of an enormous open‑source ecosystem. The 
 | Library | Version | License | Purpose in EAS Station | Project |
 |---|---|---|---|---|
 | PyOTP | 2.9.0 | MIT | TOTP generation and verification for the MFA login flow. | https://pyauth.github.io/pyotp/ |
+| cryptography | ≥ 46.0.5 | Apache‑2.0 / BSD‑3‑Clause | Ed25519 signing and SHA‑256 hashing for the tamper‑evident `audit_logs` chain — every audit row is hash‑chained to its predecessor and signed so post‑hoc DB edits are detectable via `AuditLogger.verify_chain()`. | https://cryptography.io/ |
 | qrcode | 8.2 | BSD‑3‑Clause | Renders the QR code shown during MFA enrollment. | https://github.com/lincolnloop/python-qrcode |
 | Twilio | ≥ 9.0 | MIT | SMS delivery for alert‑forwarding and compliance‑health notifications. | https://www.twilio.com/ |
 | pysnmp | ≥ 6.2 | BSD‑2‑Clause | Sends SNMP v2c traps when compliance health degrades (optional; gracefully absent). | https://pysnmp.readthedocs.io/ |

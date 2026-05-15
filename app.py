@@ -563,6 +563,21 @@ app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
 # Initialize database
 db.init_app(app)
 
+# Wire the alert-lifecycle audit listeners onto the SQLAlchemy session.
+# This must happen AFTER db.init_app() but BEFORE the first request so that
+# every CAPAlert / EASMessage / ManualEASActivation insert is captured in
+# the tamper-evident audit chain.  The function is idempotent so re-running
+# the app factory in tests is safe.
+try:
+    from app_core.auth.audit_listeners import register_audit_listeners
+    register_audit_listeners()
+except Exception as _audit_listener_exc:  # noqa: BLE001 - never block startup
+    app.logger.warning(
+        "audit listeners failed to register; alert-lifecycle audit "
+        "rows will not be auto-generated until restart: %s",
+        _audit_listener_exc,
+    )
+
 # Initialize caching
 init_cache(app)
 
