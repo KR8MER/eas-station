@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200" width="800" height="200">
   <defs>
     <style>
-      .text-primary { fill: #1e293b; }
-      .text-secondary { fill: #64748b; }
+      .text-primary { fill: #ffffff; }
+      .text-secondary { fill: #e2e8f0; }
       .accent { fill: #ef4444; }
     </style>
   </defs>
