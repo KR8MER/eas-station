@@ -1,0 +1,103 @@
+<svg viewBox="0 0 850 200" xmlns="http://www.w3.org/2000/svg" class="logo-wordmark" role="img" aria-label="EAS Station logo">
+    <title>EAS Station</title>
+    <defs>
+        <!-- Modern gradients -->
+        <linearGradient id="modernGradient1" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:var(--primary-color, #204885);stop-opacity:1" />
+            <stop offset="100%" style="stop-color:var(--secondary-color, #872a96);stop-opacity:1" />
+        </linearGradient>
+        <linearGradient id="modernGradient2" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:var(--accent-color, #4f6fb3);stop-opacity:1" />
+            <stop offset="100%" style="stop-color:var(--primary-color, #204885);stop-opacity:1" />
+        </linearGradient>
+        <!-- Glow effect -->
+        <filter id="glow">
+            <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+            <feMerge>
+                <feMergeNode in="coloredBlur"/>
+                <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+        </filter>
+    </defs>
+    
+    <!-- Icon: Alert/Shield emblem with modern geometric design -->
+    <g class="logo-icon" transform="translate(20, 30)">
+        <!-- Shield/Badge outline -->
+        <path d="M 60 20 L 90 35 L 90 75 Q 90 95, 60 110 Q 30 95, 30 75 L 30 35 Z" 
+              fill="url(#modernGradient1)" 
+              opacity="0.15"
+              class="logo-shield-bg"/>
+        
+        <!-- Alert symbol inside shield -->
+        <g class="logo-alert-symbol" transform="translate(60, 55)">
+            <!-- Triangle for alert -->
+            <path d="M 0 -25 L 15 10 L -15 10 Z" 
+                  fill="none" 
+                  stroke="url(#modernGradient1)" 
+                  stroke-width="5" 
+                  stroke-linejoin="round"
+                  class="logo-triangle"/>
+            <!-- Exclamation mark -->
+            <line x1="0" y1="-15" x2="0" y2="-5" 
+                  stroke="url(#modernGradient1)" 
+                  stroke-width="4" 
+                  stroke-linecap="round"
+                  class="logo-exclaim-line"/>
+            <circle cx="0" cy="2" r="2.5" 
+                    fill="url(#modernGradient1)"
+                    class="logo-exclaim-dot"/>
+        </g>
+        
+        <!-- Decorative broadcast waves emanating -->
+        <g class="logo-broadcast-waves" opacity="0.6">
+            <path d="M 10 40 Q 5 55, 10 70" 
+                  fill="none" 
+                  stroke="var(--primary-color, #204885)" 
+                  stroke-width="3" 
+                  stroke-linecap="round"
+                  class="logo-wave-left"/>
+            <path d="M 110 40 Q 115 55, 110 70" 
+                  fill="none" 
+                  stroke="var(--secondary-color, #872a96)" 
+                  stroke-width="3" 
+                  stroke-linecap="round"
+                  class="logo-wave-right"/>
+        </g>
+    </g>
+    
+    <!-- Main text: EAS -->
+    <g class="logo-main-text">
+        <text x="160" y="105" 
+              font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" 
+              font-size="72" 
+              font-weight="900" 
+              letter-spacing="-1"
+              fill="var(--primary-color, #204885)" 
+              class="logo-text-primary">EAS</text>
+    </g>
+    
+    <!-- Accent line -->
+    <rect x="160" y="120" width="100" height="4" 
+          rx="2"
+          fill="url(#modernGradient1)" 
+          opacity="0.7"
+          class="logo-accent-line"/>
+    
+    <!-- Secondary text: Station -->
+    <g class="logo-secondary-text">
+        <text x="160" y="155" 
+              font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" 
+              font-size="42" 
+              font-weight="400" 
+              letter-spacing="5"
+              fill="var(--text-secondary, #5a6c8f)" 
+              class="logo-text-secondary">STATION</text>
+    </g>
+    
+    <!-- Status indicator dots (optional, can animate) -->
+    <g class="logo-status-dots" transform="translate(320, 115)" opacity="0.5">
+        <circle cx="0" cy="0" r="4" fill="var(--success-color, #2eb08d)" class="logo-status-dot-1"/>
+        <circle cx="15" cy="0" r="4" fill="var(--warning-color, #f6b968)" class="logo-status-dot-2"/>
+        <circle cx="30" cy="0" r="4" fill="var(--danger-color, #e05263)" class="logo-status-dot-3"/>
+    </g>
+</svg>

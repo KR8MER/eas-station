@@ -1,0 +1,147 @@
+<svg viewBox="0 0 800 180" xmlns="http://www.w3.org/2000/svg" class="logo-wordmark" role="img" aria-label="EAS Station logo">
+    <title>EAS Station</title>
+    <defs>
+        <!-- Sleek gradient -->
+        <linearGradient id="sleekGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:var(--primary-color, #204885);stop-opacity:1" />
+            <stop offset="50%" style="stop-color:var(--accent-color, #4f6fb3);stop-opacity:1" />
+            <stop offset="100%" style="stop-color:var(--secondary-color, #872a96);stop-opacity:1" />
+        </linearGradient>
+        <!-- Subtle glow -->
+        <filter id="subtleGlow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="1.5" result="blur"/>
+            <feComponentTransfer in="blur" result="glow">
+                <feFuncA type="linear" slope="0.8"/>
+            </feComponentTransfer>
+            <feMerge>
+                <feMergeNode in="glow"/>
+                <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+        </filter>
+    </defs>
+    
+    <!-- Icon: Minimalist waveform/pulse design -->
+    <g class="logo-icon" transform="translate(25, 60)">
+        <!-- Modern pulse/waveform bars -->
+        <rect x="0" y="25" width="12" height="30" rx="6" 
+              fill="url(#sleekGradient)" 
+              opacity="0.4"
+              class="logo-bar logo-bar-1">
+            <animate attributeName="height" 
+                     values="30;50;30" 
+                     dur="1.5s" 
+                     repeatCount="indefinite"
+                     begin="0s"/>
+            <animate attributeName="y" 
+                     values="25;15;25" 
+                     dur="1.5s" 
+                     repeatCount="indefinite"
+                     begin="0s"/>
+        </rect>
+        
+        <rect x="18" y="15" width="12" height="50" rx="6" 
+              fill="url(#sleekGradient)" 
+              opacity="0.6"
+              class="logo-bar logo-bar-2">
+            <animate attributeName="height" 
+                     values="50;70;50" 
+                     dur="1.5s" 
+                     repeatCount="indefinite"
+                     begin="0.3s"/>
+            <animate attributeName="y" 
+                     values="15;5;15" 
+                     dur="1.5s" 
+                     repeatCount="indefinite"
+                     begin="0.3s"/>
+        </rect>
+        
+        <rect x="36" y="20" width="12" height="40" rx="6" 
+              fill="url(#sleekGradient)" 
+              opacity="0.8"
+              class="logo-bar logo-bar-3">
+            <animate attributeName="height" 
+                     values="40;65;40" 
+                     dur="1.5s" 
+                     repeatCount="indefinite"
+                     begin="0.6s"/>
+            <animate attributeName="y" 
+                     values="20;7.5;20" 
+                     dur="1.5s" 
+                     repeatCount="indefinite"
+                     begin="0.6s"/>
+        </rect>
+        
+        <rect x="54" y="10" width="12" height="60" rx="6" 
+              fill="url(#sleekGradient)" 
+              class="logo-bar logo-bar-4">
+            <animate attributeName="height" 
+                     values="60;75;60" 
+                     dur="1.5s" 
+                     repeatCount="indefinite"
+                     begin="0.9s"/>
+            <animate attributeName="y" 
+                     values="10;2.5;10" 
+                     dur="1.5s" 
+                     repeatCount="indefinite"
+                     begin="0.9s"/>
+        </rect>
+        
+        <rect x="72" y="20" width="12" height="40" rx="6" 
+              fill="url(#sleekGradient)" 
+              opacity="0.8"
+              class="logo-bar logo-bar-5">
+            <animate attributeName="height" 
+                     values="40;58;40" 
+                     dur="1.5s" 
+                     repeatCount="indefinite"
+                     begin="1.2s"/>
+            <animate attributeName="y" 
+                     values="20;11;20" 
+                     dur="1.5s" 
+                     repeatCount="indefinite"
+                     begin="1.2s"/>
+        </rect>
+        
+        <rect x="90" y="28" width="12" height="24" rx="6" 
+              fill="url(#sleekGradient)" 
+              opacity="0.6"
+              class="logo-bar logo-bar-6">
+            <animate attributeName="height" 
+                     values="24;45;24" 
+                     dur="1.5s" 
+                     repeatCount="indefinite"
+                     begin="1.5s"/>
+            <animate attributeName="y" 
+                     values="28;17.5;28" 
+                     dur="1.5s" 
+                     repeatCount="indefinite"
+                     begin="1.5s"/>
+        </rect>
+    </g>
+    
+    <!-- Text: Clean, modern typography -->
+    <text x="150" y="110" 
+          font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" 
+          font-size="68" 
+          font-weight="800" 
+          letter-spacing="-1"
+          fill="var(--primary-color, #204885)" 
+          class="logo-text logo-text-eas"
+          filter="url(#subtleGlow)">EAS</text>
+    
+    <text x="295" y="110" 
+          font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" 
+          font-size="68" 
+          font-weight="300" 
+          letter-spacing="4"
+          fill="var(--text-secondary, #5a6c8f)" 
+          class="logo-text logo-text-station">STATION</text>
+    
+    <!-- Decorative underline with gradient -->
+    <line x1="150" y1="125" x2="630" y2="125" 
+          stroke="url(#sleekGradient)" 
+          stroke-width="2" 
+          opacity="0.3"
+          stroke-linecap="round"
+          class="logo-underline"/>
+</svg>

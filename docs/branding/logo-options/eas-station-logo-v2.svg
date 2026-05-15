@@ -1,0 +1,77 @@
+<svg viewBox="0 0 900 200" xmlns="http://www.w3.org/2000/svg" class="logo-wordmark" role="img" aria-label="EAS Station logo">
+    <title>EAS Station</title>
+    <defs>
+        <!-- Gradient definitions for modern look -->
+        <linearGradient id="primaryGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:var(--primary-color, #204885);stop-opacity:1" />
+            <stop offset="100%" style="stop-color:var(--accent-color, #4f6fb3);stop-opacity:1" />
+        </linearGradient>
+        <linearGradient id="secondaryGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style="stop-color:var(--secondary-color, #872a96);stop-opacity:1" />
+            <stop offset="100%" style="stop-color:var(--accent-color, #4f6fb3);stop-opacity:1" />
+        </linearGradient>
+        <!-- Shadow for depth -->
+        <filter id="logoShadow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur in="SourceAlpha" stdDeviation="3"/>
+            <feOffset dx="0" dy="2" result="offsetblur"/>
+            <feComponentTransfer>
+                <feFuncA type="linear" slope="0.3"/>
+            </feComponentTransfer>
+            <feMerge>
+                <feMergeNode/>
+                <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+        </filter>
+    </defs>
+    
+    <!-- Icon: Modern broadcast/signal wave design -->
+    <g class="logo-icon" transform="translate(30, 50)" filter="url(#logoShadow)">
+        <!-- Central broadcast tower/point -->
+        <circle cx="60" cy="50" r="12" fill="url(#primaryGradient)" class="logo-center-point"/>
+        
+        <!-- Expanding signal waves (modern design) -->
+        <path d="M 60 50 Q 30 30, 20 50 Q 30 70, 60 50" fill="none" stroke="url(#primaryGradient)" stroke-width="8" stroke-linecap="round" opacity="0.9" class="logo-wave logo-wave-1"/>
+        <path d="M 60 50 Q 45 35, 35 50 Q 45 65, 60 50" fill="none" stroke="url(#primaryGradient)" stroke-width="7" stroke-linecap="round" opacity="0.7" class="logo-wave logo-wave-2"/>
+        <path d="M 60 50 Q 52 42, 48 50 Q 52 58, 60 50" fill="none" stroke="url(#primaryGradient)" stroke-width="6" stroke-linecap="round" opacity="0.5" class="logo-wave logo-wave-3"/>
+        
+        <!-- Right side waves -->
+        <path d="M 60 50 Q 90 30, 100 50 Q 90 70, 60 50" fill="none" stroke="url(#secondaryGradient)" stroke-width="8" stroke-linecap="round" opacity="0.9" class="logo-wave logo-wave-4"/>
+        <path d="M 60 50 Q 75 35, 85 50 Q 75 65, 60 50" fill="none" stroke="url(#secondaryGradient)" stroke-width="7" stroke-linecap="round" opacity="0.7" class="logo-wave logo-wave-5"/>
+        <path d="M 60 50 Q 68 42, 72 50 Q 68 58, 60 50" fill="none" stroke="url(#secondaryGradient)" stroke-width="6" stroke-linecap="round" opacity="0.5" class="logo-wave logo-wave-6"/>
+    </g>
+    
+    <!-- Text: EAS in bold, modern sans-serif -->
+    <text x="180" y="125" 
+          font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" 
+          font-size="80" 
+          font-weight="800" 
+          letter-spacing="-2"
+          fill="url(#primaryGradient)" 
+          class="logo-text logo-text-primary">EAS</text>
+    
+    <!-- Divider line -->
+    <line x1="380" y1="75" x2="380" y2="135" 
+          stroke="var(--border-color, #ced7ea)" 
+          stroke-width="2" 
+          opacity="0.5"
+          class="logo-divider"/>
+    
+    <!-- Text: STATION in lighter weight -->
+    <text x="410" y="125" 
+          font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" 
+          font-size="70" 
+          font-weight="300" 
+          letter-spacing="2"
+          fill="var(--text-secondary, #5a6c8f)" 
+          class="logo-text logo-text-secondary">STATION</text>
+    
+    <!-- Subtitle/tagline (optional, can be hidden on mobile) -->
+    <text x="180" y="155" 
+          font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" 
+          font-size="16" 
+          font-weight="500" 
+          letter-spacing="3"
+          fill="var(--text-muted, #8892a6)" 
+          opacity="0.8"
+          class="logo-tagline">EMERGENCY ALERT SYSTEM</text>
+</svg>
