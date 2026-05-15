@@ -52,19 +52,18 @@
 
     /* Timeline styles
      *
-     * The version page predates the project's theme tokens and was originally
-     * authored against a "design system" naming scheme (--color-surface,
-     * --color-text-primary, --color-border, etc.) that was never wired up in
-     * static/css/styles.css. With those variables undefined, var() fell
-     * through to the comma-fallback for backgrounds (white) but had no
-     * fallback for text colors — so every text rule inherited the body's
-     * theme-driven --text-color. On all 7 dark themes (midnight, obsidian,
-     * charcoal, slate, etc.) that meant white-ish text on a white card,
-     * making the Changelog and Features tabs unreadable.
+     * The version page predates the project's theme tokens. An earlier fix
+     * tried to force `color: #0d1b2a` (dark navy) onto these surfaces because
+     * the page assumed `--surface-color` was always white. That assumption is
+     * wrong on the seven dark themes (lightning, midnight, obsidian,
+     * charcoal, slate, aurora, nebula) where `--surface-color` is itself a
+     * dark navy/teal/violet — pinning text to dark navy on a dark surface
+     * makes the Changelog, Features and System Info tabs unreadable.
      *
-     * The fix is to use the variables that actually exist on every theme
-     * (--surface-color, --text-color, --border-color, --bg-color) and to
-     * pin explicit foregrounds on text that sits on solid white surfaces. */
+     * The correct approach is to keep the surface and text tokens paired:
+     * `var(--surface-color)` + `var(--text-color)` always have intentional
+     * theme-tuned contrast, and `var(--text-secondary)` / `--text-muted` are
+     * defined on every theme for de-emphasised text. */
     .timeline {
         position: relative;
         padding: 2rem 0;
@@ -108,11 +107,7 @@
 
     .timeline-content {
         background: var(--surface-color, #ffffff);
-        /* Explicit dark foreground because --surface-color is white on the
-         * majority of themes and the body --text-color is light on dark
-         * themes; without this the body color bleeds in and the card is
-         * unreadable. */
-        color: #0d1b2a;
+        color: var(--text-color, #0d1b2a);
         border: 1px solid var(--border-color, #dee2e6);
         border-radius: var(--radius-md, 0.375rem);
         padding: 1.5rem;
@@ -133,12 +128,12 @@
     }
 
     .timeline-item.current .version-tag {
-        color: #198754; /* Bootstrap success green; --success-color is theme-tinted and may not contrast on white */
+        color: var(--success-color, #198754);
     }
 
     .version-date {
         font-size: 0.875rem;
-        color: #495057;
+        color: var(--text-secondary, #495057);
         margin-bottom: 1rem;
     }
 
@@ -151,7 +146,7 @@
     .change-list li {
         padding: 0.5rem 0 0.5rem 1.75rem;
         position: relative;
-        color: #212529;
+        color: var(--text-color, #212529);
     }
 
     .change-list li::before {
@@ -162,12 +157,12 @@
         width: 4px;
         height: 4px;
         border-radius: 50%;
-        background: #6c757d;
+        background: var(--text-muted, #6c757d);
     }
 
     .change-category {
         font-weight: 600;
-        color: #212529;
+        color: var(--text-color, #212529);
         margin-top: 1rem;
         margin-bottom: 0.5rem;
         display: flex;
@@ -175,10 +170,12 @@
         gap: 0.5rem;
     }
 
-    .change-category.added { color: #198754; }
-    .change-category.fixed { color: #dc3545; }
-    .change-category.changed { color: #0d6efd; }
-    .change-category.removed { color: #6c757d; }
+    /* Tinted category labels are deliberately bright bootstrap hues; they
+     * read on both light and dark surfaces. */
+    .change-category.added { color: #20c997; }
+    .change-category.fixed { color: #ff6b6b; }
+    .change-category.changed { color: #4dabf7; }
+    .change-category.removed { color: var(--text-muted, #6c757d); }
 
     /* Tab styles */
     .nav-tabs .nav-link {
@@ -188,26 +185,26 @@
 
     .tab-content {
         background: var(--surface-color, #ffffff);
-        /* Force a dark text color on the white tab body so dark-theme
-         * --text-color (white-ish) does not bleed through and erase the
-         * content. Cards inside re-assert their own colors. */
-        color: #0d1b2a;
+        color: var(--text-color, #0d1b2a);
         border: 1px solid var(--border-color, #dee2e6);
         border-top: none;
         border-radius: 0 0 var(--radius-md, 0.375rem) var(--radius-md, 0.375rem);
         padding: 2rem;
     }
 
-    /* Section headers on the tab body — Bootstrap h3 inherits color, which
-     * was the body's --text-color before this fix, making the "Release
-     * History" / "Installed Features" / "Documentation Links" headings
-     * disappear on dark themes. Pin them dark explicitly. */
+    /* Section headers and prose inside the tab body inherit the theme text
+     * color so they stay legible on every theme. */
     .tab-content h3,
     .tab-content h4,
     .tab-content h5,
     .tab-content p,
     .tab-content .lead {
-        color: #0d1b2a;
+        color: var(--text-color, #0d1b2a);
+    }
+
+    .tab-content .text-muted,
+    .tab-content small.text-muted {
+        color: var(--text-muted, #6c757d) !important;
     }
 
     /* Feature matrix */
@@ -224,7 +221,7 @@
         gap: 0.75rem;
         padding: 1rem;
         background: var(--surface-color, #ffffff);
-        color: #0d1b2a;
+        color: var(--text-color, #0d1b2a);
         border: 1px solid var(--border-color, #dee2e6);
         border-radius: var(--radius-md, 0.375rem);
     }
@@ -241,28 +238,64 @@
     }
 
     .feature-icon.available {
-        background: #d1fae5;
-        color: #198754;
+        background: rgba(25, 135, 84, 0.18);
+        color: #20c997;
     }
 
     .feature-icon.unavailable {
-        background: #f1f3f5;
-        color: #6c757d;
+        background: rgba(108, 117, 125, 0.18);
+        color: var(--text-muted, #6c757d);
     }
 
     .feature-info {
         flex: 1;
+        min-width: 0;
     }
 
     .feature-name {
         font-weight: 600;
-        color: #212529;
+        color: var(--text-color, #212529);
         margin-bottom: 0.25rem;
     }
 
     .feature-version {
         font-size: 0.75rem;
-        color: #495057;
+        color: var(--text-secondary, #495057);
+    }
+
+    /* Compact feature inventory card on the System Info tab. Uses the same
+     * theme-aware tokens so it reads on both light and dark themes. */
+    .feature-status-list {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 0.5rem;
+    }
+
+    .feature-status-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        padding: 0.5rem 0.25rem;
+        border-bottom: 1px dashed color-mix(in srgb, var(--border-color, #dee2e6) 60%, transparent);
+    }
+
+    .feature-status-row:last-child {
+        border-bottom: none;
+    }
+
+    .feature-status-name {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        color: var(--text-color, #212529);
+        font-weight: 500;
+    }
+
+    .feature-status-name i {
+        color: var(--primary-color);
+        width: 1.1rem;
+        text-align: center;
     }
 </style>
 {% endblock %}
