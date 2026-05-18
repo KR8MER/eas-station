@@ -1294,6 +1294,7 @@
          Severity is communicated by the persistent status strip below,
          not by a handful of pills crammed into the header.
          ============================================================ -->
+
     <div class="gps-dash-header" role="region" aria-label="GPS dashboard header">
         <span class="title">
             <i class="fas fa-satellite-dish"></i>
@@ -5158,6 +5159,8 @@
         filter: '',
         lastSentences: []
     };
+    }
+
     function renderNmeaInspector(sentences) {
         var pauseEl  = document.getElementById('ts-nmea-pause');
         var filterEl = document.getElementById('ts-nmea-filter');
