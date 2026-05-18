@@ -117,6 +117,10 @@ _tower_light_controller = None
 _gps_manager = None
 _zigpy_controller = None
 
+_oled_preview_cache_b64 = None
+_oled_preview_cache_at = 0.0
+OLED_PREVIEW_MIN_INTERVAL_S = 2.0
+
 
 def signal_handler(signum, frame):
     """Handle shutdown signals gracefully."""
@@ -1353,11 +1357,24 @@ def publish_display_state():
                         if hasattr(_screen_manager, '_cached_header_text'):
                             state["oled"]["header_text"] = _screen_manager._cached_header_text
 
-                # Get preview image
+                # Get preview image (throttled). Rendering a base64 PNG on every
+                # publish tick creates heavy allocation churn during rapid OLED
+                # scrolling, so refresh at a low cadence and reuse cached value
+                # between refreshes.
                 try:
-                    preview_image = oled_module.oled_controller.get_preview_image_base64()
-                    if preview_image:
-                        state["oled"]["preview_image"] = preview_image
+                    global _oled_preview_cache_b64, _oled_preview_cache_at
+                    now_mono = time.monotonic()
+                    should_refresh_preview = (
+                        _oled_preview_cache_b64 is None
+                        or (now_mono - _oled_preview_cache_at) >= OLED_PREVIEW_MIN_INTERVAL_S
+                    )
+                    if should_refresh_preview:
+                        preview_image = oled_module.oled_controller.get_preview_image_base64()
+                        if preview_image:
+                            _oled_preview_cache_b64 = preview_image
+                            _oled_preview_cache_at = now_mono
+                    if _oled_preview_cache_b64:
+                        state["oled"]["preview_image"] = _oled_preview_cache_b64
                 except Exception as e:
                     logger.debug(f"Failed to get OLED preview image: {e}")
         except Exception as e:
