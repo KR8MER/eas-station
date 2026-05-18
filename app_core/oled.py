@@ -1221,6 +1221,15 @@ class ArgonOLEDController:
         self._last_image = image.copy()
         self.device.display(image)
 
+    def close(self) -> None:
+        """Release underlying OLED device resources."""
+        try:
+            dev = getattr(self, 'device', None)
+            if dev is not None and hasattr(dev, 'cleanup'):
+                dev.cleanup()
+        except Exception as exc:  # pragma: no cover - hardware specific
+            logger.debug("OLED device cleanup failed: %s", exc)
+
     def flash_invert(self, duration: float = 0.15) -> None:
         """Briefly invert the display for visual feedback.
 
@@ -1309,6 +1318,18 @@ oled_controller: Optional[ArgonOLEDController] = None
 oled_button_device: Optional[Button] = None
 
 _oled_lock = threading.Lock()
+
+
+def _close_oled_controller_safely() -> None:
+    global oled_controller
+    controller = oled_controller
+    oled_controller = None
+    if controller is None:
+        return
+    try:
+        controller.close()
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.debug("Failed to close OLED controller cleanly: %s", exc)
 
 
 def ensure_oled_button(log: Optional[logging.Logger] = None):
@@ -1421,13 +1442,15 @@ def initialise_oled_display(log: Optional[logging.Logger] = None) -> Optional[Ar
     if not oled_enabled:
         logger_ref.debug("OLED display disabled via configuration (enable in Admin > Hardware Settings)")
         OLED_AVAILABLE = False
-        oled_controller = None
+        with _oled_lock:
+            _close_oled_controller_safely()
         return None
 
     if _IMPORT_ERROR is not None:
         logger_ref.warning("OLED dependencies unavailable: %s", _IMPORT_ERROR)
         OLED_AVAILABLE = False
-        oled_controller = None
+        with _oled_lock:
+            _close_oled_controller_safely()
         return None
 
     with _oled_lock:
@@ -1459,7 +1482,7 @@ def initialise_oled_display(log: Optional[logging.Logger] = None) -> Optional[Ar
         except Exception as exc:  # pragma: no cover - hardware specific
             logger_ref.error("Failed to initialise OLED display: %s", exc)
             OLED_AVAILABLE = False
-            oled_controller = None
+            _close_oled_controller_safely()
             return None
 
         oled_controller = controller

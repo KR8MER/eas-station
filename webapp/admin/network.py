@@ -378,6 +378,15 @@ def get_gps_status():
     return jsonify(call_hardware_service('/api/hardware/gps/status', method='GET'))
 
 
+
+
+@network_bp.route('/api/hardware/runtime/diagnostics')
+@require_permission('system.configure')
+def get_hardware_runtime_diagnostics():
+    """Get hardware-service runtime diagnostics via proxy."""
+    return jsonify(call_hardware_service('/api/hardware/runtime/diagnostics', method='GET'))
+
+
 @network_bp.route('/api/hardware/gps/configure', methods=['POST'])
 @require_permission('system.configure')
 def configure_gps():
