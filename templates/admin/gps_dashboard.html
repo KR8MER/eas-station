@@ -5305,6 +5305,7 @@
         renderJammingTimeSeries();
         renderStaleness(gps);
         renderNmeaInspector(gps.recent_sentences || []);
+        renderRuntimeDiagnostics(snapshot);
     }
 
     // ── Polling.  Configurable interval; "0" means paused.

@@ -748,6 +748,15 @@ def gps_dashboard_data():
 
     chrony_payload = _collect_chrony_dashboard_data()
 
+    runtime_payload: Dict[str, Any] = {}
+    try:
+        runtime_payload = call_hardware_service('/api/hardware/runtime/diagnostics', method='GET') or {}
+        if not isinstance(runtime_payload, dict):
+            runtime_payload = {}
+    except Exception:
+        logger.warning('GPS dashboard: hardware runtime diagnostics call failed', exc_info=True)
+        runtime_payload = {'_error': 'hardware_runtime_unavailable'}
+
     host_info: Dict[str, Any] = {
         "hostname": socket.gethostname(),
         "now_utc": datetime.now(timezone.utc).isoformat(),
@@ -758,6 +767,7 @@ def gps_dashboard_data():
         "gps": gps_payload,
         "chrony": chrony_payload,
         "host": host_info,
+        "runtime": runtime_payload,
     })
 
 
