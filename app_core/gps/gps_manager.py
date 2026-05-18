@@ -253,6 +253,7 @@ class GPSManager:
         # traffic on a multi-GNSS receiver so the UI's filter/pause UX has
         # something to scroll through.
         self._recent_sentences: Deque[str] = deque(maxlen=100)
+        self._max_sentence_chars: int = 512
 
         # Time-sync state — reader thread only, no lock needed
         self._time_synced: bool = False
@@ -1087,7 +1088,7 @@ class GPSManager:
                 if not line.startswith("$"):
                     continue
                 with self._lock:
-                    self._recent_sentences.append(line)
+                    self._recent_sentences.append(line[: self._max_sentence_chars])
                 try:
                     msg = pynmea2_mod.parse(line)
                 except pynmea2_mod.ParseError:
@@ -1576,7 +1577,7 @@ class GPSManager:
     def _record_recent_sentence(self, line: str) -> None:
         """Append a raw line to the rolling buffer the UI shows. Threadsafe."""
         with self._lock:
-            self._recent_sentences.append(line.strip())
+            self._recent_sentences.append(line.strip()[: self._max_sentence_chars])
 
     def _close_gpsd_socket(self) -> None:
         sock = self._gpsd_sock
