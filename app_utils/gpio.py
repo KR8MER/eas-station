@@ -622,6 +622,7 @@ class GPIOController:
         self._backend: Optional[GPIOBackend] = None
         self._backend_failures: Set[type] = set()
         self._environment_issues: Set[str] = set()
+        self._max_environment_issues: int = 256
         self._gpiozero_available = bool(
             OutputDevice is not None
             and _ensure_pin_factory(
@@ -647,8 +648,13 @@ class GPIOController:
     def _record_environment_issue(self, detail: str) -> None:
         explanation = _explain_environment_issue(detail)
         message = explanation or detail
-        if message:
-            self._environment_issues.add(message)
+        if not message:
+            return
+        if message in self._environment_issues:
+            return
+        if len(self._environment_issues) >= self._max_environment_issues:
+            return
+        self._environment_issues.add(message)
 
     def _current_backend_label(self, backend: Optional[GPIOBackend] = None) -> str:
         target = backend if backend is not None else self._backend
