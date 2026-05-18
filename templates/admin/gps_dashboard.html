@@ -3533,9 +3533,14 @@
 
         // Peak jitter.
         var jEl = document.getElementById('qm-jitter');
+        // Match the help-card ladder for Peak Jitter: <5 µs excellent,
+        // 5–20 µs good, 20–50 µs acceptable, 50–200 µs watch,
+        // >200 µs bad.  The headline card has only ok/warn/fault
+        // colours, so keep the excellent+good range green and only
+        // mark truly bad jitter red.
         var jSev = (jitterPeakNs === null) ? 'unknown'
-                 : (jitterPeakNs <= 500) ? 'ok'
-                 : (jitterPeakNs <= 5000) ? 'warn'
+                 : (jitterPeakNs <= 20_000) ? 'ok'
+                 : (jitterPeakNs <= 200_000) ? 'warn'
                  : 'fault';
         setTileSeverity(jEl, jSev);
         if (jEl) jEl.querySelector('.metric-val').textContent = (jitterPeakNs !== null) ? fmtNs(jitterPeakNs) : '—';

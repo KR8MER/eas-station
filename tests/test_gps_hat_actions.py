@@ -27,10 +27,15 @@ def _base_report(**overrides):
             "porf_set": None,
         },
         "pps": {"gpio_device": {"name": "pps0"}},
-        "serial": {"exists": True},
+        "serial": {"device": "/dev/serial0", "exists": True, "resolved": "/dev/ttyAMA0"},
         "packages": {"items": [], "missing_required": []},
         "services": {"items": []},
-        "gpsd_config": {"exists": True, "has_n_flag": True, "baud_flag": 9600},
+        "gpsd_config": {
+            "exists": True,
+            "devices": "/dev/serial0 /dev/pps0",
+            "has_n_flag": True,
+            "baud_flag": 9600,
+        },
         "chrony_config": {
             "exists": True,
             "rtcsync_enabled": True,
@@ -69,3 +74,45 @@ def test_gpsd_source_does_not_warn_to_switch_to_gpsd():
     actions = _build_actions(_base_report(expected_source="gpsd"))
 
     assert "switch_gps_source_to_gpsd" not in {a["id"] for a in actions}
+
+
+def test_gpsd_config_warns_when_devices_miss_active_serial_alias():
+    actions = _build_actions(_base_report(
+        serial={"device": "/dev/serial0", "exists": True, "resolved": "/dev/ttyAMA0"},
+        packages={
+            "items": [{"name": "gpsd", "installed": True, "required": True}],
+            "missing_required": [],
+        },
+        gpsd_config={
+            "exists": True,
+            "devices": "/dev/ttyS0 /dev/pps0",
+            "has_n_flag": True,
+            "baud_flag": 9600,
+        },
+    ))
+
+    fix_actions = [a for a in actions if a["id"] == "fix_gpsd_options"]
+    assert len(fix_actions) == 1
+    assert "active GPS serial port" in fix_actions[0]["reason"]
+    assert "/dev/serial0 → /dev/ttyAMA0" in fix_actions[0]["reason"]
+    assert fix_actions[0]["runner"]["body"]["devices"] == ["/dev/serial0", "/dev/pps0"]
+
+
+def test_gpsd_config_accepts_serial_alias_or_resolved_target():
+    packages = {
+        "items": [{"name": "gpsd", "installed": True, "required": True}],
+        "missing_required": [],
+    }
+
+    for devices in ("/dev/serial0 /dev/pps0", "/dev/ttyAMA0 /dev/pps0"):
+        actions = _build_actions(_base_report(
+            serial={"device": "/dev/serial0", "exists": True, "resolved": "/dev/ttyAMA0"},
+            packages=packages,
+            gpsd_config={
+                "exists": True,
+                "devices": devices,
+                "has_n_flag": True,
+                "baud_flag": 9600,
+            },
+        ))
+        assert "fix_gpsd_options" not in {a["id"] for a in actions}

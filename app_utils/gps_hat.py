@@ -688,6 +688,11 @@ def _build_actions(report: Dict[str, Any]) -> List[Dict[str, Any]]:
 
     # 5. gpsd config — needs DEVICES + -n + correct baud
     gpsd_installed = any(p["name"] == "gpsd" and p["installed"] for p in pkg["items"])
+    configured_serial = str(serial.get("device") or "/dev/serial0")
+    resolved_serial = str(serial.get("resolved") or "")
+    pps_name = pps.get("gpio_device", {}).get("name") if isinstance(pps.get("gpio_device"), dict) else None
+    configured_pps = f"/dev/{pps_name}" if pps_name and not str(pps_name).startswith("/dev/") else (pps_name or "/dev/pps0")
+    recommended_gpsd_devs = [configured_serial, configured_pps]
     if gpsd_installed:
         if not gpsd_cfg.get("exists"):
             actions.append({
@@ -697,7 +702,7 @@ def _build_actions(report: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "reason": "gpsd is installed but /etc/default/gpsd is missing.",
                 "command": (
                     "sudo tee /etc/default/gpsd <<'EOF'\n"
-                    'DEVICES="/dev/serial0 /dev/pps0"\n'
+                    f'DEVICES="{configured_serial} {configured_pps}"\n'
                     f'GPSD_OPTIONS="-n -b -s {expected_baud}"\n'
                     'START_DAEMON="true"\n'
                     'USBAUTO="false"\n'
@@ -706,7 +711,7 @@ def _build_actions(report: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "runner": {
                     "endpoint": "/admin/hardware/gps-hat/gpsd-config",
                     "body": {
-                        "devices": ["/dev/serial0", "/dev/pps0"],
+                        "devices": recommended_gpsd_devs,
                         "options": f"-n -b -s {expected_baud}",
                         "start_daemon": True,
                         "usbauto": False,
@@ -716,6 +721,19 @@ def _build_actions(report: Dict[str, Any]) -> List[Dict[str, Any]]:
             })
         else:
             issues = []
+            existing_devs = [d for d in (gpsd_cfg.get("devices") or "").split() if d.startswith("/dev/")]
+            serial_candidates = [configured_serial]
+            if resolved_serial and resolved_serial not in serial_candidates:
+                serial_candidates.append(resolved_serial)
+            if serial.get("exists") and not any(d in existing_devs for d in serial_candidates):
+                issues.append(
+                    "DEVICES does not include the active GPS serial port "
+                    f"({configured_serial}"
+                    + (f" → {resolved_serial}" if resolved_serial else "")
+                    + ")"
+                )
+            if pps.get("gpio_device") and configured_pps not in existing_devs:
+                issues.append(f"DEVICES does not include the PPS device ({configured_pps})")
             if not gpsd_cfg.get("has_n_flag"):
                 issues.append("missing -n (gpsd will idle until clients connect)")
             if gpsd_cfg.get("baud_flag") and gpsd_cfg["baud_flag"] != expected_baud:
@@ -723,25 +741,24 @@ def _build_actions(report: Dict[str, Any]) -> List[Dict[str, Any]]:
             if not gpsd_cfg.get("baud_flag"):
                 issues.append(f"no -s flag (will auto-detect; force -s {expected_baud})")
             if issues:
-                # Try to preserve the user's existing DEVICES line if it parses
-                # cleanly; otherwise fall back to the standard pair. The helper
-                # validates this against its own allowlist either way.
-                existing_devs = (gpsd_cfg.get("devices") or "").split()
-                preserved_devs = [d for d in existing_devs if d.startswith("/dev/")] \
-                                 or ["/dev/serial0", "/dev/pps0"]
                 actions.append({
                     "id": "fix_gpsd_options",
                     "severity": "warning",
-                    "label": "Fix GPSD_OPTIONS in /etc/default/gpsd",
+                    "label": "Fix /etc/default/gpsd",
                     "reason": "; ".join(issues),
                     "command": (
-                        f"sudo sed -i 's|^GPSD_OPTIONS=.*|GPSD_OPTIONS=\"-n -b -s {expected_baud}\"|' "
-                        "/etc/default/gpsd && sudo systemctl restart gpsd"
+                        "sudo tee /etc/default/gpsd <<'EOF'\n"
+                        f'DEVICES="{configured_serial} {configured_pps}"\n'
+                        f'GPSD_OPTIONS="-n -b -s {expected_baud}"\n'
+                        'START_DAEMON="true"\n'
+                        'USBAUTO="false"\n'
+                        "EOF\n"
+                        "sudo systemctl restart gpsd"
                     ),
                     "runner": {
                         "endpoint": "/admin/hardware/gps-hat/gpsd-config",
                         "body": {
-                            "devices": preserved_devs,
+                            "devices": recommended_gpsd_devs,
                             "options": f"-n -b -s {expected_baud}",
                             "start_daemon": True,
                             "usbauto": False,
@@ -894,7 +911,7 @@ def _build_actions(report: Dict[str, Any]) -> List[Dict[str, Any]]:
                 ),
                 "command": (
                     "# Check who owns the serial port:\n"
-                    "sudo lsof /dev/ttyAMA10 /dev/ttyAMA0 /dev/serial0 2>/dev/null"
+                    "sudo lsof /dev/serial0 /dev/ttyAMA0 /dev/ttyS0 2>/dev/null"
                 ),
             })
 
