@@ -823,14 +823,48 @@ def _build_actions(report: Dict[str, Any]) -> List[Dict[str, Any]]:
             },
         })
 
-    # 8. GPS/PPS refclocks configured but never reaching chrony. This is
-    #    the port-contention symptom: gpsd is configured for /dev/serial0
-    #    (which resolves to /dev/ttyAMAN on Pi 5) but EAS Station's
-    #    hardware service has the same port open. gpsd never gets NMEA,
-    #    SHM 0 stays empty, the `lock GPS` constraint on PPS never fires,
-    #    and chrony falls back to internet NTP at stratum ≥ 2. There is
-    #    no one-click fix yet — properly resolving it needs Tier 3
-    #    (gpsd-as-NMEA-source mode in gps_manager.py).
+    # 8. GPS/PPS refclocks configured but not actually usable. chrony
+    #    needs two feeds: NMEA samples from gpsd's SHM 0 and the precise
+    #    PPS edge from /dev/pps0. If EAS Station is in direct-serial mode,
+    #    gpsd usually cannot own the GPS UART, so SHM 0 stays empty and
+    #    PPS cannot lock to GPS. In that case, direct operators to the
+    #    gpsd NMEA source mode instead of the old workaround of disabling
+    #    the live GPS receiver.
+    gps_source = str(report.get("expected_source") or "auto").strip().lower()
+    if gps_source == "serial" and chrony_cfg.get("has_pps_refclock"):
+        actions.append({
+            "id": "switch_gps_source_to_gpsd",
+            "severity": "warning",
+            "label": "Switch NMEA source to gpsd for PPS-disciplined chrony",
+            "reason": (
+                "EAS Station is configured to open the GPS serial port directly. "
+                "For chrony to discipline time from GPS + PPS, gpsd must own "
+                "the serial port, publish NMEA samples to SHM 0, and let chrony "
+                "lock /dev/pps0 to that GPS source. Change Admin → Hardware "
+                "Settings → GPS → NMEA Source to 'gpsd', save, then restart "
+                "gpsd, chrony, and the hardware service."
+            ),
+            "command": (
+                "# In the web UI: Admin → Hardware Settings → GPS → NMEA Source = gpsd; Save & Restart\n"
+                "sudo systemctl restart gpsd chrony eas-station-hardware"
+            ),
+            "runner": {
+                "endpoint": "/admin/hardware/gps-hat/source-mode",
+                "body": {"gps_source": "gpsd"},
+                "button_label": "Switch to gpsd",
+                "confirm": (
+                    "Set the GPS NMEA Source to gpsd now? This lets gpsd own "
+                    "the serial port so chrony can use gpsd SHM 0 plus /dev/pps0. "
+                    "The hardware service will be restarted afterward."
+                ),
+                "post_action": {
+                    "endpoint": "/admin/hardware/restart-services",
+                    "body": {},
+                    "label": "restart hardware service",
+                },
+            },
+        })
+
     unreached = chrony_run.get("refclocks_unreached") or []
     if unreached and serial.get("exists"):
         # Only surface when chrony itself is otherwise healthy — if chrony
@@ -852,11 +886,11 @@ def _build_actions(report: Dict[str, Any]) -> List[Dict[str, Any]]:
                     f"chrony has the {' / '.join(unreached)} refclock(s) configured "
                     "but Reach=0 — no samples have ever arrived. The most common "
                     "cause is gpsd not being able to open the GPS serial port "
-                    "because EAS Station's hardware service holds it. Until the "
-                    "gpsd-as-NMEA-source feature lands, the workaround is to "
-                    "uncheck 'Enable GPS Receiver' under Admin → Hardware "
-                    "Settings → GPS, save, and let gpsd own the port. You'll "
-                    "lose the live GPS card but gain stratum-1 PPS time."
+                    "because another process owns it. Set Admin → Hardware "
+                    "Settings → GPS → NMEA Source to 'gpsd' so gpsd is the "
+                    "single serial-port owner; EAS Station will read the same "
+                    "receiver from gpsd's localhost JSON stream while chrony "
+                    "uses gpsd SHM 0 plus /dev/pps0."
                 ),
                 "command": (
                     "# Check who owns the serial port:\n"
@@ -874,6 +908,7 @@ def _build_actions(report: Dict[str, Any]) -> List[Dict[str, Any]]:
 def collect_gps_hat_diagnostics(
     expected_pps_pin: int = 18,
     expected_baud: int = 9600,
+    expected_source: str = "auto",
     logger: Optional[logging.Logger] = None,
 ) -> Dict[str, Any]:
     """Top-level probe. Returns a JSON-serialisable diagnostic report.
@@ -883,6 +918,9 @@ def collect_gps_hat_diagnostics(
             (passed in by the caller from settings).
         expected_baud: Baud rate EAS Station has configured for the GPS
             serial port (passed in by the caller from settings).
+        expected_source: NMEA source mode EAS Station is configured to use
+            (``auto``, ``serial``, or ``gpsd``); used to flag port-sharing
+            setups that cannot let chrony consume GPS+PPS.
         logger: Optional logger; defaults to module logger.
     """
     log = logger or _logger
@@ -890,6 +928,7 @@ def collect_gps_hat_diagnostics(
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "expected_pps_pin": expected_pps_pin,
         "expected_baud": expected_baud,
+        "expected_source": (expected_source or "auto"),
     }
 
     try:
