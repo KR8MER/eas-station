@@ -1155,6 +1155,30 @@ class GPIOController:
 
             return result
 
+    def get_runtime_diagnostics(self) -> Dict[str, Any]:
+        """Return bounded runtime counters useful for leak diagnostics."""
+
+        with self._lock:
+            active_watchdogs = sum(
+                1 for t in self._watchdog_threads.values() if t is not None and t.is_alive()
+            )
+            active_flash_threads = sum(
+                1 for t in self._flash_threads.values() if t is not None and t.is_alive()
+            )
+            return {
+                'configured_pins': len(self._pins),
+                'active_pins': sum(1 for s in self._states.values() if s == GPIOState.ACTIVE),
+                'current_events': len(self._current_events),
+                'watchdog_threads_tracked': len(self._watchdog_threads),
+                'watchdog_threads_alive': active_watchdogs,
+                'watchdog_stop_events': len(self._watchdog_stop_events),
+                'flash_threads_tracked': len(self._flash_threads),
+                'flash_threads_alive': active_flash_threads,
+                'flash_stop_events': len(self._flash_stop_events),
+                'environment_issues_count': len(self._environment_issues),
+                'environment_issues_cap': self._max_environment_issues,
+            }
+
     def get_environment_issues(self) -> List[str]:
         """Return detected environment issues preventing GPIO access."""
 
