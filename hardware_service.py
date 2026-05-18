@@ -120,6 +120,8 @@ _zigpy_controller = None
 _oled_preview_cache_b64 = None
 _oled_preview_cache_at = 0.0
 OLED_PREVIEW_MIN_INTERVAL_S = 2.0
+_runtime_diag_cache = {'at': 0.0, 'top_object_types': [], 'alloc_top': []}
+_runtime_diag_cache_lock = threading.Lock()
 
 
 def signal_handler(signum, frame):
@@ -2693,15 +2695,12 @@ def create_api_app():
     def get_runtime_diagnostics():
         """Return runtime diagnostics for leak triage.
 
-        Default mode is intentionally lightweight so callers (including
-        web UI panels) do not stall the service under memory pressure.
-        Pass ``?verbose=1`` to include expensive heap breakdown fields.
+        Returns lightweight runtime status by default.
+        Pass ``?verbose=1`` to run deep leak-triage capture on demand.
         """
         try:
             import os
             import resource
-            import ctypes
-
             verbose = str(request.args.get('verbose', '0')).strip().lower() in {
                 '1', 'true', 'yes', 'on'
             }
@@ -2724,16 +2723,8 @@ def create_api_app():
                     'alive': bool(th.is_alive()),
                 })
 
-            # Cheap allocator probe to distinguish "retained heap" from
-            # glibc arena fragmentation. This call is fast and safe.
-            trim_released = None
-            try:
-                libc = ctypes.CDLL('libc.so.6')
-                libc.malloc_trim.argtypes = [ctypes.c_size_t]
-                libc.malloc_trim.restype = ctypes.c_int
-                trim_released = bool(libc.malloc_trim(0))
-            except Exception:
-                trim_released = None
+            if not tracemalloc.is_tracing():
+                tracemalloc.start(25)
 
             payload = {
                 'pid': os.getpid(),
@@ -2742,21 +2733,23 @@ def create_api_app():
                 'rss_kb': rss_kb,
                 'maxrss_kb': resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
                 'gc_counts': gc.get_count(),
-                'malloc_trim_released': trim_released,
                 'verbose': verbose,
                 'gpio': None,
                 'gps': None,
             }
 
-            if verbose:
-                if not tracemalloc.is_tracing():
-                    tracemalloc.start(25)
-
+            now = time.monotonic()
+            force_refresh = str(request.args.get('refresh', '0')).strip().lower() in {
+                '1', 'true', 'yes', 'on'
+            }
+            should_refresh = verbose or force_refresh
+            if should_refresh:
+                top_count = 40 if verbose else 20
                 top_types = []
                 try:
                     objs = gc.get_objects()
                     counts = Counter(type(o).__name__ for o in objs)
-                    for name, count in counts.most_common(20):
+                    for name, count in counts.most_common(top_count):
                         top_types.append({'type': name, 'count': int(count)})
                 except Exception:
                     top_types = []
@@ -2764,7 +2757,7 @@ def create_api_app():
                 alloc_top = []
                 try:
                     snapshot = tracemalloc.take_snapshot()
-                    for stat in snapshot.statistics('lineno')[:20]:
+                    for stat in snapshot.statistics('lineno')[:top_count]:
                         frame = stat.traceback[0]
                         alloc_top.append({
                             'file': str(frame.filename),
@@ -2775,8 +2768,19 @@ def create_api_app():
                 except Exception:
                     alloc_top = []
 
-                payload['top_object_types'] = top_types
-                payload['alloc_top'] = alloc_top
+                with _runtime_diag_cache_lock:
+                    _runtime_diag_cache['at'] = now
+                    _runtime_diag_cache['top_object_types'] = top_types
+                    _runtime_diag_cache['alloc_top'] = alloc_top
+
+            with _runtime_diag_cache_lock:
+                payload['runtime_diag_cache_age_s'] = round(
+                    now - float(_runtime_diag_cache.get('at', now)), 3
+                )
+                payload['runtime_diag_cache_ttl_s'] = None
+                payload['runtime_diag_refreshed'] = bool(should_refresh)
+                payload['top_object_types'] = list(_runtime_diag_cache.get('top_object_types') or [])
+                payload['alloc_top'] = list(_runtime_diag_cache.get('alloc_top') or [])
 
             if _gpio_controller is not None and hasattr(_gpio_controller, 'get_runtime_diagnostics'):
                 payload['gpio'] = _gpio_controller.get_runtime_diagnostics()
