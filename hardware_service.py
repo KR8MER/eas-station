@@ -2691,13 +2691,20 @@ def create_api_app():
 
     @api_app.route('/api/hardware/runtime/diagnostics', methods=['GET'])
     def get_runtime_diagnostics():
-        """Return broad runtime diagnostics for leak triage."""
+        """Return runtime diagnostics for leak triage.
+
+        Default mode is intentionally lightweight so callers (including
+        web UI panels) do not stall the service under memory pressure.
+        Pass ``?verbose=1`` to include expensive heap breakdown fields.
+        """
         try:
             import os
             import resource
+            import ctypes
 
-            if not tracemalloc.is_tracing():
-                tracemalloc.start(25)
+            verbose = str(request.args.get('verbose', '0')).strip().lower() in {
+                '1', 'true', 'yes', 'on'
+            }
 
             rss_kb = None
             try:
@@ -2717,28 +2724,16 @@ def create_api_app():
                     'alive': bool(th.is_alive()),
                 })
 
-            top_types = []
+            # Cheap allocator probe to distinguish "retained heap" from
+            # glibc arena fragmentation. This call is fast and safe.
+            trim_released = None
             try:
-                objs = gc.get_objects()
-                counts = Counter(type(o).__name__ for o in objs)
-                for name, count in counts.most_common(20):
-                    top_types.append({'type': name, 'count': int(count)})
+                libc = ctypes.CDLL('libc.so.6')
+                libc.malloc_trim.argtypes = [ctypes.c_size_t]
+                libc.malloc_trim.restype = ctypes.c_int
+                trim_released = bool(libc.malloc_trim(0))
             except Exception:
-                top_types = []
-
-            alloc_top = []
-            try:
-                snapshot = tracemalloc.take_snapshot()
-                for stat in snapshot.statistics('lineno')[:20]:
-                    frame = stat.traceback[0]
-                    alloc_top.append({
-                        'file': str(frame.filename),
-                        'line': int(frame.lineno),
-                        'size_kb': round(stat.size / 1024.0, 2),
-                        'count': int(stat.count),
-                    })
-            except Exception:
-                alloc_top = []
+                trim_released = None
 
             payload = {
                 'pid': os.getpid(),
@@ -2747,11 +2742,41 @@ def create_api_app():
                 'rss_kb': rss_kb,
                 'maxrss_kb': resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
                 'gc_counts': gc.get_count(),
-                'top_object_types': top_types,
-                'alloc_top': alloc_top,
+                'malloc_trim_released': trim_released,
+                'verbose': verbose,
                 'gpio': None,
                 'gps': None,
             }
+
+            if verbose:
+                if not tracemalloc.is_tracing():
+                    tracemalloc.start(25)
+
+                top_types = []
+                try:
+                    objs = gc.get_objects()
+                    counts = Counter(type(o).__name__ for o in objs)
+                    for name, count in counts.most_common(20):
+                        top_types.append({'type': name, 'count': int(count)})
+                except Exception:
+                    top_types = []
+
+                alloc_top = []
+                try:
+                    snapshot = tracemalloc.take_snapshot()
+                    for stat in snapshot.statistics('lineno')[:20]:
+                        frame = stat.traceback[0]
+                        alloc_top.append({
+                            'file': str(frame.filename),
+                            'line': int(frame.lineno),
+                            'size_kb': round(stat.size / 1024.0, 2),
+                            'count': int(stat.count),
+                        })
+                except Exception:
+                    alloc_top = []
+
+                payload['top_object_types'] = top_types
+                payload['alloc_top'] = alloc_top
 
             if _gpio_controller is not None and hasattr(_gpio_controller, 'get_runtime_diagnostics'):
                 payload['gpio'] = _gpio_controller.get_runtime_diagnostics()
