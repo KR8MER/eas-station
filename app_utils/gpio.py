@@ -614,6 +614,7 @@ class GPIOController:
         self._current_events: Dict[int, GPIOActivationEvent] = {}
         self._lock = threading.RLock()
         self._watchdog_threads: Dict[int, threading.Thread] = {}
+        self._watchdog_stop_events: Dict[int, threading.Event] = {}
         self._flash_threads: Dict[int, threading.Thread] = {}  # Flash pattern threads
         self._flash_stop_events: Dict[int, threading.Event] = {}  # Flash stop signals
         self._devices: Dict[int, Any] = {}
@@ -1214,9 +1215,18 @@ class GPIOController:
             pin: Pin number
             timeout_seconds: Watchdog timeout in seconds
         """
+        # Cancel any existing watchdog for this pin before starting a new one.
+        self._stop_watchdog(pin)
+        stop_event = threading.Event()
+        self._watchdog_stop_events[pin] = stop_event
+
         def watchdog():
-            time.sleep(timeout_seconds)
+            if stop_event.wait(timeout_seconds):
+                return
             with self._lock:
+                # Ignore stale timers replaced by newer activations.
+                if self._watchdog_stop_events.get(pin) is not stop_event:
+                    return
                 if self._states.get(pin) == GPIOState.ACTIVE:
                     if self.logger:
                         self.logger.error(
@@ -1238,9 +1248,13 @@ class GPIOController:
         Args:
             pin: Pin number
         """
-        if pin in self._watchdog_threads:
-            # Thread will exit naturally when it checks the state
-            del self._watchdog_threads[pin]
+        stop_event = self._watchdog_stop_events.pop(pin, None)
+        if stop_event is not None:
+            stop_event.set()
+
+        thread = self._watchdog_threads.pop(pin, None)
+        if thread is not None and thread.is_alive():
+            thread.join(timeout=0.2)
 
     def _start_flash(self, pin: int) -> None:
         """Start flash pattern for a pin (two-phase alternating with partner).

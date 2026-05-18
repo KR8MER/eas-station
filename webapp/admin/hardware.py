@@ -791,6 +791,10 @@ def gps_dashboard_trends():
             payload = {'samples': []}
         if not isinstance(payload, dict) or 'samples' not in payload:
             payload = {'samples': []}
+        samples = payload.get('samples')
+        if isinstance(samples, list) and len(samples) > 5000:
+            payload['samples'] = samples[-5000:]
+            payload['truncated'] = True
     except Exception:
         # Mirror the defensive logging used by gps_dashboard_data():
         # log full detail server-side, return a generic empty payload
