@@ -5158,6 +5158,18 @@
         filter: '',
         lastSentences: []
     };
+    
+    function renderRuntimeDiagnostics(snapshot) {
+        var pre = document.getElementById('runtime-diag-pre');
+        if (!pre) return;
+        var runtime = (snapshot && snapshot.runtime) || {};
+        try {
+            pre.textContent = JSON.stringify(runtime, null, 2);
+        } catch (e) {
+            pre.textContent = '{}';
+        }
+    }
+
     function renderNmeaInspector(sentences) {
         var pauseEl  = document.getElementById('ts-nmea-pause');
         var filterEl = document.getElementById('ts-nmea-filter');
@@ -5302,6 +5314,7 @@
         renderJammingTimeSeries();
         renderStaleness(gps);
         renderNmeaInspector(gps.recent_sentences || []);
+        renderRuntimeDiagnostics(snapshot);
     }
 
     // ── Polling.  Configurable interval; "0" means paused.

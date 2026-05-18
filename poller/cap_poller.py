@@ -438,6 +438,12 @@ except Exception as e:
         text_filename = Column(String(255))
         audio_data = Column(LargeBinary)
         eom_audio_data = Column(LargeBinary)
+        same_audio_data = Column(LargeBinary)
+        attention_audio_data = Column(LargeBinary)
+        tts_audio_data = Column(LargeBinary)
+        buffer_audio_data = Column(LargeBinary)
+        tts_warning = Column(String(255))
+        tts_provider = Column(String(32))
         text_payload = Column(JSON)
         created_at = Column(DateTime, default=utc_now)
         # Use metadata_payload column name to match the migration

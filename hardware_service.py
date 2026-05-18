@@ -46,6 +46,9 @@ import json
 import redis
 import subprocess
 import threading
+import gc
+import tracemalloc
+from collections import Counter
 import ipaddress
 from typing import Optional
 from datetime import datetime, timezone
@@ -2667,6 +2670,92 @@ def create_api_app():
             return jsonify({'success': False, 'error': str(e)}), 500
 
     # GPS Hardware Endpoints
+
+
+    @api_app.route('/api/hardware/runtime/diagnostics', methods=['GET'])
+    def get_runtime_diagnostics():
+        """Return broad runtime diagnostics for leak triage."""
+        try:
+            import os
+            import resource
+
+            if not tracemalloc.is_tracing():
+                tracemalloc.start(25)
+
+            rss_kb = None
+            try:
+                with open('/proc/self/status', 'r', encoding='utf-8') as fh:
+                    for line in fh:
+                        if line.startswith('VmRSS:'):
+                            rss_kb = int(line.split()[1])
+                            break
+            except Exception:
+                pass
+
+            thread_details = []
+            for th in threading.enumerate():
+                thread_details.append({
+                    'name': th.name,
+                    'daemon': bool(th.daemon),
+                    'alive': bool(th.is_alive()),
+                })
+
+            top_types = []
+            try:
+                objs = gc.get_objects()
+                counts = Counter(type(o).__name__ for o in objs)
+                for name, count in counts.most_common(20):
+                    top_types.append({'type': name, 'count': int(count)})
+            except Exception:
+                top_types = []
+
+            alloc_top = []
+            try:
+                snapshot = tracemalloc.take_snapshot()
+                for stat in snapshot.statistics('lineno')[:20]:
+                    frame = stat.traceback[0]
+                    alloc_top.append({
+                        'file': str(frame.filename),
+                        'line': int(frame.lineno),
+                        'size_kb': round(stat.size / 1024.0, 2),
+                        'count': int(stat.count),
+                    })
+            except Exception:
+                alloc_top = []
+
+            payload = {
+                'pid': os.getpid(),
+                'threads': threading.active_count(),
+                'thread_details': thread_details,
+                'rss_kb': rss_kb,
+                'maxrss_kb': resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
+                'gc_counts': gc.get_count(),
+                'top_object_types': top_types,
+                'alloc_top': alloc_top,
+                'gpio': None,
+                'gps': None,
+            }
+
+            if _gpio_controller is not None and hasattr(_gpio_controller, 'get_runtime_diagnostics'):
+                payload['gpio'] = _gpio_controller.get_runtime_diagnostics()
+
+            if _gps_manager is not None:
+                try:
+                    gps = _gps_manager.get_status() or {}
+                    payload['gps'] = {
+                        'running': bool(gps.get('running', False)),
+                        'status': gps.get('status'),
+                        'fix_mode': gps.get('fix_mode'),
+                        'pps_interval_samples': gps.get('pps_interval_samples', 0),
+                        'recent_sentences': len(gps.get('recent_sentences') or []),
+                    }
+                except Exception:
+                    payload['gps'] = {'running': False, 'status': 'status_read_failed'}
+
+            return jsonify(payload)
+        except Exception:
+            logger.error('Error getting hardware runtime diagnostics', exc_info=True)
+            return jsonify({'success': False, 'error': 'runtime_diagnostics_unavailable'}), 500
 
     @api_app.route('/api/hardware/gps/status', methods=['GET'])
     def get_gps_status():
