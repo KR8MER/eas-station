@@ -746,7 +746,7 @@ def _atomic_write_with_backup(
 # ---------------------------------------------------------------------------
 
 _GPSD_DEVICE_RE = re.compile(
-    r"^/dev/(serial[0-9]|ttyAMA[0-9]|ttyAMA1[0-9]?|ttyS[0-9]|"
+    r"^/dev/(serial[0-9]|ttyAMA[0-9]|ttyS[0-9]|"
     r"pps[0-9]|ttyUSB[0-9]|ttyACM[0-9])$"
 )
 # Tokens we accept inside GPSD_OPTIONS. Everything else is rejected so
