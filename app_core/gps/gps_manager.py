@@ -452,7 +452,7 @@ class GPSManager:
             # Subscribe to JSON event stream — `pps:true` asks gpsd to
             # forward kernel PPS samples too, but it's harmless if the
             # gpsd build is too old to support it.
-            sock.sendall(b'?WATCH={"enable":true,"json":true,"pps":true}\n')
+            sock.sendall(b'?WATCH={"enable":true,"json":true,"nmea":true,"pps":true}\n')
             # Use a long read timeout in the steady state; reconnect logic
             # in the loop handles dropped connections.
             sock.settimeout(15.0)
@@ -1467,7 +1467,7 @@ class GPSManager:
     # ------------------------------------------------------------------
     #
     # Wire format: gpsd serves JSON-Lines over TCP. After we send
-    # ``?WATCH={"enable":true,"json":true,"pps":true}`` it streams events
+    # ``?WATCH={"enable":true,"json":true,"nmea":true,"pps":true}`` it streams events
     # of the form documented at https://gpsd.gitlab.io/gpsd/gpsd_json.html
     # — primarily TPV (time/position/velocity), SKY (satellite snapshot),
     # and GST (error estimates), interleaved with periodic VERSION /
