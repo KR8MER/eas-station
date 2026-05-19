@@ -49,24 +49,6 @@ logger = logging.getLogger(__name__)
 CROSS_SOURCE_DEDUP_WINDOW_MINUTES = 15
 
 
-
-
-def _normalize_event_code(value: Any) -> str:
-    """Normalize an event code for deduplication comparisons."""
-    return str(value or '').strip().upper()
-
-
-def _normalize_fips_codes(values: Any) -> Set[str]:
-    """Normalize a sequence of FIPS/SAME codes to stripped strings."""
-    if not isinstance(values, (list, tuple, set)):
-        return set()
-    normalized: Set[str] = set()
-    for value in values:
-        code = str(value or '').strip()
-        if code and code.lower() != 'none':
-            normalized.add(code)
-    return normalized
-
 def _get_fips_from_cap_alert(alert, raw_json: Optional[Dict] = None) -> List[str]:
     """Extract FIPS/SAME codes from a CAP alert object or its raw_json."""
     codes: List[str] = []
@@ -118,12 +100,11 @@ def is_duplicate_broadcast(
     Checks both EASMessage (CAP-sourced broadcasts) and ManualEASActivation
     (manual/RWT/auto-forwarded broadcasts) tables.
     """
-    normalized_event_code = _normalize_event_code(event_code)
-    fips_set = _normalize_fips_codes(fips_codes)
-    if not normalized_event_code or not fips_set:
+    if not event_code or not fips_codes:
         return False
 
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+    fips_set = set(fips_codes)
 
     try:
         from app_core.models import EASMessage
@@ -134,14 +115,14 @@ def is_duplicate_broadcast(
         )
         for msg in recent_messages:
             meta = msg.metadata_payload or {}
-            msg_event_code = _normalize_event_code(meta.get('event_code', ''))
-            msg_locations = _normalize_fips_codes(meta.get('locations', []))
-            if msg_event_code == normalized_event_code and fips_set & msg_locations:
+            msg_event_code = meta.get('event_code', '')
+            msg_locations = meta.get('locations', [])
+            if msg_event_code == event_code and fips_set & set(msg_locations):
                 logger.info(
                     "Cross-source duplicate detected in EASMessage: "
                     "event=%s, overlapping FIPS=%s (message_id=%s)",
-                    normalized_event_code,
-                    fips_set & msg_locations,
+                    event_code,
+                    fips_set & set(msg_locations),
                     msg.id,
                 )
                 return True
@@ -153,16 +134,16 @@ def is_duplicate_broadcast(
         recent_activations = (
             db_session.query(ManualEASActivation)
             .filter(ManualEASActivation.created_at >= cutoff)
-            .filter(ManualEASActivation.event_code.ilike(normalized_event_code))
+            .filter(ManualEASActivation.event_code == event_code)
             .all()
         )
         for activation in recent_activations:
-            activation_fips = _normalize_fips_codes(activation.same_locations or [])
+            activation_fips = set(activation.same_locations or [])
             if fips_set & activation_fips:
                 logger.info(
                     "Cross-source duplicate detected in ManualEASActivation: "
                     "event=%s, overlapping FIPS=%s (activation_id=%s)",
-                    normalized_event_code,
+                    event_code,
                     fips_set & activation_fips,
                     activation.id,
                 )

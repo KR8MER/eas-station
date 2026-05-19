@@ -95,7 +95,6 @@ def gps_hat_diagnostics():
         report = collect_gps_hat_diagnostics(
             expected_pps_pin=int(gps_settings.get('pps_gpio_pin', 18) or 18),
             expected_baud=int(gps_settings.get('baudrate', 9600) or 9600),
-            expected_source=str(gps_settings.get('gps_source', 'auto') or 'auto'),
             logger=logger,
         )
         # Surface helper availability so the UI can show "Run" buttons (when
@@ -463,44 +462,6 @@ def gps_hat_config_txt_overlay():
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
-@hardware_bp.route('/hardware/gps-hat/source-mode', methods=['POST'])
-@require_permission('system.configure')
-def gps_hat_source_mode():
-    """Set the GPS NMEA source mode from a GPS HAT diagnostic action.
-
-    Body: ``{"gps_source": "auto"|"serial"|"gpsd"}``
-
-    This is intentionally narrow: the full hardware settings form can update
-    every hardware field, but the diagnostic panel only needs a one-click way
-    to move off direct-serial mode so gpsd can own the UART for chrony's
-    SHM+PPS refclock chain. Restarting the hardware service is handled by the
-    action runner's follow-up step.
-    """
-    try:
-        body = request.get_json(silent=True) or {}
-        if not isinstance(body, dict):
-            raise BadRequest("body must be a JSON object")
-        src = str(body.get('gps_source', 'gpsd') or 'gpsd').strip().lower()
-        if src not in ('auto', 'serial', 'gpsd'):
-            raise BadRequest("gps_source must be one of: auto, serial, gpsd")
-
-        settings = update_hardware_settings({'gps_source': src})
-        invalidate_hardware_settings_cache()
-        return jsonify({
-            "ok": True,
-            "success": True,
-            "gps_source": settings.gps_source,
-            "stdout": f"GPS NMEA source set to {settings.gps_source}.\n",
-            "requires_restart": True,
-        })
-    except BadRequest:
-        raise
-    except Exception as exc:
-        logger.exception("gps_hat_source_mode failed")
-        db.session.rollback()
-        return jsonify({"ok": False, "success": False, "error": str(exc)}), 500
-
-
 @hardware_bp.route('/hardware/update', methods=['POST'])
 @require_permission('system.configure')
 def update_hardware():
@@ -830,10 +791,6 @@ def gps_dashboard_trends():
             payload = {'samples': []}
         if not isinstance(payload, dict) or 'samples' not in payload:
             payload = {'samples': []}
-        samples = payload.get('samples')
-        if isinstance(samples, list) and len(samples) > 5000:
-            payload['samples'] = samples[-5000:]
-            payload['truncated'] = True
     except Exception:
         # Mirror the defensive logging used by gps_dashboard_data():
         # log full detail server-side, return a generic empty payload

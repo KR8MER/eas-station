@@ -46,9 +46,6 @@ import json
 import redis
 import subprocess
 import threading
-import gc
-import tracemalloc
-from collections import Counter
 import ipaddress
 from typing import Optional
 from datetime import datetime, timezone
@@ -116,12 +113,6 @@ _neopixel_controller = None
 _tower_light_controller = None
 _gps_manager = None
 _zigpy_controller = None
-
-_oled_preview_cache_b64 = None
-_oled_preview_cache_at = 0.0
-OLED_PREVIEW_MIN_INTERVAL_S = 2.0
-_runtime_diag_cache = {'at': 0.0, 'top_object_types': [], 'alloc_top': []}
-_runtime_diag_cache_lock = threading.Lock()
 
 
 def signal_handler(signum, frame):
@@ -1359,24 +1350,11 @@ def publish_display_state():
                         if hasattr(_screen_manager, '_cached_header_text'):
                             state["oled"]["header_text"] = _screen_manager._cached_header_text
 
-                # Get preview image (throttled). Rendering a base64 PNG on every
-                # publish tick creates heavy allocation churn during rapid OLED
-                # scrolling, so refresh at a low cadence and reuse cached value
-                # between refreshes.
+                # Get preview image
                 try:
-                    global _oled_preview_cache_b64, _oled_preview_cache_at
-                    now_mono = time.monotonic()
-                    should_refresh_preview = (
-                        _oled_preview_cache_b64 is None
-                        or (now_mono - _oled_preview_cache_at) >= OLED_PREVIEW_MIN_INTERVAL_S
-                    )
-                    if should_refresh_preview:
-                        preview_image = oled_module.oled_controller.get_preview_image_base64()
-                        if preview_image:
-                            _oled_preview_cache_b64 = preview_image
-                            _oled_preview_cache_at = now_mono
-                    if _oled_preview_cache_b64:
-                        state["oled"]["preview_image"] = _oled_preview_cache_b64
+                    preview_image = oled_module.oled_controller.get_preview_image_base64()
+                    if preview_image:
+                        state["oled"]["preview_image"] = preview_image
                 except Exception as e:
                     logger.debug(f"Failed to get OLED preview image: {e}")
         except Exception as e:
@@ -2689,119 +2667,6 @@ def create_api_app():
             return jsonify({'success': False, 'error': str(e)}), 500
 
     # GPS Hardware Endpoints
-
-
-    @api_app.route('/api/hardware/runtime/diagnostics', methods=['GET'])
-    def get_runtime_diagnostics():
-        """Return runtime diagnostics for leak triage.
-
-        Returns lightweight runtime status by default.
-        Pass ``?verbose=1`` to run deep leak-triage capture on demand.
-        """
-        try:
-            import os
-            import resource
-            verbose = str(request.args.get('verbose', '0')).strip().lower() in {
-                '1', 'true', 'yes', 'on'
-            }
-
-            rss_kb = None
-            try:
-                with open('/proc/self/status', 'r', encoding='utf-8') as fh:
-                    for line in fh:
-                        if line.startswith('VmRSS:'):
-                            rss_kb = int(line.split()[1])
-                            break
-            except Exception:
-                pass
-
-            thread_details = []
-            for th in threading.enumerate():
-                thread_details.append({
-                    'name': th.name,
-                    'daemon': bool(th.daemon),
-                    'alive': bool(th.is_alive()),
-                })
-
-            if not tracemalloc.is_tracing():
-                tracemalloc.start(25)
-
-            payload = {
-                'pid': os.getpid(),
-                'threads': threading.active_count(),
-                'thread_details': thread_details,
-                'rss_kb': rss_kb,
-                'maxrss_kb': resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
-                'gc_counts': gc.get_count(),
-                'verbose': verbose,
-                'gpio': None,
-                'gps': None,
-            }
-
-            now = time.monotonic()
-            force_refresh = str(request.args.get('refresh', '0')).strip().lower() in {
-                '1', 'true', 'yes', 'on'
-            }
-            should_refresh = verbose or force_refresh
-            if should_refresh:
-                top_count = 40 if verbose else 20
-                top_types = []
-                try:
-                    objs = gc.get_objects()
-                    counts = Counter(type(o).__name__ for o in objs)
-                    for name, count in counts.most_common(top_count):
-                        top_types.append({'type': name, 'count': int(count)})
-                except Exception:
-                    top_types = []
-
-                alloc_top = []
-                try:
-                    snapshot = tracemalloc.take_snapshot()
-                    for stat in snapshot.statistics('lineno')[:top_count]:
-                        frame = stat.traceback[0]
-                        alloc_top.append({
-                            'file': str(frame.filename),
-                            'line': int(frame.lineno),
-                            'size_kb': round(stat.size / 1024.0, 2),
-                            'count': int(stat.count),
-                        })
-                except Exception:
-                    alloc_top = []
-
-                with _runtime_diag_cache_lock:
-                    _runtime_diag_cache['at'] = now
-                    _runtime_diag_cache['top_object_types'] = top_types
-                    _runtime_diag_cache['alloc_top'] = alloc_top
-
-            with _runtime_diag_cache_lock:
-                payload['runtime_diag_cache_age_s'] = round(
-                    now - float(_runtime_diag_cache.get('at', now)), 3
-                )
-                payload['runtime_diag_cache_ttl_s'] = None
-                payload['runtime_diag_refreshed'] = bool(should_refresh)
-                payload['top_object_types'] = list(_runtime_diag_cache.get('top_object_types') or [])
-                payload['alloc_top'] = list(_runtime_diag_cache.get('alloc_top') or [])
-
-            if _gpio_controller is not None and hasattr(_gpio_controller, 'get_runtime_diagnostics'):
-                payload['gpio'] = _gpio_controller.get_runtime_diagnostics()
-
-            if _gps_manager is not None:
-                try:
-                    gps = _gps_manager.get_status() or {}
-                    payload['gps'] = {
-                        'running': bool(gps.get('running', False)),
-                        'status': gps.get('status'),
-                        'fix_mode': gps.get('fix_mode'),
-                        'pps_interval_samples': gps.get('pps_interval_samples', 0),
-                        'recent_sentences': len(gps.get('recent_sentences') or []),
-                    }
-                except Exception:
-                    payload['gps'] = {'running': False, 'status': 'status_read_failed'}
-
-            return jsonify(payload)
-        except Exception:
-            logger.error('Error getting hardware runtime diagnostics', exc_info=True)
-            return jsonify({'success': False, 'error': 'runtime_diagnostics_unavailable'}), 500
 
     @api_app.route('/api/hardware/gps/status', methods=['GET'])
     def get_gps_status():

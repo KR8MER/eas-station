@@ -2605,8 +2605,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             if (postJson.stdout) appendOutput(postJson.stdout);
                             if (postJson.stderr) appendOutput(postJson.stderr);
                             appendOutput(JSON.stringify(postJson, null, 2) + '\n');
-                            var postOk = !!(postJson.ok || postJson.success);
-                            if (!postOk) {
+                            if (!postJson.ok) {
                                 setModalStatus(
                                     '<i class="fas fa-exclamation-triangle text-warning me-1"></i>'
                                     + 'Main action succeeded but follow-up '
