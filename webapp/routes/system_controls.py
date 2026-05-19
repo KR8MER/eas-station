@@ -593,7 +593,6 @@ def register(app: Flask, logger) -> None:
                 current_user=_get_current_user(),
                 configured_pin_count=configured_count,
                 environment_issues=controller.get_environment_issues(),
-                gpio_runtime=controller.get_runtime_diagnostics(),
             )
 
         except Exception as exc:

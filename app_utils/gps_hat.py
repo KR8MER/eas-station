@@ -688,11 +688,6 @@ def _build_actions(report: Dict[str, Any]) -> List[Dict[str, Any]]:
 
     # 5. gpsd config — needs DEVICES + -n + correct baud
     gpsd_installed = any(p["name"] == "gpsd" and p["installed"] for p in pkg["items"])
-    configured_serial = str(serial.get("device") or "/dev/serial0")
-    resolved_serial = str(serial.get("resolved") or "")
-    pps_name = pps.get("gpio_device", {}).get("name") if isinstance(pps.get("gpio_device"), dict) else None
-    configured_pps = f"/dev/{pps_name}" if pps_name and not str(pps_name).startswith("/dev/") else (pps_name or "/dev/pps0")
-    recommended_gpsd_devs = [configured_serial, configured_pps]
     if gpsd_installed:
         if not gpsd_cfg.get("exists"):
             actions.append({
@@ -702,7 +697,7 @@ def _build_actions(report: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "reason": "gpsd is installed but /etc/default/gpsd is missing.",
                 "command": (
                     "sudo tee /etc/default/gpsd <<'EOF'\n"
-                    f'DEVICES="{configured_serial} {configured_pps}"\n'
+                    'DEVICES="/dev/serial0 /dev/pps0"\n'
                     f'GPSD_OPTIONS="-n -b -s {expected_baud}"\n'
                     'START_DAEMON="true"\n'
                     'USBAUTO="false"\n'
@@ -711,7 +706,7 @@ def _build_actions(report: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "runner": {
                     "endpoint": "/admin/hardware/gps-hat/gpsd-config",
                     "body": {
-                        "devices": recommended_gpsd_devs,
+                        "devices": ["/dev/serial0", "/dev/pps0"],
                         "options": f"-n -b -s {expected_baud}",
                         "start_daemon": True,
                         "usbauto": False,
@@ -721,19 +716,6 @@ def _build_actions(report: Dict[str, Any]) -> List[Dict[str, Any]]:
             })
         else:
             issues = []
-            existing_devs = [d for d in (gpsd_cfg.get("devices") or "").split() if d.startswith("/dev/")]
-            serial_candidates = [configured_serial]
-            if resolved_serial and resolved_serial not in serial_candidates:
-                serial_candidates.append(resolved_serial)
-            if serial.get("exists") and not any(d in existing_devs for d in serial_candidates):
-                issues.append(
-                    "DEVICES does not include the active GPS serial port "
-                    f"({configured_serial}"
-                    + (f" → {resolved_serial}" if resolved_serial else "")
-                    + ")"
-                )
-            if pps.get("gpio_device") and configured_pps not in existing_devs:
-                issues.append(f"DEVICES does not include the PPS device ({configured_pps})")
             if not gpsd_cfg.get("has_n_flag"):
                 issues.append("missing -n (gpsd will idle until clients connect)")
             if gpsd_cfg.get("baud_flag") and gpsd_cfg["baud_flag"] != expected_baud:
@@ -741,24 +723,25 @@ def _build_actions(report: Dict[str, Any]) -> List[Dict[str, Any]]:
             if not gpsd_cfg.get("baud_flag"):
                 issues.append(f"no -s flag (will auto-detect; force -s {expected_baud})")
             if issues:
+                # Try to preserve the user's existing DEVICES line if it parses
+                # cleanly; otherwise fall back to the standard pair. The helper
+                # validates this against its own allowlist either way.
+                existing_devs = (gpsd_cfg.get("devices") or "").split()
+                preserved_devs = [d for d in existing_devs if d.startswith("/dev/")] \
+                                 or ["/dev/serial0", "/dev/pps0"]
                 actions.append({
                     "id": "fix_gpsd_options",
                     "severity": "warning",
-                    "label": "Fix /etc/default/gpsd",
+                    "label": "Fix GPSD_OPTIONS in /etc/default/gpsd",
                     "reason": "; ".join(issues),
                     "command": (
-                        "sudo tee /etc/default/gpsd <<'EOF'\n"
-                        f'DEVICES="{configured_serial} {configured_pps}"\n'
-                        f'GPSD_OPTIONS="-n -b -s {expected_baud}"\n'
-                        'START_DAEMON="true"\n'
-                        'USBAUTO="false"\n'
-                        "EOF\n"
-                        "sudo systemctl restart gpsd"
+                        f"sudo sed -i 's|^GPSD_OPTIONS=.*|GPSD_OPTIONS=\"-n -b -s {expected_baud}\"|' "
+                        "/etc/default/gpsd && sudo systemctl restart gpsd"
                     ),
                     "runner": {
                         "endpoint": "/admin/hardware/gps-hat/gpsd-config",
                         "body": {
-                            "devices": recommended_gpsd_devs,
+                            "devices": preserved_devs,
                             "options": f"-n -b -s {expected_baud}",
                             "start_daemon": True,
                             "usbauto": False,
@@ -840,48 +823,14 @@ def _build_actions(report: Dict[str, Any]) -> List[Dict[str, Any]]:
             },
         })
 
-    # 8. GPS/PPS refclocks configured but not actually usable. chrony
-    #    needs two feeds: NMEA samples from gpsd's SHM 0 and the precise
-    #    PPS edge from /dev/pps0. If EAS Station is in direct-serial mode,
-    #    gpsd usually cannot own the GPS UART, so SHM 0 stays empty and
-    #    PPS cannot lock to GPS. In that case, direct operators to the
-    #    gpsd NMEA source mode instead of the old workaround of disabling
-    #    the live GPS receiver.
-    gps_source = str(report.get("expected_source") or "auto").strip().lower()
-    if gps_source == "serial" and chrony_cfg.get("has_pps_refclock"):
-        actions.append({
-            "id": "switch_gps_source_to_gpsd",
-            "severity": "warning",
-            "label": "Switch NMEA source to gpsd for PPS-disciplined chrony",
-            "reason": (
-                "EAS Station is configured to open the GPS serial port directly. "
-                "For chrony to discipline time from GPS + PPS, gpsd must own "
-                "the serial port, publish NMEA samples to SHM 0, and let chrony "
-                "lock /dev/pps0 to that GPS source. Change Admin → Hardware "
-                "Settings → GPS → NMEA Source to 'gpsd', save, then restart "
-                "gpsd, chrony, and the hardware service."
-            ),
-            "command": (
-                "# In the web UI: Admin → Hardware Settings → GPS → NMEA Source = gpsd; Save & Restart\n"
-                "sudo systemctl restart gpsd chrony eas-station-hardware"
-            ),
-            "runner": {
-                "endpoint": "/admin/hardware/gps-hat/source-mode",
-                "body": {"gps_source": "gpsd"},
-                "button_label": "Switch to gpsd",
-                "confirm": (
-                    "Set the GPS NMEA Source to gpsd now? This lets gpsd own "
-                    "the serial port so chrony can use gpsd SHM 0 plus /dev/pps0. "
-                    "The hardware service will be restarted afterward."
-                ),
-                "post_action": {
-                    "endpoint": "/admin/hardware/restart-services",
-                    "body": {},
-                    "label": "restart hardware service",
-                },
-            },
-        })
-
+    # 8. GPS/PPS refclocks configured but never reaching chrony. This is
+    #    the port-contention symptom: gpsd is configured for /dev/serial0
+    #    (which resolves to /dev/ttyAMAN on Pi 5) but EAS Station's
+    #    hardware service has the same port open. gpsd never gets NMEA,
+    #    SHM 0 stays empty, the `lock GPS` constraint on PPS never fires,
+    #    and chrony falls back to internet NTP at stratum ≥ 2. There is
+    #    no one-click fix yet — properly resolving it needs Tier 3
+    #    (gpsd-as-NMEA-source mode in gps_manager.py).
     unreached = chrony_run.get("refclocks_unreached") or []
     if unreached and serial.get("exists"):
         # Only surface when chrony itself is otherwise healthy — if chrony
@@ -903,15 +852,15 @@ def _build_actions(report: Dict[str, Any]) -> List[Dict[str, Any]]:
                     f"chrony has the {' / '.join(unreached)} refclock(s) configured "
                     "but Reach=0 — no samples have ever arrived. The most common "
                     "cause is gpsd not being able to open the GPS serial port "
-                    "because another process owns it. Set Admin → Hardware "
-                    "Settings → GPS → NMEA Source to 'gpsd' so gpsd is the "
-                    "single serial-port owner; EAS Station will read the same "
-                    "receiver from gpsd's localhost JSON stream while chrony "
-                    "uses gpsd SHM 0 plus /dev/pps0."
+                    "because EAS Station's hardware service holds it. Until the "
+                    "gpsd-as-NMEA-source feature lands, the workaround is to "
+                    "uncheck 'Enable GPS Receiver' under Admin → Hardware "
+                    "Settings → GPS, save, and let gpsd own the port. You'll "
+                    "lose the live GPS card but gain stratum-1 PPS time."
                 ),
                 "command": (
                     "# Check who owns the serial port:\n"
-                    "sudo lsof /dev/serial0 /dev/ttyAMA0 /dev/ttyS0 2>/dev/null"
+                    "sudo lsof /dev/ttyAMA10 /dev/ttyAMA0 /dev/serial0 2>/dev/null"
                 ),
             })
 
@@ -925,7 +874,6 @@ def _build_actions(report: Dict[str, Any]) -> List[Dict[str, Any]]:
 def collect_gps_hat_diagnostics(
     expected_pps_pin: int = 18,
     expected_baud: int = 9600,
-    expected_source: str = "auto",
     logger: Optional[logging.Logger] = None,
 ) -> Dict[str, Any]:
     """Top-level probe. Returns a JSON-serialisable diagnostic report.
@@ -935,9 +883,6 @@ def collect_gps_hat_diagnostics(
             (passed in by the caller from settings).
         expected_baud: Baud rate EAS Station has configured for the GPS
             serial port (passed in by the caller from settings).
-        expected_source: NMEA source mode EAS Station is configured to use
-            (``auto``, ``serial``, or ``gpsd``); used to flag port-sharing
-            setups that cannot let chrony consume GPS+PPS.
         logger: Optional logger; defaults to module logger.
     """
     log = logger or _logger
@@ -945,7 +890,6 @@ def collect_gps_hat_diagnostics(
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "expected_pps_pin": expected_pps_pin,
         "expected_baud": expected_baud,
-        "expected_source": (expected_source or "auto"),
     }
 
     try:

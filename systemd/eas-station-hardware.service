@@ -74,7 +74,7 @@ DeviceAllow=/dev/ttyUSB0 rw
 DeviceAllow=/dev/ttyACM0 rw
 # Serial UART for GPS HAT (/dev/serial0 symlink target varies by Pi model)
 DeviceAllow=/dev/ttyAMA0 rw
-DeviceAllow=/dev/ttyAMA1 rw
+DeviceAllow=/dev/ttyAMA10 rw
 DeviceAllow=/dev/ttyS0 rw
 
 # Resource limits

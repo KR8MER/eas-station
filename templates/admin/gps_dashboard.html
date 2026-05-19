@@ -3533,14 +3533,9 @@
 
         // Peak jitter.
         var jEl = document.getElementById('qm-jitter');
-        // Match the help-card ladder for Peak Jitter: <5 µs excellent,
-        // 5–20 µs good, 20–50 µs acceptable, 50–200 µs watch,
-        // >200 µs bad.  The headline card has only ok/warn/fault
-        // colours, so keep the excellent+good range green and only
-        // mark truly bad jitter red.
         var jSev = (jitterPeakNs === null) ? 'unknown'
-                 : (jitterPeakNs <= 20_000) ? 'ok'
-                 : (jitterPeakNs <= 200_000) ? 'warn'
+                 : (jitterPeakNs <= 500) ? 'ok'
+                 : (jitterPeakNs <= 5000) ? 'warn'
                  : 'fault';
         setTileSeverity(jEl, jSev);
         if (jEl) jEl.querySelector('.metric-val').textContent = (jitterPeakNs !== null) ? fmtNs(jitterPeakNs) : '—';
@@ -5163,7 +5158,6 @@
         filter: '',
         lastSentences: []
     };
-    
     function renderNmeaInspector(sentences) {
         var pauseEl  = document.getElementById('ts-nmea-pause');
         var filterEl = document.getElementById('ts-nmea-filter');
@@ -6816,22 +6810,17 @@
         var chrony = (snapshot && snapshot.chrony) || {};
         var t      = chrony.tracking || {};
 
-        // Reference Lock — has GPS lock + 3D fix.  gps.fix_mode is the
-        // NMEA/gpsd numeric mode (1=no fix, 2=2D, 3=3D), so normalise it
-        // before composing operator-facing copy.  Otherwise a healthy 3D
-        // solution renders as the confusing text "3 fix (no altitude)".
-        var fixMode = gps.fix_mode;
-        var fixModeLabel = (fixMode === 3) ? '3D' : ((fixMode === 2) ? '2D' : (gps.has_fix ? 'GNSS' : 'No'));
+        // Reference Lock — has GPS lock + 3D fix.
+        var locked = gps.has_fix && !gps.holdover_s;
+        var fixMode = gps.fix_mode || (gps.has_fix ? '3D' : 'No fix');
         var refLev, refDet;
         if (gps.holdover_s > 0) {
             refLev = (gps.holdover_s > 300 ? 'bad' : 'watch');
             refDet = 'Holdover ' + fmtDuration(gps.holdover_s) + ' — no live GNSS lock';
-        } else if (gps.has_fix && fixMode === 3) {
+        } else if (gps.has_fix && /3D/i.test(String(fixMode))) {
             refLev = 'excellent'; refDet = '3D fix locked';
-        } else if (gps.has_fix && fixMode === 2) {
-            refLev = 'acceptable'; refDet = '2D fix — altitude not available';
         } else if (gps.has_fix) {
-            refLev = 'acceptable'; refDet = fixModeLabel + ' fix — dimensionality unknown';
+            refLev = 'acceptable'; refDet = fixMode + ' fix (no altitude)';
         } else {
             refLev = 'bad'; refDet = 'No GNSS lock';
         }
