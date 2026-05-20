@@ -1648,7 +1648,7 @@ small,
 
 .navbar-brand .logo-wordmark,
 .navbar-brand .brand-logo {
-    height: 40px;
+    height: 56px;
     width: auto;
 }
 
@@ -5236,7 +5236,7 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 
     .navbar-brand .logo-wordmark,
     .navbar-brand .brand-logo {
-        height: 50px;
+        height: 64px;
     }
 
     /* Hamburger menu styling */
@@ -5397,7 +5397,7 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 
     .navbar-brand .logo-wordmark,
     .navbar-brand .brand-logo {
-        height: 42px;
+        height: 52px;
     }
 
     .page-header {
@@ -5554,7 +5554,7 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 
     .navbar-brand .logo-wordmark,
     .navbar-brand .brand-logo {
-        height: 36px;
+        height: 44px;
     }
 
     .page-header {
@@ -5633,7 +5633,7 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 
     .navbar-brand .logo-wordmark,
     .navbar-brand .brand-logo {
-        height: 36px;
+        height: 44px;
     }
 
     .page-header {
