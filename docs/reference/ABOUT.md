@@ -1,35 +1,35 @@
-# ℹ️ About EAS Station
+# ℹ️ About EAS Station™
 
-EAS Station is a complete Emergency Alert System platform that automates the ingestion, encoding, broadcast, and verification of Common Alerting Protocol (CAP) alerts. Built by amateur radio operators supporting Putnam County, Ohio, it combines NOAA and IPAWS feed aggregation, FCC-compliant SAME encoding, PostGIS spatial intelligence, SDR verification, and LED signage integration into a unified operations hub.
+EAS Station™ is a complete Emergency Alert System platform that automates the ingestion, encoding, broadcast, and verification of Common Alerting Protocol (CAP) alerts. Built by amateur radio operat[...]
 
-The long-term vision is to deliver a software-driven, off-the-shelf drop-in replacement for commercial encoder/decoder appliances. Every subsystem is being designed so commodity compute, SDR front-ends, and readily available interfaces can fulfill the same mission as the traditional rack units.
+The long-term vision is to deliver a software-driven, off-the-shelf drop-in replacement for commercial encoder/decoder appliances. Every subsystem is being designed so commodity compute, SDR front-[...]
 
-EAS Station’s reference build centers on a Raspberry Pi 5 (4 GB RAM baseline, 8 GB recommended when narration and SDR verification share the host) with HATs that expose dry-contact GPIO relays, RS-232 automation ports, and balanced audio interfaces. HDMI confidence monitoring and paired SDR receivers complete the package, proving that inexpensive, fan-less hardware can shoulder the same responsibilities as the utilitarian “black boxes” sold today.
+EAS Station™'s reference build centers on a Raspberry Pi 5 (4 GB RAM baseline, 8 GB recommended when narration and SDR verification share the host) with HATs that expose dry-contact GPIO relays, R[...]
 
-A **GPS/RTC HAT** (Uputronics u-blox MAX-M8Q multi-GNSS or Adafruit Ultimate GPS) brings hardware Pulse-Per-Second to the kernel, letting `chrony` discipline the host as a **true stratum 1 NTP server** with sub-microsecond accuracy and a battery-backed RTC for cold-boot continuity. Every alert timestamp, audit log entry, and SAME `JJJHHMM` field is locked to the satellites with no upstream internet time required.
+A **GPS/RTC HAT** (Uputronics u-blox MAX-M8Q multi-GNSS or Adafruit Ultimate GPS) brings hardware Pulse-Per-Second to the kernel, letting `chrony` discipline the host as a **true stratum 1 NTP serv[...]
 
-Raspberry Pi 4 systems remain compatible for labs but no longer represent the documented baseline. Deployments are validated on Debian 13 (Trixie) 64-bit builds. The container image uses Debian Bookworm (`python:3.11-slim-bookworm`) for reproducible multi-architecture builds with native SoapySDR compatibility. The remaining gap is disciplined software integration, a predictable setup experience, long-haul reliability, and the evidence required to pursue FCC certification.
+Raspberry Pi 4 systems remain compatible for labs but no longer represent the documented baseline. Deployments are validated on Debian 13 (Trixie) 64-bit builds. The container image uses Debian Bo[...]
 
 ### Python Release Strategy
 
 - **Upstream status:** Python 3.13.0 is the newest general-availability CPython release.
-- **Current runtime:** The stack uses Python 3.11 to maintain compatibility with Debian bookworm's pre-compiled SoapySDR bindings (`python3-soapysdr`). All key dependencies including `scipy==1.14.1` and `pyttsx3==2.90` provide Linux/ARM64 wheels for Python 3.11, avoiding from-source builds that would pull heavy Fortran and speech synthesis toolchains and exhaust Raspberry Pi 5 hosts.
-- **Mitigation:** The system is updated regularly with Python 3.11 patch releases, and pinned dependencies are updated alongside security advisories to ensure CVE fixes without destabilizing the hardware-specific build pipeline or SDR functionality.
+- **Current runtime:** The stack uses Python 3.11 to maintain compatibility with Debian bookworm's pre-compiled SoapySDR bindings (`python3-soapysdr`). All key dependencies including `scipy==1.14.[...]
+- **Mitigation:** The system is updated regularly with Python 3.11 patch releases, and pinned dependencies are updated alongside security advisories to ensure CVE fixes without destabilizing the h[...]
 
 ## Safety Notice
-- **Development status:** The project remains experimental and has only been cross-checked against community tools like [multimon-ng](https://github.com/EliasOenal/multimon-ng) for decoding parity. All other implementations, workflows, and documentation are original and subject to change.
-- **Certification pending:** The team is actively building toward hardware parity, but the software is not yet an approved replacement for commercial Emergency Alert System encoders or other FCC-authorized equipment.
-- **Lab use only (for now):** Operate EAS Station strictly in test environments and never rely on it for live public warning, life safety, or mission-critical decisions until the roadmap is complete and certification paths are pursued.
+- **Development status:** The project remains experimental and has only been cross-checked against community tools like [multimon-ng](https://github.com/EliasOenal/multimon-ng) for decoding parity[...]
+- **Certification pending:** The team is actively building toward hardware parity, but the software is not yet an approved replacement for commercial Emergency Alert System encoders or other FCC-a[...]
+- **Lab use only (for now):** Operate EAS Station™ strictly in test environments and never rely on it for live public warning, life safety, or mission-critical decisions until the roadmap is comple[...]
 - **Review legal docs:** Before inviting collaborators or storing data, read the repository [Terms of Use](../policies/TERMS_OF_USE) and [Privacy Policy](../policies/PRIVACY_POLICY).
 
 ## Mission and Scope
 - **Primary Goal:** Provide emergency communications teams with automated CAP-to-EAS workflow, from alert ingestion through broadcast verification, with complete compliance documentation.
-- **Drop-In Replacement Roadmap:** Implement the nine requirement areas in [`docs/roadmap/dasdec3-feature-roadmap.md`](../roadmap/dasdec3-feature-roadmap)—baseband capture, deterministic playout, hardware control, security, resilience, turnkey deployment, compliance analytics, unified documentation, and certification readiness—so the platform can mirror commercial decoder capabilities on commodity hardware.
+- **Drop-In Replacement Roadmap:** Implement the nine requirement areas in [`docs/roadmap/dasdec3-feature-roadmap.md`](../roadmap/dasdec3-feature-roadmap)—baseband capture, deterministic playout[...]
 - **Deployment Model:** Container-first architecture designed for on-premise or field deployments with external PostgreSQL/PostGIS database service.
 - **Operational Focus:** Multi-source alert aggregation, automatic SAME broadcast generation, SDR-based verification, spatial boundary awareness, and audit trail management.
 
 ## Current Development Status
-See the **[Master Roadmap](../roadmap/dasdec3-feature-roadmap)** for detailed progress on all nine requirement areas, including completed features like audio ingest, security controls, and analytics. For an honest assessment of where EAS Station stands relative to the commercial DASDEC-III, see the **[DASDEC-III Comparison](DASDEC_COMPARISON.md)**.
+See the **[Master Roadmap](../roadmap/dasdec3-feature-roadmap)** for detailed progress on all nine requirement areas, including completed features like audio ingest, security controls, and analyti[...]
 
 ## Core Services
 
@@ -69,7 +69,7 @@ The application combines open-source tooling and optional cloud integrations. Ve
 
 ## Data Sources & Attribution
 
-EAS Station relies on publicly available geographic data to enable spatial filtering, boundary-aware alert processing, and location-based targeting.
+EAS Station™ relies on publicly available geographic data to enable spatial filtering, boundary-aware alert processing, and location-based targeting.
 
 ### Geographic Data Providers
 
@@ -94,11 +94,11 @@ For complete attribution details, see [`dependency_attribution.md`](dependency_a
 - **Issue Tracking:** Use GitHub issues for bug reports and feature requests.
 - **Documentation Updates:** User-facing changes must update the README, HELP, and CHANGELOG entries.
 - **Environment Variables:** Any new variables must be mirrored in `.env.example` per contributor guidelines.
-- **Release Accounting:** Each deployment must surface the repository `VERSION` manifest in the UI, log its commit hash, and append the relevant entry to [`CHANGELOG.md`](CHANGELOG) so the operational history is auditable.
-- **Automation Guardrails:** The repository `VERSION` file, shared version resolver, and release metadata test will fail builds when the reported version and changelog drift—keep them aligned before requesting review.
-- **Upgrade & Backup Tooling:** Use `python tools/create_backup.py` for pre-flight snapshots and `python tools/inplace_upgrade.py` to roll forward without wiping containers or volumes. The Admin console exposes one-click buttons for both tasks under System Operations, calling the same helpers and recording their status for operators.
+- **Release Accounting:** Each deployment must surface the repository `VERSION` manifest in the UI, log its commit hash, and append the relevant entry to [`CHANGELOG.md`](CHANGELOG) so the operati[...]
+- **Automation Guardrails:** The repository `VERSION` file, shared version resolver, and release metadata test will fail builds when the reported version and changelog drift—keep them aligned be[...]
+- **Upgrade & Backup Tooling:** Use `python tools/create_backup.py` for pre-flight snapshots and `python tools/inplace_upgrade.py` to roll forward without wiping containers or volumes. The Admin c[...]
 
 ## Maintainer Profile
-Timothy Kramer (KR8MER) serves as the project's maintainer. Licensed as an amateur radio operator since 2004 and upgraded to General Class in 2025, Kramer brings 17 years of public-safety service as a deputy sheriff and deep familiarity with Motorola mission-critical communications. He now works as a full-time electrical panel electrician while supporting Skywarn operations and a laboratory of professional-grade radios, SDR capture nodes, digital paging systems, and networking equipment. EAS Station reflects his goal of pairing disciplined engineering practices with experimental emergency communications research.
+Timothy Kramer (KR8MER) serves as the project's maintainer. Licensed as an amateur radio operator since 2004 and upgraded to General Class in 2025, Kramer brings 17 years of public-safety service[...]
 
 For setup instructions, operational tips, and troubleshooting guidance, refer to the dedicated [HELP documentation](../guides/HELP).

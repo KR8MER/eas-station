@@ -1,5 +1,5 @@
-# MkDocs Configuration for EAS Station Documentation
-site_name: EAS Station Documentation
+# MkDocs Configuration for EAS Station™ Documentation
+site_name: EAS Station™ Documentation
 site_description: Professional Emergency Alert System platform for NOAA and IPAWS alerts
 site_author: KR8MER
 site_url: https://kr8mer.github.io/eas-station/
@@ -30,7 +30,7 @@ theme:
       accent: deep purple
       toggle:
         icon: material/brightness-4
-        name: Switch to light mode
+        name: Switch to dark mode
   features:
     - navigation.instant     # Instant loading
     - navigation.tracking    # URL updates with scroll

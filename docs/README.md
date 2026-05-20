@@ -1,6 +1,6 @@
-# EAS Station Documentation
+# EAS Station™ Documentation
 
-Welcome to the documentation for EAS Station - an Emergency Alert System platform.
+Welcome to the documentation for EAS Station™ - an Emergency Alert System platform.
 
 > **IMPORTANT**: This software is experimental and for laboratory use only. Not FCC-certified for production emergency alerting.
 
@@ -45,7 +45,7 @@ Welcome to the documentation for EAS Station - an Emergency Alert System platfor
 
 ## System Overview
 
-EAS Station integrates multiple alert sources (NOAA Weather, IPAWS Federal) and processes them through a pipeline that includes:
+EAS Station™ integrates multiple alert sources (NOAA Weather, IPAWS Federal) and processes them through a pipeline that includes:
 
 - Multi-source alert aggregation
 - FCC-compliant SAME encoding
@@ -86,7 +86,7 @@ docs/
 
 ### Setup & Configuration
 
-- [Install EAS Station](../README.md#quick-start)
+- [Install EAS Station™](../README.md#quick-start)
 - [Configure SDR receivers](hardware/SDR_SETUP)
 - [Set up HTTPS](guides/HTTPS_SETUP)
 - [Connect to IPAWS](guides/ipaws_feed_integration)
