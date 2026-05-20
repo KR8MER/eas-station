@@ -3533,9 +3533,12 @@
 
         // Peak jitter.
         var jEl = document.getElementById('qm-jitter');
+        // Thresholds mirror the documented Peak Jitter ranges in the help
+        // panel: excellent/good (<20 µs) → ok, acceptable/watch (20–200 µs)
+        // → warn, bad (>200 µs) → fault.
         var jSev = (jitterPeakNs === null) ? 'unknown'
-                 : (jitterPeakNs <= 500) ? 'ok'
-                 : (jitterPeakNs <= 5000) ? 'warn'
+                 : (jitterPeakNs <= 20000) ? 'ok'
+                 : (jitterPeakNs <= 200000) ? 'warn'
                  : 'fault';
         setTileSeverity(jEl, jSev);
         if (jEl) jEl.querySelector('.metric-val').textContent = (jitterPeakNs !== null) ? fmtNs(jitterPeakNs) : '—';
