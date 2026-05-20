@@ -1,5 +1,5 @@
 /**
- * EAS Station - WebSocket Client Module
+ * EAS Station ™ - WebSocket Client Module
  * Centralized WebSocket connection management with automatic fallback to polling
  *
  * This module replaces setInterval-based polling with WebSocket real-time updates.

@@ -1,5 +1,5 @@
 /**
- * EAS Station - Lightning Theme Bolt Renderer
+ * EAS Station ™ - Lightning Theme Bolt Renderer
  *
  * When the "lightning" theme is active, this module drives a storm overlay:
  *

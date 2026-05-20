@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% block title %}Help & Operations Guide | EAS Station{% endblock %}
+{% block title %}Help & Operations Guide | EAS Station ™{% endblock %}
 {% block content %}
 <div class="container py-4">
     <div class="row justify-content-center">
@@ -12,11 +12,11 @@
                     {% endwith %}
                     <i class="fas fa-life-ring fa-3x text-gradient mb-3 d-block"></i>
                     <h1 class="display-5 fw-bold mb-3 text-gradient">Help & Operations Guide</h1>
-                    <p class="lead text-muted">Complete documentation for operating and maintaining your EAS Station</p>
+                    <p class="lead text-muted">Complete documentation for operating and maintaining your EAS Station ™</p>
                     <div class="alert alert-warning d-flex align-items-start mt-4 text-start" role="alert">
                         <i class="fas fa-triangle-exclamation fa-lg me-3"></i>
                         <div>
-                            <strong>Safety Reminder:</strong> This guide supports an experimental build of EAS Station. The platform is verified against reference projects such as multimon-ng, but it is <em>not</em> FCC-approved and must only be used in controlled lab environments. Never depend on it for live emergency alerting or public safety workflows.
+                            <strong>Safety Reminder:</strong> This guide supports an experimental build of EAS Station ™. The platform is verified against reference projects such as multimon-ng, but it is <em>not</em> FCC-approved and must only be used in controlled lab environments. Never depend on it for live emergency alerting or public safety workflows.
                         </div>
                     </div>
                 </div>
@@ -223,7 +223,7 @@
                                 <li class="list-group-item d-flex justify-content-between align-items-start">
                                     <div class="ms-2 me-auto">
                                         <div class="fw-bold">Start Services</div>
-                                        Run <code>sudo systemctl start eas-station.target</code> to launch all EAS Station services.
+                                        Run <code>sudo systemctl start eas-station.target</code> to launch all EAS Station ™ services.
                                     </div>
                                     <i class="fas fa-rocket text-muted"></i>
                                 </li>
@@ -268,7 +268,7 @@
                             <div id="displayUnitsCollapse" class="accordion-collapse collapse" data-bs-parent="#operationsAccordion">
                                 <div class="accordion-body">
                                     <p>
-                                        EAS Station lets each operator pick how positional and motion values are
+                                        EAS Station ™ lets each operator pick how positional and motion values are
                                         displayed across the UI.  Selections are saved in your browser's
                                         <code>localStorage</code> (per-device, per-browser) and apply
                                         immediately wherever the affected values appear.
@@ -424,7 +424,7 @@
                                         (<a href="/admin/county_boundaries"><code>Admin → County Boundaries</code></a>)
                                         manages the Census TIGER/Line county shapefile used to draw highlighted county
                                         outlines on IPAWS alert coverage maps. IPAWS/NWS alerts carry 6-digit SAME
-                                        geocodes (e.g. <code>039137</code>) instead of polygon geometry; EAS Station
+                                        geocodes (e.g. <code>039137</code>) instead of polygon geometry; EAS Station ™
                                         converts those codes to county outlines by looking up this table.
                                     </p>
 
@@ -471,7 +471,7 @@
 
                                     <div class="alert alert-info mt-3">
                                         <i class="fas fa-lightbulb"></i>
-                                        <strong>One-time setup:</strong> EAS Station auto-loads the bundled Census shapefile
+                                        <strong>One-time setup:</strong> EAS Station ™ auto-loads the bundled Census shapefile
                                         on first startup if the table is empty. You only need to use this page if the
                                         auto-load did not run, if you need to reload data, or if you want to inspect or
                                         verify the coverage for specific counties.

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Mail Server — EAS Station{% endblock %}
+{% block title %}Mail Server — EAS Station ™{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
@@ -52,7 +52,7 @@
                         <i class="fas fa-circle-check fa-lg me-3"></i>
                         <div>
                             <strong>Postfix is running and accepting mail on localhost:25.</strong><br>
-                            SMTP URL for EAS Station: <code>smtp://localhost:25</code>
+                            SMTP URL for EAS Station ™: <code>smtp://localhost:25</code>
                         </div>
                     </div>
                     {% elif status.installed and status.active %}
@@ -181,10 +181,10 @@
             <!-- ── Apply to Notifications Card ─────────────────────────── -->
             <div class="card mb-3 {{ '' if status.port_open else 'd-none' }}" id="applyNotifCard">
                 <div class="card-header">
-                    <h5 class="mb-0"><i class="fas fa-plug"></i> Connect to EAS Station</h5>
+                    <h5 class="mb-0"><i class="fas fa-plug"></i> Connect to EAS Station ™</h5>
                 </div>
                 <div class="card-body">
-                    <p>Postfix is running. Click below to set the EAS Station notification
+                    <p>Postfix is running. Click below to set the EAS Station ™ notification
                        mail URL to <code>smtp://localhost:25</code> — no username or password needed.</p>
                     <div id="applyNotifOutput" class="alert d-none small mb-3"></div>
                     <a href="/admin/notifications" class="btn btn-outline-secondary btn-sm me-2">
@@ -231,7 +231,7 @@
                         <li class="mb-2"><strong>Install</strong> Postfix on this server.</li>
                         <li class="mb-2"><strong>Set the hostname</strong> — must match your server's
                             reverse-DNS record in Vultr.</li>
-                        <li class="mb-2"><strong>Apply &amp; Restart</strong> — EAS Station writes the
+                        <li class="mb-2"><strong>Apply &amp; Restart</strong> — EAS Station ™ writes the
                             Postfix config and starts the service.</li>
                         <li class="mb-2"><strong>Use Postfix</strong> — one click sets the notification
                             SMTP URL to <code>smtp://localhost:25</code>.</li>
@@ -288,7 +288,7 @@
                     <code class="d-block mb-2">postqueue -f</code>
                     <div class="text-muted mb-1"># View mail log</div>
                     <code class="d-block mb-2">journalctl -u postfix -f</code>
-                    <div class="text-muted mb-1"># SMTP URL for EAS Station</div>
+                    <div class="text-muted mb-1"># SMTP URL for EAS Station ™</div>
                     <code class="d-block">smtp://localhost:25</code>
                 </div>
             </div>

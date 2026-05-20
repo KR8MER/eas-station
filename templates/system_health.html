@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}System Health Monitor - EAS Station{% endblock %}
+{% block title %}System Health Monitor - EAS Station ™{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -1100,7 +1100,7 @@
                             {% set dep_services = systemd_data.services | selectattr('is_eas_service', 'equalto', False) | list %}
                             
                             {% if eas_services %}
-                                <h6 class="text-muted small mb-2">EAS Station Services</h6>
+                                <h6 class="text-muted small mb-2">EAS Station ™ Services</h6>
                                 {% for service in eas_services[:5] %}
                                     {% set active_state = (service.active_state or '')|lower %}
                                     {% if active_state == 'active' %}
@@ -3102,7 +3102,7 @@
             let servicesHtml = '';
             if (isAvailable) {
                 if (easServices.length > 0) {
-                    servicesHtml += '<h6 class="text-muted small mb-2">EAS Station Services</h6>';
+                    servicesHtml += '<h6 class="text-muted small mb-2">EAS Station ™ Services</h6>';
                     servicesHtml += easServices.slice(0, 5).map(renderService).join('');
                 }
                 if (depServices.length > 0) {
@@ -3200,7 +3200,7 @@
                     }
                     
                     const displayName = service.display_name || service.name || 'Unknown';
-                    const category = service.is_eas_service ? 'EAS Station' : 'Dependency';
+                    const category = service.is_eas_service ? 'EAS Station ™' : 'Dependency';
                     const subState = service.sub_state || '—';
 
                     return `

@@ -1,5 +1,5 @@
 {# ─────────────────────────────────────────────────────────────────────────
-   EAS Station brand logo partial.
+   EAS Station ™ brand logo partial.
 
    This renders the canonical brand wordmark:
 
@@ -13,7 +13,7 @@
    ───────────────────────────────────────────────────────────────────────── #}
 {% set logo_classes = logo_classes | default('brand-logo') %}
 {% set logo_style = logo_style | default('') %}
-{% set logo_label = logo_label | default('EAS Station logo') %}
+{% set logo_label = logo_label | default('EAS Station ™ logo') %}
 <img class="logo-wordmark{% if logo_classes %} {{ logo_classes }}{% endif %}"
      src="{{ url_for('static', filename='img/eas-system-wordmark.svg') }}"
      alt="{{ logo_label }}"

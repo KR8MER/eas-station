@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Alert Feeds Configuration - EAS Station{% endblock %}
+{% block title %}Alert Feeds Configuration - EAS Station ™{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
@@ -298,7 +298,7 @@
                         <label for="noaaUserAgent">NOAA User Agent String</label>
                         <input type="text" id="noaaUserAgent" name="user_agent"
                                value="{{ noaa_status.user_agent }}"
-                               placeholder="EAS Station/2.12 (+https://example.com; contact@example.com)"
+                               placeholder="EAS Station ™/2.12 (+https://example.com; contact@example.com)"
                                required>
                         <div class="form-help">
                             NOAA requires identification for API compliance. Format: "AppName/Version (contact info)"

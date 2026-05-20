@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% block title %}About | EAS Station{% endblock %}
+{% block title %}About | EAS Station ™{% endblock %}
 {% block extra_css %}
 {# About-page visual system lives in static/css/styles.css under the
    `.eas-*` class names (with `.about-*` aliases). See the
@@ -36,7 +36,7 @@
                         {% include 'partials/logo_wordmark.html' %}
                     {% endwith %}
                     <h1 class="about-hero-title">Software-defined emergency alerting, engineered like a broadcast appliance.</h1>
-                    <p class="about-hero-lead">EAS Station is an open-source, Raspberry Pi-class replacement for commercial EAS encoder/decoders — integrating CAP ingest, SAME audio synthesis, SDR verification, and multi-channel distribution into one disciplined stack.</p>
+                    <p class="about-hero-lead">EAS Station ™ is an open-source, Raspberry Pi-class replacement for commercial EAS encoder/decoders — integrating CAP ingest, SAME audio synthesis, SDR verification, and multi-channel distribution into one disciplined stack.</p>
                     <div class="about-chip-row">
                         <span class="about-chip"><i class="fas fa-flask"></i> Research Platform</span>
                         <span class="about-chip"><i class="fas fa-code-branch"></i> Open Source</span>
@@ -448,21 +448,21 @@
                     </div>
                 </div>
 
-                <p class="mb-3">EAS Station is the first open-source EAS encoder to natively support <strong>MDC1200 selective calling</strong> — Motorola's 1200-baud FFSK signalling protocol for Land Mobile Radio (LMR) systems. When EAS alerts are forwarded into a two-way radio dispatch system, MDC1200 ensures they are correctly identified on subscriber displays, selectively routed to authorised radios, and cleanly terminated — exactly as a Motorola infrastructure device would behave.</p>
+                <p class="mb-3">EAS Station ™ is the first open-source EAS encoder to natively support <strong>MDC1200 selective calling</strong> — Motorola's 1200-baud FFSK signalling protocol for Land Mobile Radio (LMR) systems. When EAS alerts are forwarded into a two-way radio dispatch system, MDC1200 ensures they are correctly identified on subscriber displays, selectively routed to authorised radios, and cleanly terminated — exactly as a Motorola infrastructure device would behave.</p>
 
                 <div class="row g-3 mb-4">
                     <div class="col-md-6 col-lg-4">
                         <div class="feature-card fc-orange h-100">
                             <div class="feature-card-icon"><i class="fas fa-id-badge"></i></div>
                             <h5 class="feature-card-title">Pre-Alert PTT-ID</h5>
-                            <p class="feature-card-text">An MDC1200 PTT-ID packet transmits <em>before</em> the SAME header burst. Every subscriber radio on the channel displays EAS Station's unit ID the moment the transmission opens — no ambiguity about the source.</p>
+                            <p class="feature-card-text">An MDC1200 PTT-ID packet transmits <em>before</em> the SAME header burst. Every subscriber radio on the channel displays EAS Station ™'s unit ID the moment the transmission opens — no ambiguity about the source.</p>
                         </div>
                     </div>
                     <div class="col-md-6 col-lg-4">
                         <div class="feature-card fc-teal h-100">
                             <div class="feature-card-icon"><i class="fas fa-volume-xmark"></i></div>
                             <h5 class="feature-card-title">Selective Unmuting</h5>
-                            <p class="feature-card-text">Motorola-compatible subscribers programmed with EAS Station's unit ID break squelch automatically. Radios on the same channel that aren't configured for that ID stay silent — no alert fatigue on channels not intended for EAS.</p>
+                            <p class="feature-card-text">Motorola-compatible subscribers programmed with EAS Station ™'s unit ID break squelch automatically. Radios on the same channel that aren't configured for that ID stay silent — no alert fatigue on channels not intended for EAS.</p>
                         </div>
                     </div>
                     <div class="col-md-6 col-lg-4">
@@ -483,7 +483,7 @@
                         <div class="feature-card fc-purple h-100">
                             <div class="feature-card-icon"><i class="fas fa-list-ol"></i></div>
                             <h5 class="feature-card-title">Dispatch Console Logging</h5>
-                            <p class="feature-card-text">Every EAS transmission appears in the radio system's call list with EAS Station's unit ID, timestamp, and call duration — providing a hardware-level audit trail alongside the software compliance logs.</p>
+                            <p class="feature-card-text">Every EAS transmission appears in the radio system's call list with EAS Station ™'s unit ID, timestamp, and call duration — providing a hardware-level audit trail alongside the software compliance logs.</p>
                         </div>
                     </div>
                     <div class="col-md-6 col-lg-4">
@@ -498,7 +498,7 @@
                 <div class="alert alert-info d-flex align-items-start mb-0" role="alert">
                     <i class="fas fa-circle-info me-2 mt-1 flex-shrink-0"></i>
                     <div>
-                        <strong>Designed for LMR integration.</strong> Wire EAS Station's audio output into a base-station radio's auxiliary input — MDC1200 handles the PTT-ID signalling automatically so the dispatch console sees a clean, identified, full-featured EAS call. No extra hardware, no separate signalling controller.
+                        <strong>Designed for LMR integration.</strong> Wire EAS Station ™'s audio output into a base-station radio's auxiliary input — MDC1200 handles the PTT-ID signalling automatically so the dispatch console sees a clean, identified, full-featured EAS call. No extra hardware, no separate signalling controller.
                         See the <a href="/docs/reference/protocols/MDC1200" class="alert-link">MDC1200 protocol reference</a> for encoder internals, op-code tables, and verification instructions.
                     </div>
                 </div>
@@ -514,7 +514,7 @@
                     </div>
                 </div>
 
-                <p class="mb-3">EAS Station ships with first-class support for a <strong>GPS/PPS HAT</strong> that turns the station itself into a <strong>true stratum 1 NTP server</strong>. <code>chrony</code> consumes a multi-GNSS NMEA fix and the hardware <strong>Pulse-Per-Second</strong> edge as a kernel refclock, so every alert timestamp, every audit log entry, and every SAME header <code>JJJHHMM</code> field is locked to the satellites — accurate to sub-microsecond, with no upstream internet time required and no drift when the WAN is down.</p>
+                <p class="mb-3">EAS Station ™ ships with first-class support for a <strong>GPS/PPS HAT</strong> that turns the station itself into a <strong>true stratum 1 NTP server</strong>. <code>chrony</code> consumes a multi-GNSS NMEA fix and the hardware <strong>Pulse-Per-Second</strong> edge as a kernel refclock, so every alert timestamp, every audit log entry, and every SAME header <code>JJJHHMM</code> field is locked to the satellites — accurate to sub-microsecond, with no upstream internet time required and no drift when the WAN is down.</p>
 
                 <div class="row g-3 mb-4">
                     <div class="col-md-6 col-lg-4">
@@ -549,7 +549,7 @@
                         <div class="feature-card fc-teal h-100">
                             <div class="feature-card-icon"><i class="fas fa-network-wired"></i></div>
                             <h5 class="feature-card-title">Air-Gap Friendly</h5>
-                            <p class="feature-card-text">The reference is the <em>sky</em>, not <code>pool.ntp.org</code>. EAS Station holds stratum 1 with no internet at all — critical for field deployments, EOC roll-outs, COW trailers, and any site that loses transit during the very emergency the station is meant to cover.</p>
+                            <p class="feature-card-text">The reference is the <em>sky</em>, not <code>pool.ntp.org</code>. EAS Station ™ holds stratum 1 with no internet at all — critical for field deployments, EOC roll-outs, COW trailers, and any site that loses transit during the very emergency the station is meant to cover.</p>
                         </div>
                     </div>
                     <div class="col-md-6 col-lg-4">
@@ -564,7 +564,7 @@
                 <div class="alert alert-info d-flex align-items-start mb-0" role="alert">
                     <i class="fas fa-circle-info me-2 mt-1 flex-shrink-0"></i>
                     <div>
-                        <strong>Why timing is treated as first-class infrastructure.</strong> Every EAS event is timestamped, geofenced, and audited — and every CAP message carries <code>sent</code>, <code>effective</code>, <code>expires</code> and <code>onset</code> fields whose math has to match the wall clock. A station that drifts seconds against NIST is a station whose RWT logs and compliance trail eventually cease to match the real world. EAS Station owns its time at the hardware level.
+                        <strong>Why timing is treated as first-class infrastructure.</strong> Every EAS event is timestamped, geofenced, and audited — and every CAP message carries <code>sent</code>, <code>effective</code>, <code>expires</code> and <code>onset</code> fields whose math has to match the wall clock. A station that drifts seconds against NIST is a station whose RWT logs and compliance trail eventually cease to match the real world. EAS Station ™ owns its time at the hardware level.
                         See the <a href="/docs/hardware/GPS_HAT_SETUP" class="alert-link">GPS HAT Setup guide</a> for board options, wiring, and the manual configuration steps the admin UI automates.
                     </div>
                 </div>
@@ -589,7 +589,7 @@
                     <div>
                         <h3 class="maintainer-name">Timothy Kramer <span class="maintainer-callsign">/ KR8MER</span></h3>
                         <p class="maintainer-role">Project Lead &middot; Putnam County, Ohio</p>
-                        <p class="maintainer-blurb">Sole maintainer of EAS Station — amateur radio operator with deep roots in public safety and mission-critical communications. The project pairs disciplined engineering with experimental emergency communications research.</p>
+                        <p class="maintainer-blurb">Sole maintainer of EAS Station ™ — amateur radio operator with deep roots in public safety and mission-critical communications. The project pairs disciplined engineering with experimental emergency communications research.</p>
                     </div>
                     <div class="maintainer-aside d-none d-md-block">
                         <i class="fas fa-broadcast-tower fa-2x mb-2" style="color: var(--vibrant-indigo);"></i>
