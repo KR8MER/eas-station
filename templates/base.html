@@ -20,9 +20,9 @@
     {% block meta %}{% endblock %}
 
     <!-- Favicon — canonical EAS Station ™ wordmark -->
-    <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/eas-system-wordmark.png') }}">
-    <link rel="shortcut icon" href="{{ url_for('static', filename='img/eas-system-wordmark.png') }}">
-    <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/eas-system-wordmark.png') }}">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/eas-system-wordmark.png') }}?v={{ static_asset_version }}">
+    <link rel="shortcut icon" href="{{ url_for('static', filename='img/eas-system-wordmark.png') }}?v={{ static_asset_version }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/eas-system-wordmark.png') }}?v={{ static_asset_version }}">
     <meta name="theme-color" content="#204885">
 
     <!-- Vendor CSS (Bootstrap) -->
