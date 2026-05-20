@@ -40,7 +40,7 @@ When discussing or investigating bugs:
   - `templates/about.html` – System overview and feature descriptions
   - Relevant Markdown files in `docs/` directory
   - This ensures users always have current information about system capabilities
-- **Brand Consistency** – Use `static/img/eas-system-wordmark.svg` (the canonical brand wordmark) for hero sections, headers, and major UI cards when expanding documentation pages. The logo must remain accessible (include `alt` text). A companion raster (`eas-system-wordmark.png`) exists for renderers that can not consume SVG (e.g. the Pillow-based share-image renderer in `app_utils/image_export.py`) — re-rasterize it whenever the SVG changes.
+- **Brand Consistency** – Use `static/img/eas-system-wordmark.png` (the canonical brand wordmark) for hero sections, headers, and major UI cards when expanding documentation pages. The logo must remain accessible (include `alt` text). This is the single source of truth for every consumer — favicons, on-page `<img>` tags, and the Pillow-based share-image renderer in `app_utils/image_export.py` — so replacing the file refreshes everything at once.
 - **Mermaid-Friendly Markdown** – GitHub-flavoured Mermaid diagrams are welcome in repository docs. Keep them accurate by naming real modules, packages, and endpoints.
 
 ### **🚨 MANDATORY: Frontend UI for Every Backend Feature**

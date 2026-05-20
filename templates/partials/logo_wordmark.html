@@ -3,18 +3,16 @@
 
    This renders the canonical brand wordmark:
 
-       static/img/eas-system-wordmark.svg
+       static/img/eas-system-wordmark.png
 
    The same wordmark is used by favicons, on-page brand placements (navbar,
-   hero, footer), and the alert share-image renderer (which loads the
-   companion PNG at static/img/eas-system-wordmark.png because Pillow can
-   not read SVG).  To change the logo, update the SVG and re-rasterize
-   the PNG companion — no template edits required.
+   hero, footer), and the alert share-image renderer.  To change the logo,
+   replace the PNG — no template edits required.
    ───────────────────────────────────────────────────────────────────────── #}
 {% set logo_classes = logo_classes | default('brand-logo') %}
 {% set logo_style = logo_style | default('') %}
 {% set logo_label = logo_label | default('EAS Station ™ logo') %}
 <img class="logo-wordmark{% if logo_classes %} {{ logo_classes }}{% endif %}"
-     src="{{ url_for('static', filename='img/eas-system-wordmark.svg') }}"
+     src="{{ url_for('static', filename='img/eas-system-wordmark.png') }}"
      alt="{{ logo_label }}"
      {% if logo_style %}style="{{ logo_style }}"{% endif %}>
