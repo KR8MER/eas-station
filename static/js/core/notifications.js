@@ -1,5 +1,5 @@
 /**
- * EAS Station - Notifications Module
+ * EAS Station ™ - Notifications Module
  * Toast notification system for user feedback
  */
 

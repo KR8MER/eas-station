@@ -1,5 +1,5 @@
 /* ===========================================================================
- * EAS Station — shared GPS constellation palette
+ * EAS Station ™ — shared GPS constellation palette
  *
  * Single source of truth for the colours we use to differentiate GNSS
  * constellations across the three GPS panels in the UI:

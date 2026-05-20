@@ -1,4 +1,4 @@
-/* EAS Station Consolidated Styles */
+/* EAS Station ™ Consolidated Styles */
 
 /* ============================================================================
    EAS STATION - PROFESSIONAL DESIGN SYSTEM
@@ -8,7 +8,7 @@
    consistency, accessibility, and professional presentation.
    
    Version: 3.0 - Professional Edition
-   Author: EAS Station Development Team
+   Author: EAS Station ™ Development Team
    ============================================================================ */
 
 /* 1. CSS VARIABLES & DESIGN SYSTEM */
@@ -7143,7 +7143,7 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 
 /* === BOOTSTRAP CSS VARIABLE OVERRIDES FOR DARK THEMES ===
    Bootstrap 5.3 hard-codes its --bs-* CSS variables to light-theme values inside
-   :root. EAS Station uses data-theme (not data-bs-theme), so Bootstrap never
+   :root. EAS Station ™ uses data-theme (not data-bs-theme), so Bootstrap never
    activates its own dark-mode palette. Override the relevant Bootstrap variables
    here so every Bootstrap component (cards, tables, alerts, accordions, etc.)
    adapts to the active theme palette. */

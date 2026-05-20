@@ -1,5 +1,5 @@
 /**
- * EAS Station - Theme Management Module
+ * EAS Station ™ - Theme Management Module
  * Handles theme switching and persistence with support for multiple themes
  * Includes import/export capabilities for custom themes
  */
