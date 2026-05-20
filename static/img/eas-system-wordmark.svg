@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2100" height="520" viewBox="0 0 2100 520">
+<defs>
+<linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e8e8e8"/><stop offset=".5" stop-color="#777"/><stop offset="1" stop-color="#38383a"/></linearGradient>
+<linearGradient id="r" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ef2323"/><stop offset=".5" stop-color="#d91515"/><stop offset="1" stop-color="#960808"/></linearGradient>
+<style> .main{font-family:'Noto Sans Display',Arial,sans-serif;font-weight:900;font-stretch:condensed;font-size:168px;} .tag{font-family:'Noto Sans Display',Arial,sans-serif;font-weight:500;font-size:44px;letter-spacing:7px;} .tm{font-family:'Noto Sans Display',Arial,sans-serif;font-weight:700;font-size:40px;}</style>
+</defs>
+<g id="equalizer">
+<rect x="70" y="301" width="35" height="16" rx="4" fill="url(#g)"/>
+<rect x="70" y="275" width="35" height="16" rx="4" fill="url(#g)"/>
+<rect x="119" y="301" width="35" height="16" rx="4" fill="url(#g)"/>
+<rect x="119" y="275" width="35" height="16" rx="4" fill="url(#g)"/>
+<rect x="119" y="249" width="35" height="16" rx="4" fill="url(#g)"/>
+<rect x="119" y="223" width="35" height="16" rx="4" fill="url(#g)"/>
+<rect x="168" y="301" width="35" height="16" rx="4" fill="url(#g)"/>
+<rect x="168" y="275" width="35" height="16" rx="4" fill="url(#g)"/>
+<rect x="168" y="249" width="35" height="16" rx="4" fill="url(#g)"/>
+<rect x="168" y="223" width="35" height="16" rx="4" fill="url(#g)"/>
+<rect x="168" y="197" width="35" height="16" rx="4" fill="url(#g)"/>
+<rect x="168" y="171" width="35" height="16" rx="4" fill="url(#g)"/>
+<rect x="217" y="301" width="35" height="16" rx="4" fill="url(#r)"/>
+<rect x="217" y="275" width="35" height="16" rx="4" fill="url(#r)"/>
+<rect x="217" y="249" width="35" height="16" rx="4" fill="url(#r)"/>
+<rect x="266" y="301" width="35" height="16" rx="4" fill="url(#r)"/>
+<rect x="266" y="275" width="35" height="16" rx="4" fill="url(#r)"/>
+<rect x="266" y="249" width="35" height="16" rx="4" fill="url(#r)"/>
+<rect x="266" y="223" width="35" height="16" rx="4" fill="url(#r)"/>
+<rect x="266" y="197" width="35" height="16" rx="4" fill="url(#g)"/>
+<rect x="315" y="301" width="35" height="16" rx="4" fill="url(#r)"/>
+<rect x="315" y="275" width="35" height="16" rx="4" fill="url(#r)"/>
+<rect x="315" y="249" width="35" height="16" rx="4" fill="url(#r)"/>
+<rect x="315" y="223" width="35" height="16" rx="4" fill="url(#r)"/>
+<rect x="315" y="197" width="35" height="16" rx="4" fill="url(#r)"/>
+<rect x="315" y="171" width="35" height="16" rx="4" fill="url(#g)"/>
+<rect x="315" y="145" width="35" height="16" rx="4" fill="url(#g)"/>
+<rect x="364" y="301" width="35" height="16" rx="4" fill="url(#r)"/>
+<rect x="364" y="275" width="35" height="16" rx="4" fill="url(#r)"/>
+<rect x="364" y="249" width="35" height="16" rx="4" fill="url(#r)"/>
+<rect x="364" y="223" width="35" height="16" rx="4" fill="url(#g)"/>
+<rect x="413" y="301" width="35" height="16" rx="4" fill="url(#g)"/>
+<rect x="413" y="275" width="35" height="16" rx="4" fill="url(#g)"/>
+<rect x="413" y="249" width="35" height="16" rx="4" fill="url(#g)"/>
+<rect x="413" y="223" width="35" height="16" rx="4" fill="url(#g)"/>
+<rect x="413" y="197" width="35" height="16" rx="4" fill="url(#g)"/>
+<rect x="413" y="171" width="35" height="16" rx="4" fill="url(#g)"/>
+<rect x="462" y="301" width="35" height="16" rx="4" fill="url(#g)"/>
+<rect x="462" y="275" width="35" height="16" rx="4" fill="url(#g)"/>
+<rect x="462" y="249" width="35" height="16" rx="4" fill="url(#g)"/>
+<rect x="511" y="301" width="35" height="16" rx="4" fill="url(#g)"/>
+<rect x="511" y="275" width="35" height="16" rx="4" fill="url(#g)"/>
+</g>
+<line x1="631" y1="125" x2="631" y2="390" stroke="#707074" stroke-width="4"/>
+<text class="main" x="721" y="285" fill="#141416">EAS</text>
+<text class="main" x="1103" y="285" fill="#c41212">STATION</text>
+<text class="tm" x="1956" y="205" fill="#141416">TM</text>
+<text class="tag" x="723" y="405" fill="#505056">OPEN-SOURCE EMERGENCY ALERTING INFRASTRUCTURE</text>
+</svg>
