@@ -427,8 +427,47 @@
                     </li>
                 </ul>
 
+                <!-- Global Search (between primary nav and user nav) -->
+                {% if current_user is defined and current_user.is_authenticated %}
+                <form class="d-flex ms-auto me-2 my-2 my-lg-0" role="search"
+                      action="/search" method="get">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text" id="global-search-prefix">
+                            <i class="fas fa-magnifying-glass"></i>
+                        </span>
+                        <input class="form-control form-control-sm"
+                               type="search"
+                               name="q"
+                               id="global-search-input"
+                               placeholder="Search alert ID, event, text…"
+                               aria-label="Global search"
+                               aria-describedby="global-search-prefix"
+                               autocomplete="off"
+                               style="min-width: 200px;">
+                        <button class="btn btn-outline-light btn-sm" type="submit"
+                                title="Search (press / to focus)">
+                            <i class="fas fa-arrow-right"></i>
+                        </button>
+                    </div>
+                </form>
+                <script>
+                    // Press "/" anywhere outside an input to focus the search.
+                    // Honours the GitHub/StackOverflow convention so operators
+                    // arriving from other tools find it immediately.
+                    (function () {
+                        document.addEventListener('keydown', function (e) {
+                            if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+                            var tag = (e.target.tagName || '').toUpperCase();
+                            if (tag === 'INPUT' || tag === 'TEXTAREA' || e.target.isContentEditable) return;
+                            var box = document.getElementById('global-search-input');
+                            if (box) { e.preventDefault(); box.focus(); box.select(); }
+                        });
+                    })();
+                </script>
+                {% endif %}
+
                 <!-- User Navigation (Right Side) -->
-                <ul class="navbar-nav ms-auto utility-nav">
+                <ul class="navbar-nav utility-nav">
                     {% if current_user is defined and current_user.is_authenticated %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle"
