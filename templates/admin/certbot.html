@@ -286,29 +286,6 @@
                     <i class="bi bi-file-text"></i> View Logs
                 </button>
             </div>
-
-            <!-- Log viewer modal -->
-            <div class="modal fade" id="logModal" tabindex="-1" aria-labelledby="logModalLabel" aria-hidden="true">
-                <div class="modal-dialog modal-xl">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title" id="logModalLabel"><i class="bi bi-file-text"></i> Certbot Logs</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                        </div>
-                        <div class="modal-body">
-                            <div id="logContent" style="max-height: 500px; overflow-y: auto;">
-                                <pre class="mb-0" style="white-space: pre-wrap; word-wrap: break-word; font-size: 0.85em;"></pre>
-                            </div>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                            <button type="button" class="btn btn-primary" onclick="viewCertbotLogs()">
-                                <i class="bi bi-arrow-clockwise"></i> Refresh
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
         </div>
 
         <!-- Certificate Acquisition -->
@@ -357,6 +334,35 @@
             <button type="button" class="btn btn-warning btn-test" onclick="renewCertificate()">
                 <i class="bi bi-arrow-clockwise"></i> Manage Certificate Renewal
             </button>
+        </div>
+    </div>
+</div>
+
+<!-- Log viewer modal -->
+<!-- Placed outside .admin-container so it is a direct child of .page-shell.
+     The .page-shell > *:not(.orb):not(.modal) rule in styles.css creates a
+     stacking context (z-index: 1) on every direct child except modals; nesting
+     this modal inside .admin-container would trap it below the modal-backdrop
+     (which Bootstrap appends to <body> at z-index 1040), making it appear
+     "beneath everything". -->
+<div class="modal fade" id="logModal" tabindex="-1" aria-labelledby="logModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="logModalLabel"><i class="bi bi-file-text"></i> Certbot Logs</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="logContent" style="max-height: 500px; overflow-y: auto;">
+                    <pre class="mb-0" style="white-space: pre-wrap; word-wrap: break-word; font-size: 0.85em;"></pre>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" onclick="viewCertbotLogs()">
+                    <i class="bi bi-arrow-clockwise"></i> Refresh
+                </button>
+            </div>
         </div>
     </div>
 </div>
