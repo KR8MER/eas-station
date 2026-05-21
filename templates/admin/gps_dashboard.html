@@ -6814,16 +6814,18 @@
         var t      = chrony.tracking || {};
 
         // Reference Lock — has GPS lock + 3D fix.
+        // fix_mode is the NMEA GSA mode: 1=no fix, 2=2D, 3=3D.
         var locked = gps.has_fix && !gps.holdover_s;
-        var fixMode = gps.fix_mode || (gps.has_fix ? '3D' : 'No fix');
+        var fixMode = gps.fix_mode;
         var refLev, refDet;
         if (gps.holdover_s > 0) {
             refLev = (gps.holdover_s > 300 ? 'bad' : 'watch');
             refDet = 'Holdover ' + fmtDuration(gps.holdover_s) + ' — no live GNSS lock';
-        } else if (gps.has_fix && /3D/i.test(String(fixMode))) {
+        } else if (gps.has_fix && fixMode === 3) {
             refLev = 'excellent'; refDet = '3D fix locked';
         } else if (gps.has_fix) {
-            refLev = 'acceptable'; refDet = fixMode + ' fix (no altitude)';
+            refLev = 'acceptable';
+            refDet = (fixMode === 2 ? '2D' : 'Unknown') + ' fix (no altitude)';
         } else {
             refLev = 'bad'; refDet = 'No GNSS lock';
         }
