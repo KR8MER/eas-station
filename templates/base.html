@@ -42,13 +42,23 @@
             window.fetch = function(input, init) {
                 init = init || {};
                 const method = (init.method || 'GET').toUpperCase();
+                const headers = new Headers(init.headers || {});
+
+                // Mark every scripted fetch as wanting JSON. Without this, the
+                // server's auth/permission helpers fall back to HTML responses
+                // (login redirects, error pages) on session expiry — JSON-parsing
+                // those in JS surfaces as the unhelpful "Unexpected token '<'".
+                if (!headers.has('Accept')) {
+                    headers.set('Accept', 'application/json');
+                }
+
                 if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
-                    const headers = new Headers(init.headers || {});
                     if (window.CSRF_TOKEN && !headers.has('X-CSRF-Token')) {
                         headers.set('X-CSRF-Token', window.CSRF_TOKEN);
                     }
-                    init.headers = headers;
                 }
+
+                init.headers = headers;
                 return originalFetch.call(this, input, init);
             };
         })();
