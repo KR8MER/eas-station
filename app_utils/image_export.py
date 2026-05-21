@@ -59,8 +59,9 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 # ─── Canonical brand logo ──────────────────────────────────────────────────
 # Single source of truth for the EAS Station brand logo raster used inside
-# the share image.  Replace this PNG to refresh every consumer — favicons,
-# on-page <img> tags, this share-image renderer.
+# the share image.  Update both the SVG (static/img/eas-system-wordmark.svg)
+# and re-rasterize this PNG to refresh every consumer — favicons, on-page
+# <img> tags, this share-image renderer.
 _LOGO_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     'static', 'img', 'eas-system-wordmark.png',
@@ -1481,8 +1482,9 @@ def generate_alert_image(
 
     # Branding (top-right) — render the canonical EAS Station wordmark image
     # so updating the brand asset is just a matter of swapping the file at
-    # static/img/eas-system-wordmark.png.  Fall back to the legacy text mark
-    # only if the file is missing or fails to load.
+    # static/img/eas-system-wordmark.png (rasterized from the SVG).  Fall
+    # back to the legacy text mark only if the file is missing or fails to
+    # load.
     logo = _load_logo()
     brand_right = FB_WIDTH - 16
     if logo is not None:
