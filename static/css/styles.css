@@ -7561,7 +7561,17 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
     gap: 1rem;
 }
 .eas-hero-logo,
-.about-hero-logo { max-width: 460px; width: 100%; }
+.about-hero-logo {
+    max-width: 460px;
+    width: 100%;
+    padding: 1rem 1.5rem;
+    border-radius: var(--radius-xl);
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    box-shadow: 0 14px 36px rgba(0, 0, 0, 0.22),
+                0 0 0 1px rgba(255, 255, 255, 0.55) inset;
+}
 .eas-hero-title,
 .about-hero-title {
     font-size: clamp(1.9rem, 3.2vw, 2.6rem);
