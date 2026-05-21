@@ -739,6 +739,15 @@ if [ -d "$INSTALL_DIR/systemd" ]; then
     chmod -R 755 /var/www/certbot
     echo_success "ACME challenge directory configured (root:root 755)"
 
+    # Ensure /etc/nginx/snippets exists so the web-UI certificate installer
+    # can write /etc/nginx/snippets/ssl-letsencrypt.conf. Hosts updated from
+    # an older release may never have created this directory, causing the
+    # in-app "obtain/install certificate" step to fail with "No such file
+    # or directory".
+    echo_progress "Ensuring nginx snippets directory exists..."
+    mkdir -p /etc/nginx/snippets
+    echo_success "Nginx snippets directory ready"
+
     # Ensure hardware access groups exist (for services that use SupplementaryGroups)
     echo_progress "Ensuring hardware access groups exist..."
     HARDWARE_GROUPS="gpio i2c spi audio plugdev dialout"

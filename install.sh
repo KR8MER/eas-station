@@ -1774,6 +1774,11 @@ echo_step "Nginx Web Server Configuration"
 
 # Configure nginx
 echo_progress "Setting up nginx reverse proxy..."
+# Ensure /etc/nginx/snippets exists. The web-UI certificate installer writes
+# /etc/nginx/snippets/ssl-letsencrypt.conf there; on minimal nginx installs
+# the directory does not exist and the install would fail with "No such
+# file or directory".
+mkdir -p /etc/nginx/snippets
 if [ ! -f /etc/nginx/sites-available/eas-station ]; then
     cp "$INSTALL_DIR/config/nginx-eas-station.conf" /etc/nginx/sites-available/eas-station
     
