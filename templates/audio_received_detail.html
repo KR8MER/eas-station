@@ -261,7 +261,17 @@
                         <i class="fas fa-headphones me-1"></i>View Broadcast
                     </a>
                     {% elif alert.forwarding_decision == 'forwarded' %}
-                    <p class="text-muted mb-0">Forwarded but no broadcast record linked.</p>
+                    <p class="text-warning mb-2">
+                        <i class="fas fa-unlink me-1"></i>
+                        Marked as forwarded but the broadcast record link is missing.
+                    </p>
+                    <p class="text-muted small mb-0">
+                        Historical data issue: prior to v2.76 some forwarded alerts were
+                        stored without a foreign key to their broadcast record (the broadcast
+                        itself usually did go out — only the link was lost). Run
+                        <code>python -m scripts.maintenance.backfill_received_alert_broadcast_links</code>
+                        to attempt to relink by SAME-header match.
+                    </p>
                     {% else %}
                     <p class="text-muted mb-0">No broadcast generated (alert was {{ alert.forwarding_decision }}).</p>
                     {% endif %}
