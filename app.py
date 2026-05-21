@@ -130,6 +130,7 @@ from flask import (
     send_file,
     abort,
 )
+from flask_compress import Compress
 from geoalchemy2.functions import ST_Intersects, ST_AsGeoJSON
 from sqlalchemy import text, func, or_, desc
 from sqlalchemy.exc import OperationalError
@@ -318,6 +319,18 @@ if _env_icecast_enabled and _env_icecast_enabled.lower() in ('true', '1', 'yes',
 
 # Create Flask app
 app = Flask(__name__)
+
+# Serve cache-busted static assets with a 1-year max-age. Templates already
+# append ?v={{ static_asset_version }} to every url_for('static', ...) call
+# (see app_core/flask/url_defaults.py + the @app.url_defaults hook below),
+# so a new deploy bumps the URL and the browser refetches automatically.
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 31_536_000  # 1 year
+
+# Compress text responses (HTML/CSS/JS/JSON/SVG) with Brotli when the client
+# supports it, falling back to gzip. Registered before our @app.after_request
+# header hook so the compression layer runs LAST (Flask invokes after_request
+# callbacks in reverse registration order).
+Compress(app)
 
 # Configure JSON encoder to handle Infinity and NaN values
 # Flask's default jsonify() produces non-standard JSON (Infinity, NaN)
@@ -1067,6 +1080,11 @@ def before_request():
 @app.after_request
 def after_request(response):
     """After request hook for headers and cleanup"""
+    # Static assets are cache-busted via ?v={{ static_asset_version }}, so the
+    # (path + query) pair is genuinely immutable across a single deploy.
+    if request.path.startswith('/static/') and response.status_code == 200:
+        response.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
+
     # Add CORS headers for API endpoints
     if request.path.startswith('/api/'):
         allowed_origins = app.config.get('CORS_ALLOWED_ORIGINS', set())
@@ -1110,12 +1128,13 @@ def after_request(response):
     #     templates/system_health.html)
     #   - *.tile.openstreetmap.org: Leaflet basemap tiles (index, alert detail,
     #     county boundaries map)
-    #   - cdn.socket.io: Socket.IO client used for realtime updates
+    # Socket.IO is served from /static/vendor/socketio/ so no external
+    # script-src allowance is needed.
     response.headers.setdefault(
         'Content-Security-Policy',
         (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' https://cdn.socket.io; "
+            "script-src 'self' 'unsafe-inline'; "
             "style-src 'self' 'unsafe-inline'; "
             "img-src 'self' data: https://img.shields.io https://*.tile.openstreetmap.org; "
             "connect-src 'self' wss: ws:; "

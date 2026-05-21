@@ -172,14 +172,18 @@
 
     function fadeBolts(bolts) {
         bolts.forEach(({ svg }) => svg.classList.add('lightning-bolt-fade'));
+        /* Matches the 280 ms opacity transition in styles.css with a small
+           grace margin so the node is gone shortly after it's invisible. */
         setTimeout(() => {
             bolts.forEach(({ svg }) => svg.remove());
-        }, 650);
+        }, 320);
     }
 
     function performStrike() {
         if (!overlay) return;
-        const boltCount = chance(0.55) ? 1 : (chance(0.7) ? 2 : 3);
+        /* Cap at two bolts per strike — three concurrent glow stacks were
+           the worst case for the GPU; two still reads as a forked strike. */
+        const boltCount = chance(0.7) ? 1 : 2;
         const bolts = [];
         for (let i = 0; i < boltCount; i++) {
             const origin = {

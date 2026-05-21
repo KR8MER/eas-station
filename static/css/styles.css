@@ -854,29 +854,22 @@
     --shadow-color: rgba(0, 0, 0, 0.45);
 }
 
-/* Lightning Theme - Electric glow on bolt icons */
+/* Lightning Theme - Electric glow on bolt icons.
+   Filter is held steady so only `opacity` animates — interpolating a
+   multi-stop drop-shadow stack at 60 fps is what made every page with
+   .fa-bolt icons feel heavy on weaker GPUs. */
 [data-theme="lightning"] .fa-bolt {
     color: var(--primary-color);
-    filter: drop-shadow(0 0 4px rgba(255, 235, 59, 0.7))
-            drop-shadow(0 0 10px rgba(64, 196, 255, 0.35));
+    filter: drop-shadow(0 0 3px rgba(255, 235, 59, 0.7))
+            drop-shadow(0 0 8px rgba(64, 196, 255, 0.35));
     animation: lightningFlicker 4.5s ease-in-out infinite;
+    will-change: opacity;
 }
 
 @keyframes lightningFlicker {
-    0%, 40%, 44%, 100% {
-        opacity: 1;
-        filter: drop-shadow(0 0 4px rgba(255, 235, 59, 0.7))
-                drop-shadow(0 0 10px rgba(64, 196, 255, 0.35));
-    }
-    42% {
-        opacity: 0.55;
-        filter: drop-shadow(0 0 1px rgba(255, 235, 59, 0.4));
-    }
-    43% {
-        opacity: 1;
-        filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.9))
-                drop-shadow(0 0 16px rgba(64, 196, 255, 0.6));
-    }
+    0%, 40%, 44%, 100% { opacity: 1; }
+    42% { opacity: 0.55; }
+    43% { opacity: 1; }
 }
 
 /* Lightning Theme - Readability overrides
@@ -1205,40 +1198,30 @@
     width: 100%;
     height: 100%;
     opacity: 0;
-    /* Stacked drop-shadows produce the real volumetric glow. Each pass
-       widens the radius and lowers intensity so the bolt bleeds light
-       into the surrounding pixels instead of reading as a drawn stroke. */
+    /* Three drop-shadow passes give the bolt a tight white core and a soft
+       blue halo without paying for the giant 40 px / 90 px radii the old
+       six-pass stack used. Transitioning only `opacity` (not `filter`)
+       avoids re-rasterising the blur stack on every frame of the fade. */
     filter:
-        drop-shadow(0 0 1.2px #ffffff)
-        drop-shadow(0 0 3px #ffffff)
-        drop-shadow(0 0 7px #b7e4ff)
-        drop-shadow(0 0 18px rgba(127, 215, 255, 0.85))
-        drop-shadow(0 0 40px rgba(64, 180, 255, 0.55))
-        drop-shadow(0 0 90px rgba(64, 180, 255, 0.32));
-    will-change: opacity, filter;
-    transition: opacity 520ms cubic-bezier(0.2, 0, 0.3, 1),
-                filter 520ms cubic-bezier(0.2, 0, 0.3, 1);
+        drop-shadow(0 0 1.5px #ffffff)
+        drop-shadow(0 0 6px #b7e4ff)
+        drop-shadow(0 0 20px rgba(64, 180, 255, 0.65));
+    will-change: opacity;
+    transition: opacity 280ms cubic-bezier(0.2, 0, 0.3, 1);
 }
 
 #lightning-overlay .lightning-bolt.lightning-bolt-strike {
     opacity: 1;
-    transition: opacity 22ms linear, filter 22ms linear;
+    transition: opacity 22ms linear;
 }
 
 #lightning-overlay .lightning-bolt.lightning-bolt-dim {
     opacity: 0.18;
-    transition: opacity 40ms linear, filter 40ms linear;
+    transition: opacity 40ms linear;
 }
 
 #lightning-overlay .lightning-bolt.lightning-bolt-fade {
     opacity: 0;
-    /* Afterglow: filter radius swells slightly as it fades so the glow
-       lingers even after the core has dropped. */
-    filter:
-        drop-shadow(0 0 0.8px #ffffff)
-        drop-shadow(0 0 4px rgba(255, 255, 255, 0.6))
-        drop-shadow(0 0 14px rgba(127, 215, 255, 0.5))
-        drop-shadow(0 0 60px rgba(64, 180, 255, 0.3));
 }
 
 @media (prefers-reduced-motion: reduce) {

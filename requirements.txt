@@ -15,6 +15,8 @@ Flask-Caching==2.3.1
 Flask-SocketIO==5.5.1
 Flask-WTF==1.2.2  # CSRF protection and form validation
 Flask-Limiter==4.1.1  # Rate limiting with Redis/memory backend
+Flask-Compress==1.17  # gzip/brotli response compression for HTML/CSS/JS
+Brotli==1.2.0  # Brotli encoder used by Flask-Compress (preferred over gzip)
 Werkzeug==3.1.4
 
 # Web framework support dependencies
