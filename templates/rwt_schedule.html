@@ -159,21 +159,43 @@
                 </div>
             </div>
 
-            <!-- Last Run Info -->
-            <div class="card mt-4" id="lastRunCard" style="display: none;">
-                <div class="card-header">
-                    <h5 class="mb-0">Last Automatic Run</h5>
+            <!-- Scheduler Status -->
+            <div class="card mt-4" id="schedulerStatusCard">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                    <h5 class="mb-0">Scheduler Status</h5>
+                    <span id="schedulerHeartbeatBadge" class="badge bg-secondary">
+                        <i class="fas fa-circle-question me-1"></i>Unknown
+                    </span>
                 </div>
                 <div class="card-body">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <strong>Time:</strong> <span id="lastRunTime">-</span>
-                        </div>
-                        <div class="col-md-6">
-                            <strong>Status:</strong> <span id="lastRunStatus">-</span>
-                        </div>
+                    <dl class="row mb-0">
+                        <dt class="col-sm-4">Last fired</dt>
+                        <dd class="col-sm-8" id="schedulerLastFired">—</dd>
+
+                        <dt class="col-sm-4">Last status</dt>
+                        <dd class="col-sm-8" id="schedulerLastStatus">—</dd>
+
+                        <dt class="col-sm-4">Next scheduled fire</dt>
+                        <dd class="col-sm-8" id="schedulerNextFire">—</dd>
+
+                        <dt class="col-sm-4">Heartbeat</dt>
+                        <dd class="col-sm-8" id="schedulerHeartbeat">—</dd>
+
+                        <dt class="col-sm-4">Skip until</dt>
+                        <dd class="col-sm-8" id="schedulerSkipUntil">—</dd>
+                    </dl>
+                    <div class="d-flex flex-wrap gap-2 mt-3">
+                        <button type="button" class="btn btn-outline-warning btn-sm" id="skipWeekBtn">
+                            <i class="fas fa-forward me-1"></i>Skip Upcoming RWT
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm d-none" id="clearSkipBtn">
+                            <i class="fas fa-rotate-left me-1"></i>Clear Skip
+                        </button>
                     </div>
-                    <div class="mt-2" id="lastRunDetails"></div>
+                    <div id="lastRunDetailsWrap" class="mt-3 d-none">
+                        <strong class="small">Last run details</strong>
+                        <pre class="mt-1 mb-0 small" id="lastRunDetails"></pre>
+                    </div>
                 </div>
             </div>
         </div>
@@ -332,20 +354,7 @@
                     document.getElementById('endHour').value = config.end_hour || 16;
                     document.getElementById('endMinute').value = config.end_minute || 0;
 
-                    // Last run info
-                    if (config.last_run_at) {
-                        document.getElementById('lastRunCard').style.display = 'block';
-                        document.getElementById('lastRunTime').textContent = new Date(config.last_run_at).toLocaleString();
-                        document.getElementById('lastRunStatus').textContent = config.last_run_status || '-';
-
-                        const statusSpan = document.getElementById('lastRunStatus');
-                        statusSpan.className = config.last_run_status === 'success' ? 'badge bg-success' : 'badge bg-danger';
-
-                        if (config.last_run_details) {
-                            const details = typeof config.last_run_details === 'string' ? JSON.stringify(config.last_run_details) : JSON.stringify(config.last_run_details, null, 2);
-                            document.getElementById('lastRunDetails').innerHTML = `<pre class="mt-2 mb-0">${details}</pre>`;
-                        }
-                    }
+                    renderSchedulerStatus(config);
                 }
             })
             .catch(error => {
@@ -353,6 +362,153 @@
                 showToast('Failed to load configuration', 'danger');
             });
         }
+
+        function formatLocal(iso) {
+            if (!iso) return '—';
+            const dt = new Date(iso);
+            if (isNaN(dt.getTime())) return iso;
+            return dt.toLocaleString();
+        }
+
+        function formatRelative(iso) {
+            if (!iso) return null;
+            const dt = new Date(iso);
+            if (isNaN(dt.getTime())) return null;
+            const deltaSec = Math.round((Date.now() - dt.getTime()) / 1000);
+            const abs = Math.abs(deltaSec);
+            if (abs < 60) return `${deltaSec}s ago`;
+            if (abs < 3600) return `${Math.round(deltaSec / 60)}m ago`;
+            if (abs < 86400) return `${Math.round(deltaSec / 3600)}h ago`;
+            return `${Math.round(deltaSec / 86400)}d ago`;
+        }
+
+        function renderSchedulerStatus(config) {
+            const lastFiredEl = document.getElementById('schedulerLastFired');
+            const lastStatusEl = document.getElementById('schedulerLastStatus');
+            const nextFireEl = document.getElementById('schedulerNextFire');
+            const heartbeatEl = document.getElementById('schedulerHeartbeat');
+            const heartbeatBadgeEl = document.getElementById('schedulerHeartbeatBadge');
+            const skipUntilEl = document.getElementById('schedulerSkipUntil');
+            const clearSkipBtn = document.getElementById('clearSkipBtn');
+            const skipWeekBtn = document.getElementById('skipWeekBtn');
+            const detailsWrap = document.getElementById('lastRunDetailsWrap');
+            const detailsPre = document.getElementById('lastRunDetails');
+
+            // Last fired
+            if (config.last_run_at) {
+                const rel = formatRelative(config.last_run_at);
+                lastFiredEl.textContent = `${formatLocal(config.last_run_at)}${rel ? ' (' + rel + ')' : ''}`;
+            } else {
+                lastFiredEl.textContent = 'Never';
+            }
+
+            // Last status
+            if (config.last_run_status) {
+                const cls = config.last_run_status === 'success' ? 'bg-success' : 'bg-danger';
+                lastStatusEl.innerHTML = `<span class="badge ${cls}">${config.last_run_status}</span>`;
+            } else {
+                lastStatusEl.textContent = '—';
+            }
+
+            // Next fire
+            if (config.next_fire_at) {
+                nextFireEl.textContent = formatLocal(config.next_fire_at);
+            } else if (!config.enabled) {
+                nextFireEl.innerHTML = '<span class="text-muted">scheduler disabled</span>';
+            } else if (!(config.days_of_week || []).length) {
+                nextFireEl.innerHTML = '<span class="text-muted">no days configured</span>';
+            } else {
+                nextFireEl.textContent = '—';
+            }
+
+            // Heartbeat: green if seen within 5 minutes, yellow if 5-30,
+            // red if older or never.
+            if (config.last_heartbeat_at) {
+                const rel = formatRelative(config.last_heartbeat_at);
+                heartbeatEl.textContent = `${formatLocal(config.last_heartbeat_at)} (${rel})`;
+                const ageSec = (Date.now() - new Date(config.last_heartbeat_at).getTime()) / 1000;
+                if (ageSec < 300) {
+                    heartbeatBadgeEl.className = 'badge bg-success';
+                    heartbeatBadgeEl.innerHTML = '<i class="fas fa-heart-pulse me-1"></i>Alive';
+                } else if (ageSec < 1800) {
+                    heartbeatBadgeEl.className = 'badge bg-warning text-dark';
+                    heartbeatBadgeEl.innerHTML = '<i class="fas fa-triangle-exclamation me-1"></i>Stale';
+                } else {
+                    heartbeatBadgeEl.className = 'badge bg-danger';
+                    heartbeatBadgeEl.innerHTML = '<i class="fas fa-circle-xmark me-1"></i>Stopped';
+                }
+            } else {
+                heartbeatEl.textContent = 'Never observed';
+                heartbeatBadgeEl.className = 'badge bg-secondary';
+                heartbeatBadgeEl.innerHTML = '<i class="fas fa-circle-question me-1"></i>Unknown';
+            }
+
+            // Skip until
+            if (config.skip_until) {
+                skipUntilEl.innerHTML = `<span class="text-warning"><i class="fas fa-forward me-1"></i>${config.skip_until}</span>`;
+                clearSkipBtn.classList.remove('d-none');
+                skipWeekBtn.disabled = false;
+            } else {
+                skipUntilEl.innerHTML = '<span class="text-muted">not skipping</span>';
+                clearSkipBtn.classList.add('d-none');
+                skipWeekBtn.disabled = false;
+            }
+
+            // Run details (collapsed by default)
+            if (config.last_run_details && Object.keys(config.last_run_details).length) {
+                detailsWrap.classList.remove('d-none');
+                detailsPre.textContent = JSON.stringify(config.last_run_details, null, 2);
+            } else {
+                detailsWrap.classList.add('d-none');
+                detailsPre.textContent = '';
+            }
+        }
+
+        // Skip-week button
+        document.getElementById('skipWeekBtn').addEventListener('click', function() {
+            if (!confirm('Skip the upcoming scheduled RWT(s)? The scheduler will resume on the next scheduled day after this week.')) return;
+            fetch('/api/rwt-schedule/skip-week', {
+                method: 'POST',
+                headers: { 'X-CSRF-Token': window.CSRF_TOKEN },
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('RWT skipped — next fire ' + (data.config.next_fire_at || 'TBD'), 'success');
+                    renderSchedulerStatus(data.config);
+                } else {
+                    showToast('Failed to skip: ' + (data.error || 'unknown'), 'danger');
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                showToast('Failed to skip', 'danger');
+            });
+        });
+
+        document.getElementById('clearSkipBtn').addEventListener('click', function() {
+            fetch('/api/rwt-schedule/skip-week', {
+                method: 'DELETE',
+                headers: { 'X-CSRF-Token': window.CSRF_TOKEN },
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('Skip cleared — scheduler resumed', 'success');
+                    renderSchedulerStatus(data.config);
+                } else {
+                    showToast('Failed to clear skip: ' + (data.error || 'unknown'), 'danger');
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                showToast('Failed to clear skip', 'danger');
+            });
+        });
+
+        // Refresh status every 30 seconds so heartbeat freshness stays
+        // current without a manual reload.
+        setInterval(loadConfiguration, 30000);
 
         function saveConfiguration() {
             // Collect form data

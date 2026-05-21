@@ -21,12 +21,44 @@ from __future__ import annotations
 
 """Routes for RWT schedule configuration management."""
 
-from typing import List
+from datetime import date, datetime, timedelta, timezone
+from typing import List, Optional
 
 from flask import jsonify, render_template, request
 from app_core.extensions import db
 from app_core.models import RWTScheduleConfig, SystemLog
 from app_utils.fips_codes import get_us_state_county_tree, get_same_lookup
+
+
+def _serialize_config(config: Optional[RWTScheduleConfig]) -> dict:
+    """Return the config dict augmented with next_fire_at (ISO local)."""
+    from app_core.rwt_scheduler import compute_next_fire
+    if config is None:
+        return {}
+    payload = config.to_dict()
+    try:
+        next_fire = compute_next_fire(config)
+        payload['next_fire_at'] = next_fire.isoformat() if next_fire else None
+    except Exception:
+        payload['next_fire_at'] = None
+    return payload
+
+
+def _next_configured_date(
+    configured_days: List[int],
+    skip_until: Optional[date],
+    today: date,
+) -> Optional[date]:
+    """Return the first configured-weekday date strictly after ``skip_until``
+    (or after today if no skip set)."""
+    if not configured_days:
+        return None
+    anchor = (skip_until or today)
+    for offset in range(1, 15):
+        candidate = anchor + timedelta(days=offset)
+        if candidate.weekday() in configured_days:
+            return candidate
+    return None
 
 
 def register_routes(app, logger):
@@ -70,12 +102,15 @@ def register_routes(app, logger):
                         'last_run_at': None,
                         'last_run_status': None,
                         'last_run_details': {},
+                        'skip_until': None,
+                        'next_fire_at': None,
+                        'last_heartbeat_at': None,
                         'same_codes_source': 'not_configured',
                         'same_codes_note': 'RWT SAME codes must be explicitly configured. Use only your local broadcast area codes, NOT your alert filtering FIPS codes.',
                     }
                 })
 
-            payload = config.to_dict()
+            payload = _serialize_config(config)
             # Do NOT auto-populate with location filtering FIPS codes
             if not payload.get('same_codes'):
                 payload['same_codes'] = []
@@ -181,7 +216,7 @@ def register_routes(app, logger):
 
             return jsonify({
                 'success': True,
-                'config': config.to_dict()
+                'config': _serialize_config(config)
             })
 
         except ValueError as exc:
@@ -190,6 +225,100 @@ def register_routes(app, logger):
             logger.error('Failed to save RWT schedule config: %s', exc)
             db.session.rollback()
             return jsonify({'success': False, 'error': 'Failed to save configuration'}), 500
+
+    @app.route('/api/rwt-schedule/skip-week', methods=['POST'])
+    def skip_rwt_week():
+        """Skip the upcoming scheduled RWT broadcast(s).
+
+        Sets ``skip_until`` to a date that covers all configured days in
+        the current scheduled week.  If today is itself a configured day
+        and the broadcast hasn't fired yet, today is included.
+        """
+        try:
+            config = RWTScheduleConfig.query.first()
+            if config is None:
+                return jsonify({'success': False, 'error': 'No configuration found'}), 404
+
+            configured_days = sorted(int(d) for d in (config.days_of_week or []))
+            if not configured_days:
+                return jsonify({
+                    'success': False,
+                    'error': 'No days configured — nothing to skip',
+                }), 400
+
+            now_local = datetime.now(timezone.utc).astimezone()
+            today = now_local.date()
+
+            # Find the next configured weekday strictly AFTER today.  Setting
+            # skip_until to the day BEFORE that means the scheduler will
+            # suppress all configured fires from today through the end of
+            # this scheduled "week" but resume at the next one.
+            next_after = _next_configured_date(configured_days, None, today)
+            if next_after is None:
+                # Shouldn't happen given configured_days is non-empty.
+                return jsonify({
+                    'success': False,
+                    'error': 'Could not determine next scheduled date',
+                }), 500
+
+            new_skip = next_after - timedelta(days=1)
+            config.skip_until = new_skip
+            db.session.add(config)
+            db.session.add(SystemLog(
+                level='INFO',
+                message='RWT schedule: skip-week activated',
+                module='rwt_schedule',
+                details={
+                    'skip_until': new_skip.isoformat(),
+                    'next_fire_after': next_after.isoformat(),
+                },
+            ))
+            db.session.commit()
+
+            return jsonify({
+                'success': True,
+                'config': _serialize_config(config),
+            })
+
+        except Exception as exc:
+            logger.error('Failed to skip RWT week: %s', exc)
+            db.session.rollback()
+            return jsonify({'success': False, 'error': 'Failed to skip week'}), 500
+
+    @app.route('/api/rwt-schedule/skip-week', methods=['DELETE'])
+    def clear_rwt_skip():
+        """Clear ``skip_until`` so the scheduler resumes immediately."""
+        try:
+            config = RWTScheduleConfig.query.first()
+            if config is None:
+                return jsonify({'success': False, 'error': 'No configuration found'}), 404
+
+            if config.skip_until is None:
+                return jsonify({
+                    'success': True,
+                    'config': _serialize_config(config),
+                })
+
+            previous = config.skip_until
+            config.skip_until = None
+            db.session.add(config)
+            db.session.add(SystemLog(
+                level='INFO',
+                message='RWT schedule: skip-week cleared',
+                module='rwt_schedule',
+                details={'previous_skip_until': previous.isoformat()},
+            ))
+            db.session.commit()
+
+            return jsonify({
+                'success': True,
+                'config': _serialize_config(config),
+            })
+
+        except Exception as exc:
+            logger.error('Failed to clear RWT skip: %s', exc)
+            db.session.rollback()
+            return jsonify({'success': False, 'error': 'Failed to clear skip'}), 500
 
     @app.route('/api/rwt-schedule/test', methods=['POST'])
     def test_rwt_schedule():
