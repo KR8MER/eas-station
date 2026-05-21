@@ -2365,6 +2365,19 @@ def register(app: Flask, logger) -> None:
                 except ValueError:
                     pass
 
+            # Compliance tab shows a summary banner with the cards that used
+            # to live on /admin/compliance (Relay Performance, Weekly Test
+            # Coverage).  Compute on demand only — keeps the page fast for
+            # every other tab.
+            compliance_summary = None
+            if log_type == 'compliance':
+                try:
+                    from app_core.eas_storage import collect_compliance_dashboard_data
+                    compliance_summary = collect_compliance_dashboard_data(window_days=30)
+                except Exception as exc:
+                    route_logger.warning("compliance summary unavailable: %s", exc)
+                    compliance_summary = None
+
             return render_template(
                 "logs.html",
                 logs=logs_data,
@@ -2378,6 +2391,7 @@ def register(app: Flask, logger) -> None:
                 service_filter=service_filter,
                 alert_filter=alert_filter,
                 available_services=get_all_log_services(),
+                compliance_summary=compliance_summary,
             )
 
         except Exception as exc:  # pragma: no cover - fallback content
