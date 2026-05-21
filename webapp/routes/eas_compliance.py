@@ -19,16 +19,22 @@ Repository: https://github.com/KR8MER/eas-station
 
 from __future__ import annotations
 
-"""Routes powering the EAS compliance dashboard and exports."""
+"""Routes powering the FCC compliance exports.
 
-from datetime import datetime, timedelta, timezone
+The visible /admin/compliance dashboard is sunset — its content lives at
+/logs?type=compliance now.  What this module still owns is the export
+endpoints that page links to (CSV/PDF compliance log and per-report
+CSV/PDF for received / forwarded / ignored / initiated / weekly /
+monthly).
+"""
 
-from flask import Flask, Response, current_app, render_template, request
+from datetime import datetime, timezone
+
+from flask import Flask, Response, request
 
 from app_core.auth.decorators import require_auth, require_role
 from app_core.eas_storage import (
     REPORT_BUILDERS,
-    collect_compliance_dashboard_data,
     collect_compliance_log_entries,
     generate_compliance_log_csv,
     generate_compliance_log_pdf,
@@ -36,11 +42,6 @@ from app_core.eas_storage import (
     generate_report_pdf,
     resolve_report_window,
 )
-from app_core.system_health import (
-    collect_audio_path_status,
-    collect_receiver_health_snapshot,
-)
-from app_utils.time import format_local_datetime, get_location_timezone_name, utc_now
 
 
 def register(app: Flask, logger) -> None:
@@ -85,75 +86,16 @@ def register(app: Flask, logger) -> None:
     @require_auth
     @require_role("Admin", "Operator", "Analyst")
     def compliance_dashboard():
-        window_start, window_end, window_days = _resolve_dashboard_window()
-
-        try:
-            dashboard = collect_compliance_dashboard_data(
-                window_days=window_days,
-                window_start=window_start,
-                window_end=window_end,
-            )
-            receiver_snapshot = collect_receiver_health_snapshot(route_logger)
-            audio_status = collect_audio_path_status(route_logger)
-        except Exception as exc:  # pragma: no cover - defensive fallback
-            route_logger.error("Failed to assemble compliance dashboard: %s", exc)
-            now = utc_now()
-            dashboard = {
-                "window_days": window_days,
-                "window_start": window_start or (now - timedelta(days=window_days)),
-                "window_end": window_end or now,
-                "generated_at": now,
-                "received_vs_relayed": {
-                    "received": 0,
-                    "relayed": 0,
-                    "auto_relayed": 0,
-                    "manual_relayed": 0,
-                    "relay_rate": None,
-                },
-                "weekly_tests": {
-                    "rows": [],
-                    "received_total": 0,
-                    "relayed_total": 0,
-                    "relay_rate": None,
-                },
-                "recent_activity": [],
-                "entries": [],
-            }
-            receiver_snapshot = {
-                "items": [],
-                "total": 0,
-                "issues": 0,
-                "issue_items": [],
-                "threshold_minutes": current_app.config.get(
-                    "RECEIVER_OFFLINE_THRESHOLD_MINUTES", 10
-                ),
-            }
-            audio_status = {
-                "enabled": False,
-                "status": "unknown",
-                "output_dir": None,
-                "heartbeat_minutes": current_app.config.get(
-                    "AUDIO_PATH_ALERT_THRESHOLD_MINUTES", 60
-                ),
-                "last_activity": None,
-                "issues": [
-                    "Compliance metrics are temporarily unavailable. Check logs for details.",
-                ],
-            }
-
-        timezone_name = get_location_timezone_name()
-
-        return render_template(
-            "eas/compliance.html",
-            dashboard=dashboard,
-            receiver_snapshot=receiver_snapshot,
-            audio_status=audio_status,
-            timezone_name=timezone_name,
-            window_days=window_days,
-            window_start=window_start,
-            window_end=window_end,
-            format_local_datetime=format_local_datetime,
-        )
+        # The FCC compliance dashboard has been folded into the unified
+        # Logs & Reports hub at /logs?type=compliance, which now shows the
+        # relay-performance / weekly-test summary cards above the
+        # activity table.  Redirect (302) so existing bookmarks land
+        # there.  Export endpoints below (/admin/compliance/export.* and
+        # /admin/compliance/report/<kind>.<fmt>) are still served — the
+        # Reports tabs on /logs link to them for the rich column-aware
+        # exports.
+        from flask import redirect
+        return redirect("/logs?type=compliance", code=302)
 
     @app.route("/admin/compliance/export.csv")
     @require_auth

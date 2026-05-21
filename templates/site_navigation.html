@@ -123,7 +123,7 @@
                 </div>
                 <div class="col-md-3">
                     <a href="/logs" class="btn btn-outline-info w-100 text-start">
-                        <i class="fas fa-file-alt me-2"></i>System Logs
+                        <i class="fas fa-file-alt me-2"></i>Logs &amp; Reports
                     </a>
                 </div>
             </div>
@@ -189,7 +189,7 @@
                     </a>
                 </div>
                 <div class="col-md-3">
-                    <a href="{{ url_for('compliance_dashboard') }}" class="btn btn-outline-secondary w-100 text-start">
+                    <a href="/logs?type=compliance" class="btn btn-outline-secondary w-100 text-start">
                         <i class="fas fa-clipboard-check me-2"></i>FCC Compliance
                     </a>
                 </div>
@@ -242,8 +242,8 @@
                     </a>
                 </div>
                 <div class="col-md-3">
-                    <a href="/admin/audit-logs" class="btn btn-outline-secondary w-100 text-start">
-                        <i class="fas fa-clipboard-list me-2"></i>Audit Logs
+                    <a href="/logs?type=audit" class="btn btn-outline-secondary w-100 text-start">
+                        <i class="fas fa-clipboard-list me-2"></i>Audit Log
                     </a>
                 </div>
                 <div class="col-md-3">

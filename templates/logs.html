@@ -1,14 +1,14 @@
 {% extends "base.html" %}
 
-{% block title %}EAS Station ™ - System Logs{% endblock %}
+{% block title %}EAS Station ™ - Logs & Reports{% endblock %}
 
 {% block content %}
 <div class="page-header">
     <div class="container-fluid">
         <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
             <div>
-                <h1 class="page-title mb-0"><i class="fas fa-file-alt me-2"></i>System Logs</h1>
-                <p class="page-subtitle mb-0">View, filter, and export system logs by category</p>
+                <h1 class="page-title mb-0"><i class="fas fa-file-alt me-2"></i>Logs &amp; Reports</h1>
+                <p class="page-subtitle mb-0">Unified hub for system logs, audit trail, compliance entries, and FCC reports — filter and export every category as CSV or PDF.</p>
             </div>
         </div>
     </div>
@@ -27,12 +27,31 @@
                             <button class="btn btn-sm btn-outline-primary" id="copyLogsBtn" onclick="copyLogsToClipboard()" title="Copy all displayed logs to clipboard">
                                 <i class="fas fa-copy"></i><span class="d-none d-sm-inline"> Copy</span>
                             </button>
-                            <a href="/logs/export.csv?type={{ log_type }}&limit={{ limit }}" class="btn btn-sm btn-outline-success" title="Export logs as CSV (opens in Excel)">
-                                <i class="fas fa-file-excel"></i><span class="d-none d-sm-inline"> CSV/Excel</span>
-                            </a>
-                            <a href="/logs/export.pdf?type={{ log_type }}&limit={{ limit }}" target="_blank" class="btn btn-sm btn-outline-secondary" title="Export logs as PDF">
-                                <i class="fas fa-file-pdf"></i><span class="d-none d-sm-inline"> PDF</span>
-                            </a>
+                            {# FCC report tabs use the rich, column-aware exporter; #}
+                            {# everything else uses the generic /logs exporter.    #}
+                            {% if log_type and log_type.startswith('report_') %}
+                                {% set _report_kind = log_type[7:] %}
+                                <a href="/admin/compliance/report/{{ _report_kind }}.csv" class="btn btn-sm btn-outline-success" title="Export this FCC report as CSV (matches the printable column layout)">
+                                    <i class="fas fa-file-excel"></i><span class="d-none d-sm-inline"> CSV/Excel</span>
+                                </a>
+                                <a href="/admin/compliance/report/{{ _report_kind }}.pdf" target="_blank" class="btn btn-sm btn-outline-secondary" title="Export this FCC report as PDF (printable layout)">
+                                    <i class="fas fa-file-pdf"></i><span class="d-none d-sm-inline"> PDF</span>
+                                </a>
+                            {% elif log_type == 'compliance' %}
+                                <a href="/admin/compliance/export.csv" class="btn btn-sm btn-outline-success" title="Export compliance activity log as CSV">
+                                    <i class="fas fa-file-excel"></i><span class="d-none d-sm-inline"> CSV/Excel</span>
+                                </a>
+                                <a href="/admin/compliance/export.pdf" target="_blank" class="btn btn-sm btn-outline-secondary" title="Export compliance activity log as PDF">
+                                    <i class="fas fa-file-pdf"></i><span class="d-none d-sm-inline"> PDF</span>
+                                </a>
+                            {% else %}
+                                <a href="/logs/export.csv?type={{ log_type }}&limit={{ limit }}" class="btn btn-sm btn-outline-success" title="Export logs as CSV (opens in Excel)">
+                                    <i class="fas fa-file-excel"></i><span class="d-none d-sm-inline"> CSV/Excel</span>
+                                </a>
+                                <a href="/logs/export.pdf?type={{ log_type }}&limit={{ limit }}" target="_blank" class="btn btn-sm btn-outline-secondary" title="Export logs as PDF">
+                                    <i class="fas fa-file-pdf"></i><span class="d-none d-sm-inline"> PDF</span>
+                                </a>
+                            {% endif %}
                             <button class="btn btn-sm btn-outline-primary" onclick="location.reload()" title="Refresh logs">
                                 <i class="fas fa-sync"></i><span class="d-none d-sm-inline"> Refresh</span>
                             </button>
@@ -44,8 +63,13 @@
                 </div>
             </div>
             <div class="card-body">
-                <!-- Filter Tabs -->
-                <ul class="nav nav-pills mb-3" id="logTypeTabs" role="tablist">
+                <!-- ── Logs tab group ────────────────────────────────── -->
+                <ul class="nav nav-pills flex-wrap mb-2" id="logTypeTabs" role="tablist">
+                    <li class="nav-item d-flex align-items-center pe-2" role="presentation">
+                        <span class="text-uppercase small text-muted fw-semibold">
+                            <i class="fas fa-file-lines"></i> Logs
+                        </span>
+                    </li>
                     <li class="nav-item" role="presentation">
                         <a class="nav-link {% if log_type == 'all' %}active{% endif %}"
                            href="?type=all&limit={{ limit }}">
@@ -122,6 +146,63 @@
                         <a class="nav-link {% if log_type == 'services' %}active{% endif %}"
                            href="?type=services&limit={{ limit }}">
                             <i class="fas fa-server"></i> Services
+                        </a>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <a class="nav-link {% if log_type == 'audit' %}active{% endif %}"
+                           href="?type=audit&limit={{ limit }}">
+                            <i class="fas fa-shield-halved"></i> Audit
+                        </a>
+                    </li>
+                </ul>
+
+                <!-- ── Reports tab group ──────────────────────────────── -->
+                <ul class="nav nav-tabs flex-wrap mb-3" id="logTypeTabs" role="tablist">
+                    <li class="nav-item d-flex align-items-center pe-2" role="presentation">
+                        <span class="text-uppercase small text-muted fw-semibold">
+                            <i class="fas fa-file-contract"></i> Reports
+                        </span>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <a class="nav-link {% if log_type == 'compliance' %}active{% endif %}"
+                           href="?type=compliance&limit={{ limit }}">
+                            <i class="fas fa-clipboard-check"></i> Compliance
+                        </a>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <a class="nav-link {% if log_type == 'report_received' %}active{% endif %}"
+                           href="?type=report_received&limit={{ limit }}">
+                            <i class="fas fa-inbox"></i> Received
+                        </a>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <a class="nav-link {% if log_type == 'report_forwarded' %}active{% endif %}"
+                           href="?type=report_forwarded&limit={{ limit }}">
+                            <i class="fas fa-share"></i> Forwarded
+                        </a>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <a class="nav-link {% if log_type == 'report_ignored' %}active{% endif %}"
+                           href="?type=report_ignored&limit={{ limit }}">
+                            <i class="fas fa-ban"></i> Ignored
+                        </a>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <a class="nav-link {% if log_type == 'report_initiated' %}active{% endif %}"
+                           href="?type=report_initiated&limit={{ limit }}">
+                            <i class="fas fa-rocket"></i> Initiated
+                        </a>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <a class="nav-link {% if log_type == 'report_weekly' %}active{% endif %}"
+                           href="?type=report_weekly&limit={{ limit }}">
+                            <i class="fas fa-calendar-week"></i> Weekly
+                        </a>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <a class="nav-link {% if log_type == 'report_monthly' %}active{% endif %}"
+                           href="?type=report_monthly&limit={{ limit }}">
+                            <i class="fas fa-calendar"></i> Monthly
                         </a>
                     </li>
                 </ul>
@@ -255,6 +336,109 @@
                     </div>
                 </div>
 
+                {# Compliance summary banner — shows the metric cards that used to #}
+                {# live on /admin/compliance (now sunset).  Only rendered for the   #}
+                {# compliance tab so other tabs stay fast.                          #}
+                {% if compliance_summary and log_type == 'compliance' %}
+                {% set relay = compliance_summary.received_vs_relayed or {} %}
+                {% set weekly = compliance_summary.weekly_tests or {} %}
+                <div class="row g-3 mb-3">
+                    <div class="col-md-4">
+                        <div class="card h-100">
+                            <div class="card-body">
+                                <h6 class="card-title text-muted mb-1">
+                                    <i class="fas fa-broadcast-tower text-primary"></i> Relay Performance
+                                </h6>
+                                <p class="display-6 fw-semibold mb-1">
+                                    {% if relay.relay_rate is not none %}
+                                        {{ '%.1f'|format(relay.relay_rate) }}%
+                                    {% else %}
+                                        <span class="text-muted">N/A</span>
+                                    {% endif %}
+                                </p>
+                                <small class="text-muted">
+                                    Received: {{ relay.received or 0 }} ·
+                                    Relayed: {{ relay.relayed or 0 }}
+                                    ({{ relay.auto_relayed or 0 }} auto / {{ relay.manual_relayed or 0 }} manual)
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card h-100">
+                            <div class="card-body">
+                                <h6 class="card-title text-muted mb-1">
+                                    <i class="fas fa-calendar-check text-success"></i> Weekly Test Coverage
+                                </h6>
+                                <p class="display-6 fw-semibold mb-1">
+                                    {% if weekly.relay_rate is not none %}
+                                        {{ '%.1f'|format(weekly.relay_rate) }}%
+                                    {% else %}
+                                        <span class="text-muted">N/A</span>
+                                    {% endif %}
+                                </p>
+                                <small class="text-muted">
+                                    Tests received: {{ weekly.received_total or 0 }} ·
+                                    Tests relayed: {{ weekly.relayed_total or 0 }}
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card h-100">
+                            <div class="card-body">
+                                <h6 class="card-title text-muted mb-1">
+                                    <i class="fas fa-chart-line text-info"></i> Window
+                                </h6>
+                                <p class="mb-1"><strong>{{ compliance_summary.window_days }}</strong> day{{ '' if compliance_summary.window_days == 1 else 's' }}</p>
+                                <small class="text-muted">
+                                    {% if compliance_summary.window_start %}
+                                        {{ compliance_summary.window_start.strftime('%Y-%m-%d') }}
+                                    {% endif %}
+                                    →
+                                    {% if compliance_summary.window_end %}
+                                        {{ compliance_summary.window_end.strftime('%Y-%m-%d') }}
+                                    {% endif %}
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% if weekly.rows %}
+                <div class="card mb-3">
+                    <div class="card-header bg-transparent py-2">
+                        <h6 class="mb-0"><i class="fas fa-history"></i> Weekly Test History</h6>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Week Starting</th>
+                                    <th class="text-end">Received</th>
+                                    <th class="text-end">Relayed</th>
+                                    <th class="text-end">Compliance</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in weekly.rows[:8] %}
+                                <tr>
+                                    <td><small>{{ row.week_start.strftime('%Y-%m-%d') if row.week_start else '—' }}</small></td>
+                                    <td class="text-end">{{ row.received }}</td>
+                                    <td class="text-end">{{ row.relayed }}</td>
+                                    <td class="text-end">
+                                        {% if row.compliance is not none %}
+                                            {{ '%.1f'|format(row.compliance) }}%
+                                        {% else %}<span class="text-muted">—</span>{% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% endif %}
+                {% endif %}
+
                 <!-- Log Type Description -->
                 <div class="alert alert-info mb-3">
                     {% if log_type == 'all' %}
@@ -346,11 +530,18 @@
                                                         <td><small class="text-muted">{{ log.module }}</small></td>
                                                         <td>
                                                             {% if log.alert_identifier %}
-                                                            <a href="?type={{ log_type }}&limit={{ limit }}&alert={{ log.alert_identifier }}"
-                                                               class="badge bg-info text-dark text-decoration-none"
-                                                               title="Filter to this alert's lifecycle">
-                                                                <code class="text-dark">{{ log.alert_identifier }}</code>
-                                                            </a>
+                                                            <div class="btn-group btn-group-sm" role="group">
+                                                                <a href="/alerts/{{ log.alert_identifier }}/trail"
+                                                                   class="badge bg-info text-dark text-decoration-none"
+                                                                   title="Open the full alert trail">
+                                                                    <code class="text-dark">{{ log.alert_identifier }}</code>
+                                                                </a>
+                                                                <a href="?type={{ log_type }}&limit={{ limit }}&alert={{ log.alert_identifier }}"
+                                                                   class="badge bg-light text-dark border ms-1 text-decoration-none"
+                                                                   title="Filter this page to that alert">
+                                                                    <i class="fas fa-filter"></i>
+                                                                </a>
+                                                            </div>
                                                             {% else %}
                                                             <span class="text-muted">—</span>
                                                             {% endif %}
@@ -438,11 +629,18 @@
                                     <td><small class="text-muted">{{ log.module }}</small></td>
                                     <td>
                                         {% if log.alert_identifier %}
-                                        <a href="?type={{ log_type }}&limit={{ limit }}&alert={{ log.alert_identifier }}"
-                                           class="badge bg-info text-dark text-decoration-none"
-                                           title="Filter to this alert's lifecycle">
-                                            <code class="text-dark">{{ log.alert_identifier }}</code>
-                                        </a>
+                                        <div class="btn-group btn-group-sm" role="group">
+                                            <a href="/alerts/{{ log.alert_identifier }}/trail"
+                                               class="badge bg-info text-dark text-decoration-none"
+                                               title="Open the full alert trail">
+                                                <code class="text-dark">{{ log.alert_identifier }}</code>
+                                            </a>
+                                            <a href="?type={{ log_type }}&limit={{ limit }}&alert={{ log.alert_identifier }}"
+                                               class="badge bg-light text-dark border ms-1 text-decoration-none"
+                                               title="Filter this page to that alert">
+                                                <i class="fas fa-filter"></i>
+                                            </a>
+                                        </div>
                                         {% else %}
                                         <span class="text-muted">—</span>
                                         {% endif %}

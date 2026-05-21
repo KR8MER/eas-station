@@ -148,14 +148,21 @@ def current_alert() -> Optional[str]:
 
 
 def attach_alert_id_autopopulate(*models, attr: str = 'alert_identifier') -> None:
-    """Register a ``before_insert`` listener on each model that stamps the
-    current correlation ID onto *attr* when the column is unset.
+    """Register listeners on each model that stamp the current correlation
+    ID onto *attr* when the column is unset.
 
-    This is the glue that lets ``SystemLog(message=...)`` writes scattered
-    across ~40 call sites automatically inherit the alert context bound by
-    ``bind_alert``/``push_alert`` — without each call site having to know
-    the field exists.  Explicit overrides at the call site still win
-    because we only fill the column when it is ``None``.
+    Two listeners are registered:
+
+    * ``init`` — fires when an instance is constructed (e.g.
+      ``SystemLog(message=...)``).  This is the primary capture point
+      because callers almost always commit *after* the
+      ``bind_alert``/``push_alert`` scope has exited.  Capturing at
+      construction time freezes the ContextVar value onto the instance
+      before the bind unwinds.
+    * ``before_insert`` — fallback for callers that construct outside a
+      bind and only enter one before flushing, or that mutate
+      ``alert_identifier`` to ``None`` after construction.  No-op when
+      the column already has a value.
 
     Args:
         *models: SQLAlchemy declarative classes to attach the listener to.
@@ -167,10 +174,27 @@ def attach_alert_id_autopopulate(*models, attr: str = 'alert_identifier') -> Non
     from sqlalchemy import event  # Imported lazily so logging_context stays
     # importable in environments without SQLAlchemy (tests, CLI tools).
 
+    def _init(target, args, kwargs):  # noqa: ARG001
+        # ``kwargs`` lets us see whether the caller passed the column
+        # explicitly.  We don't want to overwrite caller intent.
+        if kwargs.get(attr):
+            return
+        if getattr(target, attr, None):
+            return
+        try:
+            cid = _alert_id_var.get()
+        except Exception:
+            cid = None
+        if cid:
+            try:
+                setattr(target, attr, cid)
+            except Exception:
+                pass
+
     def _before_insert(mapper, connection, target):  # noqa: ARG001
         try:
             if getattr(target, attr, None):
-                return  # Caller set it explicitly; respect that.
+                return  # Already set (by caller or by the init listener).
             cid = _alert_id_var.get()
             if cid:
                 setattr(target, attr, cid)
@@ -180,5 +204,6 @@ def attach_alert_id_autopopulate(*models, attr: str = 'alert_identifier') -> Non
             pass
 
     for model in models:
-        # Use propagate=True so subclasses (if any) inherit the behaviour.
+        # propagate=True so subclasses (if any) inherit the behaviour.
+        event.listen(model, 'init', _init, propagate=True)
         event.listen(model, 'before_insert', _before_insert, propagate=True)

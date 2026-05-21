@@ -54,7 +54,13 @@ from . import (
     template_helpers,
     documentation,
 )
-from .routes import alert_verification, eas_compliance, system_controls
+from .routes import (
+    alert_trail,
+    alert_verification,
+    eas_compliance,
+    global_search,
+    system_controls,
+)
 from . import eas
 
 
@@ -76,6 +82,8 @@ def iter_route_modules() -> Iterable[RouteModule]:
     yield RouteModule("routes_setup", routes_setup.register)
     yield RouteModule("routes_monitoring", routes_monitoring.register)
     yield RouteModule("routes_alert_verification", alert_verification.register)
+    yield RouteModule("routes_alert_trail", alert_trail.register)
+    yield RouteModule("routes_global_search", global_search.register)
     yield RouteModule("routes_eas_compliance", eas_compliance.register)
     yield RouteModule("routes_system_controls", system_controls.register)
     yield RouteModule("routes_eas_workflow", eas.register)

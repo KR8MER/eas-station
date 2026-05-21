@@ -386,6 +386,11 @@ tr.alert-superseded:hover {
                                             <a href="/alerts/{{ alert.id }}" class="btn btn-sm btn-outline-primary">
                                                 <i class="fas fa-eye"></i> View
                                             </a>
+                                            <a href="/alerts/{{ alert.identifier }}/trail"
+                                               class="btn btn-sm btn-outline-secondary"
+                                               title="Open the alert's full event trail (ingest → forward → broadcast → logs)">
+                                                <i class="fas fa-route"></i> Trail
+                                            </a>
                                             {% if alert.vtec_office and alert.vtec_etn and alert.vtec_year %}
                                             <a href="{{ url_for('alerts', vtec_office=alert.vtec_office, vtec_etn=alert.vtec_etn, vtec_year=alert.vtec_year) }}"
                                                class="btn btn-sm btn-outline-info"

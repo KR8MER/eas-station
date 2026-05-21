@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+{% block title %}Alert Trail — {{ identifier }}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+
+    <!-- Breadcrumbs + identifier header ─────────────────────────── -->
+    <nav aria-label="breadcrumb" class="mb-2">
+        <ol class="breadcrumb small mb-0">
+            <li class="breadcrumb-item"><a href="/">Home</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('alerts') }}">Alerts</a></li>
+            <li class="breadcrumb-item active">Trail</li>
+        </ol>
+    </nav>
+
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-3 gap-2">
+        <div>
+            <h1 class="h3 mb-1"><i class="fas fa-route text-primary"></i> Alert Trail</h1>
+            <p class="text-muted mb-0 small">
+                Every event keyed to correlation ID
+                <code class="text-body">{{ identifier }}</code>
+                · Timezone: <span class="badge bg-secondary">{{ timezone_name }}</span>
+            </p>
+        </div>
+        <div class="btn-group btn-group-sm" role="group">
+            {% if payload.alert %}
+            <a href="{{ url_for('api.alert_detail', alert_id=payload.alert.id) }}"
+               class="btn btn-outline-primary">
+                <i class="fas fa-eye"></i> Open alert detail
+            </a>
+            {% endif %}
+            <a href="{{ url_for('logs', type='all', alert=identifier) }}"
+               class="btn btn-outline-secondary">
+                <i class="fas fa-file-lines"></i> Filter raw logs
+            </a>
+        </div>
+    </div>
+
+    {% if not has_any_signal %}
+    <!-- Empty state ─────────────────────────────────────────────── -->
+    <div class="card">
+        <div class="card-body text-center py-5">
+            <i class="fas fa-magnifying-glass fa-2x text-muted mb-3"></i>
+            <h5>No events recorded for this identifier</h5>
+            <p class="text-muted mb-0">
+                Either no alert with identifier <code>{{ identifier }}</code> has been
+                ingested yet, or the correlation ID was never bound during processing.
+            </p>
+        </div>
+    </div>
+    {% else %}
+
+    <!-- Header card with CAP metadata ───────────────────────────── -->
+    {% if payload.alert %}
+    {% set alert = payload.alert %}
+    <div class="card mb-4 border-primary">
+        <div class="card-body">
+            <div class="d-flex flex-wrap gap-2 mb-2">
+                <span class="badge bg-primary fs-6">{{ alert.event or 'Unknown event' }}</span>
+                {% if alert.severity %}
+                <span class="badge bg-{{
+                    'danger' if alert.severity in ('Extreme', 'Severe')
+                    else 'warning' if alert.severity == 'Moderate'
+                    else 'info'
+                }}">{{ alert.severity }}</span>
+                {% endif %}
+                {% if alert.urgency %}<span class="badge bg-secondary">Urgency: {{ alert.urgency }}</span>{% endif %}
+                {% if alert.certainty %}<span class="badge bg-secondary">Certainty: {{ alert.certainty }}</span>{% endif %}
+                {% if alert.status %}<span class="badge bg-dark">Status: {{ alert.status }}</span>{% endif %}
+                {% if alert.eas_forwarded %}<span class="badge bg-success"><i class="fas fa-broadcast-tower"></i> Forwarded</span>{% endif %}
+            </div>
+            {% if alert.headline %}
+            <h2 class="h5 mb-2">{{ alert.headline }}</h2>
+            {% endif %}
+            <dl class="row mb-0 small">
+                <dt class="col-sm-3">Source</dt>
+                <dd class="col-sm-9">{{ alert.source or '—' }}</dd>
+                <dt class="col-sm-3">Sent</dt>
+                <dd class="col-sm-9">{{ format_local_datetime(alert.sent, include_utc=True) if alert.sent else '—' }}</dd>
+                <dt class="col-sm-3">Expires</dt>
+                <dd class="col-sm-9">{{ format_local_datetime(alert.expires, include_utc=True) if alert.expires else '—' }}</dd>
+                <dt class="col-sm-3">Area</dt>
+                <dd class="col-sm-9">{{ alert.area_desc or '—' }}</dd>
+                {% if alert.eas_forwarding_reason %}
+                <dt class="col-sm-3">Forwarding reason</dt>
+                <dd class="col-sm-9">{{ alert.eas_forwarding_reason }}</dd>
+                {% endif %}
+            </dl>
+        </div>
+        {% if alert.geom is not none %}
+        <div class="card-footer p-0">
+            <div id="trail-map" style="height: 320px; width: 100%;"></div>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Counts strip ─────────────────────────────────────────────── -->
+    <div class="row g-2 mb-4">
+        {% for key, label in payload.category_labels.items() %}
+        {% set n = payload.counts.get(key, 0) %}
+        <div class="col-6 col-md-3 col-lg">
+            <div class="card h-100 {% if n == 0 %}opacity-50{% endif %}">
+                <div class="card-body p-2 text-center">
+                    <div class="h4 mb-0">{{ n }}</div>
+                    <small class="text-muted">{{ label }}</small>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Broadcast audio players ─────────────────────────────────── -->
+    {% if payload.messages %}
+    <div class="card mb-4">
+        <div class="card-header bg-transparent">
+            <h5 class="card-title mb-0"><i class="fas fa-volume-high text-success"></i> Broadcast Audio
+                <span class="badge bg-secondary ms-2">{{ payload.messages|length }}</span>
+            </h5>
+        </div>
+        <div class="card-body">
+            {% for message in payload.messages %}
+            <div class="mb-3 {% if not loop.last %}border-bottom pb-3{% endif %}">
+                <div class="d-flex flex-wrap justify-content-between align-items-center mb-2 gap-2">
+                    <div>
+                        <strong>EAS Message #{{ message.id }}</strong>
+                        <small class="text-muted ms-2">
+                            {{ format_local_datetime(message.created_at, include_utc=False) if message.created_at else '—' }}
+                        </small>
+                    </div>
+                    <code class="small">{{ message.same_header }}</code>
+                </div>
+                {% if payload.audio_urls.get(message.id) %}
+                <audio controls preload="none" class="w-100">
+                    <source src="{{ payload.audio_urls[message.id] }}" type="audio/wav">
+                    Your browser doesn't support inline audio playback.
+                </audio>
+                {% else %}
+                <p class="text-muted small mb-0">No audio blob recorded for this message.</p>
+                {% endif %}
+                <div class="small text-muted mt-1">
+                    {% if message.audio_filename %}File: <code>{{ message.audio_filename }}</code> · {% endif %}
+                    TTS: {{ message.tts_provider or '—' }}
+                    {% if message.tts_warning %}· <span class="text-warning">{{ message.tts_warning }}</span>{% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Timeline ─────────────────────────────────────────────────── -->
+    <div class="card">
+        <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
+            <h5 class="card-title mb-0"><i class="fas fa-timeline text-primary"></i> Timeline
+                <span class="badge bg-secondary ms-2">{{ payload.events|length }}</span>
+            </h5>
+            <small class="text-muted">Oldest → newest</small>
+        </div>
+        <div class="card-body">
+            {% if payload.events %}
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 200px;">Timestamp</th>
+                            <th style="width: 110px;">Category</th>
+                            <th style="width: 90px;">Level</th>
+                            <th style="width: 200px;">Source</th>
+                            <th>Event</th>
+                            <th style="width: 50px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for event in payload.events %}
+                        <tr>
+                            <td><small class="text-monospace">{{ format_local_datetime(event.timestamp, include_utc=True) }}</small></td>
+                            <td>
+                                <span class="badge bg-{{
+                                    'primary' if event.category == 'ingest'
+                                    else 'info' if event.category == 'decode'
+                                    else 'success' if event.category in ('forward', 'broadcast')
+                                    else 'warning' if event.category == 'gpio'
+                                    else 'secondary' if event.category in ('system', 'audio')
+                                    else 'dark'
+                                }}">{{ payload.category_labels.get(event.category, event.category) }}</span>
+                            </td>
+                            <td>
+                                <span class="badge bg-{{
+                                    'success' if event.level == 'INFO'
+                                    else 'warning' if event.level == 'WARNING'
+                                    else 'danger' if event.level in ('ERROR', 'CRITICAL')
+                                    else 'secondary'
+                                }}">{{ event.level }}</span>
+                            </td>
+                            <td><small class="text-muted">{{ event.source }}</small></td>
+                            <td>{{ event.summary }}</td>
+                            <td class="text-center">
+                                {% if event.details %}
+                                <button class="btn btn-sm btn-link p-0" type="button"
+                                        data-bs-toggle="collapse"
+                                        data-bs-target="#trail-event-{{ loop.index }}">
+                                    <i class="fas fa-chevron-down"></i>
+                                </button>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% if event.details %}
+                        <tr class="collapse" id="trail-event-{{ loop.index }}">
+                            <td colspan="6">
+                                <pre class="mb-0 small bg-light p-2 rounded" style="max-height: 300px; overflow-y: auto;">{{ event.details | tojson(indent=2) }}</pre>
+                            </td>
+                        </tr>
+                        {% endif %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-muted mb-0">No timeline events recorded.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    {% endif %}{# /has_any_signal #}
+</div>
+
+{# Leaflet map for the alert polygon — only loaded when geometry exists #}
+{% if payload.alert and payload.alert.geom is not none %}
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}" />
+<script src="{{ url_for('static', filename='vendor/leaflet/leaflet.min.js') }}"></script>
+<script>
+(function () {
+    var map = L.map('trail-map', { scrollWheelZoom: false }).setView([39.5, -98.5], 4);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap',
+        maxZoom: 18,
+    }).addTo(map);
+
+    fetch("{{ url_for('api.get_alert_geometry', alert_id=payload.alert.id) }}")
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) {
+            if (!data || !data.alert) { return; }
+            var layer = L.geoJSON(data.alert, {
+                style: { color: '#dc3545', weight: 2, fillOpacity: 0.2 }
+            }).addTo(map);
+            try { map.fitBounds(layer.getBounds(), { padding: [12, 12] }); }
+            catch (_e) { /* empty geometry — leave default view */ }
+        })
+        .catch(function () { /* silent — map just stays at default view */ });
+})();
+</script>
+{% endif %}
+{% endblock %}
