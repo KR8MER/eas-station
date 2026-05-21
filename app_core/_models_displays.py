@@ -230,6 +230,19 @@ class RWTScheduleConfig(db.Model):
     last_run_status = db.Column(db.String(20))  # 'success', 'failed', etc.
     last_run_details = db.Column(JSONB)
 
+    # Manual skip: when set, the scheduler will not fire on any configured
+    # day whose local date is on or before ``skip_until``.  Operators set
+    # this from the RWT Schedule page to pause automatic RWT broadcasts for
+    # one or more upcoming scheduled days (e.g. holiday, planned manual
+    # test).  Stored as a calendar DATE in the station's local timezone.
+    skip_until = db.Column(db.Date, nullable=True)
+
+    # Heartbeat: updated by the RWT scheduler on every check (~ every
+    # minute).  Persisted in the DB rather than kept in-process so the
+    # web UI can show "scheduler alive" indication across all Gunicorn
+    # workers without coordinating shared memory.
+    last_heartbeat_at = db.Column(db.DateTime(timezone=True))
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert configuration to dictionary for API responses.
 
@@ -250,6 +263,10 @@ class RWTScheduleConfig(db.Model):
             'last_run_at': self.last_run_at.isoformat() if self.last_run_at else None,
             'last_run_status': self.last_run_status,
             'last_run_details': dict(self.last_run_details or {}),
+            'skip_until': self.skip_until.isoformat() if self.skip_until else None,
+            'last_heartbeat_at': (
+                self.last_heartbeat_at.isoformat() if self.last_heartbeat_at else None
+            ),
         }
 
 

@@ -28,7 +28,7 @@ RWT broadcasts according to configured schedules.
 import logging
 import threading
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
 from flask import Flask, has_app_context
@@ -43,6 +43,79 @@ from app_utils.eas import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def compute_next_fire(
+    config: RWTScheduleConfig,
+    now_local: Optional[datetime] = None,
+) -> Optional[datetime]:
+    """Compute the next datetime (local timezone, aware) at which this
+    configuration will fire an automatic RWT broadcast.
+
+    Returns ``None`` when the config is disabled, has no configured days, or
+    would otherwise never fire.
+
+    Rules:
+      * The fire time on a configured day is the start of the time window
+        (start_hour:start_minute, local time).
+      * If today is a configured day, the window has not closed, and an
+        RWT hasn't already been sent successfully today, fire is today at
+        max(now, window-start).
+      * If ``skip_until`` is set, dates on or before it are skipped.
+      * Otherwise scan the next 14 days for the first configured weekday.
+    """
+    if not config.enabled:
+        return None
+    configured_days = [int(d) for d in (config.days_of_week or [])]
+    if not configured_days:
+        return None
+
+    if now_local is None:
+        now_local = datetime.now(timezone.utc).astimezone()
+
+    tz = now_local.tzinfo
+    today = now_local.date()
+    start_h = int(config.start_hour or 0)
+    start_m = int(config.start_minute or 0)
+    end_h = int(config.end_hour or 0)
+    end_m = int(config.end_minute or 0)
+
+    skip_until = getattr(config, 'skip_until', None)
+
+    last_success_date: Optional[date] = None
+    if config.last_run_at and config.last_run_status == 'success':
+        last_run_local = config.last_run_at
+        if last_run_local.tzinfo is None:
+            last_run_local = last_run_local.replace(tzinfo=timezone.utc)
+        last_success_date = last_run_local.astimezone(tz).date()
+
+    # Scan today + next 14 days for the first day that qualifies.
+    for offset in range(0, 15):
+        candidate_date = today + timedelta(days=offset)
+        if candidate_date.weekday() not in configured_days:
+            continue
+        if skip_until and candidate_date <= skip_until:
+            continue
+        if last_success_date == candidate_date:
+            continue
+        window_start = datetime(
+            candidate_date.year, candidate_date.month, candidate_date.day,
+            start_h, start_m, tzinfo=tz,
+        )
+        window_end = datetime(
+            candidate_date.year, candidate_date.month, candidate_date.day,
+            end_h, end_m, tzinfo=tz,
+        )
+        if offset == 0:
+            # Today: if we're past the window, move on; otherwise the
+            # scheduler fires at the next minute boundary >= max(now, window
+            # start), bounded by window end.
+            if now_local > window_end:
+                continue
+            return max(now_local.replace(second=0, microsecond=0), window_start)
+        return window_start
+
+    return None
 
 
 def trigger_rwt_broadcast(config: RWTScheduleConfig, logger_instance=None) -> Dict[str, Any]:
@@ -232,6 +305,10 @@ class RWTScheduler:
         self.thread: Optional[threading.Thread] = None
         self.logger = logger
         self.app = app
+        # Iteration counter for periodic heartbeat logging. Without this the
+        # scheduler is silent when no config matches the current time, which
+        # makes it impossible to tell whether the loop is running at all.
+        self._iteration = 0
 
     def start(self):
         """Start the scheduler in a background thread."""
@@ -254,8 +331,26 @@ class RWTScheduler:
             self.thread.join(timeout=5)
         self.logger.info("RWT scheduler stopped")
 
+    def _write_heartbeat(self, config: RWTScheduleConfig) -> None:
+        """Persist a heartbeat timestamp so the UI can show liveness across
+        all Gunicorn workers.  Uses a narrow UPDATE so we never accidentally
+        rewrite operator-managed columns from this thread.
+        """
+        try:
+            config.last_heartbeat_at = utc_now()
+            db.session.add(config)
+            db.session.commit()
+        except Exception as exc:
+            db.session.rollback()
+            # Heartbeat write failure is not fatal — keep the loop running.
+            self.logger.debug("Failed to write RWT heartbeat: %s", exc)
+
     def _run_loop(self):
         """Main scheduler loop."""
+        self.logger.info(
+            "RWT scheduler loop started (check interval: %.0f seconds)",
+            self.check_interval.total_seconds(),
+        )
         while self.running:
             try:
                 with self.app.app_context():
@@ -269,44 +364,109 @@ class RWTScheduler:
             time.sleep(self.check_interval.total_seconds())
 
     def _check_and_send_rwt(self):
-        """Check if RWT should be sent and send it if conditions are met."""
+        """Check if RWT should be sent and send it if conditions are met.
+
+        Schedule times (start_hour/start_minute, end_hour/end_minute) and
+        days_of_week are entered by operators in their local timezone via the
+        web UI — the UI shows no timezone selector and displays clocks in
+        local time.  Historically this method compared against UTC, which
+        silently shifted the firing window by the local UTC offset (so a
+        configured "Wed 8 AM–4 PM EDT" really fired "4 AM–12 PM EDT" and
+        skipped Wednesday entirely after 8 PM local because that's already
+        Thursday in UTC).  Comparing against local time matches the
+        operator's mental model.
+        """
         ctx = None
         if not has_app_context():
             ctx = self.app.app_context()
             ctx.push()
 
         try:
+            self._iteration += 1
+
             # Get active configuration
             config = RWTScheduleConfig.query.filter_by(enabled=True).first()
             if config is None:
-                return  # No active configuration
+                # Heartbeat once an hour so operators can confirm the loop is
+                # alive even with no enabled config in the database.
+                if self._iteration % 60 == 1:
+                    self.logger.info(
+                        "RWT scheduler loop alive — no enabled RWT schedule configured"
+                    )
+                return
 
-            now = datetime.now(timezone.utc)
+            # Persist a heartbeat on every iteration so the UI can show the
+            # scheduler is alive even when no fire conditions are met.
+            self._write_heartbeat(config)
+
+            # Use local time for day/window comparisons because operators
+            # configure the schedule in local time via the UI.
+            now_utc = datetime.now(timezone.utc)
+            now_local = now_utc.astimezone()  # System local timezone
+
+            # Honour skip_until: operator-set pause for one or more upcoming
+            # scheduled days (e.g. "skip this week").
+            if config.skip_until and now_local.date() <= config.skip_until:
+                if self._iteration % 60 == 1:
+                    self.logger.info(
+                        "RWT scheduler skipping per skip_until=%s (today=%s)",
+                        config.skip_until.isoformat(), now_local.date().isoformat(),
+                    )
+                return
 
             # Check if current day is in configured days
-            current_day = now.weekday()  # 0=Monday, 6=Sunday
-            if current_day not in (config.days_of_week or []):
-                return  # Not a configured day
+            current_day = now_local.weekday()  # 0=Monday, 6=Sunday
+            configured_days = list(config.days_of_week or [])
+            if current_day not in configured_days:
+                if self._iteration % 60 == 1:
+                    self.logger.info(
+                        "RWT scheduler loop alive — today (weekday %d, local) "
+                        "not in configured days %s",
+                        current_day, configured_days,
+                    )
+                return
 
             # Check if current time is within configured window
-            current_time_minutes = now.hour * 60 + now.minute
+            current_time_minutes = now_local.hour * 60 + now_local.minute
             start_time_minutes = config.start_hour * 60 + config.start_minute
             end_time_minutes = config.end_hour * 60 + config.end_minute
 
             if not (start_time_minutes <= current_time_minutes <= end_time_minutes):
-                return  # Not within time window
+                if self._iteration % 30 == 1:
+                    self.logger.info(
+                        "RWT scheduler waiting for window: local time %02d:%02d, "
+                        "window %02d:%02d–%02d:%02d",
+                        now_local.hour, now_local.minute,
+                        config.start_hour, config.start_minute,
+                        config.end_hour, config.end_minute,
+                    )
+                return
 
-            # Check if RWT was already sent today
+            # Check if RWT was already sent today (compare in local time to
+            # match the operator-facing "once per scheduled day" semantics).
             if config.last_run_at:
-                last_run_date = config.last_run_at.date()
-                today_date = now.date()
-
-                if last_run_date == today_date and config.last_run_status == 'success':
-                    # Already sent today
+                last_run_local = config.last_run_at
+                if last_run_local.tzinfo is None:
+                    last_run_local = last_run_local.replace(tzinfo=timezone.utc)
+                last_run_local = last_run_local.astimezone()
+                if (
+                    last_run_local.date() == now_local.date()
+                    and config.last_run_status == 'success'
+                ):
+                    if self._iteration % 60 == 1:
+                        self.logger.info(
+                            "RWT already sent today at %s — skipping",
+                            last_run_local.isoformat(timespec='seconds'),
+                        )
                     return
 
             # All conditions met - send RWT
-            self.logger.info("Triggering automatic RWT broadcast")
+            self.logger.info(
+                "Triggering automatic RWT broadcast (local %s, window %02d:%02d–%02d:%02d)",
+                now_local.isoformat(timespec='seconds'),
+                config.start_hour, config.start_minute,
+                config.end_hour, config.end_minute,
+            )
             result = trigger_rwt_broadcast(config, self.logger)
 
             if result.get('success'):
