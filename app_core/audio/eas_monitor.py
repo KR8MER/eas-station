@@ -409,14 +409,34 @@ def create_fips_filtering_callback(
             )
             try:
                 result = forward_callback(alert)
-                generated_message_id = _extract_message_id(result)
-                _store_received_alert(
-                    alert=alert,
-                    forwarding_decision='forwarded',
-                    forwarding_reason='No FIPS filtering configured - accepting all alerts',
-                    matched_fips=alert_fips_codes,
-                    generated_message_id=generated_message_id
-                )
+                outcome = _broadcast_outcome(result)
+                if outcome['actually_forwarded']:
+                    _store_received_alert(
+                        alert=alert,
+                        forwarding_decision='forwarded',
+                        forwarding_reason='No FIPS filtering configured - accepting all alerts',
+                        matched_fips=alert_fips_codes,
+                        generated_message_id=outcome['message_id'],
+                    )
+                else:
+                    # Forward callback ran without raising but no broadcast
+                    # record was persisted (event suppressed, unsupported
+                    # status, broadcaster disabled, missing app context, …).
+                    # Don't claim the alert was forwarded when nothing went
+                    # to air — that's the bug behind "Forwarded but no
+                    # broadcast record linked."
+                    log.info(
+                        "Alert accepted but broadcast not triggered: %s (%s)",
+                        event_code, outcome['reason'],
+                    )
+                    _store_received_alert(
+                        alert=alert,
+                        forwarding_decision='ignored',
+                        forwarding_reason=(
+                            f"Broadcast not triggered: {outcome['reason']}"
+                        ),
+                        matched_fips=alert_fips_codes,
+                    )
             except Exception as e:
                 log.error(f"Error forwarding alert: {e}", exc_info=True)
                 _store_received_alert(
@@ -439,14 +459,29 @@ def create_fips_filtering_callback(
             )
             try:
                 result = forward_callback(alert)
-                generated_message_id = _extract_message_id(result)
-                _store_received_alert(
-                    alert=alert,
-                    forwarding_decision='forwarded',
-                    forwarding_reason=forwarding_reason,
-                    matched_fips=matched_fips_list,
-                    generated_message_id=generated_message_id
-                )
+                outcome = _broadcast_outcome(result)
+                if outcome['actually_forwarded']:
+                    _store_received_alert(
+                        alert=alert,
+                        forwarding_decision='forwarded',
+                        forwarding_reason=forwarding_reason,
+                        matched_fips=matched_fips_list,
+                        generated_message_id=outcome['message_id'],
+                    )
+                else:
+                    log.info(
+                        "FIPS match but broadcast not triggered: %s (%s)",
+                        event_code, outcome['reason'],
+                    )
+                    _store_received_alert(
+                        alert=alert,
+                        forwarding_decision='ignored',
+                        forwarding_reason=(
+                            f"{forwarding_reason}; broadcast not triggered: "
+                            f"{outcome['reason']}"
+                        ),
+                        matched_fips=matched_fips_list,
+                    )
             except Exception as e:
                 log.error(f"Error forwarding alert: {e}", exc_info=True)
                 _store_received_alert(
@@ -482,8 +517,13 @@ def _extract_message_id(result: Any) -> Optional[int]:
     if isinstance(result, int):
         return result
     if isinstance(result, dict):
-        # Direct message_id or id at top level
-        msg_id = result.get('message_id') or result.get('id')
+        # Direct record_id/message_id/id at top level
+        # auto_forward_ota_alert / auto_forward_cap_alert put record_id here.
+        msg_id = (
+            result.get('record_id')
+            or result.get('message_id')
+            or result.get('id')
+        )
         if msg_id:
             return int(msg_id)
         # Nested inside broadcast_detail (forward_alert_to_api return format)
@@ -495,6 +535,62 @@ def _extract_message_id(result: Any) -> Optional[int]:
     if hasattr(result, 'id'):
         return getattr(result, 'id')
     return None
+
+
+def _broadcast_outcome(result: Any) -> Dict[str, Any]:
+    """Inspect a forward_callback return value and report whether a broadcast
+    record was actually persisted.
+
+    Returns a dict with:
+        actually_forwarded (bool): True iff a broadcast record was committed.
+        message_id (Optional[int]): FK to eas_messages.id when known.
+        reason (Optional[str]): Human-readable reason when the broadcast was
+            *not* triggered (e.g. unsupported status, event suppressed,
+            missing Flask app context, broadcast disabled).
+    """
+    message_id = _extract_message_id(result)
+    outcome: Dict[str, Any] = {
+        'actually_forwarded': False,
+        'message_id': message_id,
+        'reason': None,
+    }
+
+    if message_id is not None:
+        outcome['actually_forwarded'] = True
+        return outcome
+
+    if not isinstance(result, dict):
+        # Non-dict success result with no extractable id — assume not
+        # broadcast and leave reason None for the caller to fill in.
+        return outcome
+
+    # forward_alert_to_api wraps auto_forward_*; check the nested detail first
+    # because that's where the authoritative same_triggered flag lives.
+    detail = result.get('broadcast_detail')
+    if isinstance(detail, dict):
+        if detail.get('same_triggered') or detail.get('forwarded'):
+            # Broadcast claims success but no id surfaced — accept as
+            # forwarded so we don't lose track of a real on-air event.
+            outcome['actually_forwarded'] = True
+            return outcome
+        outcome['reason'] = (
+            detail.get('reason')
+            or detail.get('error')
+            or 'Broadcast not triggered'
+        )
+        return outcome
+
+    # Direct auto_forward result (no wrapper)
+    if result.get('same_triggered') or result.get('forwarded'):
+        outcome['actually_forwarded'] = True
+        return outcome
+
+    outcome['reason'] = (
+        result.get('reason')
+        or result.get('error')
+        or 'Broadcast not triggered'
+    )
+    return outcome
 
 
 # =============================================================================
