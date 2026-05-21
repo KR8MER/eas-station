@@ -443,6 +443,18 @@
                 <div class="alert alert-info mb-3">
                     {% if log_type == 'all' %}
                         <strong><i class="fas fa-info-circle"></i> All Logs:</strong> Unified view of all system logs organized by category. Click category headers to expand/collapse sections.
+                    {% elif log_type == 'report_received' %}
+                        <strong><i class="fas fa-info-circle"></i> Received Alerts Report:</strong> FCC-shaped log of every EAS alert received in the reporting window, including the forwarding decision and reason. Use the CSV/PDF buttons above for the printable layout.
+                    {% elif log_type == 'report_forwarded' %}
+                        <strong><i class="fas fa-info-circle"></i> Forwarded Alerts Report:</strong> Alerts that were relayed downstream during the reporting window. Export as CSV/PDF for FCC-shaped formatting.
+                    {% elif log_type == 'report_ignored' %}
+                        <strong><i class="fas fa-info-circle"></i> Ignored Alerts Report:</strong> Alerts received but not relayed, with the reason for each decision. Export as CSV/PDF for FCC-shaped formatting.
+                    {% elif log_type == 'report_initiated' %}
+                        <strong><i class="fas fa-info-circle"></i> Initiated Alerts Report:</strong> Alerts this station originated — automated relays plus manual activations.
+                    {% elif log_type == 'report_weekly' %}
+                        <strong><i class="fas fa-info-circle"></i> Weekly Summary Report:</strong> Per-week roll-up of received, forwarded, ignored, tests and station-initiated alerts.
+                    {% elif log_type == 'report_monthly' %}
+                        <strong><i class="fas fa-info-circle"></i> Monthly Summary Report:</strong> Per-month roll-up of received, forwarded, ignored, tests and station-initiated alerts.
                     {% elif log_type == 'system' %}
                         <strong><i class="fas fa-info-circle"></i> System Logs:</strong> General application logs including errors, warnings, and informational messages.
                     {% elif log_type == 'polling' %}
@@ -471,7 +483,111 @@
                 </div>
 
                 <!-- Logs Display -->
-                {% if logs %}
+                {% if report %}
+                    <!-- FCC report layout: summary cards + proper columnar table (desktop) / stacked cards (mobile) -->
+                    {% if report.summary_lines %}
+                    <div class="report-summary mb-3">
+                        <div class="row g-2">
+                            {% for line in report.summary_lines %}
+                                {% set parts = line.split(':', 1) %}
+                                {% set label = parts[0]|trim if parts|length == 2 else line %}
+                                {% set value = parts[1]|trim if parts|length == 2 else '' %}
+                                <div class="col-6 col-md-4 col-lg-3">
+                                    <div class="card h-100">
+                                        <div class="card-body py-2 px-3">
+                                            <div class="text-muted small text-uppercase">{{ label }}</div>
+                                            <div class="fw-semibold report-summary-value">{{ value or '—' }}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                        {% if report.window_start and report.window_end %}
+                        <div class="mt-2 text-muted small">
+                            <i class="fas fa-calendar-alt"></i>
+                            Window:
+                            <strong>{{ report.window_start.strftime('%Y-%m-%d') }}</strong>
+                            →
+                            <strong>{{ report.window_end.strftime('%Y-%m-%d') }}</strong>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+
+                    {% if logs %}
+                        {# Filter out the synthetic summary rows that older code paths pushed
+                           into logs_data — the cards above render the same information. #}
+                        {% set report_rows = [] %}
+                        {% for log in logs %}
+                            {% if log.details %}{% set _ = report_rows.append(log) %}{% endif %}
+                        {% endfor %}
+
+                        {% if report_rows %}
+                        <!-- Desktop: real columnar table -->
+                        <div class="table-responsive d-none d-md-block">
+                            <table class="table table-sm table-hover report-table mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        {% for col in report.columns %}
+                                        <th>{{ col }}</th>
+                                        {% endfor %}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for log in report_rows %}
+                                    <tr>
+                                        {% for col in report.columns %}
+                                        {% set cell = log.details.get(col, '') %}
+                                        <td>{% if cell %}{{ cell }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                                        {% endfor %}
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Mobile: stacked cards so every field has a label and wraps cleanly -->
+                        <div class="d-md-none report-card-list">
+                            {% for log in report_rows %}
+                            <div class="card mb-2 report-card">
+                                <div class="card-body p-2">
+                                    <dl class="report-card-dl mb-0">
+                                        {% for col in report.columns %}
+                                        {% set cell = log.details.get(col, '') %}
+                                        <dt>{{ col }}</dt>
+                                        <dd>{% if cell %}{{ cell }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+                                        {% endfor %}
+                                    </dl>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <div class="alert alert-secondary mb-0">
+                            <i class="fas fa-info-circle"></i> No rows in this report window.
+                            {% if search_query or log_level_filter or date_from or date_to %}
+                            <br><small>Try adjusting your filters or <a href="?type={{ log_type }}&limit={{ limit }}">clear all filters</a>.</small>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+
+                        <div class="mt-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                            <small class="text-muted">
+                                <i class="fas fa-list"></i> Showing {{ report_rows|length }} of {{ report.row_count or report_rows|length }} record{{ '' if report_rows|length == 1 else 's' }}
+                                {% if search_query or log_level_filter or date_from or date_to %}
+                                (filtered)
+                                {% endif %}
+                            </small>
+                            <small class="text-muted">
+                                <i class="fas fa-clock"></i> Last updated: <span id="lastUpdate">{{ 'now' }}</span>
+                            </small>
+                        </div>
+                    {% else %}
+                        <div class="alert alert-secondary mb-0">
+                            <i class="fas fa-info-circle"></i> No rows in this report window.
+                        </div>
+                    {% endif %}
+                {% elif logs %}
                     {% if log_type == 'all' %}
                         <!-- Grouped display for All Logs -->
                         {% set logs_by_category = {} %}
@@ -794,6 +910,60 @@
     #autoRefreshBtn.active {
         background-color: var(--primary-color);
         color: white;
+    }
+
+    /* FCC report layout — both desktop table and mobile stacked cards
+       share these tweaks so labels never collide with values. */
+    .report-summary .report-summary-value {
+        word-break: break-word;
+    }
+
+    .report-table {
+        font-size: 0.9rem;
+    }
+
+    .report-table th,
+    .report-table td {
+        vertical-align: top;
+        word-break: break-word;
+    }
+
+    /* Mobile: each report row becomes a card with a two-column
+       definition list so the column label is always next to the value. */
+    .report-card-dl {
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        column-gap: 0.75rem;
+        row-gap: 0.15rem;
+        font-size: 0.9rem;
+    }
+
+    .report-card-dl dt {
+        color: var(--text-muted);
+        font-weight: 600;
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.02em;
+        margin: 0;
+        align-self: start;
+    }
+
+    .report-card-dl dd {
+        margin: 0;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+    }
+
+    /* Very narrow phones: stack the label above the value so long values
+       don't get squeezed into a tiny column. */
+    @media (max-width: 380px) {
+        .report-card-dl {
+            grid-template-columns: 1fr;
+            row-gap: 0;
+        }
+        .report-card-dl dd {
+            margin-bottom: 0.4rem;
+        }
     }
 </style>
 
