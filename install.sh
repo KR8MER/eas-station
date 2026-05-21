@@ -1693,13 +1693,18 @@ else
     echo_warning "Sudoers configuration file not found (config/sudoers-eas-station)"
 fi
 
-# Create certbot data directories with proper permissions
-# These directories must be writable by both the eas-station user and root (for certbot via sudo)
+# Create certbot data directories with proper permissions.
+# Certbot runs as root (via sudo) and creates root-owned files. It also
+# calls os.chown() to mirror the previous cert's group onto the new key,
+# which fails with EPERM on hosts where AppArmor/user-namespace policy
+# blocks root from chowning to a non-root group. Keep the whole tree
+# owned by root:root so that copy_group step is a no-op; chmod 777
+# preserves read access for the eas-station user.
 echo_progress "Creating certbot data directories..."
 CERTBOT_DATA_DIR="$INSTALL_DIR/certbot_data"
 mkdir -p "$CERTBOT_DATA_DIR/config" "$CERTBOT_DATA_DIR/work" "$CERTBOT_DATA_DIR/logs"
 chmod -R 777 "$CERTBOT_DATA_DIR"
-chown -R "$SERVICE_USER:$SERVICE_USER" "$CERTBOT_DATA_DIR"
+chown -R root:root "$CERTBOT_DATA_DIR"
 echo_success "Certbot data directories created"
 
 # Create ACME challenge directory for certbot webroot method

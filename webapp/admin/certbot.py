@@ -61,9 +61,28 @@ CERTBOT_LOGS_DIR = CERTBOT_BASE_DIR / 'logs'
 # Use standalone or webroot modes instead.
 
 
+def _explain_certbot_failure(stderr: str, stdout: str) -> str:
+    """Return a human-readable hint prepended to certbot stderr when we
+    recognize the failure mode, so the UI surfaces a remediation step
+    instead of an opaque traceback.
+    """
+    blob = f"{stderr}\n{stdout}"
+    raw = (stderr or stdout or "").strip()
+    if "Operation not permitted" in blob and "/archive/" in blob and ".pem" in blob:
+        return (
+            "Certbot failed while chowning a new key file under the certbot "
+            "archive directory. This usually means existing files there are "
+            "owned by the eas-station user (left over from an older install) "
+            "and the kernel/AppArmor is denying root the chown to that group. "
+            "Re-run `update.sh` (or `sudo chown -R root:root "
+            f"{CERTBOT_BASE_DIR}`) and try again.\n\nOriginal error:\n{raw}"
+        )
+    return raw
+
+
 def _ensure_webroot_directory():
     """Ensure webroot directory exists with proper permissions for certbot.
-    
+
     The webroot directory must be writable by root (certbot runs as root via sudo)
     and readable by nginx (www-data) to serve the ACME challenge files.
     
@@ -132,6 +151,22 @@ def _ensure_certbot_directories():
         # Fix permissions on the entire certbot_data directory tree
         subprocess.run(
             ['sudo', 'chmod', '-R', '777', str(CERTBOT_BASE_DIR)],
+            capture_output=True,
+            timeout=10
+        )
+
+        # Normalize ownership to root:root. Certbot runs as root and calls
+        # copy_ownership_and_apply_mode(old_key, new_key, copy_group=True),
+        # which translates to os.chown(new_key, -1, old_key_gid). On hosts
+        # where that chown returns EPERM (AppArmor profile, user namespaces,
+        # certain bind-mounts), the renewal aborts with
+        #     PermissionError: [Errno 1] Operation not permitted:
+        #     '.../archive/<domain>/privkeyN.pem'
+        # Leaving the tree owned by root makes the copy-group step a no-op
+        # so the failure cannot recur. The chmod 777 above keeps read access
+        # for the eas-station user.
+        subprocess.run(
+            ['sudo', 'chown', '-R', 'root:root', str(CERTBOT_BASE_DIR)],
             capture_output=True,
             timeout=10
         )
@@ -1277,13 +1312,13 @@ def obtain_certificate_execute():
                     logger.error(f"Failed to restart nginx: {start_result.stderr}")
                 
                 if certbot_result.returncode != 0:
-                    error_msg = certbot_result.stderr
-                    
+                    error_msg = _explain_certbot_failure(certbot_result.stderr, certbot_result.stdout)
+
                     # Log the full error for debugging
                     logger.error(f"Certbot standalone failed with return code {certbot_result.returncode}")
-                    logger.error(f"Certbot stderr: {error_msg}")
+                    logger.error(f"Certbot stderr: {certbot_result.stderr}")
                     logger.error(f"Certbot stdout: {certbot_result.stdout}")
-                    
+
                     # Check for common permission errors and provide helpful messages
                     if "Permission denied" in error_msg or "Errno 13" in error_msg:
                         error_msg = (
@@ -1603,9 +1638,10 @@ def renew_certificate_execute():
             if result.returncode != 0:
                 logger.error(f"Certbot renewal failed: {result.stderr}")
                 logger.error(f"Certbot stdout: {result.stdout}")
+                explained = _explain_certbot_failure(result.stderr, result.stdout)
                 return jsonify({
                     "success": False,
-                    "error": f"Certbot renew failed: {result.stderr}",
+                    "error": f"Certbot renew failed: {explained}",
                     "output": result.stdout
                 }), 500
             
