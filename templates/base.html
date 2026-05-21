@@ -239,34 +239,37 @@
         </div>
     </footer>
 
-    <!-- SCRIPTS - Load order is important! -->
+    <!-- SCRIPTS - Load order is important!
+         All scripts use `defer` so they download in parallel during HTML
+         parsing but execute in document order after the DOM is ready, before
+         DOMContentLoaded fires. Any inline <script> below that depends on
+         these (e.g. window.EASWebSocket, the cache.js fetch interceptor)
+         MUST run inside a DOMContentLoaded listener. -->
     <!-- 1. Bootstrap first -->
-    <script src="{{ url_for('static', filename='vendor/bootstrap/bootstrap.bundle.min.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='vendor/bootstrap/bootstrap.bundle.min.js') }}"></script>
 
-    <!-- 2. Socket.IO for real-time WebSocket updates -->
-    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"
-            integrity="sha384-/KNQL8Nu5gCHLqwqfQjA689Hhoqgi2S84SNUxC3roTe4EhJ9AfLkp8QiQcU8AMzI"
-            crossorigin="anonymous"></script>
+    <!-- 2. Socket.IO for real-time WebSocket updates (vendored locally) -->
+    <script defer src="{{ url_for('static', filename='vendor/socketio/socket.io.min.js') }}"></script>
 
     <!-- 3. EAS Station ™ Core JavaScript Modules -->
     <!-- CRITICAL: Load cache.js FIRST to intercept all fetch calls and prevent server overload -->
-    <script src="{{ url_for('static', filename='js/core/cache.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='js/core/cache.js') }}"></script>
     <!-- WebSocket module must load before other modules that depend on it -->
-    <script src="{{ url_for('static', filename='js/core/websocket.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/core/theme.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/core/lightning.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/core/notifications.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/core/api.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/core/health.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/core/utils.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/core/units.js') }}?v={{ static_asset_version }}"></script>
-    <script src="{{ url_for('static', filename='js/loading-error-utils.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/accessibility-utils.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/rbds_visualization.js') }}?v={{ static_asset_version }}"></script>
+    <script defer src="{{ url_for('static', filename='js/core/websocket.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='js/core/theme.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='js/core/lightning.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='js/core/notifications.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='js/core/api.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='js/core/health.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='js/core/utils.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='js/core/units.js') }}?v={{ static_asset_version }}"></script>
+    <script defer src="{{ url_for('static', filename='js/loading-error-utils.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='js/accessibility-utils.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='js/rbds_visualization.js') }}?v={{ static_asset_version }}"></script>
 
     <!-- Visual Effects Enhancement -->
-    <script src="{{ url_for('static', filename='js/visual-effects.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/logo-effects.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='js/visual-effects.js') }}"></script>
+    <script defer src="{{ url_for('static', filename='js/logo-effects.js') }}"></script>
 
     <!-- 3. Page-specific scripts -->
     {% block scripts %}{% endblock %}
@@ -332,7 +335,7 @@
         </div>
     </div>
     <script>
-        (function () {
+        document.addEventListener('DOMContentLoaded', function () {
             var modalEl = document.getElementById('globalUnitsModal');
             if (!modalEl) return;
             modalEl.addEventListener('show.bs.modal', function () {
@@ -340,7 +343,7 @@
                     window.EASUnits.attachSelector(document.getElementById('globalUnitsModalPanel'));
                 }
             });
-        })();
+        });
     </script>
 
     <!-- Global EAS Broadcast Timer Overlay (corner badge)
@@ -370,7 +373,7 @@
         @keyframes gbcPulse   { 0%,100%{opacity:1} 50%{opacity:.3} }
     </style>
     <script>
-    (function () {
+    document.addEventListener('DOMContentLoaded', function () {
         'use strict';
 
         var _gbcInterval = null;
@@ -522,7 +525,7 @@
                 }
             );
         }
-    }());
+    });
     </script>
 </body>
 </html>
