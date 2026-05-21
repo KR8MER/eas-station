@@ -145,3 +145,93 @@ def test_alert_id_field_is_always_present(configured_logger):
     log.info("capture")
     assert hasattr(record_holder["record"], "alert_id")
     assert record_holder["record"].alert_id == "-"
+
+
+class TestAttachAlertIdAutopopulate:
+    """The SQLAlchemy ``before_insert`` listener must stamp the bound alert ID
+    onto rows that don't carry one, and leave explicit values alone."""
+
+    def _build_session(self):
+        """Build a tiny in-process SQLAlchemy setup with a single model that
+        mimics the shape of SystemLog (id + alert_identifier).  This keeps
+        the test free of Flask/PostGIS/etc. while still exercising the real
+        ``event.listen`` machinery used by the production code."""
+        from sqlalchemy import Column, Integer, String, create_engine
+        from sqlalchemy.orm import declarative_base, sessionmaker
+
+        Base = declarative_base()
+
+        class FakeLog(Base):
+            __tablename__ = "fake_log"
+            id = Column(Integer, primary_key=True)
+            message = Column(String(200))
+            alert_identifier = Column(String(255))
+
+        from app_core.logging_context import attach_alert_id_autopopulate
+        attach_alert_id_autopopulate(FakeLog)
+
+        engine = create_engine("sqlite:///:memory:")
+        Base.metadata.create_all(engine)
+        return sessionmaker(bind=engine)(), FakeLog
+
+    def test_listener_stamps_bound_alert_id(self):
+        session, FakeLog = self._build_session()
+        try:
+            with bind_alert("NWS-XYZ-2026-007"):
+                row = FakeLog(message="hello")
+                session.add(row)
+                session.commit()
+            assert row.alert_identifier == "NWS-XYZ-2026-007"
+        finally:
+            session.close()
+
+    def test_listener_skips_when_no_alert_bound(self):
+        session, FakeLog = self._build_session()
+        try:
+            row = FakeLog(message="idle")
+            session.add(row)
+            session.commit()
+            assert row.alert_identifier is None
+        finally:
+            session.close()
+
+    def test_listener_respects_explicit_value(self):
+        """When the caller set the column explicitly, the listener must not
+        clobber it with the context value."""
+        session, FakeLog = self._build_session()
+        try:
+            with bind_alert("ctx-id"):
+                row = FakeLog(message="explicit", alert_identifier="caller-id")
+                session.add(row)
+                session.commit()
+            assert row.alert_identifier == "caller-id"
+        finally:
+            session.close()
+
+    def test_listener_supports_custom_attribute_name(self):
+        """``GPIOActivationLog`` uses ``alert_id`` rather than
+        ``alert_identifier``; the helper must accept an override."""
+        from sqlalchemy import Column, Integer, String, create_engine
+        from sqlalchemy.orm import declarative_base, sessionmaker
+        from app_core.logging_context import attach_alert_id_autopopulate
+
+        Base = declarative_base()
+
+        class LegacyLog(Base):
+            __tablename__ = "legacy_log"
+            id = Column(Integer, primary_key=True)
+            alert_id = Column(String(255))
+
+        attach_alert_id_autopopulate(LegacyLog, attr="alert_id")
+
+        engine = create_engine("sqlite:///:memory:")
+        Base.metadata.create_all(engine)
+        session = sessionmaker(bind=engine)()
+        try:
+            with bind_alert("legacy-style"):
+                row = LegacyLog()
+                session.add(row)
+                session.commit()
+            assert row.alert_id == "legacy-style"
+        finally:
+            session.close()

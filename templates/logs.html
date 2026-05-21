@@ -223,8 +223,26 @@
                                 </div>
                             </div>
 
+                            <!-- Active alert-correlation-ID filter chip -->
+                            {% if alert_filter %}
+                            <div class="row mt-2">
+                                <div class="col-12">
+                                    <span class="badge bg-info text-dark">
+                                        <i class="fas fa-link"></i>
+                                        Filtered to alert
+                                        <code class="ms-1">{{ alert_filter }}</code>
+                                        <a class="ms-2 text-dark"
+                                           href="?type={{ log_type }}&limit={{ limit }}{% if search_query %}&search={{ search_query }}{% endif %}{% if log_level_filter %}&level={{ log_level_filter }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}{% if service_filter %}&service={{ service_filter }}{% endif %}"
+                                           title="Remove alert filter">
+                                            <i class="fas fa-times-circle"></i>
+                                        </a>
+                                    </span>
+                                </div>
+                            </div>
+                            {% endif %}
+
                             <!-- Clear Filters Button -->
-                            {% if search_query or log_level_filter or date_from or date_to or service_filter %}
+                            {% if search_query or log_level_filter or date_from or date_to or service_filter or alert_filter %}
                             <div class="row mt-2">
                                 <div class="col-12">
                                     <a href="?type={{ log_type }}&limit={{ limit }}" class="btn btn-sm btn-outline-secondary">
@@ -305,6 +323,7 @@
                                                         <th style="width: 180px;"><i class="fas fa-clock"></i> Timestamp</th>
                                                         <th style="width: 100px;"><i class="fas fa-tag"></i> Level</th>
                                                         <th style="width: 200px;"><i class="fas fa-cube"></i> Module</th>
+                                                        <th style="width: 180px;"><i class="fas fa-link"></i> Alert</th>
                                                         <th><i class="fas fa-comment"></i> Message</th>
                                                         <th style="width: 80px;"><i class="fas fa-info"></i> Details</th>
                                                     </tr>
@@ -325,6 +344,17 @@
                                                             </span>
                                                         </td>
                                                         <td><small class="text-muted">{{ log.module }}</small></td>
+                                                        <td>
+                                                            {% if log.alert_identifier %}
+                                                            <a href="?type={{ log_type }}&limit={{ limit }}&alert={{ log.alert_identifier }}"
+                                                               class="badge bg-info text-dark text-decoration-none"
+                                                               title="Filter to this alert's lifecycle">
+                                                                <code class="text-dark">{{ log.alert_identifier }}</code>
+                                                            </a>
+                                                            {% else %}
+                                                            <span class="text-muted">—</span>
+                                                            {% endif %}
+                                                        </td>
                                                         <td><span class="log-message">{{ log.message }}</span></td>
                                                         <td class="text-center">
                                                             {% if log.details %}
@@ -341,7 +371,7 @@
                                                     </tr>
                                                     {% if log.details %}
                                                     <tr class="collapse" id="details-{{ category|replace(' ', '') }}-{{ loop.index }}">
-                                                        <td colspan="5">
+                                                        <td colspan="6">
                                                             <div class="card card-body bg-light">
                                                                 <h6><i class="fas fa-info-circle"></i> Detailed Information:</h6>
                                                                 <pre class="mb-0" style="font-size: 0.85rem; max-height: 400px; overflow-y: auto;">{{ log.details | tojson(indent=2) }}</pre>
@@ -406,6 +436,17 @@
                                         </span>
                                     </td>
                                     <td><small class="text-muted">{{ log.module }}</small></td>
+                                    <td>
+                                        {% if log.alert_identifier %}
+                                        <a href="?type={{ log_type }}&limit={{ limit }}&alert={{ log.alert_identifier }}"
+                                           class="badge bg-info text-dark text-decoration-none"
+                                           title="Filter to this alert's lifecycle">
+                                            <code class="text-dark">{{ log.alert_identifier }}</code>
+                                        </a>
+                                        {% else %}
+                                        <span class="text-muted">—</span>
+                                        {% endif %}
+                                    </td>
                                     <td><span class="log-message">{{ log.message }}</span></td>
                                     <td class="text-center">
                                         {% if log.details %}
@@ -422,7 +463,7 @@
                                 </tr>
                                 {% if log.details %}
                                 <tr class="collapse" id="details-{{ loop.index }}">
-                                    <td colspan="5">
+                                    <td colspan="6">
                                         <div class="card card-body bg-light">
                                             <h6><i class="fas fa-info-circle"></i> Detailed Information:</h6>
                                             <pre class="mb-0" style="font-size: 0.85rem; max-height: 400px; overflow-y: auto;">{{ log.details | tojson(indent=2) }}</pre>

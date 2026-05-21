@@ -96,7 +96,10 @@ class AudioAlert(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     source_name = db.Column(db.String(100), nullable=False, index=True)
-    
+    # Correlation ID tying this row to the alert lifecycle it belongs to.
+    # Auto-populated from logging_context when set during the write.
+    alert_identifier = db.Column(db.String(255), nullable=True, index=True)
+
     # Alert classification
     alert_level = db.Column(db.String(20), nullable=False)  # 'info', 'warning', 'error', 'critical'
     alert_type = db.Column(db.String(50), nullable=False)   # 'silence', 'clipping', 'disconnect', etc.

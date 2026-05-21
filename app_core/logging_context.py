@@ -145,3 +145,40 @@ def pop_alert(token: Optional[contextvars.Token]) -> None:
 def current_alert() -> Optional[str]:
     """Return the alert ID currently bound to this task, or ``None``."""
     return _alert_id_var.get()
+
+
+def attach_alert_id_autopopulate(*models, attr: str = 'alert_identifier') -> None:
+    """Register a ``before_insert`` listener on each model that stamps the
+    current correlation ID onto *attr* when the column is unset.
+
+    This is the glue that lets ``SystemLog(message=...)`` writes scattered
+    across ~40 call sites automatically inherit the alert context bound by
+    ``bind_alert``/``push_alert`` — without each call site having to know
+    the field exists.  Explicit overrides at the call site still win
+    because we only fill the column when it is ``None``.
+
+    Args:
+        *models: SQLAlchemy declarative classes to attach the listener to.
+        attr: Column name on each model to populate.  Defaults to
+            ``alert_identifier``; pass ``alert_id`` for legacy tables
+            (e.g. ``GPIOActivationLog``) that already shipped with a
+            differently-named column.
+    """
+    from sqlalchemy import event  # Imported lazily so logging_context stays
+    # importable in environments without SQLAlchemy (tests, CLI tools).
+
+    def _before_insert(mapper, connection, target):  # noqa: ARG001
+        try:
+            if getattr(target, attr, None):
+                return  # Caller set it explicitly; respect that.
+            cid = _alert_id_var.get()
+            if cid:
+                setattr(target, attr, cid)
+        except Exception:
+            # Listeners must never break a write.  Silently skip on any
+            # unexpected error (e.g. detached instance, missing attr).
+            pass
+
+    for model in models:
+        # Use propagate=True so subclasses (if any) inherit the behaviour.
+        event.listen(model, 'before_insert', _before_insert, propagate=True)

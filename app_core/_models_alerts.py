@@ -146,6 +146,9 @@ class EASMessage(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     cap_alert_id = db.Column(db.Integer, db.ForeignKey("cap_alerts.id", ondelete="SET NULL"), index=True)
+    # Correlation ID (CAP identifier or OTA-derived hash) tying this message
+    # to the alert lifecycle.  Auto-populated from logging_context.
+    alert_identifier = db.Column(db.String(255), nullable=True, index=True)
     same_header = db.Column(db.String(255), nullable=False)
     audio_filename = db.Column(db.String(255), nullable=False)
     text_filename = db.Column(db.String(255), nullable=False)
@@ -170,6 +173,7 @@ class EASMessage(db.Model):
         return {
             "id": self.id,
             "cap_alert_id": self.cap_alert_id,
+            "alert_identifier": self.alert_identifier,
             "same_header": self.same_header,
             "audio_filename": self.audio_filename,
             "text_filename": self.text_filename,

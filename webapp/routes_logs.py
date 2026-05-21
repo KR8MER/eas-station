@@ -287,6 +287,7 @@ def get_recent_logs():
                 'module': log.module or 'system',
                 'message': log.message,
                 'category': 'system',
+                'alert_identifier': log.alert_identifier,
                 'details': log.details,
             })
 
@@ -299,6 +300,7 @@ def get_recent_logs():
                 'module': f'audio:{log.source_name}' if log.source_name else 'audio',
                 'message': log.message,
                 'category': 'audio',
+                'alert_identifier': log.alert_identifier,
                 'details': {
                     'alert_type': log.alert_type,
                     'acknowledged': log.acknowledged,
@@ -314,6 +316,9 @@ def get_recent_logs():
                 'module': f'gpio:pin{log.pin}',
                 'message': f"{log.activation_type} - Duration: {log.duration_seconds or 'active'}s",
                 'category': 'gpio',
+                # GPIOActivationLog stores the correlation ID in its legacy
+                # ``alert_id`` column rather than ``alert_identifier``.
+                'alert_identifier': log.alert_id,
                 'details': {
                     'pin': log.pin,
                     'activation_type': log.activation_type,
@@ -330,6 +335,7 @@ def get_recent_logs():
                 'module': 'eas_generator',
                 'message': f"SAME: {log.same_header}" if log.same_header else "EAS message generated",
                 'category': 'eas',
+                'alert_identifier': log.alert_identifier,
                 'details': {
                     'same_header': log.same_header,
                     'audio_filename': log.audio_filename,
