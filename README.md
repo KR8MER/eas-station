@@ -53,7 +53,7 @@ The project's long-term goal is to be a credible, auditable, drop-in alternative
 
 ## 🎯 Who This Is For, and What It's For
 
-EAS Station was built because the existing EAS appliance market is closed, expensive, and impossible to audit. The platform reframes the same workflows as transparent, inspectable, programmable infrastructure — useful across several distinct audiences:
+EAS Station™ was built because the existing EAS appliance market is closed, expensive, and impossible to audit. The platform reframes the same workflows as transparent, inspectable, programmable infrastructure — useful across several distinct audiences:
 
 ### Public-Safety Agencies & Emergency Management Offices
 **Use it to:** stand up a non-production training rig that mirrors the agency's real CAP/IPAWS workflow, validate FIPS-code and NWS-zone coverage before an exercise, run tabletop drills with realistic alert ingestion and replay, and prototype custom alert distribution (LED signage in EOCs, GPIO triggers to siren controllers, SMS/email/SNMP notifications to on-call staff) without touching the production warning system.
@@ -351,7 +351,7 @@ See the [Contributing Guide](docs/process/CONTRIBUTING.md) and the [Code Standar
 
 ## ⚖️ Legal & Compliance
 
-> 🚨 **EAS Station generates valid SAME headers and attention tones.** These signals will trigger downstream EAS equipment if coupled to any RF, STL, or streaming chain.
+> 🚨 **EAS Station™ generates valid SAME headers and attention tones.** These signals will trigger downstream EAS equipment if coupled to any RF, STL, or streaming chain.
 >
 > - **Not FCC-certified** — for laboratory, research, and training use only.
 > - **Never connect to on-air infrastructure** without explicit authorization.
@@ -364,7 +364,7 @@ See [Terms of Use](docs/policies/TERMS_OF_USE.md), [Privacy Policy](docs/policie
 
 ## 📜 License
 
-EAS Station is **dual-licensed**:
+EAS Station™ is **dual-licensed**:
 
 ### Open Source — AGPL v3
 Free to use, modify, and distribute under the [GNU Affero General Public License v3](LICENSE). Modifications to network-deployed versions must be made available as source.
@@ -383,13 +383,13 @@ Branding governed by the [Trademark Policy](docs/policies/TRADEMARK_POLICY.md). 
 
 ## 📚 Attributions & Open‑Source Credits
 
-EAS Station stands on the shoulders of an enormous open‑source ecosystem. The badges at the top of this README are a curated highlight; this section is the exhaustive list of every third‑party library, system package, and CDN asset the project relies on. Each entry explains what role that library plays inside EAS Station, not just what the upstream project is. Versions track [`requirements.txt`](requirements.txt) and the system‑package install scripts in [`scripts/`](scripts/).
+EAS Station™ stands on the shoulders of an enormous open‑source ecosystem. The badges at the top of this README are a curated highlight; this section is the exhaustive list of every third‑party library, system package, and CDN asset the project relies on. Each entry explains what role that library plays inside EAS Station™, not just what the upstream project is. Versions track [`requirements.txt`](requirements.txt) and the system‑package install scripts in [`scripts/`](scripts/).
 
 > The drift guard `tests/test_tech_stack_badges.py` and the workflow `.github/workflows/release-metadata.yml` enforce that the curated badge subset in this README, in `templates/partials/tech_stack_badges.html` (the live page footer), and in `requirements.txt` stay aligned. Bumping a dependency means updating all three.
 
 ### Python runtime, framework & extensions
 
-| Library | Version | License | Purpose in EAS Station | Project |
+| Library | Version | License | Purpose in EAS Station™ | Project |
 |---|---|---|---|---|
 | Flask | 3.1.2 | BSD‑3‑Clause | The web framework. Every dashboard, admin page, and JSON endpoint is a Flask route. | https://flask.palletsprojects.com/ |
 | Werkzeug | 3.1.4 | BSD‑3‑Clause | WSGI request/response plumbing under Flask — URL routing, cookies, exceptions, request parsing. | https://werkzeug.palletsprojects.com/ |
@@ -404,7 +404,7 @@ EAS Station stands on the shoulders of an enormous open‑source ecosystem. The 
 
 ### Database & ORM
 
-| Library | Version | License | Purpose in EAS Station | Project |
+| Library | Version | License | Purpose in EAS Station™ | Project |
 |---|---|---|---|---|
 | SQLAlchemy | 2.0.45 | MIT | ORM for every persisted entity — alerts, settings, audit logs, RBAC, GPS samples. | https://www.sqlalchemy.org/ |
 | Alembic | 1.17.2 | MIT | Schema migrations (`app_core/migrations/versions/*`); `alembic upgrade head` runs on install/update. | https://alembic.sqlalchemy.org/ |
@@ -416,7 +416,7 @@ EAS Station stands on the shoulders of an enormous open‑source ecosystem. The 
 
 ### Caching, queueing & runtime servers
 
-| Component | Version | License | Purpose in EAS Station | Project |
+| Component | Version | License | Purpose in EAS Station™ | Project |
 |---|---|---|---|---|
 | Redis (server) | 7.1 | RSAL/SSPL/AGPL (per upstream) | Pub/sub bus between the web app and the SDR / hardware services; cache; rate‑limit store; capture registry; live spectrum + waterfall feed. | https://redis.io/ |
 | redis (Python) | 7.1.0 | MIT | Python client for the Redis server. | https://github.com/redis/redis-py |
@@ -429,7 +429,7 @@ EAS Station stands on the shoulders of an enormous open‑source ecosystem. The 
 
 ### HTTP, serialization & utilities
 
-| Library | Version | License | Purpose in EAS Station | Project |
+| Library | Version | License | Purpose in EAS Station™ | Project |
 |---|---|---|---|---|
 | requests | 2.32.5 | Apache‑2.0 | Sync HTTP client used by the CAP/IPAWS pollers and most outbound integrations. | https://requests.readthedocs.io/ |
 | httpx | 0.28.1 | BSD‑3‑Clause | Modern async HTTP client with connection pooling for high‑throughput CAP fetches. | https://www.python-httpx.org/ |
@@ -448,7 +448,7 @@ EAS Station stands on the shoulders of an enormous open‑source ecosystem. The 
 
 ### Audio, SDR & signal processing
 
-| Component | Version | License | Purpose in EAS Station | Project |
+| Component | Version | License | Purpose in EAS Station™ | Project |
 |---|---|---|---|---|
 | NumPy | 2.3.5 | BSD‑3‑Clause | Foundation for every IQ buffer, FM demod, FFT, and SAME bit slicer. Also drives the one‑click IQ capture (`numpy.save` to `.npy`). | https://numpy.org/ |
 | SciPy | 1.16.3 | BSD‑3‑Clause | DSP filter design (`signal.lfilter`, FIR/IIR design) for the interference notch, deemphasis, and channel filters. | https://scipy.org/ |
@@ -463,7 +463,7 @@ EAS Station stands on the shoulders of an enormous open‑source ecosystem. The 
 
 ### Hardware / I/O
 
-| Library | Version | License | Purpose in EAS Station | Project |
+| Library | Version | License | Purpose in EAS Station™ | Project |
 |---|---|---|---|---|
 | pyserial | 3.5 | BSD‑3‑Clause | Serial transport for the VFD display, RS‑232 LED signs, and UART NMEA GPS. | https://github.com/pyserial/pyserial |
 | gpiozero | 2.0.1 | BSD‑3‑Clause | High‑level GPIO control for relay HATs, PTT lines, and transmitter keying. | https://gpiozero.readthedocs.io/ |
@@ -476,14 +476,14 @@ EAS Station stands on the shoulders of an enormous open‑source ecosystem. The 
 
 ### Timekeeping (stratum 1)
 
-| Component | Version | License | Purpose in EAS Station | Project |
+| Component | Version | License | Purpose in EAS Station™ | Project |
 |---|---|---|---|---|
 | chrony | system | GPL‑2.0 | NTP daemon that consumes the GPS NMEA + PPS edge as a kernel refclock; serves stratum 1 NTP. | https://chrony-project.org/ |
 | gpsd | system | BSD‑2‑Clause | Multiplexes the GPS UART so chrony, the dashboard, and the GPS dashboard can all read the fix simultaneously. | https://gpsd.gitlab.io/gpsd/ |
 
 ### Security / auth / notifications
 
-| Library | Version | License | Purpose in EAS Station | Project |
+| Library | Version | License | Purpose in EAS Station™ | Project |
 |---|---|---|---|---|
 | PyOTP | 2.9.0 | MIT | TOTP generation and verification for the MFA login flow. | https://pyauth.github.io/pyotp/ |
 | cryptography | ≥ 46.0.5 | Apache‑2.0 / BSD‑3‑Clause | Ed25519 signing and SHA‑256 hashing for the tamper‑evident `audit_logs` chain — every audit row is hash‑chained to its predecessor and signed so post‑hoc DB edits are detectable via `AuditLogger.verify_chain()`. | https://cryptography.io/ |
@@ -493,21 +493,21 @@ EAS Station stands on the shoulders of an enormous open‑source ecosystem. The 
 
 ### Geospatial
 
-| Library | Version | License | Purpose in EAS Station | Project |
+| Library | Version | License | Purpose in EAS Station™ | Project |
 |---|---|---|---|---|
 | pyshp | 3.0.3 | MIT | Reads ESRI shapefiles when importing custom county/zone boundaries into PostGIS. | https://github.com/GeospatialPython/pyshp |
 | pyproj | 3.7.1 | MIT | Reprojects shapefile CRSes to WGS84 during boundary import. | https://pyproj4.github.io/pyproj/ |
 
 ### Testing & QA
 
-| Library | Version | License | Purpose in EAS Station | Project |
+| Library | Version | License | Purpose in EAS Station™ | Project |
 |---|---|---|---|---|
 | pytest | 9.0.2 | MIT | Test runner for the whole suite (`tests/`). | https://pytest.org/ |
 | pytest‑asyncio | 1.3.0 | Apache‑2.0 | Lets async coroutines run as `pytest` test functions. | https://pytest-asyncio.readthedocs.io/ |
 
 ### Front‑end vendored / CDN assets
 
-| Library | Version | License | Purpose in EAS Station | Project |
+| Library | Version | License | Purpose in EAS Station™ | Project |
 |---|---|---|---|---|
 | Bootstrap | 5.3.0 | MIT | CSS grid + component library underlying every dashboard layout. | https://getbootstrap.com/ |
 | Font Awesome (Free) | 6.4.0 | CC BY 4.0 / SIL OFL / MIT | Icon set used throughout navigation, status pills, and badges. | https://fontawesome.com/ |
