@@ -274,27 +274,39 @@
                                 </a>
                             </li>
                             {% if is_authenticated and can_view_logs %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li><h6 class="dropdown-header">Logs &amp; Reports</h6></li>
                             <li>
-                                <a class="dropdown-item" href="/logs">
-                                    <i class="fas fa-file-alt"></i> System Logs
+                                <a class="dropdown-item" href="/logs?type=all">
+                                    <i class="fas fa-file-alt"></i> All Logs
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="/logs?type=audit">
+                                    <i class="fas fa-shield-halved"></i> Audit Log
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="/logs?type=compliance">
+                                    <i class="fas fa-clipboard-check"></i> Compliance Log
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="/logs?type=report_received">
+                                    <i class="fas fa-file-contract"></i> FCC Reports
                                 </a>
                             </li>
                             {% endif %}
 
                             {% if show_tools_analytics %}
                             <li><hr class="dropdown-divider"></li>
-                            <li><h6 class="dropdown-header">Analytics & Reporting</h6></li>
+                            <li><h6 class="dropdown-header">Analytics</h6></li>
                             <li>
                                 <a class="dropdown-item" href="/analytics">
                                     <i class="fas fa-chart-line"></i> Analytics Dashboard
                                 </a>
                             </li>
                             {% if can_view_logs %}
-                            <li>
-                                <a class="dropdown-item" href="/admin/audit-logs">
-                                    <i class="fas fa-clipboard-list"></i> Audit Logs
-                                </a>
-                            </li>
                             <li>
                                 <a class="dropdown-item" href="/admin/sessions">
                                     <i class="fas fa-user-clock"></i> Active Sessions
@@ -326,11 +338,7 @@
                                     <i class="fas fa-shield-check"></i> Alert Verification
                                 </a>
                             </li>
-                            <li>
-                                <a class="dropdown-item" href="{{ url_for('compliance_dashboard') }}">
-                                    <i class="fas fa-clipboard-check"></i> FCC Compliance
-                                </a>
-                            </li>
+                            {# FCC Compliance moved to the unified Logs & Reports hub above #}
                             {% endif %}
                             {% endif %}
 

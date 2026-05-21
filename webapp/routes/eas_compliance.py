@@ -85,6 +85,22 @@ def register(app: Flask, logger) -> None:
     @require_auth
     @require_role("Admin", "Operator", "Analyst")
     def compliance_dashboard():
+        # The FCC compliance dashboard has been folded into the unified
+        # Logs & Reports hub at /logs.  Redirect (302) so existing
+        # bookmarks land on the right place.  Export endpoints below
+        # (/admin/compliance/export.{csv,pdf} and
+        # /admin/compliance/report/<kind>.<fmt>) are still served — the
+        # new Reports tabs link to them for the rich column-aware exports.
+        from flask import redirect
+        return redirect("/logs?type=compliance", code=302)
+
+    # Keep the original dashboard view available at an unlinked alias so
+    # operators who specifically want the old card-heavy view can still
+    # reach it via /admin/compliance/legacy.
+    @app.route("/admin/compliance/legacy")
+    @require_auth
+    @require_role("Admin", "Operator", "Analyst")
+    def compliance_dashboard_legacy():
         window_start, window_end, window_days = _resolve_dashboard_window()
 
         try:

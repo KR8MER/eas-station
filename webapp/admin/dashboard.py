@@ -383,8 +383,13 @@ def rbac_management():
 
 @dashboard_bp.route('/admin/audit-logs')
 def audit_logs_page():
-    """Audit logs viewer with filtering and export"""
-    return render_template('admin/audit_logs.html')
+    """Audit logs are now part of the unified /logs hub.
+
+    Redirects (302) to ``/logs?type=audit`` so existing bookmarks and
+    inbound links continue to work after the consolidation.
+    """
+    from flask import redirect, url_for
+    return redirect(url_for('logs', type='audit'), code=302)
 
 @dashboard_bp.route('/admin/gpio/statistics')
 def gpio_statistics_page():

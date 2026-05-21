@@ -2105,6 +2105,146 @@ def register(app: Flask, logger) -> None:
                 for log in logs_result
             ]
 
+        elif log_type == 'audit':
+            log_type_name = "Audit Log"
+            from app_core.auth.audit import AuditLog
+            logs_result = (
+                AuditLog.query
+                .order_by(AuditLog.timestamp.desc())
+                .limit(limit)
+                .all()
+            )
+            logs_data = [
+                {
+                    'timestamp': log.timestamp,
+                    'level': 'INFO' if log.success else 'WARNING',
+                    'module': f"audit:{log.action}",
+                    'message': (
+                        f"{log.action}"
+                        + (f" by {log.username}" if log.username else " (anonymous)")
+                        + (f" on {log.resource_type}#{log.resource_id}"
+                           if log.resource_type and log.resource_id else "")
+                        + ("" if log.success else " — FAILED")
+                    ),
+                    'alert_identifier': None,  # AuditLog isn't alert-keyed
+                    'details': {
+                        'action': log.action,
+                        'success': log.success,
+                        'username': log.username,
+                        'user_id': log.user_id,
+                        'resource_type': log.resource_type,
+                        'resource_id': log.resource_id,
+                        'ip_address': log.ip_address,
+                        'user_agent': log.user_agent,
+                        'details': log.details,
+                        'entry_hash': log.entry_hash,
+                    },
+                }
+                for log in logs_result
+            ]
+
+        elif log_type == 'compliance':
+            log_type_name = "Compliance Log"
+            # Pull the unified compliance entries (CAPAlert received +
+            # EASMessage relayed + ManualEASActivation), defaulting to the
+            # last 30 days so the page is useful out of the box.
+            from app_core.eas_storage import collect_compliance_log_entries
+            try:
+                entries, _, _ = collect_compliance_log_entries(window_days=30)
+            except Exception as exc:
+                route_logger.error("compliance log query failed: %s", exc)
+                entries = []
+            logs_data = []
+            for entry in entries[:limit]:
+                category = entry.get('category', 'unknown')
+                level = (
+                    'INFO' if category == 'received'
+                    else 'SUCCESS' if category == 'relayed'
+                    else 'WARNING' if category == 'manual'
+                    else 'SECONDARY'
+                )
+                logs_data.append({
+                    'timestamp': entry.get('timestamp'),
+                    'level': level,
+                    'module': f"compliance:{category}",
+                    'message': (
+                        f"{(entry.get('event_label') or 'Unknown event')} "
+                        f"— {entry.get('status') or 'no status'}"
+                    ),
+                    'alert_identifier': entry.get('identifier'),
+                    'details': entry.get('details') or {},
+                })
+
+        elif log_type.startswith('report_'):
+            # Inline preview of one of the FCC-shaped report builders.  The
+            # rich PDF/CSV exports still go through
+            # /admin/compliance/report/<kind>.<fmt> which keeps the
+            # report-specific column layout — this branch just renders a
+            # readable summary inline so the page is consistent with the
+            # rest of /logs.
+            from app_core.eas_storage import REPORT_BUILDERS, resolve_report_window
+            report_kind = log_type[len('report_'):]
+            builder = REPORT_BUILDERS.get(report_kind)
+            if builder is None:
+                log_type_name = "Unknown report"
+                logs_data = []
+            else:
+                titles = {
+                    'received': 'Received Alerts (FCC report)',
+                    'forwarded': 'Forwarded Alerts (FCC report)',
+                    'ignored': 'Ignored Alerts (FCC report)',
+                    'initiated': 'Initiated Alerts (FCC report)',
+                    'weekly': 'Weekly Summary (FCC report)',
+                    'monthly': 'Monthly Summary (FCC report)',
+                }
+                log_type_name = titles.get(report_kind, f"Report: {report_kind}")
+                try:
+                    window_start, window_end = resolve_report_window(days=30)
+                    report = builder(window_start=window_start, window_end=window_end)
+                except Exception as exc:
+                    route_logger.error("report builder %s failed: %s", report_kind, exc)
+                    report = {"columns": [], "rows": [], "summary_lines": []}
+                # The builder returns columns + rows.  Render each row as
+                # one logs_data entry — the message string concatenates the
+                # row's column values so the existing display table handles
+                # it without a per-report custom template.
+                column_labels = [c.get("label", "") for c in report.get("columns", [])]
+                for row in report.get("rows", [])[:limit]:
+                    cells = [str(c) if c is not None else "" for c in row]
+                    pairs = " · ".join(
+                        f"{label}: {value}" for label, value in zip(column_labels, cells) if value
+                    )
+                    # Use first column (typically timestamp) as the row's
+                    # display timestamp where possible.
+                    ts = None
+                    if cells:
+                        try:
+                            from datetime import datetime as _dt
+                            # The report builder formats timestamps as
+                            # local strings — try to recover ISO portion.
+                            first = cells[0]
+                            ts = _dt.fromisoformat(first.split(' / ')[-1].split(' UTC')[0])
+                        except Exception:
+                            ts = None
+                    logs_data.append({
+                        'timestamp': ts,
+                        'level': 'INFO',
+                        'module': f"report:{report_kind}",
+                        'message': pairs or " · ".join(cells),
+                        'alert_identifier': None,
+                        'details': dict(zip(column_labels, cells)),
+                    })
+                # Append the summary lines as virtual entries at the top.
+                for summary in reversed(report.get("summary_lines", [])):
+                    logs_data.insert(0, {
+                        'timestamp': None,
+                        'level': 'SUCCESS',
+                        'module': f"report:{report_kind}",
+                        'message': summary,
+                        'alert_identifier': None,
+                        'details': {},
+                    })
+
         elif log_type == 'services':
             log_type_name = "Service Logs (systemd)"
             # Fetch systemd journal logs for EAS Station services
