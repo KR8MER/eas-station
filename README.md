@@ -4,39 +4,174 @@
 [![Commercial License](https://img.shields.io/badge/License-Commercial-green?style=flat-square)](LICENSE-COMMERCIAL)
 [![Raspberry Pi](https://img.shields.io/badge/Raspberry%20Pi-Compatible-C51A4A?style=flat-square&logo=raspberrypi&logoColor=white)](https://www.raspberrypi.com/)
 [![Python](https://img.shields.io/badge/Python-3.13-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
-[![Flask](https://img.shields.io/badge/Flask-3.1.2-000000?style=flat-square&logo=flask&logoColor=white)](https://flask.palletsprojects.com/)
-[![Werkzeug](https://img.shields.io/badge/Werkzeug-3.1.4-000000?style=flat-square)](https://werkzeug.palletsprojects.com/)
-[![Jinja2](https://img.shields.io/badge/Jinja2-3.1.6-B41717?style=flat-square&logo=jinja&logoColor=white)](https://jinja.palletsprojects.com/)
-[![Socket.IO](https://img.shields.io/badge/Socket.IO-5.15.0-010101?style=flat-square&logo=socketdotio&logoColor=white)](https://socket.io/)
-[![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0.45-CA2C39?style=flat-square&logo=sqlalchemy&logoColor=white)](https://www.sqlalchemy.org/)
-[![Alembic](https://img.shields.io/badge/Alembic-1.17.2-6BA3BE?style=flat-square&logo=sqlalchemy&logoColor=white)](https://alembic.sqlalchemy.org/)
+[![Flask](https://img.shields.io/badge/Flask-3.1-000000?style=flat-square&logo=flask&logoColor=white)](https://flask.palletsprojects.com/)
 [![PostgreSQL + PostGIS](https://img.shields.io/badge/PostgreSQL-17%20%2B%20PostGIS-0093D0?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![Redis](https://img.shields.io/badge/Redis-7.1-DC382D?style=flat-square&logo=redis&logoColor=white)](https://redis.io/)
-[![Gunicorn](https://img.shields.io/badge/Gunicorn-23.0.0-499848?style=flat-square&logo=gunicorn&logoColor=white)](https://gunicorn.org/)
-[![gevent](https://img.shields.io/badge/gevent-25.9.1-1F8B4C?style=flat-square)](https://www.gevent.org/)
-[![Nginx](https://img.shields.io/badge/Nginx-Alpine-009639?style=flat-square&logo=nginx&logoColor=white)](https://nginx.org/)
-[![Let's Encrypt](https://img.shields.io/badge/Let's%20Encrypt-Certbot-003A70?style=flat-square&logo=letsencrypt&logoColor=white)](https://letsencrypt.org/)
-[![Systemd](https://img.shields.io/badge/Systemd-Services-33A9DC?style=flat-square&logo=systemd&logoColor=white)](https://systemd.io/)
-[![Icecast](https://img.shields.io/badge/Icecast-2.4.4-1F3B73?style=flat-square)](https://icecast.org/)
+[![Redis](https://img.shields.io/badge/Redis-7-DC382D?style=flat-square&logo=redis&logoColor=white)](https://redis.io/)
 [![SoapySDR](https://img.shields.io/badge/SoapySDR-enabled-FF6600?style=flat-square)](https://github.com/pothosware/SoapySDR)
-[![FFmpeg](https://img.shields.io/badge/FFmpeg-system-007808?style=flat-square&logo=ffmpeg&logoColor=white)](https://ffmpeg.org/)
-[![pydub](https://img.shields.io/badge/pydub-0.25.1-FF8A65?style=flat-square)](https://github.com/jiaaro/pydub)
-[![eSpeak NG](https://img.shields.io/badge/eSpeak%20NG-TTS-5C2D91?style=flat-square)](https://github.com/espeak-ng/espeak-ng)
-[![NumPy](https://img.shields.io/badge/NumPy-2.3.5-013243?style=flat-square&logo=numpy&logoColor=white)](https://numpy.org/)
-[![SciPy](https://img.shields.io/badge/SciPy-1.16.3-8CAAE6?style=flat-square&logo=scipy&logoColor=white)](https://scipy.org/)
-[![Numba](https://img.shields.io/badge/Numba-0.61%2B-00A3E0?style=flat-square&logo=numba&logoColor=white)](https://numba.pydata.org/)
-[![lxml](https://img.shields.io/badge/lxml-6.0.2-4A7EBB?style=flat-square)](https://lxml.de/)
-[![Pillow](https://img.shields.io/badge/Pillow-12.0.0-3776AB?style=flat-square)](https://python-pillow.org/)
-[![Bootstrap](https://img.shields.io/badge/Bootstrap-5.3.0-7952B3?style=flat-square&logo=bootstrap&logoColor=white)](https://getbootstrap.com/)
-[![Font Awesome](https://img.shields.io/badge/Font%20Awesome-6.4.0-528DD7?style=flat-square&logo=fontawesome&logoColor=white)](https://fontawesome.com/)
-[![Leaflet](https://img.shields.io/badge/Leaflet-1.9.4-199900?style=flat-square&logo=leaflet&logoColor=white)](https://leafletjs.com/)
-[![Chart.js](https://img.shields.io/badge/Chart.js-3.9.1-FF6384?style=flat-square&logo=chartdotjs&logoColor=white)](https://www.chartjs.org/)
-[![PyOTP](https://img.shields.io/badge/PyOTP-2.9.0-2E7D32?style=flat-square)](https://pyauth.github.io/pyotp/)
-[![cryptography](https://img.shields.io/badge/cryptography-46.0.5-2c5282?style=flat-square)](https://cryptography.io/)
-[![Twilio](https://img.shields.io/badge/Twilio-SMS-F22F46?style=flat-square&logo=twilio&logoColor=white)](https://www.twilio.com/)
-[![chrony](https://img.shields.io/badge/chrony-NTP-1F4E79?style=flat-square)](https://chrony-project.org/)
-[![gpsd](https://img.shields.io/badge/gpsd-3.x-2E86AB?style=flat-square)](https://gpsd.gitlab.io/gpsd/)
+[![Icecast](https://img.shields.io/badge/Icecast-2.4.4-1F3B73?style=flat-square)](https://icecast.org/)
+[![GPS](https://img.shields.io/badge/Stratum%201-GPS%2FPPS-0F766E?style=flat-square)](#-built-in-stratum-1-ntp-time-source)
 
-> **A professional Emergency Alert System (EAS) research platform — CAP ingestion, SAME encoding, SDR verification, and multi-channel distribution, all on commodity hardware.**
+> **Open-source emergency alerting infrastructure for research, training, SDR verification, and CAP/SAME experimentation.**
 
-EAS Station™ is a software-defined drop-in replacement for commercial EAS encoder/decoder hardware costing **$5,000–$7,000**, built on a Raspberry Pi or any Linux server. It delivers a complete, [...]
+EAS Station™ is a software-defined Emergency Alert System research platform designed for amateur radio operators, emergency communications enthusiasts, developers, broadcasters, and infrastructure researchers.
+
+Built on Raspberry Pi and Linux infrastructure, EAS Station combines:
+
+- CAP/IPAWS alert ingestion
+- SAME encoding and decoding
+- SDR-based RF verification
+- Geographic intelligence via PostGIS
+- Real-time monitoring dashboards
+- Hardware integration
+- GPS-disciplined stratum-1 timing
+- Multi-channel alert distribution
+
+...all on commodity hardware consuming roughly **12 watts**.
+
+---
+
+> ⚠️ **Laboratory / Research Use Only**
+>
+> EAS Station™ is experimental software intended for:
+>
+> - laboratory environments
+> - training
+> - research
+> - amateur radio experimentation
+> - infrastructure development
+>
+> It is **NOT FCC-certified** and must never be connected to on-air broadcast infrastructure without explicit authorization.
+
+---
+
+# ✨ Core Features
+
+## 📥 Multi-Source Alert Ingestion
+
+- FEMA IPAWS integration
+- NOAA/NWS alert ingestion
+- API-based weather alert support
+- CAP-compatible ingestion workflows
+- Automatic alert deduplication
+- FIPS and NWS zone targeting
+- Geographic filtering via PostGIS
+
+---
+
+## 📻 SAME Encoding & Decoding
+
+- FCC Part 11 SAME header generation
+- Attention tone synthesis
+- SAME parser and validator
+- SAME relay verification
+- Real-time SDR SAME decode
+- Manual RWT/RMT generation
+- Audio forwarding workflows
+
+---
+
+## 📡 SDR Monitoring & RF Verification
+
+- RTL-SDR support
+- Airspy support
+- SoapySDR abstraction layer
+- NOAA Weather Radio monitoring
+- FM demodulation
+- Live spectrum visualization
+- SAME decode verification
+- Multi-source monitoring
+- Icecast audio streaming
+
+---
+
+## 🗺️ Geographic Intelligence
+
+- PostGIS spatial queries
+- Polygon-based alert targeting
+- County and zone filtering
+- Leaflet-based interactive maps
+- TIGER/Line GIS integration
+- Shapefile import support
+
+---
+
+## ⚡ Hardware Integration
+
+- GPIO relay control
+- OLED status displays
+- LED sign integration
+- VFD support
+- Serial device integration
+- Multi-relay workflows
+- GPS/PPS hardware support
+
+---
+
+## 🛰️ Built-In Stratum 1 Time Source
+
+EAS Station™ supports GPS-disciplined timing infrastructure using:
+
+- `gpsd`
+- `chrony`
+- PPS (Pulse Per Second)
+- Raspberry Pi GPS HATs
+
+Features include:
+
+- sub-microsecond PPS timing
+- stratum-1 NTP serving
+- GPS dashboards
+- live satellite metrics
+- RTC integration
+- timing diagnostics
+
+---
+
+## 🌐 Modern Web Dashboard
+
+- Responsive Bootstrap UI
+- Dark-mode friendly design
+- Live Socket.IO updates
+- Alert analytics
+- System health monitoring
+- GPS dashboards
+- RF monitoring views
+- Audio monitoring
+- Operator settings
+- REST API support
+
+---
+
+# 🏗️ Architecture
+
+EAS Station™ is intentionally split into isolated services for operational reliability.
+
+| Service | Responsibility |
+|---|---|
+| `eas-station-web` | Web UI and REST API |
+| `eas-station-poller` | Alert polling and ingestion |
+| `eas-station-sdr` | SDR capture and RF decoding |
+| `eas-station-audio` | Audio processing and monitoring |
+| `eas-station-hardware` | GPIO, displays, and relay control |
+
+Infrastructure components:
+
+- PostgreSQL 17
+- PostGIS 3.4
+- Redis 7
+- NGINX
+- Gunicorn
+- Icecast
+- gpsd
+- chrony
+
+---
+
+# 🚀 Quick Start
+
+## Installation
+
+```bash
+git clone https://github.com/KR8MER/eas-station.git
+cd eas-station
+sudo bash install.sh
