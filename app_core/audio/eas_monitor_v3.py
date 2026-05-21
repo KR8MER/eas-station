@@ -800,19 +800,39 @@ class UnifiedEASMonitorService:
             except Exception as _exc:
                 logger.warning("Could not encode OTA narration audio: %s", _exc)
 
-        logger.warning(
-            "🚨 EOM from '%s' — forwarding %s alert",
-            source_name, alert_data.get('event_code', 'UNKNOWN'),
-        )
+        # Derive a correlation ID from the raw SAME header so detection and
+        # forwarding log lines share a key.
+        from app_core.logging_context import push_alert, pop_alert
+        import hashlib as _hashlib
+        _corr_id = alert_data.get('identifier')
+        if not _corr_id:
+            seed = alert_data.get('raw_header') or alert_data.get('raw_text') or ''
+            if seed:
+                _corr_id = (
+                    f"OTA-{alert_data.get('event_code', 'UNK')}-"
+                    f"{_hashlib.sha1(seed.encode('utf-8', 'ignore')).hexdigest()[:8]}"
+                )
+            else:
+                _corr_id = f"OTA-{source_name}-{alert_data.get('event_code', 'UNK')}"
+            alert_data['identifier'] = _corr_id
 
-        self._total_alerts_dispatched += 1
-        self._last_alert_dispatch_time = time.time()
+        _token = push_alert(_corr_id)
+        try:
+            logger.warning(
+                "🚨 EOM from '%s' — forwarding %s alert",
+                source_name, alert_data.get('event_code', 'UNKNOWN'),
+            )
 
-        if self.alert_callback:
-            try:
-                self.alert_callback(alert_data)
-            except Exception as e:
-                logger.error("Error in alert callback: %s", e, exc_info=True)
+            self._total_alerts_dispatched += 1
+            self._last_alert_dispatch_time = time.time()
+
+            if self.alert_callback:
+                try:
+                    self.alert_callback(alert_data)
+                except Exception as e:
+                    logger.error("Error in alert callback: %s", e, exc_info=True)
+        finally:
+            pop_alert(_token)
 
     def _monitor_loop(self) -> None:
         """

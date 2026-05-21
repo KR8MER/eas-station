@@ -55,13 +55,18 @@ from typing import Optional, Any, Dict
 from dotenv import load_dotenv
 
 # Configure logging early
+from app_core.logging_context import (
+    LOG_FORMAT_WITH_ALERT,
+    install_alert_filter,
+)
 logging.basicConfig(
     level=logging.DEBUG,  # Changed from INFO to DEBUG to show diagnostic logs
-    format='%(asctime)s [%(levelname)s] [%(name)s] %(message)s',
+    format=LOG_FORMAT_WITH_ALERT,
     handlers=[
         logging.StreamHandler(sys.stdout)
     ]
 )
+install_alert_filter()
 
 logger = logging.getLogger(__name__)
 

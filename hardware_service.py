@@ -80,13 +80,18 @@ from app_utils.memdiag import install_memdiag_handlers
 from app_utils.glibc_tuning import apply_glibc_tuning, start_malloc_trim_thread
 
 # Configure logging early
+from app_core.logging_context import (
+    LOG_FORMAT_WITH_ALERT,
+    install_alert_filter,
+)
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] [%(name)s] %(message)s',
+    format=LOG_FORMAT_WITH_ALERT,
     handlers=[
         logging.StreamHandler(sys.stdout)
     ]
 )
+install_alert_filter()
 
 logger = logging.getLogger(__name__)
 

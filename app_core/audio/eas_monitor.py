@@ -878,6 +878,8 @@ class EASMonitor:
 
     def _handle_alert(self, alert_data) -> None:
         """Handle detected alert."""
+        from app_core.logging_context import push_alert, pop_alert
+
         self._alerts_detected += 1
 
         # The streaming decoder emits StreamingSAMEAlert objects; convert to dict.
@@ -896,16 +898,34 @@ class EASMonitor:
                 pass
         alert_data['source_name'] = active_source or self.source_name
 
-        logger.info(
-            f"EAS Alert detected on '{alert_data['source_name']}': "
-            f"{alert_data.get('event_code', 'UNKNOWN')}"
-        )
+        # Derive a correlation ID from the raw SAME header so detection,
+        # forwarding, and downstream broadcast log lines share a key.
+        _corr_id = alert_data.get('identifier')
+        if not _corr_id:
+            seed = alert_data.get('raw_header') or alert_data.get('raw_text') or ''
+            if seed:
+                _corr_id = (
+                    f"OTA-{alert_data.get('event_code', 'UNK')}-"
+                    f"{hashlib.sha1(seed.encode('utf-8', 'ignore')).hexdigest()[:8]}"
+                )
+            else:
+                _corr_id = f"OTA-{alert_data['source_name']}-{alert_data.get('event_code', 'UNK')}"
+            alert_data['identifier'] = _corr_id
 
-        if self.alert_callback:
-            try:
-                self.alert_callback(alert_data)
-            except Exception as e:
-                logger.error(f"Error in alert callback: {e}", exc_info=True)
+        _token = push_alert(_corr_id)
+        try:
+            logger.info(
+                f"EAS Alert detected on '{alert_data['source_name']}': "
+                f"{alert_data.get('event_code', 'UNKNOWN')}"
+            )
+
+            if self.alert_callback:
+                try:
+                    self.alert_callback(alert_data)
+                except Exception as e:
+                    logger.error(f"Error in alert callback: {e}", exc_info=True)
+        finally:
+            pop_alert(_token)
 
     def _handle_alert_detected(
         self,

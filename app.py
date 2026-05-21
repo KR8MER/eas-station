@@ -220,6 +220,11 @@ from app_core.datetime.parsing import parse_nws_datetime
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Install correlation-ID filter on the root logger so every log line carries
+# the current alert identifier (rendered as "-" when no alert is bound).
+from app_core.logging_context import install_alert_filter as _install_alert_filter  # noqa: E402
+_install_alert_filter()
+
 
 def _load_or_generate_secret_key(key_file: str) -> str:
     """Load the Flask secret key from *key_file*, or generate and persist a new one.
@@ -267,9 +272,11 @@ try:
         backupCount=5,
     )
     _file_handler.setFormatter(logging.Formatter(
-        '%(asctime)s [%(process)d] [%(levelname)s] %(name)s: %(message)s',
+        '%(asctime)s [%(process)d] [%(levelname)s] [alert=%(alert_id)s] %(name)s: %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S',
     ))
+    # Make sure the file handler also stamps records with the current alert ID.
+    _install_alert_filter(logging.getLogger())
     # Set WARNING as the floor level for the file handler so that DB log_level
     # overrides (applied later in _load_db_settings_into_config) cannot silence
     # notification warnings and email error messages.

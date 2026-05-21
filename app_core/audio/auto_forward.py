@@ -430,259 +430,270 @@ def auto_forward_cap_alert(
     Returns:
         Dict with forwarding result (same_triggered, event_code, reason, etc.).
     """
+    from app_core.logging_context import push_alert, pop_alert
+
     log = logger_instance or logger
 
-    result: Dict[str, Any] = {
-        'forwarded': False,
-        'source': getattr(cap_alert, 'source', 'CAP'),
-        'identifier': getattr(cap_alert, 'identifier', 'unknown'),
-    }
+    # Bind the CAP identifier as the correlation ID for the duration of this
+    # call so every log line emitted by EASBroadcaster, the SAME encoder, and
+    # downstream notification dispatch carries the same alert identifier.
+    # When the caller already bound it (e.g. cap_poller.save_cap_alert), the
+    # token-based reset below restores their value on return.
+    _alert_token = push_alert(getattr(cap_alert, 'identifier', None))
+    try:
+        result: Dict[str, Any] = {
+            'forwarded': False,
+            'source': getattr(cap_alert, 'source', 'CAP'),
+            'identifier': getattr(cap_alert, 'identifier', 'unknown'),
+        }
 
-    if not eas_config.get('enabled'):
-        reason = "EAS broadcasting disabled"
-        log.debug("Auto-forward skipped for %s: %s", result['identifier'], reason)
-        result['reason'] = reason
-        _update_cap_forwarding_status(cap_alert, db_session, False, reason, log)
-        return result
-
-    # ── ECIG §3.1: status=Actual required for any on-air broadcast ────────
-    alert_status = getattr(cap_alert, 'status', None) or alert_data.get('status', '')
-    if str(alert_status).strip().lower() != 'actual':
-        reason = f"Alert status '{alert_status}' is not 'Actual' — broadcast suppressed (ECIG §3.1)"
-        log.info("Auto-forward skipped for %s: %s", result['identifier'], reason)
-        result['reason'] = reason
-        _update_cap_forwarding_status(cap_alert, db_session, False, reason, log)
-        return result
-
-    # ── ECIG §3.2: scope=Public required for broadcast ────────────────────
-    alert_scope = getattr(cap_alert, 'scope', None) or alert_data.get('scope', '')
-    if str(alert_scope).strip().lower() != 'public':
-        reason = f"Alert scope '{alert_scope}' is not 'Public' — broadcast suppressed (ECIG §3.2)"
-        log.info("Auto-forward skipped for %s: %s", result['identifier'], reason)
-        result['reason'] = reason
-        _update_cap_forwarding_status(cap_alert, db_session, False, reason, log)
-        return result
-
-    # ── ECIG §3.3: expired alerts shall not be broadcast ─────────────────
-    sent_dt = getattr(cap_alert, 'sent', None) or alert_data.get('sent')
-    expires_dt = getattr(cap_alert, 'expires', None) or alert_data.get('expires')
-    if isinstance(expires_dt, datetime) and isinstance(sent_dt, datetime):
-        if expires_dt <= sent_dt:
-            reason = "Alert expires ≤ sent — alert is already expired (ECIG §3.3)"
-            log.info("Auto-forward skipped for %s: %s", result['identifier'], reason)
+        if not eas_config.get('enabled'):
+            reason = "EAS broadcasting disabled"
+            log.debug("Auto-forward skipped for %s: %s", result['identifier'], reason)
             result['reason'] = reason
             _update_cap_forwarding_status(cap_alert, db_session, False, reason, log)
             return result
-    now_utc = datetime.now(timezone.utc)
-    if isinstance(expires_dt, datetime):
-        exp = expires_dt if expires_dt.tzinfo else expires_dt.replace(tzinfo=timezone.utc)
-        if exp <= now_utc:
-            reason = f"Alert already expired at {expires_dt} — broadcast suppressed (ECIG §3.3)"
+
+        # ── ECIG §3.1: status=Actual required for any on-air broadcast ────────
+        alert_status = getattr(cap_alert, 'status', None) or alert_data.get('status', '')
+        if str(alert_status).strip().lower() != 'actual':
+            reason = f"Alert status '{alert_status}' is not 'Actual' — broadcast suppressed (ECIG §3.1)"
             log.info("Auto-forward skipped for %s: %s", result['identifier'], reason)
             result['reason'] = reason
             _update_cap_forwarding_status(cap_alert, db_session, False, reason, log)
             return result
 
-    # Extract FIPS codes for cross-source dedup
-    raw_json = alert_data.get('raw_json', {})
-    fips_codes = _get_fips_from_cap_alert(cap_alert, raw_json)
-    event_code = _resolve_event_code(cap_alert)
+        # ── ECIG §3.2: scope=Public required for broadcast ────────────────────
+        alert_scope = getattr(cap_alert, 'scope', None) or alert_data.get('scope', '')
+        if str(alert_scope).strip().lower() != 'public':
+            reason = f"Alert scope '{alert_scope}' is not 'Public' — broadcast suppressed (ECIG §3.2)"
+            log.info("Auto-forward skipped for %s: %s", result['identifier'], reason)
+            result['reason'] = reason
+            _update_cap_forwarding_status(cap_alert, db_session, False, reason, log)
+            return result
 
-    # Event code filtering: forward only events the operator has selected.
-    # An empty allowlist means "forward all event types" — except RWT, which is
-    # always suppressed unless the operator explicitly opts in by adding 'RWT'
-    # to forwarded_event_codes.  This keeps the CAP path consistent with the
-    # OTA path (auto_forward_ota_alert) so test activations are not silently
-    # rebroadcast just because the allowlist is empty.
-    forwarded_event_codes = eas_config.get('forwarded_event_codes') or []
-    allowed = {str(c).strip().upper() for c in forwarded_event_codes if str(c).strip()}
-    event_code_upper = event_code.upper() if event_code else ''
+        # ── ECIG §3.3: expired alerts shall not be broadcast ─────────────────
+        sent_dt = getattr(cap_alert, 'sent', None) or alert_data.get('sent')
+        expires_dt = getattr(cap_alert, 'expires', None) or alert_data.get('expires')
+        if isinstance(expires_dt, datetime) and isinstance(sent_dt, datetime):
+            if expires_dt <= sent_dt:
+                reason = "Alert expires ≤ sent — alert is already expired (ECIG §3.3)"
+                log.info("Auto-forward skipped for %s: %s", result['identifier'], reason)
+                result['reason'] = reason
+                _update_cap_forwarding_status(cap_alert, db_session, False, reason, log)
+                return result
+        now_utc = datetime.now(timezone.utc)
+        if isinstance(expires_dt, datetime):
+            exp = expires_dt if expires_dt.tzinfo else expires_dt.replace(tzinfo=timezone.utc)
+            if exp <= now_utc:
+                reason = f"Alert already expired at {expires_dt} — broadcast suppressed (ECIG §3.3)"
+                log.info("Auto-forward skipped for %s: %s", result['identifier'], reason)
+                result['reason'] = reason
+                _update_cap_forwarding_status(cap_alert, db_session, False, reason, log)
+                return result
 
-    if event_code_upper == 'RWT' and 'RWT' not in allowed:
-        reason = (
-            "RWT not forwarded — add 'RWT' to forwarded_event_codes to relay test activations"
-        )
-        log.info("Auto-forward skipped for %s: %s", result['identifier'], reason)
-        result['reason'] = reason
-        _update_cap_forwarding_status(cap_alert, db_session, False, reason, log)
-        return result
+        # Extract FIPS codes for cross-source dedup
+        raw_json = alert_data.get('raw_json', {})
+        fips_codes = _get_fips_from_cap_alert(cap_alert, raw_json)
+        event_code = _resolve_event_code(cap_alert)
 
-    if allowed and event_code_upper not in allowed:
-        # An unresolved event code (event_code_upper == '') with a configured
-        # allowlist must also be rejected: we cannot prove the alert is on the
-        # allowlist, so refuse to forward rather than silently bypassing the
-        # operator's filter.
-        reason = (
-            f"Event '{event_code or 'UNKNOWN'}' is not in the configured forwarding allowlist"
-        )
-        log.info("Auto-forward skipped for %s: %s", result['identifier'], reason)
-        result['reason'] = reason
-        _update_cap_forwarding_status(cap_alert, db_session, False, reason, log)
-        return result
+        # Event code filtering: forward only events the operator has selected.
+        # An empty allowlist means "forward all event types" — except RWT, which is
+        # always suppressed unless the operator explicitly opts in by adding 'RWT'
+        # to forwarded_event_codes.  This keeps the CAP path consistent with the
+        # OTA path (auto_forward_ota_alert) so test activations are not silently
+        # rebroadcast just because the allowlist is empty.
+        forwarded_event_codes = eas_config.get('forwarded_event_codes') or []
+        allowed = {str(c).strip().upper() for c in forwarded_event_codes if str(c).strip()}
+        event_code_upper = event_code.upper() if event_code else ''
 
-    # VTEC-aware action gating — only applies when VTEC was parsed at ingest
-    vtec_action: Optional[str] = getattr(cap_alert, 'vtec_action', None)
-    if vtec_action:
-        if vtec_action in VTEC_SKIP_ACTIONS:
-            # CON / ROU / COR: event is already on air, this is a non-VTEC text
-            # update or routine placeholder — no new broadcast needed
+        if event_code_upper == 'RWT' and 'RWT' not in allowed:
             reason = (
-                f"VTEC action '{vtec_action}' is a non-broadcast update "
-                "— rebroadcast suppressed"
+                "RWT not forwarded — add 'RWT' to forwarded_event_codes to relay test activations"
             )
             log.info("Auto-forward skipped for %s: %s", result['identifier'], reason)
             result['reason'] = reason
             _update_cap_forwarding_status(cap_alert, db_session, False, reason, log)
             return result
 
-        if vtec_action in VTEC_TERMINAL_ACTIONS:
-            # CAN / EXP: event is over; cancellation tones are not auto-generated
+        if allowed and event_code_upper not in allowed:
+            # An unresolved event code (event_code_upper == '') with a configured
+            # allowlist must also be rejected: we cannot prove the alert is on the
+            # allowlist, so refuse to forward rather than silently bypassing the
+            # operator's filter.
             reason = (
-                f"VTEC action '{vtec_action}' indicates event termination "
-                "— no broadcast triggered"
+                f"Event '{event_code or 'UNKNOWN'}' is not in the configured forwarding allowlist"
             )
             log.info("Auto-forward skipped for %s: %s", result['identifier'], reason)
             result['reason'] = reason
             _update_cap_forwarding_status(cap_alert, db_session, False, reason, log)
             return result
 
-        if vtec_action in VTEC_BROADCAST_ACTIONS and vtec_action == 'UPG':
-            # UPG: upgraded severity — always rebroadcast, skip dedup window
-            log.info(
-                "Auto-forward forced for %s: VTEC action 'UPG' bypasses dedup window",
-                result['identifier'],
-            )
-            # Fall through directly to broadcaster — skip the FIPS dedup check below
-            fips_codes_for_dedup: List[str] = []
+        # VTEC-aware action gating — only applies when VTEC was parsed at ingest
+        vtec_action: Optional[str] = getattr(cap_alert, 'vtec_action', None)
+        if vtec_action:
+            if vtec_action in VTEC_SKIP_ACTIONS:
+                # CON / ROU / COR: event is already on air, this is a non-VTEC text
+                # update or routine placeholder — no new broadcast needed
+                reason = (
+                    f"VTEC action '{vtec_action}' is a non-broadcast update "
+                    "— rebroadcast suppressed"
+                )
+                log.info("Auto-forward skipped for %s: %s", result['identifier'], reason)
+                result['reason'] = reason
+                _update_cap_forwarding_status(cap_alert, db_session, False, reason, log)
+                return result
+
+            if vtec_action in VTEC_TERMINAL_ACTIONS:
+                # CAN / EXP: event is over; cancellation tones are not auto-generated
+                reason = (
+                    f"VTEC action '{vtec_action}' indicates event termination "
+                    "— no broadcast triggered"
+                )
+                log.info("Auto-forward skipped for %s: %s", result['identifier'], reason)
+                result['reason'] = reason
+                _update_cap_forwarding_status(cap_alert, db_session, False, reason, log)
+                return result
+
+            if vtec_action in VTEC_BROADCAST_ACTIONS and vtec_action == 'UPG':
+                # UPG: upgraded severity — always rebroadcast, skip dedup window
+                log.info(
+                    "Auto-forward forced for %s: VTEC action 'UPG' bypasses dedup window",
+                    result['identifier'],
+                )
+                # Fall through directly to broadcaster — skip the FIPS dedup check below
+                fips_codes_for_dedup: List[str] = []
+            else:
+                fips_codes_for_dedup = fips_codes
         else:
             fips_codes_for_dedup = fips_codes
-    else:
-        fips_codes_for_dedup = fips_codes
 
-    # Cross-source deduplication (skipped for UPG).  Take a per-alert
-    # advisory lock so concurrent CAP/OTA arrivals for the same alert
-    # serialize through the check-then-commit sequence.
-    if event_code and fips_codes_for_dedup:
-        _acquire_dedupe_lock(
-            db_session,
-            _alert_dedupe_lock_key(event_code, fips_codes_for_dedup),
-        )
-        if is_duplicate_broadcast(event_code, fips_codes_for_dedup, db_session):
-            reason = (
-                f"Cross-source duplicate: {event_code} already broadcast "
-                f"for the same FIPS set within {CROSS_SOURCE_DEDUP_WINDOW_MINUTES}min"
+        # Cross-source deduplication (skipped for UPG).  Take a per-alert
+        # advisory lock so concurrent CAP/OTA arrivals for the same alert
+        # serialize through the check-then-commit sequence.
+        if event_code and fips_codes_for_dedup:
+            _acquire_dedupe_lock(
+                db_session,
+                _alert_dedupe_lock_key(event_code, fips_codes_for_dedup),
             )
-            log.info("Auto-forward skipped for %s: %s", result['identifier'], reason)
+            if is_duplicate_broadcast(event_code, fips_codes_for_dedup, db_session):
+                reason = (
+                    f"Cross-source duplicate: {event_code} already broadcast "
+                    f"for the same FIPS set within {CROSS_SOURCE_DEDUP_WINDOW_MINUTES}min"
+                )
+                log.info("Auto-forward skipped for %s: %s", result['identifier'], reason)
+                result['reason'] = reason
+                _update_cap_forwarding_status(cap_alert, db_session, False, reason, log)
+                return result
+
+        # Use EASBroadcaster for the full broadcast pipeline
+        from app_utils.eas import EASBroadcaster
+
+        try:
+            broadcaster = EASBroadcaster(
+                db_session=db_session,
+                model_cls=eas_message_cls,
+                config=eas_config,
+                logger=log,
+                location_settings=location_settings,
+            )
+        except Exception as exc:
+            reason = f"Failed to initialize EASBroadcaster: {exc}"
+            log.error("Auto-forward failed for %s: %s", result['identifier'], reason)
             result['reason'] = reason
             _update_cap_forwarding_status(cap_alert, db_session, False, reason, log)
             return result
 
-    # Use EASBroadcaster for the full broadcast pipeline
-    from app_utils.eas import EASBroadcaster
+        # Build payload for EASBroadcaster.handle_alert()
+        payload = dict(alert_data)
+        if 'raw_json' not in payload:
+            payload['raw_json'] = raw_json
 
-    try:
-        broadcaster = EASBroadcaster(
-            db_session=db_session,
-            model_cls=eas_message_cls,
-            config=eas_config,
-            logger=log,
-            location_settings=location_settings,
+        # Preserve key fields the broadcaster expects
+        for field in ('event', 'status', 'message_type', 'sent', 'expires'):
+            if field not in payload:
+                payload[field] = getattr(cap_alert, field, None)
+
+        # Mark as forwarded in payload so GPIO behavior triggers forwarding mode
+        payload['forwarding_decision'] = 'forwarded'
+        payload['forwarded'] = True
+
+        # Push the alert text onto every active Icecast stream while the broadcast
+        # is on the air; clear it once handle_alert() returns so normal source
+        # metadata (song titles, etc.) resumes.
+        from app_core.audio.alert_metadata import (
+            clear_alert_metadata,
+            set_alert_metadata,
         )
-    except Exception as exc:
-        reason = f"Failed to initialize EASBroadcaster: {exc}"
-        log.error("Auto-forward failed for %s: %s", result['identifier'], reason)
-        result['reason'] = reason
-        _update_cap_forwarding_status(cap_alert, db_session, False, reason, log)
-        return result
 
-    # Build payload for EASBroadcaster.handle_alert()
-    payload = dict(alert_data)
-    if 'raw_json' not in payload:
-        payload['raw_json'] = raw_json
+        alert_title = (getattr(cap_alert, 'headline', '') or '').strip()
+        if not alert_title:
+            alert_title = (getattr(cap_alert, 'event', '') or '').strip()
+        if alert_title:
+            set_alert_metadata(alert_title)
 
-    # Preserve key fields the broadcaster expects
-    for field in ('event', 'status', 'message_type', 'sent', 'expires'):
-        if field not in payload:
-            payload[field] = getattr(cap_alert, field, None)
-
-    # Mark as forwarded in payload so GPIO behavior triggers forwarding mode
-    payload['forwarding_decision'] = 'forwarded'
-    payload['forwarded'] = True
-
-    # Push the alert text onto every active Icecast stream while the broadcast
-    # is on the air; clear it once handle_alert() returns so normal source
-    # metadata (song titles, etc.) resumes.
-    from app_core.audio.alert_metadata import (
-        clear_alert_metadata,
-        set_alert_metadata,
-    )
-
-    alert_title = (getattr(cap_alert, 'headline', '') or '').strip()
-    if not alert_title:
-        alert_title = (getattr(cap_alert, 'event', '') or '').strip()
-    if alert_title:
-        set_alert_metadata(alert_title)
-
-    try:
         try:
-            broadcast_result = broadcaster.handle_alert(cap_alert, payload)
-        finally:
-            if alert_title:
-                clear_alert_metadata()
-    except Exception as exc:
-        reason = f"EASBroadcaster.handle_alert() failed: {exc}"
-        log.error("Auto-forward failed for %s: %s", result['identifier'], reason, exc_info=True)
-        result['reason'] = reason
-        _update_cap_forwarding_status(cap_alert, db_session, False, reason, log)
-        return result
+            try:
+                broadcast_result = broadcaster.handle_alert(cap_alert, payload)
+            finally:
+                if alert_title:
+                    clear_alert_metadata()
+        except Exception as exc:
+            reason = f"EASBroadcaster.handle_alert() failed: {exc}"
+            log.error("Auto-forward failed for %s: %s", result['identifier'], reason, exc_info=True)
+            result['reason'] = reason
+            _update_cap_forwarding_status(cap_alert, db_session, False, reason, log)
+            return result
 
-    if broadcast_result.get('same_triggered'):
-        reason = f"Auto-forwarded: SAME {broadcast_result.get('same_header', '')}"
-        log.info(
-            "Auto-forwarded CAP alert %s to air chain: event=%s, header=%s",
-            result['identifier'],
-            broadcast_result.get('event_code'),
-            broadcast_result.get('same_header'),
-        )
-        result['forwarded'] = True
-        result['same_header'] = broadcast_result.get('same_header')
-        result['event_code'] = broadcast_result.get('event_code')
-        result['record_id'] = broadcast_result.get('record_id')
-        _update_cap_forwarding_status(
-            cap_alert, db_session, True, reason, log,
-            audio_url=broadcast_result.get('audio_path'),
-        )
-
-        # Send email/SMS notifications for this broadcast
-        try:
-            from app_core.notifications import send_alert_notifications
-
-            alert_info = {
-                'event_code': broadcast_result.get('event_code') or event_code or '',
-                'headline': getattr(cap_alert, 'headline', '') or '',
-                'same_header': broadcast_result.get('same_header', ''),
-                'location_codes': fips_codes,
-                'source': getattr(cap_alert, 'source', 'CAP') or 'CAP',
-                'timestamp': (
-                    getattr(cap_alert, 'sent', None) or datetime.now(timezone.utc)
-                ).isoformat(),
-            }
-            send_alert_notifications(
-                record_id=broadcast_result.get('record_id'),
-                alert_info=alert_info,
-                db_session=db_session,
-                logger_instance=log,
+        if broadcast_result.get('same_triggered'):
+            reason = f"Auto-forwarded: SAME {broadcast_result.get('same_header', '')}"
+            log.info(
+                "Auto-forwarded CAP alert %s to air chain: event=%s, header=%s",
+                result['identifier'],
+                broadcast_result.get('event_code'),
+                broadcast_result.get('same_header'),
             )
-        except Exception as _notif_exc:
-            log.warning("Notification dispatch failed (non-fatal): %s", _notif_exc)
+            result['forwarded'] = True
+            result['same_header'] = broadcast_result.get('same_header')
+            result['event_code'] = broadcast_result.get('event_code')
+            result['record_id'] = broadcast_result.get('record_id')
+            _update_cap_forwarding_status(
+                cap_alert, db_session, True, reason, log,
+                audio_url=broadcast_result.get('audio_path'),
+            )
 
-    else:
-        reason = broadcast_result.get('reason', 'Broadcast not triggered')
-        log.info("Auto-forward did not trigger broadcast for %s: %s", result['identifier'], reason)
-        result['reason'] = reason
-        _update_cap_forwarding_status(cap_alert, db_session, False, reason, log)
+            # Send email/SMS notifications for this broadcast
+            try:
+                from app_core.notifications import send_alert_notifications
 
-    return result
+                alert_info = {
+                    'event_code': broadcast_result.get('event_code') or event_code or '',
+                    'headline': getattr(cap_alert, 'headline', '') or '',
+                    'same_header': broadcast_result.get('same_header', ''),
+                    'location_codes': fips_codes,
+                    'source': getattr(cap_alert, 'source', 'CAP') or 'CAP',
+                    'timestamp': (
+                        getattr(cap_alert, 'sent', None) or datetime.now(timezone.utc)
+                    ).isoformat(),
+                }
+                send_alert_notifications(
+                    record_id=broadcast_result.get('record_id'),
+                    alert_info=alert_info,
+                    db_session=db_session,
+                    logger_instance=log,
+                )
+            except Exception as _notif_exc:
+                log.warning("Notification dispatch failed (non-fatal): %s", _notif_exc)
+
+        else:
+            reason = broadcast_result.get('reason', 'Broadcast not triggered')
+            log.info("Auto-forward did not trigger broadcast for %s: %s", result['identifier'], reason)
+            result['reason'] = reason
+            _update_cap_forwarding_status(cap_alert, db_session, False, reason, log)
+
+        return result
+    finally:
+        pop_alert(_alert_token)
 
 
 def auto_forward_ota_alert(
@@ -710,6 +721,8 @@ def auto_forward_ota_alert(
     Returns:
         Dict with forwarding result.
     """
+    from app_core.logging_context import push_alert, pop_alert
+
     log = logger_instance or logger
 
     event_code = alert_dict.get('event_code', 'UNKNOWN')
@@ -719,243 +732,259 @@ def auto_forward_ota_alert(
     relay_tone_profile = alert_dict.get('relay_tone_profile', 'attention')  # 853+960 Hz EAS dual-tone
     relay_tone_duration = alert_dict.get('relay_tone_duration', 8.0)         # always 8 s
 
-    result: Dict[str, Any] = {
-        'forwarded': False,
-        'source': source_name,
-        'event_code': event_code,
-    }
+    # OTA alerts have no CAP identifier; derive a stable correlation ID from
+    # the raw SAME header (or raw_text) so all log lines for this on-air
+    # decode share a key.  Same hashing approach the dedup layer already uses.
+    _ota_id = alert_dict.get('identifier')
+    if not _ota_id:
+        _ota_seed = alert_dict.get('raw_header') or alert_dict.get('raw_text') or ''
+        if _ota_seed:
+            import hashlib as _hashlib
+            _ota_id = f"OTA-{event_code}-{_hashlib.sha1(_ota_seed.encode('utf-8', 'ignore')).hexdigest()[:8]}"
+        else:
+            _ota_id = f"OTA-{source_name}-{event_code}"
+    _alert_token = push_alert(_ota_id)
+    try:
+        result: Dict[str, Any] = {
+            'forwarded': False,
+            'source': source_name,
+            'event_code': event_code,
+            'identifier': _ota_id,
+        }
 
-    if not eas_config.get('enabled'):
-        result['reason'] = "EAS broadcasting disabled"
-        return result
+        if not eas_config.get('enabled'):
+            result['reason'] = "EAS broadcasting disabled"
+            return result
 
-    # Refuse to rebroadcast an alert whose event code could not be decoded.
-    # An UNKNOWN code means the SAME header was either garbled or from an event
-    # type not in the registry; broadcasting it would produce an illegal/
-    # nonsensical SAME header.
-    if not event_code or event_code == 'UNKNOWN':
-        result['reason'] = "OTA alert has unresolvable event code; skipping rebroadcast"
-        log.info(
-            "OTA auto-forward skipped for source '%s': %s",
-            source_name, result['reason'],
-        )
-        return result
+        # Refuse to rebroadcast an alert whose event code could not be decoded.
+        # An UNKNOWN code means the SAME header was either garbled or from an event
+        # type not in the registry; broadcasting it would produce an illegal/
+        # nonsensical SAME header.
+        if not event_code or event_code == 'UNKNOWN':
+            result['reason'] = "OTA alert has unresolvable event code; skipping rebroadcast"
+            log.info(
+                "OTA auto-forward skipped for source '%s': %s",
+                source_name, result['reason'],
+            )
+            return result
 
-    # Event code filtering.
-    forwarded_event_codes = eas_config.get('forwarded_event_codes') or []
-    allowed = {str(c).strip().upper() for c in forwarded_event_codes if str(c).strip()}
+        # Event code filtering.
+        forwarded_event_codes = eas_config.get('forwarded_event_codes') or []
+        allowed = {str(c).strip().upper() for c in forwarded_event_codes if str(c).strip()}
 
-    # RWT is suppressed by default even when no allowlist is configured.
-    # Operators must explicitly add 'RWT' to forwarded_event_codes to relay tests.
-    if event_code.upper() == 'RWT' and 'RWT' not in allowed:
-        result['reason'] = (
-            "RWT not forwarded — add 'RWT' to forwarded_event_codes to relay test activations"
-        )
-        log.info("OTA auto-forward skipped: %s", result['reason'])
-        return result
-
-    # General allowlist: when configured, reject anything not on the list.
-    if allowed and event_code.upper() not in allowed:
-        result['reason'] = (
-            f"Event '{event_code}' is not in the configured forwarding allowlist"
-        )
-        log.info("OTA auto-forward skipped: %s", result['reason'])
-        return result
-
-    # Cross-source deduplication.  Prefer the raw SAME header as the
-    # dedupe key (it identifies the alert regardless of which station
-    # relayed it); fall back to event code + full-FIPS-set match when
-    # no header is available.
-    raw_same_header = alert_dict.get('raw_header') or alert_dict.get('raw_text')
-    if fips_codes or raw_same_header:
-        # Serialize concurrent broadcasts of the SAME alert across
-        # workers/processes.  Without this, two simultaneous arrivals
-        # (CAP + OTA relay within ~1 s) can both pass the dedupe check
-        # before either commits — the failure mode that produced two
-        # back-to-back broadcasts of the same SVR at 16:54 EDT on
-        # 2026-05-19.  The lock is keyed on the alert (not global) so
-        # broadcasts of distinct alerts proceed in parallel.
-        _acquire_dedupe_lock(
-            db_session,
-            _alert_dedupe_lock_key(event_code, fips_codes),
-        )
-        if is_duplicate_broadcast(
-            event_code,
-            fips_codes,
-            db_session,
-            raw_same_header=raw_same_header,
-        ):
+        # RWT is suppressed by default even when no allowlist is configured.
+        # Operators must explicitly add 'RWT' to forwarded_event_codes to relay tests.
+        if event_code.upper() == 'RWT' and 'RWT' not in allowed:
             result['reason'] = (
-                f"Cross-source duplicate: {event_code} already broadcast "
-                f"for the same alert within {HEADER_KEY_DEDUP_WINDOW_MINUTES}min"
+                "RWT not forwarded — add 'RWT' to forwarded_event_codes to relay test activations"
             )
             log.info("OTA auto-forward skipped: %s", result['reason'])
             return result
 
-    # Build a CAPAlert-like object from OTA alert data
-    now = datetime.now(timezone.utc)
-    issue_time = alert_dict.get('issue_time')
-    purge_time = alert_dict.get('purge_time')
-    sent_dt = (
-        datetime.fromisoformat(issue_time) if isinstance(issue_time, str) else issue_time
-    ) if issue_time else now
-    expires_dt = (
-        datetime.fromisoformat(purge_time) if isinstance(purge_time, str) else purge_time
-    ) if purge_time else now + timedelta(hours=1)
-
-    from app_utils.event_codes import EVENT_CODE_REGISTRY
-    event_info = EVENT_CODE_REGISTRY.get(event_code, {})
-    event_name = event_info.get('name', event_code) if isinstance(event_info, dict) else event_code
-
-    alert_object = SimpleNamespace(
-        id=None,
-        identifier=f"OTA-{source_name}-{now.strftime('%Y%m%d%H%M%S')}",
-        event=event_name,
-        headline=f"{event_name} — {source_name}",
-        description='',
-        instruction=None,
-        sent=sent_dt,
-        expires=expires_dt,
-        status='Actual',
-        message_type='Alert',
-        severity=event_info.get('severity', 'Unknown') if isinstance(event_info, dict) else 'Unknown',
-        urgency=event_info.get('urgency', 'Unknown') if isinstance(event_info, dict) else 'Unknown',
-        certainty='Observed',
-        raw_json=None,
-    )
-
-    # Build human-readable area description from FIPS codes for TTS narration
-    try:
-        from app_utils.fips_codes import US_FIPS_LOOKUP as _FIPS_NAMES
-        _area_parts = [
-            _FIPS_NAMES[c] for c in fips_codes if c in _FIPS_NAMES
-        ]
-        area_desc = '; '.join(_area_parts) if _area_parts else 'the affected area'
-    except Exception:
-        area_desc = 'the affected area'
-
-    # Originator code from the received SAME header (e.g. WXR, EAS, CIV, PEP)
-    originator_code = (alert_dict.get('originator') or 'WXR').strip().upper()
-
-    # Build payload with SAME geocode from OTA FIPS codes
-    payload = {
-        'identifier': alert_object.identifier,
-        'event': event_name,
-        'status': 'Actual',
-        'message_type': 'Alert',
-        'sent': sent_dt,
-        'expires': expires_dt,
-        'raw_json': {
-            'properties': {
-                'event': event_name,
-                'areaDesc': area_desc,
-                'geocode': {
-                    'SAME': list(fips_codes),
-                },
-                'parameters': {
-                    'EAS-ORG': originator_code,
-                },
-            }
-        },
-        'forwarding_decision': 'forwarded',
-        'forwarded': True,
-    }
-
-    # RWT must never carry an EBS attention tone — FCC §11.61 prohibits it.
-    # When an RWT is forwarded, the relay is header × 3 + EOM only.
-    if event_code.upper() == 'RWT':
-        payload['relay_tone_profile'] = 'none'
-        payload['relay_tone_duration'] = 0.0
-        # Do NOT attach relay_audio_wav_bytes — no narration on RWT
-    else:
-        # Attach OTA narration audio captured between attention tone and EOM so
-        # build_files() can relay it instead of synthesising new TTS.
-        # Alerts with a 1050 Hz or EBS attention tone will always have narration.
-        if relay_audio_wav:
-            payload['relay_audio_wav_bytes'] = relay_audio_wav
-
-        # Relay always uses the EAS dual-tone (853+960 Hz, 8 s).  Both the NOAA
-        # 1050 Hz tone and any EBS dual-tone from the originating station are
-        # stripped from the captured ring-buffer audio by _find_narration_start();
-        # the broadcaster generates a fresh 8-second attention signal.
-        payload['relay_tone_profile'] = relay_tone_profile
-        payload['relay_tone_duration'] = relay_tone_duration
-
-    from app_utils.eas import EASBroadcaster
-
-    try:
-        broadcaster = EASBroadcaster(
-            db_session=db_session,
-            model_cls=eas_message_cls,
-            config=eas_config,
-            logger=log,
-            location_settings=location_settings,
-        )
-    except Exception as exc:
-        result['reason'] = f"Failed to initialize EASBroadcaster: {exc}"
-        log.error("OTA auto-forward failed: %s", result['reason'])
-        return result
-
-    # Push the alert text onto every active Icecast stream while the broadcast
-    # is on the air; clear it once handle_alert() returns so normal source
-    # metadata resumes.
-    from app_core.audio.alert_metadata import (
-        clear_alert_metadata,
-        set_alert_metadata,
-    )
-
-    alert_title = (alert_object.headline or '').strip()
-    if alert_title:
-        set_alert_metadata(alert_title)
-
-    try:
-        try:
-            broadcast_result = broadcaster.handle_alert(alert_object, payload)
-        finally:
-            if alert_title:
-                clear_alert_metadata()
-    except Exception as exc:
-        result['reason'] = f"EASBroadcaster.handle_alert() failed: {exc}"
-        log.error("OTA auto-forward failed: %s", result['reason'], exc_info=True)
-        return result
-
-    if broadcast_result.get('same_triggered'):
-        log.info(
-            "Auto-forwarded OTA alert to air chain: source=%s, event=%s, header=%s",
-            source_name,
-            broadcast_result.get('event_code'),
-            broadcast_result.get('same_header'),
-        )
-        result['forwarded'] = True
-        result['same_header'] = broadcast_result.get('same_header')
-        result['record_id'] = broadcast_result.get('record_id')
-
-        # Send email/SMS notifications for this broadcast
-        try:
-            from app_core.notifications import send_alert_notifications
-
-            alert_info = {
-                'event_code': event_code,
-                'headline': alert_object.headline,
-                'same_header': broadcast_result.get('same_header', ''),
-                'location_codes': list(fips_codes),
-                'source': source_name,
-                'timestamp': datetime.now(timezone.utc).isoformat(),
-            }
-            send_alert_notifications(
-                record_id=broadcast_result.get('record_id'),
-                alert_info=alert_info,
-                db_session=db_session,
-                logger_instance=log,
+        # General allowlist: when configured, reject anything not on the list.
+        if allowed and event_code.upper() not in allowed:
+            result['reason'] = (
+                f"Event '{event_code}' is not in the configured forwarding allowlist"
             )
-        except Exception as _notif_exc:
-            log.warning("Notification dispatch failed (non-fatal): %s", _notif_exc)
+            log.info("OTA auto-forward skipped: %s", result['reason'])
+            return result
 
-    else:
-        result['reason'] = broadcast_result.get('reason', 'Broadcast not triggered')
-        log.info("OTA auto-forward did not trigger broadcast: %s", result['reason'])
+        # Cross-source deduplication.  Prefer the raw SAME header as the
+        # dedupe key (it identifies the alert regardless of which station
+        # relayed it); fall back to event code + full-FIPS-set match when
+        # no header is available.
+        raw_same_header = alert_dict.get('raw_header') or alert_dict.get('raw_text')
+        if fips_codes or raw_same_header:
+            # Serialize concurrent broadcasts of the SAME alert across
+            # workers/processes.  Without this, two simultaneous arrivals
+            # (CAP + OTA relay within ~1 s) can both pass the dedupe check
+            # before either commits — the failure mode that produced two
+            # back-to-back broadcasts of the same SVR at 16:54 EDT on
+            # 2026-05-19.  The lock is keyed on the alert (not global) so
+            # broadcasts of distinct alerts proceed in parallel.
+            _acquire_dedupe_lock(
+                db_session,
+                _alert_dedupe_lock_key(event_code, fips_codes),
+            )
+            if is_duplicate_broadcast(
+                event_code,
+                fips_codes,
+                db_session,
+                raw_same_header=raw_same_header,
+            ):
+                result['reason'] = (
+                    f"Cross-source duplicate: {event_code} already broadcast "
+                    f"for the same alert within {HEADER_KEY_DEDUP_WINDOW_MINUTES}min"
+                )
+                log.info("OTA auto-forward skipped: %s", result['reason'])
+                return result
 
-    return result
+        # Build a CAPAlert-like object from OTA alert data
+        now = datetime.now(timezone.utc)
+        issue_time = alert_dict.get('issue_time')
+        purge_time = alert_dict.get('purge_time')
+        sent_dt = (
+            datetime.fromisoformat(issue_time) if isinstance(issue_time, str) else issue_time
+        ) if issue_time else now
+        expires_dt = (
+            datetime.fromisoformat(purge_time) if isinstance(purge_time, str) else purge_time
+        ) if purge_time else now + timedelta(hours=1)
+
+        from app_utils.event_codes import EVENT_CODE_REGISTRY
+        event_info = EVENT_CODE_REGISTRY.get(event_code, {})
+        event_name = event_info.get('name', event_code) if isinstance(event_info, dict) else event_code
+
+        alert_object = SimpleNamespace(
+            id=None,
+            identifier=f"OTA-{source_name}-{now.strftime('%Y%m%d%H%M%S')}",
+            event=event_name,
+            headline=f"{event_name} — {source_name}",
+            description='',
+            instruction=None,
+            sent=sent_dt,
+            expires=expires_dt,
+            status='Actual',
+            message_type='Alert',
+            severity=event_info.get('severity', 'Unknown') if isinstance(event_info, dict) else 'Unknown',
+            urgency=event_info.get('urgency', 'Unknown') if isinstance(event_info, dict) else 'Unknown',
+            certainty='Observed',
+            raw_json=None,
+        )
+
+        # Build human-readable area description from FIPS codes for TTS narration
+        try:
+            from app_utils.fips_codes import US_FIPS_LOOKUP as _FIPS_NAMES
+            _area_parts = [
+                _FIPS_NAMES[c] for c in fips_codes if c in _FIPS_NAMES
+            ]
+            area_desc = '; '.join(_area_parts) if _area_parts else 'the affected area'
+        except Exception:
+            area_desc = 'the affected area'
+
+        # Originator code from the received SAME header (e.g. WXR, EAS, CIV, PEP)
+        originator_code = (alert_dict.get('originator') or 'WXR').strip().upper()
+
+        # Build payload with SAME geocode from OTA FIPS codes
+        payload = {
+            'identifier': alert_object.identifier,
+            'event': event_name,
+            'status': 'Actual',
+            'message_type': 'Alert',
+            'sent': sent_dt,
+            'expires': expires_dt,
+            'raw_json': {
+                'properties': {
+                    'event': event_name,
+                    'areaDesc': area_desc,
+                    'geocode': {
+                        'SAME': list(fips_codes),
+                    },
+                    'parameters': {
+                        'EAS-ORG': originator_code,
+                    },
+                }
+            },
+            'forwarding_decision': 'forwarded',
+            'forwarded': True,
+        }
+
+        # RWT must never carry an EBS attention tone — FCC §11.61 prohibits it.
+        # When an RWT is forwarded, the relay is header × 3 + EOM only.
+        if event_code.upper() == 'RWT':
+            payload['relay_tone_profile'] = 'none'
+            payload['relay_tone_duration'] = 0.0
+            # Do NOT attach relay_audio_wav_bytes — no narration on RWT
+        else:
+            # Attach OTA narration audio captured between attention tone and EOM so
+            # build_files() can relay it instead of synthesising new TTS.
+            # Alerts with a 1050 Hz or EBS attention tone will always have narration.
+            if relay_audio_wav:
+                payload['relay_audio_wav_bytes'] = relay_audio_wav
+
+            # Relay always uses the EAS dual-tone (853+960 Hz, 8 s).  Both the NOAA
+            # 1050 Hz tone and any EBS dual-tone from the originating station are
+            # stripped from the captured ring-buffer audio by _find_narration_start();
+            # the broadcaster generates a fresh 8-second attention signal.
+            payload['relay_tone_profile'] = relay_tone_profile
+            payload['relay_tone_duration'] = relay_tone_duration
+
+        from app_utils.eas import EASBroadcaster
+
+        try:
+            broadcaster = EASBroadcaster(
+                db_session=db_session,
+                model_cls=eas_message_cls,
+                config=eas_config,
+                logger=log,
+                location_settings=location_settings,
+            )
+        except Exception as exc:
+            result['reason'] = f"Failed to initialize EASBroadcaster: {exc}"
+            log.error("OTA auto-forward failed: %s", result['reason'])
+            return result
+
+        # Push the alert text onto every active Icecast stream while the broadcast
+        # is on the air; clear it once handle_alert() returns so normal source
+        # metadata resumes.
+        from app_core.audio.alert_metadata import (
+            clear_alert_metadata,
+            set_alert_metadata,
+        )
+
+        alert_title = (alert_object.headline or '').strip()
+        if alert_title:
+            set_alert_metadata(alert_title)
+
+        try:
+            try:
+                broadcast_result = broadcaster.handle_alert(alert_object, payload)
+            finally:
+                if alert_title:
+                    clear_alert_metadata()
+        except Exception as exc:
+            result['reason'] = f"EASBroadcaster.handle_alert() failed: {exc}"
+            log.error("OTA auto-forward failed: %s", result['reason'], exc_info=True)
+            return result
+
+        if broadcast_result.get('same_triggered'):
+            log.info(
+                "Auto-forwarded OTA alert to air chain: source=%s, event=%s, header=%s",
+                source_name,
+                broadcast_result.get('event_code'),
+                broadcast_result.get('same_header'),
+            )
+            result['forwarded'] = True
+            result['same_header'] = broadcast_result.get('same_header')
+            result['record_id'] = broadcast_result.get('record_id')
+
+            # Send email/SMS notifications for this broadcast
+            try:
+                from app_core.notifications import send_alert_notifications
+
+                alert_info = {
+                    'event_code': event_code,
+                    'headline': alert_object.headline,
+                    'same_header': broadcast_result.get('same_header', ''),
+                    'location_codes': list(fips_codes),
+                    'source': source_name,
+                    'timestamp': datetime.now(timezone.utc).isoformat(),
+                }
+                send_alert_notifications(
+                    record_id=broadcast_result.get('record_id'),
+                    alert_info=alert_info,
+                    db_session=db_session,
+                    logger_instance=log,
+                )
+            except Exception as _notif_exc:
+                log.warning("Notification dispatch failed (non-fatal): %s", _notif_exc)
+
+        else:
+            result['reason'] = broadcast_result.get('reason', 'Broadcast not triggered')
+            log.info("OTA auto-forward did not trigger broadcast: %s", result['reason'])
+
+        return result
+    finally:
+        pop_alert(_alert_token)
 
 
 def _update_cap_forwarding_status(
