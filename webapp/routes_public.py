@@ -1515,11 +1515,23 @@ def register(app: Flask, logger) -> None:
                 f"<p>{exc}</p><p><a href='/'>← Back to Main</a></p>"
             )
 
-    def _load_logs_data(log_type: str, limit: int, service_filter: str = None) -> Tuple[str, List[Dict[str, Any]]]:
-        """Load the requested log data and metadata for rendering or export."""
+    def _load_logs_data(
+        log_type: str,
+        limit: int,
+        service_filter: str = None,
+    ) -> Tuple[str, List[Dict[str, Any]], Optional[Dict[str, Any]]]:
+        """Load the requested log data and metadata for rendering or export.
+
+        Returns a triple of ``(display_name, logs_data, report_meta)``.  The
+        third element is populated only for ``report_*`` log types and carries
+        the FCC report's column labels, summary lines, and window — the
+        template uses it to render a real columnar layout instead of cramming
+        every column into the generic ``message`` cell.
+        """
 
         log_type_name = "System Logs"
         logs_data: List[Dict[str, Any]] = []
+        report_meta: Optional[Dict[str, Any]] = None
 
         if log_type == 'all':
             log_type_name = "All Logs"
@@ -2176,12 +2188,16 @@ def register(app: Flask, logger) -> None:
                 })
 
         elif log_type.startswith('report_'):
-            # Inline preview of one of the FCC-shaped report builders.  The
-            # rich PDF/CSV exports still go through
+            # FCC-shaped report rendered inline on /logs.  Each row is also
+            # mirrored into ``logs_data`` so the page's search/level/date
+            # filters and the generic CSV exporter keep working — but the
+            # template renders the proper columnar layout from
+            # ``report_meta`` instead of cramming every column into the
+            # generic ``message`` cell (which was unreadable on mobile).
+            #
+            # The rich PDF/CSV exports still go through
             # /admin/compliance/report/<kind>.<fmt> which keeps the
-            # report-specific column layout — this branch just renders a
-            # readable summary inline so the page is consistent with the
-            # rest of /logs.
+            # report-specific column layout.
             from app_core.eas_storage import REPORT_BUILDERS, resolve_report_window
             report_kind = log_type[len('report_'):]
             builder = REPORT_BUILDERS.get(report_kind)
@@ -2203,14 +2219,19 @@ def register(app: Flask, logger) -> None:
                     report = builder(window_start=window_start, window_end=window_end)
                 except Exception as exc:
                     route_logger.error("report builder %s failed: %s", report_kind, exc)
-                    report = {"columns": [], "rows": [], "summary_lines": []}
-                # The builder returns columns + rows.  Render each row as
-                # one logs_data entry — the message string concatenates the
-                # row's column values so the existing display table handles
-                # it without a per-report custom template.
+                    report = {
+                        "columns": [],
+                        "rows": [],
+                        "summary_lines": [],
+                        "window_start": None,
+                        "window_end": None,
+                    }
                 column_labels = [c.get("label", "") for c in report.get("columns", [])]
                 for row in report.get("rows", [])[:limit]:
                     cells = [str(c) if c is not None else "" for c in row]
+                    # Keep a readable fallback ``message`` for search matching
+                    # and the generic CSV export, but the template prefers
+                    # ``details`` (label→value) when ``report`` is set.
                     pairs = " · ".join(
                         f"{label}: {value}" for label, value in zip(column_labels, cells) if value
                     )
@@ -2234,16 +2255,17 @@ def register(app: Flask, logger) -> None:
                         'alert_identifier': None,
                         'details': dict(zip(column_labels, cells)),
                     })
-                # Append the summary lines as virtual entries at the top.
-                for summary in reversed(report.get("summary_lines", [])):
-                    logs_data.insert(0, {
-                        'timestamp': None,
-                        'level': 'SUCCESS',
-                        'module': f"report:{report_kind}",
-                        'message': summary,
-                        'alert_identifier': None,
-                        'details': {},
-                    })
+
+                report_meta = {
+                    'kind': report_kind,
+                    'title': report.get('title') or log_type_name,
+                    'subtitle': report.get('subtitle'),
+                    'columns': column_labels,
+                    'summary_lines': list(report.get('summary_lines') or []),
+                    'window_start': report.get('window_start'),
+                    'window_end': report.get('window_end'),
+                    'row_count': report.get('row_count', len(logs_data)),
+                }
 
         elif log_type == 'services':
             log_type_name = "Service Logs (systemd)"
@@ -2286,7 +2308,7 @@ def register(app: Flask, logger) -> None:
             logs_data.sort(key=get_sort_key, reverse=True)
             logs_data = logs_data[:limit]
 
-        return log_type_name, logs_data
+        return log_type_name, logs_data, report_meta
 
     @app.route("/logs")
     def logs():
@@ -2303,7 +2325,9 @@ def register(app: Flask, logger) -> None:
             service_filter = request.args.get('service', '').strip()
             alert_filter = request.args.get('alert', '').strip()
 
-            log_type_name, logs_data = _load_logs_data(log_type, limit, service_filter)
+            log_type_name, logs_data, report_meta = _load_logs_data(
+                log_type, limit, service_filter
+            )
 
             # Apply filters
             if search_query:
@@ -2392,6 +2416,7 @@ def register(app: Flask, logger) -> None:
                 alert_filter=alert_filter,
                 available_services=get_all_log_services(),
                 compliance_summary=compliance_summary,
+                report=report_meta,
             )
 
         except Exception as exc:  # pragma: no cover - fallback content
@@ -2413,7 +2438,7 @@ def register(app: Flask, logger) -> None:
             log_type = request.args.get('type', 'system')
             limit = min(int(request.args.get('limit', 100)), 500)
 
-            log_type_name, logs_data = _load_logs_data(log_type, limit)
+            log_type_name, logs_data, _report_meta = _load_logs_data(log_type, limit)
 
             # Create CSV in memory
             output = io.StringIO()
@@ -2461,7 +2486,7 @@ def register(app: Flask, logger) -> None:
 
             from datetime import datetime
 
-            log_type_name, logs_data = _load_logs_data(log_type, limit)
+            log_type_name, logs_data, _report_meta = _load_logs_data(log_type, limit)
 
             sections = []
 
