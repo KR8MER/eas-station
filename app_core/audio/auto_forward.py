@@ -44,9 +44,22 @@ from app_utils.vtec import VTEC_BROADCAST_ACTIONS, VTEC_SKIP_ACTIONS, VTEC_TERMI
 
 logger = logging.getLogger(__name__)
 
-# Deduplication window: alerts with the same event code and overlapping
-# FIPS codes within this window are considered duplicates across sources.
+# Deduplication windows.
+#
+# CROSS_SOURCE_DEDUP_WINDOW_MINUTES is the window used when we only have
+# event code + FIPS to compare with (CAP path; no raw SAME header).  15
+# minutes balances catching cross-source duplicates against over-
+# suppressing legitimate re-issues of the same alert type.
+#
+# HEADER_KEY_DEDUP_WINDOW_MINUTES is the window used when we can match
+# on the callsign-independent SAME-header key.  Because the header key
+# already encodes the issuer's release time (JJJHHMM) — which is unique
+# per alert issuance — an identical key means the *same alert*, not
+# merely a similar one, and there is no reason to re-broadcast it
+# regardless of when the second copy arrives.  24 hours comfortably
+# covers any SAME purge time we will encounter in practice.
 CROSS_SOURCE_DEDUP_WINDOW_MINUTES = 15
+HEADER_KEY_DEDUP_WINDOW_MINUTES = 24 * 60
 
 
 def _get_fips_from_cap_alert(alert, raw_json: Optional[Dict] = None) -> List[str]:
@@ -88,6 +101,55 @@ def _resolve_event_code(alert) -> Optional[str]:
     return None
 
 
+def _alert_dedupe_lock_key(
+    event_code: Optional[str],
+    fips_codes: Optional[List[str]],
+) -> Optional[int]:
+    """Compute a stable 63-bit signed-int advisory-lock key for *this
+    specific alert*.
+
+    Derived from ``event_code + sorted FIPS`` — the lowest common
+    denominator that BOTH the CAP path (no raw SAME header) and the
+    OTA path (raw SAME header) can compute.  Using a shared key is
+    essential: if CAP and OTA arrivals of the same alert took
+    *different* locks, they would not actually serialize against each
+    other and the back-to-back-duplicate race would persist.
+    """
+    import hashlib
+    if not event_code:
+        return None
+    fips_part = ",".join(sorted(fips_codes or []))
+    if not fips_part:
+        return None
+    key_str = f"{event_code}|{fips_part}"
+    digest = hashlib.sha256(key_str.encode("utf-8")).digest()
+    # First 8 bytes -> signed int64; mask top bit to keep it positive so
+    # we don't trip "out of range" checks in older drivers.
+    return int.from_bytes(digest[:8], "big", signed=False) & 0x7FFFFFFFFFFFFFFF
+
+
+def _acquire_dedupe_lock(db_session, lock_key: Optional[int]) -> None:
+    """Take a transaction-scoped advisory lock on the given key.
+
+    The lock is released automatically when the current transaction
+    commits or rolls back.  A no-op when ``lock_key`` is None or the
+    underlying engine is not PostgreSQL.
+    """
+    if lock_key is None:
+        return
+    try:
+        from sqlalchemy import text
+        # pg_advisory_xact_lock is PostgreSQL-specific.  On other
+        # engines this will raise and we silently degrade (the prior
+        # behaviour — race window present — is preserved).
+        db_session.execute(
+            text("SELECT pg_advisory_xact_lock(:k)"),
+            {"k": lock_key},
+        )
+    except Exception as exc:
+        logger.debug("Advisory dedupe lock unavailable (%s); racing", exc)
+
+
 def _same_header_dedupe_key(header: Optional[str]) -> Optional[str]:
     """Reduce a SAME header to a callsign-independent dedupe key.
 
@@ -108,6 +170,51 @@ def _same_header_dedupe_key(header: Optional[str]) -> Optional[str]:
     return "-".join(parts[:-2])
 
 
+def _parse_same_header(header: Optional[str]):
+    """Extract (originator, event_code, fips_set, issue_time) from a SAME
+    header.  Returns ``None`` if the header does not parse.
+
+    SAME header format:
+        ``ZCZC-ORG-EVT-PSSCCC[-PSSCCC...]+TTTT-JJJHHMM-CCCCCCCC-``
+    The first FIPS field through the last carry ``+TTTT`` on the last
+    one; ``JJJHHMM`` (parts[-3]) is the issuer's release time and is the
+    closest thing to a globally-unique alert identifier we get from the
+    SAME header alone.
+    """
+    if not header:
+        return None
+    header = header.strip()
+    if not header.startswith("ZCZC"):
+        return None
+    parts = header.split("-")
+    if len(parts) < 6:
+        return None
+    try:
+        originator = parts[1]
+        event_code = parts[2]
+        issue_time = parts[-3]
+        # FIPS codes live between parts[3] and parts[-3], with the last
+        # one of them carrying "+TTTT" purge-time suffix.
+        fips_set = set()
+        for raw in parts[3:-3] + [parts[-3 - 1]] if False else parts[3:-3]:
+            # The +TTTT suffix lives on the final FIPS field; strip it.
+            code = raw.split("+", 1)[0]
+            code = "".join(ch for ch in code if ch.isdigit())
+            if code:
+                fips_set.add(code.zfill(6)[:6])
+        # parts[3:-3] above ends before the "+TTTT-JJJHHMM" pair; the
+        # last FIPS-bearing field is actually parts[-4] (because of the
+        # "+" glued to it).  Pull it explicitly to be safe.
+        last_fips_field = parts[-4]
+        code = last_fips_field.split("+", 1)[0]
+        code = "".join(ch for ch in code if ch.isdigit())
+        if code:
+            fips_set.add(code.zfill(6)[:6])
+        return originator, event_code, fips_set, issue_time
+    except (IndexError, ValueError):
+        return None
+
+
 def is_duplicate_broadcast(
     event_code: str,
     fips_codes: List[str],
@@ -123,17 +230,22 @@ def is_duplicate_broadcast(
     1. **Header-key match.**  When ``raw_same_header`` is supplied and
        contains a usable SAME header, compute its callsign-independent
        dedupe key (see :func:`_same_header_dedupe_key`) and look for any
-       recent broadcast whose ``same_header`` reduces to the same key.
-       This is the strongest signal — same originator, event code, FIPS
-       set and issue time — and is the right signal for OTA relays.
+       broadcast within ``HEADER_KEY_DEDUP_WINDOW_MINUTES`` whose
+       ``same_header`` reduces to the same key.  The header key already
+       encodes the issuer's release time (JJJHHMM), so two messages
+       with the same key are the *same alert issuance* and should never
+       both broadcast regardless of how far apart they arrive.  A long
+       window is necessary because relay broadcasts of the same alert
+       routinely arrive 15–30 minutes after the CAP feed.
 
     2. **Full-FIPS match.**  When no header is available (CAP alerts
-       carry only structured fields), require the recent broadcast to
-       have the *same event code* AND the *same FIPS set* (sorted-equal,
-       not "any overlap").  Requiring full-set match prevents two
-       distinct SVRs — one for Williams+Steuben (039125, 039161) and one
-       for Defiance+Williams+Henry (039039, 039125, 039137) — from
-       suppressing each other just because they share Williams.
+       carry only structured fields), use ``window_minutes`` (default
+       15) and require the recent broadcast to have the *same event
+       code* AND the *same FIPS set* (sorted-equal, not "any overlap").
+       Requiring full-set match prevents two distinct SVRs — one for
+       Williams+Steuben (039125, 039161) and one for Defiance+Williams+
+       Henry (039039, 039125, 039137) — from suppressing each other
+       just because they share Williams.
 
     Checks both ``EASMessage`` (CAP and OTA broadcasts) and
     ``ManualEASActivation`` (manual/RWT/auto-forwarded broadcasts).
@@ -141,7 +253,6 @@ def is_duplicate_broadcast(
     if not event_code:
         return False
 
-    cutoff = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
     fips_set = set(fips_codes or [])
     header_key = _same_header_dedupe_key(raw_same_header)
 
@@ -149,6 +260,18 @@ def is_duplicate_broadcast(
         # Without either signal, we cannot tell duplicates from distinct
         # alerts.  Don't suppress.
         return False
+
+    now = datetime.now(timezone.utc)
+    fips_cutoff = now - timedelta(minutes=window_minutes)
+    # Header-key matches use a 24h window because the key includes the
+    # unique issue time and so cannot produce false positives.
+    header_cutoff = now - timedelta(minutes=HEADER_KEY_DEDUP_WINDOW_MINUTES)
+    cutoff = header_cutoff if header_key else fips_cutoff
+
+    # Parse the incoming raw header once if available.  This gives us the
+    # issuer-identity triple (originator, event, issue_time) which is the
+    # strongest cross-source identity signal we have.
+    incoming = _parse_same_header(raw_same_header)
 
     try:
         from app_core.models import EASMessage
@@ -163,7 +286,7 @@ def is_duplicate_broadcast(
             if msg_event_code != event_code:
                 continue
 
-            # 1) Header-key match (preferred when available)
+            # 1) Header-key match (preferred when available — strongest signal)
             if header_key:
                 msg_key = _same_header_dedupe_key(msg.same_header)
                 if msg_key and msg_key == header_key:
@@ -173,19 +296,53 @@ def is_duplicate_broadcast(
                         event_code, header_key, msg.id,
                     )
                     return True
-                # Header keys disagree → not the same alert; don't fall
-                # through to the lossier FIPS check.
-                continue
 
-            # 2) Full-FIPS-set match (when no header is available)
-            msg_locations = set(meta.get('locations', []) or [])
-            if msg_locations and msg_locations == fips_set:
-                logger.info(
-                    "Cross-source duplicate detected in EASMessage (full-FIPS "
-                    "match): event=%s, FIPS=%s (message_id=%s)",
-                    event_code, sorted(fips_set), msg.id,
-                )
-                return True
+            # 2) Issuer-identity match: same originator + event + issue
+            # time, with overlapping FIPS.  Catches the case where a
+            # relay station's incoming raw_header has a broader FIPS set
+            # than the local outgoing broadcast (we filter to our
+            # configured coverage area before transmitting), so the
+            # header keys legitimately differ but the alert is the same
+            # NWS issuance.  Example from 2026-05-18: 16:11 CAP
+            # broadcast SVR-039173, then 16:29 DON/JKZ relay arrived
+            # with incoming FIPS 039095-039173 — same originator
+            # (WXR), event (SVR) and issue time (1382009), overlapping
+            # on 039173 — same alert.
+            if incoming is not None:
+                msg_parsed = _parse_same_header(msg.same_header)
+                if msg_parsed is not None:
+                    m_orig, m_evt, m_fips, m_issue = msg_parsed
+                    i_orig, i_evt, i_fips, i_issue = incoming
+                    if (
+                        m_orig == i_orig
+                        and m_evt == i_evt
+                        and m_issue == i_issue
+                        and (m_fips & i_fips)
+                    ):
+                        logger.info(
+                            "Cross-source duplicate detected in EASMessage "
+                            "(issuer-identity match): event=%s, originator=%s, "
+                            "issue_time=%s, FIPS overlap=%s (message_id=%s)",
+                            event_code, i_orig, i_issue,
+                            sorted(m_fips & i_fips), msg.id,
+                        )
+                        return True
+                # If header_key was provided and matched nothing above,
+                # don't fall through to the lossy FIPS-set check — we
+                # have enough signal already.
+                if header_key:
+                    continue
+
+            # 3) Full-FIPS-set match (only when no header at all)
+            if not header_key:
+                msg_locations = set(meta.get('locations', []) or [])
+                if msg_locations and msg_locations == fips_set:
+                    logger.info(
+                        "Cross-source duplicate detected in EASMessage (full-FIPS "
+                        "match): event=%s, FIPS=%s (message_id=%s)",
+                        event_code, sorted(fips_set), msg.id,
+                    )
+                    return True
     except Exception as exc:
         logger.warning("EASMessage dedup check failed: %s", exc)
 
@@ -198,6 +355,7 @@ def is_duplicate_broadcast(
             .all()
         )
         for activation in recent_activations:
+            # 1) Header-key match
             if header_key:
                 act_key = _same_header_dedupe_key(activation.same_header)
                 if act_key and act_key == header_key:
@@ -207,15 +365,38 @@ def is_duplicate_broadcast(
                         event_code, header_key, activation.id,
                     )
                     return True
-                continue
-            activation_fips = set(activation.same_locations or [])
-            if activation_fips and activation_fips == fips_set:
-                logger.info(
-                    "Cross-source duplicate detected in ManualEASActivation "
-                    "(full-FIPS match): event=%s, FIPS=%s (activation_id=%s)",
-                    event_code, sorted(fips_set), activation.id,
-                )
-                return True
+            # 2) Issuer-identity match
+            if incoming is not None:
+                act_parsed = _parse_same_header(activation.same_header)
+                if act_parsed is not None:
+                    m_orig, m_evt, m_fips, m_issue = act_parsed
+                    i_orig, i_evt, i_fips, i_issue = incoming
+                    if (
+                        m_orig == i_orig
+                        and m_evt == i_evt
+                        and m_issue == i_issue
+                        and (m_fips & i_fips)
+                    ):
+                        logger.info(
+                            "Cross-source duplicate detected in ManualEASActivation "
+                            "(issuer-identity match): event=%s, originator=%s, "
+                            "issue_time=%s, FIPS overlap=%s (activation_id=%s)",
+                            event_code, i_orig, i_issue,
+                            sorted(m_fips & i_fips), activation.id,
+                        )
+                        return True
+                if header_key:
+                    continue
+            # 3) Full-FIPS-set match (only when no header at all)
+            if not header_key:
+                activation_fips = set(activation.same_locations or [])
+                if activation_fips and activation_fips == fips_set:
+                    logger.info(
+                        "Cross-source duplicate detected in ManualEASActivation "
+                        "(full-FIPS match): event=%s, FIPS=%s (activation_id=%s)",
+                        event_code, sorted(fips_set), activation.id,
+                    )
+                    return True
     except Exception as exc:
         logger.warning("ManualEASActivation dedup check failed: %s", exc)
 
@@ -378,12 +559,18 @@ def auto_forward_cap_alert(
     else:
         fips_codes_for_dedup = fips_codes
 
-    # Cross-source deduplication (skipped for UPG)
+    # Cross-source deduplication (skipped for UPG).  Take a per-alert
+    # advisory lock so concurrent CAP/OTA arrivals for the same alert
+    # serialize through the check-then-commit sequence.
     if event_code and fips_codes_for_dedup:
+        _acquire_dedupe_lock(
+            db_session,
+            _alert_dedupe_lock_key(event_code, fips_codes_for_dedup),
+        )
         if is_duplicate_broadcast(event_code, fips_codes_for_dedup, db_session):
             reason = (
                 f"Cross-source duplicate: {event_code} already broadcast "
-                f"for overlapping FIPS within {CROSS_SOURCE_DEDUP_WINDOW_MINUTES}min"
+                f"for the same FIPS set within {CROSS_SOURCE_DEDUP_WINDOW_MINUTES}min"
             )
             log.info("Auto-forward skipped for %s: %s", result['identifier'], reason)
             result['reason'] = reason
@@ -581,6 +768,17 @@ def auto_forward_ota_alert(
     # no header is available.
     raw_same_header = alert_dict.get('raw_header') or alert_dict.get('raw_text')
     if fips_codes or raw_same_header:
+        # Serialize concurrent broadcasts of the SAME alert across
+        # workers/processes.  Without this, two simultaneous arrivals
+        # (CAP + OTA relay within ~1 s) can both pass the dedupe check
+        # before either commits — the failure mode that produced two
+        # back-to-back broadcasts of the same SVR at 16:54 EDT on
+        # 2026-05-19.  The lock is keyed on the alert (not global) so
+        # broadcasts of distinct alerts proceed in parallel.
+        _acquire_dedupe_lock(
+            db_session,
+            _alert_dedupe_lock_key(event_code, fips_codes),
+        )
         if is_duplicate_broadcast(
             event_code,
             fips_codes,
@@ -589,7 +787,7 @@ def auto_forward_ota_alert(
         ):
             result['reason'] = (
                 f"Cross-source duplicate: {event_code} already broadcast "
-                f"for the same alert within {CROSS_SOURCE_DEDUP_WINDOW_MINUTES}min"
+                f"for the same alert within {HEADER_KEY_DEDUP_WINDOW_MINUTES}min"
             )
             log.info("OTA auto-forward skipped: %s", result['reason'])
             return result
