@@ -430,6 +430,24 @@ ssl_certificate {fullchain_path};
 ssl_certificate_key {privkey_path};
 """
 
+        # Ensure the snippets directory exists. On distros without snippets/
+        # (or freshly minimal nginx installs) the subsequent `sudo tee` would
+        # fail with "No such file or directory", which surfaces in the UI as
+        # an inability to override the previous certificate. The sudoers
+        # entry for `mkdir -p /etc/nginx/snippets` is provided for exactly
+        # this reason.
+        mkdir_result = subprocess.run(
+            ['sudo', 'mkdir', '-p', str(ssl_snippet_path.parent)],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        if mkdir_result.returncode != 0:
+            return {
+                "success": False,
+                "error": f"Failed to create nginx snippets directory: {mkdir_result.stderr.strip()}"
+            }
+
         # Write the snippet file
         write_result = subprocess.run(
             ['sudo', 'tee', str(ssl_snippet_path)],
@@ -442,7 +460,7 @@ ssl_certificate_key {privkey_path};
         if write_result.returncode != 0:
             return {
                 "success": False,
-                "error": f"Failed to write SSL snippet: {write_result.stderr}"
+                "error": f"Failed to write SSL snippet: {write_result.stderr.strip()}"
             }
 
         logger.info(f"Created SSL snippet at {ssl_snippet_path}")
@@ -473,9 +491,11 @@ ssl_certificate_key {privkey_path};
                 timeout=5
             )
 
-        # Check if the include line already exists
+        # Check if the include line already exists. Use sudo for the read so
+        # we don't silently treat a "permission denied" as "include missing"
+        # and end up appending a duplicate include line on every install.
         grep_result = subprocess.run(
-            ['grep', '-q', 'ssl-letsencrypt.conf', str(nginx_config_path)],
+            ['sudo', 'grep', '-q', 'ssl-letsencrypt.conf', str(nginx_config_path)],
             capture_output=True,
             timeout=5
         )
@@ -494,9 +514,28 @@ ssl_certificate_key {privkey_path};
 
         logger.info(f"Updated nginx configuration to use Let's Encrypt certificate for {domain}")
 
+        # Validate nginx config before touching the running service. `systemctl
+        # reload nginx` reports a generic non-zero exit on config errors, but
+        # `nginx -t` returns the actual problem (e.g. missing snippet file,
+        # syntax error from a stale ssl_certificate line) — surface that to
+        # the user so the "issue overriding the old one" is debuggable.
+        test_result = subprocess.run(
+            ['sudo', 'nginx', '-t'],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        if test_result.returncode != 0:
+            nginx_diag = (test_result.stderr or test_result.stdout or '').strip()
+            logger.error(f"nginx -t rejected the updated config: {nginx_diag}")
+            return {
+                "success": False,
+                "error": f"nginx configuration test failed: {nginx_diag}"
+            }
+
         # Check if nginx is running before attempting reload
         nginx_running = _check_nginx_status()
-        
+
         if nginx_running:
             # Nginx is running - use reload (graceful, no downtime)
             logger.info("Reloading nginx to apply certificate changes")
@@ -506,7 +545,7 @@ ssl_certificate_key {privkey_path};
                 text=True,
                 timeout=10
             )
-            
+
             if reload_result.returncode != 0:
                 # Reload failed, try restart as fallback
                 logger.warning(f"Nginx reload failed: {reload_result.stderr}, attempting restart")
@@ -516,11 +555,11 @@ ssl_certificate_key {privkey_path};
                     text=True,
                     timeout=10
                 )
-                
+
                 if restart_result.returncode != 0:
                     return {
                         "success": False,
-                        "error": f"Failed to reload/restart nginx: {restart_result.stderr}"
+                        "error": f"Failed to reload/restart nginx: {restart_result.stderr.strip()}"
                     }
                 logger.info("Nginx restarted successfully with new certificate")
             else:

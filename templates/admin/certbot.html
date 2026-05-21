@@ -972,8 +972,16 @@ async function executeObtainCertificate() {
             showToast('Failed to obtain certificate', 'error');
         }
     } catch (error) {
-        // For standalone method, "Failed to fetch" is expected because nginx stops
-        if (method === 'standalone' && error.message.includes('Failed to fetch')) {
+        // For standalone method, a network error is expected because nginx stops.
+        // Different browsers report this differently: Chrome/Firefox use
+        // "Failed to fetch", Safari (incl. iOS) uses "Load failed", and some
+        // engines surface "NetworkError" — accept any of them.
+        const msg = (error && error.message) ? error.message : '';
+        const isExpectedDisconnect =
+            msg.includes('Failed to fetch') ||
+            msg.includes('Load failed') ||
+            msg.includes('NetworkError');
+        if (method === 'standalone' && isExpectedDisconnect) {
             resultDiv.innerHTML = `
                 <div class="alert alert-info">
                     <span class="spinner-border spinner-border-sm"></span> <strong>Connection lost (expected)</strong>
