@@ -1490,8 +1490,22 @@ async function executeRenewal() {
             },
             body: JSON.stringify({ dry_run: dry_run, force: force })
         });
-        
-        const result = await response.json();
+
+        // Read as text first so a non-JSON response (e.g. nginx 502/504,
+        // a Flask HTML error page, a session-expired redirect) produces
+        // an actionable message instead of "Unexpected token '<'".
+        const rawText = await response.text();
+        let result;
+        try {
+            result = JSON.parse(rawText);
+        } catch (parseErr) {
+            const snippet = (rawText || '').trim().slice(0, 500);
+            throw new Error(
+                `Server returned a non-JSON response (HTTP ${response.status} ${response.statusText}). ` +
+                `This usually means the request was killed by a gateway timeout or the server raised ` +
+                `an unhandled error. First 500 chars of response: ${snippet}`
+            );
+        }
         
         if (result.success) {
             let html = `
