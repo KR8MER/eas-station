@@ -2510,53 +2510,59 @@ class CAPPoller:
             raise  # Re-raise so caller knows intersection calculation failed
 
     def save_cap_alert(self, alert_data: Dict) -> Tuple[bool, Optional[CAPAlert], Optional[Dict[str, Any]]]:
-        try:
-            payload = dict(alert_data)
-            geometry_data = payload.pop('_geometry_data', None)
-            existing = self.db_session.query(CAPAlert).filter_by(
-                identifier=payload['identifier']
-            ).first()
+        from app_core.logging_context import bind_alert
 
-            if existing:
-                return self._update_existing_alert(existing, payload, geometry_data)
-
-            return self._insert_new_alert(payload, geometry_data, alert_data)
-
-        except IntegrityError as e:
-            # Race condition: another process inserted the same alert between our
-            # SELECT and INSERT. Rollback and retry as an UPDATE.
-            self.logger.warning(
-                f"IntegrityError saving alert {payload.get('identifier', 'unknown')}, "
-                f"retrying as update: {e}"
-            )
-            self.db_session.rollback()
-
-            # Re-fetch the existing alert and update it
+        # Bind the CAP identifier as the correlation ID for every log line
+        # produced while this alert moves through dedup, DB write, geometry
+        # processing, Redis publish, auto-forward, and IntegrityError retries.
+        with bind_alert(alert_data.get('identifier')):
             try:
+                payload = dict(alert_data)
+                geometry_data = payload.pop('_geometry_data', None)
                 existing = self.db_session.query(CAPAlert).filter_by(
                     identifier=payload['identifier']
                 ).first()
+
                 if existing:
                     return self._update_existing_alert(existing, payload, geometry_data)
-                else:
-                    # Alert was deleted between our attempts - this is very rare
-                    self.logger.error(
-                        f"Alert {payload.get('identifier')} not found after IntegrityError"
-                    )
+
+                return self._insert_new_alert(payload, geometry_data, alert_data)
+
+            except IntegrityError as e:
+                # Race condition: another process inserted the same alert between our
+                # SELECT and INSERT. Rollback and retry as an UPDATE.
+                self.logger.warning(
+                    f"IntegrityError saving alert {payload.get('identifier', 'unknown')}, "
+                    f"retrying as update: {e}"
+                )
+                self.db_session.rollback()
+
+                # Re-fetch the existing alert and update it
+                try:
+                    existing = self.db_session.query(CAPAlert).filter_by(
+                        identifier=payload['identifier']
+                    ).first()
+                    if existing:
+                        return self._update_existing_alert(existing, payload, geometry_data)
+                    else:
+                        # Alert was deleted between our attempts - this is very rare
+                        self.logger.error(
+                            f"Alert {payload.get('identifier')} not found after IntegrityError"
+                        )
+                        return False, None, None
+                except Exception as retry_err:
+                    self.logger.error(f"Failed to update alert after IntegrityError: {retry_err}")
+                    self.db_session.rollback()
                     return False, None, None
-            except Exception as retry_err:
-                self.logger.error(f"Failed to update alert after IntegrityError: {retry_err}")
+
+            except SQLAlchemyError as e:
+                self.logger.error(f"Database error saving alert: {e}")
                 self.db_session.rollback()
                 return False, None, None
-
-        except SQLAlchemyError as e:
-            self.logger.error(f"Database error saving alert: {e}")
-            self.db_session.rollback()
-            return False, None, None
-        except Exception as e:
-            self.logger.error(f"Error saving CAP alert: {e}")
-            self.db_session.rollback()
-            return False, None, None
+            except Exception as e:
+                self.logger.error(f"Error saving CAP alert: {e}")
+                self.db_session.rollback()
+                return False, None, None
 
     def _update_existing_alert(
         self,
@@ -3631,11 +3637,13 @@ def main():
     args = parser.parse_args()
 
     # Logging to stdout for service management and systemd
+    from app_core.logging_context import install_alert_filter
     logging.basicConfig(
         level=getattr(logging, args.log_level),
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        format='%(asctime)s - %(name)s - %(levelname)s - [alert=%(alert_id)s] %(message)s',
         handlers=[logging.StreamHandler(sys.stdout)]
     )
+    install_alert_filter()
     logger = logging.getLogger(__name__)
 
     startup_utc = utc_now()

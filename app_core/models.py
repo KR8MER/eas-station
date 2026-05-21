@@ -121,6 +121,17 @@ from ._models_displays import (
     ScreenRotation,
 )
 
+# Wire the alert-correlation-ID auto-populate hook onto log-shaped tables.
+# Every INSERT to one of these tables made while a logging_context alert
+# is bound will record the identifier without the call site having to know
+# about it.  GPIOActivationLog uses its legacy ``alert_id`` column; the
+# rest carry the canonical ``alert_identifier`` column added in migration
+# 20260521_add_alert_identifier_columns.
+from .logging_context import attach_alert_id_autopopulate as _attach_alert_autop
+_attach_alert_autop(SystemLog, AudioAlert, EASMessage)
+_attach_alert_autop(GPIOActivationLog, attr='alert_id')
+del _attach_alert_autop
+
 
 __all__ = [
     "db",

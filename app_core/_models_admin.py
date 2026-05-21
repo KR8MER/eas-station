@@ -43,6 +43,10 @@ class SystemLog(db.Model):
     message = db.Column(db.Text, nullable=False)
     module = db.Column(db.String(100))
     details = db.Column(db.JSON)
+    # Correlation ID tying this row to the alert lifecycle it belongs to.
+    # Auto-populated from the logging_context ContextVar when a row is
+    # inserted while an alert is being processed; left NULL otherwise.
+    alert_identifier = db.Column(db.String(255), nullable=True, index=True)
 
 
 class AdminUser(db.Model):

@@ -1705,6 +1705,7 @@ def register(app: Flask, logger) -> None:
                     'level': log.level,
                     'module': log.module or 'system',
                     'message': log.message,
+                    'alert_identifier': log.alert_identifier,
                     'details': log.details,
                 }
                 for log in logs_result
@@ -1827,6 +1828,7 @@ def register(app: Flask, logger) -> None:
                     'level': log.alert_level.upper(),
                     'module': f'Audio Alert: {log.source_name}',
                     'message': log.message,
+                    'alert_identifier': log.alert_identifier,
                     'details': {
                         'alert_type': log.alert_type,
                         'acknowledged': log.acknowledged,
@@ -1924,6 +1926,9 @@ def register(app: Flask, logger) -> None:
                         f"Type: {log.activation_type} | Operator: {log.operator or 'System'} | "
                         f"Duration: {log.duration_seconds or 'Active'}s"
                     ),
+                    # GPIOActivationLog uses the legacy ``alert_id`` field
+                    # but the UI shows it under the canonical name.
+                    'alert_identifier': log.alert_id,
                     'details': {
                         'pin': log.pin,
                         'activation_type': log.activation_type,
@@ -1959,9 +1964,11 @@ def register(app: Flask, logger) -> None:
                         f"TTS Provider: {log.tts_provider or 'None'} | "
                         f"Audio: {log.audio_filename}"
                     ),
+                    'alert_identifier': log.alert_identifier,
                     'details': {
                         'id': log.id,
                         'cap_alert_id': log.cap_alert_id,
+                        'alert_identifier': log.alert_identifier,
                         'same_header': log.same_header,
                         'audio_filename': log.audio_filename,
                         'text_filename': log.text_filename,
@@ -2154,6 +2161,7 @@ def register(app: Flask, logger) -> None:
             date_from = request.args.get('date_from', '').strip()
             date_to = request.args.get('date_to', '').strip()
             service_filter = request.args.get('service', '').strip()
+            alert_filter = request.args.get('alert', '').strip()
 
             log_type_name, logs_data = _load_logs_data(log_type, limit, service_filter)
 
@@ -2164,6 +2172,15 @@ def register(app: Flask, logger) -> None:
                     if (search_query.lower() in log.get('message', '').lower() or
                         search_query.lower() in log.get('module', '').lower() or
                         search_query.lower() in str(log.get('details', '')).lower())
+                ]
+
+            if alert_filter:
+                # Exact match on the correlation ID; clicking a chip in the UI
+                # passes the full identifier so substring matching would be
+                # surprising (different alerts can share a prefix).
+                logs_data = [
+                    log for log in logs_data
+                    if (log.get('alert_identifier') or '') == alert_filter
                 ]
 
             if log_level_filter:
@@ -2219,6 +2236,7 @@ def register(app: Flask, logger) -> None:
                 date_from=date_from,
                 date_to=date_to,
                 service_filter=service_filter,
+                alert_filter=alert_filter,
                 available_services=get_all_log_services(),
             )
 
