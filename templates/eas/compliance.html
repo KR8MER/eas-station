@@ -339,7 +339,12 @@
                                         {% endif %}
                                     </td>
                                     <td>{{ entry.event_label or '—' }}</td>
-                                    <td class="text-monospace">{{ entry.identifier or '—' }}</td>
+                                    <td class="text-monospace">
+                                        {% if entry.identifier %}
+                                        <a href="/alerts/{{ entry.identifier }}/trail"
+                                           title="Open the alert's full event trail">{{ entry.identifier }}</a>
+                                        {% else %}—{% endif %}
+                                    </td>
                                     <td>{{ entry.status or '—' }}</td>
                                 </tr>
                             {% endfor %}

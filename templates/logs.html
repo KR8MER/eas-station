@@ -346,11 +346,18 @@
                                                         <td><small class="text-muted">{{ log.module }}</small></td>
                                                         <td>
                                                             {% if log.alert_identifier %}
-                                                            <a href="?type={{ log_type }}&limit={{ limit }}&alert={{ log.alert_identifier }}"
-                                                               class="badge bg-info text-dark text-decoration-none"
-                                                               title="Filter to this alert's lifecycle">
-                                                                <code class="text-dark">{{ log.alert_identifier }}</code>
-                                                            </a>
+                                                            <div class="btn-group btn-group-sm" role="group">
+                                                                <a href="/alerts/{{ log.alert_identifier }}/trail"
+                                                                   class="badge bg-info text-dark text-decoration-none"
+                                                                   title="Open the full alert trail">
+                                                                    <code class="text-dark">{{ log.alert_identifier }}</code>
+                                                                </a>
+                                                                <a href="?type={{ log_type }}&limit={{ limit }}&alert={{ log.alert_identifier }}"
+                                                                   class="badge bg-light text-dark border ms-1 text-decoration-none"
+                                                                   title="Filter this page to that alert">
+                                                                    <i class="fas fa-filter"></i>
+                                                                </a>
+                                                            </div>
                                                             {% else %}
                                                             <span class="text-muted">—</span>
                                                             {% endif %}
@@ -438,11 +445,18 @@
                                     <td><small class="text-muted">{{ log.module }}</small></td>
                                     <td>
                                         {% if log.alert_identifier %}
-                                        <a href="?type={{ log_type }}&limit={{ limit }}&alert={{ log.alert_identifier }}"
-                                           class="badge bg-info text-dark text-decoration-none"
-                                           title="Filter to this alert's lifecycle">
-                                            <code class="text-dark">{{ log.alert_identifier }}</code>
-                                        </a>
+                                        <div class="btn-group btn-group-sm" role="group">
+                                            <a href="/alerts/{{ log.alert_identifier }}/trail"
+                                               class="badge bg-info text-dark text-decoration-none"
+                                               title="Open the full alert trail">
+                                                <code class="text-dark">{{ log.alert_identifier }}</code>
+                                            </a>
+                                            <a href="?type={{ log_type }}&limit={{ limit }}&alert={{ log.alert_identifier }}"
+                                               class="badge bg-light text-dark border ms-1 text-decoration-none"
+                                               title="Filter this page to that alert">
+                                                <i class="fas fa-filter"></i>
+                                            </a>
+                                        </div>
                                         {% else %}
                                         <span class="text-muted">—</span>
                                         {% endif %}
