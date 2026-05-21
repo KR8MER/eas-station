@@ -718,13 +718,17 @@ if [ -d "$INSTALL_DIR/systemd" ]; then
         echo_warning "Sudoers configuration file not found (config/sudoers-eas-station)"
     fi
 
-    # Fix certbot data directories permissions
-    # These directories must be writable by both the eas-station user and root (for certbot via sudo)
+    # Fix certbot data directories permissions.
+    # Keep ownership root:root (not eas-station) so certbot's internal
+    # copy_ownership_and_apply_mode() step doesn't try to chown new key
+    # files to a non-root group — that chown fails with EPERM under
+    # AppArmor and aborts the renewal. chmod 777 preserves read access
+    # for the eas-station user.
     echo_progress "Fixing certbot data directories permissions..."
     CERTBOT_DATA_DIR="$INSTALL_DIR/certbot_data"
     mkdir -p "$CERTBOT_DATA_DIR/config" "$CERTBOT_DATA_DIR/work" "$CERTBOT_DATA_DIR/logs"
     chmod -R 777 "$CERTBOT_DATA_DIR"
-    chown -R "$SERVICE_USER:$SERVICE_USER" "$CERTBOT_DATA_DIR"
+    chown -R root:root "$CERTBOT_DATA_DIR"
     # Remove any stale lock files that can cause permission errors
     find "$CERTBOT_DATA_DIR" -name ".certbot.lock" -delete 2>/dev/null || true
     echo_success "Certbot data directories configured"

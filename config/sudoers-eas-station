@@ -22,6 +22,7 @@ eas-station ALL=(ALL) NOPASSWD: /usr/bin/mkdir -p /opt/eas-station/certbot_data/
 eas-station ALL=(ALL) NOPASSWD: /usr/bin/mkdir -p /opt/eas-station/certbot_data/work
 eas-station ALL=(ALL) NOPASSWD: /usr/bin/mkdir -p /opt/eas-station/certbot_data/logs
 eas-station ALL=(ALL) NOPASSWD: /usr/bin/chmod -R 777 /opt/eas-station/certbot_data
+eas-station ALL=(ALL) NOPASSWD: /usr/bin/chown -R root\:root /opt/eas-station/certbot_data
 eas-station ALL=(ALL) NOPASSWD: /usr/bin/find /opt/eas-station/certbot_data -name .certbot.lock -delete
 eas-station ALL=(ALL) NOPASSWD: /usr/bin/cat /opt/eas-station/certbot_data/logs/letsencrypt.log
 
