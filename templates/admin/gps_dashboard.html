@@ -3512,8 +3512,14 @@
         var adev = gps.allan_deviation || null;
         var adev10 = null;
         if (adev) {
-            // Tolerate either an array of {tau, sigma} or {tau_10, ...}.
-            if (Array.isArray(adev.points)) {
+            // Backend ships parallel arrays {tau_s:[...], sigma_y:[...]}.
+            if (Array.isArray(adev.tau_s) && Array.isArray(adev.sigma_y)) {
+                for (var ti = 0; ti < adev.tau_s.length; ti++) {
+                    if (adev.tau_s[ti] === 10) { adev10 = adev.sigma_y[ti]; break; }
+                }
+            }
+            // Tolerate older/legacy shapes too.
+            if (adev10 === null && Array.isArray(adev.points)) {
                 for (var i = 0; i < adev.points.length; i++) {
                     var p = adev.points[i];
                     if (p && (p.tau === 10 || p.tau_s === 10)) { adev10 = p.sigma || p.dev || p.adev; break; }
@@ -4930,19 +4936,21 @@
     //    snapshot's wall-clock timestamp so a 1 Hz client-side ticker
     //    can decrement the readout between polls without jumping
     //    backwards on each refresh.
-    var leapAnchor = null;  // { etaMs, change, source }
+    var leapAnchor = null;  // { etaMs, change, source, currentLs, pending }
     function ingestLeapAnchor(gps) {
         if (!gps) { leapAnchor = null; return; }
         var sec = gps.leap_seconds_to_event;
-        if (typeof sec !== 'number' || !isFinite(sec)) {
-            leapAnchor = null;
-            return;
-        }
+        var hasEta = typeof sec === 'number' && isFinite(sec);
+        var hasCurrent = typeof gps.leap_seconds === 'number';
+        // Build an anchor whenever the receiver has reported *any*
+        // leap-second info — current GPS-UTC offset is useful on its own
+        // (no pending event is the normal case 99% of the time).
+        if (!hasEta && !hasCurrent) { leapAnchor = null; return; }
         leapAnchor = {
-            etaMs: Date.now() + sec * 1000,
+            etaMs: hasEta ? Date.now() + sec * 1000 : null,
             change: gps.leap_change || 0,
             source: gps.leap_change_source || gps.leap_source || null,
-            currentLs: typeof gps.leap_seconds === 'number' ? gps.leap_seconds : null,
+            currentLs: hasCurrent ? gps.leap_seconds : null,
             pending: !!gps.leap_pending
         };
     }
@@ -4990,11 +4998,14 @@
         }
         if (srcEl) srcEl.textContent = leapAnchor.source || '—';
 
-        var remainMs = leapAnchor.etaMs - Date.now();
+        var hasEta = typeof leapAnchor.etaMs === 'number';
+        var remainMs = hasEta ? leapAnchor.etaMs - Date.now() : null;
         if (bigEl) {
-            bigEl.textContent = fmtCountdown(remainMs);
+            bigEl.textContent = hasEta ? fmtCountdown(remainMs) : '—';
             bigEl.classList.remove('warn', 'crit', 'ok');
-            if (remainMs <= 0) {
+            if (!hasEta) {
+                bigEl.classList.add('ok');
+            } else if (remainMs <= 0) {
                 bigEl.classList.add('crit');
             } else if (leapAnchor.pending && leapAnchor.change !== 0 && remainMs < 7 * 86400 * 1000) {
                 bigEl.classList.add('crit');
@@ -5005,7 +5016,7 @@
             }
         }
         if (etaEl) {
-            if (leapAnchor.pending && leapAnchor.change !== 0) {
+            if (leapAnchor.pending && leapAnchor.change !== 0 && hasEta) {
                 var when = new Date(leapAnchor.etaMs);
                 etaEl.textContent = 'Scheduled for ' + when.toUTCString();
             } else {
