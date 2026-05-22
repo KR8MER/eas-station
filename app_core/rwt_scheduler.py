@@ -217,7 +217,18 @@ def trigger_rwt_broadcast(config: RWTScheduleConfig, logger_instance=None) -> Di
         if not components:
             raise ValueError("Failed to generate RWT audio components")
 
-        # Store in database
+        # Store in database.  ``manual_eas_activations.storage_path`` is
+        # NOT NULL at the schema level (it carries the on-disk directory
+        # relative to EAS_OUTPUT_DIR for operator-triggered broadcasts —
+        # see webapp/eas/workflow.py).  Automated RWTs don't write any
+        # files; the audio is generated in-memory and persisted to the
+        # blob columns at the application layer.  Pass an empty string so
+        # the NOT NULL constraint is satisfied and so the cleanup
+        # path in _remove_manual_eas_files() (which guards on
+        # ``if not activation.storage_path: return``) treats RWT rows as
+        # "no on-disk files to delete".  Previously this field was left
+        # unset and every automatic fire failed with psycopg2
+        # NotNullViolation, so RWT had never successfully fired.
         activation_record = ManualEASActivation(
             identifier=identifier,
             event_code='RWT',
@@ -236,6 +247,7 @@ def trigger_rwt_broadcast(config: RWTScheduleConfig, logger_instance=None) -> Di
             message_text='This is an automated Required Weekly Test of the Emergency Alert System.',
             instruction_text='No action required. This is only a test.',
             duration_minutes=15,
+            storage_path='',
             metadata_payload={
                 'automated': True,
                 'schedule_id': config.id,
@@ -470,7 +482,42 @@ class RWTScheduler:
                         )
                     return
 
-            # All conditions met - send RWT
+            # All conditions met - send RWT.
+            #
+            # Cross-worker lock: this module is imported by every Gunicorn
+            # worker, so each worker's process has its own RWTScheduler
+            # thread that hits this branch at the same minute.  Without a
+            # lock, an N-worker deployment would record N duplicate
+            # ManualEASActivation rows per window every minute (visible
+            # in production journals as identifier RWT-AUTO-<same ts>
+            # logged by multiple gunicorn PIDs in the same second).  Use
+            # Redis SETNX with a 25 h TTL keyed on (schedule_id, local
+            # date) so exactly one worker per day wins the race; losers
+            # silently skip.  TTL > 24 h so the key survives across the
+            # day boundary even if the window straddles midnight.  If
+            # Redis is unreachable we fall back to the historical
+            # behaviour (best-effort fire from every worker) rather than
+            # block RWT entirely on a Redis outage.
+            try:
+                from app_core.extensions import get_redis_client
+                redis_client = get_redis_client()
+                lock_key = f"rwt:fired:{config.id}:{now_local.date().isoformat()}"
+                acquired = redis_client.set(lock_key, str(now_local), nx=True, ex=25 * 3600)
+                if not acquired:
+                    if self._iteration % 60 == 1:
+                        self.logger.info(
+                            "RWT fire-lock already held for %s — another worker "
+                            "is handling today's broadcast, skipping",
+                            lock_key,
+                        )
+                    return
+            except Exception as lock_exc:
+                self.logger.warning(
+                    "Could not acquire RWT fire-lock (Redis unreachable?): %s — "
+                    "proceeding without cross-worker deduplication",
+                    lock_exc,
+                )
+
             self.logger.info(
                 "Triggering automatic RWT broadcast (local %s, window %02d:%02d–%02d:%02d)",
                 now_local.isoformat(timespec='seconds'),
