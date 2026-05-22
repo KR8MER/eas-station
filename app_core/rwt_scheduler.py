@@ -40,6 +40,7 @@ from app_utils.eas import (
     build_same_header,
     load_eas_config,
     manual_default_same_codes,
+    samples_to_wav_bytes,
 )
 
 logger = logging.getLogger(__name__)
@@ -203,32 +204,61 @@ def trigger_rwt_broadcast(config: RWTScheduleConfig, logger_instance=None) -> Di
             location_settings=None,
         )
 
-        # Generate audio components
+        # Generate audio components. RWT enforcement (no Attention Signal,
+        # no TTS) is hardcoded inside build_manual_components() per
+        # FCC 47 CFR §11.61(a)(1)(ii); we don't pass tone_profile/include_tts
+        # here so there is no way for this path to request otherwise.
         generator = EASAudioGenerator(eas_config, logger=log)
-
-        # For RWT: no TTS, no attention tones (will be auto-detected by event code)
-        components = generator.build_manual_components(
-            alert_object,
-            header,
-            tone_profile='none',
-            include_tts=False,
-        )
+        components = generator.build_manual_components(alert_object, header)
 
         if not components:
             raise ValueError("Failed to generate RWT audio components")
 
-        # Store in database.  ``manual_eas_activations.storage_path`` is
-        # NOT NULL at the schema level (it carries the on-disk directory
-        # relative to EAS_OUTPUT_DIR for operator-triggered broadcasts —
-        # see webapp/eas/workflow.py).  Automated RWTs don't write any
-        # files; the audio is generated in-memory and persisted to the
-        # blob columns at the application layer.  Pass an empty string so
-        # the NOT NULL constraint is satisfied and so the cleanup
-        # path in _remove_manual_eas_files() (which guards on
-        # ``if not activation.storage_path: return``) treats RWT rows as
-        # "no on-disk files to delete".  Previously this field was left
-        # unset and every automatic fire failed with psycopg2
-        # NotNullViolation, so RWT had never successfully fired.
+        sample_rate = int(eas_config.get('sample_rate', 16000) or 16000)
+
+        # Render the in-memory sample arrays to WAV blobs for the database.
+        # Automated RWTs never write to disk — playback streams from these
+        # blob columns (see admin/audio.py:1153 and the activation detail
+        # page), and storage_path stays empty so _remove_manual_eas_files()
+        # treats the row as "no on-disk files to delete".
+        def _wav(key: str) -> Optional[bytes]:
+            samples = components.get(key) or []
+            if not samples:
+                return None
+            return samples_to_wav_bytes(samples, sample_rate)
+
+        def _meta(key: str, suffix: str, wav_bytes: Optional[bytes]) -> Optional[Dict[str, Any]]:
+            if not wav_bytes:
+                return None
+            samples = components.get(key) or []
+            return {
+                'filename': f'{identifier}_{suffix}.wav',
+                'duration_seconds': round(len(samples) / sample_rate, 3),
+                'size_bytes': len(wav_bytes),
+                'storage_subpath': '',
+            }
+
+        same_wav = _wav('same_samples')
+        eom_wav = _wav('eom_samples')
+        composite_wav = _wav('composite_samples')
+
+        components_payload: Dict[str, Any] = {}
+        for component_key, sample_key, suffix, wav in (
+            ('same', 'same_samples', 'same', same_wav),
+            ('eom', 'eom_samples', 'eom', eom_wav),
+            ('composite', 'composite_samples', 'full', composite_wav),
+        ):
+            entry = _meta(sample_key, suffix, wav)
+            if entry:
+                components_payload[component_key] = entry
+
+        # Archive any previously-active rows so the detail page surfaces the
+        # newest RWT as the current activation (mirrors the manual workflow
+        # at webapp/eas/workflow.py:695-697).
+        ManualEASActivation.query.filter(
+            ManualEASActivation.archived_at.is_(None)
+        ).update({'archived_at': now}, synchronize_session=False)
+
         activation_record = ManualEASActivation(
             identifier=identifier,
             event_code='RWT',
@@ -239,7 +269,7 @@ def trigger_rwt_broadcast(config: RWTScheduleConfig, logger_instance=None) -> Di
             same_locations=formatted_locations,
             tone_profile='none',
             tone_seconds=0.0,
-            sample_rate=eas_config.get('sample_rate', 16000),
+            sample_rate=sample_rate,
             includes_tts=False,
             sent_at=now,
             expires_at=now + timedelta(minutes=15),
@@ -248,10 +278,14 @@ def trigger_rwt_broadcast(config: RWTScheduleConfig, logger_instance=None) -> Di
             instruction_text='No action required. This is only a test.',
             duration_minutes=15,
             storage_path='',
+            components_payload=components_payload,
             metadata_payload={
                 'automated': True,
                 'schedule_id': config.id,
             },
+            composite_audio_data=composite_wav,
+            same_audio_data=same_wav,
+            eom_audio_data=eom_wav,
         )
 
         db.session.add(activation_record)

@@ -2819,7 +2819,6 @@ class EASAudioGenerator:
         include_tts: bool = True,
         silence_between_headers: float = 1.0,
         silence_after_header: float = 1.0,
-        force_rwt_defaults: bool = True,
         narration_upload_samples: Optional[List[int]] = None,
         pre_alert_samples: Optional[List[int]] = None,
         post_alert_samples: Optional[List[int]] = None,
@@ -2832,14 +2831,12 @@ class EASAudioGenerator:
             if len(parts) > 2:
                 event_code = parts[2].strip().upper()
 
-        # For RWT (Required Weekly Test), optionally disable TTS and attention tones
-        # By default (force_rwt_defaults=True), RWT only has SAME header and EOM tones
-        # Set force_rwt_defaults=False to allow TTS and attention tones for RWT
-        if event_code == 'RWT' and force_rwt_defaults:
+        # FCC 47 CFR §11.61(a)(1)(ii): the Required Weekly Test does not carry
+        # the two-tone Attention Signal and does not include voice narration.
+        # The RWT is SAME header + EOM only — no exceptions, no override.
+        if event_code == 'RWT':
             include_tts = False
             tone_profile = 'none'
-            if self.logger:
-                self.logger.info("RWT detected: disabling TTS narration and attention tones (use force_rwt_defaults=False to override)")
 
         amplitude = 0.7 * 32767
         same_bits = encode_same_bits(header, include_preamble=True)
