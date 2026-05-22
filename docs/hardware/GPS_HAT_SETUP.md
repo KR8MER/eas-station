@@ -346,7 +346,12 @@ Edit `/etc/chrony/chrony.conf`, adding:
 refclock SHM 0 offset 0.5 delay 0.2 refid GPS
 
 # GPS PPS (high precision — requires NMEA fix from above)
-refclock PPS /dev/pps0 lock GPS refid PPS
+#   precision 1e-7  : weight the edge as ~100 ns class (true at the GPIO pin)
+#   filter 16       : median-of-16 cuts the IRQ-latency tail you get with
+#                     pps-gpio on a Pi (single biggest knob for peak jitter)
+#   prefer          : pick PPS over any pool/server time sources
+#   maxlockage 2    : ignore PPS if the NMEA seconds reference goes stale
+refclock PPS /dev/pps0 lock GPS refid PPS precision 1e-7 filter 16 prefer maxlockage 2
 ```
 
 Restart chrony:

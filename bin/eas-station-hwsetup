@@ -973,7 +973,16 @@ def _build_chrony_block(
         if user_has_refclock_pps:
             skipped.append(f"refclock PPS {pps_device} (already in user-authored section)")
         else:
-            payload.append(f"refclock PPS {pps_device} lock GPS refid PPS")
+            # precision 1e-7 reflects the ~100 ns class edge at the GPIO pin
+            # before IRQ latency; filter 16 takes the median of a sliding
+            # window which lops off the IRQ-tail outliers that dominate
+            # peak jitter on pps-gpio; prefer makes PPS the selected source
+            # over any pool/server entries the user has; maxlockage 2 stops
+            # PPS from being used if the NMEA seconds-reference goes stale.
+            payload.append(
+                f"refclock PPS {pps_device} lock GPS refid PPS "
+                "precision 1e-7 filter 16 prefer maxlockage 2"
+            )
     if not payload:
         return "", skipped
     block_lines = [_CHRONY_BLOCK_BEGIN, *payload, _CHRONY_BLOCK_END]
