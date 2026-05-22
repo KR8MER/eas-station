@@ -65,12 +65,15 @@ def call_hardware_service(endpoint, method='GET', data=None):
     except requests.Timeout:
         return {
             'success': False,
-            'error': 'Hardware service timeout'
+            'error': f'Zigbee subsystem timeout ({ZIGBEE_SERVICE_URL})'
         }
     except requests.ConnectionError:
         return {
             'success': False,
-            'error': 'Cannot connect to hardware service. Check if hardware service process is running.'
+            'error': (
+                f'Cannot reach Zigbee subsystem at {ZIGBEE_SERVICE_URL}. '
+                'Check: sudo systemctl status eas-station-zigbee.service'
+            )
         }
     except Exception as e:
         return {
