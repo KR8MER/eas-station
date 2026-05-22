@@ -24,6 +24,13 @@ GPS manager bootstrap previously inlined in ``hardware_service.py``.
 """
 
 from services.gps.api import create_blueprint
+from services.gps.events import (
+    EVENTS_MAX,
+    EVENTS_REDIS_KEY,
+    EventDetector,
+    publish_events,
+    read_events,
+)
 from services.gps.manager import initialize_gps_manager
 from services.gps.trends import (
     GPS_TRENDS_DEFAULT_WINDOW,
@@ -43,6 +50,9 @@ from services.gps.trends import (
 )
 
 __all__ = [
+    "EVENTS_MAX",
+    "EVENTS_REDIS_KEY",
+    "EventDetector",
     "GPS_TRENDS_DEFAULT_WINDOW",
     "GPS_TRENDS_INTERVAL_S",
     "GPS_TRENDS_MAX_SAMPLES",
@@ -57,6 +67,8 @@ __all__ = [
     "emit_rollups",
     "initialize_gps_manager",
     "new_last_bucket_ids",
+    "publish_events",
     "publish_sample",
+    "read_events",
     "redis_key_for_tier",
 ]

@@ -804,3 +804,43 @@ def gps_dashboard_trends():
         payload = {'samples': []}
 
     return jsonify(payload)
+
+
+@hardware_bp.route('/api/gps-dashboard/events', methods=['GET'])
+@require_permission('system.configure')
+def gps_dashboard_events():
+    """Return the persistent GPS state-change event log.
+
+    Proxies ``/api/hardware/gps/events`` from the hardware service so
+    the dashboard's Events & Alarms panel survives page reload and
+    navigation away.  Detection runs in the GPS subprocess on the same
+    cadence as trend sampling.
+    """
+    from webapp.admin.network import call_hardware_service
+
+    # Clamp limit before forwarding so a malformed client query can't
+    # cause the upstream to scan more than necessary.  read_events()
+    # also clamps server-side, but enforce it here too so the contract
+    # is obvious from the proxy.
+    try:
+        limit = int(request.args.get('limit', 200))
+    except (TypeError, ValueError):
+        limit = 200
+    if limit <= 0 or limit > 500:
+        limit = 200
+    endpoint = f'/api/hardware/gps/events?limit={limit}'
+
+    try:
+        payload = call_hardware_service(endpoint, method='GET') or {}
+        if isinstance(payload, dict) and payload.get('success') is False:
+            payload = {'events': []}
+        if not isinstance(payload, dict) or 'events' not in payload:
+            payload = {'events': []}
+    except Exception:
+        logger.warning(
+            "GPS dashboard: hardware service events call failed",
+            exc_info=True,
+        )
+        payload = {'events': []}
+
+    return jsonify(payload)

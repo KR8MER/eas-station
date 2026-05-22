@@ -35,6 +35,7 @@ from typing import Any, Callable, Optional
 import redis
 from flask import Blueprint, jsonify, request
 
+from services.gps.events import read_events
 from services.gps.trends import (
     GPS_TRENDS_DEFAULT_WINDOW,
     GPS_TRENDS_TIERS,
@@ -160,6 +161,26 @@ def create_blueprint(
             # exception text (CodeQL py/stack-trace-exposure).
             logger.error("Error getting GPS trends", exc_info=True)
             return jsonify({'success': False, 'error': 'gps_trends_unavailable'}), 500
+
+    @bp.route('/api/hardware/gps/events', methods=['GET'])
+    def get_gps_events():
+        """Return the recent state-change events for the GPS dashboard.
+
+        Events are produced by the subprocess-side detector on each
+        trend tick and persisted in a capped Redis list (newest first).
+        The dashboard hydrates from this on page load so alarms survive
+        navigation away and reload.
+
+        Optional ``?limit=N`` clamps how many to return (default 200,
+        max 500).
+        """
+        try:
+            _redis_client = get_redis_client()
+            events = read_events(_redis_client, limit=request.args.get('limit', 200))
+            return jsonify({'events': events})
+        except Exception:
+            logger.error("Error getting GPS events", exc_info=True)
+            return jsonify({'success': False, 'error': 'gps_events_unavailable'}), 500
 
     @bp.route('/api/hardware/gps/configure', methods=['POST'])
     def configure_gps():

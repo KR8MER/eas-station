@@ -652,6 +652,40 @@
         color: var(--text-muted); font-size: 0.78rem; font-style: italic;
         pointer-events: none;
     }
+    /* Crosshair + tooltip overlay for sparkline charts.  Lives inside
+       .gps-chart-canvas-wrap so it scales with the canvas; hidden
+       unless the user is hovering. */
+    .gps-chart-canvas-wrap .gps-spark-crosshair {
+        position: absolute; top: 0; bottom: 0; width: 1px;
+        background: rgba(200,200,200,0.55);
+        pointer-events: none;
+        display: none;
+        z-index: 2;
+    }
+    .gps-chart-canvas-wrap .gps-spark-tooltip {
+        position: absolute;
+        padding: 4px 6px;
+        background: rgba(20,22,28,0.92);
+        color: var(--text-color, #e6edf3);
+        border: 1px solid rgba(127,127,127,0.4);
+        border-radius: 4px;
+        font-family: var(--font-mono, ui-monospace, monospace);
+        font-size: 0.72rem;
+        line-height: 1.35;
+        white-space: nowrap;
+        pointer-events: none;
+        display: none;
+        z-index: 3;
+        max-width: 260px;
+    }
+    .gps-chart-canvas-wrap .gps-spark-tooltip .ts {
+        color: var(--text-muted, #8b949e);
+        margin-bottom: 2px;
+    }
+    .gps-chart-canvas-wrap .gps-spark-tooltip .row { display: flex; gap: 6px; align-items: baseline; }
+    .gps-chart-canvas-wrap .gps-spark-tooltip .sw {
+        display: inline-block; width: 8px; height: 8px; border-radius: 2px;
+    }
 
     /* ── Leap-second countdown big-readout — same monospace look used
           for the headline clock displays elsewhere on the page. */
@@ -2182,13 +2216,24 @@
         return (ns / 1_000_000_000).toFixed(3) + ' s';
     }
     // ADEV is a dimensionless fractional-frequency quantity; render with
-    // engineering-style scientific notation for compactness.
+    // engineering-style scientific notation for compactness.  Uses
+    // Unicode superscript digits + minus so the live tile matches the
+    // help popover's "1 × 10⁻⁹" style without any HTML escaping —
+    // textContent assignments stay valid.
+    var FMT_SUPER_DIGITS = ['⁰','¹','²','³','⁴','⁵','⁶','⁷','⁸','⁹'];
+    function fmtSuperExp(exp) {
+        var sign = exp < 0 ? '⁻' : '';
+        var abs = Math.abs(exp).toString();
+        var out = '';
+        for (var i = 0; i < abs.length; i++) out += FMT_SUPER_DIGITS[+abs[i]];
+        return sign + out;
+    }
     function fmtAdev(v) {
         if (v === null || v === undefined || isNaN(v)) return '—';
         if (v === 0) return '0';
         var exp = Math.floor(Math.log10(Math.abs(v)));
         var mantissa = v / Math.pow(10, exp);
-        return mantissa.toFixed(2) + 'e' + exp;
+        return mantissa.toFixed(2) + ' × 10' + fmtSuperExp(exp);
     }
     // chronyc -c tracking emits "ref time" as a Unix timestamp string
     // (e.g. "1778355459.498333426").  Render it as a human-readable UTC
@@ -3630,28 +3675,17 @@
         }
     }
 
-    // ── Event / Alarm timeline.  Pure client-side state-transition
-    //    detector: every poll, compare a small slice of the snapshot
-    //    to the previous one and emit a row when something interesting
-    //    happens.  No backend changes required.
+    // ── Event / Alarm timeline.  Server-side detection: the GPS
+    //    subprocess runs the same state-transition rules on its own
+    //    sampling tick and persists the resulting rows in a capped
+    //    Redis list.  We hydrate from that list on load and refresh
+    //    on each dashboard poll so alarms survive a page reload and
+    //    keep accruing even when no browser is open.
     var EVENT_LOG = [];
-    var EVENT_LOG_MAX = 60;
-    var prevEventState = null;
+    var EVENT_LOG_MAX = 200;
+    var _eventsLatestId = 0;
 
     var EVENT_SEV_ALLOWED = { ok: 1, warn: 1, fault: 1, info: 1, unknown: 1 };
-    function pushEvent(sev, msg) {
-        if (!EVENT_SEV_ALLOWED[sev]) sev = 'info';
-        var d = new Date();
-        var pad = function (n) { return n < 10 ? '0' + n : '' + n; };
-        var ts = pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes()) + ':' + pad(d.getUTCSeconds());
-        EVENT_LOG.unshift({ ts: ts, sev: sev, msg: msg });
-        if (EVENT_LOG.length > EVENT_LOG_MAX) EVENT_LOG.length = EVENT_LOG_MAX;
-        // Auto-open the collapsible card when a new event fires so the
-        // operator doesn't miss an alarm that appeared while collapsed.
-        var details = document.getElementById('gps-events-details');
-        if (details && !details.open) details.open = true;
-        renderEventList();
-    }
 
     function renderEventList() {
         var ul = document.getElementById('gps-events-list');
@@ -3661,85 +3695,47 @@
             return;
         }
         var html = EVENT_LOG.map(function (e) {
-            // Severity is whitelisted in pushEvent(), but defend in depth
-            // here too so a stray value can never inject extra classes.
+            // Severity is whitelisted server-side too, but defend in
+            // depth here so a stray value from the API can never
+            // inject extra classes onto the .sev span.
             var sev = EVENT_SEV_ALLOWED[e.sev] ? e.sev : 'info';
             return '<li>' +
-                   '<span class="ts">' + escapeHtml(e.ts) + '</span>' +
+                   '<span class="ts">' + escapeHtml(e.ts || '') + '</span>' +
                    '<span class="sev sev-' + sev + '">' + sev + '</span>' +
-                   '<span class="msg">' + escapeHtml(e.msg) + '</span>' +
+                   '<span class="msg">' + escapeHtml(e.msg || '') + '</span>' +
                    '</li>';
         }).join('');
         ul.innerHTML = html;
     }
 
-    function detectEvents(snapshot) {
-        var gps = (snapshot && snapshot.gps) || {};
-        var tracking = (snapshot && snapshot.chrony && snapshot.chrony.tracking) || {};
-        var ppsBackend = gps.pps_backend;
-        var ppsAge = (typeof gps.pps_pulse_age_s === 'number') ? gps.pps_pulse_age_s : null;
-        var state = {
-            ppsLocked: !!(ppsBackend && ppsBackend !== 'none' && ppsAge !== null && ppsAge <= 2),
-            hasFix: !!gps.has_fix,
-            fixMode: gps.fix_mode || 0,
-            holdover: (typeof gps.holdover_s === 'number') ? gps.holdover_s : null,
-            jamming: gps.jamming_state || null,
-            stratum: tracking.stratum,
-            antenna: gps.antenna_status || null,
-            leapPending: !!gps.leap_pending,
-            running: !!gps.running
-        };
-        if (!prevEventState) {
-            prevEventState = state;
-            return;
-        }
-        var p = prevEventState;
-        if (state.ppsLocked !== p.ppsLocked) {
-            if (state.ppsLocked) pushEvent('ok', 'PPS LOCK RESTORED');
-            else pushEvent('fault', 'PPS LOST');
-        }
-        if (state.hasFix !== p.hasFix) {
-            if (state.hasFix) pushEvent('ok', 'GPS RECOVERED');
-            else pushEvent('fault', 'GPS FIX LOST');
-        }
-        if (state.fixMode !== p.fixMode && p.fixMode !== 0 && state.fixMode !== 0) {
-            pushEvent('warn', 'FIX MODE CHANGED ' + p.fixMode + 'D → ' + state.fixMode + 'D');
-        }
-        // Holdover transitions: 0 → >0 means we've entered holdover.
-        var enteredHoldover = (p.holdover === 0 || p.holdover === null) && state.holdover && state.holdover > 0;
-        var exitedHoldover = p.holdover && p.holdover > 0 && state.holdover === 0;
-        if (enteredHoldover) pushEvent('warn', 'HOLDOVER ENTERED');
-        if (exitedHoldover) pushEvent('ok', 'HOLDOVER CLEARED');
-        if (state.jamming !== p.jamming && state.jamming) {
-            if (state.jamming === 'ok' && p.jamming && p.jamming !== 'ok') {
-                pushEvent('ok', 'RF INTERFERENCE CLEARED');
-            } else if (state.jamming !== 'ok') {
-                pushEvent(state.jamming === 'critical' ? 'fault' : 'warn',
-                          'RF INTERFERENCE: ' + state.jamming.toUpperCase());
-            }
-        }
-        if (state.antenna !== p.antenna && state.antenna) {
-            if (state.antenna === 'ok' && p.antenna && p.antenna !== 'ok') {
-                pushEvent('ok', 'ANTENNA OK');
-            } else if (state.antenna === 'short' || state.antenna === 'open') {
-                pushEvent('fault', 'ANTENNA FAULT: ' + state.antenna.toUpperCase());
-            }
-        }
-        if (state.leapPending && !p.leapPending) {
-            pushEvent('info', 'LEAP SECOND PENDING');
-        } else if (!state.leapPending && p.leapPending) {
-            pushEvent('info', 'LEAP SECOND CLEARED');
-        }
-        if (state.stratum !== p.stratum && state.stratum !== null && state.stratum !== undefined) {
-            var sev = (state.stratum === 1) ? 'ok' : (state.stratum <= 4 ? 'warn' : 'fault');
-            pushEvent(sev, 'STRATUM ' + (p.stratum !== null && p.stratum !== undefined ? p.stratum : '—')
-                          + ' → ' + state.stratum);
-        }
-        if (state.running !== p.running) {
-            if (state.running) pushEvent('ok', 'GPS SERVICE STARTED');
-            else pushEvent('fault', 'GPS SERVICE STOPPED');
-        }
-        prevEventState = state;
+    function refreshEventsFromServer() {
+        // Re-fetch the persistent event log on each poll.  Cheap (a
+        // few KB JSON from a single Redis LRANGE) and keeps the panel
+        // showing rows that were detected while we weren't watching.
+        return fetch('/admin/api/gps-dashboard/events?limit=' + EVENT_LOG_MAX,
+                     { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                var events = (data && Array.isArray(data.events)) ? data.events : [];
+                // Detect new arrivals so we can auto-open the
+                // collapsible card the same way the old client-side
+                // pushEvent() did when a transition fired live.
+                var newestId = events.length ? (events[0].id || 0) : 0;
+                var hadNew = newestId > _eventsLatestId && _eventsLatestId > 0;
+                _eventsLatestId = Math.max(_eventsLatestId, newestId);
+                EVENT_LOG = events;
+                renderEventList();
+                if (hadNew) {
+                    var details = document.getElementById('gps-events-details');
+                    if (details && !details.open) details.open = true;
+                }
+            })
+            .catch(function (err) {
+                // Don't clobber a previously-hydrated list on a
+                // transient fetch failure — leave EVENT_LOG alone so
+                // a brief network blip doesn't blank the panel.
+                console.warn('GPS dashboard events fetch failed:', err);
+            });
     }
 
     // ── Simple / Engineering view toggle.  Persisted in localStorage
@@ -4321,6 +4317,131 @@
             }
             ctx.restore();
         });
+
+        // Stash render metadata so the hover handler can map mouse x →
+        // sample index and read the value out of each buffer.  Refreshed
+        // on every draw so the crosshair always reflects what's actually
+        // painted, including post-resize re-renders.
+        canvas._sparkData = {
+            series: series,
+            pad: pad,
+            plotW: plotW,
+            plotH: plotH,
+            lo: lo,
+            hi: hi,
+            n: n,
+            formatter: opts.formatter || function (v) {
+                return (typeof v === 'number') ? v.toPrecision(4) : String(v);
+            }
+        };
+        _installSparklineCrosshair(canvas);
+    }
+
+    // Wire mousemove/mouseleave handlers exactly once per canvas, plus
+    // create the DOM overlay (vertical line + tooltip div) inside the
+    // canvas's wrapper.  Subsequent calls are no-ops — we re-use the
+    // same overlay across redraws.  Drawing the crosshair as DOM (not
+    // canvas) means it survives the periodic chart redraws without us
+    // having to re-render it after every paint.
+    function _installSparklineCrosshair(canvas) {
+        if (canvas._crosshairInstalled) return;
+        var wrap = canvas.parentElement;
+        if (!wrap) return;
+        if (!wrap.classList.contains('gps-chart-canvas-wrap')) {
+            // Defensive: skip if a sparkline was somehow embedded in a
+            // non-standard wrapper — the overlay positioning depends on
+            // the wrapper's relative positioning + overflow:hidden.
+            canvas._crosshairInstalled = true;
+            return;
+        }
+        var line = document.createElement('div');
+        line.className = 'gps-spark-crosshair';
+        var tip = document.createElement('div');
+        tip.className = 'gps-spark-tooltip';
+        wrap.appendChild(line);
+        wrap.appendChild(tip);
+
+        canvas.addEventListener('mousemove', function (ev) {
+            var data = canvas._sparkData;
+            if (!data || !data.n) { line.style.display = 'none'; tip.style.display = 'none'; return; }
+            var rect = canvas.getBoundingClientRect();
+            var x = ev.clientX - rect.left;
+            // Map x → buffer index (nearest).  Plot area is offset by
+            // pad.l/r — outside it we hide the overlay so the operator
+            // doesn't see a misleading "value at -3 px" reading.
+            if (x < data.pad.l || x > data.pad.l + data.plotW) {
+                line.style.display = 'none'; tip.style.display = 'none'; return;
+            }
+            // Use the longest buffer's length for the index basis;
+            // shorter series will resolve to null at out-of-range
+            // indices and just be skipped in the rendered tooltip.
+            var nMax = 0;
+            for (var si = 0; si < data.series.length; si++) {
+                var ln = data.series[si].buffer.v.length;
+                if (ln > nMax) nMax = ln;
+            }
+            if (nMax < 1) { line.style.display = 'none'; tip.style.display = 'none'; return; }
+            var frac = (x - data.pad.l) / data.plotW;
+            if (frac < 0) frac = 0; else if (frac > 1) frac = 1;
+            var idx = (nMax === 1) ? 0 : Math.round(frac * (nMax - 1));
+
+            // Snap the vertical line to the actual sample position
+            // rather than the raw cursor x — makes it obvious which
+            // discrete sample the tooltip is reading.
+            var snapX = data.pad.l + (nMax === 1 ? data.plotW / 2 : (idx / (nMax - 1)) * data.plotW);
+            line.style.left = snapX + 'px';
+            line.style.display = 'block';
+
+            // Tooltip body: timestamp from the first non-empty buffer
+            // (all rings advance in lock-step via ringPush), then one
+            // row per series labelled by the series .label or its
+            // colour swatch.
+            var ts = null;
+            for (var bi = 0; bi < data.series.length; bi++) {
+                var b = data.series[bi].buffer;
+                if (b && b.t && idx < b.t.length && typeof b.t[idx] === 'number') {
+                    ts = b.t[idx];
+                    break;
+                }
+            }
+            var html = '';
+            if (ts !== null) {
+                var d = new Date(ts);
+                var pad2 = function (n) { return n < 10 ? '0' + n : '' + n; };
+                html += '<div class="ts">' + pad2(d.getHours()) + ':' + pad2(d.getMinutes())
+                     + ':' + pad2(d.getSeconds()) + '</div>';
+            }
+            data.series.forEach(function (s) {
+                var v = (s.buffer && idx < s.buffer.v.length) ? s.buffer.v[idx] : null;
+                if (v === null || v === undefined || isNaN(v)) return;
+                var label = s.label ? (escapeHtml(s.label) + ' ') : '';
+                var text = data.formatter(v, s);
+                html += '<div class="row">'
+                      + '<span class="sw" style="background:' + s.color + '"></span>'
+                      + '<span>' + label + escapeHtml(String(text)) + '</span>'
+                      + '</div>';
+            });
+            if (!html) { tip.style.display = 'none'; return; }
+            tip.innerHTML = html;
+            tip.style.display = 'block';
+            // Position to the right of the cursor by default; flip to
+            // the left near the right edge so the tooltip doesn't get
+            // clipped by the wrap's overflow:hidden.
+            var wrapRect = wrap.getBoundingClientRect();
+            var tipW = tip.offsetWidth;
+            var tipH = tip.offsetHeight;
+            var left = snapX + 8;
+            if (left + tipW > wrapRect.width - 4) left = snapX - tipW - 8;
+            if (left < 4) left = 4;
+            var top = Math.max(4, Math.min(wrapRect.height - tipH - 4, ev.clientY - rect.top + 8));
+            tip.style.left = left + 'px';
+            tip.style.top = top + 'px';
+        });
+        canvas.addEventListener('mouseleave', function () {
+            line.style.display = 'none';
+            tip.style.display = 'none';
+        });
+        canvas._crosshairInstalled = true;
     }
 
     // Buffers for the five time-series charts (PPS drift, clock
@@ -4445,7 +4566,7 @@
         setText('ts-pps-n', pps.count);
         drawSparkline('ts-pps-canvas', [
             { buffer: ts.pps, color: '#58a6ff' }
-        ], { emptyEl: 'ts-pps-empty', includeZero: true });
+        ], { emptyEl: 'ts-pps-empty', includeZero: true, formatter: fmtSeconds });
 
         // Clock stability — chrony rms_offset_s.
         var rms = ringStats(ts.rms);
@@ -4455,7 +4576,7 @@
         setText('ts-rms-n', rms.count);
         drawSparkline('ts-rms-canvas', [
             { buffer: ts.rms, color: '#bc8cff' }
-        ], { emptyEl: 'ts-rms-empty' });
+        ], { emptyEl: 'ts-rms-empty', formatter: fmtSeconds });
 
         // Frequency steering — frequency_ppm + residual_freq_ppm.
         var freq = ringStats(ts.freq);
@@ -4464,9 +4585,9 @@
         setText('ts-resid-now', fmtPpmTight(resid.last));
         setText('ts-freq-n', Math.max(freq.count, resid.count));
         drawSparkline('ts-freq-canvas', [
-            { buffer: ts.freq,  color: '#84cc16' },
-            { buffer: ts.resid, color: '#d29922', dashed: true }
-        ], { emptyEl: 'ts-freq-empty', includeZero: true });
+            { buffer: ts.freq,  color: '#84cc16', label: 'freq' },
+            { buffer: ts.resid, color: '#d29922', dashed: true, label: 'resid' }
+        ], { emptyEl: 'ts-freq-empty', includeZero: true, formatter: fmtPpmTight });
 
         // DOP history — H/V/P (unitless).  Lower is better.
         var hd = ringStats(ts.hdop), vd = ringStats(ts.vdop), pd = ringStats(ts.pdop);
@@ -4475,10 +4596,10 @@
         setText('ts-pdop-now', fmtUnitlessTight(pd.last));
         setText('ts-dop-n', Math.max(hd.count, vd.count, pd.count));
         drawSparkline('ts-dop-canvas', [
-            { buffer: ts.hdop, color: '#58a6ff' },
-            { buffer: ts.vdop, color: '#f85149' },
-            { buffer: ts.pdop, color: '#bc8cff' }
-        ], { emptyEl: 'ts-dop-empty', includeZero: true });
+            { buffer: ts.hdop, color: '#58a6ff', label: 'hdop' },
+            { buffer: ts.vdop, color: '#f85149', label: 'vdop' },
+            { buffer: ts.pdop, color: '#bc8cff', label: 'pdop' }
+        ], { emptyEl: 'ts-dop-empty', includeZero: true, formatter: fmtUnitlessTight });
 
         // SNR history — average dBHz across satellites in view.
         var sn = ringStats(ts.snr);
@@ -4488,7 +4609,7 @@
         setText('ts-snr-n', sn.count);
         drawSparkline('ts-snr-canvas', [
             { buffer: ts.snr, color: '#3fb950' }
-        ], { emptyEl: 'ts-snr-empty' });
+        ], { emptyEl: 'ts-snr-empty', formatter: fmtDbhzTight });
 
         // Holdover history — sparkline of seconds since last 3D fix.
         var ho = ringStats(ts.hold);
@@ -4497,7 +4618,7 @@
         setText('ts-hold-n', ho.count);
         drawSparkline('ts-hold-canvas', [
             { buffer: ts.hold, color: '#d29922' }
-        ], { emptyEl: 'ts-hold-empty', includeZero: true });
+        ], { emptyEl: 'ts-hold-empty', includeZero: true, formatter: fmtDuration });
     }
 
     // ── PPS jitter histogram — vertical bars sized to bucket counts.
@@ -5041,9 +5162,10 @@
         setText('ts-jam-state', stateLabel);
 
         drawSparkline('ts-jam-canvas', [
-            { buffer: ts.noise, color: '#f85149' },
-            { buffer: ts.agc,   color: '#d29922', dashed: true }
-        ], { emptyEl: 'ts-jam-empty', includeZero: true });
+            { buffer: ts.noise, color: '#f85149', label: 'noise' },
+            { buffer: ts.agc,   color: '#d29922', dashed: true, label: 'agc' }
+        ], { emptyEl: 'ts-jam-empty', includeZero: true,
+             formatter: function (v) { return Math.round(v); } });
 
         // Colour strip for the categorical jamming_state series.
         var strip = document.getElementById('ts-jam-strip-canvas');
@@ -5266,7 +5388,7 @@
         // in lock-step with the detail cards below.
         renderStatusStrip(snapshot);
         renderClockQuality(snapshot);
-        detectEvents(snapshot);
+        refreshEventsFromServer();
 
         // Clocks — prefer the server's now_utc (sampled at the same
         // instant as the rest of the snapshot) over the browser's
@@ -5364,6 +5486,12 @@
             });
             schedule(parseInt(sel.value, 10) || 0);
         }
+
+        // Hydrate the Events & Alarms panel from the server before the
+        // first dashboard poll so the operator sees prior transitions
+        // immediately on page load (the panel used to be empty until
+        // a live transition happened).
+        refreshEventsFromServer();
         // 2D / 3D sky toggle.  Apply the persisted choice on load,
         // then wire the click handlers so flipping is instant.
         setSkyMode(getSkyMode());
