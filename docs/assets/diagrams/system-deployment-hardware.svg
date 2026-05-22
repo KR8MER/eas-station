@@ -120,8 +120,8 @@
     <text x="92" y="22" class="panel-title" text-anchor="middle">Hardware Services</text>
     <text x="92" y="40" class="sm" text-anchor="middle" style="fill:#93c5fd">eas-station-sdr</text>
     <text x="92" y="56" class="xs" text-anchor="middle">FM demod · SAME decode · Icecast</text>
-    <text x="92" y="72" class="sm" text-anchor="middle" style="fill:#93c5fd">eas-station-hardware</text>
-    <text x="92" y="88" class="xs" text-anchor="middle">GPIO relay · OLED/VFD · Port 5001</text>
+    <text x="92" y="72" class="sm" text-anchor="middle" style="fill:#93c5fd">eas-station-hardware.target</text>
+    <text x="92" y="88" class="xs" text-anchor="middle">5 subsystems · Ports 5101–5105</text>
   </g>
 
   <!-- ──── Row 2: Database (y=258-348) ──── -->

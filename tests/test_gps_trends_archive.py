@@ -1,5 +1,5 @@
 """
-Tests for the multi-resolution GPS trend archive in ``hardware_service``.
+Tests for the multi-resolution GPS trend archive in ``services.gps.trends``.
 
 The GPS dashboard sparklines and per-PRN heatmap are fed by a tiered
 RRD-style archive in Redis (raw 5 s → 1 min → 10 min → 1 h).  These
@@ -11,12 +11,24 @@ from __future__ import annotations
 
 import pytest
 
-import hardware_service as hs
+# Phase 4 of the hardware_service.py split moved every helper that used
+# to live on ``hardware_service`` into ``services.gps.trends`` (pure
+# functions taking the redis client + per-tier bucket-id dict as args)
+# and replaced the orchestrator with the per-subsystem subprocess
+# ``services/gps/__main__.py``.  These tests now exercise the library
+# directly — no module-level wrapper to keep in sync.
+from services.gps import trends as gps_trends
+from services.gps import (
+    GPS_TRENDS_DEFAULT_WINDOW,
+    GPS_TRENDS_TIERS,
+    GPS_TRENDS_WINDOW_TO_TIER,
+    new_last_bucket_ids,
+)
 from app_core.gps.gps_manager import GPSManager
 
 
 # --------------------------------------------------------------------------- #
-# _aggregate_gps_trend_samples — pure bucket aggregator, no Redis touched.    #
+# aggregate_samples — pure bucket aggregator, no Redis touched.               #
 # --------------------------------------------------------------------------- #
 class TestAggregateGpsTrendSamples:
     """Verifies min / max / avg / sample_count and per-PRN merging."""
@@ -27,7 +39,7 @@ class TestAggregateGpsTrendSamples:
         return base
 
     def test_empty_bucket_returns_none(self):
-        assert hs._aggregate_gps_trend_samples([], 0, 60_000) is None
+        assert gps_trends.aggregate_samples([], 0, 60_000) is None
 
     def test_aggregates_numeric_fields_to_mean_min_max(self):
         rows = [
@@ -35,7 +47,7 @@ class TestAggregateGpsTrendSamples:
             self._row(20000, hdop=2.0, avg_snr=42.0),
             self._row(40000, hdop=3.0, avg_snr=44.0),
         ]
-        out = hs._aggregate_gps_trend_samples(rows, 0, 60_000)
+        out = gps_trends.aggregate_samples(rows, 0, 60_000)
         assert out is not None
         # Average across the bucket.
         assert out["hdop"] == pytest.approx(2.0)
@@ -58,7 +70,7 @@ class TestAggregateGpsTrendSamples:
             self._row(20000),                # no hdop, no avg_snr
             self._row(40000, hdop=3.0, avg_snr=50.0),
         ]
-        out = hs._aggregate_gps_trend_samples(rows, 0, 60_000)
+        out = gps_trends.aggregate_samples(rows, 0, 60_000)
         assert out["hdop"] == pytest.approx(2.0)        # mean of [1.0, 3.0]
         assert out["avg_snr"] == pytest.approx(50.0)    # mean of [50.0]
 
@@ -69,7 +81,7 @@ class TestAggregateGpsTrendSamples:
             self._row(40000),
             self._row(50000, jamming_state="critical"),
         ]
-        out = hs._aggregate_gps_trend_samples(rows, 0, 60_000)
+        out = gps_trends.aggregate_samples(rows, 0, 60_000)
         assert out["jamming_state"] == "critical"
 
     def test_per_prn_snr_merges_to_mean(self):
@@ -78,7 +90,7 @@ class TestAggregateGpsTrendSamples:
             self._row(20000, prn_snr={"GP05": 44.0}),                    # missing GP07
             self._row(40000, prn_snr={"GP07": 38.0, "GL12": 30.0}),      # new PRN appears
         ]
-        out = hs._aggregate_gps_trend_samples(rows, 0, 60_000)
+        out = gps_trends.aggregate_samples(rows, 0, 60_000)
         prn = out["prn_snr"]
         assert prn["GP05"] == pytest.approx(42.0)        # (40 + 44) / 2
         assert prn["GP07"] == pytest.approx(40.0)        # (42 + 38) / 2
@@ -89,11 +101,11 @@ class TestAggregateGpsTrendSamples:
         # should produce ``None`` so the caller doesn't push an empty
         # placeholder onto the archive.
         rows = [{"t": 1000, "garbage": "yes"}]
-        assert hs._aggregate_gps_trend_samples(rows, 0, 60_000) is None
+        assert gps_trends.aggregate_samples(rows, 0, 60_000) is None
 
 
 # --------------------------------------------------------------------------- #
-# _emit_gps_trend_rollups — bucket-boundary detection + tier emission.        #
+# emit_rollups — bucket-boundary detection + tier emission.                   #
 # --------------------------------------------------------------------------- #
 class _FakeRedisPipeline:
     """Minimal pipeline mock: records (op, key, args) tuples."""
@@ -139,14 +151,15 @@ class _FakeRedis:
 
 
 @pytest.fixture
-def fake_redis(monkeypatch):
-    fake = _FakeRedis()
-    monkeypatch.setattr(hs, "_redis_client", fake)
-    # Reset the per-tier "last seen bucket" state — tests need a clean
-    # slate or earlier tests will have already flagged the boundary.
-    monkeypatch.setattr(hs, "_gps_trend_last_bucket_ids",
-                        {name: None for name in hs.GPS_TRENDS_TIERS if name != "raw"})
-    return fake
+def fake_redis():
+    return _FakeRedis()
+
+
+@pytest.fixture
+def bucket_ids():
+    # Fresh per-tier "last seen bucket" state — earlier tests in the
+    # session must not be able to flag a boundary for us.
+    return new_last_bucket_ids()
 
 
 class TestEmitGpsTrendRollups:
@@ -154,21 +167,21 @@ class TestEmitGpsTrendRollups:
 
     def _seed_raw(self, fake, samples):
         import json
-        fake.store[hs._gps_trend_redis_key("raw")] = [
+        fake.store[gps_trends.redis_key_for_tier("raw")] = [
             json.dumps(s) for s in reversed(samples)  # newest-first
         ]
 
-    def test_first_call_initializes_state_does_not_emit(self, fake_redis):
+    def test_first_call_initializes_state_does_not_emit(self, fake_redis, bucket_ids):
         self._seed_raw(fake_redis, [{"t": 1_000_000, "hdop": 1.0}])
-        hs._emit_gps_trend_rollups(now_ms=1_000_000)
+        gps_trends.emit_rollups(fake_redis, bucket_ids, now_ms=1_000_000)
         # No rollup tier should exist yet — first observation only
         # remembers which bucket we're in.
         for tier in ("1m", "10m", "1h"):
-            assert hs._gps_trend_redis_key(tier) not in fake_redis.store
+            assert gps_trends.redis_key_for_tier(tier) not in fake_redis.store
         for tier in ("1m", "10m", "1h"):
-            assert hs._gps_trend_last_bucket_ids[tier] is not None
+            assert bucket_ids[tier] is not None
 
-    def test_emits_one_row_per_crossed_bucket_for_1m_tier(self, fake_redis):
+    def test_emits_one_row_per_crossed_bucket_for_1m_tier(self, fake_redis, bucket_ids):
         # 90 s of raw samples spanning two 1-min buckets:
         #   bucket A: t ∈ [0, 60_000)   — three rows
         #   bucket B: t ∈ [60_000, 120_000) — one row at t=70_000
@@ -181,12 +194,12 @@ class TestEmitGpsTrendRollups:
         self._seed_raw(fake_redis, rows)
 
         # Initial call lands inside bucket A; just primes the state.
-        hs._emit_gps_trend_rollups(now_ms=5_000)
+        gps_trends.emit_rollups(fake_redis, bucket_ids, now_ms=5_000)
         # Now we cross into bucket B — bucket A should be aggregated.
-        hs._emit_gps_trend_rollups(now_ms=70_000)
+        gps_trends.emit_rollups(fake_redis, bucket_ids, now_ms=70_000)
 
         import json as _json
-        emitted = fake_redis.store.get(hs._gps_trend_redis_key("1m"), [])
+        emitted = fake_redis.store.get(gps_trends.redis_key_for_tier("1m"), [])
         assert len(emitted) == 1, "exactly one closed bucket should have been rolled up"
         agg = _json.loads(emitted[0])
         # Mean across bucket A samples.
@@ -201,14 +214,14 @@ class TestEmitGpsTrendRollups:
         assert agg["bucket_start_ms"] == 0
         assert agg["bucket_end_ms"] == 60_000
 
-    def test_no_emission_when_bucket_unchanged(self, fake_redis):
+    def test_no_emission_when_bucket_unchanged(self, fake_redis, bucket_ids):
         self._seed_raw(fake_redis, [
             {"t":  5_000, "hdop": 1.0},
             {"t": 20_000, "hdop": 2.0},
         ])
-        hs._emit_gps_trend_rollups(now_ms=5_000)
-        hs._emit_gps_trend_rollups(now_ms=20_000)  # same 1-min bucket
-        assert hs._gps_trend_redis_key("1m") not in fake_redis.store
+        gps_trends.emit_rollups(fake_redis, bucket_ids, now_ms=5_000)
+        gps_trends.emit_rollups(fake_redis, bucket_ids, now_ms=20_000)  # same 1-min bucket
+        assert gps_trends.redis_key_for_tier("1m") not in fake_redis.store
 
 
 # --------------------------------------------------------------------------- #
@@ -216,19 +229,19 @@ class TestEmitGpsTrendRollups:
 # --------------------------------------------------------------------------- #
 class TestWindowToTierMapping:
     def test_default_window_maps_to_raw_tier(self):
-        assert hs.GPS_TRENDS_WINDOW_TO_TIER[hs.GPS_TRENDS_DEFAULT_WINDOW] == "raw"
+        assert GPS_TRENDS_WINDOW_TO_TIER[GPS_TRENDS_DEFAULT_WINDOW] == "raw"
 
     def test_known_windows_each_resolve_to_a_defined_tier(self):
-        for window, tier in hs.GPS_TRENDS_WINDOW_TO_TIER.items():
-            assert tier in hs.GPS_TRENDS_TIERS, (
+        for window, tier in GPS_TRENDS_WINDOW_TO_TIER.items():
+            assert tier in GPS_TRENDS_TIERS, (
                 f"window {window!r} maps to undefined tier {tier!r}"
             )
 
     def test_long_windows_use_coarser_resolution(self):
         # Sanity-check: 30-day window should not be served by raw 5 s
         # ticks (that'd be 518 400 samples — ridiculous).
-        bucket_30d, _ = hs.GPS_TRENDS_TIERS[hs.GPS_TRENDS_WINDOW_TO_TIER["30d"]]
-        bucket_1h, _ = hs.GPS_TRENDS_TIERS[hs.GPS_TRENDS_WINDOW_TO_TIER["1h"]]
+        bucket_30d, _ = GPS_TRENDS_TIERS[GPS_TRENDS_WINDOW_TO_TIER["30d"]]
+        bucket_1h, _ = GPS_TRENDS_TIERS[GPS_TRENDS_WINDOW_TO_TIER["1h"]]
         assert bucket_30d > bucket_1h
 
 
@@ -269,8 +282,8 @@ class TestGetStatusCaching:
     dashboard poll.  The dashboard polls /api/hardware/gps/status at
     1 Hz; without caching, sustained dashboard sessions push ~1 MB/s
     of short-lived allocations through glibc, which (combined with
-    MALLOC_TRIM_THRESHOLD_=131072 from the hardware-service systemd
-    unit) causes the arena to grow but never trim back."""
+    MALLOC_TRIM_THRESHOLD_=131072 from the gps-subsystem systemd unit)
+    causes the arena to grow but never trim back."""
 
     def _build_manager(self):
         """Minimal manager wired enough that ``get_status()`` runs."""

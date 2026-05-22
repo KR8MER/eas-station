@@ -35,15 +35,35 @@ import subprocess
 import requests
 from flask import Blueprint, jsonify, request, render_template
 from app_core.auth.decorators import require_permission
-from app_core.config import HARDWARE_SERVICE_URL
+from app_core.config import GPS_SERVICE_URL, NETWORK_SERVICE_URL
 
 network_bp = Blueprint('network', __name__)
 
 
+def _route_to_subsystem(endpoint: str) -> str:
+    """Pick the subsystem base URL that owns ``endpoint``.
+
+    Phase 4 of the hardware_service.py split moved each blueprint into
+    its own subprocess on its own port (network 5101, zigbee 5102, gps
+    5103, displays 5104).  ``call_hardware_service`` used to point at a
+    single port 5001; this helper recovers the same "you don't care
+    which port" call site by routing on the endpoint prefix.
+    """
+    if endpoint.startswith('/api/hardware/gps/'):
+        return GPS_SERVICE_URL
+    return NETWORK_SERVICE_URL
+
+
 def call_hardware_service(endpoint, method='GET', data=None):
-    """Make HTTP request to hardware-service API."""
+    """Make HTTP request to the subsystem service that owns ``endpoint``.
+
+    The function name is preserved across the Phase 4 process-split so
+    callers (GPS dashboard, NTP page, etc.) continue to work; only the
+    base URL is now derived per-endpoint instead of being a single
+    HARDWARE_SERVICE_URL constant.
+    """
     try:
-        url = f"{HARDWARE_SERVICE_URL}{endpoint}"
+        url = f"{_route_to_subsystem(endpoint)}{endpoint}"
         if method == 'GET':
             response = requests.get(url, timeout=30)
         elif method == 'POST':

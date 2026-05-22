@@ -1380,6 +1380,66 @@
                 </div>
             </div>
         </div>
+        <!-- Hardware Subsystems Row (Phase 4 split) -->
+        {% set hw_subsystems = hardware_subsystems or {} %}
+        {% set hw_subsystem_map = hw_subsystems.subsystems or {} %}
+        {% if hw_subsystem_map %}
+        <div class="row mb-4">
+            <div class="col-12 mb-3" id="hardware-subsystems-card">
+                <div class="card health-card">
+                    <div class="card-body">
+                        {% set hw_status = hw_subsystems.status or 'unknown' %}
+                        {% if hw_status == 'healthy' %}
+                            {% set hw_badge_class = 'success' %}
+                            {% set hw_badge_label = 'All subsystems alive' %}
+                        {% elif hw_status == 'down' %}
+                            {% set hw_badge_class = 'danger' %}
+                            {% set hw_badge_label = 'Hardware target down' %}
+                        {% elif hw_status == 'degraded' %}
+                            {% set hw_badge_class = 'warning' %}
+                            {% set hw_badge_label = 'Degraded' %}
+                        {% else %}
+                            {% set hw_badge_class = 'secondary' %}
+                            {% set hw_badge_label = 'Unknown' %}
+                        {% endif %}
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="mb-0"><i class="fas fa-microchip section-icon"></i> Hardware Subsystems</h5>
+                            <span class="badge bg-{{ hw_badge_class }}">
+                                {{ hw_badge_label }} ({{ hw_subsystems.alive_count or 0 }}/{{ hw_subsystems.total or 5 }})
+                            </span>
+                        </div>
+                        <p class="text-muted small mb-3">
+                            Each subsystem runs in its own process under
+                            <code>eas-station-hardware.target</code> and publishes a 5&nbsp;s
+                            heartbeat into <code>hardware:metrics:&lt;subsystem&gt;</code>.
+                            A missing slice means that subprocess is down.
+                        </p>
+                        <div class="row g-2">
+                            {% for sub_name in ['network', 'zigbee', 'gps', 'displays', 'gpio'] %}
+                            {% set sub = hw_subsystem_map.get(sub_name) or {} %}
+                            {% set sub_alive = sub.alive %}
+                            <div class="col-md-4 col-lg col-6">
+                                <div class="border rounded p-2 h-100">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <strong class="text-capitalize">{{ sub_name }}</strong>
+                                        <span class="badge bg-{{ 'success' if sub_alive else 'danger' }}">
+                                            {{ 'Alive' if sub_alive else 'Down' }}
+                                        </span>
+                                    </div>
+                                    {% if sub.last_seen %}
+                                    <small class="text-muted d-block">heartbeat: {{ sub.last_seen }}</small>
+                                    {% else %}
+                                    <small class="text-muted d-block">no heartbeat in Redis</small>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
         <!-- Storage & Network Row -->
         <div class="row mb-4">
             <!-- Disk Storage -->

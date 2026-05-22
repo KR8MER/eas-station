@@ -1,0 +1,30 @@
+[Unit]
+Description=EAS Station Hardware Subsystem (network + zigbee + gps + displays + gpio)
+Documentation=https://github.com/KR8MER/eas-station
+PartOf=eas-station.target
+
+# Hardware target bundles the five per-subsystem units that replaced
+# the single eas-station-hardware.service in Phase 4 of the
+# hardware_service.py split.  Each subsystem now runs in its own
+# process with its own port, so a wedged Zigbee dongle or a stuck GPS
+# serial port can't take down OLED rendering or network config.
+#
+# `Wants=` (rather than `Requires=`) means systemd will start every
+# subsystem when the target is started, but a single failing subsystem
+# will *not* take the whole target down — existing scripts that do
+# `systemctl restart eas-station-hardware.target` keep the same
+# "best-effort restart everything" semantics they had with the
+# monolithic service.
+Wants=eas-station-network.service \
+      eas-station-zigbee.service \
+      eas-station-gps.service \
+      eas-station-displays.service \
+      eas-station-gpio.service
+After=eas-station-network.service \
+      eas-station-zigbee.service \
+      eas-station-gps.service \
+      eas-station-displays.service \
+      eas-station-gpio.service
+
+[Install]
+WantedBy=multi-user.target eas-station.target

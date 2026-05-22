@@ -85,7 +85,10 @@ except Exception:  # pragma: no cover - mock factory may be unavailable in minim
 # webapp/routes/system_controls.py, so any top-level lgpio import poisons
 # every gunicorn worker even though the web process never touches GPIO.
 # lgpio is imported lazily inside _LGPIOBackend.__init__ so it is only loaded
-# in processes that actually instantiate the backend (hardware_service.py).
+# in processes that actually instantiate the backend (the gpio and gps
+# subsystem subprocesses — services.gpio and services.gps — since they
+# own the only call sites that need a GPIO backend after the Phase 4
+# split of the hardware service).
 
 # NOTE: The legacy RPi.GPIO library is deprecated upstream and no longer
 # supported by this project. We rely on gpiozero's abstractions (with optional
@@ -122,7 +125,8 @@ class _LGPIOBackend:
     def __init__(self) -> None:
         # Import lazily: lgpio starts a native background thread on import,
         # which deadlocks gevent workers.  Only import when the backend is
-        # actually instantiated (i.e., in hardware_service, not in the web app).
+        # actually instantiated (i.e., in the gpio / gps subprocesses, not
+        # in the web app).
         try:  # pragma: no cover - only present on Raspberry Pi
             import lgpio as _lgpio  # type: ignore
         except Exception as exc:  # pragma: no cover

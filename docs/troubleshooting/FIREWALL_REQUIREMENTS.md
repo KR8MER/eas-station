@@ -23,8 +23,12 @@ These ports are used internally between services and should **not** be exposed t
 | Port | Protocol | Service | Description |
 |------|----------|---------|-------------|
 | **5000** | TCP | Flask App | Web application backend (nginx proxies to this). |
-| **5001** | TCP | Hardware Service | GPIO, network management, and hardware control API. |
 | **5002** | TCP | SDR/Audio Service | Audio streaming server for internal audio processing. |
+| **5101** | TCP | Network Subsystem | nmcli proxy + hostname helpers (Phase 4 split). |
+| **5102** | TCP | Zigbee Subsystem | zigpy-znp coordinator + join window. |
+| **5103** | TCP | GPS Subsystem | GPS manager + PPS trend archive. |
+| **5104** | TCP | Displays Subsystem | OLED / VFD / LED rendering. |
+| **5105** | TCP | GPIO Subsystem | Relays + alert indicators (health endpoint only). |
 | **5432** | TCP | PostgreSQL | Database (embedded profile or external). |
 | **6379** | TCP | Redis | In-memory cache for real-time updates. |
 | **8000** | TCP | Icecast (internal) | Internal Icecast port (proxied to 8001 externally). |

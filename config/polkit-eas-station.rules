@@ -5,10 +5,11 @@
  *
  * Allows the eas-station service user to disable NTP via the systemd D-Bus
  * interface (org.freedesktop.timedate1.SetNTP) without interactive
- * authentication.  This is required because the hardware service runs under
- * NoNewPrivileges=true, which prevents sudo from elevating privileges.  The
- * GPS manager calls busctl directly to request the NTP disable when a
- * PPS-backed GPS fix is available so the GPS clock is not overridden.
+ * authentication.  This is required because the GPS subsystem service
+ * (eas-station-gps.service) runs under NoNewPrivileges=true, which
+ * prevents sudo from elevating privileges.  The GPS manager calls
+ * busctl directly to request the NTP disable when a PPS-backed GPS
+ * fix is available so the GPS clock is not overridden.
  */
 polkit.addRule(function(action, subject) {
     if (action.id === "org.freedesktop.timedate1.set-ntp" &&

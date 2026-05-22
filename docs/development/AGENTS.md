@@ -1160,7 +1160,7 @@ The main service files are:
 - `eas-station-sdr.service` - SDR hardware service
 - `eas-station-audio.service` - Audio processing service
 - `eas-station-eas.service` - EAS monitoring service
-- `eas-station-hardware.service` - Hardware control (GPIO, displays)
+- `eas-station-hardware.target` - Bundles the five Phase 4 per-subsystem hardware units (`eas-station-network`, `-zigbee`, `-gps`, `-displays`, `-gpio`; ports 5101–5105)
 - `eas-station-noaa-poller.service` - NOAA alert poller
 - `eas-station-ipaws-poller.service` - IPAWS alert poller
 

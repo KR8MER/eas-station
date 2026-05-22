@@ -50,7 +50,7 @@ graph TB
 
         subgraph "Hardware Services"
             SDR_SVC[sdr-service<br>SDR + Audio<br>USB Access]
-            HW_SVC[hardware-service<br>GPIO/OLED/VFD<br>Port 5001]
+            HW_SVC[hardware.target<br>5 subsystems<br>Ports 5101–5105]
         end
 
         subgraph "Infrastructure"

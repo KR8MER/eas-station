@@ -99,7 +99,7 @@ VFD_BAUDRATE=38400
 
 Then restart the hardware service:
 ```bash
-sudo systemctl restart eas-station-hardware.service
+sudo systemctl restart eas-station-hardware.target
 ```
 
 ## Testing the Connection
@@ -186,7 +186,7 @@ sock.close()
 1. Check VFD power supply
 2. Verify TX/RX wiring connections
 3. Test with PuTTY first to isolate EAS Station vs. adapter issues
-4. Check Hardware Service logs: `sudo journalctl -u eas-station-hardware.service -f`
+4. Check Hardware Service logs: `sudo journalctl -u eas-station-hardware.target -f`
 5. Verify VFD brightness settings (might be set too dim)
 
 ### EAS Station Can't Connect
@@ -197,7 +197,7 @@ sock.close()
 1. Check network connectivity: `ping 192.168.8.122`
 2. Verify port is open: `nc -z -v 192.168.8.122 10001`
 3. Check firewall on EAS Station host
-4. Restart hardware service: Via web UI or `sudo systemctl restart eas-station-hardware.service`
+4. Restart hardware service: Via web UI or `sudo systemctl restart eas-station-hardware.target`
 5. Verify `VFD_PORT` format: Must start with `socket://`
 
 ### Multiple Connection Attempts

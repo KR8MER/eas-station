@@ -25,7 +25,7 @@ graph TB
 
         subgraph HardwareLayer["Hardware Services"]
             SDR[sdr-service<br/>SDR + Audio<br/>USB Access]
-            HW[hardware-service<br/>GPIO/OLED/VFD<br/>Port 5001]
+            HW[hardware.target<br/>5 subsystems<br/>Ports 5101–5105]
         end
 
         subgraph Infrastructure["Infrastructure"]

@@ -2053,4 +2053,4 @@ def send_alert(alert_data):
 - **Test Scripts:** `scripts/test_alpha_diagnostics.py`, `scripts/test_alpha_timedate.py`, `scripts/test_alpha_advanced.py`
 - **LED Controller:** `scripts/led_sign_controller.py`
 - **GitHub Issues:** https://github.com/KR8MER/eas-station/issues
-- **Check Hardware Service logs:** `sudo journalctl -u eas-station-hardware.service -f`
+- **Check Hardware Service logs:** `sudo journalctl -u eas-station-hardware.target -f`

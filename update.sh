@@ -683,8 +683,49 @@ if [ -d "$INSTALL_DIR/systemd" ]; then
     cp "$INSTALL_DIR/systemd/"*.target /etc/systemd/system/ 2>/dev/null || true
     cp "$INSTALL_DIR/systemd/"*.timer /etc/systemd/system/ 2>/dev/null || true
 
+    # Phase 4 retired the monolithic eas-station-hardware.service in favour of
+    # five per-subsystem units bundled under eas-station-hardware.target.
+    # Existing installs still have the old unit on disk and enabled — strip it
+    # before reloading so systemd doesn't keep trying to revive it.
+    LEGACY_HW_UNIT=/etc/systemd/system/eas-station-hardware.service
+    if [ -f "$LEGACY_HW_UNIT" ] || systemctl list-unit-files eas-station-hardware.service 2>/dev/null | grep -q eas-station-hardware.service; then
+        echo_progress "Retiring legacy eas-station-hardware.service (replaced by hardware.target)..."
+        systemctl stop eas-station-hardware.service 2>/dev/null || true
+        systemctl disable eas-station-hardware.service 2>/dev/null || true
+        rm -f "$LEGACY_HW_UNIT"
+        echo_success "Legacy monolithic hardware unit removed"
+    fi
+
     systemctl daemon-reload
     echo_success "Service files updated"
+
+    # Enable + start the five Phase 4 per-subsystem units and the target that
+    # bundles them. enable --now is idempotent for already-enabled units, so
+    # this is safe to re-run on every update. Enable units first so the
+    # target's Wants= can resolve them.
+    echo_progress "Enabling Phase 4 hardware subsystem units..."
+    for unit in eas-station-network.service \
+                eas-station-zigbee.service \
+                eas-station-gps.service \
+                eas-station-displays.service \
+                eas-station-gpio.service; do
+        if ! systemctl enable --now "$unit" >/dev/null 2>&1; then
+            echo_warning "$unit failed to enable — check 'sudo systemctl status $unit'"
+        fi
+    done
+    systemctl enable --now eas-station-hardware.target >/dev/null 2>&1 || \
+        echo_warning "eas-station-hardware.target failed to enable"
+
+    # Give the subsystems a beat to come up before we judge the target.
+    sleep 2
+    if systemctl is-active --quiet eas-station-hardware.target; then
+        echo_success "eas-station-hardware.target is active"
+    else
+        echo_error "eas-station-hardware.target is not active — aborting update"
+        echo_info "Diagnose with: sudo systemctl status eas-station-hardware.target"
+        echo_info "Per-subsystem logs: sudo journalctl -u eas-station-{network,zigbee,gps,displays,gpio}.service -n 50"
+        exit 1
+    fi
 
     # Ensure eas-station-hwsetup.service (the privileged GPS HAT setup
     # helper) is enabled and active on existing installs that predate it.
@@ -1143,7 +1184,10 @@ echo_progress "Starting all EAS Station services with updated code..."
 # be restarted by 'systemctl restart eas-station.target' unless reset first.
 echo_progress "Resetting any failed EAS Station service units..."
 for svc in eas-station-web.service eas-station-audio.service eas-station-eas.service \
-            eas-station-sdr.service eas-station-hardware.service eas-station-poller.service; do
+            eas-station-sdr.service eas-station-network.service \
+            eas-station-zigbee.service eas-station-gps.service \
+            eas-station-displays.service eas-station-gpio.service \
+            eas-station-poller.service; do
     systemctl reset-failed "$svc" 2>/dev/null || true
 done
 echo_success "Failed service states cleared"
