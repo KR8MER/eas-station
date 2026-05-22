@@ -1,6 +1,6 @@
 # ⚖️ Terms of Use
 
-_Last updated: April 13, 2026_
+_Last updated: May 22, 2026_
 
 > **Critical Safety Notice:** EAS Station is experimental software. It must not be used for life-safety, mission-critical, or FCC-mandated alerting. Commercially certified EAS equipment remains the only acceptable solution for regulatory compliance.
 
@@ -29,6 +29,15 @@ _Last updated: April 13, 2026_
 - Do not use the project for any malicious, unlawful, deceptive, surveillance, harassment, or disruptive purpose—including denial of service, spoofing, jamming, or unauthorized interception of communications.
 - You are solely responsible for restricting access to your deployment and for any downstream impacts caused by third parties who use, repurpose, or chain this software into other tools.
 - Retain attribution to the project and respect the licenses of any incorporated open-source dependencies.
+
+## 4c. Real Operational Semantics Only — No Fictional or Entertainment Use
+EAS Station is intended to faithfully model the **actual operational semantics** of certified EAS encoder/decoder equipment — the same SAME header structure, attention-tone characteristics, EOM behavior, relay-cascade logic, and timing tolerances that live broadcast hardware implements. That fidelity is what makes the project useful for research, training, amateur-radio experimentation, and standards work, and it is also what makes the project unsuitable as a content-creation toolkit. You agree that:
+
+- **Do not author fictional, fabricated, satirical, dramatized, or "what-if" EAS workflows or alert content.** That includes invented event codes, invented FIPS/SAME area combinations, joke alert text, parody RWT/RMT cycles, mock CAP feeds with non-real events, or any "imagined" alert scenario presented as if it were a real EAS message — whether for fun, demonstration, social media, or storytelling.
+- **Do not use the software, its audio output, its dashboards, its logs, or any derivative artifact in entertainment or media production.** This explicitly includes films, television, advertising, trailers, music videos, podcasts, streaming programming, video games, machinima, YouTube/TikTok/Reels/Shorts content, livestream stunts, prank or "creepypasta" content, ARGs (alternate-reality games), haunted-attraction sound design, theatrical performance, or any other dramatic or promotional work.
+- **Intent and labeling do not cure the violation.** Content clearly labeled as fiction has already triggered real EAS equipment in the real world (see the *Olympus Has Fallen* trailer enforcement action in Section 4b, Case 2). 47 C.F.R. § 11.45 prohibits broadcast of EAS codes and the Attention Signal outside actual emergencies and authorized tests **regardless of intent**, and the cascade-relay design of the EAS network does not distinguish between a "fictional" SAME header and a real one.
+- **The project models real EAS semantics; it does not manufacture EAS-styled content.** Training exercises, RWT/RMT messages, and amateur-radio drills authorized under FCC Part 97 must use lawfully assignable event codes, lawfully assignable origin/area information, and must remain confined to the controlled environments described in Sections 1, 2, and 4. They are operational exercises, not creative output.
+- **You are responsible for downstream use of any audio, header, or capture produced with this software.** If you publish such an artifact in any setting where it could be received, demodulated, or relayed by a third party — including upload to a public host that a streaming or broadcast workflow could later pull from — you assume full responsibility for the resulting enforcement exposure.
 
 ## 4a. Criminal Liability & Federal Law Violations
 

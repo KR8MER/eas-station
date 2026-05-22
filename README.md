@@ -355,6 +355,7 @@ See the [Contributing Guide](docs/process/CONTRIBUTING.md) and the [Code Standar
 >
 > - **Not FCC-certified** — for laboratory, research, and training use only.
 > - **Never connect to on-air infrastructure** without explicit authorization.
+> - **Real operational semantics only — no fictional or entertainment use.** EAS Station™ is built to emulate the *actual* behavior of certified EAS encoder/decoder equipment for research, training, and Part 97 amateur-radio experimentation. It is **not** a content-creation toolkit. Do **not** use it to author fictional or fabricated EAS workflows (invented event codes, mock CAP feeds presented as real, joke RWT/RMT cycles, "what-if" alert scenarios) and do **not** use its output in films, TV, trailers, advertising, podcasts, streaming, video games, livestream stunts, prank/creepypasta content, ARGs, or any other entertainment or media production. Labeling content as fiction does **not** cure the violation — 47 C.F.R. § 11.45 applies regardless of intent (see the *Olympus Has Fallen* trailer case below).
 > - Unauthorized broadcast has real consequences: iHeartMedia paid a [$1M settlement](https://docs.fcc.gov/public/attachments/DA-15-199A1.pdf) (2015); the *Olympus Has Fallen* trailer misuse cost [$1.9M](https://docs.fcc.gov/public/attachments/DA-14-1097A1.pdf).
 > - The maintainer will cooperate fully with authorities against any misuse.
 
