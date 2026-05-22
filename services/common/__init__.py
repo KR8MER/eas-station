@@ -27,7 +27,13 @@ from services.common.bootstrap import (
     load_environment,
     get_redis,
 )
-from services.common.metrics import publish_hardware_metrics
+from services.common.metrics import (
+    publish_displays_metrics,
+    publish_gpio_metrics,
+    publish_gps_metrics,
+    publish_network_metrics,
+    publish_zigbee_metrics,
+)
 
 __all__ = [
     "configure_logging",
@@ -36,5 +42,9 @@ __all__ = [
     "install_signal_handlers",
     "load_environment",
     "get_redis",
-    "publish_hardware_metrics",
+    "publish_displays_metrics",
+    "publish_gpio_metrics",
+    "publish_gps_metrics",
+    "publish_network_metrics",
+    "publish_zigbee_metrics",
 ]

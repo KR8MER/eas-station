@@ -1143,7 +1143,10 @@ echo_progress "Starting all EAS Station services with updated code..."
 # be restarted by 'systemctl restart eas-station.target' unless reset first.
 echo_progress "Resetting any failed EAS Station service units..."
 for svc in eas-station-web.service eas-station-audio.service eas-station-eas.service \
-            eas-station-sdr.service eas-station-hardware.service eas-station-poller.service; do
+            eas-station-sdr.service eas-station-network.service \
+            eas-station-zigbee.service eas-station-gps.service \
+            eas-station-displays.service eas-station-gpio.service \
+            eas-station-poller.service; do
     systemctl reset-failed "$svc" 2>/dev/null || true
 done
 echo_success "Failed service states cleared"

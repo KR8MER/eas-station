@@ -31,9 +31,11 @@ Operator workflow
 -----------------
 On the host where the leak is occurring::
 
-    # find the pid
-    systemctl status eas-hardware.service | grep PID
-    # or: pgrep -af hardware_service.py
+    # find the pid (Phase 4: pick the subsystem service you suspect — the
+    # monolithic eas-hardware.service has been replaced by per-subsystem
+    # units network/zigbee/gps/displays/gpio)
+    systemctl status eas-station-gps.service | grep PID
+    # or: pgrep -af "python -m services.gps"
 
     # snapshot top allocators
     kill -USR1 <pid>

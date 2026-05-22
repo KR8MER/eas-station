@@ -91,8 +91,17 @@ eas-station ALL=(ALL) NOPASSWD: /usr/bin/systemctl status icecast2
 eas-station ALL=(ALL) NOPASSWD: /usr/bin/systemctl status icecast
 
 # EAS Station service management (required for Hardware Settings restart button and web UI service control)
-# Hardware service restart is triggered after saving hardware settings (GPIO, OLED, Zigbee, displays)
-eas-station ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart eas-station-hardware.service
+# Hardware target restart bounces the five per-subsystem hardware units
+# (network/zigbee/gps/displays/gpio) that replaced eas-station-hardware.service
+# in Phase 4 of the hardware_service.py split.  The individual unit entries
+# are kept so an operator can restart a single subsystem from the CLI without
+# bouncing every hardware-side process.
+eas-station ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart eas-station-hardware.target
+eas-station ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart eas-station-network.service
+eas-station ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart eas-station-zigbee.service
+eas-station ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart eas-station-gps.service
+eas-station ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart eas-station-displays.service
+eas-station ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart eas-station-gpio.service
 eas-station ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart eas-station-web.service
 eas-station ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart eas-station-poller.service
 eas-station ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart eas-station-sdr.service

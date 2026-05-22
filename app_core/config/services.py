@@ -31,12 +31,20 @@ from typing import List
 SERVICE_PREFIX = os.environ.get('EAS_SERVICE_PREFIX', 'eas-station')
 
 # Core EAS Station services
+# The hardware subsystem split (Phase 4) replaced the single
+# eas-station-hardware.service unit with five per-subsystem units bundled
+# under eas-station-hardware.target so a Zigbee dongle hang or a GPS
+# serial-port wedge can't take down OLED rendering or network config.
 EAS_SERVICES = [
     f'{SERVICE_PREFIX}-web.service',
     f'{SERVICE_PREFIX}-sdr.service',
     f'{SERVICE_PREFIX}-audio.service',
     f'{SERVICE_PREFIX}-eas.service',
-    f'{SERVICE_PREFIX}-hardware.service',
+    f'{SERVICE_PREFIX}-network.service',
+    f'{SERVICE_PREFIX}-zigbee.service',
+    f'{SERVICE_PREFIX}-gps.service',
+    f'{SERVICE_PREFIX}-displays.service',
+    f'{SERVICE_PREFIX}-gpio.service',
 ]
 
 # Poller services (Unified poller for NOAA + IPAWS)
@@ -81,12 +89,56 @@ def get_audio_service() -> str:
 
 
 def get_hardware_service() -> str:
-    """Get the hardware service name."""
-    return f'{SERVICE_PREFIX}-hardware.service'
+    """Get the hardware service target name.
+
+    Returns the systemd *target* that bundles the five per-subsystem
+    hardware units (network/zigbee/gps/displays/gpio).  Used by
+    operator-facing 'restart hardware' actions so they bounce every
+    subsystem at once.
+    """
+    return f'{SERVICE_PREFIX}-hardware.target'
 
 
-# Service URLs (all with environment variable overrides)
-HARDWARE_SERVICE_URL = os.environ.get('HARDWARE_SERVICE_URL', 'http://127.0.0.1:5001')
+def get_network_service() -> str:
+    """Get the network subsystem service name (nmcli proxy, port 5101)."""
+    return f'{SERVICE_PREFIX}-network.service'
+
+
+def get_zigbee_service() -> str:
+    """Get the Zigbee subsystem service name (zigpy controller, port 5102)."""
+    return f'{SERVICE_PREFIX}-zigbee.service'
+
+
+def get_gps_service() -> str:
+    """Get the GPS subsystem service name (GPS manager + trends, port 5103)."""
+    return f'{SERVICE_PREFIX}-gps.service'
+
+
+def get_displays_service() -> str:
+    """Get the displays subsystem service name (OLED/LED/VFD, port 5104)."""
+    return f'{SERVICE_PREFIX}-displays.service'
+
+
+def get_gpio_service() -> str:
+    """Get the GPIO subsystem service name (relays + indicators, port 5105)."""
+    return f'{SERVICE_PREFIX}-gpio.service'
+
+
+# Service URLs (all with environment variable overrides).
+#
+# The hardware subsystem was split into per-process units in Phase 4 of
+# the hardware_service.py split; each subsystem now listens on its own
+# port so a Zigbee dongle hang can't block OLED rendering.
+#   * 5101  network    (nmcli proxy)
+#   * 5102  zigbee     (zigpy controller + join window)
+#   * 5103  gps        (GPS manager + trend archive)
+#   * 5104  displays   (OLED/LED/VFD push endpoint)
+#   * 5105  gpio       (relays + alert indicators — no HTTP API beyond /health)
+NETWORK_SERVICE_URL = os.environ.get('NETWORK_SERVICE_URL', 'http://127.0.0.1:5101')
+ZIGBEE_SERVICE_URL = os.environ.get('ZIGBEE_SERVICE_URL', 'http://127.0.0.1:5102')
+GPS_SERVICE_URL = os.environ.get('GPS_SERVICE_URL', 'http://127.0.0.1:5103')
+DISPLAYS_SERVICE_URL = os.environ.get('DISPLAYS_SERVICE_URL', 'http://127.0.0.1:5104')
+GPIO_SERVICE_URL = os.environ.get('GPIO_SERVICE_URL', 'http://127.0.0.1:5105')
 AUDIO_SERVICE_URL = os.environ.get('AUDIO_SERVICE_URL', 'http://127.0.0.1:5002')
 SDR_SERVICE_URL = os.environ.get('SDR_SERVICE_URL', 'http://127.0.0.1:5003')
 REDIS_URL = os.environ.get('REDIS_URL', 'redis://127.0.0.1:6379/0')

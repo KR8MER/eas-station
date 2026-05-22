@@ -45,8 +45,10 @@ closures and tier transitions.
 
 This module is a pure library — the trend ring state (``redis_client``,
 ``last_bucket_ids``) is owned by the caller and passed in explicitly so
-the orchestrator (``hardware_service.py``) can manage process-wide
-lifetime without us reaching into its globals.
+the GPS subsystem subprocess (``services/gps/__main__.py``) can manage
+process-wide lifetime without us reaching into its globals.  Phase 4
+of the hardware_service.py split moved the only call site into that
+subprocess.
 """
 
 import json

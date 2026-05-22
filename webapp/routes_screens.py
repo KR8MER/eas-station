@@ -30,6 +30,7 @@ from flask import Flask, jsonify, render_template, request
 from sqlalchemy.exc import IntegrityError
 
 from app_core.auth.decorators import require_auth, require_role
+from app_core.config import DISPLAYS_SERVICE_URL
 from app_core.extensions import db
 from app_core.models import DisplayScreen, ScreenRotation
 from app_utils import utc_now
@@ -335,12 +336,13 @@ def register(app: Flask, logger) -> None:
     @require_auth
     @require_role("Admin", "Operator")
     def display_screen_now(screen_id: int):
-        """Display a screen immediately by proxying to eas-station-hardware.service.
+        """Display a screen immediately by proxying to eas-station-displays.service.
 
-        All physical display access (OLED/LED/VFD) is delegated to the hardware
-        service (port 5001).  The web worker must never open I2C/GPIO/serial
-        device nodes directly: blocking ioctl() calls stall the gevent event
-        loop and can deadlock with the hardware service's own I2C session.
+        All physical display access (OLED/LED/VFD) is delegated to the
+        displays subsystem (port 5104, Phase 4 of the hardware_service.py
+        split).  The web worker must never open I2C/GPIO/serial device
+        nodes directly: blocking ioctl() calls stall the gevent event loop
+        and can deadlock with the displays service's own I2C session.
         """
         try:
             screen = DisplayScreen.query.get(screen_id)
@@ -348,8 +350,8 @@ def register(app: Flask, logger) -> None:
             if not screen:
                 return jsonify({"error": "Screen not found"}), 404
 
-            # Proxy the push request to the hardware service.
-            hw_url = "http://127.0.0.1:5001/api/hardware/display/push"
+            # Proxy the push request to the displays subsystem service.
+            hw_url = f"{DISPLAYS_SERVICE_URL}/api/hardware/display/push"
             payload = json.dumps({"screen_id": screen_id}).encode()
             hw_req = urllib.request.Request(
                 hw_url,
@@ -377,8 +379,8 @@ def register(app: Flask, logger) -> None:
                     "Hardware service unavailable at %s: %s", hw_url, exc)
                 return jsonify({
                     "error": (
-                        "Hardware service (eas-station-hardware.service) is not reachable. "
-                        "Ensure it is running: sudo systemctl start eas-station-hardware.service"
+                        "Displays service (eas-station-displays.service) is not reachable. "
+                        "Ensure it is running: sudo systemctl start eas-station-displays.service"
                     )
                 }), 503
 
@@ -641,23 +643,23 @@ def register(app: Flask, logger) -> None:
     def get_displays_current_state():
         """Get the current state of all displays.
 
-        Display state is published to Redis by eas-station-hardware.service.
+        Display state is published to Redis by eas-station-displays.service.
         The web worker reads from Redis only — it must never open I2C/GPIO/serial
         device nodes directly (see display_screen_now() for the reasoning).
         """
         try:
-            # Read display state from Redis (published by hardware-service).
+            # Read display state from Redis (published by the displays subsystem).
             try:
                 from app_core.redis_client import get_redis_client
                 redis_client = get_redis_client()
                 display_state_json = redis_client.get("hardware:display_state")
                 if display_state_json:
                     state = json.loads(display_state_json)
-                    route_logger.debug("Display state retrieved from Redis (hardware-service)")
+                    route_logger.debug("Display state retrieved from Redis (displays subsystem)")
                     return jsonify(state)
                 else:
                     route_logger.warning(
-                        "No display state in Redis — eas-station-hardware.service may not be running"
+                        "No display state in Redis — eas-station-displays.service may not be running"
                     )
             except Exception as e:
                 route_logger.warning("Failed to get display state from Redis: %s", e)

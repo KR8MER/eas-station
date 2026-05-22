@@ -779,15 +779,16 @@ else:
 #   1. The 30-fps OLED scroll loop issues blocking I2C ioctl() calls that
 #      gevent cannot yield around, so the event loop stalls and every request
 #      from that worker hangs → 504 Gateway Timeout.
-#   2. Both the web worker and eas-station-hardware.service hold the kernel
+#   2. Both the web worker and eas-station-displays.service hold the kernel
 #      I2C DesignWare mutex simultaneously → rt_mutex_schedule deadlock, the
 #      worker is stuck at the kernel level and can never recover without a
 #      service restart.
 #
 # Web routes that need to push a screen to a display proxy the request to the
-# hardware service REST API on port 5001
-# (POST /api/hardware/display/push, handled by hardware_service.py).
-logger.info('Display hardware managed by eas-station-hardware.service (not started in web worker)')
+# displays subsystem REST API on port 5104
+# (POST /api/hardware/display/push, handled by services.displays subprocess —
+# Phase 4 of the hardware_service.py split).
+logger.info('Display hardware managed by eas-station-displays.service (not started in web worker)')
 
 # Start RWT (Required Weekly Test) scheduler
 if not skip_background_services:

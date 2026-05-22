@@ -793,10 +793,14 @@ def restart_services():
     This endpoint allows restarting specific services or the entire stack
     without requiring CLI access.
     """
-    # Whitelist of allowed service names for security
+    # Whitelist of allowed service names for security.
+    # ``hardware`` resolves to the *target* that bundles the five
+    # per-subsystem hardware units split out in Phase 4
+    # (network/zigbee/gps/displays/gpio) so existing operator UI
+    # actions keep working without knowing about the split.
     ALLOWED_SERVICES = {
         'all': 'eas-station.target',
-        'hardware': 'eas-station-hardware.service',
+        'hardware': 'eas-station-hardware.target',
         'web': 'eas-station-web.service',
         'poller': 'eas-station-poller.service',
         'sdr': 'eas-station-sdr.service',

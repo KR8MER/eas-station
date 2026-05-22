@@ -608,9 +608,11 @@ def update_hardware():
 def restart_hardware_services():
     """Restart hardware-related services to apply new settings."""
     try:
-        # Restart only the hardware service (GPIO, OLED, Zigbee, displays)
+        # Restart the hardware target, which bundles all five per-subsystem
+        # units (network / zigbee / gps / displays / gpio) so the operator
+        # can bounce every hardware-side process with one click.
         result = subprocess.run(
-            ['sudo', 'systemctl', 'restart', 'eas-station-hardware.service'],
+            ['sudo', 'systemctl', 'restart', 'eas-station-hardware.target'],
             capture_output=True,
             text=True,
             timeout=30,

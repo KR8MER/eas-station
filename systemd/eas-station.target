@@ -4,12 +4,15 @@ Documentation=https://github.com/KR8MER/eas-station
 Wants=postgresql.service redis.service nginx.service
 After=postgresql.service redis.service nginx.service
 
-# This target starts all EAS Station services together
+# This target starts all EAS Station services together.
+# eas-station-hardware.target itself bundles the five per-subsystem
+# hardware units (network/zigbee/gps/displays/gpio) split out in
+# Phase 4 of the hardware_service.py split.
 Wants=eas-station-web.service \
       eas-station-sdr.service \
       eas-station-audio.service \
       eas-station-eas.service \
-      eas-station-hardware.service \
+      eas-station-hardware.target \
       eas-station-poller.service \
       eas-station-hwsetup.service
 
