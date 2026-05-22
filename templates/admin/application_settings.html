@@ -77,6 +77,20 @@
                                 A service restart is required for this change to take effect.
                             </div>
                         </div>
+
+                        <div class="mb-3">
+                            <label for="backup_dir" class="form-label">
+                                <i class="fas fa-database"></i> Backup Directory
+                            </label>
+                            <input type="text" class="form-control" id="backup_dir" name="backup_dir"
+                                   value="{{ settings.backup_dir }}"
+                                   placeholder="/var/backups/eas-station" required>
+                            <div class="form-text">
+                                Absolute path where database, configuration, and media backups are stored.
+                                The service user must have write permission to this directory.
+                                Changes take effect on the next backup &mdash; no restart required.
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -207,6 +221,10 @@
                             <small class="text-muted" id="uploadFolderDisplay">{{ settings.upload_folder }}</small>
                         </li>
                         <li class="mb-2">
+                            <strong>Backup Directory:</strong>
+                            <small class="text-muted" id="backupDirDisplay">{{ settings.backup_dir }}</small>
+                        </li>
+                        <li class="mb-2">
                             <strong>Min Password Length:</strong>
                             <span class="badge bg-info" id="pwMinLengthBadge">{{ settings.password_min_length or 8 }}</span>
                         </li>
@@ -272,6 +290,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 document.getElementById('logLevelBadge').textContent = s.log_level;
                 document.getElementById('logFileDisplay').textContent = s.log_file;
                 document.getElementById('uploadFolderDisplay').textContent = s.upload_folder;
+                document.getElementById('backupDirDisplay').textContent = s.backup_dir;
                 document.getElementById('pwMinLengthBadge').textContent = s.password_min_length;
                 if (s.updated_at) {
                     document.getElementById('lastUpdated').textContent = new Date(s.updated_at).toLocaleString();

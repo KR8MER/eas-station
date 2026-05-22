@@ -46,6 +46,7 @@ def _get_or_create_settings() -> ApplicationSettings:
             log_level='INFO',
             log_file='logs/eas_station.log',
             upload_folder='/opt/eas-station/uploads',
+            backup_dir='/var/backups/eas-station',
             password_min_length=8,
             password_require_uppercase=False,
             password_require_lowercase=False,
@@ -65,6 +66,7 @@ def _fallback_application_settings():
         log_level='INFO',
         log_file='logs/eas_station.log',
         upload_folder='/opt/eas-station/uploads',
+        backup_dir='/var/backups/eas-station',
         password_min_length=8,
         password_require_uppercase=False,
         password_require_lowercase=False,
@@ -124,6 +126,11 @@ def update_application_settings():
             return jsonify({'success': False, 'error': 'Upload folder path is required'}), 400
         settings.upload_folder = upload_folder
 
+        backup_dir = request.form.get('backup_dir', '').strip()
+        if not backup_dir:
+            return jsonify({'success': False, 'error': 'Backup directory path is required'}), 400
+        settings.backup_dir = backup_dir
+
         # Password policy
         try:
             min_length = int(request.form.get('password_min_length', 8))
@@ -151,10 +158,14 @@ def update_application_settings():
         import logging as _logging
         numeric_level = getattr(_logging, settings.log_level, _logging.INFO)
         _logging.getLogger().setLevel(numeric_level)
+        # Propagate backup_dir to the live Flask config so the next backup uses
+        # the new path without requiring a restart.
+        from flask import current_app
+        current_app.config['BACKUP_DIR'] = settings.backup_dir
         logger.info(
-            "Updated application settings: log_level=%s, log_file=%s, upload_folder=%s, "
+            "Updated application settings: log_level=%s, log_file=%s, upload_folder=%s, backup_dir=%s, "
             "password_min_length=%d, require_upper=%s, require_lower=%s, require_digits=%s, require_special=%s",
-            settings.log_level, settings.log_file, settings.upload_folder,
+            settings.log_level, settings.log_file, settings.upload_folder, settings.backup_dir,
             settings.password_min_length, settings.password_require_uppercase,
             settings.password_require_lowercase, settings.password_require_digits,
             settings.password_require_special,

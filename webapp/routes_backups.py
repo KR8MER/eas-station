@@ -40,8 +40,23 @@ def register(app: Flask, logger) -> None:
     route_logger = logger.getChild("routes_backups")
 
     def get_backup_dir() -> Path:
-        """Get configured backup directory."""
-        backup_path = app.config.get("BACKUP_DIR", "/var/backups/eas-station")
+        """Get configured backup directory.
+
+        Reads the DB-backed ApplicationSettings row first so changes from
+        the admin UI take effect on the next request without a restart,
+        then falls back to ``app.config['BACKUP_DIR']`` (populated at
+        startup) and finally to the hardcoded default.
+        """
+        backup_path = None
+        try:
+            from app_core.models import ApplicationSettings
+            settings_row = ApplicationSettings.query.first()
+            if settings_row and getattr(settings_row, "backup_dir", None):
+                backup_path = settings_row.backup_dir
+        except Exception as exc:
+            route_logger.debug("Falling back to app.config BACKUP_DIR: %s", exc)
+        if not backup_path:
+            backup_path = app.config.get("BACKUP_DIR", "/var/backups/eas-station")
         return Path(backup_path)
 
     def resolve_backup_path(backup_name: str) -> Path:
@@ -205,7 +220,20 @@ def register(app: Flask, logger) -> None:
 
         route_logger.info(f"Creating backup with label '{label}'")
 
-        args = ["--output-dir", str(get_backup_dir()), "--label", label]
+        backup_dir = get_backup_dir()
+        try:
+            backup_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            return error_response(
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+                "Backup directory is not writable",
+                detail=(
+                    f"Cannot write to {backup_dir} ({exc}). "
+                    "Change the Backup Directory in Application Settings to a writable path."
+                ),
+            )
+
+        args = ["--output-dir", str(backup_dir), "--label", label]
         if not include_media:
             args.append("--no-media")
         if not include_volumes:

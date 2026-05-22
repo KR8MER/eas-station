@@ -711,9 +711,15 @@ def _load_db_settings_into_config() -> None:
                 app.config['LOG_LEVEL'] = app_settings.log_level
                 app.config['LOG_FILE'] = app_settings.log_file
                 app.config['UPLOAD_FOLDER'] = app_settings.upload_folder
+                # backup_dir is the DB-backed replacement for the BACKUP_DIR
+                # env var.  Tolerate older rows that pre-date the column.
+                _backup_dir = getattr(app_settings, 'backup_dir', None)
+                if _backup_dir:
+                    app.config['BACKUP_DIR'] = _backup_dir
                 logger.info(
-                    "Loaded application settings from DB: log_level=%s, upload_folder=%s",
+                    "Loaded application settings from DB: log_level=%s, upload_folder=%s, backup_dir=%s",
                     app_settings.log_level, app_settings.upload_folder,
+                    app.config.get('BACKUP_DIR'),
                 )
 
     except Exception as _exc:
