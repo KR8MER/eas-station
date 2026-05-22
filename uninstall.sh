@@ -105,7 +105,16 @@ systemctl stop eas-station-web.service 2>/dev/null || true
 systemctl stop eas-station-eas.service 2>/dev/null || true
 systemctl stop eas-station-audio.service 2>/dev/null || true
 systemctl stop eas-station-sdr.service 2>/dev/null || true
+# Phase 4 replaced eas-station-hardware.service with five per-subsystem
+# units bundled under eas-station-hardware.target; stop both the legacy
+# unit (in case of an older install) and the new ones via the target.
 systemctl stop eas-station-hardware.service 2>/dev/null || true
+systemctl stop eas-station-hardware.target 2>/dev/null || true
+systemctl stop eas-station-network.service 2>/dev/null || true
+systemctl stop eas-station-zigbee.service 2>/dev/null || true
+systemctl stop eas-station-gps.service 2>/dev/null || true
+systemctl stop eas-station-displays.service 2>/dev/null || true
+systemctl stop eas-station-gpio.service 2>/dev/null || true
 systemctl stop eas-station-ipaws-poller.service 2>/dev/null || true
 systemctl stop eas-station-noaa-poller.service 2>/dev/null || true
 echo_success "Services stopped"
@@ -118,6 +127,12 @@ systemctl disable eas-station-eas.service 2>/dev/null || true
 systemctl disable eas-station-audio.service 2>/dev/null || true
 systemctl disable eas-station-sdr.service 2>/dev/null || true
 systemctl disable eas-station-hardware.service 2>/dev/null || true
+systemctl disable eas-station-hardware.target 2>/dev/null || true
+systemctl disable eas-station-network.service 2>/dev/null || true
+systemctl disable eas-station-zigbee.service 2>/dev/null || true
+systemctl disable eas-station-gps.service 2>/dev/null || true
+systemctl disable eas-station-displays.service 2>/dev/null || true
+systemctl disable eas-station-gpio.service 2>/dev/null || true
 systemctl disable eas-station-ipaws-poller.service 2>/dev/null || true
 systemctl disable eas-station-noaa-poller.service 2>/dev/null || true
 echo_success "Services disabled"
@@ -125,6 +140,7 @@ echo_success "Services disabled"
 # Remove systemd service files
 echo_info "Removing systemd service files..."
 rm -f ${SYSTEMD_DIR}/eas-station.target
+rm -f ${SYSTEMD_DIR}/eas-station-hardware.target
 rm -f ${SYSTEMD_DIR}/eas-station-*.service
 systemctl daemon-reload
 echo_success "Systemd files removed"
