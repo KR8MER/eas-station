@@ -51,11 +51,14 @@ from services.common import (
 )
 from services.gps import (
     GPS_TRENDS_INTERVAL_S,
+    EventDetector,
     create_blueprint,
     initialize_gps_manager,
     new_last_bucket_ids,
+    publish_events,
 )
 from services.gps import trends as _gps_trends
+from services.gps.trends import collect_chrony_tracking
 
 PORT = 5103
 SUBSYSTEM = "gps"
@@ -70,6 +73,12 @@ _redis_client = None
 # hardware_service.py; now lives here so the GPS subprocess owns the
 # only copy.  See services.gps.trends.emit_rollups for the semantics.
 _gps_trend_last_bucket_ids = new_last_bucket_ids()
+
+# Server-side equivalent of the JS detectEvents() that used to populate
+# the dashboard's Events & Alarms panel.  Runs on every trend tick so
+# state-change events get logged even when no browser is open; the
+# dashboard hydrates from Redis on page load.
+_event_detector = EventDetector()
 
 
 def _on_shutdown_signal(signum: int) -> None:
@@ -186,6 +195,23 @@ def main() -> None:
                 _gps_trends.publish_sample(
                     _redis_client, _gps_manager, _gps_trend_last_bucket_ids
                 )
+                # State-change events run on the same cadence as trend
+                # samples.  Build a snapshot in the same shape the
+                # dashboard sees so the detector logic stays a 1:1 port
+                # of the JS version it replaces.
+                try:
+                    gps_status: Any = {}
+                    if _gps_manager is not None:
+                        gps_status = _gps_manager.get_status() or {}
+                    chrony_fields = collect_chrony_tracking() or {}
+                    snapshot = {
+                        "gps": gps_status,
+                        "chrony": {"tracking": chrony_fields},
+                    }
+                    new_events = _event_detector.detect(snapshot)
+                    publish_events(_redis_client, new_events)
+                except Exception as exc:
+                    logger.debug("Event detector tick failed: %s", exc)
                 last_sample = now
             if now - last_heartbeat >= HEARTBEAT_INTERVAL_S:
                 publish_gps_metrics(redis_client=_redis_client, gps_manager=_gps_manager)
