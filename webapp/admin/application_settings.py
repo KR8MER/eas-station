@@ -129,6 +129,26 @@ def update_application_settings():
         backup_dir = request.form.get('backup_dir', '').strip()
         if not backup_dir:
             return jsonify({'success': False, 'error': 'Backup directory path is required'}), 400
+        # Create the directory now (and confirm we can write to it) so the
+        # operator gets immediate feedback instead of a failure on the next
+        # backup attempt.  We don't fail the save if creation fails — the
+        # path may live on a mount that comes up later (USB, NFS) — but we
+        # surface the warning in the response.
+        from pathlib import Path
+        import os
+        backup_dir_warning = None
+        try:
+            Path(backup_dir).mkdir(parents=True, exist_ok=True)
+            if not os.access(backup_dir, os.W_OK):
+                backup_dir_warning = (
+                    f"Saved, but {backup_dir} is not writable by the service "
+                    "user. Backups will fail until permissions are fixed."
+                )
+        except OSError as exc:
+            backup_dir_warning = (
+                f"Saved, but could not create {backup_dir}: {exc}. "
+                "Backups will fail until the path exists and is writable."
+            )
         settings.backup_dir = backup_dir
 
         # Password policy
@@ -171,9 +191,14 @@ def update_application_settings():
             settings.password_require_special,
         )
 
+        message = 'Application settings updated successfully. Log level applied immediately.'
+        if backup_dir_warning:
+            message = f"{message} {backup_dir_warning}"
+            logger.warning("backup_dir save warning: %s", backup_dir_warning)
         return jsonify({
             'success': True,
-            'message': 'Application settings updated successfully. Log level applied immediately.',
+            'message': message,
+            'warning': backup_dir_warning,
             'settings': settings.to_dict(),
         })
 
