@@ -881,6 +881,10 @@ class ApplicationSettings(db.Model):
     upload_folder = db.Column(db.String(255), nullable=False, default='/opt/eas-station/uploads')
     # Directory for uploaded files
 
+    backup_dir = db.Column(db.String(255), nullable=False, default='/var/backups/eas-station')
+    # Directory where create_backup.py writes snapshots and where the
+    # auto-backup scheduler stores its config file.
+
     # ========================================================================
     # Password Policy
     # ========================================================================
@@ -913,6 +917,7 @@ class ApplicationSettings(db.Model):
             "log_level": self.log_level,
             "log_file": self.log_file,
             "upload_folder": self.upload_folder,
+            "backup_dir": self.backup_dir,
             "password_min_length": self.password_min_length,
             "password_require_uppercase": self.password_require_uppercase,
             "password_require_lowercase": self.password_require_lowercase,
