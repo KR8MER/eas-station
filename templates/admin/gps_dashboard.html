@@ -3620,11 +3620,17 @@
         setTileSeverity(uEl, uSev);
         if (uEl) uEl.querySelector('.metric-val').textContent = (pct !== null) ? pct + '%' : '—';
 
-        // Stability (Allan dev at τ=10s).
+        // Stability (Allan dev at τ=10s).  Severity ladder mirrors the
+        // 5-bucket healthy-range table in the help popover
+        // ('stability-tau10'): excellent/good/acceptable all collapse
+        // to ok, watch → warn, bad → fault.  The previous thresholds
+        // started warning at 1e-9 and faulting at 1e-7, which was a
+        // decade tighter than the documented ranges and painted
+        // perfectly normal watch-zone readings as faults.
         var sEl = document.getElementById('qm-stability');
         var sSev = (adev10 === null) ? 'unknown'
-                 : (adev10 <= 1e-9) ? 'ok'
-                 : (adev10 <= 1e-7) ? 'warn'
+                 : (adev10 <= 1e-7) ? 'ok'
+                 : (adev10 <= 1e-6) ? 'warn'
                  : 'fault';
         setTileSeverity(sEl, sSev);
         if (sEl) sEl.querySelector('.metric-val').textContent = (adev10 !== null) ? fmtAdev(adev10) : '—';
