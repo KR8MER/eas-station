@@ -307,6 +307,13 @@
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/core/api.js') }}"></script>
 <script>
+function escapeHtml(value) {
+    const s = (value == null) ? '' : String(value);
+    return s.replace(/[&<>"']/g, ch => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[ch]));
+}
+
 const ZigbeeMonitor = {
     refreshInterval: null,
 
@@ -403,8 +410,21 @@ const ZigbeeMonitor = {
         `;
 
         if (data.enabled) {
-            // Port status
+            // Port status — surface the actual underlying reason when the
+            // port isn't accessible, instead of just "Not Accessible".  The
+            // proxy in webapp/admin/zigbee.py returns one of:
+            //   • accessible: true                                  → OK
+            //   • accessible: false + error: "Cannot open port: …"  → permission / busy
+            //   • accessible: false + error: "Port does not exist"  → dongle unplugged
+            //   • success: false + error: "Cannot connect to …"    → zigbee subsystem down
+            // The last case in particular used to just read "Not Accessible"
+            // with no hint that the eas-station-zigbee.service subprocess
+            // wasn't running at all.
             const portStatus = data.port_status || {};
+            const portReason = (portStatus.error || portStatus.message || '').toString();
+            const portReasonHtml = portReason
+                ? `<div class="text-muted small mt-1" style="word-break: break-word;">${escapeHtml(portReason)}</div>`
+                : '';
             html += `
                 <div class="admin-stat-card">
                     <div class="stat-label">Serial Port</div>
@@ -413,6 +433,7 @@ const ZigbeeMonitor = {
                             <i class="fas fa-${portStatus.accessible ? 'check' : 'times'}"></i>
                             ${portStatus.accessible ? 'Accessible' : 'Not Accessible'}
                         </span>
+                        ${portReasonHtml}
                     </div>
                 </div>
             `;

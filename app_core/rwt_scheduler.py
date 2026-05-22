@@ -57,10 +57,16 @@ def compute_next_fire(
 
     Rules:
       * The fire time on a configured day is the start of the time window
-        (start_hour:start_minute, local time).
+        (start_hour:start_minute, local time).  We deliberately return
+        ``window_start`` even when ``now > window_start`` — the scheduler
+        thread evaluates the window every minute and will fire on the next
+        iteration, so the UI should show the operator-scheduled time rather
+        than a moving target that advances by one minute on every refresh
+        (which the previous ``max(now, window_start)`` formulation produced
+        and operators read as "the broadcast keeps getting pushed back").
       * If today is a configured day, the window has not closed, and an
         RWT hasn't already been sent successfully today, fire is today at
-        max(now, window-start).
+        ``window_start``.
       * If ``skip_until`` is set, dates on or before it are skipped.
       * Otherwise scan the next 14 days for the first configured weekday.
     """
@@ -107,12 +113,16 @@ def compute_next_fire(
             end_h, end_m, tzinfo=tz,
         )
         if offset == 0:
-            # Today: if we're past the window, move on; otherwise the
-            # scheduler fires at the next minute boundary >= max(now, window
-            # start), bounded by window end.
+            # Today: if we're past the window, the broadcast missed its
+            # slot — move on to the next configured day.  Otherwise return
+            # the operator-configured window start.  Previously this used
+            # ``max(now, window_start)`` which made the UI's "Next
+            # scheduled fire" timestamp advance by one minute on every
+            # refresh once we were inside the window — operators read
+            # that as the scheduler "pushing back" the broadcast.
             if now_local > window_end:
                 continue
-            return max(now_local.replace(second=0, microsecond=0), window_start)
+            return window_start
         return window_start
 
     return None
