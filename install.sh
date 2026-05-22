@@ -1297,6 +1297,17 @@ echo_progress "Creating log directory: ${BOLD}$LOG_DIR${NC}"
 mkdir -p "$LOG_DIR"
 chown -R "$SERVICE_USER:$SERVICE_GROUP" "$LOG_DIR"
 
+# Create state directory for the zigpy NCP database (zigbee.db).  The
+# zigbee unit declares StateDirectory=eas-station so systemd will also
+# create this on demand, but creating it explicitly here avoids the
+# 226/NAMESPACE crash loop on systemd versions that evaluate
+# ReadWritePaths= before StateDirectory=.
+STATE_DIR="/var/lib/eas-station"
+echo_progress "Creating state directory: ${BOLD}$STATE_DIR${NC}"
+mkdir -p "$STATE_DIR"
+chown -R "$SERVICE_USER:$SERVICE_GROUP" "$STATE_DIR"
+chmod 750 "$STATE_DIR"
+
 # Set ownership
 echo_progress "Setting file permissions..."
 chown -R "$SERVICE_USER:$SERVICE_GROUP" "$INSTALL_DIR"

@@ -14,6 +14,15 @@ Group=eas-station
 # covers all three.
 SupplementaryGroups=dialout
 
+# zigpy persists its NCP/network state in /var/lib/eas-station/zigbee.db
+# (see services/zigbee/coordinator.py — ZIGBEE_DB_PATH).  Declaring
+# StateDirectory= asks systemd to create /var/lib/eas-station owned by
+# User=/Group= before ExecStart, so the unit no longer fails with
+# 226/NAMESPACE on fresh installs where the directory doesn't yet exist
+# (ReadWritePaths= rejects missing directories under ProtectSystem=strict).
+StateDirectory=eas-station
+StateDirectoryMode=0750
+
 WorkingDirectory=/opt/eas-station
 Environment="PATH=/opt/eas-station/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 Environment="PYTHONPATH=/opt/eas-station"

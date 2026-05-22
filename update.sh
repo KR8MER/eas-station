@@ -1178,6 +1178,19 @@ mkdir -p "$LOG_DIR"
 chown -R "$SERVICE_USER:$SERVICE_GROUP" "$LOG_DIR"
 echo_success "Log directory ready: $LOG_DIR"
 
+# /var/lib/eas-station holds the zigpy NCP state database (zigbee.db).  The
+# zigbee unit declares StateDirectory=eas-station so systemd auto-creates
+# this on first start, but we mkdir it here too so the directory is in
+# place even on older systemd versions and so existing installs that hit
+# the crash loop ("226/NAMESPACE: /var/lib/eas-station: No such file or
+# directory") recover on the next update.
+STATE_DIR="/var/lib/eas-station"
+echo_progress "Ensuring state directory exists with correct ownership..."
+mkdir -p "$STATE_DIR"
+chown -R "$SERVICE_USER:$SERVICE_GROUP" "$STATE_DIR"
+chmod 750 "$STATE_DIR"
+echo_success "State directory ready: $STATE_DIR"
+
 echo_progress "Starting all EAS Station services with updated code..."
 # Reset any services that are in systemd 'failed' state before restarting.
 # A service that exceeded its start-limit burst enters 'failed' and will NOT
