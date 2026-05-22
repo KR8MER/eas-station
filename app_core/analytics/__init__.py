@@ -26,7 +26,12 @@ This module provides comprehensive analytics capabilities including:
 - Historical data analysis for compliance and system health
 """
 
-from app_core.analytics.models import MetricSnapshot, TrendRecord, AnomalyRecord
+from app_core.analytics.models import (
+    AnomalyRecord,
+    MetricSnapshot,
+    SystemMetricSample,
+    TrendRecord,
+)
 from app_core.analytics.aggregator import MetricsAggregator
 from app_core.analytics.trend_analyzer import TrendAnalyzer
 from app_core.analytics.anomaly_detector import AnomalyDetector
@@ -41,6 +46,7 @@ __all__ = [
     "MetricSnapshot",
     "TrendRecord",
     "AnomalyRecord",
+    "SystemMetricSample",
     "MetricsAggregator",
     "TrendAnalyzer",
     "AnomalyDetector",

@@ -649,6 +649,16 @@
             color: var(--text-muted);
             font-variant-numeric: tabular-nums;
         }
+        .trend-stat .trend-stat-spark {
+            margin-top: 0.4rem;
+            height: 28px;
+            width: 100%;
+        }
+        .trend-stat .trend-stat-spark canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
     </style>
 {% endblock %}
 
@@ -912,7 +922,7 @@
                 <div class="card perf-trends-card">
                     <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
                         <h5 class="mb-0"><i class="fas fa-chart-line section-icon"></i> Performance Trends</h5>
-                        <small class="text-muted" id="perf-trends-sample-info">live · 0 samples · 30s interval</small>
+                        <small class="text-muted" id="perf-trends-sample-info">loading history…</small>
                     </div>
                     <div class="card-body">
                         <div class="perf-trends-canvas-wrap">
@@ -923,21 +933,25 @@
                                 <div class="trend-stat-label"><span class="swatch" style="background:#6366f1"></span>CPU</div>
                                 <div class="trend-stat-value">--<span class="text-muted" style="font-size:0.7em">%</span></div>
                                 <div class="trend-stat-meta">avg -- · peak --</div>
+                                <div class="trend-stat-spark"><canvas data-sparkline="trend-cpu"></canvas></div>
                             </div>
                             <div class="trend-stat" id="trend-stat-memory">
                                 <div class="trend-stat-label"><span class="swatch" style="background:#10b981"></span>Memory</div>
                                 <div class="trend-stat-value">--<span class="text-muted" style="font-size:0.7em">%</span></div>
                                 <div class="trend-stat-meta">avg -- · peak --</div>
+                                <div class="trend-stat-spark"><canvas data-sparkline="trend-memory"></canvas></div>
                             </div>
                             <div class="trend-stat" id="trend-stat-load">
                                 <div class="trend-stat-label"><span class="swatch" style="background:#f59e0b"></span>Load (1m)</div>
                                 <div class="trend-stat-value">--</div>
                                 <div class="trend-stat-meta">avg -- · peak --</div>
+                                <div class="trend-stat-spark"><canvas data-sparkline="trend-load"></canvas></div>
                             </div>
                             <div class="trend-stat" id="trend-stat-temp">
                                 <div class="trend-stat-label"><span class="swatch" style="background:#ef4444"></span>Temperature</div>
                                 <div class="trend-stat-value">--<span class="text-muted" style="font-size:0.7em">°C</span></div>
                                 <div class="trend-stat-meta">avg -- · peak --</div>
+                                <div class="trend-stat-spark"><canvas data-sparkline="trend-temp"></canvas></div>
                             </div>
                         </div>
                     </div>
@@ -4676,7 +4690,13 @@
         }
 
         /* ── Rolling history, sparklines, and Performance Trends chart ── */
-        const HISTORY_MAX = 60;
+        // Capped at a comfortable upper bound; the actual length is driven
+        // by what the server returns from /api/system_health/history (which
+        // downsamples long ranges to ~300 points) plus live samples appended
+        // on each refresh.
+        const HISTORY_MAX = 600;
+        const HISTORY_RANGE = '24h';     // default window to backfill on load
+        const HISTORY_POINTS = 300;       // server-side downsample target
         const trendHistory = {
             timestamps: [],
             cpu: [],
@@ -4686,6 +4706,7 @@
             temperature: []
         };
         let perfTrendsChart = null;
+        let historySeeded = false;
 
         function pickRootStoragePct(disk) {
             if (!Array.isArray(disk)) return null;
@@ -4902,6 +4923,69 @@
                 trendHistory.storage, { color: diskColor, min: 0, max: 100 });
             renderSparkline(document.querySelector('canvas[data-sparkline="load"]'),
                 trendHistory.load, { color: loadColor });
+
+            // Inline sparklines under each Performance Trends summary tile —
+            // share the same series as the big chart so they always agree.
+            const tempColor = getColorVar('--danger-color') || '#ef4444';
+            renderSparkline(document.querySelector('canvas[data-sparkline="trend-cpu"]'),
+                trendHistory.cpu, { color: cpuColor, min: 0, max: 100 });
+            renderSparkline(document.querySelector('canvas[data-sparkline="trend-memory"]'),
+                trendHistory.memory, { color: memColor, min: 0, max: 100 });
+            renderSparkline(document.querySelector('canvas[data-sparkline="trend-load"]'),
+                trendHistory.load, { color: loadColor });
+            renderSparkline(document.querySelector('canvas[data-sparkline="trend-temp"]'),
+                trendHistory.temperature, { color: tempColor });
+        }
+
+        /* ── Backfill trendHistory from persisted samples ────────────── */
+        async function seedHistoryFromServer() {
+            if (historySeeded) return;
+            try {
+                const url = `/api/system_health/history?range=${encodeURIComponent(HISTORY_RANGE)}&points=${HISTORY_POINTS}`;
+                const response = await fetch(url, { headers: { 'Accept': 'application/json' } });
+                if (!response.ok) {
+                    console.warn('History fetch returned', response.status);
+                    return;
+                }
+                const payload = await response.json();
+                const series = payload && payload.series;
+                if (!series || !Array.isArray(series.timestamps) || series.timestamps.length === 0) {
+                    return;
+                }
+
+                // Replace the in-memory rolling window with the persisted
+                // series.  Any live samples that came in between page-load
+                // and this call were captured by the same backend sampler,
+                // so we don't risk losing data by overwriting.
+                const toDate = (iso) => {
+                    if (!iso) return null;
+                    const d = new Date(iso);
+                    return Number.isNaN(d.getTime()) ? null : d;
+                };
+                trendHistory.timestamps = series.timestamps.map(toDate);
+                trendHistory.cpu = series.cpu || [];
+                trendHistory.memory = series.memory || [];
+                trendHistory.load = series.load_1m || [];
+                trendHistory.storage = series.storage || [];
+                trendHistory.temperature = series.temperature || [];
+
+                // Truncate to HISTORY_MAX from the tail just in case the
+                // server ever returns more than we want to hold client-side.
+                const keys = ['timestamps', 'cpu', 'memory', 'load', 'storage', 'temperature'];
+                keys.forEach((k) => {
+                    const arr = trendHistory[k];
+                    if (Array.isArray(arr) && arr.length > HISTORY_MAX) {
+                        trendHistory[k] = arr.slice(arr.length - HISTORY_MAX);
+                    }
+                });
+
+                historySeeded = true;
+                refreshSparklines();
+                updatePerfTrendsChart();
+                updateTrendSummaries();
+            } catch (err) {
+                console.warn('Failed to seed system-health history:', err);
+            }
         }
 
         /* ── Performance trends multi-series chart ────────────────────── */
@@ -5073,7 +5157,8 @@
             const info = document.getElementById('perf-trends-sample-info');
             if (info) {
                 const n = trendHistory.cpu.length;
-                info.textContent = 'live · ' + n + ' sample' + (n === 1 ? '' : 's') + ' · ' + Math.round(REFRESH_INTERVAL_MS / 1000) + 's interval';
+                const source = historySeeded ? 'persisted · ' : 'live · ';
+                info.textContent = source + n + ' sample' + (n === 1 ? '' : 's') + ' · ' + Math.round(REFRESH_INTERVAL_MS / 1000) + 's interval';
             }
         }
 
@@ -5111,6 +5196,11 @@
             updateCharts(initialHealthData);
             updateCurrentTimeDisplay();
             setInterval(updateCurrentTimeDisplay, 1000);
+
+            // Backfill the in-memory history from the persisted samples so
+            // the trend chart and sparklines have meaningful context the
+            // moment the page loads — not only after the first 30s tick.
+            seedHistoryFromServer();
 
             // Re-render sparklines on window resize so they stay crisp.
             let resizeHandle = null;
