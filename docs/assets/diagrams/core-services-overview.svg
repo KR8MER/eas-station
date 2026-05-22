@@ -100,18 +100,18 @@
   <!-- hardware-service Panel -->
   <g transform="translate(780 100)">
     <rect width="220" height="280" rx="16" fill="url(#panel)" stroke="#f59e0b" stroke-width="2" />
-    <text x="110" y="30" class="panel-title" text-anchor="middle">hardware-service</text>
-    <text x="110" y="55" class="small-text" text-anchor="middle">GPIO &amp; Display Control</text>
-    <text x="110" y="80" class="small-text" text-anchor="middle" style="fill:#fef3c7">I2C/GPIO access</text>
-    <text x="110" y="110" class="small-text" text-anchor="middle" style="fill:#a5b4fc">• GPIO relay control</text>
-    <text x="110" y="130" class="small-text" text-anchor="middle" style="fill:#a5b4fc">• OLED displays (I2C)</text>
-    <text x="110" y="150" class="small-text" text-anchor="middle" style="fill:#a5b4fc">• VFD displays</text>
-    <text x="110" y="170" class="small-text" text-anchor="middle" style="fill:#a5b4fc">• LED signs (Alpha)</text>
-    <text x="110" y="190" class="small-text" text-anchor="middle" style="fill:#a5b4fc">• Transmitter keying</text>
+    <text x="110" y="30" class="panel-title" text-anchor="middle">hardware.target</text>
+    <text x="110" y="55" class="small-text" text-anchor="middle">5 per-subsystem units</text>
+    <text x="110" y="80" class="small-text" text-anchor="middle" style="fill:#fef3c7">one process each</text>
+    <text x="110" y="110" class="small-text" text-anchor="middle" style="fill:#a5b4fc">• network (5101)</text>
+    <text x="110" y="130" class="small-text" text-anchor="middle" style="fill:#a5b4fc">• zigbee (5102)</text>
+    <text x="110" y="150" class="small-text" text-anchor="middle" style="fill:#a5b4fc">• gps (5103)</text>
+    <text x="110" y="170" class="small-text" text-anchor="middle" style="fill:#a5b4fc">• displays (5104)</text>
+    <text x="110" y="190" class="small-text" text-anchor="middle" style="fill:#a5b4fc">• gpio (5105)</text>
     <text x="110" y="215" class="small-text" text-anchor="middle" style="fill:#93c5fd">Publishes to Redis</text>
     <g class="pill" transform="translate(25 230)">
       <rect width="170" height="32" rx="16" fill="#b45309" />
-      <text x="85" y="22" text-anchor="middle">Port 5001</text>
+      <text x="85" y="22" text-anchor="middle">Ports 5101–5105</text>
     </g>
   </g>
 

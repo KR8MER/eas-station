@@ -569,7 +569,7 @@ Port: 10001
 
 ```bash
 # Check hardware service logs
-sudo journalctl -u eas-station-hardware.service -n 50
+sudo journalctl -u eas-station-hardware.target -n 50
 
 # Look for:
 # ✅ "Connected to Alpha LED sign at 192.168.8.122:10001"

@@ -122,7 +122,12 @@ The installer now collects **all configuration during installation** using blue/
   - `eas-station-sdr.service` - SDR hardware service
   - `eas-station-audio.service` - Audio processing
   - `eas-station-eas.service` - EAS monitoring
-  - `eas-station-hardware.service` - GPIO/displays
+  - `eas-station-hardware.target` - bundles the five Phase 4 per-subsystem units below
+    - `eas-station-network.service` - nmcli proxy (port 5101)
+    - `eas-station-zigbee.service` - zigpy coordinator (port 5102)
+    - `eas-station-gps.service` - GPS manager + trends (port 5103)
+    - `eas-station-displays.service` - OLED / VFD / LED rendering (port 5104)
+    - `eas-station-gpio.service` - relays + alert indicators (port 5105)
   - `eas-station-noaa-poller.service` - NOAA alerts
   - `eas-station-ipaws-poller.service` - IPAWS alerts
 - Reloads systemd daemon

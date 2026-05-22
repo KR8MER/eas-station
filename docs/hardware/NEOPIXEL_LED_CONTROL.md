@@ -100,7 +100,7 @@ The `rpi_ws281x` library requires access to `/dev/mem` for DMA-based LED control
 Check the service user:
 
 ```bash
-grep User /opt/eas-station/systemd/eas-station-hardware.service
+grep User /opt/eas-station/systemd/eas-station-gpio.service
 ```
 
 If the service does not run as root, add the capability or add `AmbientCapabilities=CAP_SYS_RAWIO` to the service unit file.

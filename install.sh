@@ -2255,6 +2255,22 @@ echo_step "Start EAS Station Services"
 echo_progress "Enabling services for automatic startup..."
 systemctl enable eas-station.target > /dev/null 2>&1
 systemctl enable nginx > /dev/null 2>&1
+# Hardware subsystem units (Phase 4 split). The umbrella target Wants= these,
+# but transitively-wanted units don't get [Install] symlinks created — so
+# enable each one explicitly so they auto-start at boot independent of the
+# umbrella target. Enable the units before the target so daemon-reload state
+# is consistent if anything in the target's [Install] block needs the
+# children to be known first.
+for unit in eas-station-network.service \
+            eas-station-zigbee.service \
+            eas-station-gps.service \
+            eas-station-displays.service \
+            eas-station-gpio.service; do
+    systemctl enable "$unit" > /dev/null 2>&1 || \
+        echo_warning "$unit failed to enable"
+done
+systemctl enable eas-station-hardware.target > /dev/null 2>&1 || \
+    echo_warning "eas-station-hardware.target failed to enable"
 # eas-station-hwsetup is a privileged setup helper used by the GPS HAT
 # admin UI. The umbrella target wants it, but explicit enablement is
 # what creates the boot-time symlink — without this, an operator pulling

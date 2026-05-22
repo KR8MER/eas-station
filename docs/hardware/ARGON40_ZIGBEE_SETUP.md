@@ -133,7 +133,7 @@ sudo usermod -aG dialout eas-station
 sudo usermod -aG dialout eas-station
 
 # Restart hardware service
-sudo systemctl restart eas-station-hardware.service
+sudo systemctl restart eas-station-hardware.target
 ```
 
 ### Zigbee status shows "port_open_failed"
@@ -145,7 +145,7 @@ Another process may be holding the port open. Check:
 sudo fuser /dev/ttyUSB0
 
 # Check if another service (e.g. VFD) is using ttyUSB0
-sudo systemctl status eas-station-hardware.service
+sudo systemctl status eas-station-hardware.target
 ```
 
 If the VFD display is also configured to use `/dev/ttyUSB0`, move one device
@@ -158,7 +158,7 @@ Zigbee is disabled by default. Enable it at **Admin → Hardware Settings → Zi
 ### Checking hardware service logs
 
 ```bash
-sudo journalctl -u eas-station-hardware.service -f
+sudo journalctl -u eas-station-hardware.target -f
 ```
 
 Look for:

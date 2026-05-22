@@ -167,14 +167,14 @@
   </g>
 
   <!-- hardware-service -->
-  <text class="group-label" x="180" y="600" text-anchor="middle">hardware-service</text>
+  <text class="group-label" x="180" y="600" text-anchor="middle">hardware.target (5 units)</text>
   <g transform="translate(40,610)">
     <rect class="hw-card" width="280" height="130"/>
-    <text class="card-title" x="140" y="30" text-anchor="middle" style="fill:#78350f">Hardware Control</text>
-    <text class="card-body" x="140" y="55" text-anchor="middle" style="fill:#fef3c7">GPIO relay control</text>
-    <text class="card-body" x="140" y="77" text-anchor="middle" style="fill:#fef3c7">OLED/VFD displays</text>
-    <text class="card-body" x="140" y="99" text-anchor="middle" style="fill:#fef3c7">LED sign protocols</text>
-    <text class="card-body" x="140" y="118" text-anchor="middle" style="font-size:12px;fill:#92400e">I2C/GPIO access · Port 5001</text>
+    <text class="card-title" x="140" y="30" text-anchor="middle" style="fill:#78350f">Hardware Subsystems</text>
+    <text class="card-body" x="140" y="55" text-anchor="middle" style="fill:#fef3c7">network · zigbee · gps</text>
+    <text class="card-body" x="140" y="77" text-anchor="middle" style="fill:#fef3c7">displays · gpio</text>
+    <text class="card-body" x="140" y="99" text-anchor="middle" style="fill:#fef3c7">one process each</text>
+    <text class="card-body" x="140" y="118" text-anchor="middle" style="font-size:12px;fill:#92400e">Ports 5101–5105</text>
   </g>
 
   <!-- Arrows: sdr-service to Redis -->
