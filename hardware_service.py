@@ -73,6 +73,42 @@ from services.common import (
     install_signal_handlers,
     load_environment,
     get_redis,
+    publish_hardware_metrics as _publish_hardware_metrics_impl,
+)
+
+# Per-subsystem services extracted from this module in Phase 2 of the
+# hardware_service.py split.  Each package exposes a pure ``initialize``
+# function that returns the controller (so the orchestrator below owns
+# the lifetime via module-level globals) plus any periodic helpers.
+from services.displays import (
+    initialize_led_controller as _initialize_led_controller_impl,
+    initialize_oled_display as _initialize_oled_display_impl,
+    initialize_screen_manager as _initialize_screen_manager_impl,
+    initialize_vfd_controller as _initialize_vfd_controller_impl,
+)
+from services.gpio import (
+    initialize_gpio_controller as _initialize_gpio_controller_impl,
+    initialize_neopixel_controller as _initialize_neopixel_controller_impl,
+    initialize_tower_light_controller as _initialize_tower_light_controller_impl,
+    update_alert_indicators as _update_alert_indicators_impl,
+)
+from services.gps import (
+    GPS_TRENDS_DEFAULT_WINDOW,
+    GPS_TRENDS_INTERVAL_S,
+    GPS_TRENDS_MAX_SAMPLES,
+    GPS_TRENDS_RAW_MAX_SAMPLES,
+    GPS_TRENDS_REDIS_KEY,
+    GPS_TRENDS_TIERS,
+    GPS_TRENDS_WINDOW_TO_TIER,
+    initialize_gps_manager as _initialize_gps_manager_impl,
+    new_last_bucket_ids as _new_gps_last_bucket_ids,
+)
+from services.gps import trends as _gps_trends
+from services.zigbee import (
+    ZigpyController,
+    detect_zigbee_coordinator,
+    initialize_zigbee_coordinator as _initialize_zigbee_coordinator_impl,
+    publish_zigbee_status as _publish_zigbee_status_impl,
 )
 
 configure_logging()
@@ -119,1279 +155,138 @@ def initialize_database():
 
 
 def initialize_led_controller():
-    """Initialize LED sign controller."""
-    try:
-        from app_core.led import initialise_led_controller, ensure_led_tables
-
-        # Call initialise_led_controller() directly - it checks the database
-        # enabled setting internally. Do NOT gate on LED_AVAILABLE here because
-        # that flag is False at import time and only set True *after*
-        # initialise_led_controller() succeeds.
-        controller = initialise_led_controller(logger)
-        if controller:
-            logger.info("✅ LED controller initialized")
-            # Ensure database tables exist
-            try:
-                ensure_led_tables()
-            except Exception as e:
-                logger.warning(f"⚠️  Failed to ensure LED tables: {e}")
-        else:
-            logger.info("LED controller disabled or unavailable")
-
-    except Exception as e:
-        logger.warning(f"⚠️  LED controller not available: {e}")
-        logger.info("Continuing without LED support")
+    """Initialize LED sign controller (delegates to ``services.displays``)."""
+    _initialize_led_controller_impl()
 
 
 def initialize_vfd_controller():
-    """Initialize VFD display controller."""
-    try:
-        from app_core.vfd import initialise_vfd_controller, ensure_vfd_tables
-
-        # Call initialise_vfd_controller() directly - it checks the database
-        # enabled setting internally. Do NOT gate on VFD_AVAILABLE here because
-        # that flag is False at import time and only set True *after*
-        # initialise_vfd_controller() succeeds.
-        controller = initialise_vfd_controller(logger)
-        if controller:
-            logger.info("✅ VFD controller initialized")
-            # Ensure database tables exist
-            try:
-                ensure_vfd_tables()
-            except Exception as e:
-                logger.warning(f"⚠️  Failed to ensure VFD tables: {e}")
-        else:
-            logger.info("VFD controller disabled or unavailable")
-
-    except Exception as e:
-        logger.warning(f"⚠️  VFD controller not available: {e}")
-        logger.info("Continuing without VFD support")
+    """Initialize VFD display controller (delegates to ``services.displays``)."""
+    _initialize_vfd_controller_impl()
 
 
 def initialize_oled_display():
-    """Initialize OLED display."""
-    try:
-        from app_core.oled import initialise_oled_display, ensure_oled_button
-
-        # Call initialise_oled_display() directly - it checks the database
-        # enabled setting internally. Do NOT gate on OLED_AVAILABLE here because
-        # that flag is False at import time and only set True *after*
-        # initialise_oled_display() succeeds.
-        controller = initialise_oled_display(logger)
-        if controller:
-            logger.info("✅ OLED display initialized")
-
-            # Initialize OLED button (GPIO pin 4)
-            button = ensure_oled_button(logger)
-            if button:
-                logger.info("✅ OLED button initialized on GPIO 4")
-            else:
-                logger.info("OLED button disabled or unavailable")
-        else:
-            logger.info("OLED display disabled or unavailable")
-
-    except Exception as e:
-        logger.warning(f"⚠️  OLED display not available: {e}")
-        logger.info("Continuing without OLED support")
-
-
-# Known Zigbee coordinator USB device signatures (vid, pid, label)
-# Used for auto-detection via pyserial and /dev/serial/by-id
-_ZIGBEE_USB_SIGNATURES = [
-    (0x10c4, 0xea60, "Silicon Labs CP210x — Argon Industria V5 / SONOFF / SMLIGHT / CC2652P"),
-    (0x10c4, 0x8a2a, "Silicon Labs CP2105"),
-    (0x1cf1, 0x0030, "Dresden Elektronik ConBee II"),
-    (0x0451, 0x16a8, "Texas Instruments CC2531"),
-    (0x1a86, 0x7523, "CH340 USB-Serial"),
-    (0x0403, 0x6001, "FTDI FT232R"),
-    (0x0403, 0x6015, "FTDI FT231X"),
-]
-
-# Substrings in /dev/serial/by-id symlink names that suggest a Zigbee coordinator
-_ZIGBEE_BYID_KEYWORDS = [
-    "cp210", "silabs", "silicon_labs", "sonoff", "itead", "conbee",
-    "dresden", "argon", "smlight", "cc2531", "cc2652", "skyconnect",
-]
-
-
-def detect_zigbee_coordinator():
-    """Detect connected Zigbee coordinator USB devices.
-
-    Returns a list of dicts, each with keys:
-        port        - device path e.g. /dev/ttyUSB0
-        description - human-readable label
-        confidence  - 'high' (VID/PID match) or 'medium' (by-id name match)
-    Ordered by confidence (high first), then by port path.
-    """
-    detected = {}  # keyed by port path to avoid duplicates
-
-    # Method 1: pyserial list_ports — gives USB VID/PID, most reliable
-    try:
-        from serial.tools import list_ports
-        for info in list_ports.comports():
-            if info.vid is None:
-                continue
-            for vid, pid, label in _ZIGBEE_USB_SIGNATURES:
-                if info.vid == vid and info.pid == pid:
-                    detected[info.device] = {
-                        'port': info.device,
-                        'description': f"{label}",
-                        'vid': f"{vid:04x}",
-                        'pid': f"{pid:04x}",
-                        'confidence': 'high',
-                    }
-                    break
-    except Exception:
-        pass
-
-    # Method 2: /dev/serial/by-id symlinks — works without pyserial VID/PID support
-    try:
-        import glob as _glob
-        for symlink in _glob.glob('/dev/serial/by-id/*'):
-            real = os.path.realpath(symlink)
-            name_lower = os.path.basename(symlink).lower()
-            if any(kw in name_lower for kw in _ZIGBEE_BYID_KEYWORDS):
-                if real not in detected:
-                    detected[real] = {
-                        'port': real,
-                        'description': os.path.basename(symlink),
-                        'confidence': 'medium',
-                    }
-    except Exception:
-        pass
-
-    results = sorted(
-        detected.values(),
-        key=lambda x: (0 if x['confidence'] == 'high' else 1, x['port'])
-    )
-    return results
-
-
-class ZigpyController:
-    """Runs the zigpy-znp coordinator stack in a background asyncio thread.
-
-    Handles permit_join (pairing mode), publishes device and status data
-    to Redis so the web UI can display live information.
-    """
-
-    def __init__(self, port, baudrate, channel, pan_id, redis_client, db_path):
-        self.port = port
-        self.baudrate = int(baudrate)
-        self.channel = int(channel)
-        # Accept pan_id as hex string ("0x1A62") or int
-        if isinstance(pan_id, str):
-            self.pan_id = int(pan_id, 16) if pan_id.lower().startswith('0x') else int(pan_id)
-        else:
-            self.pan_id = int(pan_id)
-        self._redis = redis_client
-        self._db_path = db_path
-        self._app = None
-        self._loop = None
-        self._thread = None
-        self._running = False
-        self._starting = False
-        self._permit_join_active = False
-        self._permit_join_deadline = None  # UTC timestamp float
-        self._permit_join_timer = None
-
-    # ------------------------------------------------------------------ start/stop
-
-    def start(self):
-        self._starting = True
-        self._publish_status()
-        self._thread = threading.Thread(
-            target=self._run, daemon=True, name='zigpy-controller'
-        )
-        self._thread.start()
-
-    def stop(self):
-        if self._permit_join_timer:
-            self._permit_join_timer.cancel()
-        if self._loop and self._app and self._running:
-            try:
-                asyncio.run_coroutine_threadsafe(
-                    self._app.shutdown(), self._loop
-                ).result(timeout=10)
-            except Exception as e:
-                logger.warning(f"Zigpy shutdown error: {e}")
-        if self._loop:
-            self._loop.call_soon_threadsafe(self._loop.stop)
-        self._running = False
-
-    def _run(self):
-        self._loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(self._loop)
-        try:
-            self._loop.run_until_complete(self._start_app())
-            if self._running:
-                self._loop.run_forever()
-        except Exception as e:
-            logger.error(f"Zigpy controller fatal error: {e}", exc_info=True)
-        finally:
-            self._running = False
-            self._starting = False
-            self._publish_status()
-
-    async def _start_app(self):
-        try:
-            from zigpy_znp.zigbee.application import ControllerApplication
-        except ImportError:
-            logger.error(
-                "zigpy-znp not installed. Run: pip install zigpy zigpy-znp"
-            )
-            self._starting = False
-            return
-
-        os.makedirs(os.path.dirname(self._db_path), exist_ok=True)
-
-        config = ControllerApplication.SCHEMA({
-            "database_path": self._db_path,
-            "device": {
-                "path": self.port,
-                "baudrate": self.baudrate,
-            },
-        })
-
-        self._app = ControllerApplication(config)
-        self._app.add_listener(self)
-
-        try:
-            await self._app.startup(auto_form=True)
-            self._running = True
-            self._starting = False
-            logger.info(
-                f"Zigpy coordinator running on {self.port} "
-                f"(channel {self.channel}, PAN ID {hex(self.pan_id)})"
-            )
-            self._publish_status()
-        except Exception as e:
-            logger.error(f"Zigpy startup failed: {e}", exc_info=True)
-            self._starting = False
-            self._publish_status()
-
-    # ------------------------------------------------------------------ permit join
-
-    def permit_join(self, duration=60):
-        """Open the join window for *duration* seconds."""
-        if not self._app or not self._running:
-            raise RuntimeError("Zigpy coordinator is not running")
-
-        asyncio.run_coroutine_threadsafe(
-            self._app.permit_joining(duration), self._loop
-        ).result(timeout=10)
-
-        self._permit_join_active = True
-        self._permit_join_deadline = datetime.now(timezone.utc).timestamp() + duration
-
-        # Cancel any outstanding auto-close timer
-        if self._permit_join_timer:
-            self._permit_join_timer.cancel()
-
-        def _auto_close():
-            self._permit_join_active = False
-            self._permit_join_deadline = None
-            self._permit_join_timer = None
-            self._publish_status()
-
-        self._permit_join_timer = threading.Timer(duration, _auto_close)
-        self._permit_join_timer.daemon = True
-        self._permit_join_timer.start()
-        self._publish_status()
-
-    def close_join(self):
-        """Close the join window immediately."""
-        if self._app and self._running:
-            try:
-                asyncio.run_coroutine_threadsafe(
-                    self._app.permit_joining(0), self._loop
-                ).result(timeout=10)
-            except Exception as e:
-                logger.warning(f"Error closing join window: {e}")
-        if self._permit_join_timer:
-            self._permit_join_timer.cancel()
-            self._permit_join_timer = None
-        self._permit_join_active = False
-        self._permit_join_deadline = None
-        self._publish_status()
-
-    # ------------------------------------------------------------------ zigpy callbacks
-
-    def device_joined(self, device):
-        logger.info(f"Zigbee device joined: {device.ieee}")
-        self._publish_device(device)
-
-    def device_initialized(self, device):
-        logger.info(
-            f"Zigbee device initialized: {device.ieee} "
-            f"model={getattr(device, 'model', None)}"
-        )
-        self._publish_device(device)
-
-    # ------------------------------------------------------------------ redis helpers
-
-    def _publish_device(self, device):
-        if not self._redis:
-            return
-        try:
-            key = f"zigbee:device:{device.ieee}"
-            data = {
-                "ieee": str(device.ieee),
-                "network_address": device.nwk,
-                "model": getattr(device, 'model', None),
-                "manufacturer": getattr(device, 'manufacturer', None),
-                "name": getattr(device, 'model', None) or str(device.ieee),
-                "last_seen": datetime.now(timezone.utc).isoformat(),
-            }
-            self._redis.set(key, json.dumps(data))
-        except Exception as e:
-            logger.error(f"Failed to publish device to Redis: {e}")
-
-    def _publish_status(self):
-        if not self._redis:
-            return
-        try:
-            if self._running:
-                status = "running"
-            elif self._starting:
-                status = "starting"
-            else:
-                status = "stopped"
-
-            self._redis.setex("zigbee:coordinator", 120, json.dumps({
-                "enabled": True,
-                "port": self.port,
-                "baudrate": self.baudrate,
-                "channel": self.channel,
-                "pan_id": hex(self.pan_id).upper().replace('X', 'x'),
-                "status": status,
-                "port_accessible": self._running or self._starting,
-                "permit_join_active": self._permit_join_active,
-                "permit_join_deadline": self._permit_join_deadline,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-            }))
-        except Exception as e:
-            logger.debug(f"Failed to publish Zigbee status to Redis: {e}")
-
-    # ------------------------------------------------------------------ properties
-
-    @property
-    def running(self):
-        return self._running
-
-    @property
-    def permit_join_active(self):
-        return self._permit_join_active
-
-    @property
-    def permit_join_deadline(self):
-        return self._permit_join_deadline
+    """Initialize OLED display (delegates to ``services.displays``)."""
+    _initialize_oled_display_impl()
 
 
 def initialize_zigbee_coordinator():
-    """Initialize Zigbee coordinator if enabled in hardware settings."""
-    try:
-        from app_core.hardware_settings import get_zigbee_settings
+    """Initialize Zigbee coordinator (delegates to ``services.zigbee``).
 
-        zigbee_settings = get_zigbee_settings()
-        if not zigbee_settings.get('enabled', False):
-            logger.info("Zigbee coordinator disabled (enable in Admin > Hardware Settings)")
-            return
-
-        port = zigbee_settings.get('port', '/dev/ttyAMA0')
-        baudrate = zigbee_settings.get('baudrate', 115200)
-        channel = zigbee_settings.get('channel', 15)
-        pan_id = zigbee_settings.get('pan_id', '0x1A62')
-
-        # Verify the configured serial port is accessible; auto-detect if missing
-        if not os.path.exists(port):
-            logger.warning(
-                f"Zigbee serial port {port} does not exist — attempting auto-detection."
-            )
-            candidates = detect_zigbee_coordinator()
-            if candidates:
-                detected_port = candidates[0]['port']
-                detected_desc = candidates[0].get('description', '')
-                logger.info(
-                    f"Auto-detected Zigbee coordinator: {detected_port} ({detected_desc}). "
-                    "Update Hardware Settings to make this permanent."
-                )
-                port = detected_port
-            else:
-                logger.warning(
-                    "No Zigbee coordinator detected. Connect a coordinator and check hardware settings."
-                )
-                if _redis_client:
-                    try:
-                        _redis_client.setex(
-                            "zigbee:coordinator",
-                            30,
-                            json.dumps({
-                                "enabled": True,
-                                "port": zigbee_settings.get('port', '/dev/ttyAMA0'),
-                                "baudrate": baudrate,
-                                "channel": channel,
-                                "pan_id": pan_id,
-                                "status": "port_not_found",
-                                "port_accessible": False,
-                                "timestamp": datetime.now(timezone.utc).isoformat(),
-                            })
-                        )
-                    except Exception:
-                        pass
-                return
-
-        # Verify the serial port can actually be opened (not just that the path exists)
-        port_usable = False
-        try:
-            import serial
-            ser = serial.Serial(port, baudrate, timeout=1)
-            ser.close()
-            port_usable = True
-        except ImportError:
-            logger.warning("pyserial not installed - cannot verify Zigbee serial port")
-            port_usable = True  # Assume usable if we can't test
-        except Exception as e:
-            logger.warning(
-                f"Zigbee serial port {port} exists but cannot be opened: {e}. "
-                "Check permissions (user must be in 'dialout' group) and that "
-                "no other process is using the port."
-            )
-
-        # Publish Zigbee coordinator config to Redis so the web UI can display status
-        status = "configured" if port_usable else "port_open_failed"
-        if _redis_client:
-            try:
-                _redis_client.setex(
-                    "zigbee:coordinator",
-                    30,  # Short TTL - refreshed by publish_zigbee_status() every 5s
-                    json.dumps({
-                        "enabled": True,
-                        "port": port,
-                        "baudrate": baudrate,
-                        "channel": channel,
-                        "pan_id": pan_id,
-                        "status": status,
-                        "port_accessible": port_usable,
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                    })
-                )
-            except Exception as e:
-                logger.debug(f"Failed to publish Zigbee config to Redis: {e}")
-
-        if port_usable:
-            logger.info(
-                f"✅ Zigbee coordinator configured on {port} "
-                f"(channel {channel}, PAN ID {pan_id})"
-            )
-            # Start the zigpy protocol stack in a background thread
-            try:
-                global _zigpy_controller
-                db_path = os.environ.get(
-                    'ZIGBEE_DB_PATH',
-                    '/var/lib/eas-station/zigbee.db'
-                )
-                _zigpy_controller = ZigpyController(
-                    port, baudrate, channel, pan_id, _redis_client, db_path
-                )
-                _zigpy_controller.start()
-                logger.info("Zigpy coordinator stack starting in background…")
-            except Exception as e:
-                logger.warning(f"Could not start zigpy controller: {e}")
-        else:
-            logger.warning(
-                f"⚠️  Zigbee coordinator configured on {port} but port is not usable"
-            )
-
-    except Exception as e:
-        logger.warning(f"⚠️  Zigbee coordinator not available: {e}")
-        logger.info("Continuing without Zigbee support")
+    Captures the returned ``ZigpyController`` (if any) in
+    ``_zigpy_controller`` so the Flask API and the shutdown handler can
+    drive it.
+    """
+    global _zigpy_controller
+    _zigpy_controller = _initialize_zigbee_coordinator_impl(_redis_client)
 
 
 def initialize_gps_manager():
-    """Initialize GPS receiver manager (Uputronics GPS/RTC HAT or Adafruit #2324) if enabled."""
+    """Initialize the GPS receiver manager (delegates to ``services.gps``).
+
+    Captures the returned ``GPSManager`` (if any) in ``_gps_manager`` so
+    the Flask API can serve live status from it and the shutdown handler
+    can stop it.
+    """
     global _gps_manager
-
-    try:
-        from app_core.hardware_settings import get_gps_settings
-        from app_core.gps import GPSManager
-
-        gps_settings = get_gps_settings()
-        if not gps_settings.get('enabled', False):
-            logger.info("GPS receiver disabled (enable in Admin > Hardware Settings)")
-            return
-
-        _gps_manager = GPSManager(
-            config=gps_settings,
-            redis_client=_redis_client,
-            logger=logger.getChild("gps"),
-        )
-        _gps_manager.start()
-        # Keep manager alive even on start() failure so get_status() can
-        # return the specific error reason (port_not_found, pyserial_missing, etc.)
-
-    except Exception as e:
-        logger.warning(f"⚠️  GPS manager not available: {e}")
-        logger.info("Continuing without GPS support")
+    _gps_manager = _initialize_gps_manager_impl(_redis_client, logger)
 
 
 def initialize_screen_manager(app):
-    """Initialize screen manager for OLED/LED/VFD displays."""
+    """Initialize screen manager (delegates to ``services.displays``)."""
     global _screen_manager
-
-    try:
-        from scripts.screen_manager import screen_manager
-
-        with app.app_context():
-            screen_manager.init_app(app)
-
-            # Start screen rotation if enabled (read from database, not env var)
-            auto_start = True  # default
-            try:
-                from app_core.hardware_settings import get_oled_settings
-                oled_settings = get_oled_settings()
-                auto_start = oled_settings.get('screens_auto_start', True)
-            except Exception:
-                pass  # Fall back to default True if database unavailable
-
-            if auto_start:
-                screen_manager.start()
-                logger.info("✅ Screen manager started with automatic rotation")
-            else:
-                logger.info("Screen manager initialized (auto-start disabled)")
-
-    except Exception as e:
-        logger.warning(f"⚠️  Screen manager not available: {e}")
-        logger.info("Continuing without display support")
+    _screen_manager = _initialize_screen_manager_impl(app)
 
 
 def initialize_gpio_controller(db_session=None):
-    """Initialize GPIO controller for relay/transmitter control."""
+    """Initialize GPIO controller (delegates to ``services.gpio``)."""
     global _gpio_controller
-
-    try:
-        from app_utils.gpio import (
-            GPIOController,
-            GPIOBehaviorManager,
-            load_gpio_pin_configs_from_db,
-            load_gpio_behavior_matrix_from_db,
-        )
-
-        # Try to load GPIO enabled flag from database first
-        try:
-            from app_core.hardware_settings import get_gpio_settings, get_oled_settings
-            gpio_settings = get_gpio_settings()
-            gpio_enabled = gpio_settings.get('enabled', False)
-            
-            # Check if OLED is enabled to avoid pin conflicts
-            oled_settings = get_oled_settings()
-            oled_enabled = oled_settings.get('enabled', False)
-        except Exception:
-            # Fallback if database not available
-            gpio_enabled = False
-            oled_enabled = False
-
-        if not gpio_enabled:
-            logger.info("GPIO controller disabled (enable in Admin > Hardware Settings)")
-            return
-
-        # Load GPIO pin configurations (from database with env fallback)
-        # Pass oled_enabled to ensure reserved pins are only blocked when OLED is actually enabled
-        gpio_configs = load_gpio_pin_configs_from_db(logger, oled_enabled=oled_enabled)
-        if not gpio_configs:
-            logger.info("No GPIO pins configured (configure in Admin > Hardware Settings)")
-            return
-
-        # Create GPIO controller with database session for audit logging
-        _gpio_controller = GPIOController(
-            db_session=db_session,
-            logger=logger,
-        )
-
-        # Add each configured pin to the controller
-        for config in gpio_configs:
-            try:
-                _gpio_controller.add_pin(config)
-            except Exception as e:
-                logger.error(f"Failed to add GPIO pin {config.pin}: {e}")
-
-        # Load and configure GPIO behavior matrix
-        behavior_matrix = load_gpio_behavior_matrix_from_db(logger, oled_enabled=oled_enabled)
-        if behavior_matrix:
-            gpio_behavior_manager = GPIOBehaviorManager(
-                controller=_gpio_controller,
-                pin_configs=gpio_configs,
-                behavior_matrix=behavior_matrix,
-                logger=logger,
-            )
-            _gpio_controller.behavior_manager = gpio_behavior_manager
-            logger.info(f"✅ GPIO controller initialized with {len(gpio_configs)} pin(s) and behavior matrix")
-        else:
-            logger.info(f"✅ GPIO controller initialized with {len(gpio_configs)} pin(s)")
-
-    except Exception as e:
-        logger.warning(f"⚠️  GPIO controller not available: {e}")
-        logger.info("Continuing without GPIO support")
+    _gpio_controller = _initialize_gpio_controller_impl(db_session=db_session)
 
 
 def initialize_tower_light_controller():
-    """Initialize USB tower light controller (Adafruit #5125 / CH34x serial)."""
+    """Initialize USB tower light controller (delegates to ``services.gpio``)."""
     global _tower_light_controller
-
-    try:
-        from app_utils.gpio import TowerLightController, load_tower_light_config_from_db
-
-        config = load_tower_light_config_from_db(logger)
-        if config is None:
-            logger.info("USB tower light disabled (enable in Admin > Hardware Settings)")
-            return
-
-        _tower_light_controller = TowerLightController(config, logger=logger)
-        available = _tower_light_controller.start()
-
-        if available:
-            logger.info(
-                "✅ USB tower light initialized on %s",
-                config.serial_port,
-            )
-        else:
-            logger.warning(
-                "⚠️  USB tower light configured on %s but port could not be opened",
-                config.serial_port,
-            )
-
-    except Exception as e:
-        logger.warning(f"⚠️  USB tower light not available: {e}")
-        logger.info("Continuing without USB tower light support")
+    _tower_light_controller = _initialize_tower_light_controller_impl()
 
 
 def initialize_neopixel_controller():
-    """Initialize NeoPixel / WS2812B LED strip controller."""
+    """Initialize NeoPixel controller (delegates to ``services.gpio``)."""
     global _neopixel_controller
-
-    try:
-        from app_utils.gpio import NeopixelController, load_neopixel_config_from_db
-
-        config = load_neopixel_config_from_db(logger)
-        if config is None:
-            logger.info("NeoPixel controller disabled (enable in Admin > Hardware Settings)")
-            return
-
-        _neopixel_controller = NeopixelController(config, logger=logger)
-        hardware_available = _neopixel_controller.start()
-
-        if hardware_available:
-            logger.info(
-                "✅ NeoPixel controller initialized: %d pixel(s) on GPIO %d",
-                config.num_pixels,
-                config.gpio_pin,
-            )
-        else:
-            logger.info(
-                "NeoPixel controller running in null mode "
-                "(rpi_ws281x library not available or DMA access denied)"
-            )
-
-    except Exception as e:
-        logger.warning(f"⚠️  NeoPixel controller not available: {e}")
-        logger.info("Continuing without NeoPixel support")
+    _neopixel_controller = _initialize_neopixel_controller_impl()
 
 
 # ---------------------------------------------------------------------------
-# GPS / chrony trend sampler — multi-resolution archive.
+# GPS / chrony trend sampler — thin wrappers around ``services.gps.trends``.
 #
-# The /admin/gps-dashboard page draws sparklines and a per-PRN SNR heatmap
-# from a JS-side ring buffer.  Historically that buffer only filled while
-# the page was open and was capped at 720 samples (1 h @ 5 s), which made
-# it useless for tracking long-term GNSS stability and meant the heatmap
-# reset on every page reload.
+# The implementation lives in ``services/gps/trends.py`` as pure functions
+# that accept the redis client and per-tier bucket-id dict as arguments.
+# This module owns the runtime state (``_redis_client``,
+# ``_gps_trend_last_bucket_ids``, ``_gps_manager``) and passes it in so
+# the orchestrator stays the single source of process-wide state.
 #
-# The sampler now keeps a *tiered* RRD-style archive in Redis so the
-# dashboard can render an operator-selected window from minutes to months
-# at roughly constant client-side cost (~720–2400 samples per chart).
-# Tiers (each is a Redis list of JSON rows, newest-first):
-#
-#   * raw  — 5 s cadence,    cap 800   →  ≈ 1.1 h
-#   * 1m   — 1 min buckets,  cap 1500  →  ≈ 25 h
-#   * 10m  — 10 min buckets, cap 1100  →  ≈ 7.6 d
-#   * 1h   — 1 h buckets,    cap 2200  →  ≈ 91 d
-#
-# Higher tiers are produced by aggregating samples from the raw ring
-# whenever a wall-clock bucket boundary is crossed (see
-# ``_emit_gps_trend_rollups``).  The aggregation preserves min/max/avg
-# (alongside the headline ``value``) and the union of per-PRN SNR maps,
-# so the heatmap survives both page closures and tier transitions.
+# Constants (``GPS_TRENDS_TIERS`` etc.) are re-exported at the top of the
+# file so the Flask API in this module and ``tests/test_gps_trends_archive``
+# can both keep their existing import paths working.
 # ---------------------------------------------------------------------------
-GPS_TRENDS_REDIS_KEY = "gps:dashboard:trends"            # back-compat alias for raw tier
-GPS_TRENDS_RAW_MAX_SAMPLES = 800                          # ≈ 1.1 h at 5 s cadence
-GPS_TRENDS_INTERVAL_S = 5
-
-# Tier definitions: name → (bucket size in seconds, ring cap).
-GPS_TRENDS_TIERS: "dict[str, tuple[int, int]]" = {
-    "raw": (GPS_TRENDS_INTERVAL_S, GPS_TRENDS_RAW_MAX_SAMPLES),
-    "1m":  (60,      1500),
-    "10m": (600,     1100),
-    "1h":  (3600,    2200),
-}
-
-# Window → tier the API returns when a client requests that data window.
-# Keeps the resolution roughly constant (the whole point of the archive):
-# 1 h shows raw 5 s ticks; 30 d shows 1 h buckets.
-GPS_TRENDS_WINDOW_TO_TIER: "dict[str, str]" = {
-    "1h":  "raw",
-    "6h":  "1m",
-    "24h": "1m",
-    "7d":  "10m",
-    "30d": "1h",
-    "90d": "1h",
-}
-GPS_TRENDS_DEFAULT_WINDOW = "1h"
-
-# Back-compat: the old single-cap constant is still referenced in a few
-# places; keep it pointing at the raw tier's cap so external callers
-# don't break.
-GPS_TRENDS_MAX_SAMPLES = GPS_TRENDS_RAW_MAX_SAMPLES
+_gps_trend_last_bucket_ids: "dict[str, Optional[int]]" = _new_gps_last_bucket_ids()
 
 
 def _gps_trend_redis_key(tier: str) -> str:
-    """Redis list key for a given tier; ``raw`` keeps the legacy key
-    so existing seed data and other consumers keep working."""
-    if tier == "raw":
-        return GPS_TRENDS_REDIS_KEY
-    return f"{GPS_TRENDS_REDIS_KEY}:{tier}"
-
-
-# Bucket id (= floor(t/B)) of the most recent sample we observed for
-# each non-raw tier, used to detect boundary crossings.  None until the
-# first sample lands; we never aggregate the *current* (still-filling)
-# bucket — only the one that just closed.
-_gps_trend_last_bucket_ids: "dict[str, Optional[int]]" = {
-    name: None for name in GPS_TRENDS_TIERS if name != "raw"
-}
+    return _gps_trends.redis_key_for_tier(tier)
 
 
 def _collect_chrony_tracking_for_trends() -> dict:
-    """Run ``chronyc -c tracking`` and return the four fields the trend
-    charts care about.  Missing/unparseable fields come back as ``None``;
-    if chronyc isn't installed at all we return an empty dict so callers
-    can detect "no chrony data this tick" without faking values.
-    """
-    try:
-        from shutil import which as _which
-        if not _which("chronyc"):
-            return {}
-        from app_utils.chrony_parser import parse_chronyc_tracking_csv
-        rc = subprocess.run(
-            ["chronyc", "-c", "tracking"],
-            capture_output=True,
-            text=True,
-            timeout=2.0,
-        )
-        if rc.returncode != 0:
-            return {}
-        parsed = parse_chronyc_tracking_csv(rc.stdout) or {}
-        return {
-            "last_offset_s":     parsed.get("last_offset_s"),
-            "rms_offset_s":      parsed.get("rms_offset_s"),
-            "frequency_ppm":     parsed.get("frequency_ppm"),
-            "residual_freq_ppm": parsed.get("residual_freq_ppm"),
-        }
-    except Exception as exc:
-        logger.debug("Trend sampler: chronyc tracking failed: %s", exc)
-        return {}
+    return _gps_trends.collect_chrony_tracking()
 
 
 def _collect_gps_for_trends() -> dict:
-    """Pull the DOP / SNR fields the dashboard plots from the live GPS
-    manager.  Returns an empty dict when no manager is running so the
-    sampler can decide whether the row is worth publishing at all.
-    """
-    if _gps_manager is None:
-        return {}
-    try:
-        status = _gps_manager.get_status() or {}
-    except Exception as exc:
-        logger.debug("Trend sampler: gps_manager.get_status failed: %s", exc)
-        return {}
-
-    def _num(v):
-        return float(v) if isinstance(v, (int, float)) else None
-
-    sats_in_view = status.get("satellites_in_view") or []
-    snrs = [
-        s.get("snr") for s in sats_in_view
-        if isinstance(s, dict) and isinstance(s.get("snr"), (int, float))
-    ]
-    avg_snr = (sum(snrs) / len(snrs)) if snrs else None
-
-    # Per-PRN SNR map keyed by ``"<talker><PRN02>"`` (e.g. "GP05") so
-    # the dashboard's per-PRN heatmap can repaint history regardless of
-    # whether the page was open while samples were collected.  Empty
-    # SNRs are dropped so the row stays compact when the receiver hasn't
-    # locked yet.  Each tier preserves the per-PRN average across its
-    # bucket, so this map shape is identical at every resolution.
-    prn_snr: "dict[str, float]" = {}
-    for s in sats_in_view:
-        if not isinstance(s, dict):
-            continue
-        prn = s.get("prn")
-        snr = s.get("snr")
-        if not isinstance(prn, int) or not isinstance(snr, (int, float)):
-            continue
-        talker = (s.get("constellation") or "GN").upper()
-        key = f"{talker}{int(prn):02d}"
-        prn_snr[key] = float(snr)
-
-    # PPS jitter (1σ in nanoseconds) — included in the trend ring so
-    # the GPS dashboard can plot a "Receiver Stability" sparkline
-    # alongside chrony's RMS offset.  Empty when the manager hasn't
-    # accumulated enough PPS pulses yet for a stddev to mean anything.
-    jitter = status.get("pps_jitter") or {}
-    jitter_stddev_ns = jitter.get("stddev_ns") if isinstance(jitter, dict) else None
-
-    # Holdover seconds for the holdover-timer trend.  ``0`` while we
-    # have a 3D fix; counts upward when we don't.
-    holdover_s = status.get("holdover_s")
-
-    # RF / jamming-spoof telemetry from UBX-MON-HW.  Stored alongside the
-    # DOP/SNR fields so the GPS dashboard can plot a "Jamming & Spoofing"
-    # time-series across the same 1-hour ring buffer.  ``jamming_state``
-    # is a short string (ok|warning|critical|unknown) — preserved as-is
-    # so the chart can colour-code each sample.
-    jamming_state = status.get("jamming_state")
-    if jamming_state is not None:
-        jamming_state = str(jamming_state)
-
-    return {
-        "hdop":            _num(status.get("hdop")),
-        "vdop":            _num(status.get("vdop")),
-        "pdop":            _num(status.get("pdop")),
-        "avg_snr":         avg_snr,
-        "fix_age_s":       _num(status.get("fix_age_s")),
-        "holdover_s":      _num(holdover_s),
-        "pps_jitter_ns":   _num(jitter_stddev_ns),
-        "noise_level":     _num(status.get("noise_level")),
-        "agc_count":       _num(status.get("agc_count")),
-        "jamming_state":   jamming_state,
-        # Per-PRN SNR map.  Always present (possibly empty) so the
-        # dashboard can distinguish "no data this tick" from "row
-        # predates the per-PRN feature".
-        "prn_snr":         prn_snr,
-    }
+    return _gps_trends.collect_gps_status(_gps_manager)
 
 
-def _aggregate_gps_trend_samples(rows: list, bucket_start_ms: int, bucket_end_ms: int) -> Optional[dict]:
-    """Collapse a list of raw trend rows into a single bucket row.
-
-    Numeric fields are reduced to their arithmetic mean across the
-    bucket (with ``min``/``max`` retained on a per-field side-channel
-    so the dashboard's "min" / "max" badges remain meaningful at coarse
-    resolutions).  ``jamming_state`` keeps the *last* (most recent)
-    non-empty value in the bucket — the categorical worst-state would
-    arguably be more conservative but the dashboard already colour-
-    codes per-sample, so "what state did we end the bucket in" is the
-    most useful summary.  Per-PRN SNR maps are merged: each PRN's
-    value is the mean of its sightings within the bucket; PRNs not
-    seen in this bucket are simply omitted.
-
-    Returns ``None`` when ``rows`` carries no usable signal so callers
-    don't push empty rollup placeholders into the archive.
-    """
-    if not rows:
-        return None
-
-    # Numeric fields we want to average across the bucket.
-    NUM_FIELDS = (
-        "last_offset_s", "rms_offset_s", "frequency_ppm", "residual_freq_ppm",
-        "hdop", "vdop", "pdop", "avg_snr", "fix_age_s", "holdover_s",
-        "pps_jitter_ns", "noise_level", "agc_count",
-    )
-
-    sums: "dict[str, float]" = {}
-    counts: "dict[str, int]" = {}
-    mins: "dict[str, float]" = {}
-    maxs: "dict[str, float]" = {}
-    last_jam: Optional[str] = None
-    prn_sums: "dict[str, float]" = {}
-    prn_counts: "dict[str, int]" = {}
-
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        for f in NUM_FIELDS:
-            v = row.get(f)
-            if isinstance(v, (int, float)):
-                sums[f] = sums.get(f, 0.0) + float(v)
-                counts[f] = counts.get(f, 0) + 1
-                fv = float(v)
-                if f not in mins or fv < mins[f]:
-                    mins[f] = fv
-                if f not in maxs or fv > maxs[f]:
-                    maxs[f] = fv
-        js = row.get("jamming_state")
-        if isinstance(js, str) and js:
-            last_jam = js
-        prn_map = row.get("prn_snr")
-        if isinstance(prn_map, dict):
-            for prn, snr in prn_map.items():
-                if isinstance(prn, str) and isinstance(snr, (int, float)):
-                    prn_sums[prn] = prn_sums.get(prn, 0.0) + float(snr)
-                    prn_counts[prn] = prn_counts.get(prn, 0) + 1
-
-    if not counts and not prn_counts and last_jam is None:
-        return None
-
-    out: "dict[str, object]" = {
-        # Use the bucket's *end* timestamp so the chart positions the
-        # bucket at the moment the data was complete.  Keeps the
-        # right-edge of coarse-tier sparklines aligned with the live
-        # tail.
-        "t": int(bucket_end_ms),
-        "bucket_start_ms": int(bucket_start_ms),
-        "bucket_end_ms": int(bucket_end_ms),
-        "sample_count": max(counts.values()) if counts else len(rows),
-    }
-    for f in NUM_FIELDS:
-        n = counts.get(f, 0)
-        if n > 0:
-            out[f] = sums[f] / n
-            out[f + "_min"] = mins[f]
-            out[f + "_max"] = maxs[f]
-    if last_jam is not None:
-        out["jamming_state"] = last_jam
-    if prn_counts:
-        out["prn_snr"] = {
-            prn: prn_sums[prn] / prn_counts[prn] for prn in prn_counts
-        }
-    else:
-        out["prn_snr"] = {}
-    return out
+def _aggregate_gps_trend_samples(
+    rows: list, bucket_start_ms: int, bucket_end_ms: int
+) -> Optional[dict]:
+    return _gps_trends.aggregate_samples(rows, bucket_start_ms, bucket_end_ms)
 
 
 def _emit_gps_trend_rollups(now_ms: int) -> None:
-    """Produce one aggregate row per closed bucket on each non-raw tier.
-
-    Reads the raw ring (newest-first) once per tier-boundary crossing,
-    filters to samples in the just-closed bucket window, aggregates,
-    and pushes the result onto the tier's ring with ``LPUSH`` +
-    ``LTRIM``.  No-ops while the raw ring is unreachable so a Redis
-    outage doesn't drop the live tail.
-    """
-    if not _redis_client:
-        return
-
-    now_s = now_ms / 1000.0
-    raw_rows: Optional[list] = None  # lazy fetch — only when a boundary trips
-
-    for tier, (bucket_s, cap) in GPS_TRENDS_TIERS.items():
-        if tier == "raw":
-            continue
-        current_id = int(now_s // bucket_s)
-        last_id = _gps_trend_last_bucket_ids.get(tier)
-        # Initialise on first observation; we never roll up the bucket
-        # we landed in mid-fill because we don't know what samples are
-        # still coming.
-        if last_id is None:
-            _gps_trend_last_bucket_ids[tier] = current_id
-            continue
-        if current_id <= last_id:
-            continue
-
-        # Lazily decode the raw ring once across all tiers that fired.
-        if raw_rows is None:
-            try:
-                raw_items = _redis_client.lrange(
-                    _gps_trend_redis_key("raw"), 0, GPS_TRENDS_RAW_MAX_SAMPLES - 1
-                ) or []
-            except Exception as exc:
-                logger.debug("Trend rollup: lrange(raw) failed: %s", exc)
-                _gps_trend_last_bucket_ids[tier] = current_id
-                continue
-            raw_rows = []
-            for raw in raw_items:
-                try:
-                    if isinstance(raw, bytes):
-                        raw = raw.decode("utf-8", errors="replace")
-                    raw_rows.append(json.loads(raw))
-                except Exception:
-                    continue
-
-        # Roll up every bucket between last_id (exclusive) and
-        # current_id (exclusive).  Usually that's just one bucket —
-        # but if the service was paused (e.g. SIGSTOP, a long GC, a
-        # Pi sleep) we'll catch up by emitting one row per skipped
-        # bucket so the gap is honest history rather than a single
-        # smeared average.
-        for finished_id in range(last_id, current_id):
-            bucket_start_ms = finished_id * bucket_s * 1000
-            bucket_end_ms = (finished_id + 1) * bucket_s * 1000
-            in_bucket = [
-                r for r in raw_rows
-                if isinstance(r, dict)
-                and isinstance(r.get("t"), (int, float))
-                and bucket_start_ms <= r["t"] < bucket_end_ms
-            ]
-            agg = _aggregate_gps_trend_samples(in_bucket, bucket_start_ms, bucket_end_ms)
-            if agg is None:
-                continue
-            agg["tier"] = tier
-            try:
-                pipe = _redis_client.pipeline()
-                pipe.lpush(_gps_trend_redis_key(tier), json.dumps(agg))
-                pipe.ltrim(_gps_trend_redis_key(tier), 0, cap - 1)
-                pipe.execute()
-            except Exception as exc:
-                logger.debug("Trend rollup: failed to publish %s tier: %s", tier, exc)
-                break  # don't try further buckets if Redis is unhappy
-
-        _gps_trend_last_bucket_ids[tier] = current_id
+    _gps_trends.emit_rollups(_redis_client, _gps_trend_last_bucket_ids, now_ms)
 
 
 def publish_gps_trend_sample() -> None:
     """Append one trend sample to the Redis ring buffer.
 
-    Skips publication entirely when neither GPS nor chrony returned any
-    usable fields, so the buffer doesn't fill with placeholder rows
-    while the hardware service is still starting up.
+    Thin wrapper that hands the orchestrator-owned state to the pure
+    sampler in ``services.gps.trends``.
     """
-    if not _redis_client:
-        return
-
-    chrony_fields = _collect_chrony_tracking_for_trends()
-    gps_fields = _collect_gps_for_trends()
-    if not chrony_fields and not gps_fields:
-        return
-
-    sample = {"t": int(time.time() * 1000)}
-    sample.update(chrony_fields)
-    sample.update(gps_fields)
-
-    try:
-        pipe = _redis_client.pipeline()
-        pipe.lpush(_gps_trend_redis_key("raw"), json.dumps(sample))
-        pipe.ltrim(_gps_trend_redis_key("raw"), 0, GPS_TRENDS_RAW_MAX_SAMPLES - 1)
-        pipe.execute()
-    except Exception as exc:
-        logger.debug("Trend sampler: failed to publish to Redis: %s", exc)
-        return
-
-    # Aggregate raw → 1m / 10m / 1h whenever the wall-clock crosses a
-    # bucket boundary.  Cheap when no boundary fired (just three
-    # arithmetic comparisons); does one Redis round-trip per crossed
-    # boundary the rest of the time.
-    _emit_gps_trend_rollups(sample["t"])
+    _gps_trends.publish_sample(
+        _redis_client, _gps_manager, _gps_trend_last_bucket_ids
+    )
 
 
 def publish_hardware_metrics():
     """Publish hardware status and metrics to Redis.
 
-    IMPORTANT: This is called from health_check_loop() which runs outside any
-    Flask app context. Functions that access the database (publish_display_state,
-    publish_zigbee_status) require app context for Flask-SQLAlchemy queries.
-    We push the app context here so all downstream functions can use the DB.
+    Thin wrapper that hands the orchestrator-owned state to the
+    cross-subsystem publisher in ``services.common.metrics``.
     """
-    if not _redis_client:
-        return
-
-    # Push Flask app context for database operations in publish_display_state()
-    # and publish_zigbee_status() which call get_*_settings() -> HardwareSettings.query
-    if _flask_app:
-        ctx = _flask_app.app_context()
-        ctx.push()
-    else:
-        ctx = None
-
-    try:
-        metrics = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "screen_manager_running": _screen_manager is not None and getattr(_screen_manager, '_running', False),
-            "gpio_controller_available": _gpio_controller is not None,
-        }
-
-        # Add screen manager metrics if available
-        if _screen_manager:
-            try:
-                metrics["screens"] = {
-                    "oled_active": getattr(_screen_manager, '_oled_rotation', None) is not None,
-                    "led_active": getattr(_screen_manager, '_led_rotation', None) is not None,
-                    "vfd_active": getattr(_screen_manager, '_vfd_rotation', None) is not None,
-                }
-            except Exception:
-                pass
-
-        # Publish basic metrics to Redis
-        _redis_client.setex(
-            "hardware:metrics",
-            60,  # 60 second TTL
-            json.dumps(metrics)
-        )
-
-        # Publish detailed display state for preview (separate key for larger data)
-        publish_display_state()
-
-        # Refresh Zigbee coordinator status in Redis (keeps key alive beyond initial publish)
-        publish_zigbee_status()
-
-    except Exception as e:
-        logger.debug(f"Failed to publish hardware metrics: {e}")
-    finally:
-        if ctx is not None:
-            ctx.pop()
+    _publish_hardware_metrics_impl(
+        redis_client=_redis_client,
+        flask_app=_flask_app,
+        screen_manager=_screen_manager,
+        gpio_controller=_gpio_controller,
+    )
 
 
 def publish_display_state():
-    """Publish detailed display state including preview images to Redis."""
-    if not _redis_client:
-        return
-
-    try:
-        # Import hardware settings helpers
-        from app_core.hardware_settings import get_oled_settings, get_led_settings, get_vfd_settings
-        
-        state = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "oled": {
-                "enabled": False,
-                "width": 128,
-                "height": 64,
-                "current_screen": None,
-                "scroll_offset": 0,
-                "alert_active": False,
-            },
-            "vfd": {
-                "enabled": False,
-                "width": 140,
-                "height": 32,
-                "current_screen": None,
-            },
-            "led": {
-                "enabled": False,
-                "lines": 4,
-                "chars_per_line": 20,
-                "current_message": None,
-                "color": "AMBER",
-            },
-        }
-
-        # Get OLED state from database and module
-        try:
-            oled_settings = get_oled_settings()
-            oled_enabled_in_db = oled_settings.get('enabled', False)
-            
-            # Import after getting settings to avoid circular imports
-            import app_core.oled as oled_module
-            
-            # Only show as enabled if both database setting is true AND controller exists
-            if oled_enabled_in_db and oled_module.oled_controller:
-                state["oled"]["enabled"] = True
-                state["oled"]["width"] = oled_module.oled_controller.width
-                state["oled"]["height"] = oled_module.oled_controller.height
-
-                # Get current screen name if available
-                if _screen_manager and hasattr(_screen_manager, '_current_oled_screen'):
-                    current_screen = _screen_manager._current_oled_screen
-                    if current_screen:
-                        state["oled"]["current_screen"] = current_screen.name if hasattr(current_screen, 'name') else str(current_screen)
-
-                # Get current alert state if scrolling
-                if _screen_manager:
-                    if hasattr(_screen_manager, '_oled_scroll_effect') and _screen_manager._oled_scroll_effect:
-                        state["oled"]["alert_active"] = True
-                        state["oled"]["scroll_offset"] = getattr(_screen_manager, '_oled_scroll_offset', 0)
-                        state["oled"]["alert_text"] = getattr(_screen_manager, '_current_alert_text', "") or ""
-                        state["oled"]["scroll_speed"] = getattr(_screen_manager, '_oled_scroll_speed', 4)
-
-                        # Get cached header
-                        if hasattr(_screen_manager, '_cached_header_text'):
-                            state["oled"]["header_text"] = _screen_manager._cached_header_text
-
-                # Get preview image
-                try:
-                    preview_image = oled_module.oled_controller.get_preview_image_base64()
-                    if preview_image:
-                        state["oled"]["preview_image"] = preview_image
-                except Exception as e:
-                    logger.debug(f"Failed to get OLED preview image: {e}")
-        except Exception as e:
-            logger.debug(f"Error getting OLED state: {e}")
-
-        # Get VFD state from database and module
-        try:
-            vfd_settings = get_vfd_settings()
-            vfd_enabled_in_db = vfd_settings.get('enabled', False)
-            
-            from app_core.vfd import vfd_controller
-            
-            # Only show as enabled if both database setting is true AND controller exists
-            if vfd_enabled_in_db and vfd_controller:
-                state["vfd"]["enabled"] = True
-        except Exception as e:
-            logger.debug(f"Error getting VFD state: {e}")
-
-        # Get LED state from database and module
-        try:
-            led_settings = get_led_settings()
-            led_enabled_in_db = led_settings.get('enabled', False)
-            
-            import app_core.led as led_module
-            
-            # Only show as enabled if both database setting is true AND controller exists
-            if led_enabled_in_db and led_module.led_controller:
-                state["led"]["enabled"] = True
-        except Exception as e:
-            logger.debug(f"Error getting LED state: {e}")
-
-        # Publish to Redis with short TTL (refreshes every 5 seconds)
-        _redis_client.setex(
-            "hardware:display_state",
-            15,  # 15 second TTL (3x the publish interval for tolerance)
-            json.dumps(state)
-        )
-
-    except Exception as e:
-        logger.debug(f"Failed to publish display state: {e}")
+    """Publish detailed display state (delegates to ``services.displays``)."""
+    from services.displays import publish_display_state as _impl
+    _impl(_redis_client, _screen_manager)
 
 
 def publish_zigbee_status():
-    """Refresh Zigbee coordinator status in Redis.
-
-    The initial publish in initialize_zigbee_coordinator() uses a 120s TTL.
-    This function is called periodically from the health check loop to keep
-    the key alive so the web UI always has current coordinator status.
-    """
-    if not _redis_client:
-        return
-
-    try:
-        from app_core.hardware_settings import get_zigbee_settings
-
-        zigbee_settings = get_zigbee_settings()
-        if not zigbee_settings.get('enabled', False):
-            return
-
-        port = zigbee_settings.get('port', '/dev/ttyAMA0')
-        baudrate = zigbee_settings.get('baudrate', 115200)
-        channel = zigbee_settings.get('channel', 15)
-        pan_id = zigbee_settings.get('pan_id', '0x1A62')
-
-        # Check if the serial port is still accessible
-        port_accessible = os.path.exists(port)
-
-        _redis_client.setex(
-            "zigbee:coordinator",
-            30,  # 30 second TTL (6x the 5s publish interval for tolerance)
-            json.dumps({
-                "enabled": True,
-                "port": port,
-                "baudrate": baudrate,
-                "channel": channel,
-                "pan_id": pan_id,
-                "status": "configured" if port_accessible else "port_unavailable",
-                "port_accessible": port_accessible,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-            })
-        )
-    except Exception as e:
-        logger.debug(f"Failed to publish Zigbee status: {e}")
+    """Refresh Zigbee coordinator status (delegates to ``services.zigbee``)."""
+    _publish_zigbee_status_impl(_redis_client)
 
 
 def create_api_app():
@@ -2922,70 +1817,17 @@ def _update_alert_indicators(
     broadcast_was_active: bool,
     incoming_was_active: bool,
 ) -> tuple:
-    """Drive tower light and NeoPixel controllers based on broadcast state.
+    """Drive tower light + NeoPixel based on broadcast / incoming alert state.
 
-    Reads the current ``eas:broadcast_active`` and ``eas:incoming_alert`` Redis
-    keys and calls the appropriate alert-lifecycle methods on any configured
-    hardware indicator controllers whenever the state changes.
-
-    The tower light follows a three-state machine:
-      idle → incoming (yellow) → active broadcast (red) → idle (green)
-
-    Returns ``(broadcast_active, incoming_active)`` so the caller can track
-    state across loop iterations.
+    Thin wrapper that hands the orchestrator-owned controllers to the
+    pure state-machine in ``services.gpio.alert_indicators``.
     """
-    try:
-        from app_utils.eas import get_broadcast_state, get_incoming_alert_state
-        state = get_broadcast_state()
-        broadcast_active = bool(state.get('active', False))
-        incoming_state = get_incoming_alert_state()
-        incoming_active = bool(incoming_state.get('incoming', False))
-    except Exception:
-        return broadcast_was_active, incoming_was_active  # Leave light in current state on error
-
-    # Transition: * → active broadcast (broadcast takes priority over incoming)
-    if broadcast_active and not broadcast_was_active:
-        if _tower_light_controller and _tower_light_controller.is_available:
-            try:
-                _tower_light_controller.start_alert()
-            except Exception as exc:
-                logger.warning("Tower light start_alert failed: %s", exc)
-        if _neopixel_controller:
-            try:
-                _neopixel_controller.start_alert()
-            except Exception as exc:
-                logger.warning("NeoPixel start_alert failed: %s", exc)
-
-    # Transition: active → idle (broadcast ended)
-    elif not broadcast_active and broadcast_was_active:
-        if _tower_light_controller and _tower_light_controller.is_available:
-            try:
-                _tower_light_controller.end_alert()
-            except Exception as exc:
-                logger.warning("Tower light end_alert failed: %s", exc)
-        if _neopixel_controller:
-            try:
-                _neopixel_controller.end_alert()
-            except Exception as exc:
-                logger.warning("NeoPixel end_alert failed: %s", exc)
-
-    # Transition: idle → incoming (alert received, broadcast not yet started)
-    elif not broadcast_active and incoming_active and not incoming_was_active:
-        if _tower_light_controller and _tower_light_controller.is_available:
-            try:
-                _tower_light_controller.start_incoming_alert()
-            except Exception as exc:
-                logger.warning("Tower light start_incoming_alert failed: %s", exc)
-
-    # Transition: incoming → idle (alert rejected or expired without broadcast)
-    elif not broadcast_active and not incoming_active and incoming_was_active:
-        if _tower_light_controller and _tower_light_controller.is_available:
-            try:
-                _tower_light_controller.end_alert()
-            except Exception as exc:
-                logger.warning("Tower light end_alert (incoming expired) failed: %s", exc)
-
-    return broadcast_active, incoming_active
+    return _update_alert_indicators_impl(
+        broadcast_was_active,
+        incoming_was_active,
+        tower_light_controller=_tower_light_controller,
+        neopixel_controller=_neopixel_controller,
+    )
 
 
 def health_check_loop():

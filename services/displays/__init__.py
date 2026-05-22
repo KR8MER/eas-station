@@ -17,24 +17,20 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Shared bootstrap helpers for every split hardware service."""
+"""Displays subsystem (LED sign, VFD, OLED, screen rotation)."""
 
-from services.common.bootstrap import (
-    configure_logging,
-    init_database,
-    init_runtime,
-    install_signal_handlers,
-    load_environment,
-    get_redis,
+from services.displays.init import (
+    initialize_led_controller,
+    initialize_oled_display,
+    initialize_screen_manager,
+    initialize_vfd_controller,
 )
-from services.common.metrics import publish_hardware_metrics
+from services.displays.state import publish_display_state
 
 __all__ = [
-    "configure_logging",
-    "init_database",
-    "init_runtime",
-    "install_signal_handlers",
-    "load_environment",
-    "get_redis",
-    "publish_hardware_metrics",
+    "initialize_led_controller",
+    "initialize_oled_display",
+    "initialize_screen_manager",
+    "initialize_vfd_controller",
+    "publish_display_state",
 ]

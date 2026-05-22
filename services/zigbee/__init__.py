@@ -17,24 +17,22 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Shared bootstrap helpers for every split hardware service."""
+"""Zigbee subsystem.
 
-from services.common.bootstrap import (
-    configure_logging,
-    init_database,
-    init_runtime,
-    install_signal_handlers,
-    load_environment,
-    get_redis,
+Owns coordinator detection, the zigpy-znp asyncio controller, and the
+Redis status publisher previously inlined in ``hardware_service.py``.
+"""
+
+from services.zigbee.controller import ZigpyController
+from services.zigbee.coordinator import (
+    initialize_zigbee_coordinator,
+    publish_zigbee_status,
 )
-from services.common.metrics import publish_hardware_metrics
+from services.zigbee.detection import detect_zigbee_coordinator
 
 __all__ = [
-    "configure_logging",
-    "init_database",
-    "init_runtime",
-    "install_signal_handlers",
-    "load_environment",
-    "get_redis",
-    "publish_hardware_metrics",
+    "ZigpyController",
+    "detect_zigbee_coordinator",
+    "initialize_zigbee_coordinator",
+    "publish_zigbee_status",
 ]
