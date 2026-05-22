@@ -4,8 +4,45 @@
 
 {% block extra_css %}
 <style>
+        /* ── Unified typography for the health page ──────────────────── */
+        :root {
+            --font-display: 'Inter', 'Segoe UI', 'Roboto', system-ui, -apple-system, sans-serif;
+            --font-numeric: 'Inter', 'SF Pro Display', 'Segoe UI Variable', system-ui, sans-serif;
+            --font-mono: 'JetBrains Mono', 'Roboto Mono', 'SFMono-Regular', ui-monospace, 'Courier New', monospace;
+        }
+        .system-health-root {
+            font-family: var(--font-display);
+            font-feature-settings: "cv11", "ss01", "ss03";
+        }
+        .system-health-root h1,
+        .system-health-root h2,
+        .system-health-root h3,
+        .system-health-root h4,
+        .system-health-root h5,
+        .system-health-root h6 {
+            font-family: var(--font-display);
+            letter-spacing: -0.01em;
+        }
+        .system-health-root .metric-value,
+        .system-health-root .metric-value.display-number,
+        .system-health-root .dep-version,
+        .system-health-root .smart-attr-val,
+        .system-health-root .container-image,
+        .system-health-root .gps-timecode,
+        .system-health-root .gps-nmea-log,
+        .system-health-root .gps-sat-table {
+            font-family: var(--font-mono);
+            font-variant-numeric: tabular-nums;
+        }
+        .system-health-root .quick-stat-card .stat-value,
+        .system-health-root .perf-trends-summary .trend-stat-value {
+            font-family: var(--font-numeric);
+            font-variant-numeric: tabular-nums;
+            font-feature-settings: "tnum", "cv11";
+        }
+
         /* System Health Page Styles - Consistent with Admin Theme */
-        .health-card { 
+        .health-card {
             border-left: 4px solid var(--primary-color);
             background: var(--surface-color);
             border-radius: var(--radius-lg);
@@ -467,10 +504,156 @@
         .gps-nmea-log  { font-family: 'Courier New', monospace; font-size: 0.7rem; max-height: 90px;
                          overflow-y: auto; background: rgba(0,0,0,0.15); border-radius: var(--radius-sm);
                          padding: 0.4rem 0.6rem; margin-top: 0.5rem; }
+
+        /* ── Quick-stat cards: refined layout with sparklines ────────── */
+        .quick-stat-card {
+            position: relative;
+            overflow: hidden;
+        }
+        .quick-stat-card::before {
+            content: "";
+            position: absolute;
+            inset: 0 0 auto 0;
+            height: 3px;
+            background: linear-gradient(90deg,
+                var(--primary-color) 0%,
+                var(--secondary-color) 100%);
+            opacity: 0.85;
+        }
+        .quick-stat-card.tone-success::before { background: linear-gradient(90deg, var(--success-color), color-mix(in srgb, var(--success-color) 60%, var(--info-color))); }
+        .quick-stat-card.tone-warning::before { background: linear-gradient(90deg, var(--warning-color), color-mix(in srgb, var(--warning-color) 60%, var(--danger-color))); }
+        .quick-stat-card.tone-danger::before  { background: linear-gradient(90deg, var(--danger-color), color-mix(in srgb, var(--danger-color) 60%, var(--warning-color))); }
+
+        .quick-stat-card .stat-label {
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            margin-bottom: 0.35rem;
+        }
+        .quick-stat-card .stat-value {
+            font-size: 2.1rem;
+            font-weight: 700;
+            line-height: 1.05;
+            letter-spacing: -0.02em;
+            color: var(--text-color);
+            margin-bottom: 0.25rem;
+        }
+        .quick-stat-card .stat-value .unit {
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            margin-left: 0.15rem;
+        }
+        .quick-stat-card .stat-subtext {
+            font-family: var(--font-mono);
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            font-variant-numeric: tabular-nums;
+            min-height: 1em;
+        }
+        .quick-stat-card .quick-stat-icon {
+            margin: 0 0 0.6rem 0;
+            width: 40px;
+            height: 40px;
+            font-size: 1.1rem;
+            border-radius: 10px;
+        }
+        .quick-stat-card .sparkline-wrap {
+            position: relative;
+            margin-top: 0.5rem;
+            height: 40px;
+        }
+        .quick-stat-card .sparkline-wrap canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        .quick-stat-card .sparkline-empty {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            opacity: 0.6;
+            pointer-events: none;
+        }
+        .quick-stat-card .sparkline-empty.hidden { display: none; }
+
+        /* ── Performance Trends card ─────────────────────────────────── */
+        .perf-trends-card {
+            border-left: 4px solid var(--primary-color);
+            background: var(--surface-color);
+            border-radius: var(--radius-lg);
+            box-shadow: 0 2px 10px var(--shadow-color);
+            overflow: hidden;
+        }
+        .perf-trends-card .card-header {
+            background: linear-gradient(135deg,
+                color-mix(in srgb, var(--primary-color) 12%, transparent),
+                color-mix(in srgb, var(--secondary-color) 6%, transparent));
+            border-bottom: 1px solid var(--border-color);
+        }
+        .perf-trends-canvas-wrap {
+            position: relative;
+            height: 260px;
+            width: 100%;
+        }
+        .perf-trends-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 0.75rem;
+            margin-top: 1rem;
+        }
+        .trend-stat {
+            padding: 0.65rem 0.85rem;
+            border-radius: var(--radius-md);
+            background: var(--bg-color);
+            border: 1px solid var(--border-color);
+            position: relative;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .trend-stat:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 14px var(--shadow-color);
+        }
+        .trend-stat .trend-stat-label {
+            font-size: 0.66rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+            margin-bottom: 0.2rem;
+        }
+        .trend-stat .trend-stat-label .swatch {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .trend-stat .trend-stat-value {
+            font-size: 1.15rem;
+            font-weight: 700;
+            letter-spacing: -0.01em;
+            color: var(--text-color);
+        }
+        .trend-stat .trend-stat-meta {
+            font-family: var(--font-mono);
+            font-size: 0.68rem;
+            color: var(--text-muted);
+            font-variant-numeric: tabular-nums;
+        }
     </style>
 {% endblock %}
 
 {% block content %}
+<div class="system-health-root">
 <div class="page-header">
     <div class="container-fluid">
         <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
@@ -514,94 +697,87 @@
     <!-- Quick Stats Summary -->
     <div class="row mb-4">
         <div class="col-md-3 mb-3">
-            <div class="card health-card h-100">
-                <div class="card-body text-center">
+            <div class="card health-card quick-stat-card h-100" id="quick-cpu-card">
+                <div class="card-body">
                     <div class="quick-stat-icon cpu"><i class="fas fa-microchip"></i></div>
-                    <h6 class="text-muted mb-2">CPU Usage</h6>
-                    <h3 class="mb-0" id="quick-cpu-usage">
+                    <div class="stat-label">CPU Usage</div>
+                    <div class="stat-value" id="quick-cpu-usage">
                         {% if cpu and cpu.cpu_usage_percent is not none %}
-                            {{ "%.1f"|format(cpu.cpu_usage_percent) }}%
+                            {{ "%.1f"|format(cpu.cpu_usage_percent) }}<span class="unit">%</span>
                         {% else %}
-                            N/A
+                            <span class="unit">N/A</span>
                         {% endif %}
-                    </h3>
-                    {% if cpu and cpu.cpu_usage_percent is not none %}
-                        <div class="progress progress-sm mt-2">
-                            <div class="progress-bar" role="progressbar" 
-                                 style="width: {{ cpu.cpu_usage_percent }}%; 
-                                        background-color: {% if cpu.cpu_usage_percent > 90 %}var(--danger-color){% elif cpu.cpu_usage_percent > 70 %}var(--warning-color){% else %}var(--success-color){% endif %};">
-                            </div>
-                        </div>
-                    {% endif %}
+                    </div>
+                    <div class="stat-subtext" id="quick-cpu-subtext">
+                        {% if cpu and cpu.total_cores %}{{ cpu.total_cores }} cores · {{ "%.0f"|format(cpu.current_frequency or 0) }} MHz{% endif %}
+                    </div>
+                    <div class="sparkline-wrap">
+                        <canvas data-sparkline="cpu"></canvas>
+                        <div class="sparkline-empty" data-spark-empty="cpu">collecting samples…</div>
+                    </div>
                 </div>
             </div>
         </div>
         <div class="col-md-3 mb-3">
-            <div class="card health-card h-100">
-                <div class="card-body text-center">
+            <div class="card health-card quick-stat-card h-100" id="quick-memory-card">
+                <div class="card-body">
                     <div class="quick-stat-icon memory"><i class="fas fa-memory"></i></div>
-                    <h6 class="text-muted mb-2">Memory Usage</h6>
-                    <h3 class="mb-0" id="quick-memory-usage">
+                    <div class="stat-label">Memory Usage</div>
+                    <div class="stat-value" id="quick-memory-usage">
                         {% if memory and memory.percentage is not none %}
-                            {{ "%.1f"|format(memory.percentage) }}%
+                            {{ "%.1f"|format(memory.percentage) }}<span class="unit">%</span>
                         {% else %}
-                            N/A
+                            <span class="unit">N/A</span>
                         {% endif %}
-                    </h3>
-                    {% if memory and memory.percentage is not none %}
-                        <div class="progress progress-sm mt-2">
-                            <div class="progress-bar" role="progressbar" 
-                                 style="width: {{ memory.percentage }}%; 
-                                        background-color: {% if memory.percentage > 90 %}var(--danger-color){% elif memory.percentage > 80 %}var(--warning-color){% else %}var(--success-color){% endif %};">
-                            </div>
-                        </div>
-                        <small class="text-muted">{{ format_bytes(memory.used) }} / {{ format_bytes(memory.total) }}</small>
-                    {% endif %}
+                    </div>
+                    <div class="stat-subtext" id="quick-memory-subtext">
+                        {% if memory and memory.total %}{{ format_bytes(memory.used) }} / {{ format_bytes(memory.total) }}{% endif %}
+                    </div>
+                    <div class="sparkline-wrap">
+                        <canvas data-sparkline="memory"></canvas>
+                        <div class="sparkline-empty" data-spark-empty="memory">collecting samples…</div>
+                    </div>
                 </div>
             </div>
         </div>
         <div class="col-md-3 mb-3">
-            <div class="card health-card h-100">
-                <div class="card-body text-center">
+            <div class="card health-card quick-stat-card h-100" id="quick-storage-card">
+                <div class="card-body">
                     <div class="quick-stat-icon disk"><i class="fas fa-hdd"></i></div>
-                    <h6 class="text-muted mb-2">Storage</h6>
-                    <h3 class="mb-0" id="quick-storage-usage">
+                    <div class="stat-label">Root Storage</div>
+                    <div class="stat-value" id="quick-storage-usage">
+                        {% set root_partition = namespace(found=false, pct=0, used=0, total=0) %}
                         {% if disk %}
-                            {% set root_partition = namespace(found=false) %}
                             {% for partition in disk %}
                                 {% if partition.mountpoint == '/' and not root_partition.found %}
                                     {% set root_partition.found = true %}
-                                    {{ "%.1f"|format(partition.percentage) }}%
+                                    {% set root_partition.pct = partition.percentage %}
+                                    {% set root_partition.used = partition.used %}
+                                    {% set root_partition.total = partition.total %}
                                 {% endif %}
                             {% endfor %}
-                            {% if not root_partition.found %}
-                                N/A
-                            {% endif %}
-                        {% else %}
-                            N/A
                         {% endif %}
-                    </h3>
-                    {% if disk %}
-                        {% for partition in disk %}
-                            {% if partition.mountpoint == '/' %}
-                                <div class="progress progress-sm mt-2">
-                                    <div class="progress-bar" role="progressbar" 
-                                         style="width: {{ partition.percentage }}%; 
-                                                background-color: {% if partition.percentage > 90 %}var(--danger-color){% elif partition.percentage > 80 %}var(--warning-color){% else %}var(--success-color){% endif %};">
-                                    </div>
-                                </div>
-                                <small class="text-muted">{{ format_bytes(partition.used) }} / {{ format_bytes(partition.total) }}</small>
-                            {% endif %}
-                        {% endfor %}
-                    {% endif %}
+                        {% if root_partition.found %}
+                            {{ "%.1f"|format(root_partition.pct) }}<span class="unit">%</span>
+                        {% else %}
+                            <span class="unit">N/A</span>
+                        {% endif %}
+                    </div>
+                    <div class="stat-subtext" id="quick-storage-subtext">
+                        {% if root_partition.found %}{{ format_bytes(root_partition.used) }} / {{ format_bytes(root_partition.total) }}{% endif %}
+                    </div>
+                    <div class="sparkline-wrap">
+                        <canvas data-sparkline="storage"></canvas>
+                        <div class="sparkline-empty" data-spark-empty="storage">collecting samples…</div>
+                    </div>
                 </div>
             </div>
         </div>
         <div class="col-md-3 mb-3">
-            <div class="card health-card h-100">
-                <div class="card-body text-center">
+            <div class="card health-card quick-stat-card h-100" id="quick-smart-card">
+                <div class="card-body">
                     <div class="quick-stat-icon smart"><i class="fas fa-heartbeat"></i></div>
-                    <h6 class="text-muted mb-2">S.M.A.R.T. Status</h6>
+                    <div class="stat-label">S.M.A.R.T. Status</div>
                     {% if smart and smart.available and smart.devices %}
                         {% set smart_summary = namespace(passed=0, failed=0, warning=0) %}
                         {% for device in smart.devices %}
@@ -614,26 +790,25 @@
                                 {% set smart_summary.warning = smart_summary.warning + 1 %}
                             {% endif %}
                         {% endfor %}
-                        <h3 class="mb-2">
-                            <span class="badge bg-success">{{ smart_summary.passed }}</span>
-                            {% if smart_summary.failed > 0 %}
-                                <span class="badge bg-danger">{{ smart_summary.failed }}</span>
-                            {% endif %}
-                            {% if smart_summary.warning > 0 %}
-                                <span class="badge bg-warning">{{ smart_summary.warning }}</span>
-                            {% endif %}
-                        </h3>
-                        <small class="text-muted">
-                            {{ smart_summary.passed }} OK
-                            {% if smart_summary.failed > 0 %}, {{ smart_summary.failed }} Failed{% endif %}
-                            {% if smart_summary.warning > 0 %}, {{ smart_summary.warning }} Warning{% endif %}
-                        </small>
+                        <div class="stat-value" id="quick-smart-summary">
+                            {{ smart_summary.passed + smart_summary.failed + smart_summary.warning }}<span class="unit"> drives</span>
+                        </div>
+                        <div class="stat-subtext" id="quick-smart-subtext">
+                            <span class="badge bg-success me-1">{{ smart_summary.passed }} OK</span>
+                            {% if smart_summary.failed > 0 %}<span class="badge bg-danger me-1">{{ smart_summary.failed }} fail</span>{% endif %}
+                            {% if smart_summary.warning > 0 %}<span class="badge bg-warning">{{ smart_summary.warning }} warn</span>{% endif %}
+                        </div>
                     {% elif smart and not smart.available %}
-                        <h3 class="mb-0 text-muted">Unavailable</h3>
-                        <small class="text-muted">{{ smart.error or 'Not installed' }}</small>
+                        <div class="stat-value text-muted" id="quick-smart-summary"><span class="unit">Unavailable</span></div>
+                        <div class="stat-subtext" id="quick-smart-subtext">{{ smart.error or 'smartctl not installed' }}</div>
                     {% else %}
-                        <h3 class="mb-0 text-muted">No Devices</h3>
+                        <div class="stat-value text-muted" id="quick-smart-summary"><span class="unit">No drives</span></div>
+                        <div class="stat-subtext" id="quick-smart-subtext"></div>
                     {% endif %}
+                    <div class="sparkline-wrap">
+                        <canvas data-sparkline="load"></canvas>
+                        <div class="sparkline-empty" data-spark-empty="load">load avg sparkline</div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -724,6 +899,45 @@
                                         <i class="fas fa-sync-alt"></i> Refresh Data
                                     </button>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Performance Trends (live time-series) -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card perf-trends-card">
+                    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <h5 class="mb-0"><i class="fas fa-chart-line section-icon"></i> Performance Trends</h5>
+                        <small class="text-muted" id="perf-trends-sample-info">live · 0 samples · 30s interval</small>
+                    </div>
+                    <div class="card-body">
+                        <div class="perf-trends-canvas-wrap">
+                            <canvas id="perfTrendsChart"></canvas>
+                        </div>
+                        <div class="perf-trends-summary">
+                            <div class="trend-stat" id="trend-stat-cpu">
+                                <div class="trend-stat-label"><span class="swatch" style="background:#6366f1"></span>CPU</div>
+                                <div class="trend-stat-value">--<span class="text-muted" style="font-size:0.7em">%</span></div>
+                                <div class="trend-stat-meta">avg -- · peak --</div>
+                            </div>
+                            <div class="trend-stat" id="trend-stat-memory">
+                                <div class="trend-stat-label"><span class="swatch" style="background:#10b981"></span>Memory</div>
+                                <div class="trend-stat-value">--<span class="text-muted" style="font-size:0.7em">%</span></div>
+                                <div class="trend-stat-meta">avg -- · peak --</div>
+                            </div>
+                            <div class="trend-stat" id="trend-stat-load">
+                                <div class="trend-stat-label"><span class="swatch" style="background:#f59e0b"></span>Load (1m)</div>
+                                <div class="trend-stat-value">--</div>
+                                <div class="trend-stat-meta">avg -- · peak --</div>
+                            </div>
+                            <div class="trend-stat" id="trend-stat-temp">
+                                <div class="trend-stat-label"><span class="swatch" style="background:#ef4444"></span>Temperature</div>
+                                <div class="trend-stat-value">--<span class="text-muted" style="font-size:0.7em">°C</span></div>
+                                <div class="trend-stat-meta">avg -- · peak --</div>
                             </div>
                         </div>
                     </div>
@@ -2095,6 +2309,7 @@
         </button>
     </div>
 </div>
+</div>{# /.system-health-root #}
 {% endblock %}
 
 {% block scripts %}
@@ -4207,6 +4422,19 @@
             updateGpsCard(data.gps || {});
             updateRtcCard(data.rtc || {});
 
+            // Update the quick-stat tiles (CPU/Memory/Storage numbers + tone)
+            try { updateQuickStats(data); } catch (e) { console.error('updateQuickStats failed:', e); }
+
+            // Record a sample, refresh sparklines + trends chart
+            try {
+                pushHistory(data);
+                refreshSparklines();
+                updatePerfTrendsChart();
+                updateTrendSummaries();
+            } catch (e) {
+                console.error('Trend update failed:', e);
+            }
+
             const timestamp = data.local_timestamp || data.timestamp;
             const parsedDate = timestamp ? new Date(timestamp) : new Date();
             lastUpdatedTime = Number.isNaN(parsedDate.getTime()) ? new Date() : parsedDate;
@@ -4387,6 +4615,408 @@
             }
         }
 
+        /* ── Rolling history, sparklines, and Performance Trends chart ── */
+        const HISTORY_MAX = 60;
+        const trendHistory = {
+            timestamps: [],
+            cpu: [],
+            memory: [],
+            load: [],
+            storage: [],
+            temperature: []
+        };
+        let perfTrendsChart = null;
+
+        function pickRootStoragePct(disk) {
+            if (!Array.isArray(disk)) return null;
+            const root = disk.find((p) => p && p.mountpoint === '/');
+            return root && Number.isFinite(root.percentage) ? root.percentage : null;
+        }
+
+        function pickPrimaryTemp(temperature) {
+            if (!temperature || typeof temperature !== 'object') return null;
+            // Best-effort: try common shapes (number, {current}, sensor arrays)
+            if (Number.isFinite(temperature.current)) return temperature.current;
+            if (Number.isFinite(temperature.cpu)) return temperature.cpu;
+            if (Number.isFinite(temperature.value)) return temperature.value;
+            for (const key of Object.keys(temperature)) {
+                const v = temperature[key];
+                if (Number.isFinite(v)) return v;
+                if (v && typeof v === 'object') {
+                    if (Number.isFinite(v.current)) return v.current;
+                    if (Array.isArray(v) && v.length && Number.isFinite(v[0]?.current)) {
+                        return v[0].current;
+                    }
+                }
+            }
+            return null;
+        }
+
+        function pushHistory(data) {
+            const ts = new Date();
+            const cpuVal = (data.cpu && Number.isFinite(data.cpu.cpu_usage_percent)) ? data.cpu.cpu_usage_percent : null;
+            const memVal = (data.memory && Number.isFinite(data.memory.percentage)) ? data.memory.percentage : null;
+            let loadVal = null;
+            if (data.system && Array.isArray(data.system.load_averages) && Number.isFinite(data.system.load_averages[0])) {
+                loadVal = data.system.load_averages[0];
+            } else if (Array.isArray(data.load_averages) && Number.isFinite(data.load_averages[0])) {
+                loadVal = data.load_averages[0];
+            }
+            const storageVal = pickRootStoragePct(data.disk);
+            const tempVal = pickPrimaryTemp(data.temperature);
+
+            trendHistory.timestamps.push(ts);
+            trendHistory.cpu.push(cpuVal);
+            trendHistory.memory.push(memVal);
+            trendHistory.load.push(loadVal);
+            trendHistory.storage.push(storageVal);
+            trendHistory.temperature.push(tempVal);
+
+            const keys = ['timestamps', 'cpu', 'memory', 'load', 'storage', 'temperature'];
+            keys.forEach((k) => {
+                while (trendHistory[k].length > HISTORY_MAX) trendHistory[k].shift();
+            });
+        }
+
+        function pickToneClass(value, warn, danger) {
+            if (!Number.isFinite(value)) return '';
+            if (value >= danger) return 'tone-danger';
+            if (value >= warn) return 'tone-warning';
+            return 'tone-success';
+        }
+
+        function setQuickStatTone(cardId, toneClass) {
+            const card = document.getElementById(cardId);
+            if (!card) return;
+            card.classList.remove('tone-success', 'tone-warning', 'tone-danger');
+            if (toneClass) card.classList.add(toneClass);
+        }
+
+        function setText(id, text) {
+            const el = document.getElementById(id);
+            if (el) el.textContent = text;
+        }
+        function setHtml2(id, html) {
+            const el = document.getElementById(id);
+            if (el) el.innerHTML = html;
+        }
+
+        function updateQuickStats(data) {
+            // CPU
+            const cpuPct = data.cpu && Number.isFinite(data.cpu.cpu_usage_percent) ? data.cpu.cpu_usage_percent : null;
+            if (cpuPct !== null) {
+                setHtml2('quick-cpu-usage', cpuPct.toFixed(1) + '<span class="unit">%</span>');
+            } else {
+                setHtml2('quick-cpu-usage', '<span class="unit">N/A</span>');
+            }
+            const cores = data.cpu && (data.cpu.total_cores || data.cpu.physical_cores);
+            const freq = data.cpu && data.cpu.current_frequency;
+            const subParts = [];
+            if (cores) subParts.push(cores + ' cores');
+            if (Number.isFinite(freq) && freq > 0) subParts.push(Math.round(freq) + ' MHz');
+            setText('quick-cpu-subtext', subParts.join(' · '));
+            setQuickStatTone('quick-cpu-card', pickToneClass(cpuPct, 50, 80));
+
+            // Memory
+            const memPct = data.memory && Number.isFinite(data.memory.percentage) ? data.memory.percentage : null;
+            if (memPct !== null) {
+                setHtml2('quick-memory-usage', memPct.toFixed(1) + '<span class="unit">%</span>');
+            } else {
+                setHtml2('quick-memory-usage', '<span class="unit">N/A</span>');
+            }
+            if (data.memory && data.memory.total) {
+                setText('quick-memory-subtext',
+                    formatBytes(data.memory.used || 0) + ' / ' + formatBytes(data.memory.total));
+            }
+            setQuickStatTone('quick-memory-card', pickToneClass(memPct, 75, 90));
+
+            // Storage (root)
+            const rootPct = pickRootStoragePct(data.disk);
+            if (rootPct !== null) {
+                setHtml2('quick-storage-usage', rootPct.toFixed(1) + '<span class="unit">%</span>');
+                const root = data.disk.find((p) => p && p.mountpoint === '/');
+                if (root) {
+                    setText('quick-storage-subtext',
+                        formatBytes(root.used || 0) + ' / ' + formatBytes(root.total || 0));
+                }
+            }
+            setQuickStatTone('quick-storage-card', pickToneClass(rootPct, 80, 90));
+        }
+
+        /* ── Tiny canvas sparkline renderer (no Chart.js, fast) ───────── */
+        function renderSparkline(canvas, values, opts) {
+            if (!canvas) return;
+            const valid = values.filter((v) => Number.isFinite(v));
+            const empty = canvas.parentElement && canvas.parentElement.querySelector('[data-spark-empty]');
+            if (valid.length < 2) {
+                if (empty) empty.classList.remove('hidden');
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                return;
+            }
+            if (empty) empty.classList.add('hidden');
+
+            const dpr = window.devicePixelRatio || 1;
+            const cssW = canvas.clientWidth || canvas.parentElement.clientWidth || 200;
+            const cssH = canvas.clientHeight || 40;
+            if (canvas.width !== cssW * dpr || canvas.height !== cssH * dpr) {
+                canvas.width = cssW * dpr;
+                canvas.height = cssH * dpr;
+            }
+            const ctx = canvas.getContext('2d');
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            ctx.clearRect(0, 0, cssW, cssH);
+
+            const color = opts && opts.color ? opts.color : getColorVar('--primary-color');
+            const min = opts && opts.min != null ? opts.min : Math.min.apply(null, valid);
+            const max = opts && opts.max != null ? opts.max : Math.max.apply(null, valid);
+            const range = (max - min) || 1;
+
+            const padX = 2;
+            const padY = 4;
+            const innerW = cssW - padX * 2;
+            const innerH = cssH - padY * 2;
+            const step = innerW / (values.length - 1 || 1);
+
+            // Build path (skip nulls)
+            const points = values.map((v, i) => {
+                if (!Number.isFinite(v)) return null;
+                const x = padX + i * step;
+                const y = padY + innerH - ((v - min) / range) * innerH;
+                return { x, y };
+            });
+
+            // Filled area
+            ctx.beginPath();
+            let started = false;
+            for (let i = 0; i < points.length; i++) {
+                const p = points[i];
+                if (!p) continue;
+                if (!started) { ctx.moveTo(p.x, cssH - padY); ctx.lineTo(p.x, p.y); started = true; }
+                else ctx.lineTo(p.x, p.y);
+            }
+            const lastPoint = [...points].reverse().find((p) => p);
+            if (lastPoint) ctx.lineTo(lastPoint.x, cssH - padY);
+            ctx.closePath();
+            const grad = ctx.createLinearGradient(0, padY, 0, cssH);
+            grad.addColorStop(0, color + '55');
+            grad.addColorStop(1, color + '00');
+            ctx.fillStyle = grad;
+            ctx.fill();
+
+            // Line
+            ctx.beginPath();
+            started = false;
+            for (let i = 0; i < points.length; i++) {
+                const p = points[i];
+                if (!p) { started = false; continue; }
+                if (!started) { ctx.moveTo(p.x, p.y); started = true; }
+                else ctx.lineTo(p.x, p.y);
+            }
+            ctx.lineWidth = 1.5;
+            ctx.strokeStyle = color;
+            ctx.lineJoin = 'round';
+            ctx.lineCap = 'round';
+            ctx.stroke();
+
+            // End dot
+            if (lastPoint) {
+                ctx.beginPath();
+                ctx.arc(lastPoint.x, lastPoint.y, 2.5, 0, Math.PI * 2);
+                ctx.fillStyle = color;
+                ctx.fill();
+            }
+        }
+
+        function refreshSparklines() {
+            const cpuColor = getColorVar('--primary-color') || '#6366f1';
+            const memColor = getColorVar('--success-color') || '#10b981';
+            const diskColor = getColorVar('--warning-color') || '#f59e0b';
+            const loadColor = getColorVar('--danger-color') || '#ef4444';
+
+            renderSparkline(document.querySelector('canvas[data-sparkline="cpu"]'),
+                trendHistory.cpu, { color: cpuColor, min: 0, max: 100 });
+            renderSparkline(document.querySelector('canvas[data-sparkline="memory"]'),
+                trendHistory.memory, { color: memColor, min: 0, max: 100 });
+            renderSparkline(document.querySelector('canvas[data-sparkline="storage"]'),
+                trendHistory.storage, { color: diskColor, min: 0, max: 100 });
+            renderSparkline(document.querySelector('canvas[data-sparkline="load"]'),
+                trendHistory.load, { color: loadColor });
+        }
+
+        /* ── Performance trends multi-series chart ────────────────────── */
+        function initPerfTrendsChart() {
+            const canvas = document.getElementById('perfTrendsChart');
+            if (!canvas) return;
+            if (perfTrendsChart) { perfTrendsChart.destroy(); perfTrendsChart = null; }
+            const ctx = canvas.getContext('2d');
+            const textColor = getColorVar('--text-secondary') || '#888';
+            const gridColor = getColorVar('--border-color') || 'rgba(128,128,128,0.15)';
+
+            perfTrendsChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: 'CPU %',
+                            data: [],
+                            borderColor: '#6366f1',
+                            backgroundColor: 'rgba(99,102,241,0.12)',
+                            yAxisID: 'y',
+                            tension: 0.35,
+                            fill: true,
+                            pointRadius: 0,
+                            borderWidth: 2
+                        },
+                        {
+                            label: 'Memory %',
+                            data: [],
+                            borderColor: '#10b981',
+                            backgroundColor: 'rgba(16,185,129,0.10)',
+                            yAxisID: 'y',
+                            tension: 0.35,
+                            fill: true,
+                            pointRadius: 0,
+                            borderWidth: 2
+                        },
+                        {
+                            label: 'Load (1m)',
+                            data: [],
+                            borderColor: '#f59e0b',
+                            backgroundColor: 'rgba(245,158,11,0.08)',
+                            yAxisID: 'yLoad',
+                            tension: 0.35,
+                            fill: false,
+                            pointRadius: 0,
+                            borderWidth: 2,
+                            borderDash: [4, 3]
+                        },
+                        {
+                            label: 'Temp °C',
+                            data: [],
+                            borderColor: '#ef4444',
+                            backgroundColor: 'rgba(239,68,68,0.08)',
+                            yAxisID: 'yTemp',
+                            tension: 0.35,
+                            fill: false,
+                            pointRadius: 0,
+                            borderWidth: 2,
+                            borderDash: [2, 4]
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: { duration: 300 },
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            align: 'end',
+                            labels: { color: textColor, boxWidth: 10, font: { size: 11 } }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(20,20,28,0.92)',
+                            titleColor: '#fff',
+                            bodyColor: '#fff',
+                            borderColor: 'rgba(255,255,255,0.08)',
+                            borderWidth: 1,
+                            padding: 10,
+                            callbacks: {
+                                label: function(ctx) {
+                                    if (ctx.parsed.y == null) return ctx.dataset.label + ': —';
+                                    const isPct = ctx.dataset.label.indexOf('%') !== -1;
+                                    const isTemp = ctx.dataset.label.indexOf('°') !== -1;
+                                    const val = ctx.parsed.y;
+                                    return ctx.dataset.label + ': ' + val.toFixed(isPct || isTemp ? 1 : 2);
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: textColor, maxRotation: 0, autoSkip: true, maxTicksLimit: 8, font: { size: 10 } },
+                            grid: { color: gridColor }
+                        },
+                        y: {
+                            position: 'left',
+                            min: 0, max: 100,
+                            title: { display: true, text: '%', color: textColor, font: { size: 11 } },
+                            ticks: { color: textColor, font: { size: 10 } },
+                            grid: { color: gridColor }
+                        },
+                        yLoad: {
+                            position: 'right',
+                            min: 0,
+                            title: { display: true, text: 'load', color: textColor, font: { size: 11 } },
+                            ticks: { color: textColor, font: { size: 10 } },
+                            grid: { drawOnChartArea: false }
+                        },
+                        yTemp: {
+                            position: 'right',
+                            display: false
+                        }
+                    }
+                }
+            });
+        }
+
+        function updatePerfTrendsChart() {
+            if (!perfTrendsChart) return;
+            const labels = trendHistory.timestamps.map((t) =>
+                t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+            perfTrendsChart.data.labels = labels;
+            perfTrendsChart.data.datasets[0].data = trendHistory.cpu;
+            perfTrendsChart.data.datasets[1].data = trendHistory.memory;
+            perfTrendsChart.data.datasets[2].data = trendHistory.load;
+            perfTrendsChart.data.datasets[3].data = trendHistory.temperature;
+            perfTrendsChart.update('none');
+        }
+
+        function avgPeak(values, decimals) {
+            const valid = values.filter((v) => Number.isFinite(v));
+            if (!valid.length) return { current: null, avg: null, peak: null };
+            const sum = valid.reduce((a, b) => a + b, 0);
+            return {
+                current: valid[valid.length - 1],
+                avg: sum / valid.length,
+                peak: Math.max.apply(null, valid)
+            };
+        }
+
+        function updateTrendSummaries() {
+            const fmt = (v, suf, d) => (v == null ? '--' : (d != null ? v.toFixed(d) : v.toFixed(1)) + (suf || ''));
+            const setStat = (id, stats, suffix, decimals) => {
+                const card = document.getElementById(id);
+                if (!card) return;
+                const valEl = card.querySelector('.trend-stat-value');
+                const metaEl = card.querySelector('.trend-stat-meta');
+                if (valEl) {
+                    if (stats.current == null) {
+                        valEl.innerHTML = '--' + (suffix ? '<span class="text-muted" style="font-size:0.7em">' + suffix + '</span>' : '');
+                    } else {
+                        valEl.innerHTML = (decimals != null ? stats.current.toFixed(decimals) : stats.current.toFixed(1))
+                            + (suffix ? '<span class="text-muted" style="font-size:0.7em">' + suffix + '</span>' : '');
+                    }
+                }
+                if (metaEl) {
+                    metaEl.textContent = 'avg ' + fmt(stats.avg, '', decimals) + ' · peak ' + fmt(stats.peak, '', decimals);
+                }
+            };
+            setStat('trend-stat-cpu', avgPeak(trendHistory.cpu), '%', 1);
+            setStat('trend-stat-memory', avgPeak(trendHistory.memory), '%', 1);
+            setStat('trend-stat-load', avgPeak(trendHistory.load), '', 2);
+            setStat('trend-stat-temp', avgPeak(trendHistory.temperature), '°C', 1);
+
+            const info = document.getElementById('perf-trends-sample-info');
+            if (info) {
+                const n = trendHistory.cpu.length;
+                info.textContent = 'live · ' + n + ' sample' + (n === 1 ? '' : 's') + ' · ' + Math.round(REFRESH_INTERVAL_MS / 1000) + 's interval';
+            }
+        }
+
         // Export system data to JSON file
         function exportSystemData() {
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
@@ -4416,10 +5046,18 @@
 
         document.addEventListener('DOMContentLoaded', () => {
             initializeCharts();
+            initPerfTrendsChart();
             applyHealthData(initialHealthData);
             updateCharts(initialHealthData);
             updateCurrentTimeDisplay();
             setInterval(updateCurrentTimeDisplay, 1000);
+
+            // Re-render sparklines on window resize so they stay crisp.
+            let resizeHandle = null;
+            window.addEventListener('resize', () => {
+                if (resizeHandle) cancelAnimationFrame(resizeHandle);
+                resizeHandle = requestAnimationFrame(refreshSparklines);
+            });
 
             document.querySelectorAll('.refresh-trigger').forEach((button) => {
                 button.addEventListener('click', () => {
