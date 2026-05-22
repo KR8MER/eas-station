@@ -813,6 +813,17 @@ if not skip_background_services:
     except Exception as _backup_sched_err:
         logger.warning('Auto-backup scheduler could not be started: %s', _backup_sched_err)
 
+# Start system-health metrics sampler so the dashboard's Performance Trends
+# chart and sparklines have history even when the page has not been open.
+if not skip_background_services:
+    try:
+        from app_core.analytics.system_sampler import start_system_sampler
+        if not app.config.get('SETUP_MODE'):
+            start_system_sampler(app)
+            logger.info('System metrics sampler started')
+    except Exception as _sys_sampler_err:
+        logger.warning('System metrics sampler could not be started: %s', _sys_sampler_err)
+
 print(f"[PID {os.getpid()}] app.py module initialization COMPLETE", file=sys.stderr, flush=True)
 
 # =============================================================================

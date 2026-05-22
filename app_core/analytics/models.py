@@ -371,4 +371,53 @@ class AnomalyRecord(db.Model):
         }
 
 
-__all__ = ["MetricSnapshot", "TrendRecord", "AnomalyRecord"]
+class SystemMetricSample(db.Model):
+    """High-frequency time-series samples for the live system-health dashboard.
+
+    Captured by a background sampler (``app_core.analytics.system_sampler``)
+    at a fixed interval (~30 s) so the Performance Trends chart and
+    sparklines on the system-health page remain populated even when the
+    page has not been open.  This table is intentionally narrow and
+    flat — it is queried as a simple time-ordered series, not aggregated
+    like ``MetricSnapshot``.
+    """
+
+    __tablename__ = "system_metric_samples"
+
+    id = db.Column(db.BigInteger, primary_key=True)
+    recorded_at = db.Column(
+        db.DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+        index=True,
+    )
+
+    cpu_percent = db.Column(db.Float)
+    memory_percent = db.Column(db.Float)
+    swap_percent = db.Column(db.Float)
+    load_1m = db.Column(db.Float)
+    load_5m = db.Column(db.Float)
+    load_15m = db.Column(db.Float)
+    storage_percent = db.Column(db.Float)  # root partition
+    temperature_c = db.Column(db.Float)    # primary CPU/system temp
+    net_rx_bytes = db.Column(db.BigInteger)  # cumulative since boot
+    net_tx_bytes = db.Column(db.BigInteger)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "id": self.id,
+            "recorded_at": self.recorded_at.isoformat() if self.recorded_at else None,
+            "cpu_percent": self.cpu_percent,
+            "memory_percent": self.memory_percent,
+            "swap_percent": self.swap_percent,
+            "load_1m": self.load_1m,
+            "load_5m": self.load_5m,
+            "load_15m": self.load_15m,
+            "storage_percent": self.storage_percent,
+            "temperature_c": self.temperature_c,
+            "net_rx_bytes": self.net_rx_bytes,
+            "net_tx_bytes": self.net_tx_bytes,
+        }
+
+
+__all__ = ["MetricSnapshot", "TrendRecord", "AnomalyRecord", "SystemMetricSample"]
