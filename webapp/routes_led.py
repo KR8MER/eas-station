@@ -811,7 +811,7 @@ def register(app: Flask, logger) -> None:
                         "serial_mode": serial_mode,
                         "baud_rate": baud_rate,
                     },
-                    "note": "Configuration saved. Restart hardware service for changes to take effect."
+                    "note": "Configuration saved. Restart eas-station-displays.service for changes to take effect."
                 })
             except Exception as exc:
                 route_logger.error(f"Error saving serial configuration: {exc}")
