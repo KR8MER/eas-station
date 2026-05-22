@@ -1145,6 +1145,26 @@ function updateEventName() {
     const target = document.getElementById('eventNameInput');
     const code = select.value;
     target.value = EVENT_LOOKUP[code] || target.value;
+    applyRwtToneLock(code);
+}
+
+// FCC 47 CFR §11.61(a)(1)(ii): the Required Weekly Test has no Attention
+// Signal and no voice narration. Lock the tone selector to "none" whenever
+// RWT is selected so the operator can't request a tone the backend will
+// silently discard.
+function applyRwtToneLock(eventCode) {
+    const toneSelect = document.getElementById('toneProfileSelect');
+    if (!toneSelect) return;
+    const isRwt = (eventCode || '').toUpperCase() === 'RWT';
+    if (isRwt) {
+        toneSelect.value = 'none';
+        toneSelect.disabled = true;
+        toneSelect.title = 'RWT broadcasts cannot include the Attention Signal (FCC §11.61).';
+    } else {
+        toneSelect.disabled = false;
+        toneSelect.title = '';
+    }
+    updateToneControls();
 }
 
 function applyDefaultCodes() {
@@ -1708,6 +1728,9 @@ function initialiseWorkflow() {
     const eventSelect = document.getElementById('eventCodeSelect');
     if (eventSelect) {
         eventSelect.addEventListener('change', updateEventName);
+        // Apply the RWT tone-lock immediately so the default-selected event
+        // (RWT) loads with the tone selector already disabled.
+        applyRwtToneLock(eventSelect.value);
     }
 
     const loadDefaultsBtn = document.getElementById('loadDefaultCodes');

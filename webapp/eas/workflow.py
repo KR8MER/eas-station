@@ -431,16 +431,14 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
 
         generator = EASAudioGenerator(manual_config, logger=workflow_logger)
 
-        # For RWT events, respect user's TTS choice if they explicitly enabled it
-        # By default (force_rwt_defaults=True), RWT disables TTS and attention tones per EAS spec
-        # If user explicitly requests TTS for RWT (include_tts=True), set force_rwt_defaults=False
-        # to honor their choice. For non-RWT events, force_rwt_defaults has no effect.
-        if event_code == 'RWT' and include_tts:
-            # User wants TTS for RWT - override the default RWT behavior
-            force_rwt_defaults = False
-        else:
-            # Use default behavior (RWT disables TTS, other events keep user's choice)
-            force_rwt_defaults = True
+        # FCC 47 CFR §11.61(a)(1)(ii): RWT carries SAME header + EOM only —
+        # no Attention Signal, no voice narration. Enforced unconditionally
+        # in build_manual_components(); mirror it here so the saved record
+        # reflects what was actually broadcast.
+        if event_code == 'RWT':
+            tone_profile = 'none'
+            tone_seconds = 0.0
+            include_tts = False
 
         # Process uploaded audio files (only present in multipart requests)
         uploaded_narration = _read_upload_file('narration_audio', workflow_logger)
@@ -454,7 +452,6 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
                 tone_profile=tone_profile,
                 tone_duration=tone_seconds,
                 include_tts=include_tts,
-                force_rwt_defaults=force_rwt_defaults,
                 narration_upload_samples=uploaded_narration,
                 pre_alert_samples=uploaded_pre_alert,
                 post_alert_samples=uploaded_post_alert,
