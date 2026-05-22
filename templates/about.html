@@ -364,9 +364,37 @@
                     </div>
                     <div class="col-md-6 col-lg-4">
                         <div class="feature-card fc-orange">
-                            <div class="feature-card-icon"><i class="fas fa-sliders"></i></div>
-                            <h5 class="feature-card-title">hardware-service</h5>
-                            <p class="feature-card-text">GPIO relays, OLED/VFD displays, LED sign protocols. <em>I2C/GPIO access.</em></p>
+                            <div class="feature-card-icon"><i class="fas fa-network-wired"></i></div>
+                            <h5 class="feature-card-title">hardware: network</h5>
+                            <p class="feature-card-text">nmcli proxy, DNS, hostname, link diagnostics. <em>Port 5101.</em></p>
+                        </div>
+                    </div>
+                    <div class="col-md-6 col-lg-4">
+                        <div class="feature-card fc-orange">
+                            <div class="feature-card-icon"><i class="fas fa-tower-broadcast"></i></div>
+                            <h5 class="feature-card-title">hardware: zigbee</h5>
+                            <p class="feature-card-text">zigpy-znp coordinator, join window, paired devices. <em>USB serial. Port 5102.</em></p>
+                        </div>
+                    </div>
+                    <div class="col-md-6 col-lg-4">
+                        <div class="feature-card fc-orange">
+                            <div class="feature-card-icon"><i class="fas fa-satellite"></i></div>
+                            <h5 class="feature-card-title">hardware: gps</h5>
+                            <p class="feature-card-text">GPSManager, NMEA + PPS, trend archive. <em>UART. Port 5103.</em></p>
+                        </div>
+                    </div>
+                    <div class="col-md-6 col-lg-4">
+                        <div class="feature-card fc-orange">
+                            <div class="feature-card-icon"><i class="fas fa-display"></i></div>
+                            <h5 class="feature-card-title">hardware: displays</h5>
+                            <p class="feature-card-text">OLED, LED sign, VFD, screen rotation manager. <em>I2C / SPI / serial. Port 5104.</em></p>
+                        </div>
+                    </div>
+                    <div class="col-md-6 col-lg-4">
+                        <div class="feature-card fc-orange">
+                            <div class="feature-card-icon"><i class="fas fa-plug"></i></div>
+                            <h5 class="feature-card-title">hardware: gpio</h5>
+                            <p class="feature-card-text">GPIO controller, tower light, NeoPixel, status indicators. <em>GPIO. Port 5105.</em></p>
                         </div>
                     </div>
                     <div class="col-md-6 col-lg-4">
@@ -393,7 +421,7 @@
                 </div>
                 <div class="alert alert-info mt-4 mb-0 d-flex align-items-start" role="alert">
                     <i class="fas fa-circle-info me-2 mt-1"></i>
-                    <div><strong>Why separated?</strong> A web UI crash won't affect audio processing, and a hardware failure won't take down the dashboard. Every service restarts independently.</div>
+                    <div><strong>Why separated?</strong> A web UI crash won't affect audio processing, and a wedged Zigbee dongle won't block OLED renders or take down the GPS time source. Every service — including each of the five hardware subsystems — restarts independently under <code>eas-station-hardware.target</code>.</div>
                 </div>
             </section>
 
