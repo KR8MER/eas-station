@@ -40,7 +40,6 @@ The web UI communicates with this service via HTTP API for hardware control.
 import os
 import sys
 import time
-import signal
 import logging
 import json
 import redis
@@ -49,7 +48,6 @@ import threading
 import ipaddress
 from typing import Optional
 from datetime import datetime, timezone
-from dotenv import load_dotenv
 from flask import Flask, jsonify, request
 
 # Network utilities (extracted for reuse)
@@ -63,50 +61,26 @@ from app_utils.network import (
     HOSTNAME_PATTERN,
 )
 
-# On-demand memory diagnostic hooks (SIGUSR1 → tracemalloc snapshot,
-# SIGUSR2 → all-threads traceback).  See app_utils/memdiag.py for the
-# operator workflow.  Added because the previous attempt at fixing the
-# python_hardware_service ~13 GB RES growth (PR #2062) explicitly punted
-# and recommended this hook so a real heap snapshot can be captured from
-# the live host.
-from app_utils.memdiag import install_memdiag_handlers
-
-# Runtime glibc malloc tuning.  The systemd unit sets MALLOC_ARENA_MAX=2
-# / MALLOC_TRIM_THRESHOLD_=131072 (the fix from eb48eea that cut RSS
-# from 9.68 GB → 320 MB), but those only take effect if the live unit
-# carries them.  Apply the same caps from inside the process so the fix
-# is robust to unit drift, and run a periodic malloc_trim() to actively
-# return free top-of-heap memory to the kernel.
-from app_utils.glibc_tuning import apply_glibc_tuning, start_malloc_trim_thread
-
-# Configure logging early
-from app_core.logging_context import (
-    LOG_FORMAT_WITH_ALERT,
-    install_alert_filter,
+# Shared bootstrap scaffolding for all split hardware-side services.
+# See services/common/bootstrap.py for the full rationale (glibc tuning,
+# memdiag hooks, etc.) — this is the exact same startup behaviour that
+# used to be inlined here, factored out so the per-subsystem services
+# can reuse it.
+from services.common import (
+    configure_logging,
+    init_database,
+    init_runtime,
+    install_signal_handlers,
+    load_environment,
+    get_redis,
 )
-logging.basicConfig(
-    level=logging.INFO,
-    format=LOG_FORMAT_WITH_ALERT,
-    handlers=[
-        logging.StreamHandler(sys.stdout)
-    ]
-)
-install_alert_filter()
 
+configure_logging()
 logger = logging.getLogger(__name__)
 
 # Load environment variables from persistent config volume
 # This must happen before initializing hardware controllers
-_config_path = os.environ.get('CONFIG_PATH')
-if _config_path:
-    if os.path.exists(_config_path):
-        load_dotenv(_config_path, override=True)
-        logger.info(f"✅ Loaded environment from: {_config_path}")
-    else:
-        logger.warning(f"⚠️  CONFIG_PATH set but file not found: {_config_path}")
-        load_dotenv(override=True)  # Fall back to default .env
-else:
-    load_dotenv(override=True)  # Use default .env location
+load_environment(logger)
 
 # Global state
 _running = True
@@ -120,53 +94,28 @@ _gps_manager = None
 _zigpy_controller = None
 
 
-def signal_handler(signum, frame):
-    """Handle shutdown signals gracefully."""
+def _on_shutdown_signal(signum: int) -> None:
+    """Flip the process-local _running flag in response to SIGTERM/SIGINT."""
     global _running
     logger.info(f"Received signal {signum}, initiating graceful shutdown...")
     _running = False
 
 
 def get_redis_client() -> redis.Redis:
-    """Get or create Redis client with retry logic."""
+    """Get or create Redis client with retry logic.
+
+    Thin wrapper around ``services.common.bootstrap.get_redis`` that
+    keeps the module-level ``_redis_client`` in sync so downstream
+    helpers can continue to read it directly.
+    """
     global _redis_client
-
-    from app_core.redis_client import get_redis_client as get_robust_client
-
-    try:
-        _redis_client = get_robust_client(
-            max_retries=5,
-            initial_backoff=1.0,
-            max_backoff=30.0
-        )
-        return _redis_client
-    except Exception as e:
-        logger.error(f"❌ Failed to connect to Redis: {e}")
-        raise
+    _redis_client = get_redis()
+    return _redis_client
 
 
 def initialize_database():
     """Initialize database connection for hardware configuration."""
-    from app_core.extensions import db
-    from flask import Flask
-
-    # Create minimal Flask app for database access
-    app = Flask(__name__)
-
-    # Database configuration
-    database_url = os.getenv("DATABASE_URL")
-    if not database_url:
-        raise ValueError("DATABASE_URL environment variable is required")
-
-    app.config["SQLALCHEMY_DATABASE_URI"] = database_url
-    app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-    app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-        "pool_pre_ping": True,
-        "pool_recycle": 300,
-    }
-
-    db.init_app(app)
-    return app, db
+    return init_database()
 
 
 def initialize_led_controller():
@@ -3087,31 +3036,13 @@ def main():
     logger.info("🔌 EAS Station - Dedicated Hardware Service")
     logger.info("=" * 60)
 
-    # Cap glibc arenas and pin the trim threshold *before* any worker
-    # threads spawn — mallopt(M_ARENA_MAX) only affects arenas created
-    # after the call, so doing this here (before the screen / GPIO /
-    # GPS / Flask threads start below) ensures every thread shares the
-    # capped pool.  Mirrors MALLOC_ARENA_MAX=2 / MALLOC_TRIM_THRESHOLD_
-    # in the systemd unit; applying it from inside the process makes
-    # the fix survive unit-file drift on the live host.
-    apply_glibc_tuning(arena_max=2, trim_threshold=131072)
-    # Start a 60 s malloc_trim() ticker so freed top-of-heap memory
-    # actually returns to the kernel under sustained allocation (the
-    # GPS dashboard polling get_status() copies a 16 K-int deque and
-    # builds a phase array per call — without active trim the freed
-    # blocks linger as arena fragmentation).
-    start_malloc_trim_thread(interval_s=60.0)
+    # Apply glibc tuning + start the malloc_trim ticker + install the
+    # SIGUSR1/SIGUSR2 memory-diagnostic handlers in one call.  Must
+    # happen before any worker threads spawn — see
+    # services/common/bootstrap.py for the full rationale.
+    init_runtime("hardware")
 
-    # Register signal handlers
-    signal.signal(signal.SIGTERM, signal_handler)
-    signal.signal(signal.SIGINT, signal_handler)
-
-    # Install on-demand memory diagnostic hooks.  Operators trigger a
-    # snapshot with `kill -USR1 <pid>` (memory) or `kill -USR2 <pid>`
-    # (all-thread Python traceback); dumps land in /tmp.  Tracemalloc is
-    # off by default — set MEMDIAG_TRACEMALLOC=1 in the unit env when
-    # actively investigating a leak.
-    install_memdiag_handlers("hardware")
+    install_signal_handlers(_on_shutdown_signal)
 
     try:
         # Initialize Redis
