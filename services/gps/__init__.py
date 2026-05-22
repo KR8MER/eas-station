@@ -23,6 +23,7 @@ Owns the chrony/GPS trend archive (raw → 1m → 10m → 1h tiers) and the
 GPS manager bootstrap previously inlined in ``hardware_service.py``.
 """
 
+from services.gps.api import create_blueprint
 from services.gps.manager import initialize_gps_manager
 from services.gps.trends import (
     GPS_TRENDS_DEFAULT_WINDOW,
@@ -52,6 +53,7 @@ __all__ = [
     "aggregate_samples",
     "collect_chrony_tracking",
     "collect_gps_status",
+    "create_blueprint",
     "emit_rollups",
     "initialize_gps_manager",
     "new_last_bucket_ids",

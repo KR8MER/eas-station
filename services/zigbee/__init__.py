@@ -23,6 +23,7 @@ Owns coordinator detection, the zigpy-znp asyncio controller, and the
 Redis status publisher previously inlined in ``hardware_service.py``.
 """
 
+from services.zigbee.api import create_blueprint
 from services.zigbee.controller import ZigpyController
 from services.zigbee.coordinator import (
     initialize_zigbee_coordinator,
@@ -32,6 +33,7 @@ from services.zigbee.detection import detect_zigbee_coordinator
 
 __all__ = [
     "ZigpyController",
+    "create_blueprint",
     "detect_zigbee_coordinator",
     "initialize_zigbee_coordinator",
     "publish_zigbee_status",

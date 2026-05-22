@@ -17,22 +17,13 @@ See NOTICE file for complete terms.
 Repository: https://github.com/KR8MER/eas-station
 """
 
-"""Displays subsystem (LED sign, VFD, OLED, screen rotation)."""
+"""Network management subsystem.
 
-from services.displays.api import create_blueprint
-from services.displays.init import (
-    initialize_led_controller,
-    initialize_oled_display,
-    initialize_screen_manager,
-    initialize_vfd_controller,
-)
-from services.displays.state import publish_display_state
+Owns the ``/api/network/*`` Flask blueprint (NetworkManager / nmcli
+proxy endpoints, DNS / route diagnostics, hostname configuration)
+previously inlined in ``hardware_service.create_api_app``.
+"""
 
-__all__ = [
-    "create_blueprint",
-    "initialize_led_controller",
-    "initialize_oled_display",
-    "initialize_screen_manager",
-    "initialize_vfd_controller",
-    "publish_display_state",
-]
+from services.network.api import create_blueprint
+
+__all__ = ["create_blueprint"]
