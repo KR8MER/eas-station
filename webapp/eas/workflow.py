@@ -72,7 +72,11 @@ from app_utils.gpio import (
     load_gpio_pin_configs_from_db,
 )
 from app_utils.event_codes import EVENT_CODE_REGISTRY
-from app_utils.fips_codes import get_extended_same_lookup, get_us_state_county_tree
+from app_utils.fips_codes import (
+    get_extended_same_lookup,
+    get_extended_state_county_tree,
+    state_index_from_tree,
+)
 
 ALLOWED_AUDIO_EXTENSIONS = {'.wav', '.mp3', '.ogg', '.aac', '.flac'}
 MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MB
@@ -126,7 +130,11 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
             for code in PRIMARY_ORIGINATORS
         ]
 
-        state_tree = get_us_state_county_tree()
+        # Use the extended tree so the Broadcast Builder picker can
+        # surface marine areas (GM/AM/AN/lakes/etc.) loaded from the
+        # NWS marine zone DBF, not just U.S. Census states. Falls back
+        # to U.S.-only when no marine zones are loaded.
+        state_tree = get_extended_state_county_tree()
         same_lookup = get_extended_same_lookup()
 
         recent_messages: List[EASMessage] = (
@@ -586,12 +594,8 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
                 'wav_bytes': wav_bytes,
             }
 
-        state_tree = get_us_state_county_tree()
-        state_index = {
-            state.get('state_fips'): {'abbr': state.get('abbr'), 'name': state.get('name')}
-            for state in state_tree
-            if state.get('state_fips')
-        }
+        state_tree = get_extended_state_county_tree()
+        state_index = state_index_from_tree(state_tree)
         same_lookup = get_extended_same_lookup()
         header_detail = describe_same_header(header, lookup=same_lookup, state_index=state_index)
 
@@ -923,12 +927,8 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
                 'stream_url': url_for('manual_eas_audio', event_id=event.id, component=component_key),
             }
 
-        state_tree = get_us_state_county_tree()
-        state_index = {
-            state.get('state_fips'): {'abbr': state.get('abbr'), 'name': state.get('name')}
-            for state in state_tree
-            if state.get('state_fips')
-        }
+        state_tree = get_extended_state_county_tree()
+        state_index = state_index_from_tree(state_tree)
         same_lookup = get_extended_same_lookup()
         header_detail = describe_same_header(event.same_header, lookup=same_lookup, state_index=state_index)
 
@@ -989,12 +989,8 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
         })
 
         # Location Information
-        state_tree = get_us_state_county_tree()
-        state_index = {
-            state.get('state_fips'): {'abbr': state.get('abbr'), 'name': state.get('name')}
-            for state in state_tree
-            if state.get('state_fips')
-        }
+        state_tree = get_extended_state_county_tree()
+        state_index = state_index_from_tree(state_tree)
         same_lookup = get_extended_same_lookup()
         header_detail = describe_same_header(event.same_header, lookup=same_lookup, state_index=state_index)
 
