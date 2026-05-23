@@ -72,7 +72,7 @@ from app_utils.gpio import (
     load_gpio_pin_configs_from_db,
 )
 from app_utils.event_codes import EVENT_CODE_REGISTRY
-from app_utils.fips_codes import get_same_lookup, get_us_state_county_tree
+from app_utils.fips_codes import get_extended_same_lookup, get_us_state_county_tree
 
 ALLOWED_AUDIO_EXTENSIONS = {'.wav', '.mp3', '.ogg', '.aac', '.flac'}
 MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MB
@@ -127,7 +127,7 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
         ]
 
         state_tree = get_us_state_county_tree()
-        same_lookup = dict(get_same_lookup())
+        same_lookup = get_extended_same_lookup()
 
         recent_messages: List[EASMessage] = (
             EASMessage.query.order_by(EASMessage.created_at.desc()).limit(10).all()
@@ -592,7 +592,7 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
             for state in state_tree
             if state.get('state_fips')
         }
-        same_lookup = get_same_lookup()
+        same_lookup = get_extended_same_lookup()
         header_detail = describe_same_header(header, lookup=same_lookup, state_index=state_index)
 
         same_component = _package_audio(components.get('same_samples') or [], 'same')
@@ -929,7 +929,7 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
             for state in state_tree
             if state.get('state_fips')
         }
-        same_lookup = get_same_lookup()
+        same_lookup = get_extended_same_lookup()
         header_detail = describe_same_header(event.same_header, lookup=same_lookup, state_index=state_index)
 
         summary_url = None
@@ -995,7 +995,7 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
             for state in state_tree
             if state.get('state_fips')
         }
-        same_lookup = get_same_lookup()
+        same_lookup = get_extended_same_lookup()
         header_detail = describe_same_header(event.same_header, lookup=same_lookup, state_index=state_index)
 
         locations = header_detail.get('locations', [])

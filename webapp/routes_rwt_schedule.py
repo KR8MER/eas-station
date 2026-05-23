@@ -27,7 +27,7 @@ from typing import List, Optional
 from flask import jsonify, render_template, request
 from app_core.extensions import db
 from app_core.models import RWTScheduleConfig, SystemLog
-from app_utils.fips_codes import get_us_state_county_tree, get_same_lookup
+from app_utils.fips_codes import get_us_state_county_tree, get_extended_same_lookup
 
 
 def _serialize_config(config: Optional[RWTScheduleConfig]) -> dict:
@@ -69,7 +69,7 @@ def register_routes(app, logger):
         """Render the RWT schedule configuration page."""
         # Provide state/county tree for proper selection UI
         state_tree = get_us_state_county_tree()
-        same_lookup = dict(get_same_lookup())
+        same_lookup = get_extended_same_lookup()
 
         return render_template(
             'rwt_schedule.html',

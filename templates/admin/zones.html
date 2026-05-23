@@ -143,10 +143,11 @@
                                     <input type="file" class="form-control" id="zone-file" name="file" accept=".dbf" required>
                                     <div class="form-text">Only .dbf (dBase) files are accepted.</div>
                                 </div>
-                                <button type="submit" class="btn btn-primary">
+                                <button type="submit" id="upload-btn" class="btn btn-primary">
                                     <i class="fas fa-upload"></i> Upload and Load
                                 </button>
                             </form>
+                            <div id="upload-status" class="mt-3" role="status" aria-live="polite"></div>
                         </div>
                         <div class="col-md-6 mb-3">
                             <h6>Reload Zone Catalog</h6>
@@ -229,35 +230,79 @@ function createToastContainer() {
 }
 
 // Upload form handler
+const uploadBtn = document.getElementById('upload-btn');
+const uploadStatus = document.getElementById('upload-status');
+const uploadOriginalBtnHtml = uploadBtn ? uploadBtn.innerHTML : '';
+
+function setUploadStatus(kind, message) {
+    if (!uploadStatus) return;
+    // kind: 'info' | 'success' | 'danger' | ''
+    if (!kind) {
+        uploadStatus.innerHTML = '';
+        return;
+    }
+    const icon = ({
+        info: 'fa-spinner fa-spin',
+        success: 'fa-check-circle',
+        danger: 'fa-exclamation-triangle',
+    })[kind] || 'fa-info-circle';
+    uploadStatus.innerHTML = `<div class="alert alert-${kind} mb-0"><i class="fas ${icon} me-2"></i>${message}</div>`;
+}
+
 document.getElementById('upload-form').addEventListener('submit', async (e) => {
     e.preventDefault();
-    
+
     const formData = new FormData(e.target);
     const fileInput = document.getElementById('zone-file');
-    
+
     if (!fileInput.files.length) {
+        setUploadStatus('danger', 'Please select a .dbf file.');
         showToast('Please select a file', 'warning');
         return;
     }
-    
+
+    const file = fileInput.files[0];
+    const sizeKb = Math.round(file.size / 1024);
+    setUploadStatus('info', `Uploading <strong>${file.name}</strong> (${sizeKb.toLocaleString()} KB) and parsing zones&hellip; this can take 10&ndash;30 s for a full national catalog.`);
+
+    if (uploadBtn) {
+        uploadBtn.disabled = true;
+        uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading&hellip;';
+    }
+
     try {
         const response = await fetch('/admin/zones/upload', {
             method: 'POST',
             body: formData
         });
-        
-        const data = await response.json();
-        
-        if (response.ok && data.success) {
-            showToast(data.message, 'success');
-            // Reset form and refresh info
+
+        let data = null;
+        try { data = await response.json(); } catch (_) { data = null; }
+
+        if (response.ok && data && data.success) {
+            const detail = [
+                data.message || 'Upload complete.',
+                data.schema ? `Schema detected: <code>${data.schema}</code>.` : '',
+                data.zone_count != null ? `<code>nws_zones</code> now contains <strong>${data.zone_count.toLocaleString()}</strong> rows.` : '',
+                data.warning ? `Warning: ${data.warning}.` : '',
+            ].filter(Boolean).join(' ');
+            setUploadStatus(data.warning ? 'danger' : 'success', detail);
+            showToast(data.message || 'Upload complete.', data.warning ? 'warning' : 'success');
             e.target.reset();
             refreshInfo();
         } else {
-            showToast(data.error || 'Upload failed', 'danger');
+            const errMsg = (data && (data.error || data.message)) || `HTTP ${response.status} ${response.statusText}`;
+            setUploadStatus('danger', `Upload failed: <code>${errMsg}</code>`);
+            showToast('Upload failed: ' + errMsg, 'danger');
         }
     } catch (error) {
+        setUploadStatus('danger', `Error uploading file: <code>${error.message}</code>`);
         showToast('Error uploading file: ' + error.message, 'danger');
+    } finally {
+        if (uploadBtn) {
+            uploadBtn.disabled = false;
+            uploadBtn.innerHTML = uploadOriginalBtnHtml;
+        }
     }
 });
 

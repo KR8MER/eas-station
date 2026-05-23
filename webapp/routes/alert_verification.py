@@ -87,7 +87,7 @@ from app_utils.eas_decode import (
 )
 from app_utils.eas_detection import detect_eas_from_file
 from app_utils.eas import describe_same_header
-from app_utils.fips_codes import get_same_lookup
+from app_utils.fips_codes import get_extended_same_lookup
 
 
 DEFAULT_SAMPLE_FILES: Tuple[Path, ...] = (
@@ -1555,7 +1555,7 @@ def register(app: Flask, logger) -> None:
             return jsonify({"error": "Header must begin with ZCZC-."}), 400
 
         try:
-            fips_lookup = get_same_lookup()
+            fips_lookup = get_extended_same_lookup()
             fields = describe_same_header(raw_header, lookup=fips_lookup)
             summary = build_plain_language_summary(raw_header, fields)
             return jsonify({

@@ -37,7 +37,7 @@ import numpy as np
 
 from .eas import ORIGINATOR_DESCRIPTIONS, decode_county_originator, describe_same_header
 from .eas_fsk import SAME_BAUD, SAME_MARK_FREQ, SAME_SPACE_FREQ, encode_same_bits
-from .fips_codes import get_same_lookup
+from .fips_codes import get_extended_same_lookup
 from .eas_demod import (
     SAMEDemodulatorCore,
     apply_bandpass_filter as _apply_bandpass_filter,
@@ -1551,7 +1551,7 @@ def _decode_from_samples(
                             decoded_header = decoded_header[zczc_idx:]
 
                         raw_text = decoded_header + "\r"
-                        fips_lookup = get_same_lookup()
+                        fips_lookup = get_extended_same_lookup()
                         header_fields = describe_same_header(
                             decoded_header, lookup=fips_lookup
                         )
@@ -1640,7 +1640,7 @@ def _decode_from_samples(
     use_dll = dll_has_complete and not goertzel_all_complete
 
     if metadata_headers and not use_dll:
-        fips_lookup = get_same_lookup()
+        fips_lookup = get_extended_same_lookup()
         headers: List[SAMEHeaderDetails] = []
         for header in metadata_headers:
             fields = describe_same_header(header, lookup=fips_lookup)

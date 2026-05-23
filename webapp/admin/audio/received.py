@@ -156,8 +156,8 @@ def register_received_alerts_routes(app, logger) -> None:
         try:
             alert = ReceivedEASAlert.query.get_or_404(alert_id)
 
-            from app_utils.fips_codes import get_same_lookup
-            fips_lookup = get_same_lookup()
+            from app_utils.fips_codes import get_extended_same_lookup
+            fips_lookup = get_extended_same_lookup()
             all_codes = list(alert.fips_codes or []) + [
                 c for c in (alert.matched_fips_codes or [])
                 if c not in (alert.fips_codes or [])

@@ -3821,3 +3821,38 @@ def get_extended_state_county_tree() -> List[Dict[str, object]]:
     """
 
     return get_us_state_county_tree() + get_marine_state_tree()
+
+
+def get_extended_same_lookup() -> Dict[str, str]:
+    """Return a SAME-code → description map covering U.S. + marine areas.
+
+    The static :func:`get_same_lookup` only knows U.S. Census-state codes.
+    Marine SAME codes (``077650`` Gulf of Mexico, ``091000`` Lake
+    Superior, etc.) live in ``nws_zones`` and only become resolvable
+    once an operator uploads the NWS marine zone DBF. This function
+    merges the static lookup with a marine lookup derived from
+    :func:`get_marine_state_tree`, so any caller decoding a SAME header
+    for display gets human-readable names for both kinds of code.
+
+    Returns a fresh dict (not a MappingProxyType) because we mutate it
+    by merging in DB-derived entries. Never raises; if the DB isn't
+    reachable, the returned dict is just the static U.S. lookup.
+    """
+
+    merged: Dict[str, str] = dict(_US_FIPS_LOOKUP_PROXY)
+
+    for marine_state in get_marine_state_tree():
+        statewide_code = marine_state.get("statewide_code")
+        state_name = str(marine_state.get("name") or marine_state.get("abbr") or "")
+        if isinstance(statewide_code, str) and statewide_code:
+            merged.setdefault(statewide_code, f"All Areas, {state_name}")
+        for area in marine_state.get("counties", []) or []:
+            code = area.get("code")
+            name = area.get("name")
+            if isinstance(code, str) and code and isinstance(name, str) and name:
+                # Marine catalog wins over any (defensively unlikely)
+                # collision with a static U.S. code, because the
+                # operator explicitly loaded it.
+                merged[code] = name
+
+    return merged
