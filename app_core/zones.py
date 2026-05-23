@@ -386,14 +386,14 @@ def ensure_zone_catalog(
     logger=None,
     source_path: str | Path | None = None,
     *,
-    delete_scope: Optional[str] = None,
+    delete_scope=None,
 ) -> bool:
     """Ensure the zone catalog table matches the bundled DBF file.
 
-    ``delete_scope`` is forwarded to :func:`sync_zone_catalog`; pass
-    ``"marine"`` or ``"public"`` when the source file only covers a
-    single schema so the other schema's rows are preserved. The default
-    (``None``) performs a full sync.
+    ``delete_scope`` is forwarded to :func:`sync_zone_catalog` — see
+    that function for the supported values. Default ``None`` performs
+    a full sync; pass ``False`` for an additive load that never deletes
+    existing rows.
     """
 
     path = _resolve_zone_catalog_path(source_path)

@@ -24,7 +24,7 @@ from __future__ import annotations
 import struct
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterator, List, Optional, Sequence, Tuple
+from typing import Dict, Iterator, List, Optional, Sequence, Tuple, Union
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -374,7 +374,7 @@ def sync_zone_catalog(
     *,
     commit: bool = True,
     source_path: str | Path | None = None,
-    delete_scope: Optional[str] = None,
+    delete_scope: Union[str, bool, None] = None,
 ) -> ZoneSyncResult:
     """Synchronise ``nws_zones`` against ``records``.
 
@@ -383,17 +383,19 @@ def sync_zone_catalog(
 
     * ``None`` (default): remove any existing zone whose ``zone_code`` is
       not in ``records``. Use this for a full reload from a single
-      authoritative file.
+      authoritative file (startup auto-load, the operator-triggered
+      Reload button).
+    * ``False``: never delete. Use this for additive uploads where the
+      catalog is being assembled from multiple files (a marine ``mz``
+      plus an offshore ``oz`` plus the public ``z`` all stack rather
+      than overwriting each other). Inserts and updates still happen
+      normally.
     * ``"public"``: only consider zones with two-letter U.S. state
-      prefixes (real Census states / territories) for removal. Marine
-      rows are preserved.
+      prefixes for removal. Marine rows are preserved.
     * ``"marine"``: only consider zones whose ``state_code`` matches a
       known marine UGC prefix for removal. Public zones are preserved.
-
-    The scope is needed because the system supports loading public and
-    marine catalogs independently (different DBF files); without it,
-    uploading ``mz_*.dbf`` after ``z_*.dbf`` would wipe every terrestrial
-    zone since it isn't in the marine file.
+      Note that this still wipes one marine file's zones when another
+      marine file is loaded over it, which is why uploads use ``False``.
     """
 
     from app_core.models import NWSZone  # Imported lazily to avoid circular import
@@ -430,7 +432,10 @@ def sync_zone_catalog(
 
     updated = len(updated_codes)
 
-    if delete_scope is not None:
+    if delete_scope is False:
+        # Caller wants a purely additive sync — never delete.
+        orphan_codes = set()
+    elif delete_scope is not None:
         try:
             from app_utils.fips_codes import MARINE_PREFIX_TO_SAME_STATE
         except Exception:

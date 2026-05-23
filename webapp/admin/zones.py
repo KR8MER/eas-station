@@ -203,10 +203,12 @@ def upload_zone_file():
         
         logger.info(f"Zone catalog file uploaded: {file_path}")
 
-        # Detect schema before syncing so an mz_*.dbf upload doesn't wipe
-        # the public-zone rows previously loaded from z_*.dbf (and vice
-        # versa). detect_zone_schema raises ValueError on an unsupported
-        # DBF, which the outer except handler reports to the user.
+        # Detect schema so we can report it back to the operator. The
+        # admin UI advertises support for public + marine + offshore
+        # DBFs, all of which can be layered without overwriting each
+        # other — uploads are purely additive (delete_scope=False).
+        # detect_zone_schema raises ValueError on an unsupported DBF,
+        # which the outer except handler reports to the user.
         try:
             schema = detect_zone_schema(file_path)
         except Exception:
@@ -220,7 +222,7 @@ def upload_zone_file():
 
         clear_zone_lookup_cache()
         success = ensure_zone_catalog(
-            logger, source_path=file_path, delete_scope=schema
+            logger, source_path=file_path, delete_scope=False
         )
 
         if success:
@@ -228,8 +230,8 @@ def upload_zone_file():
             return jsonify({
                 'success': True,
                 'message': (
-                    f'File uploaded ({schema} zones) and '
-                    f'{zone_count} total zones now in catalog.'
+                    f'File uploaded ({schema} zones) and merged into '
+                    f'catalog. Total zones now: {zone_count}.'
                 ),
                 'path': str(file_path),
                 'schema': schema,
