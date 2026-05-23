@@ -103,13 +103,19 @@ To refresh it:
   monitoring. `app_utils/fips_codes.py` therefore declares two small
   marine-specific tables:
 
-  * `MARINE_PREFIX_TO_SAME_STATE` — UGC prefix → SAME `SS` digits
-    (e.g. `PS` → `77`). Only entries verified against an on-air SAME
-    header live here. Adding a new prefix requires NWS confirmation
-    (from the relevant `<XX>SAME.txt` file at
-    `weather.gov/nwr/SAMECountyTextFiles`) *and* a marine zone DBF
-    upload that contains zones with that prefix.
-  * `MARINE_AREA_LABELS` — display name per prefix.
+  * `MARINE_PREFIX_TO_SAME_STATE` — UGC prefix → SAME `SS` digits.
+    All 15 marine prefixes (PZ=57, PK=58, PH=59, PS=61, PM=65, AN=73,
+    AM=75, GM=77, LS=91, LM=92, LH=93, LC=94, LE=96, LO=97, SL=98) are
+    populated from the NWS *Coastal and Offshore Marine Codes Listings
+    for EAS and NWR Applications* §6. The GM row is additionally
+    cross-verified against an on-air SMW header (077650/077633/077632/
+    077631 ↔ GMZ650/GMZ633/GMZ632/GMZ631).
+  * `MARINE_AREA_LABELS` — geographic-area name per prefix, following
+    the same NWS table.
+
+  When NWS publishes a new marine prefix in the future,
+  `tools/match_same_to_zone.py` can be used to confirm the SS digit
+  empirically against any received alert before extending the table.
 
   `get_marine_state_tree()` queries `nws_zones` for rows whose
   `state_code` matches a configured prefix and emits a "state" entry

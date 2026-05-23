@@ -3667,47 +3667,55 @@ def get_same_lookup() -> Mapping[str, str]:
 # ---------------------------------------------------------------------------
 
 # UGC prefix → numeric SAME "state" digits (the SS in PSSCCC — two digits).
-# Verified from real SAME headers received on-station and cross-checked
-# against the area names in the NWS marine zone DBF.
+#
+# Source: NWS "Coastal and Offshore Marine Codes Listings for Emergency
+# Alert System (EAS) and NOAA Weather Radio (NWR) Applications", §6,
+# which publishes the complete Numeric ↔ Alpha ↔ Geographic-area
+# correspondence. The GM=77 row was cross-verified on-station against
+# an SMW with codes 077650/077633/077632/077631 whose CCC values match
+# GMZ650 ("Coastal waters from Pensacola FL to Pascagoula MS"),
+# GMZ633 (Perdido Bay), GMZ632 (Mississippi Sound), GMZ631 (South
+# Mobile Bay) byte-for-byte in the mz16ap26 DBF.
 MARINE_PREFIX_TO_SAME_STATE: Dict[str, str] = {
-    # Gulf of Mexico — verified against an SMW for "Coastal waters from
-    # Pensacola FL to Pascagoula MS / Perdido Bay / South Mobile Bay /
-    # Mississippi Sound" carrying codes 077650 / 077633 / 077631 / 077632.
-    # The CCC values match GMZ650 / GMZ633 / GMZ631 / GMZ632 in the
-    # mz16ap26 DBF byte-for-byte, so SS=77 is unambiguously the Gulf.
-    "GM": "77",
+    # Pacific
+    "PZ": "57",  # Eastern N. Pacific Ocean (US West Coast)
+    "PK": "58",  # N. Pacific Ocean near Alaska
+    "PH": "59",  # Central Pacific Ocean (Hawaiian Waters)
+    "PS": "61",  # S. Central Pacific Ocean (American Samoa)
+    "PM": "65",  # Western Pacific Ocean (Mariana Islands)
+    # Atlantic / Gulf
+    "AN": "73",  # Northwest N. Atlantic Ocean (US East Coast, N. of Hatteras)
+    "AM": "75",  # West N. Atlantic Ocean (US East Coast S. of Hatteras + Caribbean)
+    "GM": "77",  # Gulf of Mexico — verified on-air (see above)
+    # Great Lakes / St. Lawrence
+    "LS": "91",  # Lake Superior
+    "LM": "92",  # Lake Michigan
+    "LH": "93",  # Lake Huron
+    "LC": "94",  # Lake St. Clair
+    "LE": "96",  # Lake Erie
+    "LO": "97",  # Lake Ontario
+    "SL": "98",  # St. Lawrence River
 }
 
 # Display label per UGC prefix, used as the "state" name in the picker
 # whenever the prefix is also mapped in MARINE_PREFIX_TO_SAME_STATE.
-# These labels were confirmed by inspecting the area names in the
-# official NWS marine zone DBF (mz16ap26.dbf + oz16ap26.dbf):
-#   AM → "Deerfield Beach to Ocean Reef FL", Caribbean offshore
-#   AN → "Rhode Island Sound", "Narragansett Bay", "Cape Hatteras"
-#   GM → "Pensacola to Pascagoula", "Mississippi Sound"
-#   PH → "Kauai Channel", "Kauai Leeward Waters"
-#   PK → "Kiska to Attu", arctic offshore (Alaska)
-#   PM → "Yap Coastal Waters", "Chuuk Coastal Waters" (Marianas/FSM)
-#   PS → "Tutuila and Aunuu", "Pago Pago" (American Samoa)
-#   PZ → "San Francisco Bay", "Point Pinos to Point Piedras Blancas"
-#   LM/LS/LE/LO/LH → respective Great Lakes (name matches verbatim)
-#   LC → "Lake St. Clair Open Lake (U.S. Portion)", "St. Clair River"
-#   SL → "St. Lawrence River from Ogdensburg to St. Regis NY"
+# Names follow the NWS Coastal/Offshore Marine Codes Listings (the
+# same document that publishes the numeric SAME mappings above).
 MARINE_AREA_LABELS: Dict[str, str] = {
-    "AM": "Atlantic Marine (Caribbean / Tropical Offshore)",
-    "AN": "Atlantic North Marine (NY / NE / Mid-Atlantic)",
-    "GM": "Gulf of Mexico Marine",
+    "PZ": "Eastern N. Pacific Ocean",
+    "PK": "N. Pacific Ocean near Alaska",
+    "PH": "Central Pacific Ocean (Hawaii)",
+    "PS": "S. Central Pacific Ocean (American Samoa)",
+    "PM": "Western Pacific Ocean (Mariana Islands)",
+    "AN": "Northwest N. Atlantic Ocean",
+    "AM": "West N. Atlantic Ocean (incl. Caribbean)",
+    "GM": "Gulf of Mexico",
+    "LS": "Lake Superior",
+    "LM": "Lake Michigan",
+    "LH": "Lake Huron",
     "LC": "Lake St. Clair",
     "LE": "Lake Erie",
-    "LH": "Lake Huron",
-    "LM": "Lake Michigan",
     "LO": "Lake Ontario",
-    "LS": "Lake Superior",
-    "PH": "Pacific Hawaii Marine",
-    "PK": "Pacific Alaska Marine",
-    "PM": "Pacific Marianas / Micronesia Marine",
-    "PS": "Pacific American Samoa Marine",
-    "PZ": "Pacific US West Coast Marine",
     "SL": "St. Lawrence River",
 }
 
