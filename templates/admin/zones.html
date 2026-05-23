@@ -133,8 +133,10 @@
                             <p class="text-muted">
                                 Upload a <code>.dbf</code> from any NOAA zone shapefile
                                 (public&nbsp;<code>z_*</code>, marine&nbsp;<code>mz*</code>,
-                                or fire&nbsp;<code>fz_*</code>). See the source links at the
-                                top of this page.
+                                or fire&nbsp;<code>fz_*</code>). Public and marine
+                                catalogs are additive &mdash; uploading <code>mz*.dbf</code>
+                                adds marine zones without removing previously loaded public
+                                zones, and vice versa. See the source links above.
                             </p>
                             <form id="upload-form" enctype="multipart/form-data">
                                 <div class="mb-3">

@@ -33,7 +33,7 @@ from app_core.extensions import db
 from app_core.models import NWSZone
 from app_core.zones import ensure_zone_catalog, clear_zone_lookup_cache, get_zone_lookup
 from app_core.auth.roles import require_permission
-from app_utils.zone_catalog import iter_zone_records
+from app_utils.zone_catalog import iter_zone_records, detect_zone_schema
 
 
 def _get_zone_catalog_path() -> Path:
@@ -202,30 +202,46 @@ def upload_zone_file():
         file.save(str(file_path))
         
         logger.info(f"Zone catalog file uploaded: {file_path}")
-        
-        # Update the configuration to use the new file (session only, not persistent)
-        # Note: This change only affects the current application instance.
-        # To make it permanent, update the NWS_ZONE_DBF_PATH environment variable.
-        current_app.config['NWS_ZONE_DBF_PATH'] = str(file_path)
-        
-        # Try to reload the zones
+
+        # Detect schema before syncing so an mz_*.dbf upload doesn't wipe
+        # the public-zone rows previously loaded from z_*.dbf (and vice
+        # versa). detect_zone_schema raises ValueError on an unsupported
+        # DBF, which the outer except handler reports to the user.
+        try:
+            schema = detect_zone_schema(file_path)
+        except Exception:
+            schema = "public"  # Treat ambiguous DBFs as public so legacy uploads still work.
+
+        # Only update NWS_ZONE_DBF_PATH for public-zone uploads; the
+        # marine catalog is additive and shouldn't replace the primary
+        # public-zone source on next restart.
+        if schema == "public":
+            current_app.config['NWS_ZONE_DBF_PATH'] = str(file_path)
+
         clear_zone_lookup_cache()
-        success = ensure_zone_catalog(logger, source_path=file_path)
-        
+        success = ensure_zone_catalog(
+            logger, source_path=file_path, delete_scope=schema
+        )
+
         if success:
             zone_count = NWSZone.query.count()
             return jsonify({
                 'success': True,
-                'message': f'File uploaded and {zone_count} zones loaded successfully.',
+                'message': (
+                    f'File uploaded ({schema} zones) and '
+                    f'{zone_count} total zones now in catalog.'
+                ),
                 'path': str(file_path),
-                'zone_count': zone_count
+                'schema': schema,
+                'zone_count': zone_count,
             })
         else:
             return jsonify({
                 'success': True,
                 'message': 'File uploaded but failed to load zones. Check file format.',
                 'path': str(file_path),
-                'warning': 'Zone loading failed'
+                'schema': schema,
+                'warning': 'Zone loading failed',
             })
             
     except Exception as e:

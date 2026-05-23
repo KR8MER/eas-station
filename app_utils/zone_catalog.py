@@ -147,8 +147,100 @@ def _normalise_zone_number(raw: str) -> str:
     return digits.zfill(3)[:3]
 
 
+def _detect_zone_schema(field_map: Dict[str, "_DBFField"]) -> str:
+    """Return ``"public"`` or ``"marine"`` based on the DBF's columns.
+
+    Public forecast zone DBFs (``z_*.dbf``) carry the full per-record
+    state/zone breakdown (``STATE``, ``ZONE``, ``CWA``, …). Marine zone
+    DBFs (``mz_*.dbf``) use a much narrower schema (``ID``, ``WFO``,
+    ``GL_WFO``, ``NAME``, ``LON``, ``LAT``) — the alphanumeric UGC code
+    sits in ``ID`` already and there is no per-state breakdown to read.
+
+    Raises ``ValueError`` if neither schema is recognisable so the
+    operator gets an actionable error instead of silent partial data.
+    """
+
+    has_public = all(name in field_map for name in ("STATE", "ZONE", "NAME"))
+    has_marine = all(name in field_map for name in ("ID", "NAME", "WFO"))
+    if has_public:
+        return "public"
+    if has_marine:
+        return "marine"
+    raise ValueError(
+        "Unrecognised zone DBF schema. Expected public-zone columns "
+        "(STATE, ZONE, CWA, NAME, …) or marine-zone columns "
+        "(ID, WFO, NAME, LON, LAT). Got: "
+        + ", ".join(sorted(field_map.keys()))
+    )
+
+
+def _parse_public_record(values: Dict[str, bytes]) -> ZoneRecord:
+    state = _decode_string(values["STATE"]).upper()
+    zone_number = _normalise_zone_number(_decode_string(values["ZONE"]))
+    zone_code = f"{state}Z{zone_number}" if state else zone_number
+    state_zone = _decode_string(values.get("STATE_ZONE", b"")).upper()
+    if not state_zone and state:
+        state_zone = f"{state}{zone_number}"
+
+    return ZoneRecord(
+        zone_code=zone_code,
+        state_code=state,
+        zone_number=zone_number,
+        cwa=_decode_string(values.get("CWA", b"")).upper(),
+        time_zone=_decode_string(values.get("TIME_ZONE", b"")).upper(),
+        fe_area=_decode_string(values.get("FE_AREA", b"")).upper(),
+        name=_decode_string(values["NAME"]),
+        state_zone=state_zone,
+        longitude=_decode_float(values.get("LON", b"")),
+        latitude=_decode_float(values.get("LAT", b"")),
+        short_name=_decode_string(values.get("SHORTNAME", b"")),
+    )
+
+
+def _parse_marine_record(values: Dict[str, bytes]) -> Optional[ZoneRecord]:
+    raw_id = _decode_string(values.get("ID", b"")).upper()
+    if len(raw_id) < 3:
+        return None  # Not a valid UGC zone code.
+
+    # UGC zone codes are ``XXY###`` — two-letter regional prefix (``PS``,
+    # ``GM``, ``AM``, …), one-letter type (``Z`` for forecast zones), and
+    # a three-digit zone number. We store the alphabetic prefix in
+    # ``state_code`` so :func:`fips_codes.get_marine_state_tree` can find
+    # marine entries with a simple ``state_code IN (...)`` filter.
+    prefix = raw_id[:2]
+    zone_type_char = raw_id[2:3] if raw_id[2:3].isalpha() else "Z"
+    zone_number = _normalise_zone_number(raw_id[3:])
+    zone_code = raw_id if len(raw_id) <= 6 else f"{prefix}{zone_type_char}{zone_number}"
+
+    # Prefer the Great-Lakes-specific WFO column when populated.
+    gl_wfo = _decode_string(values.get("GL_WFO", b"")).upper()
+    wfo = gl_wfo or _decode_string(values.get("WFO", b"")).upper()
+
+    return ZoneRecord(
+        zone_code=zone_code[:6],
+        state_code=prefix,
+        zone_number=zone_number,
+        cwa=wfo,
+        time_zone="",
+        fe_area="",
+        name=_decode_string(values.get("NAME", b"")),
+        state_zone=f"{prefix}{zone_number}",
+        longitude=_decode_float(values.get("LON", b"")),
+        latitude=_decode_float(values.get("LAT", b"")),
+        short_name="",
+    )
+
+
 def iter_zone_records(path: str | Path) -> Iterator[ZoneRecord]:
-    """Yield :class:`ZoneRecord` instances from the provided DBF file."""
+    """Yield :class:`ZoneRecord` instances from a NOAA zone DBF.
+
+    Supports both the public-forecast-zone schema (``z_*.dbf``) and the
+    marine/Great-Lakes zone schema (``mz_*.dbf``). The two schemas have
+    almost no columns in common; ``_detect_zone_schema`` picks the right
+    parser. The yielded records share the same dataclass — marine
+    entries simply leave ``time_zone``, ``fe_area``, and ``short_name``
+    empty since the marine DBF doesn't carry them.
+    """
 
     dbf_path = Path(path)
     with dbf_path.open("rb") as handle:
@@ -156,21 +248,7 @@ def iter_zone_records(path: str | Path) -> Iterator[ZoneRecord]:
         handle.seek(header.header_length)
 
         field_map: Dict[str, _DBFField] = {field.name.upper(): field for field in fields}
-        required = [
-            "STATE",
-            "CWA",
-            "TIME_ZONE",
-            "FE_AREA",
-            "ZONE",
-            "NAME",
-            "STATE_ZONE",
-            "LON",
-            "LAT",
-            "SHORTNAME",
-        ]
-        missing = [name for name in required if name not in field_map]
-        if missing:
-            raise ValueError(f"DBF is missing required fields: {', '.join(missing)}")
+        schema = _detect_zone_schema(field_map)
 
         for _ in range(header.record_count):
             record_bytes = handle.read(header.record_length)
@@ -185,23 +263,26 @@ def iter_zone_records(path: str | Path) -> Iterator[ZoneRecord]:
                 offset += field.length
                 values[field.name.upper()] = field_data
 
-            state = _decode_string(values["STATE"]).upper()
-            zone_number = _normalise_zone_number(_decode_string(values["ZONE"]))
-            zone_code = f"{state}Z{zone_number}" if state else zone_number
+            if schema == "public":
+                yield _parse_public_record(values)
+            else:
+                record = _parse_marine_record(values)
+                if record is not None:
+                    yield record
 
-            yield ZoneRecord(
-                zone_code=zone_code,
-                state_code=state,
-                zone_number=zone_number,
-                cwa=_decode_string(values["CWA"]).upper(),
-                time_zone=_decode_string(values["TIME_ZONE"]).upper(),
-                fe_area=_decode_string(values["FE_AREA"]).upper(),
-                name=_decode_string(values["NAME"]),
-                state_zone=_decode_string(values["STATE_ZONE"]).upper(),
-                longitude=_decode_float(values["LON"]),
-                latitude=_decode_float(values["LAT"]),
-                short_name=_decode_string(values["SHORTNAME"]),
-            )
+
+def detect_zone_schema(path: str | Path) -> str:
+    """Return ``"public"`` or ``"marine"`` for ``path`` without parsing rows.
+
+    Useful to callers that need to scope behaviour (e.g. delete-orphan
+    logic) by schema without iterating the entire DBF.
+    """
+
+    dbf_path = Path(path)
+    with dbf_path.open("rb") as handle:
+        _, fields = _read_header(handle)
+        field_map: Dict[str, _DBFField] = {field.name.upper(): field for field in fields}
+        return _detect_zone_schema(field_map)
 
 
 def iter_county_subdivision_records(path: str | Path) -> Iterator[CountySubdivisionRecord]:
@@ -293,7 +374,28 @@ def sync_zone_catalog(
     *,
     commit: bool = True,
     source_path: str | Path | None = None,
+    delete_scope: Optional[str] = None,
 ) -> ZoneSyncResult:
+    """Synchronise ``nws_zones`` against ``records``.
+
+    ``delete_scope`` controls which existing rows are eligible for the
+    orphan-delete pass:
+
+    * ``None`` (default): remove any existing zone whose ``zone_code`` is
+      not in ``records``. Use this for a full reload from a single
+      authoritative file.
+    * ``"public"``: only consider zones with two-letter U.S. state
+      prefixes (real Census states / territories) for removal. Marine
+      rows are preserved.
+    * ``"marine"``: only consider zones whose ``state_code`` matches a
+      known marine UGC prefix for removal. Public zones are preserved.
+
+    The scope is needed because the system supports loading public and
+    marine catalogs independently (different DBF files); without it,
+    uploading ``mz_*.dbf`` after ``z_*.dbf`` would wipe every terrestrial
+    zone since it isn't in the marine file.
+    """
+
     from app_core.models import NWSZone  # Imported lazily to avoid circular import
 
     bind = session.get_bind()
@@ -327,6 +429,22 @@ def sync_zone_catalog(
             updated_codes.add(record.zone_code)
 
     updated = len(updated_codes)
+
+    if delete_scope is not None:
+        try:
+            from app_utils.fips_codes import MARINE_PREFIX_TO_SAME_STATE
+        except Exception:
+            MARINE_PREFIX_TO_SAME_STATE = {}
+        marine_prefixes = set(MARINE_PREFIX_TO_SAME_STATE.keys())
+        scoped: set[str] = set()
+        for code in orphan_codes:
+            zone_state = (existing[code].state_code or "").upper()
+            is_marine = zone_state in marine_prefixes
+            if delete_scope == "marine" and is_marine:
+                scoped.add(code)
+            elif delete_scope == "public" and not is_marine:
+                scoped.add(code)
+        orphan_codes = scoped
 
     removed = 0
     for zone_code in orphan_codes:
