@@ -460,12 +460,28 @@ class UnifiedEASMonitorService:
         self._total_alerts_dispatched = 0  # EOM-confirmed dispatch count (one per event)
         self._last_alert_dispatch_time: Optional[float] = None  # Unix timestamp of last dispatch
 
-        # Per-source rolling audio ring buffers for OTA alert capture.
-        # Stores up to _ring_max_seconds of 16 kHz float32 chunks per source.
-        self._ring_max_seconds = 90
-        self._ring_max_samples = self._target_sample_rate * self._ring_max_seconds
+        # Per-source audio capture buffers for OTA alert recording.
+        #
+        # Two distinct capacity regimes share the same deque per source:
+        #
+        #   • Idle (no pending alert)  → small rolling pre-roll
+        #     Keeps ~10 s of recent audio so the ZCZC back-track (1.5 s) and
+        #     the three SAME header bursts (~4.8 s) are available when a
+        #     header is decoded.  Old chunks are evicted continuously.
+        #
+        #   • Active capture (between ZCZC decode and EOM/timeout) → no eviction
+        #     The deque grows to hold the full alert.  Capped at
+        #     _capture_max_samples (matches _eom_timeout_seconds) as a safety
+        #     net so a stuck capture can't grow without bound.
+        self._preroll_max_seconds = 10
+        self._preroll_max_samples = self._target_sample_rate * self._preroll_max_seconds
         self._audio_rings: Dict[str, deque] = {}
         self._audio_rings_lock = threading.Lock()
+
+        # Sources with an active ZCZC → EOM capture in progress.  Guarded by
+        # _audio_rings_lock so the monitor loop can decide trim policy without
+        # acquiring a second lock.
+        self._capturing_sources: set[str] = set()
 
         # Monotonic per-source sample counter (never wraps back, not bounded by the
         # ring capacity).  Used to determine exactly how many samples were added to
@@ -483,6 +499,14 @@ class UnifiedEASMonitorService:
         self._zczc_ring_total: Dict[str, int] = {}     # source → ring total at ZCZC
         self._pending_lock = threading.Lock()
         self._eom_timeout_seconds: float = 300.0       # 5-minute safety net
+
+        # Hard ceiling on active-capture buffer size, matched to the EOM
+        # timeout so a stuck capture can't grow without bound.  Includes a
+        # small headroom (+10 s) to cover the pre-roll already in the deque
+        # when ZCZC fires.
+        self._capture_max_samples = int(
+            self._target_sample_rate * (self._eom_timeout_seconds + 10)
+        )
 
         logger.info(
             f"UnifiedEASMonitorService initialized: "
@@ -720,6 +744,13 @@ class UnifiedEASMonitorService:
             alert_data['_pending_since'] = time.time()
             self._pending_alerts[effective_source] = alert_data
 
+        # Mark this source as actively capturing so the monitor loop stops
+        # trimming its ring buffer until EOM arrives.  Done outside the
+        # _pending_lock to preserve the existing lock ordering
+        # (_audio_rings_lock acquired before _pending_lock elsewhere).
+        with self._audio_rings_lock:
+            self._capturing_sources.add(effective_source)
+
         logger.warning(
             "🔔 SAME header from '%s': %s — holding until EOM before forwarding",
             effective_source, alert_data.get('event_code', 'UNKNOWN'),
@@ -730,6 +761,13 @@ class UnifiedEASMonitorService:
         with self._pending_lock:
             alert_data = self._pending_alerts.pop(source_name, None)
             zczc_total = self._zczc_ring_total.pop(source_name, None)
+
+        # Allow the monitor loop to resume trimming this source's ring back
+        # down to the pre-roll size now that the capture is complete.  The
+        # ring snapshot taken below is unaffected — list(ring) copies the
+        # deque structure before any further trims could occur.
+        with self._audio_rings_lock:
+            self._capturing_sources.discard(source_name)
 
         if alert_data is None:
             logger.debug("EOM from '%s' with no pending alert — ignoring", source_name)
@@ -881,9 +919,17 @@ class UnifiedEASMonitorService:
                                 self._ring_total_added[source_name] = (
                                     self._ring_total_added.get(source_name, 0) + len(samples)
                                 )
-                                # Trim oldest chunks to stay within the ring capacity
+                                # Trim policy depends on whether a ZCZC → EOM capture
+                                # is currently in progress for this source.  Idle
+                                # sources keep only a short pre-roll; active captures
+                                # grow until EOM (capped at _capture_max_samples as
+                                # a runaway safety net).
+                                if source_name in self._capturing_sources:
+                                    max_samples = self._capture_max_samples
+                                else:
+                                    max_samples = self._preroll_max_samples
                                 total = sum(len(c) for c in ring)
-                                while total > self._ring_max_samples and ring:
+                                while total > max_samples and ring:
                                     total -= len(ring.popleft())
 
                             # Process audio through this source's OWN dedicated decoder.
