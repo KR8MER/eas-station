@@ -631,15 +631,13 @@ class GPSManager:
     def _compute_jitter_summary(intervals_ns: List[int]) -> Dict[str, Any]:
         """Summarise inter-pulse intervals as a histogram + scalars.
 
-        The histogram spans ``±100 µs`` (10 buckets of 20 µs each, plus
-        an under/over-flow bucket on each side).  That matches what we
-        actually see on a Raspberry Pi reading the pps-gpio kernel
-        device: the IRQ-handler timestamping path adds ~10–30 µs of
-        host-side jitter to the receiver's own ~ns-scale PPS edge,
-        with rare scheduling outliers landing in the overflow bucket.
-        For receivers feeding chrony directly we'd want ns-scale buckets,
-        but the overhead of histogramming at that resolution isn't worth
-        it when the kernel itself has already smeared the edge.
+        Bucket layout is adaptive: 14 inner buckets centred on zero
+        plus one under/over-flow bucket on each side (16 total).  The
+        inner bucket width is chosen from a 1-2-5 sequence so the bulk
+        of observed samples fill 5-10 buckets — that matches what
+        operators expect of a histogram and avoids the sparse 2-bar
+        appearance you get when the static ±100 µs / 20 µs grid is
+        much wider than the receiver's actual jitter.
 
         Returns ``{}`` when the buffer holds fewer than two samples.
         """
@@ -664,15 +662,33 @@ class GPSManager:
         sorted_deltas = sorted(deltas_ns)
         median = sorted_deltas[n // 2]
 
-        # Histogram bucket layout:
-        #   bucket 0     : delta < -100 µs              (underflow)
-        #   buckets 1-10 : 20 µs wide, spanning -100 µs to +100 µs
-        #   bucket 11    : delta > +100 µs              (overflow)
-        # Each bucket entry is {label, count, lo_ns, hi_ns} so the JS
-        # side can render the label without knowing the layout.
-        bucket_count = 12
-        edges_ns = [-100_000, -80_000, -60_000, -40_000, -20_000,
-                    0, 20_000, 40_000, 60_000, 80_000, 100_000]
+        # Pick a bucket width so the bulk of the data spans most of the
+        # 14 inner buckets.  Target the larger of:
+        #   - half a sigma (so ±4σ fills ±8 buckets — the visible core)
+        #   - peak/14 (so a one-off outlier still lands inside the grid
+        #     rather than getting silently lumped into overflow)
+        # Then snap up to a 1-2-5 step so the X-axis tick labels stay
+        # tidy.  Floor at 100 ns to avoid zero-width buckets on
+        # exceptionally clean receivers.
+        raw_step = max(stddev / 2.0, peak / 14.0, 1.0)
+        exp10 = math.floor(math.log10(raw_step))
+        base = 10 ** exp10
+        ratio = raw_step / base
+        if ratio <= 1:
+            mult = 1
+        elif ratio <= 2:
+            mult = 2
+        elif ratio <= 5:
+            mult = 5
+        else:
+            mult = 10
+        width_ns = max(100, int(mult * base))
+
+        N_INNER = 14
+        half = N_INNER // 2  # = 7
+        edges_ns = [(i - half) * width_ns for i in range(N_INNER + 1)]
+
+        bucket_count = N_INNER + 2  # + 1 underflow, + 1 overflow
         counts = [0] * bucket_count
         for d in deltas_ns:
             if d < edges_ns[0]:
@@ -680,23 +696,27 @@ class GPSManager:
             elif d >= edges_ns[-1]:
                 counts[-1] += 1
             else:
-                # Find the first edge that exceeds d (linear scan; only
-                # ~10 edges, not worth bisect).
-                placed = False
-                for i in range(len(edges_ns) - 1):
-                    if edges_ns[i] <= d < edges_ns[i + 1]:
-                        counts[i + 1] += 1
-                        placed = True
-                        break
-                if not placed:
+                # Inner-bucket index derived directly from width — no
+                # linear edge scan needed.
+                idx = (d - edges_ns[0]) // width_ns
+                if idx < 0:
+                    counts[0] += 1
+                elif idx >= N_INNER:
                     counts[-1] += 1
+                else:
+                    counts[int(idx) + 1] += 1
+
+        def _fmt_edge(ns: int) -> str:
+            if abs(ns) >= 1000 and ns % 1000 == 0:
+                return f"{ns // 1000} µs"
+            return f"{ns} ns"
 
         def _label(lo: Optional[int], hi: Optional[int]) -> str:
             if lo is None:
-                return f"<{hi // 1000} µs"
+                return f"< {_fmt_edge(hi)}"
             if hi is None:
-                return f"≥{lo // 1000} µs"
-            return f"{lo // 1000} to {hi // 1000} µs"
+                return f"≥ {_fmt_edge(lo)}"
+            return f"{_fmt_edge(lo)} to {_fmt_edge(hi)}"
 
         histogram: List[Dict[str, Any]] = []
         for i, c in enumerate(counts):
@@ -716,6 +736,7 @@ class GPSManager:
         return {
             "sample_count": n,
             "histogram": histogram,
+            "bucket_width_ns": width_ns,
             "mean_ns": round(mean, 1),
             "stddev_ns": round(stddev, 1),
             "peak_ns": int(peak),

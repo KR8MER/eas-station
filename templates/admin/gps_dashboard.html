@@ -4450,6 +4450,66 @@
         canvas._crosshairInstalled = true;
     }
 
+    // Generic hover plumbing for the non-sparkline canvas charts
+    // (jitter histogram, Allan deviation, SNR-vs-elevation scatter,
+    // PRN heatmap).  Re-uses the same overlay elements/styles the
+    // sparklines use so the page has one consistent tooltip look.
+    //
+    // The caller supplies a `hitTest(mx, my)` function that returns
+    // either null (hide tooltip) or `{ html, snapX? }`.  Each redraw
+    // just overwrites canvas._hoverHitTest; the listeners are wired
+    // once.
+    function _installChartHover(canvas, hitTest) {
+        canvas._hoverHitTest = hitTest;
+        if (canvas._hoverInstalled) return;
+        var wrap = canvas.parentElement;
+        if (!wrap || !wrap.classList.contains('gps-chart-canvas-wrap')) {
+            canvas._hoverInstalled = true;
+            return;
+        }
+        var line = document.createElement('div');
+        line.className = 'gps-spark-crosshair';
+        var tip = document.createElement('div');
+        tip.className = 'gps-spark-tooltip';
+        wrap.appendChild(line);
+        wrap.appendChild(tip);
+
+        canvas.addEventListener('mousemove', function (ev) {
+            var fn = canvas._hoverHitTest;
+            if (!fn) { line.style.display = 'none'; tip.style.display = 'none'; return; }
+            var rect = canvas.getBoundingClientRect();
+            var mx = ev.clientX - rect.left;
+            var my = ev.clientY - rect.top;
+            var result;
+            try { result = fn(mx, my); } catch (_) { result = null; }
+            if (!result || !result.html) {
+                line.style.display = 'none'; tip.style.display = 'none'; return;
+            }
+            if (typeof result.snapX === 'number') {
+                line.style.left = result.snapX + 'px';
+                line.style.display = 'block';
+            } else {
+                line.style.display = 'none';
+            }
+            tip.innerHTML = result.html;
+            tip.style.display = 'block';
+            var wrapRect = wrap.getBoundingClientRect();
+            var tipW = tip.offsetWidth, tipH = tip.offsetHeight;
+            var anchorX = (typeof result.snapX === 'number') ? result.snapX : mx;
+            var left = anchorX + 8;
+            if (left + tipW > wrapRect.width - 4) left = anchorX - tipW - 8;
+            if (left < 4) left = 4;
+            var top = Math.max(4, Math.min(wrapRect.height - tipH - 4, my + 8));
+            tip.style.left = left + 'px';
+            tip.style.top = top + 'px';
+        });
+        canvas.addEventListener('mouseleave', function () {
+            line.style.display = 'none';
+            tip.style.display = 'none';
+        });
+        canvas._hoverInstalled = true;
+    }
+
     // Buffers for the five time-series charts (PPS drift, clock
     // stability, frequency steering, DOP history, SNR history).
     // Re-rendered on every poll, also redrawn on resize so they stay
@@ -4637,6 +4697,8 @@
             setText('ts-jitter-peak', '—');
             setText('ts-jitter-median', '—');
             setText('ts-jitter-n', 0);
+            var jc = document.getElementById('ts-jitter-canvas');
+            if (jc) jc._hoverHitTest = null;
             return;
         }
         setText('ts-jitter-stddev', fmtNs(jitter.stddev_ns));
@@ -4665,10 +4727,31 @@
         if (maxCount === 0) maxCount = 1;
 
         var barW = plotW / buckets.length;
-        // Centre bucket index — for the layout in _compute_jitter_summary
-        // this is the boundary between negative and positive halves
-        // (buckets 0..5 are ≤0, 6..11 are >0).  Render the centre divider.
-        var centreX = pad.l + barW * (buckets.length / 2);
+
+        // Locate the bucket containing 0 ns so the centre divider lines
+        // up with the actual zero crossing (the histogram's bucket
+        // edges are adaptive, so we can't assume the midpoint of the
+        // array is exactly 0).
+        var centreFrac = buckets.length / 2;
+        for (var ci = 0; ci < buckets.length; ci++) {
+            var blo = buckets[ci].lo_ns, bhi = buckets[ci].hi_ns;
+            if (blo != null && bhi != null && blo <= 0 && 0 < bhi) {
+                centreFrac = ci + (bhi === blo ? 0.5 : (0 - blo) / (bhi - blo));
+                break;
+            }
+        }
+        var centreX = pad.l + barW * centreFrac;
+
+        // Inner bucket width (in ns) — from the backend when available,
+        // otherwise inferred from the first finite-width bucket.  Used
+        // for both colour-coding and X-axis labels.
+        var widthNs = jitter.bucket_width_ns || null;
+        if (!widthNs) {
+            for (var wi = 1; wi < buckets.length - 1; wi++) {
+                var lo2 = buckets[wi].lo_ns, hi2 = buckets[wi].hi_ns;
+                if (lo2 != null && hi2 != null) { widthNs = hi2 - lo2; break; }
+            }
+        }
 
         // Faint grid lines at 25/50/75/100% of max count.
         ctx.strokeStyle = 'rgba(127,127,127,0.18)';
@@ -4696,32 +4779,61 @@
         ctx.moveTo(centreX, pad.t); ctx.lineTo(centreX, pad.t + plotH);
         ctx.stroke();
 
-        // Bars.  Colour-code: centre buckets green (low jitter), edges
-        // amber/red so the operator's eye finds outliers at a glance.
+        // Bars.  Colour-code by absolute distance from 0 expressed in
+        // bucket widths: ≤1 width = green (healthy), ≤3 = amber, more
+        // than that = red (outlier).  Underflow/overflow buckets are
+        // always red.
         for (var b = 0; b < buckets.length; b++) {
             var count = buckets[b].count;
             if (!count) continue;
             var h = (count / maxCount) * plotH;
             var x = pad.l + b * barW + 1;
             var y = pad.t + plotH - h;
-            // Distance from centre buckets (5 & 6 are the ±200 µs core).
-            var distFromCentre = Math.min(Math.abs(b - 5), Math.abs(b - 6));
-            var color;
-            if (distFromCentre <= 1)      color = '#3fb950';   // green — healthy
-            else if (distFromCentre <= 3) color = '#d29922';   // amber — wide
-            else                          color = '#f85149';   // red — outlier
+            var blo2 = buckets[b].lo_ns, bhi2 = buckets[b].hi_ns;
+            var color = '#f85149';
+            if (blo2 == null || bhi2 == null) {
+                color = '#f85149';   // under/over-flow
+            } else if (widthNs && widthNs > 0) {
+                var midNs = (blo2 + bhi2) / 2;
+                var widths = Math.abs(midNs) / widthNs;
+                if (widths <= 1.05)      color = '#3fb950';
+                else if (widths <= 3.05) color = '#d29922';
+                else                     color = '#f85149';
+            }
             ctx.fillStyle = color;
             ctx.fillRect(x, y, Math.max(1, barW - 2), h);
         }
 
-        // X-axis labels — show -1 ms / 0 / +1 ms anchors only (a label
-        // per bucket would overlap on the 600px-wide canvas).
+        // X-axis labels — show the leftmost finite edge, 0, and the
+        // rightmost finite edge.  fmtNs picks ns/µs/ms automatically.
         ctx.fillStyle = 'rgba(127,127,127,0.85)';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
-        ctx.fillText('-100 µs', pad.l + barW * 1, pad.t + plotH + 4);
-        ctx.fillText('0',       centreX,           pad.t + plotH + 4);
-        ctx.fillText('+100 µs', pad.l + barW * (buckets.length - 1), pad.t + plotH + 4);
+        var firstInner = buckets.length > 1 ? buckets[1].lo_ns : null;
+        var lastInner = buckets.length > 1 ? buckets[buckets.length - 2].hi_ns : null;
+        if (firstInner != null) {
+            ctx.fillText(fmtNs(firstInner), pad.l + barW * 1, pad.t + plotH + 4);
+        }
+        ctx.fillText('0', centreX, pad.t + plotH + 4);
+        if (lastInner != null) {
+            ctx.fillText('+' + fmtNs(lastInner), pad.l + barW * (buckets.length - 1), pad.t + plotH + 4);
+        }
+
+        // Hover: report bucket label + count + % share of samples.
+        var totalCount = jitter.sample_count || 0;
+        _installChartHover(canvas, function (mx, my) {
+            if (mx < pad.l || mx > pad.l + plotW) return null;
+            if (my < pad.t || my > pad.t + plotH) return null;
+            var idx = Math.floor((mx - pad.l) / barW);
+            if (idx < 0 || idx >= buckets.length) return null;
+            var bucket = buckets[idx];
+            var snapX = pad.l + (idx + 0.5) * barW;
+            var pct = totalCount ? (100 * bucket.count / totalCount) : 0;
+            var html = '<div class="ts">' + escapeHtml(bucket.label || '') + '</div>'
+                     + '<div class="row"><span>count ' + bucket.count + '</span></div>'
+                     + '<div class="row"><span>' + pct.toFixed(1) + '% of samples</span></div>';
+            return { snapX: snapX, html: html };
+        });
     }
 
     // ── Allan deviation log-log plot.  Renders the (τ, σ_y) tuples the
@@ -4735,6 +4847,8 @@
             setText('ts-adev-10', '—');
             setText('ts-adev-100', '—');
             setText('ts-adev-n', adev && adev.sample_count ? adev.sample_count : 0);
+            var ac = document.getElementById('ts-adev-canvas');
+            if (ac) ac._hoverHitTest = null;
             return;
         }
         setText('ts-adev-n', adev.sample_count);
@@ -4797,7 +4911,9 @@
             ctx.beginPath();
             ctx.moveTo(pad.l, yy); ctx.lineTo(pad.l + plotW, yy);
             ctx.stroke();
-            ctx.fillText('1e' + ly, pad.l - 4, yy);
+            // Real scientific notation ("10⁻⁷") rather than computer-y
+            // "1e-7" — matches the fmtAdev helper used in the readouts.
+            ctx.fillText('10' + fmtSuperExp(ly), pad.l - 4, yy);
         }
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
@@ -4834,6 +4950,40 @@
             ctx.arc(xOf(adev.tau_s[m]), yOf(sm), 3, 0, Math.PI * 2);
             ctx.fill();
         }
+
+        // Hover: snap to nearest (τ, σ_y) marker within ~30 px and
+        // show formatted values; outside the marker neighbourhood,
+        // fall back to a τ-only readout so the operator can still
+        // read the x-axis position when scrubbing.
+        _installChartHover(canvas, function (mx, my) {
+            if (mx < pad.l || mx > pad.l + plotW) return null;
+            if (my < pad.t || my > pad.t + plotH) return null;
+            var bestI = -1, bestD = 1e9;
+            for (var i = 0; i < adev.tau_s.length; i++) {
+                var s = adev.sigma_y[i];
+                if (!isFinite(s) || s <= 0) continue;
+                var px = xOf(adev.tau_s[i]);
+                var py = yOf(s);
+                var dx = px - mx, dy = py - my;
+                var d = Math.sqrt(dx * dx + dy * dy);
+                if (d < bestD) { bestD = d; bestI = i; }
+            }
+            if (bestI >= 0 && bestD <= 30) {
+                var tauS = adev.tau_s[bestI];
+                var sigma = adev.sigma_y[bestI];
+                var snapX = xOf(tauS);
+                var html = '<div class="ts">τ = ' + tauS + ' s</div>'
+                         + '<div class="row">'
+                         +   '<span class="sw" style="background:#bc8cff"></span>'
+                         +   '<span>σ_y = ' + escapeHtml(fmtAdev(sigma)) + '</span>'
+                         + '</div>';
+                return { snapX: snapX, html: html };
+            }
+            var frac = (mx - pad.l) / plotW;
+            var logTau = logTauMin + frac * (logTauMax - logTauMin);
+            var tauVal = Math.pow(10, logTau);
+            return { html: '<div class="ts">τ ≈ ' + tauVal.toFixed(1) + ' s</div>' };
+        });
     }
 
     // ── SNR-vs-elevation scatter.  Each visible satellite plotted as a
@@ -4855,6 +5005,7 @@
             if (emptyEl) emptyEl.style.display = '';
             setText('ts-elev-avg', '—');
             setText('ts-elev-zenith', '—');
+            if (canvas) canvas._hoverHitTest = null;
             return;
         }
         if (emptyEl) emptyEl.style.display = 'none';
@@ -4918,6 +5069,32 @@
             ctx.arc(xOf(s.elevation), yOf(s.snr), 3.5, 0, Math.PI * 2);
             ctx.fill();
         });
+
+        // Hover: nearest satellite dot within ~12 px gets a tooltip
+        // with PRN, constellation, elevation and SNR.
+        _installChartHover(canvas, function (mx, my) {
+            if (mx < pad.l || mx > pad.l + plotW) return null;
+            if (my < pad.t || my > pad.t + plotH) return null;
+            var bestI = -1, bestD = 1e9;
+            for (var i = 0; i < usable.length; i++) {
+                var s = usable[i];
+                var dx = xOf(s.elevation) - mx;
+                var dy = yOf(s.snr) - my;
+                var d = Math.sqrt(dx * dx + dy * dy);
+                if (d < bestD) { bestD = d; bestI = i; }
+            }
+            if (bestI < 0 || bestD > 12) return null;
+            var sat = usable[bestI];
+            var info = constInfo(sat.constellation || (sat.prn_string ? sat.prn_string.slice(0, 2) : null));
+            var label = sat.prn_string ? sat.prn_string : (info.label + ' ' + sat.prn);
+            var html = '<div class="row">'
+                     +   '<span class="sw" style="background:' + info.color + '"></span>'
+                     +   '<span>' + escapeHtml(label) + '</span>'
+                     + '</div>'
+                     + '<div class="row"><span>elev ' + sat.elevation + '°</span></div>'
+                     + '<div class="row"><span>SNR ' + sat.snr + ' dBHz</span></div>';
+            return { html: html };
+        });
     }
 
     // ── Per-PRN SNR heatmap.  Rows = PRN keys we've seen since page
@@ -4954,6 +5131,7 @@
             setText('ts-heatmap-window', '—');
             var fitEarly = fitCanvas(canvas);
             fitEarly.ctx.clearRect(0, 0, fitEarly.w, fitEarly.h);
+            canvas._hoverHitTest = null;
             return;
         }
         if (emptyEl) emptyEl.style.display = 'none';
@@ -5056,6 +5234,49 @@
         ctx.fillText('25',   pad.l + plotW * 0.40, legendY + 14);
         ctx.fillText('35',   pad.l + plotW * 0.60, legendY + 14);
         ctx.fillText('45+',  pad.l + plotW * 0.80, legendY + 14);
+
+        // Hover: report which PRN + timestamp + SNR the cell under
+        // the cursor represents (or "no sample in window" when the
+        // ring is sparse and the bin didn't catch a sample).
+        var heatmapMeta = {
+            pad: pad, plotW: plotW, plotH: plotH,
+            rowH: rowH, colW: colW, COLS: COLS,
+            keys: keys, tMin: tMin, spanMs: spanMs,
+        };
+        _installChartHover(canvas, function (mx, my) {
+            var m = heatmapMeta;
+            if (mx < m.pad.l || mx > m.pad.l + m.plotW) return null;
+            if (my < m.pad.t || my > m.pad.t + m.plotH) return null;
+            var rowIdx = Math.floor((my - m.pad.t) / m.rowH);
+            if (rowIdx < 0 || rowIdx >= m.keys.length) return null;
+            var colIdx = Math.floor((mx - m.pad.l) / m.colW);
+            if (colIdx < 0 || colIdx >= m.COLS) return null;
+            var key = m.keys[rowIdx];
+            var entry = prnHistory[key];
+            if (!entry) return null;
+            var binStart = m.tMin + (colIdx / m.COLS) * m.spanMs;
+            var binEnd = m.tMin + ((colIdx + 1) / m.COLS) * m.spanMs;
+            var ring = entry.ring;
+            var picked = -1;
+            for (var i = 0; i < ring.t.length; i++) {
+                if (ring.t[i] >= binStart && ring.t[i] < binEnd) picked = i;
+            }
+            var info = constInfo(entry.constellation);
+            var html = '<div class="row">'
+                     +   '<span class="sw" style="background:' + info.color + '"></span>'
+                     +   '<span>' + escapeHtml(key) + '</span>'
+                     + '</div>';
+            if (picked >= 0 && ring.v[picked] != null && !isNaN(ring.v[picked])) {
+                var d = new Date(ring.t[picked]);
+                var pad2 = function (n) { return n < 10 ? '0' + n : '' + n; };
+                html += '<div class="ts">' + pad2(d.getHours()) + ':'
+                     + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds()) + '</div>'
+                     + '<div class="row"><span>SNR ' + ring.v[picked] + ' dBHz</span></div>';
+            } else {
+                html += '<div class="row"><span>no sample in window</span></div>';
+            }
+            return { html: html };
+        });
     }
 
     // ── Leap-second countdown.  ``leap_seconds_to_event`` is reported
