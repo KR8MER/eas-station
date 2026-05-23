@@ -28,6 +28,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional
@@ -1297,7 +1298,12 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
                 source='manual',
             )
 
-            # Play audio via configured player command
+            # Play audio via configured player command. The GPIO airchain must
+            # stay asserted for the full composite duration regardless of
+            # whether the player actually blocks for that long — on hosts
+            # without an audio device the player can exit immediately, which
+            # would otherwise drop the relay before the encoder finishes.
+            playout_start = time.monotonic()
             if audio_player_cmd:
                 try:
                     command = list(audio_player_cmd) + [tmp_path]
@@ -1321,6 +1327,10 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
                     event_id,
                 )
                 send_result['audio_player_configured'] = False
+
+            remaining_playout = playback_duration - (time.monotonic() - playout_start)
+            if remaining_playout > 0:
+                time.sleep(remaining_playout)
 
         finally:
             # Release GPIO relays before clearing broadcast state so the
