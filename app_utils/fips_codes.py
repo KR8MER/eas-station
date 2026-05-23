@@ -3644,3 +3644,180 @@ def get_same_lookup() -> Mapping[str, str]:
     """
 
     return _US_FIPS_LOOKUP_PROXY
+
+
+# ---------------------------------------------------------------------------
+# NWS marine SAME areas
+#
+# Marine, Great Lakes, and offshore alerts arrive on the SAME wire as 6-digit
+# PSSCCC codes whose SS digits don't overlap the U.S. Census state FIPS grid
+# (the alert in admin issue #2168 had SS=077 = American Samoa marine). The
+# corresponding UGC codes that NWS publishes in the marine zone shapefile
+# use 2-letter alphabetic prefixes (PSZ###, GMZ###, AMZ###, …) — those go
+# into ``nws_zones`` once the operator uploads ``mz_*.dbf``.
+#
+# To let the admin FIPS picker surface marine areas, we need to map each
+# alphabetic UGC prefix to its numeric SAME "state" digit. Only entries we
+# can verify against an authoritative source live here. Adding a new prefix
+# requires:
+#   1. NWS confirmation of the prefix → numeric-state mapping (per-state
+#      ``<XX>SAME.txt`` files at weather.gov/nwr/SAMECountyTextFiles), AND
+#   2. Loading a marine zone DBF that contains entries with that prefix
+#      via the admin Zones page (or tools/sync_zone_catalog.py).
+# ---------------------------------------------------------------------------
+
+# UGC prefix → numeric SAME "state" digits (the SS in PSSCCC — two digits).
+#
+# Source: NWS "Coastal and Offshore Marine Codes Listings for Emergency
+# Alert System (EAS) and NOAA Weather Radio (NWR) Applications", §6,
+# which publishes the complete Numeric ↔ Alpha ↔ Geographic-area
+# correspondence. The GM=77 row was cross-verified on-station against
+# an SMW with codes 077650/077633/077632/077631 whose CCC values match
+# GMZ650 ("Coastal waters from Pensacola FL to Pascagoula MS"),
+# GMZ633 (Perdido Bay), GMZ632 (Mississippi Sound), GMZ631 (South
+# Mobile Bay) byte-for-byte in the mz16ap26 DBF.
+MARINE_PREFIX_TO_SAME_STATE: Dict[str, str] = {
+    # Pacific
+    "PZ": "57",  # Eastern N. Pacific Ocean (US West Coast)
+    "PK": "58",  # N. Pacific Ocean near Alaska
+    "PH": "59",  # Central Pacific Ocean (Hawaiian Waters)
+    "PS": "61",  # S. Central Pacific Ocean (American Samoa)
+    "PM": "65",  # Western Pacific Ocean (Mariana Islands)
+    # Atlantic / Gulf
+    "AN": "73",  # Northwest N. Atlantic Ocean (US East Coast, N. of Hatteras)
+    "AM": "75",  # West N. Atlantic Ocean (US East Coast S. of Hatteras + Caribbean)
+    "GM": "77",  # Gulf of Mexico — verified on-air (see above)
+    # Great Lakes / St. Lawrence
+    "LS": "91",  # Lake Superior
+    "LM": "92",  # Lake Michigan
+    "LH": "93",  # Lake Huron
+    "LC": "94",  # Lake St. Clair
+    "LE": "96",  # Lake Erie
+    "LO": "97",  # Lake Ontario
+    "SL": "98",  # St. Lawrence River
+}
+
+# Display label per UGC prefix, used as the "state" name in the picker
+# whenever the prefix is also mapped in MARINE_PREFIX_TO_SAME_STATE.
+# Names follow the NWS Coastal/Offshore Marine Codes Listings (the
+# same document that publishes the numeric SAME mappings above).
+MARINE_AREA_LABELS: Dict[str, str] = {
+    "PZ": "Eastern N. Pacific Ocean",
+    "PK": "N. Pacific Ocean near Alaska",
+    "PH": "Central Pacific Ocean (Hawaii)",
+    "PS": "S. Central Pacific Ocean (American Samoa)",
+    "PM": "Western Pacific Ocean (Mariana Islands)",
+    "AN": "Northwest N. Atlantic Ocean",
+    "AM": "West N. Atlantic Ocean (incl. Caribbean)",
+    "GM": "Gulf of Mexico",
+    "LS": "Lake Superior",
+    "LM": "Lake Michigan",
+    "LH": "Lake Huron",
+    "LC": "Lake St. Clair",
+    "LE": "Lake Erie",
+    "LO": "Lake Ontario",
+    "SL": "St. Lawrence River",
+}
+
+
+def _normalise_marine_state_code(state_code: str) -> str:
+    """Return the upper-case prefix portion of a ``nws_zones.state_code`` value."""
+
+    return (state_code or "").strip().upper()
+
+
+def _marine_same_code(prefix: str, zone_number: str) -> Optional[str]:
+    """Build the numeric SAME code (``PSSCCC``, P=0) for a marine UGC zone.
+
+    SAME location codes are six digits: a one-digit partition code ``P``
+    (always ``0`` for an entire marine zone), two-digit "state" ``SS``,
+    and three-digit area ``CCC``. Returns ``None`` if the prefix isn't
+    in :data:`MARINE_PREFIX_TO_SAME_STATE` or the zone number doesn't
+    normalise to three digits.
+    """
+
+    state_digits = MARINE_PREFIX_TO_SAME_STATE.get(prefix)
+    if not state_digits or len(state_digits) != 2 or not state_digits.isdigit():
+        return None
+    digits = "".join(ch for ch in (zone_number or "") if ch.isdigit())
+    if not digits:
+        return None
+    return f"0{state_digits}{digits.zfill(3)[-3:]}"
+
+
+def get_marine_state_tree() -> List[Dict[str, object]]:
+    """Return marine "state" entries derived from the ``nws_zones`` table.
+
+    Each returned entry mirrors the shape of a state in
+    :func:`get_us_state_county_tree`: ``abbr`` (the marine UGC prefix),
+    ``name`` (display label), ``statewide_code`` (``0SS000``), and
+    ``counties`` (the marine areas under that prefix, sorted by name with
+    their 6-digit numeric SAME code).
+
+    Returns an empty list if the database isn't reachable yet (e.g. during
+    module import) or if no zones for any configured marine prefix have
+    been loaded. Never raises.
+    """
+
+    if not MARINE_PREFIX_TO_SAME_STATE:
+        return []
+
+    try:
+        from app_core.models import NWSZone  # Lazy import to avoid cycles
+        from app_core.extensions import db
+    except Exception:
+        return []
+
+    try:
+        rows = (
+            db.session.query(NWSZone.state_code, NWSZone.zone_number, NWSZone.name)
+            .filter(NWSZone.state_code.in_(tuple(MARINE_PREFIX_TO_SAME_STATE.keys())))
+            .all()
+        )
+    except Exception:
+        # DB not ready, table missing, or query failed — silently degrade.
+        return []
+
+    grouped: Dict[str, List[Dict[str, object]]] = {}
+    for state_code, zone_number, name in rows:
+        prefix = _normalise_marine_state_code(state_code)
+        same = _marine_same_code(prefix, zone_number or "")
+        if not same:
+            continue
+        grouped.setdefault(prefix, []).append(
+            {"code": same, "name": (name or "").strip() or f"{prefix}{zone_number}"}
+        )
+
+    tree: List[Dict[str, object]] = []
+    for prefix, counties in grouped.items():
+        seen: Dict[str, Dict[str, object]] = {}
+        for entry in counties:
+            seen.setdefault(str(entry["code"]), entry)
+        ordered = sorted(seen.values(), key=lambda item: str(item["name"]).lower())
+
+        state_digits = MARINE_PREFIX_TO_SAME_STATE[prefix]
+        tree.append(
+            {
+                "abbr": prefix,
+                "name": MARINE_AREA_LABELS.get(prefix, f"{prefix} Marine"),
+                "state_fips": None,  # Intentionally omitted — not a Census state.
+                "statewide_code": f"0{state_digits}000",  # PSSCCC: P=0, CCC=000
+                "counties": ordered,
+                "is_marine": True,
+            }
+        )
+
+    tree.sort(key=lambda item: str(item["name"]).lower())
+    return tree
+
+
+def get_extended_state_county_tree() -> List[Dict[str, object]]:
+    """Return the U.S. state/county tree plus any loaded marine areas.
+
+    This is the function admin templates should call so the FIPS picker
+    surfaces marine alerts (e.g. American Samoa SMW codes ``077###``).
+    Import-time callers must keep using :func:`get_us_state_county_tree`,
+    which never touches the database.
+    """
+
+    return get_us_state_county_tree() + get_marine_state_tree()

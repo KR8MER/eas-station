@@ -382,8 +382,19 @@ def format_zone_code_list(codes: Sequence[str]) -> List[str]:
     return formatted
 
 
-def ensure_zone_catalog(logger=None, source_path: str | Path | None = None) -> bool:
-    """Ensure the zone catalog table matches the bundled DBF file."""
+def ensure_zone_catalog(
+    logger=None,
+    source_path: str | Path | None = None,
+    *,
+    delete_scope=None,
+) -> bool:
+    """Ensure the zone catalog table matches the bundled DBF file.
+
+    ``delete_scope`` is forwarded to :func:`sync_zone_catalog` — see
+    that function for the supported values. Default ``None`` performs
+    a full sync; pass ``False`` for an additive load that never deletes
+    existing rows.
+    """
 
     path = _resolve_zone_catalog_path(source_path)
     if not path.exists():
@@ -395,7 +406,9 @@ def ensure_zone_catalog(logger=None, source_path: str | Path | None = None) -> b
         _log_warning(f"Zone catalog at {path} is empty; skipping load")
         return False
 
-    result = sync_zone_catalog(db.session, records, source_path=path)
+    result = sync_zone_catalog(
+        db.session, records, source_path=path, delete_scope=delete_scope
+    )
     clear_zone_lookup_cache()
     summary = (
         "Loaded %d zone records (%d inserted, %d updated, %d removed) from %s"

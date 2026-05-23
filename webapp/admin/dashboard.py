@@ -44,7 +44,10 @@ from app_utils.eas import (
     manual_default_same_codes,
 )
 from app_utils.event_codes import EVENT_CODE_REGISTRY
-from app_utils.fips_codes import get_same_lookup, get_us_state_county_tree
+from app_utils.fips_codes import (
+    get_same_lookup,
+    get_extended_state_county_tree,
+)
 
 USERNAME_PATTERN = re.compile(r'^[A-Za-z0-9_.-]{3,64}$')
 
@@ -162,7 +165,9 @@ def admin():
         ]
         eas_event_options.sort(key=lambda item: item['code'])
 
-        eas_state_tree = get_us_state_county_tree()
+        # Extended tree includes marine areas loaded via mz_*.dbf so the
+        # FIPS picker can surface codes like American Samoa marine 077###.
+        eas_state_tree = get_extended_state_county_tree()
         eas_lookup = dict(get_same_lookup())
         originator_choices = [
             {
