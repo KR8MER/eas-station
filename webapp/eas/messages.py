@@ -188,8 +188,9 @@ def register_message_routes(bp, logger) -> None:
         import os
         import subprocess
         import tempfile
+        import time
 
-        from app_utils.eas import set_broadcast_active, clear_broadcast_active
+        from app_utils.eas import set_broadcast_active, clear_broadcast_active, _wav_duration_seconds
         from app_utils.gpio import GPIOController, GPIOActivationType
         from app_utils.gpio_behavior import GPIOBehaviorManager, load_gpio_behavior_matrix_from_db
         from app_core.models import GPIOConfig
@@ -209,7 +210,11 @@ def register_message_routes(bp, logger) -> None:
 
         metadata = message.metadata_payload or {}
         event_code = metadata.get('event_code') or ''
-        playback_duration = metadata.get('playback_duration_seconds') or metadata.get('duration_seconds') or 60.0
+        # Prefer the actual WAV length so we hold GPIO for the right window
+        # even when the audio player exits early (no audio device, etc.).
+        actual_audio_duration = _wav_duration_seconds(message.audio_data) if message.audio_data else 0.0
+        metadata_duration = metadata.get('playback_duration_seconds') or metadata.get('duration_seconds') or 0.0
+        playback_duration = actual_audio_duration or float(metadata_duration) or 60.0
 
         from app_utils.event_codes import EVENT_CODE_REGISTRY as _ECR
         _ei = _ECR.get(event_code, {})
@@ -279,6 +284,10 @@ def register_message_routes(bp, logger) -> None:
             )
 
             audio_played = False
+            # Hold the airchain for the full composite duration regardless of
+            # whether the player actually blocks (e.g. no audio device on this
+            # host) — otherwise GPIO drops as soon as the player exits.
+            playout_start = time.monotonic()
             if audio_player_cmd:
                 try:
                     command = list(audio_player_cmd) + [tmp_path]
@@ -288,6 +297,10 @@ def register_message_routes(bp, logger) -> None:
                     logger.warning('Resend audio playback timed out for message %s', message_id)
                 except Exception as exc:
                     logger.warning('Resend audio playback failed: %s', exc)
+
+            remaining_playout = float(playback_duration) - (time.monotonic() - playout_start)
+            if remaining_playout > 0:
+                time.sleep(remaining_playout)
 
         finally:
             if gpio_controller and activated_any:
