@@ -3823,6 +3823,35 @@ def get_extended_state_county_tree() -> List[Dict[str, object]]:
     return get_us_state_county_tree() + get_marine_state_tree()
 
 
+def state_index_from_tree(
+    state_tree: List[Dict[str, object]],
+) -> Dict[str, Dict[str, object]]:
+    """Map SAME-header SS digits → {abbr, name} for the given tree.
+
+    ``describe_same_header`` uses this to label the per-location
+    ``state_name`` / ``state_abbr`` fields. Census states key on their
+    numeric ``state_fips`` (e.g. ``"12"`` → Florida). Marine entries
+    from :func:`get_marine_state_tree` have ``state_fips=None`` (they
+    are not Census states); their SS digit lives at characters 1:3 of
+    ``statewide_code`` (a ``PSSCCC`` literal), so ``"077000"`` for the
+    Gulf of Mexico yields ``"77" → {"abbr": "GM", "name": "Gulf of
+    Mexico"}``. Pass :func:`get_extended_state_county_tree` to get
+    proper labels for both kinds of code in a single index.
+    """
+
+    index: Dict[str, Dict[str, object]] = {}
+    for state in state_tree:
+        abbr = state.get("abbr")
+        name = state.get("name")
+        state_fips = state.get("state_fips")
+        if state_fips:
+            index[str(state_fips)] = {"abbr": abbr, "name": name}
+        statewide_code = state.get("statewide_code")
+        if isinstance(statewide_code, str) and len(statewide_code) == 6:
+            index.setdefault(statewide_code[1:3], {"abbr": abbr, "name": name})
+    return index
+
+
 def get_extended_same_lookup() -> Dict[str, str]:
     """Return a SAME-code → description map covering U.S. + marine areas.
 

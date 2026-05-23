@@ -65,7 +65,11 @@ from app_utils.eas import (
     samples_to_wav_bytes,
 )
 from app_utils.event_codes import EVENT_CODE_REGISTRY
-from app_utils.fips_codes import get_extended_same_lookup, get_us_state_county_tree
+from app_utils.fips_codes import (
+    get_extended_same_lookup,
+    get_extended_state_county_tree,
+    state_index_from_tree,
+)
 
 
 # Create Blueprint for audio routes
@@ -895,12 +899,8 @@ def admin_manual_eas_generate():
             'size_bytes': len(wav_bytes),
         }
 
-    state_tree = get_us_state_county_tree()
-    state_index = {
-        state.get('state_fips'): {'abbr': state.get('abbr'), 'name': state.get('name')}
-        for state in state_tree
-        if state.get('state_fips')
-    }
+    state_tree = get_extended_state_county_tree()
+    state_index = state_index_from_tree(state_tree)
     same_lookup = get_extended_same_lookup()
     header_detail = describe_same_header(header, lookup=same_lookup, state_index=state_index)
 
@@ -1222,12 +1222,8 @@ def manual_eas_print(event_id: int):
         if component_value:
             components[key] = component_value
 
-    state_tree = get_us_state_county_tree()
-    state_index = {
-        state.get('state_fips'): {'abbr': state.get('abbr'), 'name': state.get('name')}
-        for state in state_tree
-        if state.get('state_fips')
-    }
+    state_tree = get_extended_state_county_tree()
+    state_index = state_index_from_tree(state_tree)
     same_lookup = get_extended_same_lookup()
     header_detail = describe_same_header(event.same_header, lookup=same_lookup, state_index=state_index)
 
