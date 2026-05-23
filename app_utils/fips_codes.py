@@ -3678,9 +3678,37 @@ MARINE_PREFIX_TO_SAME_STATE: Dict[str, str] = {
     "GM": "77",
 }
 
-# Display label per UGC prefix, used as the "state" name in the picker.
+# Display label per UGC prefix, used as the "state" name in the picker
+# whenever the prefix is also mapped in MARINE_PREFIX_TO_SAME_STATE.
+# These labels were confirmed by inspecting the area names in the
+# official NWS marine zone DBF (mz16ap26.dbf + oz16ap26.dbf):
+#   AM → "Deerfield Beach to Ocean Reef FL", Caribbean offshore
+#   AN → "Rhode Island Sound", "Narragansett Bay", "Cape Hatteras"
+#   GM → "Pensacola to Pascagoula", "Mississippi Sound"
+#   PH → "Kauai Channel", "Kauai Leeward Waters"
+#   PK → "Kiska to Attu", arctic offshore (Alaska)
+#   PM → "Yap Coastal Waters", "Chuuk Coastal Waters" (Marianas/FSM)
+#   PS → "Tutuila and Aunuu", "Pago Pago" (American Samoa)
+#   PZ → "San Francisco Bay", "Point Pinos to Point Piedras Blancas"
+#   LM/LS/LE/LO/LH → respective Great Lakes (name matches verbatim)
+#   LC → "Lake St. Clair Open Lake (U.S. Portion)", "St. Clair River"
+#   SL → "St. Lawrence River from Ogdensburg to St. Regis NY"
 MARINE_AREA_LABELS: Dict[str, str] = {
+    "AM": "Atlantic Marine (Caribbean / Tropical Offshore)",
+    "AN": "Atlantic North Marine (NY / NE / Mid-Atlantic)",
     "GM": "Gulf of Mexico Marine",
+    "LC": "Lake St. Clair",
+    "LE": "Lake Erie",
+    "LH": "Lake Huron",
+    "LM": "Lake Michigan",
+    "LO": "Lake Ontario",
+    "LS": "Lake Superior",
+    "PH": "Pacific Hawaii Marine",
+    "PK": "Pacific Alaska Marine",
+    "PM": "Pacific Marianas / Micronesia Marine",
+    "PS": "Pacific American Samoa Marine",
+    "PZ": "Pacific US West Coast Marine",
+    "SL": "St. Lawrence River",
 }
 
 
