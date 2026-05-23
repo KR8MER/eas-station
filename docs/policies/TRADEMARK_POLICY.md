@@ -1,13 +1,13 @@
-# ™️ EAS Station Trademark Policy
+# ™️ EAS Station™ Trademark Policy
 
 _Last updated: April 13, 2026_
 
-This policy explains permitted and prohibited use of the **EAS Station** name, logos, and branding.
+This policy explains permitted and prohibited use of the **EAS Station™** name, logos, and branding.
 
 ## 1. Scope
 
 This policy governs use of:
-- The name **EAS Station**
+- The name **EAS Station™**
 - Project logos, icons, and wordmarks
 - Any confusingly similar names, branding, or visual identity
 
@@ -22,24 +22,24 @@ The software copyright licenses (AGPL-3.0 and the commercial license) do **not**
 
 You may, without prior written approval:
 - Use the unmodified project name to refer to the upstream project factually
-- State that your fork is "based on EAS Station"
+- State that your fork is "based on EAS Station™"
 - Preserve required legal notices and attribution from upstream materials
 - Describe compatibility in a truthful, non-confusing way
 
 ## 4. Prohibited Uses
 
 You may not, without explicit written permission:
-- Use "EAS Station" as the primary name of a modified fork in a way that implies official endorsement
+- Use "EAS Station™" as the primary name of a modified fork in a way that implies official endorsement
 - Use project logos/wordmarks for your modified distribution branding
 - Use confusingly similar names, logos, or trade dress
-- State or imply sponsorship, certification, or endorsement by Timothy Kramer or the EAS Station project
+- State or imply sponsorship, certification, or endorsement by Timothy Kramer or the EAS Station™ project
 
 ## 5. Fork Naming Guidance
 
 If you distribute a modified version, choose distinct branding that avoids confusion.
 
 Recommended format:
-- "<Your Product Name> (based on EAS Station)"
+- "<Your Product Name> (based on EAS Station™)"
 
 ## 6. Enforcement
 

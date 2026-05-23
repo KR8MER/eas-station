@@ -1,6 +1,6 @@
 # Analytics Module
 
-The analytics module provides comprehensive trend analysis and anomaly detection capabilities for the EAS Station system.
+The analytics module provides comprehensive trend analysis and anomaly detection capabilities for the EAS Station™ system.
 
 ## Features
 
@@ -296,4 +296,4 @@ When modifying detection algorithms:
 
 ## License
 
-This module is part of the EAS Station system and follows the same license.
+This module is part of the EAS Station™ system and follows the same license.

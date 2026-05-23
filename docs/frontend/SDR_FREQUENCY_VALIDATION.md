@@ -2,7 +2,7 @@
 
 ## Overview
 
-The EAS Station SDR configuration UI provides comprehensive frequency and hardware validation to ensure correct receiver configuration.
+The EAS Station™ SDR configuration UI provides comprehensive frequency and hardware validation to ensure correct receiver configuration.
 
 ## Frequency Input - Already in MHz!
 

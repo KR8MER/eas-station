@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-EAS Station supports Alpha LED signs via the M-Protocol over a serial-to-Ethernet adapter (e.g., Waveshare). The integration provides full bidirectional control including message display, diagnostics, time/date synchronization, speaker control, brightness management, and file reading. All functions are accessible through the web UI dashboard or the Python API.
+EAS Station™ supports Alpha LED signs via the M-Protocol over a serial-to-Ethernet adapter (e.g., Waveshare). The integration provides full bidirectional control including message display, diagnostics, time/date synchronization, speaker control, brightness management, and file reading. All functions are accessible through the web UI dashboard or the Python API.
 
 **Supported signs:**
 - ✅ Alpha Premier (4-line)
@@ -35,7 +35,7 @@ LED_SIGN_ENABLED=true            # Enable LED sign controller
 - Alpha LED sign configured (LED_SIGN_IP and LED_SIGN_PORT set)
 
 **Navigation:**
-1. Log in to EAS Station web interface
+1. Log in to EAS Station™ web interface
 2. Click **Hardware** in navigation menu
 3. Select **Alpha LED Sign**
 
@@ -53,7 +53,7 @@ LED_SIGN_ENABLED=true            # Enable LED sign controller
 - Auto-refresh indicator (30-second intervals)
 
 **Quick Actions:**
-- **Sync Time with System** - Immediately synchronize sign time with EAS Station
+- **Sync Time with System** - Immediately synchronize sign time with EAS Station™
 - **Refresh Diagnostics** - Manually trigger diagnostics refresh
 
 #### 2. Sign Diagnostics
@@ -94,7 +94,7 @@ LED_SIGN_ENABLED=true            # Enable LED sign controller
 - **Sync Time**: Quick sync button in header
 
 **Use Cases:**
-- Keep sign synchronized with EAS Station time
+- Keep sign synchronized with EAS Station™ time
 - Switch to manual mode during emergency alerts
 - Configure time format for user preference
 
@@ -218,7 +218,7 @@ All endpoints require authentication and `hardware.manage` permission.
 
 #### POST /api/alpha/sync-time
 
-**Description:** Sync sign time with EAS Station system time
+**Description:** Sync sign time with EAS Station™ system time
 
 **Request:** Empty POST
 
@@ -648,7 +648,7 @@ LED_SIGN_ENABLED=true            # Enable LED sign controller
 - ✅ **Query sign data** (current message, memory usage, etc.)
 - ✅ **Set configuration** (time/date, brightness, etc.)
 
-The EAS Station LED controller and Waveshare adapter **fully support bidirectional communication**.
+The EAS Station™ LED controller and Waveshare adapter **fully support bidirectional communication**.
 
 ---
 
@@ -657,7 +657,7 @@ The EAS Station LED controller and Waveshare adapter **fully support bidirection
 #### Communication Flow
 
 ```
-EAS Station ←→ TCP Socket ←→ Waveshare ←→ RS232 ←→ Alpha LED Sign
+EAS Station™ ←→ TCP Socket ←→ Waveshare ←→ RS232 ←→ Alpha LED Sign
    (Python)                  (Network)    (Serial)      (M-Protocol)
 ```
 
@@ -678,7 +678,7 @@ EAS Station ←→ TCP Socket ←→ Waveshare ←→ RS232 ←→ Alpha LED Sig
 
 ---
 
-### EAS Station LED Controller Support
+### EAS Station™ LED Controller Support
 
 The LED controller (`scripts/led_sign_controller.py`) implements full bidirectional M-Protocol:
 
@@ -1090,7 +1090,7 @@ Other:
 
 ---
 
-### EAS Station Configuration
+### EAS Station™ Configuration
 
 **No changes needed!** The LED controller already:
 - ✅ Sends data bidirectionally
@@ -1238,7 +1238,7 @@ Alpha LED Sign Diagnostics - M-Protocol Phase 1
    temperature: 72.0
 ```
 
-### Integration with EAS Station
+### Integration with EAS Station™
 
 #### Hardware Service Integration
 
@@ -1350,7 +1350,7 @@ The following time/date control commands are now available:
 | `set_day_of_week()` | Set day of week (0-6) | Type E, 0x22 |
 | `set_time_format()` | Set 12h or 24h format | Type E, 0x27 |
 | `set_run_mode()` | Set auto/manual mode | Type E, 0x2E |
-| `sync_time_with_system()` | Sync with EAS Station | Combined |
+| `sync_time_with_system()` | Sync with EAS Station™ | Combined |
 
 ### Usage
 
@@ -1434,7 +1434,7 @@ Alpha LED Sign Time/Date Control - M-Protocol Phase 2
    Sign will hold current message
 ```
 
-### Integration with EAS Station
+### Integration with EAS Station™
 
 #### Automatic Time Synchronization
 
@@ -1535,7 +1535,7 @@ alpha_day = (python_day + 1) % 7
 
 #### 1. Daily Time Sync
 
-Keep sign synchronized with EAS Station:
+Keep sign synchronized with EAS Station™:
 
 ```python
 # Run at system startup and daily at midnight

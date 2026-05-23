@@ -1,6 +1,6 @@
 # VTEC Event Linking
 
-EAS Station uses the VTEC **Event Tracking Number (ETN)** to link every update
+EAS Station™ uses the VTEC **Event Tracking Number (ETN)** to link every update
 to a weather event into a single lifecycle chain.  This document explains the
 data model, the ingest flow, and how the alert detail page surfaces related
 updates.

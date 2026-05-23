@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-EAS Station provides GPIO integration for relay control, visual indicators, and OLED status displays. The GPIO subsystem is handled by the `hardware_service` (systemd unit `eas-station-hardware`). This guide covers relay wiring, the OLED status screen, and configurable flash patterns for stack lights.
+EAS Station™ provides GPIO integration for relay control, visual indicators, and OLED status displays. The GPIO subsystem is handled by the `hardware_service` (systemd unit `eas-station-hardware`). This guide covers relay wiring, the OLED status screen, and configurable flash patterns for stack lights.
 
 **Supported GPIO configurations:**
 - **Raspberry Pi** (all models with 40-pin header) — via `gpiochip0`
@@ -15,7 +15,7 @@ The software uses `libgpiod` for GPIO access, which does not require root privil
 
 ## 2. Relay Wiring
 
-EAS Station uses GPIO-controlled relays to key transmitters, activate external equipment, and signal alert states. This section covers physical wiring, pin assignments, configuration, and safety procedures.
+EAS Station™ uses GPIO-controlled relays to key transmitters, activate external equipment, and signal alert states. This section covers physical wiring, pin assignments, configuration, and safety procedures.
 
 ### Overview
 
@@ -47,7 +47,7 @@ A relay HAT sits directly on the Raspberry Pi's 40-pin header. Each relay on the
 | CH4 | BCM 19 | Pin 35 | Spare |
 
 !!! note "Check your specific HAT"
-    Pin assignments vary between HAT manufacturers. Always consult your HAT's schematic or documentation. Some HATs are active-low (relay closes when GPIO is LOW); EAS Station supports configuring pin polarity.
+    Pin assignments vary between HAT manufacturers. Always consult your HAT's schematic or documentation. Some HATs are active-low (relay closes when GPIO is LOW); EAS Station™ supports configuring pin polarity.
 
 ---
 
@@ -60,7 +60,7 @@ The transmit relay provides a dry contact closure to key an external transmitter
 A relay in the transmit path replaces or augments a PTT switch:
 
 ```
-EAS Station Relay (Relay 1)
+EAS Station™ Relay (Relay 1)
 │
 ├── COM  ──── Transmitter PTT Common (GND)
 └── NO   ──── Transmitter PTT Hot (+V or signal line)
@@ -185,7 +185,7 @@ gpioset gpiochip0 26=0   # Open relay
 ### Safety Procedures
 
 !!! danger "High-voltage relay contacts"
-    If your relay board is wired to mains voltage (AC power) for any reason, follow electrical safety standards and ensure all high-voltage wiring is performed by a licensed electrician. EAS Station relays are intended for low-voltage PTT and control circuits only.
+    If your relay board is wired to mains voltage (AC power) for any reason, follow electrical safety standards and ensure all high-voltage wiring is performed by a licensed electrician. EAS Station™ relays are intended for low-voltage PTT and control circuits only.
 
 #### Before Making or Changing Wiring
 
@@ -199,7 +199,7 @@ gpioset gpiochip0 26=0   # Open relay
 Configure all relays to use **Normally Open (NO)** contacts for the transmitter:
 - Transmitter is **not keyed** when power is off or the service is stopped.
 - Transmitter is **not keyed** if the hardware service crashes.
-- Transmitter is **keyed only** when EAS Station explicitly activates the relay.
+- Transmitter is **keyed only** when EAS Station™ explicitly activates the relay.
 
 #### Preventing Stuck Relays
 
@@ -270,7 +270,7 @@ sudo systemctl restart eas-station-hardware
 
 ## 3. OLED Status Display
 
-The EAS Station now includes a dedicated OLED screen that displays real-time GPIO status information. This screen provides at-a-glance monitoring of GPIO pin activations, making it easy to verify that GPIO relays are functioning correctly.
+The EAS Station™ now includes a dedicated OLED screen that displays real-time GPIO status information. This screen provides at-a-glance monitoring of GPIO pin activations, making it easy to verify that GPIO relays are functioning correctly.
 
 ### Features
 
@@ -581,7 +581,7 @@ These fields are automatically calculated:
 
 ## 4. Flash Patterns
 
-The EAS Station GPIO controller supports configurable flash patterns for stack lights and visual indicators. This feature allows you to create attention-grabbing alternating flash patterns with two-phase operation.
+The EAS Station™ GPIO controller supports configurable flash patterns for stack lights and visual indicators. This feature allows you to create attention-grabbing alternating flash patterns with two-phase operation.
 
 ### Features
 

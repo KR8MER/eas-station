@@ -1,6 +1,6 @@
 /* eslint-disable no-var */
 /**
- * EAS Station ™ — display-units preference module.
+ * EAS Station™ — display-units preference module.
  *
  * Wraps lat/lon, altitude, speed and distance formatting behind a
  * single namespace (`window.EASUnits`) so every page renders these

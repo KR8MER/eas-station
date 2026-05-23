@@ -502,7 +502,7 @@ graph TB
     WXK23 --> SAME
     WXK23 --> IPAWS_W
     
-    SAME --> STATIONS[EAS Station<br>Receivers]
+    SAME --> STATIONS[EAS Station™<br>Receivers]
     IPAWS_W --> STATIONS
     
     style WXK23 fill:#3498db,stroke:#2980b9,stroke-width:3px,color:#fff

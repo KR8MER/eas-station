@@ -1,6 +1,6 @@
 # Waveshare RS232/485 to WiFi POE ETH Adapter Setup Guide
 
-This guide explains how to configure the **Waveshare RS232/485 TO WIFI POE ETH (B)** adapter to work with EAS Station for network-based serial communication with VFD displays and other serial devices.
+This guide explains how to configure the **Waveshare RS232/485 TO WIFI POE ETH (B)** adapter to work with EAS Station™ for network-based serial communication with VFD displays and other serial devices.
 
 ## Overview
 
@@ -75,7 +75,7 @@ Configure the UART settings to match your VFD display:
 - Httpdclient Mode: `long`
 - 485 selector switch: `off`
 
-## EAS Station Configuration
+## EAS Station™ Configuration
 
 ### Method 1: Web Interface (Recommended)
 
@@ -174,7 +174,7 @@ sock.close()
 1. **Baud rate mismatch**: 
    - Waveshare adapter: Usually 9600
    - VFD device: Check your model (typically 38400)
-   - Set `VFD_BAUDRATE` in EAS Station to match VFD device
+   - Set `VFD_BAUDRATE` in EAS Station™ to match VFD device
 2. **Check wiring**: TX/RX might be swapped
 3. **Verify data format**: 8N1 (8 data bits, No parity, 1 stop bit)
 
@@ -185,24 +185,24 @@ sock.close()
 **Solutions**:
 1. Check VFD power supply
 2. Verify TX/RX wiring connections
-3. Test with PuTTY first to isolate EAS Station vs. adapter issues
+3. Test with PuTTY first to isolate EAS Station™ vs. adapter issues
 4. Check Hardware Service logs: `sudo journalctl -u eas-station-hardware.target -f`
 5. Verify VFD brightness settings (might be set too dim)
 
-### EAS Station Can't Connect
+### EAS Station™ Can't Connect
 
-**Symptom**: EAS Station logs show "Failed to connect to VFD on socket://..."
+**Symptom**: EAS Station™ logs show "Failed to connect to VFD on socket://..."
 
 **Solutions**:
 1. Check network connectivity: `ping 192.168.8.122`
 2. Verify port is open: `nc -z -v 192.168.8.122 10001`
-3. Check firewall on EAS Station host
+3. Check firewall on EAS Station™ host
 4. Restart hardware service: Via web UI or `sudo systemctl restart eas-station-hardware.target`
 5. Verify `VFD_PORT` format: Must start with `socket://`
 
 ### Multiple Connection Attempts
 
-**Symptom**: Waveshare shows multiple connections from EAS Station
+**Symptom**: Waveshare shows multiple connections from EAS Station™
 
 **Solutions**:
 1. Set **MAX TCP Num** to `1` if you only need one connection
@@ -216,7 +216,7 @@ sock.close()
 The Waveshare adapter supports two independent serial ports. To use the second port:
 
 1. Enable Socket B in adapter settings (port 18899)
-2. In EAS Station, configure second device:
+2. In EAS Station™, configure second device:
    ```bash
    LED_PORT=socket://192.168.8.122:18899
    ```
@@ -235,7 +235,7 @@ The basic Waveshare adapter doesn't support SSL/TLS. For encrypted connections:
 
 1. Use a reverse proxy (nginx, stunnel)
 2. Configure tunnel from adapter to proxy
-3. Point EAS Station to encrypted endpoint
+3. Point EAS Station™ to encrypted endpoint
 
 ## Reference Information
 
@@ -248,7 +248,7 @@ The basic Waveshare adapter doesn't support SSL/TLS. For encrypted connections:
 - **Baud Rates**: 1200 - 230400 bps
 - **Documentation**: https://www.waveshare.com/wiki/RS232/485_TO_WIFI_POE_ETH_(B)
 
-### EAS Station Serial Support
+### EAS Station™ Serial Support
 
 - **Direct Serial**: `/dev/ttyUSB0`, `/dev/ttyACM0`, etc.
 - **Network Serial**: `socket://HOST:PORT`

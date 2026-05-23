@@ -1,6 +1,6 @@
-# EAS Station Test Suite
+# EAS Station™ Test Suite
 
-This directory contains the test suite for EAS Station, including unit tests, integration tests, and functional tests.
+This directory contains the test suite for EAS Station™, including unit tests, integration tests, and functional tests.
 
 ## Running Tests
 

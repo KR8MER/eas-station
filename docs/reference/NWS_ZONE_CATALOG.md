@@ -1,6 +1,6 @@
 # NWS Zone Catalog (Public, Marine, Fire, Offshore)
 
-The `nws_zones` database table is EAS Station's runtime catalog of every
+The `nws_zones` database table is EAS Station™'s runtime catalog of every
 NWS Universal Geographic Code (UGC) zone — **public forecast zones**,
 **marine zones (coastal, Great Lakes, offshore)**, and **fire-weather
 zones**. Unlike the static county FIPS table in `app_utils/fips_codes.py`,
@@ -43,7 +43,7 @@ newer snapshot whenever NWS publishes one.
 ## Authoritative data sources
 
 All source files are published by NOAA / NWS as ESRI shapefiles
-(zipped `.shp` + `.shx` + `.dbf` + `.prj`). EAS Station only needs the
+(zipped `.shp` + `.shx` + `.dbf` + `.prj`). EAS Station™ only needs the
 `.dbf` attribute table; the geometry files are discarded after extraction.
 
 | Zone family | NWS landing page | Filename pattern | UGC prefixes |

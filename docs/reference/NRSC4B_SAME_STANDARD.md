@@ -1,6 +1,6 @@
 # NRSC-4-B SAME Standard Reference
 
-> **Canonical source:** NRSC-4-B *United States RBDS Standard* (2005), Section 4 — Specific Area Message Encoding (SAME). This document summarises the standard for implementers working with the EAS Station codebase.
+> **Canonical source:** NRSC-4-B *United States RBDS Standard* (2005), Section 4 — Specific Area Message Encoding (SAME). This document summarises the standard for implementers working with the EAS Station™ codebase.
 
 ---
 
@@ -42,7 +42,7 @@ Each burst consists of:
 2. The SAME ASCII message string
 3. A trailing carriage return (`0x0D`)
 
-**Purpose:** Redundancy allows receivers to reconstruct a correct header even when one burst is partially corrupted by noise. EAS Station applies 2-of-3 majority voting across the three bursts (see Section 7).
+**Purpose:** Redundancy allows receivers to reconstruct a correct header even when one burst is partially corrupted by noise. EAS Station™ applies 2-of-3 majority voting across the three bursts (see Section 7).
 
 ---
 
@@ -96,7 +96,7 @@ Three-letter codes defined by the FCC (47 CFR §11.31(e)). Examples:
 | `FFW` | Flash Flood Warning |
 | `TOE` | 911 Telephone Outage Emergency |
 
-EAS Station maintains a full registry in `app_utils/eas.py → EVENT_CODE_REGISTRY`.
+EAS Station™ maintains a full registry in `app_utils/eas.py → EVENT_CODE_REGISTRY`.
 
 ### 4.5 Location Codes (§4.3.3.3)
 
@@ -135,7 +135,7 @@ Four-character field `TTTT` in **HHMM format**:
 | `0530` | 5 hours 30 minutes |
 | `0600` | 6 hours |
 
-Only these fourteen values are valid. EAS Station validates the received code against `NRSC4B_VALID_PURGE_TIMES` in `app_utils/eas.py`.
+Only these fourteen values are valid. EAS Station™ validates the received code against `NRSC4B_VALID_PURGE_TIMES` in `app_utils/eas.py`.
 
 > **Common mistake:** `TTTT` is **not** decimal minutes. `0100` means 1 hour, not 100 minutes.
 
@@ -149,7 +149,7 @@ Seven-digit UTC field `JJJHHMM`:
 | `HH` | 2 | 00–23 | Hour (UTC) |
 | `MM` | 2 | 00–59 | Minute (UTC) |
 
-EAS Station computes a `datetime` object by anchoring `JJJ` to the current calendar year and adds the UTC hours/minutes.
+EAS Station™ computes a `datetime` object by anchoring `JJJ` to the current calendar year and adds the UTC hours/minutes.
 
 ### 4.8 Station Identifier (§4.3.3.6)
 
@@ -293,7 +293,7 @@ Each entry in `locations` is a dict with:
 | **ECIG EAS-ENDEC** | Equipment manufacturer guideline; mostly consistent with NRSC-4-B |
 | **CAP / IPAWS** | XML-based national alert aggregation; IPAWS OPEN converts CAP to SAME |
 | **NRSC-4-B §3** | RBDS physical layer (57 kHz subcarrier); SAME lives on the audio baseband |
-| **EAS Station RBDS decoder** | Decodes EWS Group 9A which carries RBDS-layer emergency warning data correlated with SAME |
+| **EAS Station™ RBDS decoder** | Decodes EWS Group 9A which carries RBDS-layer emergency warning data correlated with SAME |
 
 ---
 

@@ -55,7 +55,7 @@ The 16-bit PI code uniquely identifies the station. Block A of every group carri
 - Range `0x54A8`–`0x994F`: W-prefix stations (algorithmic)
 - Range `0x9950`–`0x99B9`: Legacy 3-letter calls (lookup table)
 
-The EAS Station function `pi_to_call_sign()` in `app_core/radio/demodulation.py` implements this lookup.
+The EAS Station™ function `pi_to_call_sign()` in `app_core/radio/demodulation.py` implements this lookup.
 
 ### Group Structure
 
@@ -209,15 +209,15 @@ Proprietary data for use by the broadcaster's own equipment.
 
 ### Group 7A — Radio Paging
 
-Used for alphanumeric paging services. EAS Station logs these groups at DEBUG level but does not decode paging data.
+Used for alphanumeric paging services. EAS Station™ logs these groups at DEBUG level but does not decode paging data.
 
 ### Group 8A — Traffic Message Channel (TMC / ALERT-C)
 
-ALERT-C encoded traffic messages. EAS Station flags the presence of TMC (`tmc_present=True`) but does not implement full ALERT-C decoding, which requires a location database.
+ALERT-C encoded traffic messages. EAS Station™ flags the presence of TMC (`tmc_present=True`) but does not implement full ALERT-C decoding, which requires a location database.
 
 ### Group 9A — Emergency Warning System (EWS) ⚠️
 
-**This is the most important group for EAS Station operation.**
+**This is the most important group for EAS Station™ operation.**
 
 EWS is the RBDS mechanism for broadcasting emergency alerts directly in the FM signal, complementing SAME/EAS audio alerts.
 
@@ -365,7 +365,7 @@ Group 9A carries the **Emergency Warning System** data, which is the in-band RBD
 - The EWS channel number (bits 4-0 of Block B) identifies which of up to 32 alert channels is active.
 - Blocks C and D carry two 16-bit words whose format is defined by the alert coordinator (often mirroring key SAME fields like event code and FIPS location).
 
-**EAS Station handling:**
+**EAS Station™ handling:**
 - When Group 9A is received, `ews_channel`, `ews_message_c`, and `ews_message_d` are populated in `RBDSData`.
 - The audio monitoring UI displays an **alert-style panel** (red background) when EWS data is present.
 - The fields are propagated through `metadata['rbds_ews_channel']` etc. for use by monitoring logic.
@@ -383,11 +383,11 @@ When a broadcaster transmits on multiple frequencies (e.g., translators, network
 - Code 205: Filler (ignore).
 - Codes 250–255: Special (follow-on, regional variant, etc.)
 
-EAS Station implements the simple case (direct codes 1-204 only). Count bytes (224-249) and special codes are skipped. The decoded frequencies are available as `rbds_af_list` in the metadata.
+EAS Station™ implements the simple case (direct codes 1-204 only). Count bytes (224-249) and special codes are skipped. The decoded frequencies are available as `rbds_af_list` in the metadata.
 
 ---
 
-## 11. How EAS Station Implements This
+## 11. How EAS Station™ Implements This
 
 ### Where the code lives
 

@@ -1,6 +1,6 @@
 # SDR Setup Guide
 
-**Complete guide for setting up Software Defined Radio (SDR) receivers with EAS Station**
+**Complete guide for setting up Software Defined Radio (SDR) receivers with EAS Station™**
 
 ## Quick Navigation
 
@@ -195,7 +195,7 @@ flowchart TD
 
 ### 1. Access Radio Settings
 
-1. Log into EAS Station web interface
+1. Log into EAS Station™ web interface
 2. Navigate to **Settings → Radio Receivers**
 
 ### 2. Run Diagnostics

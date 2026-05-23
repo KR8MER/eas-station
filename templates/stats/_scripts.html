@@ -2076,7 +2076,7 @@ async function exportDashboardAsPdf() {
             doc.setFont('helvetica', 'normal');
             doc.setFontSize(8);
             doc.setTextColor(120);
-            doc.text('EAS Station ™ — Statistics Report', margin, 8);
+            doc.text('EAS Station™ — Statistics Report', margin, 8);
             doc.text(new Date().toLocaleString(), pageW - margin, 8, { align: 'right' });
             doc.setDrawColor(220);
             doc.line(margin, 10, pageW - margin, 10);
@@ -2089,7 +2089,7 @@ async function exportDashboardAsPdf() {
         doc.setTextColor(255);
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(26);
-        doc.text('EAS Station ™', margin, 28);
+        doc.text('EAS Station™', margin, 28);
         doc.setFontSize(18);
         doc.text('Statistics Report', margin, 40);
         doc.setFont('helvetica', 'normal');

@@ -1,4 +1,4 @@
-# VSCode Quick Reference - EAS Station
+# VSCode Quick Reference - EAS Station™
 
 **Quick access to common tasks and commands**
 

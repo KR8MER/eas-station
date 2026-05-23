@@ -1,6 +1,6 @@
 # API Key Management
 
-EAS Station provides a REST API accessible via cryptographically secure API keys. API keys allow external tools, scripts, and integrations to query alert data, system status, and perform management operations without using a web browser session.
+EAS Station™ provides a REST API accessible via cryptographically secure API keys. API keys allow external tools, scripts, and integrations to query alert data, system status, and perform management operations without using a web browser session.
 
 ---
 
@@ -26,7 +26,7 @@ EAS Station provides a REST API accessible via cryptographically secure API keys
    - **Role** — Select the permission level: `Admin`, `Operator`, or `Analyst`.
    - **Expiry** — Optional expiration date. Leave blank for a non-expiring key.
 5. Click **Create**.
-6. **Copy the full key immediately.** It is displayed only once. EAS Station stores only a hashed version and cannot recover the plaintext key later.
+6. **Copy the full key immediately.** It is displayed only once. EAS Station™ stores only a hashed version and cannot recover the plaintext key later.
 
 ---
 

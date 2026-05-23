@@ -15,11 +15,11 @@
     {% if google_site_verification %}
     <meta name="google-site-verification" content="{{ google_site_verification }}">
     {% endif %}
-    <title>{% block title %}EAS Station ™ - Emergency Alert System{% endblock %}</title>
+    <title>{% block title %}EAS Station™ - Emergency Alert System{% endblock %}</title>
     {% block nav_title %}{% endblock %}
     {% block meta %}{% endblock %}
 
-    <!-- Favicon — canonical EAS Station ™ wordmark -->
+    <!-- Favicon — canonical EAS Station™ wordmark -->
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/eas-system-wordmark.svg') }}?v={{ static_asset_version }}">
     <link rel="alternate icon" type="image/png" href="{{ url_for('static', filename='img/eas-system-wordmark.png') }}?v={{ static_asset_version }}">
     <link rel="shortcut icon" href="{{ url_for('static', filename='img/eas-system-wordmark.svg') }}?v={{ static_asset_version }}">
@@ -32,7 +32,7 @@
     <!-- Font Awesome (local to avoid CDN tracking prevention blocks) -->
     <link href="{{ url_for('static', filename='vendor/fontawesome/css/all.min.css') }}" rel="stylesheet">
 
-    <!-- EAS Station ™ Styles (Consolidated) -->
+    <!-- EAS Station™ Styles (Consolidated) -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}?v={{ static_asset_version }}">
 
     <script>
@@ -154,7 +154,7 @@
                                 <i class="fas fa-broadcast-tower"></i>
                             </div>
                             <div class="footer-brand-text">
-                                <div class="footer-title">EAS Station ™</div>
+                                <div class="footer-title">EAS Station™</div>
                                 <div class="footer-subtitle">Emergency Alert System Research Platform</div>
                             </div>
                             <div class="footer-copyright">
@@ -261,7 +261,7 @@
     <!-- 2. Socket.IO for real-time WebSocket updates (vendored locally) -->
     <script defer src="{{ url_for('static', filename='vendor/socketio/socket.io.min.js') }}"></script>
 
-    <!-- 3. EAS Station ™ Core JavaScript Modules -->
+    <!-- 3. EAS Station™ Core JavaScript Modules -->
     <!-- CRITICAL: Load cache.js FIRST to intercept all fetch calls and prevent server overload -->
     <script defer src="{{ url_for('static', filename='js/core/cache.js') }}"></script>
     <!-- WebSocket module must load before other modules that depend on it -->
@@ -309,7 +309,7 @@
             <i class="fas fa-flag-checkered me-2"></i>End of Message
         </div>
         <div style="margin-top:1.5rem;font-size:.75rem;color:rgba(255,255,255,.45);max-width:560px;">
-            Air-chain is under EAS Station ™ control.  Do not initiate another alert until this transmission completes.
+            Air-chain is under EAS Station™ control.  Do not initiate another alert until this transmission completes.
         </div>
     </div>
 
@@ -329,7 +329,7 @@
                 <div class="modal-body">
                     <p class="text-muted small mb-3">
                         Choose how lat/lon, altitude, speed, and distance values are shown across the
-                        EAS Station ™ UI.  Your choices are saved in this browser only and apply
+                        EAS Station™ UI.  Your choices are saved in this browser only and apply
                         immediately wherever those values appear (GPS Dashboard, System Health, and
                         related panels).
                     </p>

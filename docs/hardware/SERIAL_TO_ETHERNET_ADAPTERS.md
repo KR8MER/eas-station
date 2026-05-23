@@ -1,6 +1,6 @@
 # Serial-to-Ethernet Adapter Configuration Guide
 
-Complete setup instructions for connecting RS232/RS485 devices (LED signs, VFD displays) to EAS Station via network adapters.
+Complete setup instructions for connecting RS232/RS485 devices (LED signs, VFD displays) to EAS Station™ via network adapters.
 
 ---
 
@@ -11,7 +11,7 @@ Complete setup instructions for connecting RS232/RS485 devices (LED signs, VFD d
 3. [Moxa NPort 5110 Serial Server](#moxa-nport-5110-serial-server)
 4. [Perle IOLAN SDS Serial Server](#perle-iolan-sds-serial-server)
 5. [Generic Serial-to-Ethernet Adapters](#generic-serial-to-ethernet-adapters)
-6. [EAS Station Configuration](#eas-station-configuration)
+6. [EAS Station™ Configuration](#eas-station-configuration)
 7. [Troubleshooting](#troubleshooting)
 
 ---
@@ -154,7 +154,7 @@ Waveshare → Device
 1. **PoE (Power over Ethernet)**: IEEE 802.3af compatible
 2. **DC Power**: 5V DC via barrel jack (included adapter)
 
-### EAS Station Configuration
+### EAS Station™ Configuration
 
 ```bash
 # For Alpha LED Sign
@@ -240,7 +240,7 @@ Serial Packet Length: 1024 bytes
 Enable RFC2217: Yes (optional, for compatibility)
 ```
 
-### EAS Station Configuration
+### EAS Station™ Configuration
 
 ```bash
 # For Alpha LED Sign
@@ -338,7 +338,7 @@ Delimiter Process: Do Nothing
 Force Transmit: 100 ms
 ```
 
-### EAS Station Configuration
+### EAS Station™ Configuration
 
 ```bash
 # For Alpha LED Sign
@@ -423,7 +423,7 @@ Tx Delay: 0 ms
 Rx Delay: 100 ms
 ```
 
-### EAS Station Configuration
+### EAS Station™ Configuration
 
 ```bash
 # For Alpha LED Sign
@@ -485,7 +485,7 @@ Telnet: Disable
 
 ---
 
-## EAS Station Configuration
+## EAS Station™ Configuration
 
 ### For LED Signs (Alpha, BetaBrite, etc.)
 
@@ -565,7 +565,7 @@ Port: 10001
 3. They should be sent to the serial device
 4. LED sign should display text (if properly formatted)
 
-### Test 5: EAS Station Logs
+### Test 5: EAS Station™ Logs
 
 ```bash
 # Check hardware service logs
@@ -671,7 +671,7 @@ Advanced:
   Timeout: 0
 ```
 
-### EAS Station Settings Summary
+### EAS Station™ Settings Summary
 
 ```bash
 # LED Sign
@@ -687,6 +687,6 @@ VFD_BAUDRATE=38400
 
 **Need Help?**
 - Check adapter documentation for your specific model
-- Test with PuTTY first to isolate EAS Station from adapter issues
+- Test with PuTTY first to isolate EAS Station™ from adapter issues
 - Verify serial wiring with a multimeter
 - GitHub Issues: https://github.com/KR8MER/eas-station/issues

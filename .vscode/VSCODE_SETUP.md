@@ -1,6 +1,6 @@
-# VSCode Remote Development Setup for EAS Station
+# VSCode Remote Development Setup for EAS Station™
 
-**Quick and easy VSCode setup for working with EAS Station on `easstation-dev.local`**
+**Quick and easy VSCode setup for working with EAS Station™ on `easstation-dev.local`**
 
 > **TL;DR**: Install VSCode + Remote-SSH extension → Connect to server → Open `/opt/eas-station` → Start coding!
 
@@ -10,11 +10,11 @@
 
 **On your local computer:**
 - VSCode installed ([download here](https://code.visualstudio.com/))
-- SSH access to your EAS Station server
+- SSH access to your EAS Station™ server
 - The server hostname: `easstation-dev.local` (or IP address)
 
 **On the server (already done by install.sh):**
-- ✅ EAS Station installed at `/opt/eas-station`
+- ✅ EAS Station™ installed at `/opt/eas-station`
 - ✅ Python virtual environment at `/opt/eas-station/venv`
 - ✅ Services running via systemd
 - ✅ User account: `eas-station`
@@ -64,7 +64,7 @@ Host easstation-dev
 
 You'll see **"SSH: easstation-dev"** in the bottom-left corner when connected.
 
-### Step 4: Open the EAS Station Folder
+### Step 4: Open the EAS Station™ Folder
 
 1. Click **File → Open Folder**
 2. Type or navigate to: `/opt/eas-station`
@@ -77,7 +77,7 @@ You'll see **"SSH: easstation-dev"** in the bottom-left corner when connected.
 2. Type: `Python: Select Interpreter`
 3. Choose: `/opt/eas-station/venv/bin/python`
 
-**✅ You're all set!** VSCode is now connected to your EAS Station server.
+**✅ You're all set!** VSCode is now connected to your EAS Station™ server.
 
 ---
 
@@ -114,7 +114,7 @@ FLASK_ENV=development FLASK_DEBUG=true python app.py
 - Edit any Python file - changes are saved directly on the server
 - Use IntelliSense (auto-complete) - works with the remote Python environment
 
-### Manage Services (All EAS Station Services)
+### Manage Services (All EAS Station™ Services)
 
 **Available services**:
 - `eas-station-web.service` - Flask web application (Gunicorn)
@@ -223,7 +223,7 @@ redis-cli INFO
 redis-cli DBSIZE
 ```
 
-**Common Redis keys in EAS Station**:
+**Common Redis keys in EAS Station™**:
 - `eas:audio:*` - Audio service metrics
 - `eas:sdr:*` - SDR status
 - `eas:alert:*` - Current alert state
@@ -255,7 +255,7 @@ The SQLTools extension provides a graphical interface for database queries.
 
 2. Click the **SQLTools** icon in the left sidebar (database icon)
 
-3. You'll see: **EAS Station Database** connection
+3. You'll see: **EAS Station™ Database** connection
 
 4. Click the connection → **Connect**
 
@@ -350,7 +350,7 @@ sudo journalctl -u 'eas-station*' -f
 
 Or use tasks:
 - `View Web Service Logs`
-- `View All EAS Station Logs`
+- `View All EAS Station™ Logs`
 
 ### Check Database
 ```bash
@@ -797,7 +797,7 @@ Or use the VSCode SQL extensions to run queries with IntelliSense!
 - [Python in VSCode](https://code.visualstudio.com/docs/languages/python)
 - [Debugging in VSCode](https://code.visualstudio.com/docs/editor/debugging)
 
-**EAS Station Docs**:
+**EAS Station™ Docs**:
 - [User Guide](../docs/guides/HELP.md)
 - [Developer Guide](../docs/development/AGENTS.md)
 - [Architecture Overview](../docs/architecture/SYSTEM_ARCHITECTURE.md)

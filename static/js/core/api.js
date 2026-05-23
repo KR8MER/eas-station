@@ -1,5 +1,5 @@
 /**
- * EAS Station ™ - API Client Module
+ * EAS Station™ - API Client Module
  * Handles API requests with CSRF token management
  */
 

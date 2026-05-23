@@ -1,6 +1,6 @@
 # Icecast Streaming Setup
 
-EAS Station integrates with the **Icecast 2** open-source streaming server to distribute audio — both live SDR demodulation output and EAS broadcast audio — over the network. Icecast acts as a relay, accepting a source audio stream from EAS Station and distributing it to any number of listeners.
+EAS Station™ integrates with the **Icecast 2** open-source streaming server to distribute audio — both live SDR demodulation output and EAS broadcast audio — over the network. Icecast acts as a relay, accepting a source audio stream from EAS Station™ and distributing it to any number of listeners.
 
 ---
 
@@ -14,7 +14,7 @@ Audio Monitoring Service  →  Demodulated PCM audio
 Icecast Server           →  HTTP audio stream (listeners)
 ```
 
-EAS Station acts as the **Icecast source client**; Icecast handles distribution. Multiple stream profiles (mount points) can be configured for different audiences or audio formats.
+EAS Station™ acts as the **Icecast source client**; Icecast handles distribution. Multiple stream profiles (mount points) can be configured for different audiences or audio formats.
 
 ---
 
@@ -28,15 +28,15 @@ sudo apt-get install icecast2
 
 During the APT installation, you will be prompted for:
 - **Icecast hostname** — use `localhost` for local-only or your FQDN for public access
-- **Source password** — the password EAS Station uses to push audio to Icecast
+- **Source password** — the password EAS Station™ uses to push audio to Icecast
 - **Relay password** — for inter-server relaying (not used in basic setups)
 - **Admin password** — for the Icecast admin web interface at `http://<host>:8000/admin`
 
 ---
 
-## Configuring Icecast in EAS Station
+## Configuring Icecast in EAS Station™
 
-EAS Station manages Icecast credentials and basic settings from the web interface. The configuration is written to `/etc/icecast2/icecast.xml` automatically.
+EAS Station™ manages Icecast credentials and basic settings from the web interface. The configuration is written to `/etc/icecast2/icecast.xml` automatically.
 
 ### Via the Web Interface
 
@@ -47,12 +47,12 @@ EAS Station manages Icecast credentials and basic settings from the web interfac
 |-------|---------|-------------|
 | Icecast Host | `localhost` | Hostname or IP of the Icecast server |
 | Icecast Port | `8000` | Icecast HTTP port |
-| Source Password | *(generated)* | Password EAS Station uses to push streams |
+| Source Password | *(generated)* | Password EAS Station™ uses to push streams |
 | Admin User | `admin` | Icecast admin username |
 | Admin Password | *(generated)* | Icecast admin web interface password |
 | Max Sources | Unlimited | Maximum simultaneous source connections |
 
-3. Click **Save & Apply**. EAS Station writes the new credentials to `/etc/icecast2/icecast.xml` and restarts the Icecast service.
+3. Click **Save & Apply**. EAS Station™ writes the new credentials to `/etc/icecast2/icecast.xml` and restarts the Icecast service.
 
 ### Via eas-config
 
@@ -75,7 +75,7 @@ ICECAST_ADMIN_PASSWORD=your-admin-password
 
 ## Stream Profiles (Mount Points)
 
-Each audio source in EAS Station can be assigned to a separate Icecast mount point. Navigate to **Admin → Stream Profiles** to manage them.
+Each audio source in EAS Station™ can be assigned to a separate Icecast mount point. Navigate to **Admin → Stream Profiles** to manage them.
 
 ### Default Mount Points
 
@@ -122,7 +122,7 @@ Or open the URL directly in any Icecast-compatible player (Winamp, foobar2000, e
 </audio>
 ```
 
-### EAS Station Audio Monitoring Page
+### EAS Station™ Audio Monitoring Page
 
 The built-in audio monitoring page at `/admin/audio` displays:
 - Live VU meters for each mount point
@@ -174,9 +174,9 @@ Log in with the admin credentials configured in **Admin → Icecast**.
 
 ## Audio Health Monitoring
 
-EAS Station monitors the health of each Icecast stream. Navigate to **Admin → Audio Sources** to view:
+EAS Station™ monitors the health of each Icecast stream. Navigate to **Admin → Audio Sources** to view:
 
-- **Connection state** — is EAS Station connected to Icecast as a source?
+- **Connection state** — is EAS Station™ connected to Icecast as a source?
 - **Input level** — real-time audio level from the source device
 - **Silence detection** — alerts if the stream has been silent for too long
 - **Listener count** — pulled from the Icecast API
@@ -197,7 +197,7 @@ sudo journalctl -u icecast2 -f
 
 ### Source not connecting
 
-- Verify the source password in EAS Station matches `/etc/icecast2/icecast.xml`.
+- Verify the source password in EAS Station™ matches `/etc/icecast2/icecast.xml`.
 - Check Icecast logs: `/var/log/icecast2/error.log`
 - Confirm the audio service is running: `sudo systemctl status eas-station-audio`
 
@@ -210,7 +210,7 @@ sudo journalctl -u icecast2 -f
 ### Port 8000 not accessible from outside
 
 - Confirm UFW allows port 8000: `sudo ufw status`
-- If behind a router, ensure port 8000 is forwarded to the EAS Station host.
+- If behind a router, ensure port 8000 is forwarded to the EAS Station™ host.
 
 ### Mount point shows as "404 Not Found"
 

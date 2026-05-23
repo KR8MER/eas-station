@@ -1,6 +1,6 @@
 # Diagnostic Scripts
 
-This directory contains diagnostic and troubleshooting scripts for EAS Station.
+This directory contains diagnostic and troubleshooting scripts for EAS Station™.
 
 ## Quick Start
 
@@ -42,7 +42,7 @@ python3 scripts/diagnostics/check_sdr_status.py
 
 ### `troubleshoot_connection.sh`
 
-Comprehensive connection troubleshooting for EAS Station web interface.
+Comprehensive connection troubleshooting for EAS Station™ web interface.
 
 **Usage:**
 ```bash
@@ -70,7 +70,7 @@ bash scripts/diagnostics/diagnose_icecast.sh
 
 ### `diagnose_portainer.sh`
 
-Quick diagnostic script for EAS Station Portainer deployments.
+Quick diagnostic script for EAS Station™ Portainer deployments.
 
 **Usage:**
 ```bash

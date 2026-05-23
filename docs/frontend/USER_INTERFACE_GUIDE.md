@@ -1,8 +1,8 @@
-# 🖥️ EAS Station User Interface Guide
+# 🖥️ EAS Station™ User Interface Guide
 
 ## Overview
 
-EAS Station features a modern, responsive web interface built with Bootstrap 5, custom CSS architecture, and comprehensive JavaScript modules. This guide covers all UI components, navigation, interactions, and customization options.
+EAS Station™ features a modern, responsive web interface built with Bootstrap 5, custom CSS architecture, and comprehensive JavaScript modules. This guide covers all UI components, navigation, interactions, and customization options.
 
 ## 🎨 Design System
 
@@ -478,4 +478,4 @@ EASNotifications.show('info', 'Custom message', {
 
 ---
 
-This guide provides comprehensive documentation for the EAS Station user interface, covering all components, features, and customization options. For specific implementation details, refer to the individual component files and API documentation.
+This guide provides comprehensive documentation for the EAS Station™ user interface, covering all components, features, and customization options. For specific implementation details, refer to the individual component files and API documentation.

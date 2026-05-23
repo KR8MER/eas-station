@@ -1,7 +1,7 @@
 # Argon Industria V5 Zigbee Module Setup
 
 This guide covers setting up the [Argon Industria V5 Zigbee Module](https://argon40.com/products/argon-industria-v5-zigbee-module)
-with EAS Station.
+with EAS Station™.
 
 ## Hardware Overview
 
@@ -84,7 +84,7 @@ If `/dev/ttyUSB0` does not appear, check:
 
 ---
 
-## Step 4 — Configure EAS Station
+## Step 4 — Configure EAS Station™
 
 ### Add User to dialout Group
 
@@ -105,7 +105,7 @@ sudo usermod -aG dialout eas-station
 7. Click **Save Changes**
 8. Restart the hardware service when prompted
 
-### Verify in EAS Station
+### Verify in EAS Station™
 
 1. Navigate to **Admin → Zigbee** to view the coordinator status page
 2. The coordinator status should show `configured` with your port settings

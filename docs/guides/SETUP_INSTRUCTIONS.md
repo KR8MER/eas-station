@@ -1,4 +1,4 @@
-# EAS Station Setup Instructions
+# EAS Station™ Setup Instructions
 
 ## Quick Start
 

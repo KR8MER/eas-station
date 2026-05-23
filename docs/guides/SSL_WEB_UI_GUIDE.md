@@ -2,11 +2,11 @@
 
 ## Overview
 
-As of version 2.35.0, EAS Station provides complete SSL certificate management through the web interface. No CLI access required!
+As of version 2.35.0, EAS Station™ provides complete SSL certificate management through the web interface. No CLI access required!
 
 ## Accessing the SSL Certificate Manager
 
-1. Log in to your EAS Station web interface
+1. Log in to your EAS Station™ web interface
 2. Navigate to **Settings → SSL Certificates** in the top navigation menu
 3. Or directly visit: `https://your-domain.com/admin/certbot`
 

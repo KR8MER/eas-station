@@ -1,5 +1,5 @@
 # Postal Mail Server — Docker Compose
-# Used by EAS Station for self-hosted outbound email delivery.
+# Used by EAS Station™ for self-hosted outbound email delivery.
 #
 # DO NOT run this file directly.
 # Use:  scripts/setup_postal.sh   (first-time setup)

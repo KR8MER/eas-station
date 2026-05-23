@@ -1,6 +1,6 @@
 # GPS HAT Setup
 
-EAS Station supports two NMEA-0183 GPS HATs out of the box:
+EAS Station™ supports two NMEA-0183 GPS HATs out of the box:
 
 - **Uputronics Raspberry Pi GPS/RTC Expansion Board** *(recommended default)* — u-blox MAX-M8Q multi-GNSS receiver with PPS on **BCM 18**, battery-backed RTC (DS3231 on older revisions, RV-3028-C7 on current revisions), and a low-profile stacking GPIO header.
 - **Adafruit Ultimate GPS HAT (#2324)** *(legacy / alternative)* — MTK3339 GPS-only receiver with PPS on **BCM 4** and a tall non-stacking GPIO header.
@@ -17,7 +17,7 @@ Any other UART GPS module that emits standard NMEA at 9600 baud will also work; 
 
 ## Quick setup via the admin UI (recommended)
 
-Since EAS Station 2.74 you do **not** need a terminal to install or configure the GPS HAT. Everything below — package installs, `dtoverlay` lines in `config.txt`, `/etc/default/gpsd`, the chrony refclock block, and seeding the RTC after replacing the coin cell — is one click each in the admin UI. The terminal sections later in this document describe what those buttons do under the hood for operators who prefer to see the machinery, or for diagnosing a system where the UI itself isn't reachable.
+Since EAS Station™ 2.74 you do **not** need a terminal to install or configure the GPS HAT. Everything below — package installs, `dtoverlay` lines in `config.txt`, `/etc/default/gpsd`, the chrony refclock block, and seeding the RTC after replacing the coin cell — is one click each in the admin UI. The terminal sections later in this document describe what those buttons do under the hood for operators who prefer to see the machinery, or for diagnosing a system where the UI itself isn't reachable.
 
 ### 1. Install the HAT and reboot
 
@@ -63,16 +63,16 @@ That's the end-to-end happy path. The rest of this document covers manual operat
 
 ## NMEA source modes (Tier 3)
 
-EAS Station 2.74+ can read NMEA from one of two sources. The choice does **not** affect what the Live GPS Status card displays — the same fix data, satellite list, and per-talker counts populate both ways. It only affects whether `chrony` can use the same GPS for time discipline.
+EAS Station™ 2.74+ can read NMEA from one of two sources. The choice does **not** affect what the Live GPS Status card displays — the same fix data, satellite list, and per-talker counts populate both ways. It only affects whether `chrony` can use the same GPS for time discipline.
 
 ### Why two modes exist
 
 GPS receivers expose NMEA over a single serial port. Two userspace processes cannot share one open serial device, so:
 
-- If EAS Station opens `/dev/serial0` directly, chrony's `refclock SHM` gets nothing because gpsd can't read the port either.
-- If gpsd opens `/dev/serial0`, the legacy direct-serial path inside EAS Station fails.
+- If EAS Station™ opens `/dev/serial0` directly, chrony's `refclock SHM` gets nothing because gpsd can't read the port either.
+- If gpsd opens `/dev/serial0`, the legacy direct-serial path inside EAS Station™ fails.
 
-The Tier 3 mode resolves this by letting EAS Station consume NMEA from gpsd over the localhost TCP JSON socket (`127.0.0.1:2947`) instead of opening the serial port directly. gpsd becomes the single owner of the port; chrony reads the same data via SHM segment 0; PPS locks to the GPS via `lock GPS` in chrony.conf; everyone is happy.
+The Tier 3 mode resolves this by letting EAS Station™ consume NMEA from gpsd over the localhost TCP JSON socket (`127.0.0.1:2947`) instead of opening the serial port directly. gpsd becomes the single owner of the port; chrony reads the same data via SHM segment 0; PPS locks to the GPS via `lock GPS` in chrony.conf; everyone is happy.
 
 ### How each mode behaves
 
@@ -86,7 +86,7 @@ The Tier 3 mode resolves this by letting EAS Station consume NMEA from gpsd over
 
 In the GPS form under *Hardware Settings → GPS*:
 
-- **Serial Port** and **Baud Rate** apply when the runtime ends up on the direct-serial path: **serial** mode always, and **auto** mode when gpsd isn't running. In **gpsd** mode they are ignored by EAS Station — gpsd has its own copy in `/etc/default/gpsd`. The GPS HAT Setup Status panel's *Write gpsd config* / *Fix gpsd config* actions write the gpsd-side equivalents.
+- **Serial Port** and **Baud Rate** apply when the runtime ends up on the direct-serial path: **serial** mode always, and **auto** mode when gpsd isn't running. In **gpsd** mode they are ignored by EAS Station™ — gpsd has its own copy in `/etc/default/gpsd`. The GPS HAT Setup Status panel's *Write gpsd config* / *Fix gpsd config* actions write the gpsd-side equivalents.
 - **PPS GPIO Pin** is independent of source mode. It's used to detect kernel pulses via `/sys/class/pps/pps0` regardless of who's reading the serial port.
 - **Use GPS for station location** and **Use GPS for time sync** apply in every mode.
 
@@ -200,7 +200,7 @@ ls -la /dev/serial0
 
 ### 2. Add user to dialout group
 
-The EAS Station service user needs access to the serial port:
+The EAS Station™ service user needs access to the serial port:
 
 ```bash
 sudo usermod -aG dialout eas-station
@@ -265,7 +265,7 @@ This gives the Pi correct timestamps the moment the kernel mounts the I²C bus, 
 
 ---
 
-## EAS Station Configuration
+## EAS Station™ Configuration
 
 1. Navigate to **Admin → Hardware Settings → GPS**.
 2. Check **Enable GPS Receiver**.
@@ -412,7 +412,7 @@ redis-cli GET gps:status | python3 -m json.tool
 
 ## Migrating from the Adafruit HAT to the Uputronics Board
 
-If you previously configured EAS Station for the Adafruit #2324 and are swapping in the Uputronics board:
+If you previously configured EAS Station™ for the Adafruit #2324 and are swapping in the Uputronics board:
 
 1. Power off the Pi and replace the HAT.
 2. Edit `/boot/firmware/config.txt` (or `/boot/config.txt` on older Pi OS):

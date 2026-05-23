@@ -1,6 +1,6 @@
 # Fixing IPv6 Connectivity Issues
 
-This guide helps troubleshoot and fix IPv6 connectivity problems that can affect SSL Labs testing and external IPv6 access to EAS Station.
+This guide helps troubleshoot and fix IPv6 connectivity problems that can affect SSL Labs testing and external IPv6 access to EAS Station™.
 
 ## Table of Contents
 
@@ -15,7 +15,7 @@ This guide helps troubleshoot and fix IPv6 connectivity problems that can affect
 
 ## Overview
 
-EAS Station uses systemd with an IPv6-enabled network (`fd00:ea:1::/64`). While this enables modern dual-stack networking, it can cause issues when:
+EAS Station™ uses systemd with an IPv6-enabled network (`fd00:ea:1::/64`). While this enables modern dual-stack networking, it can cause issues when:
 
 1. **SSL Labs cannot reach your IPv6 site** - The AAAA DNS record points to an IPv6 address, but the server isn't responding on that address
 3. **Intermittent connection failures** - nginx tries IPv6 first, fails, then retries on IPv4

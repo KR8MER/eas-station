@@ -1,5 +1,5 @@
 /**
- * EAS Station ™ - System Health Monitoring Module
+ * EAS Station™ - System Health Monitoring Module
  * Monitors system health status and updates UI indicators
  *
  * Uses WebSocket for real-time updates with automatic fallback to polling.

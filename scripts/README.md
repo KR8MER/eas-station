@@ -1,4 +1,4 @@
-# EAS Station Utility Scripts
+# EAS Station™ Utility Scripts
 
 ## Quick Reference
 
@@ -18,7 +18,7 @@
 | `generate_repo_stats.py` | Generate repository statistics page | `python3 scripts/generate_repo_stats.py` |
 | `setup_smart_monitoring.sh` | Configure S.M.A.R.T. disk monitoring | `sudo bash scripts/setup_smart_monitoring.sh` |
 | `setup_postal.sh` | Set up Postfix local mail relay | `sudo bash scripts/setup_postal.sh` |
-| `restart_services.sh` | Restart all EAS Station services | `sudo bash scripts/restart_services.sh` |
+| `restart_services.sh` | Restart all EAS Station™ services | `sudo bash scripts/restart_services.sh` |
 | `warmup_workers.sh` | Pre-warm Gunicorn workers | `bash scripts/warmup_workers.sh` |
 | `configure.py` | Interactive first-run configuration | `python3 scripts/configure.py` |
 

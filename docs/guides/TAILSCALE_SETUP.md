@@ -1,6 +1,6 @@
 # Tailscale VPN Setup Guide
 
-This guide explains how to configure Tailscale on EAS Station for secure remote access over a private mesh VPN.
+This guide explains how to configure Tailscale on EAS Station™ for secure remote access over a private mesh VPN.
 
 ## Table of Contents
 
@@ -21,12 +21,12 @@ This guide explains how to configure Tailscale on EAS Station for secure remote 
 
 ## Overview
 
-EAS Station includes built-in Tailscale VPN management, allowing you to:
+EAS Station™ includes built-in Tailscale VPN management, allowing you to:
 
-- Access your EAS Station remotely over a secure, encrypted tunnel
+- Access your EAS Station™ remotely over a secure, encrypted tunnel
 - Join your station to a private tailnet shared with your team
 - Avoid exposing ports to the public internet
-- Manage Tailscale settings, connection state, and diagnostics entirely from the EAS Station web interface
+- Manage Tailscale settings, connection state, and diagnostics entirely from the EAS Station™ web interface
 
 ---
 
@@ -49,7 +49,7 @@ Key concepts:
 
 ## Prerequisites
 
-Before configuring Tailscale in EAS Station, you need:
+Before configuring Tailscale in EAS Station™, you need:
 
 1. **A Tailscale account** — Free at [tailscale.com](https://tailscale.com). Supports up to 100 devices at no cost.
 2. **Tailscale installed on the system** — See [Installation](#installation) below.
@@ -59,9 +59,9 @@ Before configuring Tailscale in EAS Station, you need:
 
 ## Installation
 
-Tailscale must be installed on the EAS Station system before it can be configured. Installation is performed entirely through the EAS Station web interface — no command-line access is required.
+Tailscale must be installed on the EAS Station™ system before it can be configured. Installation is performed entirely through the EAS Station™ web interface — no command-line access is required.
 
-1. Log in to the EAS Station web interface
+1. Log in to the EAS Station™ web interface
 2. Navigate to **Admin → Tailscale**
 3. Click the **Diagnostics** tab
 4. If Tailscale is not yet installed, the Installation Status section will show **Not Installed** along with an **Install Tailscale** button
@@ -71,13 +71,13 @@ Tailscale must be installed on the EAS Station system before it can be configure
 
 The installer uses the [official Tailscale install script](https://tailscale.com/install.sh) and automatically enables the `tailscaled` system service.
 
-> **Note:** The EAS Station system must have internet access during installation to download Tailscale from the official repository.
+> **Note:** The EAS Station™ system must have internet access during installation to download Tailscale from the official repository.
 
 ---
 
 ## Accessing the Tailscale Settings Page
 
-1. Log in to the EAS Station web interface
+1. Log in to the EAS Station™ web interface
 2. Click **Admin** in the top navigation bar
 3. Select **Tailscale** from the admin menu
 
@@ -93,7 +93,7 @@ The Tailscale page has three tabs:
 
 ## Configuration
 
-All Tailscale settings are saved in the EAS Station database and applied the next time you connect.
+All Tailscale settings are saved in the EAS Station™ database and applied the next time you connect.
 
 ### Configuration Fields
 
@@ -118,13 +118,13 @@ Click **Save Settings** after making changes. Settings are stored in the databas
 
 ## Authentication
 
-There are two ways to authenticate the EAS Station device with your tailnet.
+There are two ways to authenticate the EAS Station™ device with your tailnet.
 
 ### Option 1: Auth Key (Recommended for Headless Deployment)
 
 1. Log in to the [Tailscale admin console](https://login.tailscale.com/admin/settings/keys)
 2. Generate an **Auth Key** (reusable or one-time)
-3. Paste the key into the **Auth Key** field in EAS Station settings
+3. Paste the key into the **Auth Key** field in EAS Station™ settings
 4. Save settings, then click **Connect** on the Status tab
 
 The device authenticates automatically without requiring browser interaction.
@@ -153,7 +153,7 @@ All connection management is done from the **Status** tab.
 2. Configure your settings and save (see [Configuration](#configuration))
 3. Click **Connect**
 
-EAS Station will:
+EAS Station™ will:
 - Start the `tailscaled` daemon if it is not running
 - Enable the daemon to start automatically on boot
 - Run `tailscale up` with your saved settings
@@ -197,7 +197,7 @@ The Diagnostics tab provides:
 
 ### Advertising Subnet Routes
 
-If other tailnet peers need access to devices on the same LAN as EAS Station, you can advertise the local subnet:
+If other tailnet peers need access to devices on the same LAN as EAS Station™, you can advertise the local subnet:
 
 1. Enter the CIDR notation of your subnet in **Advertise Routes** (e.g., `192.168.1.0/24`)
 2. Multiple subnets can be specified as a comma-separated list
@@ -207,11 +207,11 @@ If other tailnet peers need access to devices on the same LAN as EAS Station, yo
 
 ### Exit Node
 
-Enabling **Advertise as Exit Node** allows other tailnet peers to route all their internet traffic through this EAS Station device. This is typically not needed for EAS operations but may be useful in custom network configurations.
+Enabling **Advertise as Exit Node** allows other tailnet peers to route all their internet traffic through this EAS Station™ device. This is typically not needed for EAS operations but may be useful in custom network configurations.
 
 ### Shields Up
 
-**Shields Up** prevents any tailnet peer from initiating connections to this device. Outbound connections from this device to the tailnet still work. Use this if you want the EAS Station to be part of the tailnet for outbound monitoring purposes only.
+**Shields Up** prevents any tailnet peer from initiating connections to this device. Outbound connections from this device to the tailnet still work. Use this if you want the EAS Station™ to be part of the tailnet for outbound monitoring purposes only.
 
 ### Accept DNS
 
@@ -236,7 +236,7 @@ The device requires authentication. Either:
 - Verify you are connecting to the correct Tailscale IP (`100.x.x.x` range shown in the Status tab)
 - Check that **Shields Up** is not enabled, which blocks all incoming connections
 - Ensure the tailnet peer you are connecting from is authenticated and online
-- Check that any local firewall on the EAS Station host allows traffic on the Tailscale interface (`tailscale0`)
+- Check that any local firewall on the EAS Station™ host allows traffic on the Tailscale interface (`tailscale0`)
 
 ### Peer ping fails
 
@@ -260,8 +260,8 @@ Click **Disconnect**, then **Connect** again to apply the new settings. Tailscal
 
 - **Access control:** Only users with `system.configure` permission can access Tailscale settings. Guard admin credentials carefully.
 - **Auth keys:** Store auth keys securely. Anyone with an auth key can add a device to your tailnet. Use short-lived or ephemeral keys where possible, and revoke unused keys from the Tailscale admin console.
-- **Tailnet ACLs:** The Tailscale admin console allows defining Access Control Lists (ACLs) to restrict which tailnet peers can communicate with each other. Configure ACLs to limit access to your EAS Station.
-- **Shields Up:** Consider enabling **Shields Up** if the EAS Station should not accept any inbound connections from tailnet peers.
+- **Tailnet ACLs:** The Tailscale admin console allows defining Access Control Lists (ACLs) to restrict which tailnet peers can communicate with each other. Configure ACLs to limit access to your EAS Station™.
+- **Shields Up:** Consider enabling **Shields Up** if the EAS Station™ should not accept any inbound connections from tailnet peers.
 - **Public internet:** Tailscale access does not replace firewall rules for your public internet interface. Continue following the guidance in [Firewall Requirements](../troubleshooting/FIREWALL_REQUIREMENTS.md).
 
 ---
@@ -269,7 +269,7 @@ Click **Disconnect**, then **Connect** again to apply the new settings. Tailscal
 ## Related Documentation
 
 - [HTTPS Setup](HTTPS_SETUP.md) — Configuring SSL/TLS for the web interface
-- [Security Features](../security/SECURITY_FEATURES.md) — Overview of EAS Station security
+- [Security Features](../security/SECURITY_FEATURES.md) — Overview of EAS Station™ security
 - [Firewall Requirements](../troubleshooting/FIREWALL_REQUIREMENTS.md) — Network port requirements
 - [Security Guide](../security/SECURITY.md) — Security best practices
 

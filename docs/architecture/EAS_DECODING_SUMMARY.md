@@ -343,7 +343,7 @@ The current streaming decoder implementation has resolved these issues:
 
 ### The Bottom Line
 
-**EAS Station now uses correct real-time streaming architecture:**
+**EAS Station™ now uses correct real-time streaming architecture:**
 
 - ✅ Batch processing removed
 - ✅ Streaming decoder implemented

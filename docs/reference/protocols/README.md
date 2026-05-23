@@ -1,7 +1,7 @@
 # Protocol References
 
 This directory contains **technical / engineering-level** references for the
-on-air signalling protocols EAS Station produces and consumes. They describe
+on-air signalling protocols EAS Station™ produces and consumes. They describe
 the bit-level frame format, modulation parameters, error-detection and
 forward-error-correction schemes, and how each protocol is implemented in
 this codebase.
@@ -21,7 +21,7 @@ FM broadcasters), see also [`../NRSC4B_SAME_STANDARD.md`](../NRSC4B_SAME_STANDAR
 
 ## How they are combined
 
-Every EAS Station broadcast — auto-forwarded CAP/IPAWS, OTA EAS relay, or
+Every EAS Station™ broadcast — auto-forwarded CAP/IPAWS, OTA EAS relay, or
 manually-authored alert — passes through the same composite-audio assembly
 in `EASAudioGenerator.build_files` (and `build_manual_components` for
 operator-authored events). The on-air timeline is:
