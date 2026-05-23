@@ -186,13 +186,16 @@ def upload_zone_file():
         # Validate file extension
         if not file.filename.lower().endswith('.dbf'):
             return jsonify({'error': 'File must be a .dbf file'}), 400
-        
-        # Use secure filename
+
+        # Use secure filename; reject if it sanitises to empty
         filename = secure_filename(file.filename)
-        
-        # Get upload directory (assets folder)
-        upload_dir = Path('assets')
-        upload_dir.mkdir(exist_ok=True)
+        if not filename:
+            return jsonify({'error': 'Invalid filename'}), 400
+
+        # Get upload directory (assets folder), resolved against the app root
+        # so it works regardless of the current working directory.
+        upload_dir = Path(current_app.root_path) / 'assets'
+        upload_dir.mkdir(parents=True, exist_ok=True)
         
         # Save the file
         file_path = upload_dir / filename
@@ -226,8 +229,12 @@ def upload_zone_file():
             })
             
     except Exception as e:
-        logger.error(f"Error uploading zone file: {e}")
-        return jsonify({'error': str(e)}), 500
+        logger.exception("Error uploading zone file")
+        try:
+            db.session.rollback()
+        except Exception:
+            logger.exception("Rollback after upload failure also failed")
+        return jsonify({'error': f'{type(e).__name__}: {e}'}), 500
 
 
 @zones_bp.route('/zones/search', methods=['GET'])
