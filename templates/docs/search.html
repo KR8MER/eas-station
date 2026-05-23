@@ -222,117 +222,102 @@
 </div>
 
 <script>
-// Documentation index for searching
-const docsIndex = [
-    {
-        title: "Backup & Recovery Strategy",
-        url: "/docs/runbooks/backup_strategy",
-        category: "Runbook",
-        description: "Complete guide to backup procedures, recovery procedures, and retention policies for EAS Station™",
-        keywords: ["backup", "restore", "disaster recovery", "RPO", "RTO", "retention", "snapshot", "recovery point", "recovery time"]
-    },
-    {
-        title: "Outage Response Runbook",
-        url: "/docs/runbooks/outage_response",
-        category: "Runbook",
-        description: "Step-by-step procedures for responding to system outages and service degradation",
-        keywords: ["outage", "incident response", "troubleshooting", "failover", "emergency", "downtime", "service degradation", "critical"]
-    },
-    {
-        title: "Warm-Standby Deployment",
-        url: "/docs/deployment/STANDBY_DEPLOYMENT",
-        category: "Guide",
-        description: "Configure and deploy a warm-standby EAS Station™ instance for high availability",
-        keywords: ["standby", "failover", "high availability", "HA", "redundancy", "secondary", "backup site"]
-    },
-    {
-        title: "Visual RBAC Permission Tree",
-        url: "/docs/rbac/visual",
-        category: "Security",
-        description: "Interactive graphical representation of role-based access control permissions and role hierarchy",
-        keywords: ["RBAC", "permissions", "roles", "access control", "authentication", "authorization", "security", "visual", "graphic", "diagram", "hierarchy"]
-    },
-    {
-        title: "RBAC Permission Tree (Text)",
-        url: "/docs/RBAC_PERMISSION_TREE",
-        category: "Reference",
-        description: "Detailed text-based documentation of role-based access control permissions",
-        keywords: ["RBAC", "permissions", "roles", "access control", "authentication", "authorization", "security", "documentation"]
-    },
-    {
-        title: "Backup Management",
-        url: "/admin/backups",
-        category: "Interface",
-        description: "Web interface for creating, managing, and restoring backups",
-        keywords: ["backup", "restore", "create backup", "download backup", "validate backup", "delete backup"]
-    },
-    {
-        title: "Admin Operations",
-        url: "/admin/operations",
-        category: "Interface",
-        description: "Administrative operations including backup, upgrade, and database maintenance",
-        keywords: ["operations", "admin", "maintenance", "upgrade", "database optimization"]
-    },
-    {
-        title: "System Health Check",
-        url: "/health/dependencies",
-        category: "API",
-        description: "Check the health of all critical services and dependencies",
-        keywords: ["health", "status", "dependencies", "monitoring", "services", "database", "icecast", "systemd"]
-    }
-];
+// Documentation search — calls the backend API which scans every markdown
+// file in docs/, so any term that appears in the actual documentation will
+// match.
 
-// Search functionality
-function performSearch() {
-    const query = document.getElementById('search-input').value.toLowerCase().trim();
-    if (!query) return;
+let searchAbortController = null;
 
-    const results = docsIndex.filter(doc => {
-        const searchText = `${doc.title} ${doc.description} ${doc.keywords.join(' ')}`.toLowerCase();
-        return searchText.includes(query);
-    });
-
-    displayResults(results, query);
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
-function displayResults(results, query) {
+function escapeRegex(text) {
+    return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function highlightQuery(text, query) {
+    const safe = escapeHtml(text);
+    if (!query) return safe;
+    const regex = new RegExp(`(${escapeRegex(query)})`, 'gi');
+    return safe.replace(regex, '<mark>$1</mark>');
+}
+
+async function performSearch() {
+    const input = document.getElementById('search-input');
+    const query = input.value.trim();
+    if (!query) return;
+
+    // Cancel any in-flight request so rapid typing doesn't render stale results.
+    if (searchAbortController) searchAbortController.abort();
+    searchAbortController = new AbortController();
+
     const resultsContainer = document.getElementById('results-container');
     const resultCount = document.getElementById('result-count');
     const searchResults = document.getElementById('search-results');
     const allDocs = document.getElementById('all-docs');
 
+    resultsContainer.innerHTML = `
+        <div class="text-muted small py-3">
+            <i class="fas fa-spinner fa-spin"></i> Searching documentation…
+        </div>
+    `;
+    searchResults.style.display = 'block';
+    allDocs.style.display = 'none';
+
+    try {
+        const response = await fetch(
+            `/docs/search/api?q=${encodeURIComponent(query)}`,
+            { signal: searchAbortController.signal }
+        );
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        displayResults(data.results || [], query);
+        resultCount.textContent = data.count ?? (data.results || []).length;
+    } catch (err) {
+        if (err.name === 'AbortError') return;
+        resultsContainer.innerHTML = `
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-triangle"></i>
+                Search failed: ${escapeHtml(err.message)}
+            </div>
+        `;
+        resultCount.textContent = '0';
+    }
+}
+
+function displayResults(results, query) {
+    const resultsContainer = document.getElementById('results-container');
+
     if (results.length === 0) {
         resultsContainer.innerHTML = `
             <div class="alert alert-warning">
-                <i class="fas fa-search"></i> No results found for "<strong>${query}</strong>".
+                <i class="fas fa-search"></i> No results found for "<strong>${escapeHtml(query)}</strong>".
                 <p class="mb-0 mt-2">Try different keywords or browse all documentation below.</p>
             </div>
         `;
-    } else {
-        let html = '<div class="list-group">';
-        results.forEach(doc => {
-            html += `
-                <a href="${doc.url}" class="list-group-item list-group-item-action">
-                    <div class="d-flex w-100 justify-content-between">
-                        <h6 class="mb-1">${highlightQuery(doc.title, query)}</h6>
-                        <small class="text-muted">${doc.category}</small>
-                    </div>
-                    <p class="mb-1 small">${highlightQuery(doc.description, query)}</p>
-                </a>
-            `;
-        });
-        html += '</div>';
-        resultsContainer.innerHTML = html;
+        return;
     }
 
-    resultCount.textContent = results.length;
-    searchResults.style.display = 'block';
-    allDocs.style.display = 'none';
-}
-
-function highlightQuery(text, query) {
-    const regex = new RegExp(`(${query})`, 'gi');
-    return text.replace(regex, '<mark>$1</mark>');
+    let html = '<div class="list-group">';
+    results.forEach(doc => {
+        const matchBadge = doc.matches && doc.matches > 1
+            ? ` <span class="badge bg-secondary">${doc.matches} matches</span>`
+            : '';
+        html += `
+            <a href="${escapeHtml(doc.url)}" class="list-group-item list-group-item-action">
+                <div class="d-flex w-100 justify-content-between">
+                    <h6 class="mb-1">${highlightQuery(doc.title, query)}${matchBadge}</h6>
+                    <small class="text-muted">${escapeHtml(doc.category || '')}</small>
+                </div>
+                <p class="mb-1 small text-muted">${highlightQuery(doc.snippet || '', query)}</p>
+            </a>
+        `;
+    });
+    html += '</div>';
+    resultsContainer.innerHTML = html;
 }
 
 // Search on Enter key
@@ -345,6 +330,7 @@ document.getElementById('search-input').addEventListener('keypress', function(e)
 // Clear search
 document.getElementById('search-input').addEventListener('input', function() {
     if (this.value === '') {
+        if (searchAbortController) searchAbortController.abort();
         document.getElementById('search-results').style.display = 'none';
         document.getElementById('all-docs').style.display = 'block';
     }
