@@ -476,7 +476,7 @@ def downgrade() -> None:
 
 - **Extend base.html** - All templates should use `{% extends "base.html" %}`
 - **Use theme variables** - Reference CSS variables: `var(--primary-color)`, `var(--text-color)`, `var(--bg-color)`
-- **Support all themes** - EAS Station has multiple built-in themes (Cosmo, Dark, Coffee, Spring, and color-based themes)
+- **Support all themes** - EAS Station™ has multiple built-in themes (Cosmo, Dark, Coffee, Spring, and color-based themes)
 - **Test in multiple themes** - Always test in both light (Cosmo) and dark themes at minimum
 - **Be responsive** - Use Bootstrap 5 grid classes for mobile support
 - **Mobile-friendly is required** - Every page MUST render without horizontal scrolling at viewport widths ≥320px. Specifically:
@@ -524,7 +524,7 @@ Every time you add a `{% block … %}` to a child template, cross-check the name
 ```html
 {% extends "base.html" %}
 
-{% block title %}My Feature - EAS Station{% endblock %}
+{% block title %}My Feature - EAS Station™{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -629,7 +629,7 @@ Before editing any template file:
 
 ### Overview
 
-EAS Station features a comprehensive theme system with 11 built-in themes and support for custom theme import/export.
+EAS Station™ features a comprehensive theme system with 11 built-in themes and support for custom theme import/export.
 
 ### Built-in Themes
 
@@ -844,7 +844,7 @@ curl http://localhost:5000/health
 
 ### Configuration System
 
-**CRITICAL CONCEPT**: EAS Station uses a **persistent configuration file** at `/opt/eas-station/.env` that survives Git updates and system reboots.
+**CRITICAL CONCEPT**: EAS Station™ uses a **persistent configuration file** at `/opt/eas-station/.env` that survives Git updates and system reboots.
 
 #### How It Works
 

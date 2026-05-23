@@ -2,7 +2,7 @@
 
 ## Overview
 
-The EAS Station uses a **dual-service architecture** for SDR (Software Defined Radio) operations to ensure reliable 24/7 operation required for life-safety systems. This document describes the architecture, components, and operational details.
+The EAS Station™ uses a **dual-service architecture** for SDR (Software Defined Radio) operations to ensure reliable 24/7 operation required for life-safety systems. This document describes the architecture, components, and operational details.
 
 ## Architecture Diagram
 

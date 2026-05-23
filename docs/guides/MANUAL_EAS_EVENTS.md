@@ -1,8 +1,8 @@
 # Manual EAS Events and Broadcast Builder
 
-EAS Station supports manually-authored EAS broadcasts for drills, required weekly tests (RWT), and locally-generated emergency messages. The primary interface is the **Broadcast Builder**, accessible from the top navigation bar.
+EAS Station™ supports manually-authored EAS broadcasts for drills, required weekly tests (RWT), and locally-generated emergency messages. The primary interface is the **Broadcast Builder**, accessible from the top navigation bar.
 
-> **Important:** EAS Station is experimental software and is not FCC-certified equipment. Manual broadcasts must only be performed in controlled, isolated testing environments. Do not connect the output to licensed broadcast transmitters without proper FCC authorization.
+> **Important:** EAS Station™ is experimental software and is not FCC-certified equipment. Manual broadcasts must only be performed in controlled, isolated testing environments. Do not connect the output to licensed broadcast transmitters without proper FCC authorization.
 
 ---
 
@@ -130,7 +130,7 @@ Toggle which audio components to include in the broadcast:
 
 All components have configurable 1-second guard intervals between sections.
 
-> **Tip:** EAS Station can also play a configurable **pre-alert** and/or
+> **Tip:** EAS Station™ can also play a configurable **pre-alert** and/or
 > **post-alert signal** outside the SAME signalling — useful for station
 > fingerprinting, paging-style call selection (QC-II), or DTMF unit IDs.
 > See the [Pre/Post-Alert Signaling guide](ALERT_SIGNALS.md) for details.
@@ -155,7 +155,7 @@ This concludes this test of the Emergency Alert System.
 
 1. Click **Preview Broadcast** to review the complete audio package plan.
 2. Click **Execute Broadcast** to confirm and start the broadcast.
-3. EAS Station generates the WAV audio package and triggers the output:
+3. EAS Station™ generates the WAV audio package and triggers the output:
    - GPIO relay activates the transmitter
    - Audio is routed to the configured output device and Icecast stream
    - The message is logged to the EAS message history
@@ -238,7 +238,7 @@ Audio files are stored in the media directory (`EAS_AUDIO_DIR`) and linked to th
 
 ### SAME header preview shows wrong time
 
-- EAS Station uses UTC for the `JJJHHMM` field. Verify the server clock is correct: `timedatectl status`.
+- EAS Station™ uses UTC for the `JJJHHMM` field. Verify the server clock is correct: `timedatectl status`.
 
 ### Broadcast appears in logs but not on air
 

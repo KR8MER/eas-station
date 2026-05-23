@@ -1,6 +1,6 @@
 # Audit Log Review
 
-EAS Station maintains two audit trails: a structured **database audit log** that captures user actions and security events, and a **security log file** in fail2ban-compatible format that captures authentication events.
+EAS Station™ maintains two audit trails: a structured **database audit log** that captures user actions and security events, and a **security log file** in fail2ban-compatible format that captures authentication events.
 
 ---
 
@@ -135,7 +135,7 @@ The security log is designed for fail2ban integration to automatically block att
 
 ## Malicious Login Attempts Dashboard
 
-EAS Station tracks injection and brute-force attempts in the **Malicious Logins** page:
+EAS Station™ tracks injection and brute-force attempts in the **Malicious Logins** page:
 
 1. Navigate to **Admin → Security → Malicious Logins**.
 2. The dashboard shows:

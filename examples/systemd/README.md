@@ -1,6 +1,6 @@
-# Systemd Timer Setup for EAS Station Backups
+# Systemd Timer Setup for EAS Station™ Backups
 
-This directory contains systemd unit files for automated EAS Station backups.
+This directory contains systemd unit files for automated EAS Station™ backups.
 
 ## Files
 
@@ -15,7 +15,7 @@ This directory contains systemd unit files for automated EAS Station backups.
    ```
 
    Update these paths:
-   - `WorkingDirectory=/opt/eas-station` (your EAS Station installation path)
+   - `WorkingDirectory=/opt/eas-station` (your EAS Station™ installation path)
    - `ExecStart=/opt/eas-station/tools/backup_scheduler.py` (path to script)
    - `--output-dir /var/backups/eas-station` (backup destination)
    - `--notify admin@example.com` (your email address)

@@ -1,6 +1,6 @@
 # eas-config: Interactive Configuration Tool
 
-`eas-config` is a terminal-based configuration utility for EAS Station, similar in style to Raspberry Pi's `raspi-config`. It provides a menu-driven interface for changing common settings without requiring manual `.env` file edits, and automatically restarts services after changes are saved.
+`eas-config` is a terminal-based configuration utility for EAS Station™, similar in style to Raspberry Pi's `raspi-config`. It provides a menu-driven interface for changing common settings without requiring manual `.env` file edits, and automatically restarts services after changes are saved.
 
 ---
 
@@ -28,9 +28,9 @@ sudo apt-get install whiptail
 When you launch `eas-config`, the main menu appears:
 
 ```
- EAS Station Configuration Tool
+ EAS Station™ Configuration Tool
  ───────────────────────────────────────────────────────────────────
- Configure your EAS Station (similar to raspi-config)
+ Configure your EAS Station™ (similar to raspi-config)
 
  Select an option:
 
@@ -76,7 +76,7 @@ Configure the PostgreSQL connection.
 |--------|----------|-------------|
 | Database Host | `DATABASE_HOST` | Hostname or IP of PostgreSQL server |
 | Database Port | `DATABASE_PORT` | Port (default: 5432) |
-| Database Name | `DATABASE_NAME` | Name of the EAS Station database |
+| Database Name | `DATABASE_NAME` | Name of the EAS Station™ database |
 | Database Username | `DATABASE_USER` | PostgreSQL user |
 | Database Password | `DATABASE_PASSWORD` | PostgreSQL password (input is masked) |
 | Test Connection | — | Validates the entered credentials |
@@ -85,7 +85,7 @@ Configure the PostgreSQL connection.
 
 ### 3. Alert Sources
 
-Configure where EAS Station fetches CAP alerts from.
+Configure where EAS Station™ fetches CAP alerts from.
 
 | Option | Variable | Description |
 |--------|----------|-------------|
@@ -167,7 +167,7 @@ Presents a confirmation dialog, then runs:
 systemctl restart eas-station.target
 ```
 
-This restarts all EAS Station services in the correct order.
+This restarts all EAS Station™ services in the correct order.
 
 ---
 

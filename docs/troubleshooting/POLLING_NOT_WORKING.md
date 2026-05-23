@@ -38,7 +38,7 @@ sudo -u easstation psql -h localhost -U eas_station -d alerts -c "SELECT COUNT(*
 **Symptoms:**
 ```bash
 $ sudo systemctl status eas-station-poller.service
-● eas-station-poller.service - EAS Station Alert Poller
+● eas-station-poller.service - EAS Station™ Alert Poller
    Loaded: loaded (/etc/systemd/system/eas-station-poller.service; enabled)
    Active: inactive (dead)
 ```
@@ -62,7 +62,7 @@ sudo systemctl status eas-station-poller.service
 **Symptoms:**
 ```bash
 $ sudo systemctl status eas-station-poller.service
-● eas-station-poller.service - EAS Station Alert Poller
+● eas-station-poller.service - EAS Station™ Alert Poller
    Loaded: loaded (/etc/systemd/system/eas-station-poller.service; enabled)
    Active: failed (Result: exit-code)
 ```

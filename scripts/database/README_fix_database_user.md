@@ -81,4 +81,4 @@ The script:
 1. Verify password in `.env` matches PostgreSQL user password
 2. Check pg_hba.conf allows connections from localhost
 3. Restart PostgreSQL: `sudo systemctl restart postgresql`
-4. Restart EAS Station services: `sudo systemctl restart eas-station.target`
+4. Restart EAS Station™ services: `sudo systemctl restart eas-station.target`

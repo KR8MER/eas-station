@@ -1,6 +1,6 @@
 # SDR Master Troubleshooting Guide
 
-**Complete diagnostic and troubleshooting guide for SDR issues in EAS Station**
+**Complete diagnostic and troubleshooting guide for SDR issues in EAS Station™**
 
 ## Quick Start Diagnostic
 
@@ -342,7 +342,7 @@ This was caused by incorrect use of FFmpeg `-re` flag for live hardware capture.
 2. **Check linearity mode vs sensitivity mode:**
    - Linearity mode: Better for strong signals (default)
    - Sensitivity mode: Better for weak signals
-   - EAS Station uses linearity mode by default
+   - EAS Station™ uses linearity mode by default
 
 3. **Check firmware version:**
    ```bash
@@ -517,7 +517,7 @@ echo ""
 
 {
   echo "============================================"
-  echo "EAS Station SDR Diagnostics"
+  echo "EAS Station™ SDR Diagnostics"
   echo "Date: $(date)"
   echo "============================================"
   echo ""
@@ -659,7 +659,7 @@ INSERT INTO radio_receivers (
 2. **Gain Settings:**
    - Use linearity mode (21 dB) for strong signals
    - Use sensitivity mode for weak signals
-   - EAS Station defaults to linearity mode
+   - EAS Station™ defaults to linearity mode
 
 3. **Firmware:**
    - Ensure latest firmware is installed

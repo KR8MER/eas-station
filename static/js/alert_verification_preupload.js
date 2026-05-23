@@ -1,5 +1,5 @@
 /*
- * EAS Station ™ - Alert Verification pre-upload audio inspector.
+ * EAS Station™ - Alert Verification pre-upload audio inspector.
  * Copyright (c) 2025-2026 Timothy Kramer (KR8MER)
  *
  * Parses the RIFF/WAV header of the selected file in the browser BEFORE

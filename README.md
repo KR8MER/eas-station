@@ -1,4 +1,4 @@
-# <img src="static/img/eas-system-wordmark.svg" alt="EAS Station" width="192" height="48" style="vertical-align: middle;"> EAS Station™
+# <img src="static/img/eas-system-wordmark.svg" alt="EAS Station™" width="192" height="48" style="vertical-align: middle;"> EAS Station™
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue?style=flat-square&logo=gnu&logoColor=white)](https://www.gnu.org/licenses/agpl-3.0)
 [![Commercial License](https://img.shields.io/badge/License-Commercial-green?style=flat-square)](LICENSE-COMMERCIAL)

@@ -259,7 +259,7 @@ Authorization: Bearer YOUR_API_KEY
 - [Text-to-Speech Quickstart](https://learn.microsoft.com/en-us/azure/ai-services/openai/text-to-speech-quickstart)
 - [API Reference](https://learn.microsoft.com/en-us/azure/ai-services/openai/reference)
 
-### EAS Station Documentation
+### EAS Station™ Documentation
 - Repository: https://github.com/KR8MER/eas-station
 - Admin UI: `http://your-server/admin/tts`
 

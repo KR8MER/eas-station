@@ -1,6 +1,6 @@
-# EAS Station Bare Metal - Quick Start Guide
+# EAS Station™ Bare Metal - Quick Start Guide
 
-Get EAS Station running on bare metal in 15 minutes!
+Get EAS Station™ running on bare metal in 15 minutes!
 
 ## Choose Your Installation Method
 
@@ -55,7 +55,7 @@ sudo dd if=eas-station-*.iso of=/dev/sdX bs=4M status=progress
 
 ### Accessing Your Station
 
-After installation completes, your EAS Station is **fully configured and ready to use**!
+After installation completes, your EAS Station™ is **fully configured and ready to use**!
 
 1. **Navigate to** https://localhost (or your configured domain)
    - Accept the self-signed certificate warning (normal for self-signed certs)

@@ -17,7 +17,7 @@ Simple Notification Service (SNS) pilot.
   workflow without requiring separate code paths.
 - **Source Tracking**: Alerts stored in PostGIS are stamped with their originating feed
   (NOAA, IPAWS, or MANUAL) and the poller automatically deduplicates alerts across multi-feed runs.
-- **Caching Implemented**: EAS Station uses PostgreSQL + PostGIS for persistent storage and Redis
+- **Caching Implemented**: EAS Station™ uses PostgreSQL + PostGIS for persistent storage and Redis
   for runtime caching, ensuring efficient alert distribution and geographic queries.
 - **SNS Push Option**: IPAWS is piloting AWS SNS topics for push-style integrations (email,
   HTTPS webhooks, Lambda, Kinesis). Currently only `EAS_PUBLIC_FEED` topic is available.
@@ -69,7 +69,7 @@ based on the **default lookback hours** poller setting (default: 12 hours) or th
 
 ### 3. Polling and Caching (Already Implemented)
 
-EAS Station implements FEMA's best practices:
+EAS Station™ implements FEMA's best practices:
 
 - ✅ **2-Minute Polling**: Default interval is 120 seconds (configurable at Settings → Poller)
 - ✅ **Automatic Caching**: PostgreSQL + PostGIS for persistent storage, Redis for runtime cache
@@ -136,7 +136,7 @@ Saved Y new alerts to database
 
 ### 4. View Alerts in Dashboard
 
-Open your EAS Station web interface and navigate to the alerts dashboard to see incoming IPAWS alerts on the map.
+Open your EAS Station™ web interface and navigate to the alerts dashboard to see incoming IPAWS alerts on the map.
 
 ## Optional: SNS Push Integration
 

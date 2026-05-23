@@ -1,8 +1,8 @@
-# 🚀 EAS Station JavaScript API Reference
+# 🚀 EAS Station™ JavaScript API Reference
 
 ## Overview
 
-The EAS Station frontend includes a comprehensive JavaScript API for interacting with backend services, managing UI state, and handling real-time updates. This document provides complete reference documentation for all available APIs and modules.
+The EAS Station™ frontend includes a comprehensive JavaScript API for interacting with backend services, managing UI state, and handling real-time updates. This document provides complete reference documentation for all available APIs and modules.
 
 ## 📋 Table of Contents
 
@@ -577,7 +577,7 @@ lineChart.updateOptions({
 
 ### Map Manager (`EASMap`)
 
-Leaflet integration with EAS Station specific features.
+Leaflet integration with EAS Station™ specific features.
 
 ```javascript
 // Initialize map
@@ -770,7 +770,7 @@ map.on('move', (bounds) => {
 
 ### Global Configuration
 ```javascript
-// Configure EAS Station JavaScript
+// Configure EAS Station™ JavaScript
 EASStation.configure({
   api: {
     baseUrl: '/api',
@@ -810,7 +810,7 @@ if (EASStation.isModuleLoaded('websocket')) {
 ```javascript
 // Global error handler
 EASStation.on('error', (error, context) => {
-  console.error('EAS Station Error:', error, context);
+  console.error('EAS Station™ Error:', error, context);
   
   // Send error to server for logging
   EASAPI.post('/api/log-error', {
@@ -904,4 +904,4 @@ if (EASStation.isDebugMode()) {
 
 ---
 
-This JavaScript API reference provides comprehensive documentation for all frontend functionality available in EAS Station. Each module is designed to be modular, extensible, and easy to use while maintaining high performance and accessibility standards.
+This JavaScript API reference provides comprehensive documentation for all frontend functionality available in EAS Station™. Each module is designed to be modular, extensible, and easy to use while maintaining high performance and accessibility standards.

@@ -1,6 +1,6 @@
 # NeoPixel LED Strip Control
 
-EAS Station supports WS2812B/NeoPixel addressable RGB LED strips for visual alert indication. When an EAS alert is received or broadcast, the LED strip can flash or display color patterns to provide a visible at-a-glance status indicator.
+EAS Station™ supports WS2812B/NeoPixel addressable RGB LED strips for visual alert indication. When an EAS alert is received or broadcast, the LED strip can flash or display color patterns to provide a visible at-a-glance status indicator.
 
 ---
 
@@ -168,4 +168,4 @@ python -c "import rpi_ws281x; print('OK')"
 
 ## Integration with Tower Lights
 
-EAS Station also supports industrial-grade tower lights (e.g., Patlite or similar serial-controlled units) via a separate hardware integration. Tower lights and NeoPixel strips can be used simultaneously. See **Admin → Hardware Settings → Tower Light** for tower light configuration.
+EAS Station™ also supports industrial-grade tower lights (e.g., Patlite or similar serial-controlled units) via a separate hardware integration. Tower lights and NeoPixel strips can be used simultaneously. See **Admin → Hardware Settings → Tower Light** for tower light configuration.

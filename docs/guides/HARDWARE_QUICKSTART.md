@@ -1,6 +1,6 @@
 # Hardware Configuration Quickstart Guide
 
-This guide will help you quickly configure GPIO, OLED, VFD, and LED hardware components through the EAS Station web interface. **No command-line access required!**
+This guide will help you quickly configure GPIO, OLED, VFD, and LED hardware components through the EAS Station™ web interface. **No command-line access required!**
 
 ## Overview
 
@@ -133,7 +133,7 @@ See [Waveshare Setup Guide](../hardware/WAVESHARE_RS232_WIFI_SETUP.md) for detai
 
 #### Argon Industria V5 (Raspberry Pi 5 only)
 
-Before configuring in EAS Station, make sure the module is detected at the OS level:
+Before configuring in EAS Station™, make sure the module is detected at the OS level:
 
 1. Add to `/boot/firmware/config.txt` under `[all]`:
    ```ini
@@ -150,7 +150,7 @@ Before configuring in EAS Station, make sure the module is detected at the OS le
 
 > See [Argon40 Zigbee Setup Guide](../hardware/ARGON40_ZIGBEE_SETUP.md) for complete OS setup steps.
 
-#### Configure in EAS Station
+#### Configure in EAS Station™
 
 1. Navigate to **Admin → Hardware Settings → Zigbee** tab
 2. Check **Enable Zigbee Coordinator**
@@ -207,7 +207,7 @@ fetch('/api/environment/restart-services', {
 
 ### Available Service Options
 
-- `all` - Restart entire EAS Station stack
+- `all` - Restart entire EAS Station™ stack
 - `hardware` - GPIO, OLED, VFD, LED only
 - `web` - Web interface only
 - `poller` - Alert polling service

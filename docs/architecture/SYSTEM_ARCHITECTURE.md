@@ -1,8 +1,8 @@
-# EAS Station System Architecture
+# EAS Station™ System Architecture
 
 ## Document Overview
 
-This document provides comprehensive architectural diagrams and flowcharts for the entire EAS Station system, covering all major components, data flows, and operational workflows. It serves as a visual reference for understanding how the system operates from end to end.
+This document provides comprehensive architectural diagrams and flowcharts for the entire EAS Station™ system, covering all major components, data flows, and operational workflows. It serves as a visual reference for understanding how the system operates from end to end.
 
 **Related Documents:**
 - [Data Flow Sequences](DATA_FLOW_SEQUENCES) - Detailed sequence diagrams showing data processing paths ⭐ NEW
@@ -31,7 +31,7 @@ This document provides comprehensive architectural diagrams and flowcharts for t
 
 ### High-Level Architecture
 
-EAS Station uses a **separated service architecture** where hardware access is isolated into dedicated systemd services for reliability and security:
+EAS Station™ uses a **separated service architecture** where hardware access is isolated into dedicated systemd services for reliability and security:
 
 ```mermaid
 graph TB
@@ -41,7 +41,7 @@ graph TB
         RF[RF Signals<br>162 MHz NOAA WX]
     end
 
-    subgraph "EAS Station Services"
+    subgraph "EAS Station™ Services"
         subgraph "Application Layer"
             APP[app<br>Flask Web UI<br>Port 5000]
             NOAA_POLL[noaa-poller<br>CAP Polling]
@@ -1083,7 +1083,7 @@ graph TB
 ```mermaid
 graph TB
     subgraph "Application Server"
-        APP[EAS Station App<br>Flask + Gunicorn]
+        APP[EAS Station™ App<br>Flask + Gunicorn]
         POLL[CAP Pollers<br>NOAA + IPAWS]
     end
 

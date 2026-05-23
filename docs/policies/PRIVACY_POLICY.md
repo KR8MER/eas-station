@@ -2,7 +2,7 @@
 
 _Last updated: February 14, 2026_
 
-EAS Station is a self-hosted project that runs entirely under your control. The maintainers do not operate a hosted service, collect analytics, or receive telemetry from deployments. This policy explains how to handle data while testing the software in lab environments.
+EAS Station™ is a self-hosted project that runs entirely under your control. The maintainers do not operate a hosted service, collect analytics, or receive telemetry from deployments. This policy explains how to handle data while testing the software in lab environments.
 
 ## 1. Project Scope
 - The maintainers do not collect or process any information from your installations.
@@ -18,7 +18,7 @@ EAS Station is a self-hosted project that runs entirely under your control. The 
 - Configure credentials via environment variables and avoid transmitting sensitive or personally identifiable information through optional integrations.
 
 ## 4. Development & Testing Data
-- Populate EAS Station exclusively with non-production or simulated data while it remains in development.
+- Populate EAS Station™ exclusively with non-production or simulated data while it remains in development.
 - Do not ingest live IPAWS traffic, dispatch records, or emergency response telemetry.
 - The maintainers are not responsible for safeguarding any datasets you choose to import.
 

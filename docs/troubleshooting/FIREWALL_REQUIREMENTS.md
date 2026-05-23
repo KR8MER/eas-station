@@ -2,7 +2,7 @@
 
 ## Overview
 
-EAS Station uses several network ports for its services. This document lists all ports that may need to be opened in your firewall for proper operation.
+EAS Station™ uses several network ports for its services. This document lists all ports that may need to be opened in your firewall for proper operation.
 
 **Note for Bare-Metal Installations**: As of version 2.19.7, the `install.sh` script **automatically configures UFW firewall** during installation. Ports 22 (SSH), 80 (HTTP), and 443 (HTTPS) are opened automatically. See [Automatic Firewall Configuration](#automatic-firewall-configuration-bare-metal) below.
 
@@ -81,7 +81,7 @@ To                         Action      From
 
 ### Remote Access Enabled
 
-With these firewall rules in place, you can access your EAS Station from any device on your network or the internet (if your router/cloud provider allows it):
+With these firewall rules in place, you can access your EAS Station™ from any device on your network or the internet (if your router/cloud provider allows it):
 
 - **From this server**: `https://localhost`
 - **From local network**: `https://<server-ip-address>`

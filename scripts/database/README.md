@@ -1,6 +1,6 @@
 # Database Utilities
 
-This directory contains database management and troubleshooting scripts for EAS Station.
+This directory contains database management and troubleshooting scripts for EAS Station™.
 
 ## Scripts
 

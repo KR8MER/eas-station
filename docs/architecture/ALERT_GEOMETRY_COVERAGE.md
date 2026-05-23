@@ -1,6 +1,6 @@
 # Alert Geometry and Coverage Calculation
 
-This document explains how EAS Station resolves spatial geometry for incoming CAP
+This document explains how EAS Station™ resolves spatial geometry for incoming CAP
 alerts and calculates coverage percentages against configured emergency-service
 boundaries.
 

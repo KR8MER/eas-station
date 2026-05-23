@@ -1,6 +1,6 @@
 # Multi-Factor Authentication (TOTP) Setup
 
-EAS Station supports time-based one-time password (TOTP) multi-factor authentication for all admin accounts. Once enabled, users must enter a six-digit code from an authenticator app in addition to their password at every login.
+EAS Station™ supports time-based one-time password (TOTP) multi-factor authentication for all admin accounts. Once enabled, users must enter a six-digit code from an authenticator app in addition to their password at every login.
 
 ---
 
@@ -19,13 +19,13 @@ EAS Station supports time-based one-time password (TOTP) multi-factor authentica
 
 ## Enabling MFA on Your Account
 
-1. Log in to the EAS Station web interface.
+1. Log in to the EAS Station™ web interface.
 2. Navigate to **Account → Security Settings** (top-right user menu).
 3. Click **Enable Two-Factor Authentication**.
 4. A QR code is displayed. Open your authenticator app and scan it.
    - If you cannot scan the QR code, tap **Enter code manually** in your app and type the key shown on screen.
 5. Once the app shows a six-digit code, enter it in the **Verification Code** field and click **Verify & Enable**.
-6. EAS Station verifies the code. If valid, MFA is activated immediately.
+6. EAS Station™ verifies the code. If valid, MFA is activated immediately.
 7. **Save your backup codes.** A set of 10 single-use recovery codes is displayed. Store these in a safe place — they are the only way to recover access if you lose your authenticator device.
 
 ---
@@ -73,7 +73,7 @@ An administrator can also disable MFA for another user via **Admin → User Mana
 
 ## Clock Synchronization
 
-TOTP codes are time-sensitive. If your EAS Station server clock drifts, codes may be rejected.
+TOTP codes are time-sensitive. If your EAS Station™ server clock drifts, codes may be rejected.
 
 Verify NTP is working:
 
@@ -102,7 +102,7 @@ The system accepts codes from ±1 time step (90 seconds total window) to handle 
 
 ### "Code already used" error
 
-EAS Station prevents the same TOTP code from being used twice within 90 seconds. Wait for the next code to appear in your authenticator app before trying again.
+EAS Station™ prevents the same TOTP code from being used twice within 90 seconds. Wait for the next code to appear in your authenticator app before trying again.
 
 ### Locked out (lost authenticator + backup codes)
 

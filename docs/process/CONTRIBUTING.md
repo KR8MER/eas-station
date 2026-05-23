@@ -1,14 +1,14 @@
-# Contributing to EAS Station
+# Contributing to EAS Station™
 
-Thank you for your interest in improving EAS Station. We welcome issues, feature proposals, and code contributions that advance experimental emergency alert tooling while keeping the project safe for lab use.
+Thank you for your interest in improving EAS Station™. We welcome issues, feature proposals, and code contributions that advance experimental emergency alert tooling while keeping the project safe for lab use.
 
 ## Code of Conduct
 
-Be respectful and constructive. EAS Station is maintained by volunteers supporting the public-safety and amateur-radio communities. Provide helpful context, avoid personal attacks, and keep communication focused on building a reliable platform.
+Be respectful and constructive. EAS Station™ is maintained by volunteers supporting the public-safety and amateur-radio communities. Provide helpful context, avoid personal attacks, and keep communication focused on building a reliable platform.
 
 ## Licensing and Copyright
 
-- The EAS Station source code is dual-licensed under the [GNU Affero General Public License v3 (AGPL-3.0)](../../LICENSE) for open-source use and a [Commercial License](../../LICENSE-COMMERCIAL) for proprietary use. Timothy Kramer (KR8MER) retains the project copyright.
+- The EAS Station™ source code is dual-licensed under the [GNU Affero General Public License v3 (AGPL-3.0)](../../LICENSE) for open-source use and a [Commercial License](../../LICENSE-COMMERCIAL) for proprietary use. Timothy Kramer (KR8MER) retains the project copyright.
 - By contributing, you agree that your submissions will be licensed under the AGPL-3.0 license and may be redistributed under those terms.
 
 ## Developer Certificate of Origin (DCO)
@@ -43,4 +43,4 @@ If you contribute on behalf of an organization, ensure you have the necessary au
 6. **Run the test suite or targeted regression checks** (alert ingest, SAME generation, GPIO control, audio playout) before opening a pull request so reviewers know nothing critical regressed.
 7. **Submit a pull request** describing the change, its motivation, and any verification steps performed.
 
-We encourage proposals and discussion via GitHub issues before major changes. Thanks for helping build EAS Station!
+We encourage proposals and discussion via GitHub issues before major changes. Thanks for helping build EAS Station™!

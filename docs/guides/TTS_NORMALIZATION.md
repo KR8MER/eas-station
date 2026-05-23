@@ -1,6 +1,6 @@
 # TTS Text Normalization & Pronunciation Guide
 
-EAS Station converts raw CAP/SAME alert text into natural spoken language before
+EAS Station™ converts raw CAP/SAME alert text into natural spoken language before
 sending it to the TTS engine.  The pipeline is entirely automatic, but operators
 can extend it with custom pronunciation rules for their coverage area.
 

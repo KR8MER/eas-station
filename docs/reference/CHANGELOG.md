@@ -51,7 +51,7 @@ tracks releases under the 2.x series.
 ## [2.74.0] - 2026-05-14 - Tech-stack attributions, IQ capture, GPS &amp; Time dashboard
 
 ### Added
-- **Single source of truth for tech-stack shields, with what-each-library-does explanations everywhere.** The footer's "Built With Modern Technologies" badge strip was previously inlined into `templates/base.html` while a *second*, larger copy lived in the orphan `templates/partials/footer.html` (not included by any template — silently drifting). The badge list is now consolidated into a new partial **`templates/partials/tech_stack_badges.html`** which `base.html` `{% include %}`s; the orphan `partials/footer.html` was deleted. The canonical set was expanded from ~13 to ~35 shields to credit every major dependency that genuinely powers a user-visible feature: Werkzeug, Jinja2, SciPy, Numba, lxml, Pillow, pydub, FFmpeg, eSpeak NG, PyOTP, Twilio, chrony, gpsd, Docker, and Alembic were missing from the on-page footer; they're now attributed. Every footer badge now carries a `title="..."` hover tooltip that explains, in 1–2 sentences, exactly what that library does *for EAS Station specifically* (not a generic upstream blurb) — e.g. Numba reads "JIT-compiles the SAME DLL and RBDS workers (~6× faster real-time demod on a Pi)", chrony reads "NTP daemon. Consumes the GPS NMEA fix + PPS edge as a kernel refclock and serves stratum-1 NTP". The README's top badge block was rewritten to match the same curated set, and a new **`## 📚 Attributions & Open-Source Credits`** section near the bottom of `README.md` lists every Python dependency from `requirements.txt`, every system package (PostgreSQL/PostGIS, Redis, Nginx, Icecast, FFmpeg, eSpeak NG, chrony, gpsd, systemd, Let's Encrypt/Certbot, Docker), and every vendored/CDN front-end asset (Bootstrap, Font Awesome, Leaflet, Chart.js, Socket.IO client) in nine grouped tables. Each row has a **Purpose in EAS Station** column with the long-form explanation alongside the upstream license identifier and project URL — the proper home for the long tail of credits (Flask-WTF, Flask-Limiter, requests, httpx, pyserial, zigpy, pyshp, pyproj, ...) that don't warrant a top-level shield.
+- **Single source of truth for tech-stack shields, with what-each-library-does explanations everywhere.** The footer's "Built With Modern Technologies" badge strip was previously inlined into `templates/base.html` while a *second*, larger copy lived in the orphan `templates/partials/footer.html` (not included by any template — silently drifting). The badge list is now consolidated into a new partial **`templates/partials/tech_stack_badges.html`** which `base.html` `{% include %}`s; the orphan `partials/footer.html` was deleted. The canonical set was expanded from ~13 to ~35 shields to credit every major dependency that genuinely powers a user-visible feature: Werkzeug, Jinja2, SciPy, Numba, lxml, Pillow, pydub, FFmpeg, eSpeak NG, PyOTP, Twilio, chrony, gpsd, Docker, and Alembic were missing from the on-page footer; they're now attributed. Every footer badge now carries a `title="..."` hover tooltip that explains, in 1–2 sentences, exactly what that library does *for EAS Station™ specifically* (not a generic upstream blurb) — e.g. Numba reads "JIT-compiles the SAME DLL and RBDS workers (~6× faster real-time demod on a Pi)", chrony reads "NTP daemon. Consumes the GPS NMEA fix + PPS edge as a kernel refclock and serves stratum-1 NTP". The README's top badge block was rewritten to match the same curated set, and a new **`## 📚 Attributions & Open-Source Credits`** section near the bottom of `README.md` lists every Python dependency from `requirements.txt`, every system package (PostgreSQL/PostGIS, Redis, Nginx, Icecast, FFmpeg, eSpeak NG, chrony, gpsd, systemd, Let's Encrypt/Certbot, Docker), and every vendored/CDN front-end asset (Bootstrap, Font Awesome, Leaflet, Chart.js, Socket.IO client) in nine grouped tables. Each row has a **Purpose in EAS Station™** column with the long-form explanation alongside the upstream license identifier and project URL — the proper home for the long tail of credits (Flask-WTF, Flask-Limiter, requests, httpx, pyserial, zigpy, pyshp, pyproj, ...) that don't warrant a top-level shield.
 - **Drift guard `tests/test_tech_stack_badges.py`.** Asserts (a) `base.html` actually `{% include %}`s the badge partial, (b) the deleted `partials/footer.html` is not resurrected, (c) for a curated subset of versioned Python libraries (Flask, Werkzeug, Jinja2, Socket.IO, SQLAlchemy, Alembic, Gunicorn, NumPy, SciPy, lxml, Pillow, pydub, PyOTP) the version pinned in `requirements.txt` appears verbatim in **both** the README badge block and the footer partial, (d) system-level dependencies (Nginx, Icecast, SoapySDR, FFmpeg, eSpeak NG, Raspberry Pi, Docker, Systemd, Redis, chrony, gpsd, Twilio, Numba, gevent) remain attributed in both surfaces, and (e) every `<a class="tech-badge">` in the footer partial carries a non-trivial (≥25-char, sentence-shaped) `title="..."` tooltip. Bumping a dependency in `requirements.txt` without bumping the matching shield now fails CI. `docs/process/CONTRIBUTING.md` was updated with a "Keep tech-stack attributions in sync" rule pointing contributors at the canonical files.
 - **IQ capture-to-file from Radio Diagnostics page (and via SDR-service command).** Operators can now grab a raw complex64 IQ recording from any active receiver without SSHing into the host — useful as input to `scripts/rbds_diagnose.py`, `inspectrum`, GNU Radio, or any other offline analyser. A new "Capture IQ" button next to each receiver on `/admin/radio/diagnostics` triggers a one-second capture; the browser then streams the resulting `.npy` file via a single-use download URL (file deleted after the download completes). The page also gains an **"About IQ Captures"** collapsible help card that explains, in operator-friendly terms, what an IQ capture is, the typical reasons to grab one (RBDS/RDS decode investigation, SAME/EAS replay, signal-quality analysis, bug-report evidence), and step-by-step instructions for what to do with the downloaded `.npy` file (load in Python, feed to `rbds_diagnose.py`, open in inspectrum / GNU Radio). Two new HTTP endpoints back the button: `POST /api/radio/diagnostics/capture/<receiver_id>` (returns `capture_id`, filename, size, and a `download_url`) and `GET /api/radio/diagnostics/capture/<capture_id>/download` (streams as attachment, then cleans up). A new `capture_iq` action in `sdr_hardware_service.py` does the actual `numpy.save()` to `RADIO_CAPTURE_DIR` (default `/var/log/eas-station/captures`, override via env), capped at `RADIO_CAPTURE_MAX_SAMPLES` (8M samples ≈ 64 MB) to bound memory and disk. Sample count is bounded by the SDR ring buffer (~2 s) and the web layer's `RADIO_CAPTURE_MAX_DURATION_SEC = 5`. Path-traversal is blocked on both sides: capture IDs are hex UUIDs and the on-disk path is verified to resolve under the allow-list directory before the file is served. Regression coverage in `tests/test_radio_diagnostics_capture.py` (happy path, traversal rejection on tampered Redis value, invalid capture-id format, missing/expired capture, timeout from the SDR service).
 - **GPS &amp; Time Dashboard** at `/admin/gps-dashboard` — a dense, single-page status page modelled visually on [W0CHP's chrogps-dash](https://w0chp.radio/chrogps-dash/) and reachable from the Admin → Hardware tab. Surfaces, all in one place: a header banner with the station hostname, a live "GPS LOCKED / ACQUIRING / NO GPS" pill, a fix-mode pill (2D/3D), and a colour-graded "STRATUM N" pill; a **System Tracking** card that renders every field of `chronyc -c tracking` (Reference ID, Stratum, Ref time, System / Last / RMS offsets, Frequency, Residual freq, Skew, Root delay/dispersion, Update interval, Leap status) plus a logarithmic Sync-Health bar that maps |offset| → 0-100 % so a sub-microsecond stratum-1 lock visibly pegs the meter; a **Satellite Skyview** card with a polar sky plot (cardinal cross-hair, 30°/60° elevation rings, dots coloured by constellation, alpha by SNR, glowing outer rings on used-in-fix sats), a Signal-Integrity bar (avg-SNR-scaled), GPS position (lat/lon/alt), DOP block (HDOP/VDOP/PDOP), serial port + baud, and Constellation Breakdown chips (e.g. *GPS 9/9, GLONASS 4/5, Galileo 7/7, BeiDou 17/21*); an **Individual Signal Levels** per-PRN bar chart sorted by constellation then PRN; a **Chrony Sources** table parsing `chronyc -c sources` (mode/state glyph, source name, stratum, poll, octal reach, last-sample age, current offset with sign-coloured cells); a **Satellite Data** table (PRN coloured by constellation, EL, AZ, SNR with the existing 6-stop colour scale, ACTIVE/VIEW status) with click-to-filter constellation chips. The page polls a single new endpoint, `/admin/api/gps-dashboard/data`, on a configurable 3 / 5 / 10 / 30 s interval (or paused). All styling uses the existing theme CSS variables so it adapts to every dark and light theme — no fixed palette.
@@ -98,7 +98,7 @@ tracks releases under the 2.x series.
      AGENTS.md, forcing a fresh asset URL.
 
 ### Changed
-- **EAS Station fingerprint trill changed to `0xA9`**: The post-burst
+- **EAS Station™ fingerprint trill changed to `0xA9`**: The post-burst
   ENDEC fingerprint byte emitted by `_generate_station_terminator_samples()` (3
   copies appended after each SAME burst when `endec_fingerprint` is enabled) has
   been updated to `0xA9` (10101001). The previous functional value in code was
@@ -558,7 +558,7 @@ tracks releases under the 2.x series.
   with the correct default, and continues serving — the same
   "schema-catch-up" pattern used for previous column-addition migrations.
 
-## [2.71.51] - 2026-04-13 - Add KR8MER EAS Station FSK trill fingerprint (3 × 0xAA)
+## [2.71.51] - 2026-04-13 - Add KR8MER EAS Station™ FSK trill fingerprint (3 × 0xAA)
 
 ### Added
 - **`app_utils/eas_fsk.py`** — New `encode_terminator_bits()` helper,
@@ -1696,7 +1696,7 @@ flowchart TD
   misleading grey `stopped` badge when the audio-service is dead (Redis metrics
   absent). The error message is updated to "Audio service is not running –
   source failed to start".
-- **`update.sh`** — Added `systemctl reset-failed` for all EAS Station service
+- **`update.sh`** — Added `systemctl reset-failed` for all EAS Station™ service
   units before the `systemctl restart eas-station.target` call.  A service
   that exceeded systemd's start-limit burst enters the `failed` state and will
   **not** be restarted by a target restart until it is reset; this caused the
@@ -2074,7 +2074,7 @@ flowchart TD
 ## [2.65.0] - 2026-03-20 - SNMP trap notifications and email notification fixes
 
 ### Added
-- **SNMP v2c trap notifications** — EAS Station can now send SNMP traps to NMS targets
+- **SNMP v2c trap notifications** — EAS Station™ can now send SNMP traps to NMS targets
   when system health issues are detected. Configure targets, community string, and enable/
   disable via the Notification Settings admin page (`/admin/notifications`).
 - **`pysnmp` added to `requirements.txt`** — previously the SNMP library was an undocumented
@@ -2340,7 +2340,7 @@ flowchart TD
 
 ### Fixed
 - **Dark theme: invisible text on cards and Bootstrap components** — Bootstrap 5.3
-  sets `--bs-body-color: #212529` (dark gray) in `:root`. Because EAS Station uses
+  sets `--bs-body-color: #212529` (dark gray) in `:root`. Because EAS Station™ uses
   `data-theme` instead of `data-bs-theme`, Bootstrap's own dark-mode palette was
   never activated, causing nearly all Bootstrap components (cards, tables, accordions,
   alerts, badges, etc.) to render dark gray text on dark theme backgrounds. Fixed by
@@ -2762,11 +2762,11 @@ flowchart TD
   - Files: `templates/sms_compliance.html`
 
 - **Twilio Toll-Free Verification help card in admin Notification Settings** (v2.53.2)
-  - Added a new "Toll-Free Verification" card in the sidebar of `/admin/notifications` that contains a ready-to-use field reference table: use case, opt-in type, opt-in page URL, privacy policy URL, terms of service URL, and exact message sample — all pre-filled for EAS Station. Operators can copy values directly into the Twilio console form.
+  - Added a new "Toll-Free Verification" card in the sidebar of `/admin/notifications` that contains a ready-to-use field reference table: use case, opt-in type, opt-in page URL, privacy policy URL, terms of service URL, and exact message sample — all pre-filled for EAS Station™. Operators can copy values directly into the Twilio console form.
   - Files: `templates/admin/notifications.html`
 
 - **Complete Twilio verification form field-by-field guide in `docs/guides/notifications.md`** (v2.53.2)
-  - Replaced the short verification table with a full guide covering business information, contact information, use case, opt-in information, and message content sections. Each section provides exact copy-paste values for an EAS Station deployment.
+  - Replaced the short verification table with a full guide covering business information, contact information, use case, opt-in information, and message content sections. Each section provides exact copy-paste values for an EAS Station™ deployment.
   - Added CTIA message content requirements section explaining the mandatory STOP footer.
   - Files: `docs/guides/notifications.md`
 
@@ -4983,7 +4983,7 @@ flowchart TD
   - Added `set_day_of_week()` method to set day of week 0-6 (Type E, Function 0x22)
   - Added `set_time_format()` method to set 12h/24h time format (Type E, Function 0x27)
   - Added `set_run_mode()` method to set auto/manual operation mode (Type E, Function 0x2E)
-  - Added `sync_time_with_system()` convenience method to sync sign with EAS Station time
+  - Added `sync_time_with_system()` convenience method to sync sign with EAS Station™ time
   - Added `WriteSpecialExtCommand` enum for M-Protocol Type E function codes
   - All functions use bidirectional communication with ACK/NAK handling
   - Created test script `scripts/test_alpha_timedate.py` for testing time control
@@ -5280,10 +5280,10 @@ flowchart TD
   - Updated system health template to display systemd services instead of Docker containers
   
 ### Added
-  - Systemd service monitoring for all EAS Station services (web, sdr, audio, eas, hardware, noaa-poller, ipaws-poller)
+  - Systemd service monitoring for all EAS Station™ services (web, sdr, audio, eas, hardware, noaa-poller, ipaws-poller)
   - Dependency service monitoring (nginx, postgresql, redis-server, icecast2)
   - Service status categorization (active, inactive, failed) with visual indicators
-  - Separate display sections for EAS Station services vs. system dependencies
+  - Separate display sections for EAS Station™ services vs. system dependencies
 
 ### Changed
   - Replaced _collect_container_statuses() with _collect_systemd_services() in system.py
@@ -5309,7 +5309,7 @@ flowchart TD
   - Environment validation now respects default values defined in ENV_CATEGORIES when checking required fields
   - About page now uses deployment-agnostic terminology for service architecture
   - Admin panel now uses terminology appropriate for both Docker and bare metal deployments
-  - NOAA_USER_AGENT default value no longer includes version number (simplified to "EAS Station")
+  - NOAA_USER_AGENT default value no longer includes version number (simplified to "EAS Station™")
 
 ## [2.19.8] - 2025-12-10
 ### Changed
@@ -5960,7 +5960,7 @@ Then rebuild and restart:
 
 ## [2.12.1] - 2025-11-27
 ### Changed
-- Rebuilt the EAS Station wordmark as an inline SVG partial that inherits theme colors for its accent bars and lettering, so the logo automatically matches whichever palette operators choose without filters or manual assets.
+- Rebuilt the EAS Station™ wordmark as an inline SVG partial that inherits theme colors for its accent bars and lettering, so the logo automatically matches whichever palette operators choose without filters or manual assets.
 - Updated the navigation bar and hero sections on the Help, About, Privacy, Terms, and Version pages to consume the new partial, eliminating duplicate markup and keeping the refreshed layout consistent in every mode.
 
 ## [2.12.0] - 2025-11-27
@@ -6103,7 +6103,7 @@ Then rebuild and restart:
   - Built dedicated security settings UI at `/settings/security` for managing roles, permissions, and MFA
   - Added database migrations to auto-initialize roles and assign them to existing users
   - Documented security hardening procedures in `docs/MIGRATION_SECURITY.md`
-- Redesigned EAS Station logo with modern signal processing visualization
+- Redesigned EAS Station™ logo with modern signal processing visualization
   - Professional audio frequency spectrum visualization with animated elements
   - Radar/monitoring circular grid overlay for technical aesthetic
   - Animated signal waveform with alert gradient effects

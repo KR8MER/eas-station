@@ -1,6 +1,6 @@
-# EAS Station Visual Documentation
+# EAS Station™ Visual Documentation
 
-This page provides an index of all professional diagrams and flowcharts available in the EAS Station documentation. These visual resources complement the written documentation and help understand system architecture, workflows, and deployment configurations.
+This page provides an index of all professional diagrams and flowcharts available in the EAS Station™ documentation. These visual resources complement the written documentation and help understand system architecture, workflows, and deployment configurations.
 
 ## 📊 Professional SVG Diagrams
 
@@ -192,7 +192,7 @@ These diagrams were created earlier and provide high-level system overviews:
 
 **High-level platform architecture** showing major components and data flows.
 
-![EAS Station Architecture](../assets/diagrams/eas-station-architecture.svg)
+![EAS Station™ Architecture](../assets/diagrams/eas-station-architecture.svg)
 
 **File:** [`../assets/diagrams/eas-station-architecture.svg`](../assets/diagrams/eas-station-architecture.svg)
 

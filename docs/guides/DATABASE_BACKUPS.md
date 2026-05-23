@@ -1,6 +1,6 @@
 # Database Backups and Restore
 
-EAS Station includes a built-in backup and restore system accessible from the web interface. Backups capture the full state of the system — database, configuration, and optionally audio archives — in a single timestamped directory.
+EAS Station™ includes a built-in backup and restore system accessible from the web interface. Backups capture the full state of the system — database, configuration, and optionally audio archives — in a single timestamped directory.
 
 ---
 
@@ -55,7 +55,7 @@ BACKUP_DIR=/mnt/nas/eas-station-backups
 
 ## Scheduling Automatic Backups
 
-EAS Station does not include a built-in scheduler for backups. Use a cron job or systemd timer to automate them.
+EAS Station™ does not include a built-in scheduler for backups. Use a cron job or systemd timer to automate them.
 
 **Daily backup via cron (runs as the `eas-station` user):**
 

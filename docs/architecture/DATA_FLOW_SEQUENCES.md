@@ -1,6 +1,6 @@
-# EAS Station Data Flow Sequence Diagrams
+# EAS Station™ Data Flow Sequence Diagrams
 
-This document provides detailed sequence diagrams showing how data flows through the EAS Station system, from initial ingestion through processing to final output. These diagrams focus on the actual data paths and transformations as data moves through components like SDR receivers, audio streams, CAP pollers, and broadcast systems.
+This document provides detailed sequence diagrams showing how data flows through the EAS Station™ system, from initial ingestion through processing to final output. These diagrams focus on the actual data paths and transformations as data moves through components like SDR receivers, audio streams, CAP pollers, and broadcast systems.
 
 ## Document Overview
 
@@ -825,7 +825,7 @@ sequenceDiagram
 
 ## Summary
 
-These sequence diagrams illustrate the major data processing paths through the EAS Station system:
+These sequence diagrams illustrate the major data processing paths through the EAS Station™ system:
 
 1. **Alert Processing** - CAP alerts flow from external sources through validation and spatial processing to storage
 2. **SDR Monitoring** - RF signals are continuously converted to digital samples and monitored for quality

@@ -1,4 +1,4 @@
-# EAS Station Installation Details
+# EAS Station™ Installation Details
 
 ## Installation Process
 
@@ -141,7 +141,7 @@ The installer now collects **all configuration during installation** using blue/
 - Tests and reloads nginx
 
 #### 13. **Service Startup** (5-10 seconds)
-- **Automatically starts** all EAS Station services
+- **Automatically starts** all EAS Station™ services
 - Waits 3 seconds for startup
 - Checks if services are running
 - Reports status
@@ -302,7 +302,7 @@ Unlike traditional installations that require:
 - ❌ Running database migrations
 - ❌ Starting services manually
 
-EAS Station does **everything automatically** and provides a **web-based setup wizard** for all configuration.
+EAS Station™ does **everything automatically** and provides a **web-based setup wizard** for all configuration.
 
 ## Troubleshooting Installation
 
@@ -559,7 +559,7 @@ This gives users flexibility while maintaining simplicity for the common case.
 
 ### Conclusion
 
-The current bash script installation is **appropriate and efficient** for EAS Station's target audience because:
+The current bash script installation is **appropriate and efficient** for EAS Station™'s target audience because:
 
 - Target users are familiar with command-line tools
 - Single-system installation is the primary use case  

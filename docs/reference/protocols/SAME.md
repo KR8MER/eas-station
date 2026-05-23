@@ -19,7 +19,7 @@ activation begins with a SAME header burst, is followed by an audio
 attention tone and a voice (or synthesised) message, and ends with a
 SAME End-of-Message (EOM) burst.
 
-EAS Station produces SAME audio for every outgoing broadcast — auto-
+EAS Station™ produces SAME audio for every outgoing broadcast — auto-
 forwarded CAP/IPAWS, OTA EAS relay, and operator-authored manual events —
 and consumes SAME audio off-air via the SDR / line-in receivers, decoding
 it back into structured alerts.
@@ -43,7 +43,7 @@ bit period (1.92 ms/bit), giving the AFSK waveform integer-cycle symbols
 that align cleanly at every bit boundary — this is what makes SAME
 decodable on minimal receivers like NWR-only weather radios.
 
-EAS Station's renderer (`generate_fsk_samples`) is phase-continuous: phase
+EAS Station™'s renderer (`generate_fsk_samples`) is phase-continuous: phase
 is carried across every symbol boundary so there are no glitches at
 mark-to-space transitions. The fractional-bit timing
 (`samples_per_bit = sr / 520.83…`) is handled by a per-bit carry
@@ -131,9 +131,9 @@ This is the responsibility of `encode_same_bits` in
 `app_utils/eas_fsk.py`. Crucially there are **no start or stop framing
 bits** between characters — the bit stream is continuous within the burst.
 
-### 2.3 ENDEC fingerprint (optional, EAS Station extension)
+### 2.3 ENDEC fingerprint (optional, EAS Station™ extension)
 
-Immediately after the carriage return, EAS Station optionally transmits 3
+Immediately after the carriage return, EAS Station™ optionally transmits 3
 copies of the byte `0xA9` (binary `10101001`, 24 mostly-alternating mark/space
 pulses, ~46 ms). This is **not** part of the SAME standard — it is a
 common ENDEC-vendor convention for station fingerprinting, used to
@@ -157,7 +157,7 @@ signal":
 | Tone 1 | **853.0 Hz** |
 | Tone 2 | **960.0 Hz** |
 
-EAS Station emits the standard 853 + 960 Hz mix for 8 seconds by default
+EAS Station™ emits the standard 853 + 960 Hz mix for 8 seconds by default
 (configurable via `attention_tone_seconds`). NOAA Weather Radio uses a
 single 1050 Hz "warning alarm tone" instead; the codebase supports both
 forms via the `_tone_freqs` selector in `app_utils/eas.py`.
@@ -202,7 +202,7 @@ post-alert signal (if any) is rendered.
 
 ## 5. Composite audio assembly
 
-Putting it all together, every EAS Station broadcast follows this exact
+Putting it all together, every EAS Station™ broadcast follows this exact
 audio timeline, assembled in `EASAudioGenerator.build_files`:
 
 ```mermaid
@@ -247,7 +247,7 @@ serialised to a 16 kHz (default) signed-int16 mono WAV by
 
 ## 6. Origination → broadcast pipeline
 
-EAS Station builds SAME audio from one of four input paths, all converging
+EAS Station™ builds SAME audio from one of four input paths, all converging
 into `EASAudioGenerator.build_files`:
 
 | Source | Trigger | Where |

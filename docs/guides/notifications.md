@@ -1,6 +1,6 @@
 # Notifications — Email & SMS
 
-EAS Station can send notifications to operators whenever an EAS alert is received and
+EAS Station™ can send notifications to operators whenever an EAS alert is received and
 broadcast. Two channels are supported: **email** (via SMTP) and **SMS** (via Twilio).
 
 Both are configured in the web UI under **Settings → Notifications**.
@@ -46,7 +46,7 @@ sequenceDiagram
 
 ### How It Works
 
-After each EAS broadcast, EAS Station connects to the configured SMTP server and delivers
+After each EAS broadcast, EAS Station™ connects to the configured SMTP server and delivers
 an alert summary to every address in the **EAS Alert Recipients** list. A separate list
 (**Compliance / Health Alert Recipients**) receives system-health and FCC compliance
 notifications.
@@ -88,7 +88,7 @@ All support TLS on port 587.
 | **Resend** | 100 msg/day | `smtp.resend.com:587` | `resend` (literally) | Pass = API key |
 | **SMTP2GO** | 1,000 msg/month | `mail.smtp2go.com:587` | SMTP2GO username | Good for low-volume |
 
-For EAS Station, alert volume is typically very low (alerts are only sent on actual EAS
+For EAS Station™, alert volume is typically very low (alerts are only sent on actual EAS
 events), so any free tier will comfortably cover normal operation.
 
 **Example — Brevo:**
@@ -129,7 +129,7 @@ smtp://your.address@yourdomain.com:PASSWORD@smtp.office365.com:587?tls=true
 
 ### Configuration Steps
 
-1. Go to **Settings → Notifications** in the EAS Station web UI.
+1. Go to **Settings → Notifications** in the EAS Station™ web UI.
 2. Set **Enable Email Notifications** to **Enabled**.
 3. Enter your SMTP URL in the **Mail Server URL** field.
 4. Add recipient addresses to **EAS Alert Recipients** (one per line).
@@ -142,7 +142,7 @@ smtp://your.address@yourdomain.com:PASSWORD@smtp.office365.com:587?tls=true
 
 ## SMS Notifications (Twilio)
 
-EAS Station sends SMS alerts via **Twilio**. You need a Twilio account and a purchased
+EAS Station™ sends SMS alerts via **Twilio**. You need a Twilio account and a purchased
 phone number (toll-free or long code).
 
 ### Prerequisites
@@ -184,14 +184,14 @@ very limited throughput and may have messages blocked or filtered.
 #### Complete Twilio Verification Form Field Guide
 
 The Twilio toll-free verification form asks for the following information. Use these
-exact values for EAS Station:
+exact values for EAS Station™:
 
 **Business / Organization Information**
 
 | Field | What to Enter |
 |---|---|
 | Business name | Your organization name (e.g. "Putnam County ARES" or personal callsign) |
-| Business website | Full URL of your EAS Station instance (e.g. `https://eas.example.com`) |
+| Business website | Full URL of your EAS Station™ instance (e.g. `https://eas.example.com`) |
 | Business type | Non-profit / Government / Individual (choose what applies) |
 | Business industry | Public Safety / Emergency Services |
 | Business address | Your physical mailing address |
@@ -210,7 +210,7 @@ exact values for EAS Station:
 | Field | What to Enter |
 |---|---|
 | Use case category | **Emergency** (select from dropdown) |
-| Use case description | `EAS Station sends real-time Emergency Alert System (EAS) notifications to a small list of pre-authorized recipients (operators, monitoring personnel). Recipients have provided explicit prior written consent. Messages contain NWS/IPAWS alert event codes, affected area identifiers, and timestamps. Use case: emergency public-safety notification only.` |
+| Use case description | `EAS Station™ sends real-time Emergency Alert System (EAS) notifications to a small list of pre-authorized recipients (operators, monitoring personnel). Recipients have provided explicit prior written consent. Messages contain NWS/IPAWS alert event codes, affected area identifiers, and timestamps. Use case: emergency public-safety notification only.` |
 
 **Opt-In Information**
 
@@ -218,7 +218,7 @@ exact values for EAS Station:
 |---|---|
 | Opt-in type | **Website opt-in** (or **Offline opt-in** if consent is documented offline) |
 | Opt-in image / URL | `https://yourserver/sms-compliance` |
-| Opt-in description | `Recipients are added exclusively by the system administrator in the EAS Station admin panel after obtaining explicit prior written consent from the individual. The consent disclosure shown at the opt-in URL is read to/provided to each recipient before their number is added.` |
+| Opt-in description | `Recipients are added exclusively by the system administrator in the EAS Station™ admin panel after obtaining explicit prior written consent from the individual. The consent disclosure shown at the opt-in URL is read to/provided to each recipient before their number is added.` |
 
 **Message Content**
 
@@ -235,13 +235,13 @@ EAS ALERT: TOR
 Tornado Warning for Putnam County
 Areas: 039137
 2026-03-12T14:00:00
-- EAS Station
+- EAS Station™
 Reply STOP to stop msgs
 ```
 
 #### Compliance Pages
 
-EAS Station includes three public-facing compliance pages that Twilio reviewers can access
+EAS Station™ includes three public-facing compliance pages that Twilio reviewers can access
 without logging in:
 
 | Page | URL | Purpose |
@@ -266,7 +266,7 @@ submitting the Twilio form.
 
 ### CTIA Message Content Requirements
 
-EAS Station automatically appends **`Reply STOP to stop msgs`** to every outgoing alert
+EAS Station™ automatically appends **`Reply STOP to stop msgs`** to every outgoing alert
 message. This opt-out footer is required by CTIA messaging guidelines and enforced by
 Twilio during verification review. Do not remove or alter this text.
 
@@ -277,7 +277,7 @@ compliance to Twilio reviewers.
 
 !!! warning "TCPA Compliance"
     You must obtain **explicit prior written consent** from every recipient before
-    adding their number to EAS Station. This is a legal requirement under the
+    adding their number to EAS Station™. This is a legal requirement under the
     Telephone Consumer Protection Act (TCPA) and CTIA guidelines.
 
     - Document consent before adding any number.
@@ -314,7 +314,7 @@ Enter one E.164 phone number per line. All numbers receive an SMS on every EAS b
 - Check the **Mail Server URL** format — copy it exactly from the examples above.
 - For Gmail, verify you are using an **App Password**, not your account password.
 - For Brevo/SendGrid, confirm the API key has sending permission.
-- Check the EAS Station application log for SMTP errors:
+- Check the EAS Station™ application log for SMTP errors:
   ```
   journalctl -u eas-station-web -f
   ```

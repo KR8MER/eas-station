@@ -2,7 +2,7 @@
 
 Welcome to the operator help guide for the NOAA CAP Emergency Alert System (EAS). This document outlines everyday workflows, troubleshooting tips, and reference material for evaluating the application in lab environments or during controlled exercises.
 
-> ⚠️ **Important:** EAS Station is experimental software. It has been cross-checked against open-source decoders like [multimon-ng](https://github.com/EliasOenal/multimon-ng), but it is not FCC-certified equipment and must never be relied upon for life-safety alerting.
+> ⚠️ **Important:** EAS Station™ is experimental software. It has been cross-checked against open-source decoders like [multimon-ng](https://github.com/EliasOenal/multimon-ng), but it is not FCC-certified equipment and must never be relied upon for life-safety alerting.
 
 ## Safety Expectations
 - Operate the stack in isolated development or staging networks disconnected from broadcast transmitter controls.
@@ -12,7 +12,7 @@ Welcome to the operator help guide for the NOAA CAP Emergency Alert System (EAS)
 
 ## Getting Started
 1. **Review the About document:** The [About page](../reference/ABOUT) covers system goals, core services, and the complete software stack.
-3. **Install EAS Station:** Follow the [Installation Guide](../installation/README) for a bare-metal deployment on Debian/Ubuntu with PostgreSQL + PostGIS and Redis.
+3. **Install EAS Station™:** Follow the [Installation Guide](../installation/README) for a bare-metal deployment on Debian/Ubuntu with PostgreSQL + PostGIS and Redis.
 4. **Launch the stack:**
 
 ## Routine Operations
@@ -41,7 +41,7 @@ Welcome to the operator help guide for the NOAA CAP Emergency Alert System (EAS)
 #### US County Boundaries (IPAWS SAME Coverage)
 Navigate to **Admin → County Boundaries** (`/admin/county_boundaries`) to manage the Census
 TIGER/Line county shapefile. IPAWS/NWS alerts carry 6-digit SAME geocodes (e.g. `039137`)
-instead of polygon geometry; EAS Station converts those codes to highlighted county outlines
+instead of polygon geometry; EAS Station™ converts those codes to highlighted county outlines
 on the alert detail map by looking up this table. Without it, affected alerts show
 "Alert has no geographic data."
 
@@ -56,7 +56,7 @@ Page sections, top to bottom:
 | **Search Counties** | Real-time search by county name, 5-digit GEOID, or state abbreviation; click a result to load that state on the map |
 | **Table Lookup / Diagnostics** | Enter comma-separated SAME codes or GEOIDs to verify database presence before an activation |
 
-> **Note:** EAS Station auto-loads the bundled shapefile on first startup if the table is
+> **Note:** EAS Station™ auto-loads the bundled shapefile on first startup if the table is
 > empty. This page is only needed for manual reloads, partial-state imports, or diagnostics.
 
 ### Managing Receivers
@@ -105,7 +105,7 @@ Page sections, top to bottom:
 ## Related Documentation
 - **[Master Roadmap](../roadmap/dasdec3-feature-roadmap)** - View completed features and upcoming priorities
 - **[System Architecture](../architecture/SYSTEM_ARCHITECTURE)** - Understand the technical design
-- **[About EAS Station](../reference/ABOUT)** - Project mission and scope
+- **[About EAS Station™](../reference/ABOUT)** - Project mission and scope
 
 ## Getting Help
 - **Documentation:** Consult the [README](https://github.com/KR8MER/eas-station/blob/main/README.md) for architecture, deployment, and configuration details.

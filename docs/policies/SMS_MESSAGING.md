@@ -2,15 +2,15 @@
 
 **Last updated:** March 12, 2026
 
-This policy applies to the SMS notification feature of EAS Station. It describes how
+This policy applies to the SMS notification feature of EAS Station™. It describes how
 text messages are sent, who receives them, and how recipients can opt out.
 
 ---
 
 ## Program Description
 
-EAS Station is a self-hosted Emergency Alert System (EAS) research and monitoring
-platform. When SMS notifications are enabled by the system administrator, EAS Station
+EAS Station™ is a self-hosted Emergency Alert System (EAS) research and monitoring
+platform. When SMS notifications are enabled by the system administrator, EAS Station™
 sends text message alerts to pre-configured recipients whenever an EAS alert is received
 and broadcast by the system.
 
@@ -22,10 +22,10 @@ added exclusively by the system administrator.
 
 ## Opt-In Mechanism
 
-Because EAS Station is self-hosted software operated by a system administrator (not a
+Because EAS Station™ is self-hosted software operated by a system administrator (not a
 public-facing service), opt-in is managed at the operator level:
 
-- The system administrator adds recipient phone numbers in the EAS Station admin panel
+- The system administrator adds recipient phone numbers in the EAS Station™ admin panel
   under **Settings → Notifications → SMS Recipients**.
 - Only individuals who have provided **explicit prior written consent** may be added.
 - Adding a number constitutes the operator's attestation that the individual has
@@ -43,7 +43,7 @@ EAS ALERT: [Event Code]
 [Alert Headline]
 Areas: [Location Codes]
 [Timestamp]
-- EAS Station
+- EAS Station™
 Reply STOP to stop msgs
 ```
 
@@ -66,7 +66,7 @@ may be sent within a short period. During quiet periods, no messages may be sent
 ## Message & Data Rates
 
 **Message and data rates may apply.** Standard SMS and data rates charged by the
-recipient's mobile carrier may apply. EAS Station and its operators do not charge any
+recipient's mobile carrier may apply. EAS Station™ and its operators do not charge any
 fee for SMS notifications.
 
 ---
@@ -111,11 +111,11 @@ national carriers.
 
 ## Privacy
 
-Phone numbers added to the EAS Station SMS recipient list are:
+Phone numbers added to the EAS Station™ SMS recipient list are:
 
-- Stored in the local EAS Station database on the **operator's** infrastructure.
+- Stored in the local EAS Station™ database on the **operator's** infrastructure.
 - Transmitted to **Twilio, Inc.** solely for the purpose of delivering SMS messages.
-- Not accessible by the EAS Station project maintainers.
+- Not accessible by the EAS Station™ project maintainers.
 
 See the [Privacy Policy](PRIVACY_POLICY.md) for complete data handling details.
 Twilio's privacy policy is at [twilio.com/en-us/legal/privacy](https://www.twilio.com/en-us/legal/privacy).
@@ -145,4 +145,4 @@ for the verification process.
 | Notifications setup guide | [guides/notifications.md](../guides/notifications.md) |
 | Terms of Use | [policies/TERMS_OF_USE.md](TERMS_OF_USE.md) |
 | Privacy Policy | [policies/PRIVACY_POLICY.md](PRIVACY_POLICY.md) |
-| Live SMS policy page (web UI) | `/sms-compliance` on your EAS Station instance |
+| Live SMS policy page (web UI) | `/sms-compliance` on your EAS Station™ instance |

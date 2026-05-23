@@ -32,7 +32,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from flask import Flask, render_template, abort, make_response, redirect, url_for
+from flask import Flask, render_template, abort, make_response, redirect, url_for, request, jsonify
 from markupsafe import escape, Markup
 import mistune
 from mistune.renderers.html import HTMLRenderer
@@ -201,6 +201,131 @@ def _get_docs_structure() -> Dict[str, List[Dict[str, str]]]:
     return structure
 
 
+_DOC_INDEX_CACHE: Dict[str, Any] = {'mtime': 0.0, 'entries': []}
+
+
+def _build_doc_search_index(docs_root: Path) -> List[Dict[str, Any]]:
+    """Scan every markdown file under docs_root and build an in-memory index.
+
+    Cached and invalidated when any file's mtime changes. Each entry holds the
+    full lowercased content so substring matching is straightforward, plus the
+    original content for snippet generation.
+    """
+    if not docs_root.exists():
+        return []
+
+    md_files = sorted(docs_root.rglob('*.md'))
+    latest_mtime = max((f.stat().st_mtime for f in md_files), default=0.0)
+
+    if _DOC_INDEX_CACHE['entries'] and _DOC_INDEX_CACHE['mtime'] >= latest_mtime:
+        return _DOC_INDEX_CACHE['entries']
+
+    # Map directories to categories (mirrors _get_docs_structure)
+    dir_mapping = {
+        'guides': 'Guides',
+        'architecture': 'Architecture',
+        'development': 'Development',
+        'reference': 'Reference',
+        'policies': 'Policies',
+        'roadmap': 'Reference',
+        'process': 'Development',
+        'frontend': 'Development',
+        'hardware': 'Hardware',
+        'audio': 'Guides',
+        'installation': 'Getting Started',
+        'maintenance': 'Guides',
+        'security': 'Security',
+        'troubleshooting': 'Troubleshooting',
+    }
+
+    entries: List[Dict[str, Any]] = []
+    for md_file in md_files:
+        if md_file.name.startswith('.'):
+            continue
+        try:
+            content = md_file.read_text(encoding='utf-8')
+        except (OSError, UnicodeDecodeError):
+            continue
+
+        rel_path = md_file.relative_to(docs_root)
+        parent_dir = rel_path.parent.name if rel_path.parent != Path('.') else ''
+        category = dir_mapping.get(parent_dir, 'Reference')
+
+        title_match = re.search(r'^#\s+(.+)$', content, re.MULTILINE)
+        if title_match:
+            title = title_match.group(1).strip()
+        else:
+            title = md_file.stem.replace('_', ' ').replace('-', ' ').title()
+
+        url_path = str(rel_path.with_suffix('')).replace('\\', '/')
+        if rel_path == Path('policies/TERMS_OF_USE.md'):
+            url = '/terms'
+        elif rel_path == Path('policies/PRIVACY_POLICY.md'):
+            url = '/privacy'
+        else:
+            url = f'/docs/{url_path}'
+
+        entries.append({
+            'title': title,
+            'url': url,
+            'category': category,
+            'path': str(rel_path),
+            'content': content,
+            'content_lower': content.lower(),
+            'title_lower': title.lower(),
+        })
+
+    _DOC_INDEX_CACHE['mtime'] = latest_mtime
+    _DOC_INDEX_CACHE['entries'] = entries
+    return entries
+
+
+def _make_snippet(content: str, query: str, window: int = 80) -> str:
+    """Return a ~160-char excerpt around the first case-insensitive match of query."""
+    idx = content.lower().find(query.lower())
+    if idx == -1:
+        cleaned = re.sub(r'\s+', ' ', content[:200]).strip()
+        return cleaned + ('…' if len(content) > 200 else '')
+    start = max(0, idx - window)
+    end = min(len(content), idx + len(query) + window)
+    snippet = content[start:end]
+    snippet = re.sub(r'\s+', ' ', snippet).strip()
+    prefix = '…' if start > 0 else ''
+    suffix = '…' if end < len(content) else ''
+    return f'{prefix}{snippet}{suffix}'
+
+
+def _search_docs(docs_root: Path, query: str, limit: int = 50) -> List[Dict[str, Any]]:
+    """Search the docs index for `query`. Title hits rank above content hits."""
+    query = query.strip()
+    if not query:
+        return []
+
+    q_lower = query.lower()
+    results: List[Tuple[int, Dict[str, Any]]] = []
+
+    for entry in _build_doc_search_index(docs_root):
+        title_hit = q_lower in entry['title_lower']
+        content_hit = q_lower in entry['content_lower']
+        if not (title_hit or content_hit):
+            continue
+
+        # Score: title matches first, then by number of content occurrences.
+        occurrences = entry['content_lower'].count(q_lower)
+        score = (1000 if title_hit else 0) + occurrences
+
+        results.append((score, {
+            'title': entry['title'],
+            'url': entry['url'],
+            'category': entry['category'],
+            'snippet': _make_snippet(entry['content'], query),
+            'matches': occurrences,
+        }))
+
+    results.sort(key=lambda item: item[0], reverse=True)
+    return [r[1] for r in results[:limit]]
+
+
 def _render_no_cache(template_name: str, **context: Any):
     """Render a template with response headers that disable caching."""
 
@@ -242,6 +367,20 @@ def register_documentation_routes(app: Flask, logger_instance: Any) -> None:
             return _render_no_cache('error.html',
                                    error='Unable to load documentation search',
                                    details=str(exc)), 500
+
+    @app.route('/docs/search/api')
+    def docs_search_api():
+        """JSON search endpoint backing the /docs/search page."""
+        query = (request.args.get('q') or '').strip()
+        if not query:
+            return jsonify({'query': '', 'results': [], 'count': 0})
+        try:
+            results = _search_docs(docs_root, query)
+        except Exception as exc:
+            logger.error('Error searching docs for %r: %s', query, exc)
+            return jsonify({'query': query, 'results': [], 'count': 0,
+                            'error': 'Search failed'}), 500
+        return jsonify({'query': query, 'results': results, 'count': len(results)})
 
     @app.route('/docs/rbac/visual')
     def docs_rbac_visual():

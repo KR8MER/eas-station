@@ -1,8 +1,8 @@
-# 🧩 EAS Station Component Library
+# 🧩 EAS Station™ Component Library
 
 ## Overview
 
-This comprehensive reference documents all UI components available in the EAS Station interface. Each component includes usage examples, customization options, and accessibility guidelines.
+This comprehensive reference documents all UI components available in the EAS Station™ interface. Each component includes usage examples, customization options, and accessibility guidelines.
 
 ### Vendored frontend libraries
 
@@ -65,8 +65,8 @@ The primary navigation provides access to main application areas.
   <div class="container-fluid">
     <!-- Logo and Brand -->
     <a class="navbar-brand" href="/">
-      <img src="/static/img/eas-system-wordmark.svg" alt="EAS Station" height="32">
-      <span class="brand-text">EAS Station</span>
+      <img src="/static/img/eas-system-wordmark.svg" alt="EAS Station™" height="32">
+      <span class="brand-text">EAS Station™</span>
     </a>
 
     <!-- Mobile Toggle -->
@@ -1021,4 +1021,4 @@ Minimum 44px touch targets for mobile devices:
 
 ---
 
-This component library provides comprehensive documentation for all UI elements used in the EAS Station interface. Each component is designed with accessibility, responsiveness, and usability in mind.
+This component library provides comprehensive documentation for all UI elements used in the EAS Station™ interface. Each component is designed with accessibility, responsiveness, and usability in mind.

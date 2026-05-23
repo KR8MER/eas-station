@@ -1,6 +1,6 @@
-# VSCode Configuration for EAS Station
+# VSCode Configuration for EAS Station™
 
-This directory contains VSCode workspace configuration for remote development on EAS Station.
+This directory contains VSCode workspace configuration for remote development on EAS Station™.
 
 ## 📁 Files
 

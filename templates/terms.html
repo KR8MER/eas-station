@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% block title %}Terms of Use | EAS Station ™{% endblock %}
+{% block title %}Terms of Use | EAS Station™{% endblock %}
 {% block content %}
 <div class="container py-4">
     <div class="row justify-content-center">
@@ -17,14 +17,14 @@
                     <div class="alert alert-warning d-flex align-items-start" role="alert">
                         <i class="fas fa-triangle-exclamation fa-lg me-3"></i>
                         <div>
-                            <strong>Critical Safety Notice:</strong> EAS Station ™ is experimental software. It must not be used for
+                            <strong>Critical Safety Notice:</strong> EAS Station™ is experimental software. It must not be used for
                             life-safety, mission-critical, or FCC-mandated alerting. Commercially certified EAS equipment remains
                             the only acceptable solution for regulatory compliance.
                         </div>
                     </div>
                     <section class="mb-4">
                         <h2 class="h4 text-primary">1. Project Status & Intended Use</h2>
-                        <p>EAS Station ™ is an open-source development project currently in a pre-production, experimental phase.
+                        <p>EAS Station™ is an open-source development project currently in a pre-production, experimental phase.
                            The codebase was compared against open-source utilities such as multimon-ng for validation purposes,
                            but all other content—including generated alerts, workflows, and documentation—is original and
                            community authored. The software is provided strictly for research, testing, and educational
@@ -43,7 +43,7 @@
                         <h2 class="h4 text-primary">3. Disclaimer of Liability &amp; Indemnification</h2>
                         <p>To the maximum extent permitted by law, the authors, maintainers, and contributors disclaim liability for
                            damages, penalties, data loss, downtime, enforcement actions, or claims arising from your use, misuse,
-                           deployment, or redistribution of EAS Station ™. No emergency response, broadcast activation, or public
+                           deployment, or redistribution of EAS Station™. No emergency response, broadcast activation, or public
                            warning decision should be based on this project. You are solely responsible for securing your deployment,
                            controlling access, and complying with applicable law. You agree to defend, indemnify, and hold harmless
                            the project authors, maintainers, and contributors from third-party claims, losses, and expenses (including
@@ -54,7 +54,7 @@
                         <ul>
                             <li>Operate the software only in controlled, non-production lab or development environments.</li>
                             <li>Do not present generated outputs as official alerts or public information.</li>
-                            <li>Do not connect EAS Station ™ directly to transmitter plants, IPAWS live interfaces, dispatch systems,
+                            <li>Do not connect EAS Station™ directly to transmitter plants, IPAWS live interfaces, dispatch systems,
                                 or any life-safety infrastructure.</li>
                             <li>Do not use the project to transmit, relay, spoof, or interfere with authorized public warning systems
                                 or licensed broadcast facilities.</li>
@@ -76,7 +76,7 @@
                                 defense.
                             </div>
                         </div>
-                        <p>Misuse of EAS Station ™—including unauthorized broadcast, spoofing, or interference with public warning
+                        <p>Misuse of EAS Station™—including unauthorized broadcast, spoofing, or interference with public warning
                            systems—may constitute serious criminal offenses under United States federal law and the laws of
                            multiple states and jurisdictions worldwide. You acknowledge and agree that:</p>
                         <ul>
@@ -150,7 +150,7 @@
                         <div class="alert alert-warning d-flex align-items-start" role="alert">
                             <i class="fas fa-triangle-exclamation fa-lg me-3 mt-1 flex-shrink-0"></i>
                             <div>
-                                EAS Station ™ generates <strong>valid</strong>, standards-compliant SAME-encoded audio that has been
+                                EAS Station™ generates <strong>valid</strong>, standards-compliant SAME-encoded audio that has been
                                 confirmed by testing across multiple receivers to activate ENDEC hardware and software relay
                                 equipment—exactly as a live alert would. The cases below are real documented enforcement actions
                                 that arose from exactly this type of signal. They are directly applicable to any output
@@ -161,7 +161,7 @@
                             <i class="fas fa-triangle-exclamation fa-lg me-3 mt-1 flex-shrink-0"></i>
                             <div>
                                 <strong>This software has not received FCC certification or regulatory approval as an EAS
-                                encoder/decoder.</strong> EAS Station ™ is a software-based reference implementation designed
+                                encoder/decoder.</strong> EAS Station™ is a software-based reference implementation designed
                                 to replicate the functionality of certified hardware devices such as the Digital Alert Systems
                                 DASDEC. It is <strong>not an approved substitute</strong> for certified EAS encoder/decoder
                                 equipment under <strong>47 C.F.R. Part 11</strong> and <strong>must not be installed anywhere
@@ -185,7 +185,7 @@
                                 automatically and without human intervention to every downstream participant. A state-level
                                 Primary Entry Point (PEP) activation can force hundreds of broadcasters to re-transmit a false
                                 alert across an entire state in seconds&mdash;all without any human ever reviewing or approving
-                                the signal. EAS Station ™ produces output that is indistinguishable from a live, authorized alert
+                                the signal. EAS Station™ produces output that is indistinguishable from a live, authorized alert
                                 by the relay equipment that governs this cascade. This is not
                                 theoretical&mdash;the Montana incident (Case 3 below) is direct, documented proof.
                             </div>
@@ -285,7 +285,7 @@
                     </section>
                     <section class="mb-4">
                         <h2 class="h4 text-primary">4c. Real Operational Semantics Only — No Fictional or Entertainment Use</h2>
-                        <p>EAS Station ™ is intended to faithfully model the <strong>actual operational semantics</strong> of certified EAS encoder/decoder equipment — the same SAME header structure, attention-tone characteristics, EOM behavior, relay-cascade logic, and timing tolerances that live broadcast hardware implements. That fidelity is what makes the project useful for research, training, amateur-radio experimentation, and standards work, and it is also what makes the project unsuitable as a content-creation toolkit. You agree that:</p>
+                        <p>EAS Station™ is intended to faithfully model the <strong>actual operational semantics</strong> of certified EAS encoder/decoder equipment — the same SAME header structure, attention-tone characteristics, EOM behavior, relay-cascade logic, and timing tolerances that live broadcast hardware implements. That fidelity is what makes the project useful for research, training, amateur-radio experimentation, and standards work, and it is also what makes the project unsuitable as a content-creation toolkit. You agree that:</p>
                         <ul>
                             <li><strong>Do not author fictional, fabricated, satirical, dramatized, or "what-if" EAS workflows or alert content.</strong> That includes invented event codes, invented FIPS/SAME area combinations, joke alert text, parody RWT/RMT cycles, mock CAP feeds with non-real events, or any "imagined" alert scenario presented as if it were a real EAS message — whether for fun, demonstration, social media, or storytelling.</li>
                             <li><strong>Do not use the software, its audio output, its dashboards, its logs, or any derivative artifact in entertainment or media production.</strong> This explicitly includes films, television, advertising, trailers, music videos, podcasts, streaming programming, video games, machinima, YouTube/TikTok/Reels/Shorts content, livestream stunts, prank or "creepypasta" content, ARGs (alternate-reality games), haunted-attraction sound design, theatrical performance, or any other dramatic or promotional work.</li>
@@ -320,7 +320,7 @@
                                 and for complying with all applicable laws including the
                                 Telephone Consumer Protection Act (TCPA), CTIA guidelines, and applicable
                                 carrier requirements.</li>
-                            <li>Messages sent by EAS Station ™ via Twilio are for <strong>emergency alert notification
+                            <li>Messages sent by EAS Station™ via Twilio are for <strong>emergency alert notification
                                 purposes only</strong>. Do not use the SMS feature for marketing, promotional,
                                 or non-emergency communications.</li>
                             <li>You must honor opt-out requests (STOP) promptly and remove the corresponding
@@ -355,7 +355,7 @@
                     </section>
                     <section class="mb-4">
                         <h2 class="h4 text-primary">9. Licensing &amp; Contributions</h2>
-                        <p>The EAS Station ™ source code is dual-licensed under AGPL-3.0 and a Commercial License. AGPL use is not
+                        <p>The EAS Station™ source code is dual-licensed under AGPL-3.0 and a Commercial License. AGPL use is not
                            limited to non-commercial users; commercial users may also choose AGPL if they comply with AGPL terms.
                            By submitting code, documentation, or other content, contributors agree their work is provided under
                            AGPL-3.0 unless a separate commercial agreement is in place. All commits must include a Developer

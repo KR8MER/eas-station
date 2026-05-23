@@ -1,6 +1,6 @@
 # HTTPS Setup Guide
 
-This guide explains how to configure HTTPS for EAS Station using nginx and Let's Encrypt.
+This guide explains how to configure HTTPS for EAS Station™ using nginx and Let's Encrypt.
 
 ## Table of Contents
 
@@ -16,7 +16,7 @@ This guide explains how to configure HTTPS for EAS Station using nginx and Let's
 
 ## Overview
 
-EAS Station includes built-in HTTPS support using:
+EAS Station™ includes built-in HTTPS support using:
 
 - **nginx** - Reverse proxy server that handles SSL/TLS termination
 - **Let's Encrypt** - Free, automated SSL certificate authority
@@ -185,7 +185,7 @@ Let's Encrypt production limits:
 
 ### Accessing the Certificate Manager
 
-1. Log in to EAS Station web interface
+1. Log in to EAS Station™ web interface
 2. Navigate to **Settings → SSL Certificates** (or visit `/admin/certbot`)
 3. Configure your domain and email in the **Configuration** tab
 

@@ -1,12 +1,12 @@
-# EAS Station Theory of Operation
+# EAS Station™ Theory of Operation
 
-The EAS Station platform orchestrates NOAA and IPAWS Common Alerting Protocol (CAP) messages from ingestion to FCC-compliant broadcast and verification. This document explains the end-to-end data flow, highlights the subsystems that participate in each phase, and provides historical context for the Specific Area Message Encoding (SAME) protocol that anchors the audio workflow.
+The EAS Station™ platform orchestrates NOAA and IPAWS Common Alerting Protocol (CAP) messages from ingestion to FCC-compliant broadcast and verification. This document explains the end-to-end data flow, highlights the subsystems that participate in each phase, and provides historical context for the Specific Area Message Encoding (SAME) protocol that anchors the audio workflow.
 
 ---
 
 ## System Architecture Overview
 
-EAS Station uses a **separated service architecture** with complete hardware isolation for reliability and fault tolerance:
+EAS Station™ uses a **separated service architecture** with complete hardware isolation for reliability and fault tolerance:
 
 ```mermaid
 graph TB
@@ -16,7 +16,7 @@ graph TB
         RF[RF Signals<br/>162 MHz NOAA WX]
     end
 
-    subgraph EASServices["EAS Station Services"]
+    subgraph EASServices["EAS Station™ Services"]
         subgraph AppLayer["Application Layer"]
             APP[app<br/>Flask Web UI<br/>Port 5000]
             NOAA_POLL[noaa-poller<br/>CAP Polling]
@@ -345,10 +345,10 @@ sequenceDiagram
 - **Compliance Dashboard** reconciles alerts for FCC reporting
 ## SAME Protocol Deep Dive
 
-The Specific Area Message Encoding protocol is the broadcast payload EAS Station produces for on-air activation. Key characteristics:
+The Specific Area Message Encoding protocol is the broadcast payload EAS Station™ produces for on-air activation. Key characteristics:
 
 - **Encoding Format** – ASCII characters transmitted with 520⅔ baud frequency-shift keying (FSK) using mark and space tones at 2083.3 Hz and 1562.5 Hz. The generator in `app_utils/eas.py` honours this cadence and injects the mandated three-header burst sequence (Preamble, ZCZC, message body, End of Message).
-- **Message Structure** – SAME headers follow `ZCZC-ORG-EEE-PSSCCC+TTTT-JJJHHMM-LLLLLLLL-`. EAS Station assembles each component from CAP payloads: ORG from `senderName`, EEE from the CAP event code, PSSCCC from matched FIPS/SAME codes, TTTT for duration, and `LLLLLLLL` for the station identifier configured in the admin UI.
+- **Message Structure** – SAME headers follow `ZCZC-ORG-EEE-PSSCCC+TTTT-JJJHHMM-LLLLLLLL-`. EAS Station™ assembles each component from CAP payloads: ORG from `senderName`, EEE from the CAP event code, PSSCCC from matched FIPS/SAME codes, TTTT for duration, and `LLLLLLLL` for the station identifier configured in the admin UI.
 - **Attention Signal** – After the third header, the attention signal is generated using simultaneous 853 Hz and 960 Hz sine waves for a configurable duration (defaults defined in `app_utils/eas.py`).
 - **End of Message** – The `NNNN` EOM triplet terminates the activation. The workflow enforces the three-EOM rule and logs playout with timestamps in `app_core/eas_storage.py`.
 
@@ -357,12 +357,12 @@ The Specific Area Message Encoding protocol is the broadcast payload EAS Station
 ### Historical Background
 
 - **1994 Rollout** – The FCC adopted SAME to replace the two-tone Attention Signal, enabling geographically targeted alerts and automated receiver activation.
-- **2002 IPAWS Integration** – FEMA’s Integrated Public Alert and Warning System standardised CAP 1.2 feeds, which EAS Station ingests via dedicated pollers.
+- **2002 IPAWS Integration** – FEMA’s Integrated Public Alert and Warning System standardised CAP 1.2 feeds, which EAS Station™ ingests via dedicated pollers.
 - **Ongoing Enforcement** – FCC Enforcement Bureau cases such as the 2015 iHeartMedia consent decree (The Bobby Bones Show) and the 2014 Olympus Has Fallen trailer settlement demonstrate the penalties for misuse. The `/about` page links to the official notices to reinforce best practices.
 
 ### Raspberry Pi Platform Evolution
 
-EAS Station’s quest to deliver a software-first encoder/decoder is tightly coupled with the Raspberry Pi roadmap:
+EAS Station™’s quest to deliver a software-first encoder/decoder is tightly coupled with the Raspberry Pi roadmap:
 
 - **Model B (2012):** Early tests proved a $35 board could poll CAP feeds and render SAME tones with USB DACs, albeit with limited concurrency.
 - **Pi 3 (2016):** Integrated Wi-Fi and quad-core CPUs enabled simultaneous NOAA/IPAWS polling and text-to-speech without overruns.

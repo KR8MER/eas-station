@@ -1,8 +1,8 @@
-# EAS Station Security Guide
+# EAS Station™ Security Guide
 
 ## Overview
 
-EAS Station implements comprehensive security controls including Role-Based Access Control (RBAC), Multi-Factor Authentication (MFA), and detailed audit logging. This guide covers setup, configuration, and best practices for securing your EAS Station deployment.
+EAS Station™ implements comprehensive security controls including Role-Based Access Control (RBAC), Multi-Factor Authentication (MFA), and detailed audit logging. This guide covers setup, configuration, and best practices for securing your EAS Station™ deployment.
 
 ## Table of Contents
 
@@ -67,7 +67,7 @@ curl -X PUT http://localhost:5000/security/users/1/role \
 
 ### Default Roles
 
-EAS Station provides three predefined roles:
+EAS Station™ provides three predefined roles:
 
 #### 1. **Admin** (Full Access)
 - All system permissions
@@ -203,7 +203,7 @@ curl -X POST http://localhost:5000/security/roles \
 
 ### Overview
 
-EAS Station supports TOTP-based two-factor authentication compatible with:
+EAS Station™ supports TOTP-based two-factor authentication compatible with:
 - Google Authenticator
 - Microsoft Authenticator
 - Authy
@@ -498,7 +498,7 @@ app.config['PERMANENT_SESSION_LIFETIME'] = 3600  # 1 hour timeout
 
 ### 5. **Network Security**
 
-- Run EAS Station behind reverse proxy (nginx/Apache)
+- Run EAS Station™ behind reverse proxy (nginx/Apache)
 - Enable HTTPS with valid TLS certificates
 - Use firewall rules to restrict admin access
 - Consider VPN for remote administration
@@ -632,7 +632,7 @@ class MFASession:
 
 ## Migration Checklist
 
-When deploying security features to existing EAS Station:
+When deploying security features to existing EAS Station™:
 
 - [ ] Pull latest code from security branch
 - [ ] Install new dependencies: `pip install -r requirements.txt`

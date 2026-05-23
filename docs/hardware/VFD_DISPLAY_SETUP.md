@@ -1,6 +1,6 @@
 # VFD Display Setup (Noritake GU140x32F-7000B)
 
-EAS Station supports the **Noritake GU140x32F-7000B** vacuum fluorescent display for showing alert status, system metrics, and scrolling messages. The display connects via RS-232 serial and is managed by the `hardware_service`.
+EAS Station™ supports the **Noritake GU140x32F-7000B** vacuum fluorescent display for showing alert status, system metrics, and scrolling messages. The display connects via RS-232 serial and is managed by the `hardware_service`.
 
 ---
 

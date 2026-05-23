@@ -1,6 +1,6 @@
 # Display System Architecture
 
-This document provides comprehensive architectural diagrams for the EAS Station display system, including OLED/VFD/LED screen management, the visual editor, and real-time preview functionality.
+This document provides comprehensive architectural diagrams for the EAS Station™ display system, including OLED/VFD/LED screen management, the visual editor, and real-time preview functionality.
 
 ---
 

@@ -1,6 +1,6 @@
 # NVMe and SSD SMART Monitoring Setup
 
-The EAS Station health monitoring page displays S.M.A.R.T. data from your NVMe and SATA drives, including temperature, power-on hours, media errors, and health status.
+The EAS Station™ health monitoring page displays S.M.A.R.T. data from your NVMe and SATA drives, including temperature, power-on hours, media errors, and health status.
 
 ## Requirements
 
@@ -24,7 +24,7 @@ The web application needs permission to run `smartctl` as root to access raw dev
 Create `/etc/sudoers.d/eas-station-smartctl`:
 
 ```bash
-# Allow EAS Station web app to run smartctl without password
+# Allow EAS Station™ web app to run smartctl without password
 # Replace 'www-data' with your web app user (could be 'eas-station', 'nginx', etc.)
 www-data ALL=(ALL) NOPASSWD: /usr/sbin/smartctl
 

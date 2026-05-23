@@ -1,6 +1,6 @@
 # Analytics and Reporting
 
-EAS Station includes a built-in analytics engine that tracks alert trends, detects anomalies in alert patterns, and aggregates system metrics over time. This data is accessible from the analytics dashboard and via REST API.
+EAS Station™ includes a built-in analytics engine that tracks alert trends, detects anomalies in alert patterns, and aggregates system metrics over time. This data is accessible from the analytics dashboard and via REST API.
 
 ---
 

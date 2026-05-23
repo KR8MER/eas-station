@@ -1,6 +1,6 @@
 # Local Mail Server (Postfix)
 
-EAS Station can install and manage a **Postfix** mail transfer agent directly on the host
+EAS Station™ can install and manage a **Postfix** mail transfer agent directly on the host
 server. Once running, it acts as a local send-only SMTP relay — no external email
 provider is required.
 
@@ -31,12 +31,12 @@ No terminal access required. All steps are performed in the browser.
 
 ### 1. Open Mail Server Settings
 
-Go to **Settings → Mail Server** in the EAS Station navigation bar.
+Go to **Settings → Mail Server** in the EAS Station™ navigation bar.
 
 ### 2. Install Postfix
 
 If Postfix is not yet installed, the page shows an **Install Postfix** button. Click it.
-EAS Station runs `apt-get install postfix` in the background. Installation takes about
+EAS Station™ runs `apt-get install postfix` in the background. Installation takes about
 30–60 seconds depending on connection speed. The page reloads automatically when done.
 
 ### 3. Configure
@@ -48,17 +48,17 @@ Two fields are required:
     remote mail servers. Example: `mail.yourdomain.com`.
 
     This **must match** your server's PTR (reverse-DNS) record for reliable delivery.
-    EAS Station auto-detects the current system hostname as a starting point.
+    EAS Station™ auto-detects the current system hostname as a starting point.
 
 **Sender Address**
 :   The `From:` address on all outbound alert emails. Example: `alerts@yourdomain.com`.
 
     The domain should have an SPF record that includes your server's IP.
 
-Click **Apply Configuration & Restart**. EAS Station writes `/etc/postfix/main.cf` and
+Click **Apply Configuration & Restart**. EAS Station™ writes `/etc/postfix/main.cf` and
 restarts the Postfix service.
 
-### 4. Connect to EAS Station Notifications
+### 4. Connect to EAS Station™ Notifications
 
 Once Postfix is running (green **Port 25 Open** badge), click:
 
@@ -103,7 +103,7 @@ Set in the Vultr control panel:
 
 1. Go to **Products → Instances** → your instance.
 2. Click **Settings → IPv4**.
-3. Set the **Reverse DNS** field to match the hostname you configured in EAS Station
+3. Set the **Reverse DNS** field to match the hostname you configured in EAS Station™
    (e.g., `mail.yourdomain.com`).
 
 #### SPF (Sender Policy Framework)
@@ -128,10 +128,10 @@ mail.yourdomain.com  MX  10  mail.yourdomain.com
 
 ## Postfix Configuration Details
 
-EAS Station writes the following `main.cf` to `/etc/postfix/main.cf`:
+EAS Station™ writes the following `main.cf` to `/etc/postfix/main.cf`:
 
 ```ini
-# Postfix main.cf — managed by EAS Station
+# Postfix main.cf — managed by EAS Station™
 myhostname = mail.yourdomain.com    # ← your configured hostname
 myorigin   = $myhostname
 
@@ -220,7 +220,7 @@ postfix check
 - Postfix may still be starting up — click **Refresh** after 10–15 seconds.
 - Check logs: `journalctl -u postfix -e`
 - Verify `inet_interfaces = loopback-only` is set (only listens on 127.0.0.1, but
-  the port should still be reachable from EAS Station).
+  the port should still be reachable from EAS Station™).
 
 ### Mail is being deferred / rejected
 
@@ -233,4 +233,4 @@ postfix check
 - Add the SPF TXT record for your domain.
 - Ensure the PTR record is set correctly in Vultr.
 - For better deliverability, consider adding DKIM signing via `opendkim`
-  (advanced — not currently managed by EAS Station).
+  (advanced — not currently managed by EAS Station™).

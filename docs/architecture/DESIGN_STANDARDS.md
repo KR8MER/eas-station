@@ -1,4 +1,4 @@
-# EAS Station Design Standards
+# EAS Station™ Design Standards
 ## Enterprise-Grade Design System Guidelines
 
 **Version:** 3.0 - Professional Edition  
@@ -9,7 +9,7 @@
 
 ## 🎯 Mission Statement
 
-EAS Station is a **professional, enterprise-grade** emergency alert management system. Every aspect of the user interface must reflect this standard. No exceptions.
+EAS Station™ is a **professional, enterprise-grade** emergency alert management system. Every aspect of the user interface must reflect this standard. No exceptions.
 
 ---
 

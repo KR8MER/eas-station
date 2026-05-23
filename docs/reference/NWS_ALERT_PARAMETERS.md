@@ -1,6 +1,6 @@
 # NWS Alert Parameters Reference
 
-This document covers two NWS-specific CAP parameters that EAS Station parses
+This document covers two NWS-specific CAP parameters that EAS Station™ parses
 and displays on the Alert Detail page: **VTEC** and **eventMotionDescription**.
 
 Both arrive in a CAP alert's `properties.parameters` object (keyed `VTEC` and
@@ -17,14 +17,14 @@ https://www.weather.gov/media/vtec/VTEC_explanation_ver9.pdf
 VTEC is a structured machine-readable string that NWS appends to every
 watch/warning/advisory product. It provides a canonical, unambiguous identifier
 for the event that survives text reformatting and allows downstream systems
-(like EAS Station) to link successive updates (issuance → extension →
+(like EAS Station™) to link successive updates (issuance → extension →
 expiration) to the same event via the Event Tracking Number.
 
 Two types exist:
 
 | Type | Purpose |
 |------|---------|
-| **P-VTEC** (Primary) | All weather phenomena — the one EAS Station parses |
+| **P-VTEC** (Primary) | All weather phenomena — the one EAS Station™ parses |
 | **H-VTEC** (Hydrologic) | Flood-specific addendum; adds crest time, severity, and cause |
 
 ### P-VTEC String Format
@@ -188,7 +188,7 @@ ETNs reset to 0001 on 1 January each year.
 
 **All-zeros convention:** `000000T0000Z` means the event was already in
 progress when the product was issued (common on CON, EXT, and EXP actions).
-EAS Station displays this as "Ongoing at issuance" rather than a timestamp.
+EAS Station™ displays this as "Ongoing at issuance" rather than a timestamp.
 
 ---
 
@@ -207,7 +207,7 @@ adds river-gauge-specific information.
         └─ flood severity
 ```
 
-EAS Station does not currently parse H-VTEC strings (they only appear on river
+EAS Station™ does not currently parse H-VTEC strings (they only appear on river
 flood products and are not used for EAS broadcast decisions), but they may be
 visible in the raw VTEC parameter for Flash Flood and Flood Warnings.
 
@@ -245,7 +245,7 @@ Parts are separated by `...`:
 
 ### Compass Conversion
 
-EAS Station converts degrees to a 16-point compass label using:
+EAS Station™ converts degrees to a 16-point compass label using:
 
 ```python
 dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE',
@@ -266,7 +266,7 @@ idx  = int((degrees + 11.25) / 22.5) % 16
 
 ### Map Visualization
 
-EAS Station plots the track data on the Alert Coverage Map as:
+EAS Station™ plots the track data on the Alert Coverage Map as:
 
 - **Solid dashed orange polyline** — observed track (past positions)
 - **Orange circle markers** — each track point; the most recent is larger

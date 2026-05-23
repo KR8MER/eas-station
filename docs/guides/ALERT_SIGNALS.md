@@ -1,6 +1,6 @@
 # Pre/Post-Alert Signaling
 
-EAS Station can prepend or append a short attention signal to **every** outgoing
+EAS Station™ can prepend or append a short attention signal to **every** outgoing
 SAME broadcast — auto-forwarded CAP/IPAWS alerts, OTA relays from upstream
 EAS sources, and operator-authored manual broadcasts. The signal plays:
 
@@ -176,7 +176,7 @@ systems, industrial site-wide LMR. The full technical reference,
 including frame format, FEC, and op-code table, lives in
 [`docs/reference/protocols/MDC1200.md`](../reference/protocols/MDC1200.md).
 
-> **PTT keying is not part of this feature.** EAS Station produces audio.
+> **PTT keying is not part of this feature.** EAS Station™ produces audio.
 > Putting the radio into transmit is the responsibility of the radio
 > interface (GPIO output, COR loop, VOX, VOIP gateway, …) and must be
 > configured separately, keyed off the same trigger that starts EAS

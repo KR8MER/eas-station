@@ -1,6 +1,6 @@
 # Warm-Standby Deployment Guide
 
-This guide explains how to configure and deploy a warm-standby EAS Station instance for high availability and disaster recovery.
+This guide explains how to configure and deploy a warm-standby EAS Station™ instance for high availability and disaster recovery.
 
 ## Overview
 
@@ -200,7 +200,7 @@ HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${PRIMARY_URL}/health" --max
 
 if [ "$HTTP_CODE" != "200" ]; then
     echo "PRIMARY ALERT: Health check failed (HTTP $HTTP_CODE)" | \
-        mail -s "EAS Station Primary Down!" "$ALERT_EMAIL"
+        mail -s "EAS Station™ Primary Down!" "$ALERT_EMAIL"
     logger -t eas-failover "Primary health check failed: HTTP $HTTP_CODE"
 else
     logger -t eas-failover "Primary health check OK"
