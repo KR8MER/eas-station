@@ -61,32 +61,68 @@ Format and field reference (NWS Operations Manual / WSOM):
 * **NWS Directive 10-1701** (county/zone updates procedure):
   <https://www.weather.gov/directives/010/index.php?direct=017>
 
-## DBF schema (consumed by `iter_zone_records`)
+## DBF schemas (consumed by `iter_zone_records`)
 
-Both the public-zone and marine-zone shapefiles share the same DBF
-attribute schema, which is why one loader handles both. See
-`app_utils/zone_catalog.py:iter_zone_records` (required-fields list at
-line ≈159).
+The public-zone (`z_*.dbf`) and marine-zone (`mz_*.dbf` / `oz_*.dbf`)
+shapefiles use **different** DBF attribute schemas. The loader at
+`app_utils/zone_catalog.py:iter_zone_records` detects which schema a
+file uses by inspecting its column names (`_detect_zone_schema`) and
+dispatches to the appropriate parser. Both schemas yield the same
+`ZoneRecord` dataclass so downstream code is unchanged.
+
+### Public-zone schema (`z_*.dbf`)
 
 | DBF field | Type | Example | Mapped to `ZoneRecord` |
 | --- | --- | --- | --- |
-| `STATE` | C(2) | `OH`, `AM`, `LE` | `state_code` |
+| `STATE` | C(2) | `OH` | `state_code` |
 | `CWA` | C(3) | `CLE` | `cwa` |
 | `TIME_ZONE` | C(2) | `E`, `C` | `time_zone` |
 | `FE_AREA` | C(2) | `nw`, `cm` | `fe_area` |
 | `ZONE` | C(3) | `001`, `144` | `zone_number` (zero-padded) |
-| `NAME` | C(70) | `Pamlico Sound` | `name` |
-| `STATE_ZONE` | C(5) | `OH001`, `AMZ135` | `state_zone` |
-| `LON` | F | `-76.05` | `longitude` |
-| `LAT` | F | `35.40` | `latitude` |
+| `NAME` | C(70) | `Erie` | `name` |
+| `STATE_ZONE` | C(5) | `OH001` | `state_zone` |
+| `LON` | F | `-83.4` | `longitude` |
+| `LAT` | F | `40.7` | `latitude` |
 | `SHORTNAME` | C(45) | abbreviated name | `short_name` |
 
-The loader synthesizes the full UGC code as `f"{STATE}Z{ZONE}"`, so a
-marine row with `STATE='AM'`, `ZONE='135'` becomes `AMZ135`.
+The loader synthesizes the full UGC code as `f"{STATE}Z{ZONE}"`. Only
+`STATE`, `ZONE`, and `NAME` are required; the others are now optional
+and fall back to empty strings if absent.
 
-If NWS ever changes the schema, `iter_zone_records` raises
-`ValueError("DBF is missing required fields: …")` so operators see a
-clear error before bad data lands in the database.
+### Marine-zone schema (`mz_*.dbf`, `oz_*.dbf`)
+
+| DBF field | Type | Example | Mapped to `ZoneRecord` |
+| --- | --- | --- | --- |
+| `ID` | C(6) — coastal / C(50) — offshore | `GMZ650` | `zone_code` (full UGC); first 2 chars → `state_code` (the alphabetic prefix); chars 3+ → `zone_number` |
+| `WFO` | C(3) | `MOB` | `cwa` |
+| `GL_WFO` | C(3) — coastal only | (Great Lakes WFO, usually blank) | preferred over `WFO` when populated |
+| `NAME` | C(254) / C(90) | `Coastal waters from Pensacola FL to Pascagoula MS out 20 NM` | `name` |
+| `LON`, `LAT` | F | `-87.5`, `30.3` | `longitude`, `latitude` |
+
+The marine schema does not carry `TIME_ZONE`, `FE_AREA`, `SHORTNAME`,
+or `STATE_ZONE`; those fields are left empty on the resulting
+`ZoneRecord`. The two-letter `state_code` (e.g. `GM`, `AM`, `PH`,
+`PK`) is what `app_utils/fips_codes.py:get_marine_state_tree` filters
+on to surface marine areas in the admin FIPS picker.
+
+### Fire-weather schema (`fz_*.dbf`)
+
+Fire-weather DBFs use the public-zone schema, so the parser handles
+them via the same `_parse_public_record` path. However, fire-weather
+zone codes structurally overlap public-zone codes (`OHZ089` exists in
+both files referring to different geographies), and the `nws_zones`
+table currently enforces a unique constraint on `zone_code` alone.
+Loading both `z_*.dbf` and `fz_*.dbf` therefore raises a duplicate-key
+error mid-sync. Adding first-class fire-weather support requires
+extending the schema to include `zone_type` in the uniqueness
+constraint and is tracked as a known limitation.
+
+### Schema detection errors
+
+If a DBF doesn't match either schema, `_detect_zone_schema` raises
+`ValueError("Unrecognised zone DBF schema. Expected …")` listing the
+actual columns it found, so operators see a clear actionable error
+before bad data lands in the database.
 
 ## Refresh mechanisms — how operators alter the catalog
 
