@@ -1288,8 +1288,15 @@ def initialize_database():
                 return False
             
             logger.info("[13/16] Loading NWS zone catalog (may take time)...")
-            # Zone catalog is optional - app can start without it
-            if not ensure_zone_catalog(logger):
+            # Zone catalog is optional - app can start without it.
+            # delete_scope="public" scopes the orphan-delete pass to
+            # public-zone rows only, so the bundled z_*.dbf still
+            # round-trips cleanly on boot but any marine zones the
+            # operator uploaded separately via /admin/zones (mz_*.dbf,
+            # oz_*.dbf) survive across restarts. Without this, every
+            # service restart treated marine rows as orphans of the
+            # public catalog and silently wiped them.
+            if not ensure_zone_catalog(logger, delete_scope="public"):
                 logger.warning("NWS zone catalog could not be loaded - continuing without it")
 
             logger.info("[14/16] Loading US county boundaries (may take time on first run)...")

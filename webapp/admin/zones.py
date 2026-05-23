@@ -146,8 +146,11 @@ def reload_zones():
         # Clear cache first
         clear_zone_lookup_cache()
         
-        # Reload from file
-        success = ensure_zone_catalog(logger)
+        # Reload from file. Scope deletions to public so an operator
+        # clicking "Reload from File" against the bundled public-zone
+        # DBF refreshes the public catalog without wiping marine zones
+        # that were uploaded separately via the upload form.
+        success = ensure_zone_catalog(logger, delete_scope="public")
         
         if success:
             zone_count = NWSZone.query.count()
