@@ -30,7 +30,7 @@ from flask import current_app, has_app_context
 from app_utils.fips_codes import (
     NATIONWIDE_SAME_CODE,
     STATE_ABBR_NAMES,
-    get_same_lookup,
+    get_extended_same_lookup,
     get_us_state_county_tree,
 )
 from app_utils.location_settings import (
@@ -368,7 +368,7 @@ def describe_location_reference(
 
         known_zones.append(zone_details)
 
-    same_lookup = get_same_lookup()
+    same_lookup = get_extended_same_lookup()
     known_fips: List[Dict[str, Any]] = []
     missing_fips: List[str] = []
     for raw_code in snapshot.get("fips_codes", []) or []:

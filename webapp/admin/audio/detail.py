@@ -29,7 +29,7 @@ from flask import flash, redirect, render_template, url_for, Response
 from app_core.models import CAPAlert, EASMessage
 from app_core.eas_storage import get_eas_static_prefix, load_or_cache_summary_payload, format_local_datetime
 from app_utils.eas import describe_same_header
-from app_utils.fips_codes import get_same_lookup, get_us_state_county_tree
+from app_utils.fips_codes import get_extended_same_lookup, get_us_state_county_tree
 from app_utils.pdf_generator import generate_pdf_document
 
 
@@ -334,7 +334,7 @@ def _build_location_details(
     if not header:
         return []
 
-    lookup_map = lookup or get_same_lookup()
+    lookup_map = lookup or get_extended_same_lookup()
     if state_index is None:
         state_index = {
             str(state.get('state_fips') or '').zfill(2): {

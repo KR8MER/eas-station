@@ -682,8 +682,8 @@ def _extract_alert_display_data(alert) -> Optional[Dict[str, Any]]:
 
         # Decode SAME codes to location names
         try:
-            from app_utils.fips_codes import get_same_lookup
-            fips_lookup = get_same_lookup()
+            from app_utils.fips_codes import get_extended_same_lookup
+            fips_lookup = get_extended_same_lookup()
             decoded_same = []
             for code in same_codes:
                 label = fips_lookup.get(code, '')

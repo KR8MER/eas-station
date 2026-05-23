@@ -25,7 +25,7 @@ from email.message import EmailMessage
 from typing import Any, Dict, List, Optional, Tuple
 
 from app_utils.event_codes import EVENT_CODE_REGISTRY
-from app_utils.fips_codes import get_same_lookup
+from app_utils.fips_codes import get_extended_same_lookup
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +98,7 @@ def send_eas_alert_email(
     event_name = event_entry.get("name") if event_entry else None
     event_label = f"{event_code} - {event_name}" if event_name else event_code
 
-    fips_lookup = get_same_lookup()
+    fips_lookup = get_extended_same_lookup()
     location_labels = []
     for code in location_codes:
         name = fips_lookup.get(code)
