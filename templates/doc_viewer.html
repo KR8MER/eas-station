@@ -28,8 +28,24 @@
             });
         }
 
+        // Hardcoded `style nodeId fill:#fff,...` and `classDef name fill:#fff,...`
+        // directives in the markdown override the Mermaid theme, which makes
+        // those diagrams unreadable on dark site themes (white blocks on a
+        // dark page). When the site is in dark mode, strip those lines so
+        // Mermaid's dark palette controls the colors. Light mode keeps the
+        // original source so authored colors render as intended.
+        function stripHardcodedColorDirectives(source) {
+            return source
+                .split('\n')
+                .filter(function(line) {
+                    return !/^\s*(style|classDef|linkStyle)\s+/.test(line);
+                })
+                .join('\n');
+        }
+
         function renderAll() {
             captureSources();
+            const mode = document.documentElement.getAttribute('data-theme-mode');
             mermaid.initialize({
                 startOnLoad: false,
                 theme: mermaidThemeForMode(),
@@ -37,7 +53,8 @@
             });
             document.querySelectorAll('.mermaid').forEach(function(el) {
                 el.removeAttribute('data-processed');
-                el.innerHTML = el.dataset.mermaidSource;
+                const src = el.dataset.mermaidSource;
+                el.innerHTML = mode === 'dark' ? stripHardcodedColorDirectives(src) : src;
             });
             mermaid.run({ querySelector: '.mermaid' });
         }
