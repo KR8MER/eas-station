@@ -795,7 +795,9 @@
        ============================================================ */
     .gps-status-strip {
         display: grid;
-        grid-template-columns: repeat(7, minmax(0, 1fr));
+        /* Wider weight for the two operator-critical tiles (Sync, PPS Lock)
+           so triage works at a glance from across the room. */
+        grid-template-columns: 2fr 1fr 2fr 1fr 1fr 1fr 1fr;
         gap: 8px;
         margin: 0 0 14px 0;
     }
@@ -812,6 +814,16 @@
         min-width: 0;
         transition: border-left-color 0.45s ease, background-color 0.45s ease;
     }
+    /* Primary tiles (Sync, PPS Lock): bigger readout and a heavier accent
+       so they read first when the eye scans the strip. Selectors target
+       the existing IDs so no markup changes are needed. */
+    #strip-sync, #strip-pps {
+        border-left-width: 5px;
+        padding: 12px 14px;
+    }
+    #strip-sync .lbl, #strip-pps .lbl { font-size: 0.72rem; }
+    #strip-sync .val, #strip-pps .val { font-size: 1.55rem; }
+    #strip-sync .sub, #strip-pps .sub { font-size: 0.74rem; }
     .gps-status-tile .lbl {
         font-size: 0.66rem;
         font-weight: 700;
@@ -889,11 +901,14 @@
 
     @media (max-width: 1100px) {
         .gps-status-strip { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        #strip-sync .val, #strip-pps .val { font-size: 1.28rem; }
     }
     @media (max-width: 720px) {
         .gps-status-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
         .gps-status-tile { padding: 8px 10px; }
         .gps-status-tile .val { font-size: 1.02rem; }
+        #strip-sync, #strip-pps { padding: 10px 12px; }
+        #strip-sync .val, #strip-pps .val { font-size: 1.15rem; }
     }
 
     /* ============================================================
@@ -1087,6 +1102,63 @@
     .gps-section-head .hint {
         font-size: 0.70rem;
         color: var(--text-muted, #8b949e);
+    }
+
+    /* Time-series data-window selector — promoted to a real, scannable
+       control rather than a tiny inline select. Lives inside the
+       Engineering section header. */
+    .ts-window-section { align-items: center; gap: 12px; }
+    .ts-window-control {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 4px 6px 4px 10px;
+        margin: 0;
+        border: 1px solid var(--border-color, rgba(127,127,127,.28));
+        border-radius: 999px;
+        background: var(--bg-secondary, rgba(127,127,127,.05));
+        cursor: pointer;
+        transition: border-color 0.2s ease, background-color 0.2s ease;
+    }
+    .ts-window-control:hover,
+    .ts-window-control:focus-within {
+        border-color: rgba(88, 166, 255, 0.6);
+        background: rgba(88, 166, 255, 0.06);
+    }
+    .ts-window-control-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.10em;
+        text-transform: uppercase;
+        color: var(--text-muted, #8b949e);
+    }
+    .ts-window-control-label i {
+        font-size: 0.78rem;
+        color: #58a6ff;
+        opacity: 0.85;
+    }
+    .ts-window-select {
+        width: auto;
+        min-width: 7.5em;
+        font-size: 0.82rem;
+        font-weight: 600;
+        padding: 4px 28px 4px 10px;
+        border-radius: 999px;
+        border: 1px solid var(--border-color, rgba(127,127,127,.30));
+        background-color: var(--bg-primary, rgba(255,255,255,.02));
+    }
+    .ts-window-resolution {
+        font-size: 0.68rem;
+        color: var(--text-muted, #8b949e);
+        font-variant-numeric: tabular-nums;
+        padding-right: 4px;
+    }
+    @media (max-width: 720px) {
+        .ts-window-section { flex-wrap: wrap; }
+        .ts-window-control { width: 100%; justify-content: space-between; }
     }
 
     /* Wrap the engineering-only diagnostics behind a <details> on
@@ -1728,12 +1800,15 @@
         </div>
     </div>
 
-    <div class="gps-section-head" data-view="engineering">
+    <div class="gps-section-head ts-window-section" data-view="engineering">
         <h2>Engineering · Time-series</h2>
         <span class="rule"></span>
-        <label class="hint" style="display:flex;align-items:center;gap:6px;margin:0;">
-            <span>data window</span>
-            <select id="ts-window-select" class="form-select form-select-sm" style="width:auto;min-width:7em;">
+        <label class="ts-window-control" for="ts-window-select">
+            <span class="ts-window-control-label">
+                <i class="fas fa-clock-rotate-left" aria-hidden="true"></i>
+                Window
+            </span>
+            <select id="ts-window-select" class="form-select form-select-sm ts-window-select">
                 <option value="1h">1 hour</option>
                 <option value="6h">6 hours</option>
                 <option value="24h">24 hours</option>
@@ -1741,7 +1816,7 @@
                 <option value="30d">30 days</option>
                 <option value="90d">90 days</option>
             </select>
-            <span id="ts-window-resolution" class="text-muted small">resolution: 5 s</span>
+            <span id="ts-window-resolution" class="ts-window-resolution">resolution: 5 s</span>
         </label>
     </div>
 
