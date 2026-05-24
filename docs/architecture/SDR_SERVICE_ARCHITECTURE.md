@@ -6,74 +6,41 @@ The EAS Station™ uses a **dual-service architecture** for SDR (Software Define
 
 ## Architecture Diagram
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           HOST SYSTEM                                        │
-│  ┌─────────────────┐                                                        │
-│  │  USB SDR Device │  (Airspy R2, RTL-SDR, etc.)                           │
-│  │  /dev/bus/usb   │                                                        │
-│  └────────┬────────┘                                                        │
-└───────────┼─────────────────────────────────────────────────────────────────┘
-            │ USB passthrough
-            ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                     SDR SERVICE CONTAINER                                    │
-│                     (sdr_service.py)                                        │
-│  ┌──────────────────────────────────────────────────────────────────────┐  │
-│  │                    Dual-Thread Architecture                           │  │
-│  │                                                                       │  │
-│  │  ┌─────────────────┐        ┌─────────────────┐                      │  │
-│  │  │ USB Reader      │        │ Ring Buffer     │                      │  │
-│  │  │ Thread          │───────▶│ (1 second)      │                      │  │
-│  │  │                 │        │                 │                      │  │
-│  │  │ • readStream()  │        │ • Lock-free     │                      │  │
-│  │  │ • Never blocks  │        │ • Overflow      │                      │  │
-│  │  │ • 100ms timeout │        │   detection     │                      │  │
-│  │  └─────────────────┘        └────────┬────────┘                      │  │
-│  │                                      │                                │  │
-│  │                                      ▼                                │  │
-│  │                          ┌─────────────────────┐                      │  │
-│  │                          │ Publisher Thread    │                      │  │
-│  │                          │                     │                      │  │
-│  │                          │ • FFT/Spectrum      │                      │  │
-│  │                          │ • Sample encoding   │                      │  │
-│  │                          │ • Redis publish     │                      │  │
-│  │                          └──────────┬──────────┘                      │  │
-│  └──────────────────────────────────────┼───────────────────────────────┘  │
-│                                         │                                   │
-│  Privileges:                            │                                   │
-│  • privileged: true                     │                                   │
-│  • USB device access                    │                                   │
-│  • Unlimited locked memory              │                                   │
-│  • 256MB shared memory                  │                                   │
-└─────────────────────────────────────────┼───────────────────────────────────┘
-                                          │ Redis pub/sub
-                                          │ (zlib compressed, base64 encoded)
-                                          ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                          REDIS                                               │
-│                                                                              │
-│  Channels:                               Keys:                               │
-│  • sdr:samples:{receiver_id}             • sdr:metrics (health data)        │
-│                                          • sdr:spectrum:{id} (waterfall)    │
-│                                          • sdr:ring_buffer:{id} (stats)     │
-│                                          • sdr:heartbeat                     │
-│                                          • sdr:commands (control queue)      │
-│                                          • sdr:command_result:{id}           │
-└─────────────────────────────────────────┬───────────────────────────────────┘
-                                          │
-                                          ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                     AUDIO SERVICE CONTAINER                                  │
-│                     (audio_service.py)                                      │
-│                                                                              │
-│  No USB access required - receives samples via Redis                         │
-│                                                                              │
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐             │
-│  │ Demodulation    │  │ EAS/SAME        │  │ Icecast         │             │
-│  │ (FM, AM, etc.)  │──│ Decoder         │──│ Streaming       │             │
-│  └─────────────────┘  └─────────────────┘  └─────────────────┘             │
-└─────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph host["HOST SYSTEM"]
+        usb["USB SDR Device<br/>(Airspy R2, RTL-SDR, etc.)<br/><code>/dev/bus/usb</code>"]
+    end
+
+    subgraph sdr["SDR SERVICE CONTAINER — <code>sdr_service.py</code>"]
+        direction TB
+        subgraph dual["Dual-Thread Architecture"]
+            direction LR
+            reader["USB Reader Thread<br/>• readStream()<br/>• Never blocks<br/>• 100 ms timeout"]
+            ring["Ring Buffer (1 s)<br/>• Lock-free<br/>• Overflow detection"]
+            pub["Publisher Thread<br/>• FFT / Spectrum<br/>• Sample encoding<br/>• Redis publish"]
+            reader --> ring --> pub
+        end
+        privs["Privileges:<br/>• privileged: true<br/>• USB device access<br/>• Unlimited locked memory<br/>• 256 MB shared memory"]
+    end
+
+    subgraph redis["REDIS"]
+        direction LR
+        channels["Channels<br/>• <code>sdr:samples:{receiver_id}</code>"]
+        keys["Keys<br/>• <code>sdr:metrics</code> (health)<br/>• <code>sdr:spectrum:{id}</code> (waterfall)<br/>• <code>sdr:ring_buffer:{id}</code> (stats)<br/>• <code>sdr:heartbeat</code><br/>• <code>sdr:commands</code> (control queue)<br/>• <code>sdr:command_result:{id}</code>"]
+    end
+
+    subgraph audio["AUDIO SERVICE CONTAINER — <code>audio_service.py</code><br/>No USB access required — receives samples via Redis"]
+        direction LR
+        demod["Demodulation<br/>(FM, AM, …)"]
+        decoder["EAS / SAME<br/>Decoder"]
+        icecast["Icecast<br/>Streaming"]
+        demod --> decoder --> icecast
+    end
+
+    usb -- "USB passthrough" --> reader
+    pub -- "Redis pub/sub<br/>(zlib compressed, base64 encoded)" --> channels
+    keys --> demod
 ```
 
 ## Components
