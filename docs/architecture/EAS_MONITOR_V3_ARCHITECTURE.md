@@ -36,45 +36,33 @@ The EAS Monitor V3 architecture represents a complete redesign of the EAS monito
 
 ### Previous Architecture (V2 - Multi-Monitor)
 
-```
-Audio Pipeline (Per Source):
-┌─────────────┐    ┌────────────────┐    ┌──────────────────────┐    ┌────────────┐
-│ Audio       │───>│ Broadcast      │───>│ Resampling           │───>│ EASMonitor │
-│ Source LP1  │    │ Queue LP1      │    │ Adapter (48k→16k)    │    │ (Thread 1) │
-└─────────────┘    └────────────────┘    └──────────────────────┘    └────────────┘
-                                                                             │
-                                                                             ├─> Health Tracker
-                                                                             └─> SAME Decoder
+```mermaid
+flowchart LR
+    subgraph LP1["Audio Pipeline — LP1"]
+        direction LR
+        src1["Audio Source LP1"] --> q1["Broadcast Queue LP1"] --> rs1["Resampling Adapter<br/>(48k → 16k)"] --> m1["EASMonitor (Thread 1)"]
+        m1 --> h1["Health Tracker"]
+        m1 --> d1["SAME Decoder"]
+    end
 
-┌─────────────┐    ┌────────────────┐    ┌──────────────────────┐    ┌────────────┐
-│ Audio       │───>│ Broadcast      │───>│ Resampling           │───>│ EASMonitor │
-│ Source LP2  │    │ Queue LP2      │    │ Adapter (48k→16k)    │    │ (Thread 2) │
-└─────────────┘    └────────────────┘    └──────────────────────┘    └────────────┘
-                                                                             │
-                                                                             ├─> Health Tracker
-                                                                             └─> SAME Decoder
+    subgraph LP2["Audio Pipeline — LP2"]
+        direction LR
+        src2["Audio Source LP2"] --> q2["Broadcast Queue LP2"] --> rs2["Resampling Adapter<br/>(48k → 16k)"] --> m2["EASMonitor (Thread 2)"]
+        m2 --> h2["Health Tracker"]
+        m2 --> d2["SAME Decoder"]
+    end
 
-┌─────────────┐    ┌────────────────┐    ┌──────────────────────┐    ┌────────────┐
-│ Audio       │───>│ Broadcast      │───>│ Resampling           │───>│ EASMonitor │
-│ Source SP1  │    │ Queue SP1      │    │ Adapter (48k→16k)    │    │ (Thread 3) │
-└─────────────┘    └────────────────┘    └──────────────────────┘    └────────────┘
-                                                                             │
-                                                                             ├─> Health Tracker
-                                                                             └─> SAME Decoder
+    subgraph SP1["Audio Pipeline — SP1"]
+        direction LR
+        src3["Audio Source SP1"] --> q3["Broadcast Queue SP1"] --> rs3["Resampling Adapter<br/>(48k → 16k)"] --> m3["EASMonitor (Thread 3)"]
+        m3 --> h3["Health Tracker"]
+        m3 --> d3["SAME Decoder"]
+    end
 
-                                          ┌──────────────────────────┐
-                                          │ MultiMonitorManager      │
-                                          │                          │
-                                          │ monitors = {             │
-                                          │   'LP1': monitor1,       │
-                                          │   'LP2': monitor2,       │
-                                          │   'SP1': monitor3        │
-                                          │ }                        │
-                                          │                          │
-                                          │ get_status():            │
-                                          │   Loop through monitors  │
-                                          │   Aggregate stats        │
-                                          └──────────────────────────┘
+    mgr["MultiMonitorManager<br/>monitors = { LP1: monitor1, LP2: monitor2, SP1: monitor3 }<br/>get_status() — loop through monitors, aggregate stats"]
+    m1 -.-> mgr
+    m2 -.-> mgr
+    m3 -.-> mgr
 ```
 
 **Problems:**
@@ -86,73 +74,24 @@ Audio Pipeline (Per Source):
 
 ### New Architecture (V3 - Unified)
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                    UnifiedEASMonitorService (Single Thread)                 │
-│                                                                             │
-│  Monitor Loop:                                                              │
-│  1. Auto-discover sources every 5s                                          │
-│  2. Poll each SourceWatcher for audio                                       │
-│  3. Process through shared decoder                                          │
-│  4. Update centralized health                                               │
-│                                                                             │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │                         Source Watchers                             │   │
-│  │                                                                     │   │
-│  │  ┌────────────────┐    ┌────────────────────┐                      │   │
-│  │  │ SourceWatcher  │    │ Resampling         │                      │   │
-│  │  │ [LP1]          │───>│ Adapter            │──┐                   │   │
-│  │  │                │    │ (48k→16k)          │  │                   │   │
-│  │  └────────────────┘    └────────────────────┘  │                   │   │
-│  │         ↑                                       │                   │   │
-│  │         │ subscribes                            │                   │   │
-│  │         │                                       │                   │   │
-│  │  ┌──────────────┐                               │                   │   │
-│  │  │ Broadcast    │                               │                   │   │
-│  │  │ Queue LP1    │                               │                   │   │
-│  │  └──────────────┘                               │                   │   │
-│  │                                                  │                   │   │
-│  │  ┌────────────────┐    ┌────────────────────┐  │                   │   │
-│  │  │ SourceWatcher  │    │ Resampling         │  │                   │   │
-│  │  │ [LP2]          │───>│ Adapter            │──┤  Audio Samples    │   │
-│  │  │                │    │ (48k→16k)          │  │  (16kHz)          │   │
-│  │  └────────────────┘    └────────────────────┘  │                   │   │
-│  │         ↑                                       │                   │   │
-│  │         │ subscribes                            ├──────────────┐    │   │
-│  │         │                                       │              │    │   │
-│  │  ┌──────────────┐                               │              ↓    │   │
-│  │  │ Broadcast    │                               │      ┌─────────────┐ │
-│  │  │ Queue LP2    │                               │      │   Shared    │ │
-│  │  └──────────────┘                               │      │   SAME      │ │
-│  │                                                  │      │   Decoder   │ │
-│  │  ┌────────────────┐    ┌────────────────────┐  │      └─────────────┘ │
-│  │  │ SourceWatcher  │    │ Resampling         │  │              │    │   │
-│  │  │ [SP1]          │───>│ Adapter            │──┘              │    │   │
-│  │  │                │    │ (48k→16k)          │                 │    │   │
-│  │  └────────────────┘    └────────────────────┘                 │    │   │
-│  │         ↑                                                      │    │   │
-│  │         │ subscribes                                           │    │   │
-│  │         │                                                      │    │   │
-│  │  ┌──────────────┐                                              │    │   │
-│  │  │ Broadcast    │                                              │    │   │
-│  │  │ Queue SP1    │                                              │    │   │
-│  │  └──────────────┘                                              │    │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                                                                             │
-│  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │                    Centralized Health Tracker                       │   │
-│  │                                                                     │   │
-│  │  LP1: { audio_flowing: true, samples: 123456, errors: 0 }          │   │
-│  │  LP2: { audio_flowing: true, samples: 234567, errors: 0 }          │   │
-│  │  SP1: { audio_flowing: false, samples: 0, errors: 2 }              │   │
-│  └─────────────────────────────────────────────────────────────────────┘   │
-│                                                                             │
-│                                          Alert Detected                     │
-│                                                  │                          │
-│                                                  ↓                          │
-│                                          Alert Callback                     │
-│                                          (with source name)                 │
-└─────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph svc["UnifiedEASMonitorService (Single Thread)<br/>Loop: 1) auto-discover sources every 5 s &nbsp;·&nbsp; 2) poll each SourceWatcher &nbsp;·&nbsp; 3) process through shared decoder &nbsp;·&nbsp; 4) update centralized health"]
+        direction LR
+        subgraph watchers["Source Watchers"]
+            direction LR
+            q1["Broadcast Queue LP1"] -. subscribes .- w1["SourceWatcher [LP1]"] --> r1["Resampling Adapter<br/>(48k → 16k)"]
+            q2["Broadcast Queue LP2"] -. subscribes .- w2["SourceWatcher [LP2]"] --> r2["Resampling Adapter<br/>(48k → 16k)"]
+            q3["Broadcast Queue SP1"] -. subscribes .- w3["SourceWatcher [SP1]"] --> r3["Resampling Adapter<br/>(48k → 16k)"]
+        end
+        decoder["Shared SAME Decoder"]
+        health["Centralized Health Tracker<br/>LP1: { audio_flowing: true, samples: 123456, errors: 0 }<br/>LP2: { audio_flowing: true, samples: 234567, errors: 0 }<br/>SP1: { audio_flowing: false, samples: 0, errors: 2 }"]
+        r1 -- "Audio Samples (16 kHz)" --> decoder
+        r2 -- "Audio Samples (16 kHz)" --> decoder
+        r3 -- "Audio Samples (16 kHz)" --> decoder
+        decoder --> health
+    end
+    decoder -- "Alert Detected" --> cb["Alert Callback<br/>(with source name)"]
 ```
 
 ---

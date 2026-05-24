@@ -21,6 +21,7 @@ from __future__ import annotations
 
 """Tests that enforce release governance expectations for contributors."""
 
+import importlib.util
 import re
 import sys
 from pathlib import Path
@@ -29,7 +30,24 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from app_utils import versioning
+
+def _load_versioning_standalone():
+    """Load app_utils/versioning.py without triggering app_utils/__init__.py.
+
+    The package init eagerly imports submodules that require third-party deps
+    (pytz, psutil, sqlalchemy, ...). This metadata test only needs the
+    pure-stdlib versioning module, so load it directly from its file path.
+    """
+    spec = importlib.util.spec_from_file_location(
+        "app_utils_versioning_standalone",
+        ROOT / "app_utils" / "versioning.py",
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+versioning = _load_versioning_standalone()
 VERSION_FILE = ROOT / "VERSION"
 CHANGELOG_FILE = ROOT / "docs" / "reference" / "CHANGELOG.md"
 ENV_TEMPLATE = ROOT / ".env.example"
