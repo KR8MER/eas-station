@@ -886,6 +886,17 @@ class ApplicationSettings(db.Model):
     # auto-backup scheduler stores its config file.
 
     # ========================================================================
+    # Dashboard Branding
+    # ========================================================================
+    dashboard_headline = db.Column(db.String(120), nullable=False, default='')
+    # Optional headline (call letters, agency name, etc.) shown above the
+    # main dashboard title. Empty string falls back to the default title.
+
+    dashboard_subtitle = db.Column(db.String(160), nullable=False, default='')
+    # Optional subtitle shown beneath the headline. Empty string falls
+    # back to the configured county/state location line.
+
+    # ========================================================================
     # Password Policy
     # ========================================================================
     password_min_length = db.Column(db.Integer, nullable=False, default=8)
@@ -918,6 +929,8 @@ class ApplicationSettings(db.Model):
             "log_file": self.log_file,
             "upload_folder": self.upload_folder,
             "backup_dir": self.backup_dir,
+            "dashboard_headline": self.dashboard_headline or "",
+            "dashboard_subtitle": self.dashboard_subtitle or "",
             "password_min_length": self.password_min_length,
             "password_require_uppercase": self.password_require_uppercase,
             "password_require_lowercase": self.password_require_lowercase,

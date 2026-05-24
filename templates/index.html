@@ -473,14 +473,18 @@
 <div class="container-fluid">
     {% set county_name = location_settings.county_name if location_settings is defined and location_settings and location_settings.county_name else 'your area' %}
     {% set state_code = location_settings.state_code if location_settings is defined and location_settings and location_settings.state_code else '' %}
+    {% set custom_headline = (branding_settings.dashboard_headline if branding_settings is defined and branding_settings else '') %}
+    {% set custom_subtitle = (branding_settings.dashboard_subtitle if branding_settings is defined and branding_settings else '') %}
+    {% set header_title = custom_headline if custom_headline else 'Emergency Alert Dashboard' %}
+    {% set header_subtitle = custom_subtitle if custom_subtitle else (county_name ~ (', ' ~ state_code if state_code else '')) %}
     <div class="page-header">
         <div class="container-fluid">
             <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
                 <div>
                     <h1 class="page-title mb-0">
-                        <i class="fas fa-gauge-high me-2"></i>Emergency Alert Dashboard
+                        <i class="fas fa-gauge-high me-2"></i>{{ header_title }}
                     </h1>
-                    <p class="page-subtitle mb-0">{{ county_name }}{% if state_code %}, {{ state_code }}{% endif %}</p>
+                    <p class="page-subtitle mb-0">{{ header_subtitle }}</p>
                 </div>
                 <div class="page-header-actions">
                     <button class="btn btn-outline-light" onclick="refreshData({ includeBoundaries: true, reason: 'Manual refresh' })">
@@ -625,24 +629,6 @@
         </div>
 
         <div class="col-lg-8 col-xxl-9 order-1 order-lg-2 d-flex flex-column gap-4">
-            <div class="d-flex flex-wrap align-items-center gap-2 quick-actions-strip">
-                <a href="{{ url_for('audio_history') }}" class="btn btn-sm btn-outline-primary">
-                    <i class="fas fa-headphones me-1"></i>Audio Archive
-                </a>
-                <a href="/stats" class="btn btn-sm btn-outline-info">
-                    <i class="fas fa-chart-bar me-1"></i>Statistics
-                </a>
-                <a href="/admin" class="btn btn-sm btn-outline-secondary">
-                    <i class="fas fa-cog me-1"></i>Admin Panel
-                </a>
-                <button class="btn btn-sm btn-outline-warning" onclick="centerOnConfiguredLocation()">
-                    <i class="fas fa-crosshairs me-1"></i>Center on {{ county_name }}
-                </button>
-                <button class="btn btn-sm btn-outline-success" onclick="inspectBoundaries()">
-                    <i class="fas fa-search me-1"></i>Inspect Boundaries
-                </button>
-            </div>
-
             <div class="card map-card shadow-sm">
                 <div class="card-header">
                     <div class="d-flex align-items-center gap-2">

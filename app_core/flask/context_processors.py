@@ -55,6 +55,19 @@ def inject_global_vars(app) -> dict:
         except Exception as exc:  # pragma: no cover - defensive logging
             logger.warning('Failed to load location settings; continuing without defaults: %s', exc)
             location_settings = {}
+
+    branding_settings = {'dashboard_headline': '', 'dashboard_subtitle': ''}
+    if not setup_mode_active:
+        try:
+            from app_core.models import ApplicationSettings
+            app_settings = ApplicationSettings.query.first()
+            if app_settings is not None:
+                branding_settings = {
+                    'dashboard_headline': getattr(app_settings, 'dashboard_headline', '') or '',
+                    'dashboard_subtitle': getattr(app_settings, 'dashboard_subtitle', '') or '',
+                }
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.debug('Branding settings unavailable; falling back to defaults: %s', exc)
     
     return {
         'current_utc_time': utc_now(),
@@ -92,6 +105,7 @@ def inject_global_vars(app) -> dict:
             )
         },
         'location_settings': location_settings,
+        'branding_settings': branding_settings,
         'boundary_type_config': BOUNDARY_TYPE_CONFIG,
         'boundary_group_labels': BOUNDARY_GROUP_LABELS,
         'current_user': getattr(g, 'current_user', None),
