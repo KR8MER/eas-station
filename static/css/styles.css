@@ -2530,66 +2530,22 @@ footer a:hover {
     border-radius: 2px;
 }
 
-.tech-stack-details {
-    width: 100%;
-}
-
-.tech-stack-details > summary {
-    list-style: none;
-    cursor: pointer;
-}
-
-.tech-stack-details > summary::-webkit-details-marker {
-    display: none;
-}
-
 .tech-stack-title {
     font-size: 0.85rem;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.15em;
     text-align: center;
-    margin-bottom: 0;
+    margin-bottom: 1.5rem;
     opacity: 0.95;
     position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.25rem;
+    display: inline-block;
     width: 100%;
-    padding: 0.75rem 1rem;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.10);
-    transition: background 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
-}
-
-.tech-stack-title:hover,
-.tech-stack-details[open] > .tech-stack-title {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: rgba(255, 255, 255, 0.16);
-    opacity: 1;
 }
 
 .tech-stack-title i {
     color: var(--vibrant-teal);
     filter: drop-shadow(0 0 6px rgba(90, 200, 250, 0.5));
-}
-
-.tech-stack-chevron {
-    font-size: 0.75rem;
-    opacity: 0.7;
-    transition: transform 0.25s ease;
-    filter: none;
-    color: inherit;
-}
-
-.tech-stack-details[open] .tech-stack-chevron {
-    transform: rotate(180deg);
-}
-
-.tech-stack-details[open] .tech-stack-card {
-    margin-top: 1.5rem;
 }
 
 /* Glass card container for tech stack badges */
