@@ -552,129 +552,280 @@
             <div class="tab-pane fade" id="features" role="tabpanel">
                 <h3 class="mb-4">
                     <i class="fas fa-check-circle text-success me-2"></i>
-                    Installed Features
+                    Installed Features &amp; Software Stack
                 </h3>
 
+                <p class="text-muted">
+                    Live availability for hardware-dependent features comes from the runtime probe at startup.
+                    Core software features are always present in this build. The footer of every page shows the
+                    full version-pinned dependency stack.
+                </p>
+
+                {# ---------- Alerting core ---------- #}
+                <h4 class="mt-4 mb-2"><i class="fas fa-bullhorn me-2 text-primary"></i>Alerting Core</h4>
                 <div class="feature-grid">
                     <div class="feature-item">
-                        <div class="feature-icon available">
-                            <i class="fas fa-satellite-dish"></i>
-                        </div>
+                        <div class="feature-icon available"><i class="fas fa-satellite-dish"></i></div>
                         <div class="feature-info">
                             <div class="feature-name">CAP Alert Monitoring</div>
-                            <div class="feature-version">Core feature</div>
+                            <div class="feature-version">NOAA / NWS / IPAWS feeds</div>
                         </div>
                     </div>
-
                     <div class="feature-item">
-                        <div class="feature-icon available">
-                            <i class="fas fa-broadcast-tower"></i>
-                        </div>
+                        <div class="feature-icon available"><i class="fas fa-broadcast-tower"></i></div>
                         <div class="feature-info">
-                            <div class="feature-name">EAS Broadcasting</div>
-                            <div class="feature-version">Core feature</div>
+                            <div class="feature-name">EAS SAME Encoder / Decoder</div>
+                            <div class="feature-version">Header, attention tone, EOM</div>
                         </div>
                     </div>
+                    <div class="feature-item">
+                        <div class="feature-icon available"><i class="fas fa-map-marked-alt"></i></div>
+                        <div class="feature-info">
+                            <div class="feature-name">PostGIS Spatial Filtering</div>
+                            <div class="feature-version">County / zone polygon match</div>
+                        </div>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon available"><i class="fas fa-rss"></i></div>
+                        <div class="feature-info">
+                            <div class="feature-name">CAP Forwarding &amp; Webhooks</div>
+                            <div class="feature-version">Outbound integrations</div>
+                        </div>
+                    </div>
+                </div>
 
+                {# ---------- Hardware integrations ---------- #}
+                <h4 class="mt-4 mb-2"><i class="fas fa-microchip me-2 text-primary"></i>Hardware Integrations</h4>
+                <div class="feature-grid">
                     <div class="feature-item">
                         <div class="feature-icon {% if version_info.led_available %}available{% else %}unavailable{% endif %}">
                             <i class="fas fa-sign"></i>
                         </div>
                         <div class="feature-info">
-                            <div class="feature-name">LED Signs</div>
+                            <div class="feature-name">LED Signs (Alpha 9120C)</div>
                             <div class="feature-version">
                                 {% if version_info.led_available %}Available{% else %}Not configured{% endif %}
                             </div>
                         </div>
                     </div>
-
                     <div class="feature-item">
-                        <div class="feature-icon available">
+                        <div class="feature-icon {% if version_info.vfd_available %}available{% else %}unavailable{% endif %}">
                             <i class="fas fa-display"></i>
                         </div>
                         <div class="feature-info">
                             <div class="feature-name">VFD Display</div>
-                            <div class="feature-version">v2.1.0+</div>
+                            <div class="feature-version">
+                                {% if version_info.vfd_available %}Available{% else %}Not configured{% endif %}
+                            </div>
                         </div>
                     </div>
-
                     <div class="feature-item">
-                        <div class="feature-icon available">
+                        <div class="feature-icon {% if version_info.oled_available %}available{% else %}unavailable{% endif %}">
                             <i class="fas fa-tv"></i>
                         </div>
                         <div class="feature-info">
-                            <div class="feature-name">OLED Support</div>
-                            <div class="feature-version">v2.8.0+</div>
+                            <div class="feature-name">OLED Display (SSD1306)</div>
+                            <div class="feature-version">
+                                {% if version_info.oled_available %}Available{% else %}Not configured{% endif %}
+                            </div>
                         </div>
                     </div>
-
                     <div class="feature-item">
-                        <div class="feature-icon available">
+                        <div class="feature-icon {% if version_info.radio_available %}available{% else %}unavailable{% endif %}">
                             <i class="fas fa-radio"></i>
                         </div>
                         <div class="feature-info">
-                            <div class="feature-name">SDR/Radio</div>
-                            <div class="feature-version">v2.1.0+</div>
+                            <div class="feature-name">SDR Radio Receiver</div>
+                            <div class="feature-version">
+                                {% if version_info.radio_available %}SoapySDR / RTL-SDR / Airspy{% else %}Not detected{% endif %}
+                            </div>
                         </div>
                     </div>
-
                     <div class="feature-item">
-                        <div class="feature-icon available">
-                            <i class="fas fa-shield-alt"></i>
-                        </div>
-                        <div class="feature-info">
-                            <div class="feature-name">RBAC Security</div>
-                            <div class="feature-version">v2.3.0+</div>
-                        </div>
-                    </div>
-
-                    <div class="feature-item">
-                        <div class="feature-icon available">
-                            <i class="fas fa-microphone"></i>
-                        </div>
-                        <div class="feature-info">
-                            <div class="feature-name">Audio Subsystem</div>
-                            <div class="feature-version">v2.7.0+</div>
-                        </div>
-                    </div>
-
-                    <div class="feature-item">
-                        <div class="feature-icon available">
-                            <i class="fas fa-chart-line"></i>
-                        </div>
-                        <div class="feature-info">
-                            <div class="feature-name">Analytics</div>
-                            <div class="feature-version">v2.0.0+</div>
-                        </div>
-                    </div>
-
-                    <div class="feature-item">
-                        <div class="feature-icon available">
-                            <i class="fas fa-map-marked-alt"></i>
-                        </div>
-                        <div class="feature-info">
-                            <div class="feature-name">PostGIS Spatial</div>
-                            <div class="feature-version">Core feature</div>
-                        </div>
-                    </div>
-
-                    <div class="feature-item">
-                        <div class="feature-icon available">
-                            <i class="fas fa-plug"></i>
-                        </div>
+                        <div class="feature-icon available"><i class="fas fa-plug"></i></div>
                         <div class="feature-info">
                             <div class="feature-name">GPIO Control</div>
-                            <div class="feature-version">v2.1.0+</div>
+                            <div class="feature-version">Raspberry Pi rail</div>
                         </div>
                     </div>
-
                     <div class="feature-item">
-                        <div class="feature-icon available">
-                            <i class="fab fa-server"></i>
+                        <div class="feature-icon available"><i class="fas fa-satellite"></i></div>
+                        <div class="feature-info">
+                            <div class="feature-name">GPS / Stratum-1 NTP</div>
+                            <div class="feature-version">gpsd + chrony PPS refclock</div>
+                        </div>
+                    </div>
+                </div>
+
+                {# ---------- Audio / DSP ---------- #}
+                <h4 class="mt-4 mb-2"><i class="fas fa-wave-square me-2 text-primary"></i>Audio &amp; DSP</h4>
+                <div class="feature-grid">
+                    <div class="feature-item">
+                        <div class="feature-icon available"><i class="fas fa-tower-broadcast"></i></div>
+                        <div class="feature-info">
+                            <div class="feature-name">Icecast Streaming</div>
+                            <div class="feature-version">FM / AM mounts over HTTP</div>
+                        </div>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon available"><i class="fas fa-comment-dots"></i></div>
+                        <div class="feature-info">
+                            <div class="feature-name">Text-to-Speech</div>
+                            <div class="feature-version">eSpeak NG</div>
+                        </div>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon available"><i class="fas fa-file-audio"></i></div>
+                        <div class="feature-info">
+                            <div class="feature-name">Audio Decode</div>
+                            <div class="feature-version">FFmpeg + pydub (MP3/AAC/OGG)</div>
+                        </div>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon {% if version_info.alsa_available %}available{% else %}unavailable{% endif %}">
+                            <i class="fas fa-volume-high"></i>
                         </div>
                         <div class="feature-info">
-                            <div class="feature-name">Bare Metal Deployment</div>
-                            <div class="feature-version">Core feature</div>
+                            <div class="feature-name">ALSA Output</div>
+                            <div class="feature-version">
+                                {% if version_info.alsa_available %}Available{% else %}Unavailable{% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon {% if version_info.pulse_available %}available{% else %}unavailable{% endif %}">
+                            <i class="fas fa-headphones"></i>
+                        </div>
+                        <div class="feature-info">
+                            <div class="feature-name">PulseAudio Output</div>
+                            <div class="feature-version">
+                                {% if version_info.pulse_available %}Available{% else %}Unavailable{% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon {% if version_info.scipy_available %}available{% else %}unavailable{% endif %}">
+                            <i class="fas fa-square-root-variable"></i>
+                        </div>
+                        <div class="feature-info">
+                            <div class="feature-name">SciPy DSP Filters</div>
+                            <div class="feature-version">
+                                {% if version_info.scipy_available %}FIR / IIR / notch{% else %}Unavailable{% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon {% if version_info.numba_available %}available{% else %}unavailable{% endif %}">
+                            <i class="fas fa-bolt"></i>
+                        </div>
+                        <div class="feature-info">
+                            <div class="feature-name">Numba JIT Demod</div>
+                            <div class="feature-version">
+                                {% if version_info.numba_available %}SAME / RBDS JIT enabled{% else %}Disabled (pure NumPy){% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {# ---------- Security & auth ---------- #}
+                <h4 class="mt-4 mb-2"><i class="fas fa-shield-halved me-2 text-primary"></i>Security &amp; Auth</h4>
+                <div class="feature-grid">
+                    <div class="feature-item">
+                        <div class="feature-icon available"><i class="fas fa-user-shield"></i></div>
+                        <div class="feature-info">
+                            <div class="feature-name">RBAC</div>
+                            <div class="feature-version">Role-based access control</div>
+                        </div>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon {% if version_info.mfa_available %}available{% else %}unavailable{% endif %}">
+                            <i class="fas fa-mobile-screen"></i>
+                        </div>
+                        <div class="feature-info">
+                            <div class="feature-name">MFA (TOTP)</div>
+                            <div class="feature-version">
+                                {% if version_info.mfa_available %}PyOTP + QR enrolment{% else %}PyOTP not installed{% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon available"><i class="fas fa-link"></i></div>
+                        <div class="feature-info">
+                            <div class="feature-name">Tamper-Evident Audit Log</div>
+                            <div class="feature-version">Ed25519 + SHA-256 hash chain</div>
+                        </div>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon available"><i class="fas fa-lock"></i></div>
+                        <div class="feature-info">
+                            <div class="feature-name">TLS / HTTPS</div>
+                            <div class="feature-version">Nginx + Let's Encrypt</div>
+                        </div>
+                    </div>
+                </div>
+
+                {# ---------- Notifications & UI ---------- #}
+                <h4 class="mt-4 mb-2"><i class="fas fa-bell me-2 text-primary"></i>Notifications &amp; Dashboards</h4>
+                <div class="feature-grid">
+                    <div class="feature-item">
+                        <div class="feature-icon available"><i class="fas fa-sms"></i></div>
+                        <div class="feature-info">
+                            <div class="feature-name">Twilio SMS</div>
+                            <div class="feature-version">Alert + health notifications</div>
+                        </div>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon available"><i class="fas fa-bolt-lightning"></i></div>
+                        <div class="feature-info">
+                            <div class="feature-name">Live WebSocket Updates</div>
+                            <div class="feature-version">Flask-SocketIO + gevent</div>
+                        </div>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon available"><i class="fas fa-chart-line"></i></div>
+                        <div class="feature-info">
+                            <div class="feature-name">Analytics Dashboard</div>
+                            <div class="feature-version">Chart.js time-series</div>
+                        </div>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon available"><i class="fas fa-map"></i></div>
+                        <div class="feature-info">
+                            <div class="feature-name">Leaflet Maps</div>
+                            <div class="feature-version">Alert polygons &amp; coverage</div>
+                        </div>
+                    </div>
+                </div>
+
+                {# ---------- Deployment ---------- #}
+                <h4 class="mt-4 mb-2"><i class="fas fa-server me-2 text-primary"></i>Deployment</h4>
+                <div class="feature-grid">
+                    <div class="feature-item">
+                        <div class="feature-icon available"><i class="fas fa-cogs"></i></div>
+                        <div class="feature-info">
+                            <div class="feature-name">systemd Services</div>
+                            <div class="feature-version">eas-station, sdr_hardware_service, hardware_service, gps_manager</div>
+                        </div>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon available"><i class="fab fa-raspberry-pi"></i></div>
+                        <div class="feature-info">
+                            <div class="feature-name">Raspberry Pi Compatible</div>
+                            <div class="feature-version">Reference deployment target</div>
+                        </div>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon available"><i class="fas fa-database"></i></div>
+                        <div class="feature-info">
+                            <div class="feature-name">PostgreSQL + PostGIS</div>
+                            <div class="feature-version">Primary store, Alembic migrations</div>
+                        </div>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon available"><i class="fas fa-database"></i></div>
+                        <div class="feature-info">
+                            <div class="feature-name">Redis</div>
+                            <div class="feature-version">Pub/sub, cache, rate limit</div>
                         </div>
                     </div>
                 </div>
@@ -682,9 +833,10 @@
                 <div class="alert alert-info mt-4">
                     <h5 class="alert-heading"><i class="fas fa-info-circle me-2"></i>Feature Status</h5>
                     <p class="mb-0">
-                        This EAS Station™ installation includes all core features and professional-grade components
-                        for 24/7 emergency alert monitoring and broadcasting. Visit the
-                        <a href="/docs" class="alert-link">documentation</a> for detailed feature guides.
+                        Hardware-dependent rows reflect the live startup probe — see
+                        <strong>Admin &rarr; Hardware Settings</strong> to enable or reconfigure devices.
+                        The full version-pinned dependency stack (Python, Flask, NumPy, SciPy, Icecast, &hellip;)
+                        is shown in the footer of every page.
                     </p>
                 </div>
             </div>
@@ -750,11 +902,21 @@
                     <div class="col-md-6">
                         <div class="card h-100">
                             <div class="card-header bg-warning text-dark">
-                                <h5 class="mb-0"><i class="fas fa-puzzle-piece me-2"></i>Features</h5>
+                                <h5 class="mb-0"><i class="fas fa-puzzle-piece me-2"></i>Runtime Feature Probe</h5>
                             </div>
                             <div class="card-body">
+                                {% set yes = '<span class="badge bg-success"><i class="fas fa-check me-1"></i>Available</span>' %}
+                                {% set no  = '<span class="badge bg-secondary"><i class="fas fa-times me-1"></i>Not Available</span>' %}
                                 {% set items = [
-                                    {'label': 'LED Signs', 'value': ('<span class="badge bg-success"><i class="fas fa-check me-1"></i>Available</span>' if version_info.led_available else '<span class="badge bg-secondary"><i class="fas fa-times me-1"></i>Not Available</span>')}
+                                    {'label': 'LED Signs',        'value': (yes if version_info.led_available   else no)},
+                                    {'label': 'VFD Display',      'value': (yes if version_info.vfd_available   else no)},
+                                    {'label': 'OLED Display',     'value': (yes if version_info.oled_available  else no)},
+                                    {'label': 'SDR Radio',        'value': (yes if version_info.radio_available else no)},
+                                    {'label': 'ALSA Audio',       'value': (yes if version_info.alsa_available  else no)},
+                                    {'label': 'PulseAudio',       'value': (yes if version_info.pulse_available else no)},
+                                    {'label': 'MFA (TOTP)',       'value': (yes if version_info.mfa_available   else no)},
+                                    {'label': 'SciPy DSP',        'value': (yes if version_info.scipy_available else no)},
+                                    {'label': 'Numba JIT',        'value': (yes if version_info.numba_available else no)}
                                 ] %}
                                 {% include 'components/data_list.html' with context %}
                             </div>
