@@ -151,7 +151,9 @@
                     <div class="col-12 col-lg-4">
                         <div class="footer-brand-section">
                             <div class="footer-logo-mark">
-                                <i class="fas fa-broadcast-tower"></i>
+                                <img src="{{ url_for('static', filename='img/eas-app-icon.svg') }}?v={{ static_asset_version }}"
+                                     alt="EAS Station app icon"
+                                     class="footer-logo-mark-img">
                             </div>
                             <div class="footer-brand-text">
                                 <div class="footer-title">EAS Station™</div>

@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 512 512"
+     role="img"
+     aria-label="EAS Station">
+  <title>EAS Station app icon</title>
+  <desc>EAS Station — broadcast tower with signal waves and red beacon</desc>
+
+  <defs>
+    <linearGradient id="eas-icon-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"   stop-color="#3B82F6"/>
+      <stop offset="55%"  stop-color="#6366F1"/>
+      <stop offset="100%" stop-color="#8B5CF6"/>
+    </linearGradient>
+    <linearGradient id="eas-icon-sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"  stop-color="#ffffff" stop-opacity="0.28"/>
+      <stop offset="60%" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="eas-icon-beacon-glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0%"   stop-color="#ED1C24" stop-opacity="0.55"/>
+      <stop offset="70%"  stop-color="#ED1C24" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#ED1C24" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="eas-icon-squircle">
+      <rect x="0" y="0" width="512" height="512" rx="115" ry="115"/>
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#eas-icon-squircle)">
+    <!-- Chassis -->
+    <rect x="0" y="0" width="512" height="512" fill="url(#eas-icon-bg)"/>
+    <rect x="0" y="0" width="512" height="280" fill="url(#eas-icon-sheen)"/>
+
+    <!-- Mark: broadcast tower + signal arcs + beacon -->
+    <g transform="translate(256,256)"
+       fill="none"
+       stroke="#ffffff"
+       stroke-linecap="round"
+       stroke-linejoin="round">
+
+      <!-- Signal arcs, three pairs radiating outward from the antenna -->
+      <g stroke-width="14" opacity="0.95">
+        <path d="M -38,-128 Q -22,-148 -6,-128"/>
+        <path d="M  38,-128 Q  22,-148  6,-128"/>
+      </g>
+      <g stroke-width="13" opacity="0.78">
+        <path d="M -74,-140 Q -50,-172 -26,-140"/>
+        <path d="M  74,-140 Q  50,-172  26,-140"/>
+      </g>
+      <g stroke-width="12" opacity="0.55">
+        <path d="M -114,-152 Q -82,-194 -50,-152"/>
+        <path d="M  114,-152 Q  82,-194  50,-152"/>
+      </g>
+
+      <!-- Tower outline: triangular truss tapering from base to antenna -->
+      <path d="M -78,170 L 0,-96 L 78,170" stroke-width="18"/>
+
+      <!-- Central mast -->
+      <path d="M 0,-96 L 0,170" stroke-width="14"/>
+
+      <!-- Cross-braces (truss detail), spaced along the height -->
+      <g stroke-width="10" opacity="0.92">
+        <path d="M -68,138 L 68,138"/>
+        <path d="M -52,82  L 52,82"/>
+        <path d="M -36,28  L 36,28"/>
+        <path d="M -22,-22 L 22,-22"/>
+        <path d="M -10,-66 L 10,-66"/>
+      </g>
+    </g>
+
+    <!-- Red beacon glow + dot, on top of the antenna -->
+    <circle cx="256" cy="160" r="44" fill="url(#eas-icon-beacon-glow)"/>
+    <circle cx="256" cy="160" r="14" fill="#ED1C24"/>
+    <circle cx="256" cy="160" r="14" fill="none" stroke="#ffffff" stroke-width="3" opacity="0.85"/>
+  </g>
+</svg>
