@@ -830,13 +830,22 @@
                     </div>
                 </div>
 
+                {# ---------- Pinned software stack ---------- #}
+                <h4 class="mt-4 mb-2"><i class="fas fa-layer-group me-2 text-primary"></i>Software Stack (pinned versions)</h4>
+                <p class="text-muted mb-2">
+                    Canonical dependency list, kept in sync with <code>requirements.txt</code> by
+                    <code>tests/test_tech_stack_badges.py</code>. Hover any badge for a one-line
+                    description of how that library is used inside EAS Station.
+                </p>
+                {% include 'partials/tech_stack_badges.html' %}
+
                 <div class="alert alert-info mt-4">
                     <h5 class="alert-heading"><i class="fas fa-info-circle me-2"></i>Feature Status</h5>
                     <p class="mb-0">
                         Hardware-dependent rows reflect the live startup probe — see
                         <strong>Admin &rarr; Hardware Settings</strong> to enable or reconfigure devices.
-                        The full version-pinned dependency stack (Python, Flask, NumPy, SciPy, Icecast, &hellip;)
-                        is shown in the footer of every page.
+                        Software stack versions above are the build-time pins; the running Python
+                        interpreter, host platform, and hostname are reported on the System Info tab.
                     </p>
                 </div>
             </div>
@@ -893,6 +902,22 @@
                                     {'label': 'Timezone', 'value': version_info.timezone},
                                     {'label': 'Local Time', 'value': '<code>' ~ version_info.local_timestamp ~ '</code>'},
                                     {'label': 'UTC Time', 'value': '<code>' ~ version_info.timestamp ~ '</code>'}
+                                ] %}
+                                {% include 'components/data_list.html' with context %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="card h-100">
+                            <div class="card-header bg-dark text-white">
+                                <h5 class="mb-0"><i class="fas fa-microchip me-2"></i>Runtime Environment</h5>
+                            </div>
+                            <div class="card-body">
+                                {% set items = [
+                                    {'label': 'Python',   'value': '<code>' ~ version_info.python_version ~ '</code>'},
+                                    {'label': 'Platform', 'value': '<code>' ~ version_info.platform ~ '</code>'},
+                                    {'label': 'Hostname', 'value': '<code>' ~ version_info.hostname ~ '</code>'}
                                 ] %}
                                 {% include 'components/data_list.html' with context %}
                             </div>
