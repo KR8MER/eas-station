@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg"
-     viewBox="0 0 2080 360"
+     viewBox="0 0 2080 325"
      role="img"
      aria-label="EAS Station">
   <title>EAS Station wordmark</title>
@@ -26,10 +26,10 @@
     .logo-tagline {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
                    "Helvetica Neue", Arial, "Liberation Sans", sans-serif;
-      font-weight: 600;
-      font-size: 32px;
-      letter-spacing: 5px;
-      fill: rgba(255, 255, 255, 0.88);
+      font-weight: 700;
+      font-size: 44px;
+      letter-spacing: 2.5px;
+      fill: rgba(255, 255, 255, 0.92);
     }
     .logo-bar-neutral { fill: #e2e8f0; }
     .logo-bar-accent  { fill: #ED1C24; }

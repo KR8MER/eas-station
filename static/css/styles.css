@@ -1631,7 +1631,7 @@ small,
 
 .navbar-brand .logo-wordmark,
 .navbar-brand .brand-logo {
-    height: 56px;
+    height: 72px;
     width: auto;
 }
 
@@ -7550,9 +7550,9 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
 }
 .eas-hero-logo,
 .about-hero-logo {
-    max-width: 460px;
+    max-width: 680px;
     width: 100%;
-    padding: 1rem 1.5rem;
+    padding: 1.25rem 1.75rem;
     border-radius: var(--radius-xl);
     background: rgba(255, 255, 255, 0.94);
     backdrop-filter: blur(6px);
