@@ -94,6 +94,43 @@
                     </div>
                 </div>
 
+                <!-- Dashboard Branding -->
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-bullhorn"></i> Dashboard Header</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="dashboard_headline" class="form-label">
+                                <i class="fas fa-heading"></i> Headline
+                            </label>
+                            <input type="text" class="form-control" id="dashboard_headline"
+                                   name="dashboard_headline" maxlength="120"
+                                   value="{{ settings.dashboard_headline or '' }}"
+                                   placeholder="e.g. KR8MER, Putnam County EMA, WXYZ-FM">
+                            <div class="form-text">
+                                Optional. Replaces the default
+                                &ldquo;Emergency Alert Dashboard&rdquo; title on the home page.
+                                Leave blank to keep the default. Max 120 characters.
+                            </div>
+                        </div>
+
+                        <div class="mb-0">
+                            <label for="dashboard_subtitle" class="form-label">
+                                <i class="fas fa-quote-left"></i> Subtitle
+                            </label>
+                            <input type="text" class="form-control" id="dashboard_subtitle"
+                                   name="dashboard_subtitle" maxlength="160"
+                                   value="{{ settings.dashboard_subtitle or '' }}"
+                                   placeholder="e.g. Emergency Management Agency">
+                            <div class="form-text">
+                                Optional. Replaces the location line shown beneath the headline.
+                                Leave blank to show the configured county and state. Max 160 characters.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Password Policy -->
                 <div class="card mb-3">
                     <div class="card-header">

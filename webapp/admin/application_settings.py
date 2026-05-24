@@ -47,6 +47,8 @@ def _get_or_create_settings() -> ApplicationSettings:
             log_file='logs/eas_station.log',
             upload_folder='/opt/eas-station/uploads',
             backup_dir='/var/backups/eas-station',
+            dashboard_headline='',
+            dashboard_subtitle='',
             password_min_length=8,
             password_require_uppercase=False,
             password_require_lowercase=False,
@@ -67,6 +69,8 @@ def _fallback_application_settings():
         log_file='logs/eas_station.log',
         upload_folder='/opt/eas-station/uploads',
         backup_dir='/var/backups/eas-station',
+        dashboard_headline='',
+        dashboard_subtitle='',
         password_min_length=8,
         password_require_uppercase=False,
         password_require_lowercase=False,
@@ -150,6 +154,19 @@ def update_application_settings():
                 "Backups will fail until the path exists and is writable."
             )
         settings.backup_dir = backup_dir
+
+        # Dashboard branding (optional, may be blank to use defaults)
+        dashboard_headline = request.form.get('dashboard_headline', '').strip()
+        if len(dashboard_headline) > 120:
+            return jsonify({'success': False,
+                            'error': 'Dashboard headline must be 120 characters or fewer'}), 400
+        settings.dashboard_headline = dashboard_headline
+
+        dashboard_subtitle = request.form.get('dashboard_subtitle', '').strip()
+        if len(dashboard_subtitle) > 160:
+            return jsonify({'success': False,
+                            'error': 'Dashboard subtitle must be 160 characters or fewer'}), 400
+        settings.dashboard_subtitle = dashboard_subtitle
 
         # Password policy
         try:
