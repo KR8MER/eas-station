@@ -2,6 +2,22 @@
 
 {% block title %}Received Audio Alerts - EAS Station™{% endblock %}
 
+{# Build a dict of currently-active filters so we can preserve them across
+   pagination links and offer one-click removal chips. Empty values are
+   stripped so they don't pollute URLs. #}
+{% set _active_filters = {
+    'search': search,
+    'source': source_filter,
+    'alert_source': alert_source_filter,
+    'event': event_filter,
+    'decision': decision_filter,
+    'originator': originator_filter,
+    'date_from': date_from,
+    'date_to': date_to,
+    'min_confidence': (min_confidence|string if min_confidence is not none else ''),
+    'per_page': (per_page|string if per_page and per_page != 25 else ''),
+} %}
+
 {% block content %}
 <div class="page-header">
     <div class="container-fluid">
@@ -24,8 +40,8 @@
 <div class="container-fluid">
 
             <!-- Statistics Cards -->
-            <div class="row mb-4">
-                <div class="col-md-3">
+            <div class="row mb-4 g-3">
+                <div class="col-6 col-md-3">
                     <div class="card bg-info-gradient text-white">
                         <div class="card-body text-center">
                             <h3 class="mb-0">{{ stats.total }}</h3>
@@ -33,7 +49,7 @@
                         </div>
                     </div>
                 </div>
-                <div class="col-md-3">
+                <div class="col-6 col-md-3">
                     <div class="card bg-success-gradient text-white">
                         <div class="card-body text-center">
                             <h3 class="mb-0">{{ stats.forwarded }}</h3>
@@ -41,7 +57,7 @@
                         </div>
                     </div>
                 </div>
-                <div class="col-md-3">
+                <div class="col-6 col-md-3">
                     <div class="card stat-card text-white">
                         <div class="card-body text-center">
                             <h3 class="mb-0">{{ stats.ignored }}</h3>
@@ -49,7 +65,7 @@
                         </div>
                     </div>
                 </div>
-                <div class="col-md-3">
+                <div class="col-6 col-md-3">
                     <div class="card bg-danger-gradient text-white">
                         <div class="card-body text-center">
                             <h3 class="mb-0">{{ stats.error }}</h3>
@@ -67,18 +83,23 @@
 
             <!-- Filters -->
             <div class="card mb-4">
-                <div class="card-header">
+                <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <h5 class="mb-0">
                         <i class="fas fa-filter"></i> Filters
                     </h5>
+                    {% if _active_filters.values()|select|list %}
+                    <a href="/audio/received" class="btn btn-sm btn-outline-secondary">
+                        <i class="fas fa-times"></i> Clear All
+                    </a>
+                    {% endif %}
                 </div>
                 <div class="card-body">
                     <form method="GET" class="row g-3 align-items-end">
-                        <div class="col-md-3">
+                        <div class="col-12 col-md-6 col-lg-4">
                             <label for="search" class="form-label">Search</label>
                             <input type="text" class="form-control" id="search" name="search" value="{{ search }}" placeholder="Search event, header, or callsign">
                         </div>
-                        <div class="col-md-2">
+                        <div class="col-6 col-md-4 col-lg-2">
                             <label for="source" class="form-label">Audio Source</label>
                             <select class="form-select" id="source" name="source">
                                 <option value="">All Sources</option>
@@ -87,7 +108,7 @@
                                 {% endfor %}
                             </select>
                         </div>
-                        <div class="col-md-2">
+                        <div class="col-6 col-md-4 col-lg-2">
                             <label for="alert_source" class="form-label">Ingest Path</label>
                             <select class="form-select" id="alert_source" name="alert_source">
                                 <option value="">All Paths</option>
@@ -95,7 +116,7 @@
                                 <option value="EAS-STREAM" {% if alert_source_filter == 'EAS-STREAM' %}selected{% endif %}>Stream (Internet)</option>
                             </select>
                         </div>
-                        <div class="col-md-2">
+                        <div class="col-6 col-md-4 col-lg-2">
                             <label for="event" class="form-label">Event Type</label>
                             <select class="form-select" id="event" name="event">
                                 <option value="">All Events</option>
@@ -104,7 +125,16 @@
                                 {% endfor %}
                             </select>
                         </div>
-                        <div class="col-md-2">
+                        <div class="col-6 col-md-4 col-lg-2">
+                            <label for="originator" class="form-label">Originator</label>
+                            <select class="form-select" id="originator" name="originator">
+                                <option value="">All Originators</option>
+                                {% for code, name in originators %}
+                                <option value="{{ code }}" {% if originator_filter == code %}selected{% endif %}>{{ code }}{% if name and name != code %} - {{ name }}{% endif %}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-6 col-md-4 col-lg-2">
                             <label for="decision" class="form-label">Decision</label>
                             <select class="form-select" id="decision" name="decision">
                                 <option value="">All Decisions</option>
@@ -113,19 +143,41 @@
                                 {% endfor %}
                             </select>
                         </div>
-                        <div class="col-md-2">
+                        <div class="col-6 col-md-4 col-lg-2">
+                            <label for="date_from" class="form-label">
+                                <i class="fas fa-calendar-alt"></i> From Date
+                            </label>
+                            <input type="date" class="form-control" id="date_from" name="date_from" value="{{ date_from or '' }}">
+                        </div>
+                        <div class="col-6 col-md-4 col-lg-2">
+                            <label for="date_to" class="form-label">
+                                <i class="fas fa-calendar-check"></i> To Date
+                            </label>
+                            <input type="date" class="form-control" id="date_to" name="date_to" value="{{ date_to or '' }}">
+                        </div>
+                        <div class="col-6 col-md-4 col-lg-2">
+                            <label for="min_confidence" class="form-label">Min Confidence</label>
+                            <select class="form-select" id="min_confidence" name="min_confidence">
+                                <option value="">Any</option>
+                                <option value="0.75" {% if min_confidence == 0.75 %}selected{% endif %}>≥ 75% (High)</option>
+                                <option value="0.50" {% if min_confidence == 0.5 %}selected{% endif %}>≥ 50% (Medium)</option>
+                                <option value="0.25" {% if min_confidence == 0.25 %}selected{% endif %}>≥ 25% (Low)</option>
+                            </select>
+                        </div>
+                        <div class="col-6 col-md-4 col-lg-2">
+                            <label for="per_page" class="form-label">Per Page</label>
+                            <select class="form-select" id="per_page" name="per_page">
+                                {% for n in [25, 50, 100] %}
+                                <option value="{{ n }}" {% if per_page == n %}selected{% endif %}>{{ n }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-12 col-lg-2">
                             <button type="submit" class="btn btn-primary w-100">
-                                <i class="fas fa-search"></i> Filter
+                                <i class="fas fa-search"></i> Apply Filters
                             </button>
                         </div>
                     </form>
-                    {% if search or source_filter or alert_source_filter or event_filter or decision_filter %}
-                    <div class="mt-2">
-                        <a href="/audio/received" class="btn btn-sm btn-outline-secondary">
-                            <i class="fas fa-times"></i> Clear Filters
-                        </a>
-                    </div>
-                    {% endif %}
                 </div>
             </div>
 
@@ -137,59 +189,94 @@
                         <span class="badge bg-secondary">{{ pagination.total }} total</span>
                     </h5>
                 </div>
+
+                {# Active filter chips — give the user a quick way to see and
+                   drop individual filters. #}
+                {% set _chip_labels = {
+                    'search': 'Search',
+                    'source': 'Source',
+                    'alert_source': 'Path',
+                    'event': 'Event',
+                    'decision': 'Decision',
+                    'originator': 'Originator',
+                    'date_from': 'From',
+                    'date_to': 'To',
+                    'min_confidence': 'Min confidence',
+                    'per_page': 'Per page',
+                } %}
+                {% set _chip_active = [] %}
+                {% for k, v in _active_filters.items() %}{% if v %}{% set _ = _chip_active.append(k) %}{% endif %}{% endfor %}
+                {% if _chip_active %}
+                <div class="eas-table-toolbar">
+                    <small class="text-muted me-1"><i class="fas fa-filter"></i> Active:</small>
+                    {% for k in _chip_active %}
+                    {% set _v = _active_filters[k] %}
+                    <span class="filter-chip">
+                        <span><strong>{{ _chip_labels[k] }}:</strong> {{ _v }}</span>
+                        {# Build remove-link by reconstructing the query string without this key. #}
+                        {% set _qs = [] %}
+                        {% for k2, v2 in _active_filters.items() %}{% if v2 and k2 != k %}{% set _ = _qs.append(k2 ~ '=' ~ v2) %}{% endif %}{% endfor %}
+                        <a href="?{{ _qs|join('&') }}" title="Remove this filter" aria-label="Remove {{ _chip_labels[k] }} filter">
+                            <i class="fas fa-times-circle"></i>
+                        </a>
+                    </span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
                 <div class="card-body p-0">
                     {% if alerts %}
                     <div class="table-responsive">
-                        <table class="table table-hover mb-0">
-                            <thead class="table-light">
+                        <table class="table eas-table mb-0">
+                            <thead>
                                 <tr>
-                                    <th style="width: 10%">Received</th>
-                                    <th style="width: 12%">Source</th>
-                                    <th style="width: 15%">Event</th>
-                                    <th style="width: 8%">Originator</th>
-                                    <th style="width: 15%">FIPS Codes</th>
-                                    <th style="width: 9%">Confidence</th>
-                                    <th style="width: 11%">Decision</th>
-                                    <th style="width: 18%">Reason</th>
-                                    <th style="width: 8%">Actions</th>
+                                    <th>Received</th>
+                                    <th>Source</th>
+                                    <th>Event</th>
+                                    <th>Originator</th>
+                                    <th>FIPS Codes</th>
+                                    <th>Confidence</th>
+                                    <th>Decision</th>
+                                    <th>Reason</th>
+                                    <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for alert in alerts %}
                                 <tr>
-                                    <td>
+                                    <td data-label="Received">
                                         <small>{{ alert.received_at.strftime('%Y-%m-%d %H:%M:%S') if alert.received_at else 'N/A' }}</small>
                                     </td>
-                                    <td>
+                                    <td data-label="Source">
                                         <span class="badge bg-info text-dark">{{ alert.source_name }}</span>
                                         {% if alert.alert_source == 'EAS-RF' %}
-                                        <br><span class="badge bg-warning text-dark mt-1"><i class="fas fa-broadcast-tower"></i> RF</span>
+                                        <span class="badge bg-warning text-dark ms-1"><i class="fas fa-broadcast-tower"></i> RF</span>
                                         {% elif alert.alert_source == 'EAS-STREAM' %}
-                                        <br><span class="badge bg-primary mt-1"><i class="fas fa-wifi"></i> Stream</span>
+                                        <span class="badge bg-primary ms-1"><i class="fas fa-wifi"></i> Stream</span>
                                         {% elif alert.alert_source %}
-                                        <br><span class="badge bg-secondary mt-1">{{ alert.alert_source }}</span>
+                                        <span class="badge bg-secondary ms-1">{{ alert.alert_source }}</span>
                                         {% endif %}
                                     </td>
-                                    <td>
+                                    <td data-label="Event">
                                         <strong>{{ alert.event_code }}</strong>
                                         {% if alert.event_name %}
                                         <br><small class="text-muted">{{ alert.event_name }}</small>
                                         {% endif %}
                                     </td>
-                                    <td>
+                                    <td data-label="Originator">
                                         <small>{{ alert.originator_code or 'N/A' }}</small>
                                         {% if alert.originator_name %}
                                         <br><small class="text-muted">{{ alert.originator_name }}</small>
                                         {% endif %}
                                     </td>
-                                    <td>
+                                    <td data-label="FIPS Codes">
                                         {% if alert.fips_codes %}
                                         <small>{{ alert.fips_codes|join(', ') }}</small>
                                         {% else %}
                                         <small class="text-muted">None</small>
                                         {% endif %}
                                     </td>
-                                    <td>
+                                    <td data-label="Confidence">
                                         {% if alert.decode_confidence is not none %}
                                         {% set pct = (alert.decode_confidence * 100) | round(1) %}
                                         {% if alert.decode_confidence >= 0.75 %}
@@ -203,7 +290,7 @@
                                         <span class="text-muted">—</span>
                                         {% endif %}
                                     </td>
-                                    <td>
+                                    <td data-label="Decision">
                                         {% if alert.forwarding_decision == 'forwarded' %}
                                         <span class="badge bg-success">
                                             <i class="fas fa-check"></i> Forwarded
@@ -218,12 +305,12 @@
                                         </span>
                                         {% endif %}
                                     </td>
-                                    <td>
+                                    <td data-label="Reason">
                                         <small class="text-muted">{{ alert.forwarding_reason or 'N/A' }}</small>
                                     </td>
                                     <td>
                                         <a href="/audio/received/{{ alert.id }}" class="btn btn-sm btn-outline-primary" title="View details">
-                                            <i class="fas fa-eye"></i>
+                                            <i class="fas fa-eye"></i> <span class="d-md-none">View Details</span>
                                         </a>
                                     </td>
                                 </tr>
@@ -241,49 +328,40 @@
 
                 <!-- Pagination -->
                 {% if pagination.pages > 1 %}
+                {# Carry every active filter through pagination links. #}
+                {% set _pager_qs = [] %}
+                {% for k, v in _active_filters.items() %}{% if v %}{% set _ = _pager_qs.append(k ~ '=' ~ v) %}{% endif %}{% endfor %}
+                {% set _pager_base = '?per_page=' ~ per_page %}
+                {% if _pager_qs %}{% set _pager_base = _pager_base ~ '&' ~ _pager_qs|join('&') %}{% endif %}
                 <div class="card-footer">
                     <nav aria-label="Alert pagination">
-                        <ul class="pagination justify-content-center mb-0">
+                        <ul class="pagination justify-content-center mb-0 flex-wrap">
                             {% if pagination.has_prev %}
                             <li class="page-item">
-                                <a class="page-link" href="?page={{ pagination.prev_num }}&per_page={{ per_page }}{% if search %}&search={{ search }}{% endif %}{% if source_filter %}&source={{ source_filter }}{% endif %}{% if event_filter %}&event={{ event_filter }}{% endif %}{% if decision_filter %}&decision={{ decision_filter }}{% endif %}">
-                                    Previous
-                                </a>
+                                <a class="page-link" href="{{ _pager_base }}&page={{ pagination.prev_num }}">Previous</a>
                             </li>
                             {% else %}
-                            <li class="page-item disabled">
-                                <span class="page-link">Previous</span>
-                            </li>
+                            <li class="page-item disabled"><span class="page-link">Previous</span></li>
                             {% endif %}
 
                             {% for p in range(1, pagination.pages + 1) %}
                                 {% if p == pagination.page %}
-                                <li class="page-item active">
-                                    <span class="page-link">{{ p }}</span>
-                                </li>
+                                <li class="page-item active"><span class="page-link">{{ p }}</span></li>
                                 {% elif p <= 3 or p > pagination.pages - 3 or (p >= pagination.page - 1 and p <= pagination.page + 1) %}
                                 <li class="page-item">
-                                    <a class="page-link" href="?page={{ p }}&per_page={{ per_page }}{% if search %}&search={{ search }}{% endif %}{% if source_filter %}&source={{ source_filter }}{% endif %}{% if event_filter %}&event={{ event_filter }}{% endif %}{% if decision_filter %}&decision={{ decision_filter }}{% endif %}">
-                                        {{ p }}
-                                    </a>
+                                    <a class="page-link" href="{{ _pager_base }}&page={{ p }}">{{ p }}</a>
                                 </li>
                                 {% elif p == 4 or p == pagination.pages - 3 %}
-                                <li class="page-item disabled">
-                                    <span class="page-link">...</span>
-                                </li>
+                                <li class="page-item disabled"><span class="page-link">…</span></li>
                                 {% endif %}
                             {% endfor %}
 
                             {% if pagination.has_next %}
                             <li class="page-item">
-                                <a class="page-link" href="?page={{ pagination.next_num }}&per_page={{ per_page }}{% if search %}&search={{ search }}{% endif %}{% if source_filter %}&source={{ source_filter }}{% endif %}{% if event_filter %}&event={{ event_filter }}{% endif %}{% if decision_filter %}&decision={{ decision_filter }}{% endif %}">
-                                    Next
-                                </a>
+                                <a class="page-link" href="{{ _pager_base }}&page={{ pagination.next_num }}">Next</a>
                             </li>
                             {% else %}
-                            <li class="page-item disabled">
-                                <span class="page-link">Next</span>
-                            </li>
+                            <li class="page-item disabled"><span class="page-link">Next</span></li>
                             {% endif %}
                         </ul>
                     </nav>

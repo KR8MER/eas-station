@@ -52,6 +52,10 @@ def register_received_alerts_routes(app, logger) -> None:
             alert_source_filter = request.args.get('alert_source', '').strip()
             event_filter = request.args.get('event', '').strip()
             decision_filter = request.args.get('decision', '').strip()
+            originator_filter = request.args.get('originator', '').strip()
+            date_from = request.args.get('date_from', '').strip()
+            date_to = request.args.get('date_to', '').strip()
+            min_confidence_raw = request.args.get('min_confidence', '').strip()
 
             # Build query
             base_query = ReceivedEASAlert.query
@@ -80,6 +84,36 @@ def register_received_alerts_routes(app, logger) -> None:
             if decision_filter:
                 base_query = base_query.filter(ReceivedEASAlert.forwarding_decision == decision_filter)
 
+            if originator_filter:
+                base_query = base_query.filter(ReceivedEASAlert.originator_code == originator_filter)
+
+            # Date range: inputs are YYYY-MM-DD local dates. Treat as inclusive day.
+            if date_from:
+                try:
+                    df = datetime.strptime(date_from, '%Y-%m-%d').replace(tzinfo=timezone.utc)
+                    base_query = base_query.filter(ReceivedEASAlert.received_at >= df)
+                except ValueError:
+                    date_from = ''
+            if date_to:
+                try:
+                    dt = datetime.strptime(date_to, '%Y-%m-%d').replace(tzinfo=timezone.utc)
+                    # Include the entire selected end day
+                    dt_end = dt.replace(hour=23, minute=59, second=59, microsecond=999999)
+                    base_query = base_query.filter(ReceivedEASAlert.received_at <= dt_end)
+                except ValueError:
+                    date_to = ''
+
+            min_confidence = None
+            if min_confidence_raw:
+                try:
+                    min_confidence = float(min_confidence_raw)
+                    if 0.0 <= min_confidence <= 1.0:
+                        base_query = base_query.filter(ReceivedEASAlert.decode_confidence >= min_confidence)
+                    else:
+                        min_confidence = None
+                except ValueError:
+                    min_confidence = None
+
             # Order by most recent first
             query = base_query.order_by(desc(ReceivedEASAlert.received_at))
 
@@ -93,6 +127,11 @@ def register_received_alerts_routes(app, logger) -> None:
 
             events = db.session.query(ReceivedEASAlert.event_code, ReceivedEASAlert.event_name).distinct().order_by(ReceivedEASAlert.event_code).all()
             events = [(e[0], e[1] or e[0]) for e in events if e[0]]
+
+            originators = db.session.query(
+                ReceivedEASAlert.originator_code, ReceivedEASAlert.originator_name
+            ).distinct().order_by(ReceivedEASAlert.originator_code).all()
+            originators = [(o[0], o[1] or o[0]) for o in originators if o[0]]
 
             decisions = ['forwarded', 'ignored', 'error']
 
@@ -115,8 +154,13 @@ def register_received_alerts_routes(app, logger) -> None:
                 alert_source_filter=alert_source_filter,
                 event_filter=event_filter,
                 decision_filter=decision_filter,
+                originator_filter=originator_filter,
+                date_from=date_from,
+                date_to=date_to,
+                min_confidence=min_confidence,
                 sources=sources,
                 events=events,
+                originators=originators,
                 decisions=decisions,
                 stats=stats,
             )
