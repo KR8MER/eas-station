@@ -51,6 +51,23 @@ try:
     from app_core.audio.sources import RADIO_AVAILABLE
 except Exception:  # pragma: no cover - defensive: optional hardware module
     RADIO_AVAILABLE = False
+try:
+    from app_core.audio.sources import ALSA_AVAILABLE, PULSE_AVAILABLE
+except Exception:  # pragma: no cover - defensive
+    ALSA_AVAILABLE = False
+    PULSE_AVAILABLE = False
+try:
+    from app_core.auth.mfa import TOTP_AVAILABLE
+except Exception:  # pragma: no cover - defensive
+    TOTP_AVAILABLE = False
+try:
+    from app_core.radio.drivers import _SCIPY_AVAILABLE as SCIPY_AVAILABLE
+except Exception:  # pragma: no cover - defensive
+    SCIPY_AVAILABLE = False
+try:
+    from app_core.radio.demodulation import _NUMBA_AVAILABLE as NUMBA_AVAILABLE
+except Exception:  # pragma: no cover - defensive
+    NUMBA_AVAILABLE = False
 from app_utils import get_location_timezone_name, local_now, utc_now
 from app_utils.versioning import get_git_metadata, get_git_tree_state
 
@@ -378,17 +395,22 @@ def register(app: Flask, logger) -> None:
             _hostname = "unknown"
         version_data = {
             "version": current_version,
-            "name": "NOAA CAP Alerts System",
-            "author": "KR8MER Amateur Radio Emergency Communications",
+            "name": "EAS Station",
+            "author": "Timothy Kramer (KR8MER) / KR8MER Amateur Radio Emergency Communications",
             "description": (
                 f"Emergency alert system for {location['county_name']}, "
                 f"{location['state_code']}"
             ),
             "timezone": get_location_timezone_name(),
-            "led_available": LED_AVAILABLE,
+            "led_available": bool(LED_AVAILABLE),
             "vfd_available": bool(VFD_AVAILABLE),
             "oled_available": bool(OLED_AVAILABLE),
             "radio_available": bool(RADIO_AVAILABLE),
+            "alsa_available": bool(ALSA_AVAILABLE),
+            "pulse_available": bool(PULSE_AVAILABLE),
+            "mfa_available": bool(TOTP_AVAILABLE),
+            "scipy_available": bool(SCIPY_AVAILABLE),
+            "numba_available": bool(NUMBA_AVAILABLE),
             "python_version": _sys.version.split()[0],
             "platform": _platform.platform(terse=True),
             "hostname": _hostname,
