@@ -84,12 +84,12 @@ flowchart LR
 
 Each burst is a continuous bit stream made of three concatenated parts:
 
-```
-┌──────────────────────────────┬────────────────────────────────┬──────────────────┐
-│  Preamble                    │  ASCII header                  │  Optional ENDEC  │
-│  16 × 0xAB  (= 128 bits)     │  ZCZC-ORG-EEE-PSSCCC+TTTT-     │  fingerprint     │
-│                              │  JJJHHMM-LLLLLLLL-<CR>         │  3 × 0xA9        │
-└──────────────────────────────┴────────────────────────────────┴──────────────────┘
+```mermaid
+flowchart LR
+    preamble["Preamble<br/>16 × 0xAB<br/>(= 128 bits)"]
+    header["ASCII header<br/>ZCZC-ORG-EEE-PSSCCC+TTTT-<br/>JJJHHMM-LLLLLLLL-&lt;CR&gt;"]
+    fingerprint["Optional ENDEC<br/>fingerprint<br/>3 × 0xA9"]
+    preamble --- header --- fingerprint
 ```
 
 ### 2.1 Preamble
