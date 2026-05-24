@@ -6,6 +6,73 @@ tracks releases under the 2.x series.
 
 ## [Unreleased]
 
+- _No unreleased changes — record new work here as PRs land. Most recent cut release: 2.81.1 (2026-05-24)._
+
+## [2.81.1] - 2026-05-24 - Historical alerts 500 fix
+
+### Fixed
+- **`GET /api/alerts/historical` returned 500 whenever any alert in the result window had `description = NULL`.** The serializer ran `alert.description[:500] + '...'` unconditionally, so a single null-description row poisoned the entire page response (`TypeError: 'NoneType' object is not subscriptable`). The handler now coerces with `alert.description or ''` before slicing and extracts the truncated value into a named local for readability. (PR #2180.)
+
+### Changed
+- **Historical alerts query parameters accept `start` / `end` aliases** in addition to the existing `start_date` / `end_date`. Callers that follow the more common short form (used by most JS date pickers and by the new external dashboards) no longer have to translate parameter names. Resolution uses `request.args.get('start_date') or request.args.get('start')` so existing integrations keep working byte-for-byte. (PR #2180.)
+
+## [2.81.0] - 2026-05-24 - Customizable dashboard header branding
+
+### Added
+- **Operator-customizable dashboard headline and subtitle.** Two new fields — `dashboard_headline` (≤120 chars) and `dashboard_subtitle` (≤160 chars) — were added to `application_settings` so each station can brand the main `/` dashboard with its own call sign, market name, or mission statement instead of the hard-coded "Emergency Alert Dashboard" / county-state line. The Application Settings page (`templates/admin/settings.html`) gained a "Dashboard Header" card with both inputs, client-side `maxlength` enforcement, and helpful placeholder text. The settings update endpoint enforces the same character limits server-side. The `ApplicationSettings` model defaults both fields to empty strings so existing deployments render unchanged until an admin explicitly fills them in. The Flask context processor now injects the branding values globally (only outside setup mode) and `templates/index.html` consumes them with `{{ dashboard_headline or 'Emergency Alert Dashboard' }}` / county-state fallback. (PR #2179.)
+- **Migration `20260524_add_dashboard_branding_to_application_settings.py`** — fully additive, idempotent up/down, defensive existence-check on both columns so it can be re-applied against partially-migrated environments without erroring.
+
+### Changed
+- **Removed the Quick Actions button strip from the main dashboard** (Audio Archive, Statistics, Admin Panel, etc.). The buttons duplicated entries already in the top navbar and were the largest single contributor to dashboard above-the-fold clutter; their removal makes room for the new headline/subtitle without changing the overall page height. The same entry points remain available from the navbar.
+
+## [2.80.1] - 2026-05-24 - True-vector wordmark and footer app icon
+
+### Changed
+- **Footer brand mark replaced with a purpose-built SVG app icon** (`static/img/eas-app-icon.svg`). The Font Awesome broadcast-tower glyph rendered at small sizes was visually indistinguishable from the navbar tower icon and aliased badly on hi-DPI laptops. The new icon is a self-contained SVG (linear-gradient squircle background, radial-gradient beacon glow, hand-drawn tower + signal-wave path) with full `role` / `aria-label` / `<title>` / `<desc>` accessibility attributes and the standard `?v={{ static_asset_version }}` cache-bust query string. `templates/base.html` swaps the `<i class="fa-...">` for an `<img>` and `static/css/styles.css` drops the per-mark gradient (now on the SVG itself), adds `overflow: hidden` to `.footer-logo-mark`, and introduces `.footer-logo-mark-img` to make the SVG fill the container. The `eas-system-wordmark.svg` / `.png` were re-exported from the same design source so the navbar wordmark and footer mark stay visually paired. (PR #2178.)
+
+## [2.80.0] - 2026-05-23 - GPS dashboard hover tooltips and adaptive histograms
+
+### Added
+- **Adaptive jitter histogram bucketing on the GPS &amp; Time Dashboard.** The fixed ±100 µs / 20 µs bucket layout collapsed to a single tall bar on stratum-1-grade receivers (sub-microsecond jitter) and clipped silently on noisy installs. The backend now picks bucket width from a 1-2-5 sequence sized so the bulk of samples fill 5–10 buckets, with a 100 ns floor to prevent zero-width buckets on very clean clocks. The endpoint additionally returns `bucket_width_ns` so the front-end can colour-grade bars by distance-from-zero (≤1 bucket = green, ≤3 = amber, &gt;3 = red) and align the centre divider with the actual zero crossing instead of the midpoint. X-axis labels now show the leftmost finite edge, zero, and the rightmost finite edge with adaptive sig-figs (`±2 µs`, `±450 ns`, etc.) instead of the dead `±100 µs` legend. (PR #2177.)
+- **Generic hover-tooltip infrastructure for canvas charts.** Added `_installChartHover()` on the GPS dashboard which provides consistent positioning (left/right + top/bottom edge avoidance), per-chart hit-test closures stored on the canvas element so they can be swapped on redraw without re-binding event listeners, optional `snapX` vertical crosshair, and inherits the existing sparkline tooltip stylesheet so light/dark themes are picked up for free. All tooltip HTML is escaped to block injection from numeric labels. (PR #2177.)
+- **Hover readouts on every non-sparkline GPS chart:**
+  - **Jitter Histogram** — bucket label, sample count, and percentage of total.
+  - **Allan Deviation** — snaps to the nearest (τ, σ\_y) marker within ~30 px and falls back to a τ-only readout when scrubbing between markers.
+  - **SNR-vs-Elevation Scatter** — snaps to the nearest satellite dot within ~12 px, shows PRN, constellation, elevation, and SNR.
+  - **PRN Heatmap** — shows PRN key, timestamp, and SNR for populated cells; explicitly labels sparse bins as "no sample in window" instead of rendering a blank tooltip.
+
+### Changed
+- **Allan-deviation Y-axis labels render in proper scientific notation** (`10⁻⁷` via Unicode superscript digits) instead of `1e-7`, matching the rest of the project's timing displays. (PR #2177.)
+
+## [2.79.2] - 2026-05-23 - Hold GPIO airchain for full composite duration
+
+### Fixed
+- **GPIO relays dropped the airchain assert as soon as the audio player exited**, which on hosts without a real audio device (most container/dev installs and any production node where `aplay` returns immediately if the ALSA card is busy) released the relay before the downstream encoder finished framing — the composite was being trimmed mid-EOM. Both `webapp/eas/messages.py` (resend) and `webapp/eas/workflow.py` (manual send) now (1) compute the authoritative composite duration with `_wav_duration_seconds()` against the actual WAV header (falling back to the stored metadata and a 60 s ceiling), (2) capture `time.monotonic()` before invoking the player, and (3) `time.sleep(remaining)` after the player exits so the relay stays asserted for the full composite duration regardless of whether playback was blocking. Comments at both call sites explain the invariant so the next reader doesn't "optimise" the sleep away. (PR #2176.)
+
+## [2.79.1] - 2026-05-23 - Locally vendored Chart.js / Bootstrap / Font Awesome
+
+### Changed
+- **Repo Stats page (`static/repo_stats.html` and its `scripts/generate_repo_stats.py` generator) no longer hits external CDNs** for Chart.js, Bootstrap, or Font Awesome. All three are now served from the existing `/static/vendor/` tree (`chartjs/chart.min.js`, `bootstrap/bootstrap.min.css`, `fontawesome/css/all.min.css`) so the page renders identically on air-gapped installs, survives upstream CDN outages, and produces deterministic builds. The generator and the rendered HTML were updated in lockstep so re-running the generator does not regress the page to the old CDN URLs. (PR #2175.)
+
+## [2.79.0] - 2026-05-23 - Documentation search and trademark typography
+
+### Added
+- **In-app documentation search backed by an on-demand index.** `webapp/documentation.py` gained `_build_doc_search_index()` (walks the docs root, parses out the H1 title of every `.md` file, keeps both original and lowercased bodies for case-insensitive substring matching, tags each doc with its containing-directory category) and `_make_snippet()` (produces a contextual ±80-char excerpt around the first match, with the matched span bolded). Results are cached in-process and invalidated by tracking the highest `mtime` across all scanned files, so an admin editing a doc and refreshing the page sees the change without a service restart. (PR #2174.)
+
+### Changed
+- **Standardised `EAS Station™` (no space before the symbol) across the entire repository.** The mixed `EAS Station ™` / `EAS Station™` formatting drifted across markdown, templates, CSS comments, JS file headers, VS Code workspace files, and config samples. All occurrences were normalised to the no-space form (proper typographic convention) so the brand reads consistently on every page, every email, every system-tray tooltip, and every doc PDF. This is purely a presentation pass — no functional code paths were touched. (PR #2174.)
+
+## [2.78.0] - 2026-05-23 - Dual-mode SAME audio capture buffer
+
+### Changed
+- **Replaced the single fixed-size SAME audio ring with two operating modes.** The old single `_ring_max_samples` budget had to be sized for the worst case (full ZCZC→EOM capture, potentially several minutes), which permanently held that buffer per source even during idle 99 %+ of the time, and conversely failed long alerts when the operator had tuned the buffer down for memory. The capture loop now distinguishes:
+  - **Pre-roll mode** (idle): `_preroll_max_samples` ≈ 10 s @ 16 kHz, enough to retain the ZCZC back-track (~1.5 s) plus the three SAME header bursts (~4.8 s) the decoder needs.
+  - **Capture mode** (live ZCZC→EOM): `_capture_max_samples` ≈ 5 min + 10 s headroom, no eviction while the alert is in-flight so the full audio body is captured intact, with the ceiling acting as a sanity stop for a stuck capture.
+
+  A new `_capturing_sources` set tracks which sources are mid-capture and is guarded by `_audio_rings_lock` so the monitor-loop's trim policy and `_handle_alert()` / `_on_eom_received()` agree on capture state under all interleavings. Lock ordering is preserved (capture-state updates always take `_audio_rings_lock` first), and the ring snapshot is taken after the capture-state flag is cleared so the snapshot has consistent semantics. (PR #2173.)
+
+## [2.77.0] - 2026-05-23 - Marine zone catalog support
+
 ### Added
 - **Marine zone DBF upload now actually works** (`/admin/zones/upload` previously 500'd on every `mz_*.dbf` with `ValueError: DBF is missing required fields: STATE, CWA, TIME_ZONE, FE_AREA, ZONE, STATE_ZONE, SHORTNAME`). The public-zone schema parser at `app_utils/zone_catalog.py` was the only one wired in even though the upload page and `tools/download_nws_gis_data.py --marine` both advertised marine support. `iter_zone_records` now detects the DBF schema by column inspection and dispatches to either `_parse_public_record` (existing public/forecast columns) or `_parse_marine_record` (marine schema: `ID`, `WFO`, `GL_WFO`, `NAME`, `LON`, `LAT`). The marine parser stores the 2-letter UGC prefix (`PS`, `GM`, `AM`, `LM`, …) in `nws_zones.state_code` so the new marine state-tree builder can find them with a simple `IN (...)` filter. Verified against the official `mz16ap26.dbf` from `weather.gov/gis/MarineZones` (569 zones across 15 marine prefixes).
 - **Admin FIPS picker surfaces marine areas** loaded via `mz_*.dbf` and `oz_*.dbf`. `app_utils/fips_codes.py` gained `MARINE_PREFIX_TO_SAME_STATE` (UGC prefix → SAME `SS` digits, sourced from the NWS *Coastal and Offshore Marine Codes Listings for EAS and NWR Applications* §6 — all 15 marine prefixes covered: PZ=57, PK=58, PH=59, PS=61, PM=65, AN=73, AM=75, GM=77, LS=91, LM=92, LH=93, LC=94, LE=96, LO=97, SL=98), `MARINE_AREA_LABELS` (the official geographic-area names from the same table), `get_marine_state_tree()` (queries `nws_zones` and emits state-shaped entries with 6-digit `PSSCCC` `code` values per marine area), and `get_extended_state_county_tree()` which composes the static US tree with the runtime marine tree. `webapp/admin/dashboard.py` now feeds the admin template from the extended version so the State/County dropdown can show e.g. *Gulf of Mexico → Coastal waters from Pensacola FL to Pascagoula MS out 20 NM (077650)* and operators can add marine SAME codes through the normal picker UI. The GM=77 mapping was additionally cross-verified on-station against an SMW header carrying `077650/077633/077632/077631` whose CCC values match GMZ650/GMZ633/GMZ632/GMZ631 byte-for-byte in the NWS marine zone DBF. All 699 zones across `mz16ap26.dbf` + `oz16ap26.dbf` are now pickable. The base `get_us_state_county_tree()` remains DB-free so import-time callers (`app_core/location.py:70`, `app_core/alert_filtering.py:46`) are untouched.
