@@ -659,23 +659,296 @@
             width: 100%;
             height: 100%;
         }
+
+        /* ============================================================
+           chrogps-style chrome overlay — gives the System Health page
+           the same dashboard language as the GNSS / Time appliance:
+           tiny-caps card headers, an at-a-glance status strip with
+           severity-tinted tiles, section dividers, and pill chips.
+           Layered on top of the existing markup so all JS bindings,
+           gauges, sparklines, and tables continue to work unchanged.
+           ============================================================ */
+        .system-health-root { font-size: 0.93rem; }
+
+        /* App-bar style header — keeps the .page-header gradient hero
+           but adopts the gps-dash chrome (title / pills / live-dot /
+           controls all inline on a single row). */
+        .system-health-root .health-dash-header {
+            padding-top: 14px;
+            padding-bottom: 14px;
+        }
+        .system-health-root .health-dash-header .header-flex {
+            display: flex; flex-wrap: wrap;
+            gap: 10px 14px; align-items: center;
+        }
+        .system-health-root .health-dash-header .title {
+            font-size: 1.0rem; font-weight: 700;
+            letter-spacing: 0.10em; text-transform: uppercase;
+            display: inline-flex; align-items: center; gap: 10px;
+            color: #fff;
+        }
+        .system-health-root .health-dash-header .title i { font-size: 1.1rem; }
+        .system-health-root .health-dash-header .subtitle {
+            color: rgba(255,255,255,0.82);
+            font-size: 0.78rem;
+            margin: 0; padding-left: 4px;
+        }
+        .system-health-root .health-dash-header .node {
+            color: rgba(255,255,255,0.78);
+            font-family: var(--font-mono, ui-monospace, monospace);
+            font-size: 0.82rem;
+        }
+        .system-health-root .health-dash-header .spacer { flex: 1 1 auto; }
+        .system-health-root .health-dash-header select.form-select-sm { width: auto; }
+        .system-health-root .health-dash-header .distro-logo {
+            height: 36px; width: auto; margin: 0;
+            filter: brightness(1.1) drop-shadow(0 2px 6px rgba(0,0,0,0.35));
+        }
+
+        /* Pills (platform, kernel, etc.) — sit inside the gradient
+           header, so they use solid text + translucent backdrop. */
+        .system-health-root .health-pill {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 3px 10px; border-radius: 999px;
+            font-size: 0.74rem; font-weight: 600; letter-spacing: 0.04em;
+            border: 1px solid currentColor;
+            background: rgba(0,0,0,0.22);
+            font-family: var(--font-mono, ui-monospace, monospace);
+        }
+        .system-health-root .health-pill.ok      { color: #6ee07a; }
+        .system-health-root .health-pill.warn    { color: #f6c343; }
+        .system-health-root .health-pill.danger  { color: #ff7b72; }
+        .system-health-root .health-pill.info    { color: #79c0ff; }
+        .system-health-root .health-pill.muted   { color: rgba(255,255,255,0.78); }
+        .system-health-root .health-pill i { font-size: 0.72rem; opacity: 0.85; }
+
+        /* Live-data heartbeat dot — pulses after each successful poll. */
+        .system-health-root .health-live-dot {
+            display: inline-block; width: 8px; height: 8px;
+            border-radius: 50%; background: rgba(255,255,255,0.45);
+            flex-shrink: 0;
+        }
+        @keyframes health-data-ping {
+            0%   { box-shadow: 0 0 0 0   rgba(63,185,80,0.80); background: #3fb950; }
+            70%  { box-shadow: 0 0 0 8px rgba(63,185,80,0);    background: #3fb950; }
+            100% { box-shadow: 0 0 0 0   rgba(63,185,80,0);    background: rgba(255,255,255,0.45); }
+        }
+        .system-health-root .health-live-dot.ping { animation: health-data-ping 0.75s ease forwards; }
+
+        /* ── Persistent at-a-glance status strip ──────────────────────
+           Seven tiles spanning the page width. Each tile shows a
+           short uppercase label, a large mono value, and a one-line
+           context sub-string. Severity is conveyed by the left-edge
+           rail and the value colour. */
+        .system-health-root .health-status-strip {
+            display: grid;
+            grid-template-columns: repeat(7, minmax(0, 1fr));
+            gap: 8px;
+            margin: 0 0 18px 0;
+        }
+        .system-health-root .health-status-tile {
+            position: relative;
+            padding: 10px 12px;
+            border: 1px solid var(--border-color, rgba(127,127,127,.22));
+            border-left: 3px solid var(--text-muted, #8b949e);
+            border-radius: 6px;
+            background: var(--surface-color, rgba(127,127,127,.04));
+            display: flex; flex-direction: column; gap: 4px;
+            min-width: 0;
+            transition: border-left-color 0.45s ease, background-color 0.45s ease;
+        }
+        .system-health-root .health-status-tile .lbl {
+            font-size: 0.66rem; font-weight: 700;
+            letter-spacing: 0.10em; text-transform: uppercase;
+            color: var(--text-muted, #8b949e);
+            display: flex; align-items: center; gap: 5px;
+        }
+        .system-health-root .health-status-tile .lbl i { font-size: 0.74rem; opacity: 0.7; }
+        .system-health-root .health-status-tile .val {
+            font-family: var(--font-mono, ui-monospace, monospace);
+            font-size: 1.18rem; font-weight: 700; line-height: 1.05;
+            color: var(--text-color);
+            font-variant-numeric: tabular-nums;
+            letter-spacing: 0.02em;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .system-health-root .health-status-tile .sub {
+            font-size: 0.68rem; color: var(--text-muted, #8b949e);
+            font-family: var(--font-mono, ui-monospace, monospace);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .system-health-root .health-status-tile.sev-ok    { border-left-color: #3fb950; }
+        .system-health-root .health-status-tile.sev-ok    .val { color: #3fb950; }
+        .system-health-root .health-status-tile.sev-warn  { border-left-color: #d29922; background: rgba(210,153,34,0.06); }
+        .system-health-root .health-status-tile.sev-warn  .val { color: #f6c343; }
+        .system-health-root .health-status-tile.sev-fault { border-left-color: #f85149; background: rgba(248,81,73,0.07); }
+        .system-health-root .health-status-tile.sev-fault .val { color: #f85149; }
+        .system-health-root .health-status-tile.sev-info  { border-left-color: #58a6ff; }
+        .system-health-root .health-status-tile.sev-info  .val { color: #58a6ff; }
+        .system-health-root .health-status-tile.sev-unknown .val { color: var(--text-muted, #8b949e); }
+
+        @keyframes health-tile-in {
+            from { opacity: 0; transform: translateY(6px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .system-health-root .health-status-tile { animation: health-tile-in 0.35s ease both; }
+        .system-health-root .health-status-tile:nth-child(2) { animation-delay: 0.05s; }
+        .system-health-root .health-status-tile:nth-child(3) { animation-delay: 0.10s; }
+        .system-health-root .health-status-tile:nth-child(4) { animation-delay: 0.15s; }
+        .system-health-root .health-status-tile:nth-child(5) { animation-delay: 0.20s; }
+        .system-health-root .health-status-tile:nth-child(6) { animation-delay: 0.25s; }
+        .system-health-root .health-status-tile:nth-child(7) { animation-delay: 0.30s; }
+        @media (prefers-reduced-motion: reduce) {
+            .system-health-root .health-status-tile { animation: none; }
+        }
+        @media (max-width: 1180px) {
+            .system-health-root .health-status-strip { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        }
+        @media (max-width: 720px) {
+            .system-health-root .health-status-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+            .system-health-root .health-status-tile { padding: 8px 10px; }
+            .system-health-root .health-status-tile .val { font-size: 1.02rem; }
+        }
+
+        /* ── Section dividers — tiny-caps title + horizontal rule, used
+           to break the dense page into operator-friendly chunks. */
+        .system-health-root .health-section-head {
+            display: flex; align-items: center; gap: 12px;
+            margin: 22px 0 10px 0;
+        }
+        .system-health-root .health-section-head h2 {
+            font-size: 0.78rem; font-weight: 700;
+            letter-spacing: 0.14em; text-transform: uppercase;
+            color: var(--text-muted, #8b949e);
+            margin: 0; white-space: nowrap;
+        }
+        .system-health-root .health-section-head .rule {
+            flex: 1 1 auto; height: 1px;
+            background: linear-gradient(90deg,
+                var(--border-color, rgba(127,127,127,.30)),
+                transparent);
+        }
+
+        /* ── Card chrome — thin border, dense padding, tiny-caps header.
+           Layered over Bootstrap's .card so existing gauges, charts,
+           and tables continue to render unchanged. */
+        .system-health-root .card {
+            border: 1px solid var(--border-color, rgba(127,127,127,.25));
+            background: var(--surface-color, rgba(127,127,127,.04));
+            border-radius: 8px;
+            box-shadow: none;
+        }
+        .system-health-root .card > .card-header {
+            background: transparent;
+            border-bottom: 1px solid var(--border-color, rgba(127,127,127,.18));
+            padding: 10px 14px;
+        }
+        .system-health-root .card > .card-header h5,
+        .system-health-root .card > .card-header h6 {
+            margin: 0;
+            font-size: 0.80rem;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: var(--text-color);
+            display: inline-flex; align-items: center; gap: 8px;
+        }
+        .system-health-root .card > .card-header .section-icon {
+            color: var(--primary-color);
+            font-size: 0.85rem;
+            margin-right: 2px;
+        }
+        .system-health-root .card > .card-body {
+            padding: 14px 16px;
+        }
+
+        /* The chunky 4px coloured rail on .health-card flattens to a
+           subtle 3px accent that matches the status-strip styling. */
+        .system-health-root .health-card {
+            border-left: 1px solid var(--border-color, rgba(127,127,127,.25));
+            box-shadow: none;
+            transition: box-shadow 0.2s ease;
+        }
+        .system-health-root .health-card:hover {
+            box-shadow: 0 2px 12px var(--shadow-color, rgba(0,0,0,0.15));
+            transform: none;
+        }
+        .system-health-root .health-card.warning { border-left: 3px solid var(--warning-color, #d29922); }
+        .system-health-root .health-card.danger  { border-left: 3px solid var(--danger-color,  #f85149); }
+        .system-health-root .health-card.success { border-left: 3px solid var(--success-color, #3fb950); }
+
+        /* Quick-stat cards keep their colourful icon tiles + tone bar,
+           but adopt the same dense padding as other cards. */
+        .system-health-root .quick-stat-card .card-body { padding: 14px 16px; }
+
+        /* Dense table styling — uppercase headers, thin separators,
+           tabular numbers — matches the gps-dash satellite / chrony
+           tables. */
+        .system-health-root .table {
+            margin-bottom: 0;
+            font-size: 0.84rem;
+            font-variant-numeric: tabular-nums;
+        }
+        .system-health-root .table thead th {
+            text-transform: uppercase;
+            font-size: 0.70rem;
+            letter-spacing: 0.08em;
+            color: var(--text-muted, #8b949e);
+            background: transparent;
+            border-bottom: 1px solid var(--border-color, rgba(127,127,127,.25));
+            font-weight: 700;
+        }
+        .system-health-root .table > :not(caption) > * > * {
+            border-color: var(--border-color, rgba(127,127,127,.15));
+        }
+
+        /* Badge-showcase strip — flat, dense, no rounded box. */
+        .system-health-root .badge-showcase {
+            padding: 8px 12px;
+            background: transparent;
+            border: 1px dashed var(--border-color, rgba(127,127,127,.18));
+            border-radius: 6px;
+            margin-bottom: 14px;
+        }
     </style>
 {% endblock %}
 
 {% block content %}
 <div class="system-health-root">
-<div class="page-header">
+{# ============================================================
+   APPLIANCE-STYLE HEADER — title, host id, platform pills, live
+   data heartbeat, and the units toggle. Mirrors the GNSS / Time
+   appliance dashboard so the System Health page reads as part
+   of the same operator UI rather than a standalone Bootstrap
+   admin page.
+   ============================================================ #}
+<div class="page-header health-dash-header" role="region" aria-label="System health header">
     <div class="container-fluid">
-        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
-            <div class="d-flex align-items-center gap-3">
-                {% if distro_logo_url %}
-                <img src="{{ distro_logo_url }}" alt="Distribution Logo" class="distro-logo" onerror="this.style.display='none'">
-                {% endif %}
-                <div>
-                    <h1 class="page-title mb-0"><i class="fas fa-heartbeat me-2"></i>System Health Monitor</h1>
-                    <p class="page-subtitle mb-0">Comprehensive monitoring of system resources, hardware, and container health</p>
-                </div>
-            </div>
+        <div class="header-flex">
+            {% if distro_logo_url %}
+            <img src="{{ distro_logo_url }}" alt="Distribution Logo" class="distro-logo" onerror="this.style.display='none'">
+            {% endif %}
+            <span class="title">
+                <i class="fas fa-heartbeat"></i> System Health Monitor
+            </span>
+            <span class="node">Host:&nbsp;<span id="health-host-name">{{ system.hostname or '—' }}</span></span>
+            {% if system.os_pretty_name or system.distribution %}
+            <span class="health-pill ok" id="health-platform-pill" title="Operating system"><i class="fas fa-server"></i>
+                {{ system.os_pretty_name or system.distribution }}
+            </span>
+            {% endif %}
+            {% if system.kernel_release or system.release %}
+            <span class="health-pill muted" id="health-kernel-pill" title="Kernel release"><i class="fas fa-microchip"></i>
+                {{ system.kernel_release or system.release }}
+            </span>
+            {% endif %}
+            {% if system.architecture %}
+            <span class="health-pill info" id="health-arch-pill" title="CPU architecture"><i class="fas fa-bezier-curve"></i>
+                {{ system.architecture }}
+            </span>
+            {% endif %}
+            <span class="health-live-dot" id="health-live-dot" title="Last data received"></span>
+            <span class="spacer"></span>
             <details class="eas-units-disclosure" id="sys-health-units-disclosure">
                 <summary class="btn btn-sm btn-outline-light" title="Display units (lat/lon, altitude, speed, distance)">
                     <i class="fas fa-ruler"></i> Units
@@ -703,7 +976,105 @@
     {% endif %}
     
     <div class="alert alert-danger d-none" id="refresh-error" role="alert"></div>
-    
+
+    {# ============================================================
+       PERSISTENT TOP STATUS STRIP — at-a-glance system health.
+       Seven tiles, severity-tinted (green/amber/red/blue), each
+       showing a primary value and a one-line context sub-string.
+       Mirrors the GNSS dashboard's appliance-style status strip
+       so operators get an instant read on system state without
+       hunting through cards.  Populated by updateHealthStrip()
+       on every poll and seeded with server-rendered initial
+       values below for first-paint.
+       ============================================================ #}
+    <section class="health-status-strip" aria-label="System health at a glance">
+        <div class="health-status-tile sev-unknown" id="hs-strip-cpu">
+            <div class="lbl"><i class="fas fa-microchip"></i> CPU</div>
+            <div class="val">
+                {% if cpu and cpu.cpu_usage_percent is not none %}{{ "%.1f"|format(cpu.cpu_usage_percent) }}%{% else %}—{% endif %}
+            </div>
+            <div class="sub">
+                {% if cpu and cpu.total_cores %}{{ cpu.total_cores }} cores{% if cpu.current_frequency %} · {{ "%.0f"|format(cpu.current_frequency) }} MHz{% endif %}{% else %}awaiting data…{% endif %}
+            </div>
+        </div>
+        <div class="health-status-tile sev-unknown" id="hs-strip-memory">
+            <div class="lbl"><i class="fas fa-memory"></i> Memory</div>
+            <div class="val">
+                {% if memory and memory.percentage is not none %}{{ "%.1f"|format(memory.percentage) }}%{% else %}—{% endif %}
+            </div>
+            <div class="sub">
+                {% if memory and memory.total %}{{ format_bytes(memory.used) }} / {{ format_bytes(memory.total) }}{% else %}awaiting data…{% endif %}
+            </div>
+        </div>
+        <div class="health-status-tile sev-unknown" id="hs-strip-storage">
+            {% set strip_root = namespace(found=false, pct=0, used=0, total=0) %}
+            {% if disk %}
+                {% for partition in disk %}
+                    {% if partition.mountpoint == '/' and not strip_root.found %}
+                        {% set strip_root.found = true %}
+                        {% set strip_root.pct = partition.percentage %}
+                        {% set strip_root.used = partition.used %}
+                        {% set strip_root.total = partition.total %}
+                    {% endif %}
+                {% endfor %}
+            {% endif %}
+            <div class="lbl"><i class="fas fa-hdd"></i> Root Disk</div>
+            <div class="val">
+                {% if strip_root.found %}{{ "%.1f"|format(strip_root.pct) }}%{% else %}—{% endif %}
+            </div>
+            <div class="sub">
+                {% if strip_root.found %}{{ format_bytes(strip_root.used) }} / {{ format_bytes(strip_root.total) }}{% else %}awaiting data…{% endif %}
+            </div>
+        </div>
+        <div class="health-status-tile sev-unknown" id="hs-strip-load">
+            <div class="lbl"><i class="fas fa-tachometer-alt"></i> Load Avg</div>
+            <div class="val">
+                {% if cpu and cpu.load_average %}{{ "%.2f"|format(cpu.load_average[0]) }}{% else %}—{% endif %}
+            </div>
+            <div class="sub">
+                {% if cpu and cpu.load_average %}{{ "%.2f"|format(cpu.load_average[0]) }} / {{ "%.2f"|format(cpu.load_average[1]) }} / {{ "%.2f"|format(cpu.load_average[2]) }}{% else %}1m / 5m / 15m{% endif %}
+            </div>
+        </div>
+        <div class="health-status-tile sev-unknown" id="hs-strip-temp">
+            <div class="lbl"><i class="fas fa-thermometer-half"></i> Temp</div>
+            <div class="val">—</div>
+            <div class="sub">awaiting sensors…</div>
+        </div>
+        <div class="health-status-tile sev-unknown" id="hs-strip-uptime">
+            <div class="lbl"><i class="fas fa-clock"></i> Uptime</div>
+            <div class="val">
+                {% if system and system.uptime_human %}{{ system.uptime_human }}{% elif system and system.uptime_seconds %}{{ (system.uptime_seconds // 86400) }}d{% else %}—{% endif %}
+            </div>
+            <div class="sub">since boot</div>
+        </div>
+        <div class="health-status-tile sev-unknown" id="hs-strip-smart">
+            <div class="lbl"><i class="fas fa-heartbeat"></i> S.M.A.R.T.</div>
+            {% if smart and smart.available and smart.devices %}
+                {% set strip_smart = namespace(passed=0, failed=0, warning=0) %}
+                {% for device in smart.devices %}
+                    {% set status = (device.overall_status or 'unknown')|lower %}
+                    {% if status in ['passed', 'ok', 'healthy', 'success'] %}
+                        {% set strip_smart.passed = strip_smart.passed + 1 %}
+                    {% elif status in ['failed', 'fail', 'critical'] %}
+                        {% set strip_smart.failed = strip_smart.failed + 1 %}
+                    {% else %}
+                        {% set strip_smart.warning = strip_smart.warning + 1 %}
+                    {% endif %}
+                {% endfor %}
+                <div class="val">{{ strip_smart.passed + strip_smart.failed + strip_smart.warning }}</div>
+                <div class="sub">{{ strip_smart.passed }} ok{% if strip_smart.warning %} · {{ strip_smart.warning }} warn{% endif %}{% if strip_smart.failed %} · {{ strip_smart.failed }} fail{% endif %}</div>
+            {% else %}
+                <div class="val">—</div>
+                <div class="sub">{% if smart and not smart.available %}unavailable{% else %}no drives{% endif %}</div>
+            {% endif %}
+        </div>
+    </section>
+
+    <div class="health-section-head">
+        <h2>Resources Overview</h2>
+        <span class="rule"></span>
+    </div>
+
     <!-- Quick Stats Summary -->
     <div class="row mb-4">
         <div class="col-md-3 mb-3">
@@ -824,6 +1195,11 @@
         </div>
     </div>
     
+    <div class="health-section-head">
+        <h2>System Information</h2>
+        <span class="rule"></span>
+    </div>
+
     <!-- System Stats Cards -->
         <div class="row mb-4">
             <div class="col-12">
@@ -1132,6 +1508,11 @@
             </div>
         </div>
 
+        <div class="health-section-head">
+            <h2>Resource Usage</h2>
+            <span class="rule"></span>
+        </div>
+
         <!-- Resource Usage Row -->
         <div class="row mb-4">
             <!-- CPU Usage -->
@@ -1394,6 +1775,11 @@
                 </div>
             </div>
         </div>
+        <div class="health-section-head">
+            <h2>Hardware Subsystems</h2>
+            <span class="rule"></span>
+        </div>
+
         <!-- Hardware Subsystems Row (Phase 4 split) -->
         {% set hw_subsystems = hardware_subsystems or {} %}
         {% set hw_subsystem_map = hw_subsystems.subsystems or {} %}
@@ -1454,6 +1840,11 @@
             </div>
         </div>
         {% endif %}
+        <div class="health-section-head">
+            <h2>Storage &amp; Network</h2>
+            <span class="rule"></span>
+        </div>
+
         <!-- Storage & Network Row -->
         <div class="row mb-4">
             <!-- Disk Storage -->
@@ -1678,6 +2069,11 @@
                 </div>
             </div>
 
+        </div>
+
+        <div class="health-section-head">
+            <h2>Drive Health (S.M.A.R.T.)</h2>
+            <span class="rule"></span>
         </div>
 
         <!-- S.M.A.R.T. Health - Full Width -->
@@ -1910,6 +2306,11 @@
             </div>
         </div>
 
+        <div class="health-section-head">
+            <h2>Software Stack</h2>
+            <span class="rule"></span>
+        </div>
+
         <!-- Software Dependencies -->
         <div class="row mb-4">
             <div class="col-12" id="dependencies-card">
@@ -1960,6 +2361,11 @@
                     </div>
                 </div>
             </div>
+        </div>
+
+        <div class="health-section-head">
+            <h2>Peripherals</h2>
+            <span class="rule"></span>
         </div>
 
         <!-- Peripheral Inventory -->
@@ -2040,6 +2446,11 @@
                     </div>
                 </div>
             </div>
+        </div>
+
+        <div class="health-section-head">
+            <h2>Top Processes</h2>
+            <span class="rule"></span>
         </div>
 
         <!-- Process Information -->
@@ -2146,6 +2557,11 @@
                     </div>
                 </div>
             </div>
+        </div>
+
+        <div class="health-section-head">
+            <h2>GPS Receiver</h2>
+            <span class="rule"></span>
         </div>
 
         <!-- GPS Receiver (shown only when GPS is enabled/running) -->
@@ -2255,6 +2671,11 @@
             </div>
         </div>
 
+        <div class="health-section-head">
+            <h2>Hardware Clock</h2>
+            <span class="rule"></span>
+        </div>
+
         <!-- Hardware Clock (DS3231 RTC, shown only when an RTC device is present) -->
         <div class="row mt-4 {% if not (rtc and rtc.get('available')) %}d-none{% endif %}" id="rtc-section">
             <div class="col-12">
@@ -2333,6 +2754,11 @@
                     </div>
                 </div>
             </div>
+        </div>
+
+        <div class="health-section-head">
+            <h2>Temperature Sensors</h2>
+            <span class="rule"></span>
         </div>
 
         <!-- Temperature Sensors (if available) -->
@@ -4499,6 +4925,11 @@
             // Update the quick-stat tiles (CPU/Memory/Storage numbers + tone)
             try { updateQuickStats(data); } catch (e) { console.error('updateQuickStats failed:', e); }
 
+            // Mirror values into the persistent at-a-glance status strip
+            // and pulse the live-data heartbeat dot in the header.
+            try { updateHealthStrip(data); } catch (e) { console.error('updateHealthStrip failed:', e); }
+            try { pingHealthLiveDot(); } catch (e) { /* non-critical */ }
+
             // Record a sample, refresh sparklines + trends chart
             try {
                 pushHistory(data);
@@ -4822,6 +5253,157 @@
                 }
             }
             setQuickStatTone('quick-storage-card', pickToneClass(rootPct, 80, 90));
+        }
+
+        /* ── Persistent status-strip updater ─────────────────────────────
+           Mirrors the at-a-glance tile values from the data already used
+           by updateQuickStats(), plus a few extras the quick-stats row
+           doesn't carry (load, temperature, uptime). Severity tinting
+           follows the same thresholds as the GNSS dashboard strip. */
+        function setStripTile(id, value, sub, severity) {
+            const tile = document.getElementById(id);
+            if (!tile) return;
+            const valEl = tile.querySelector('.val');
+            const subEl = tile.querySelector('.sub');
+            if (valEl) valEl.textContent = value;
+            if (subEl && sub !== undefined && sub !== null) subEl.textContent = sub;
+            tile.classList.remove('sev-ok', 'sev-warn', 'sev-fault', 'sev-info', 'sev-unknown');
+            tile.classList.add(severity ? ('sev-' + severity) : 'sev-unknown');
+        }
+        function pickStripSeverity(value, warn, danger) {
+            if (!Number.isFinite(value)) return 'unknown';
+            if (value >= danger) return 'fault';
+            if (value >= warn) return 'warn';
+            return 'ok';
+        }
+        function formatUptime(seconds) {
+            if (!Number.isFinite(seconds) || seconds <= 0) return '—';
+            const d = Math.floor(seconds / 86400);
+            const h = Math.floor((seconds % 86400) / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            if (d > 0) return d + 'd ' + h + 'h';
+            if (h > 0) return h + 'h ' + m + 'm';
+            return m + 'm';
+        }
+        function pickPrimaryTempC(temperature) {
+            if (!temperature || typeof temperature !== 'object') return null;
+            // Try a few common shapes the backend may emit.
+            const candidates = [];
+            if (Array.isArray(temperature.sensors)) candidates.push(...temperature.sensors);
+            if (Array.isArray(temperature.devices)) candidates.push(...temperature.devices);
+            if (Array.isArray(temperature)) candidates.push(...temperature);
+            for (const s of candidates) {
+                if (!s) continue;
+                const v = s.current ?? s.value ?? s.temperature ?? s.temp_c;
+                if (Number.isFinite(v)) return v;
+            }
+            if (Number.isFinite(temperature.cpu)) return temperature.cpu;
+            if (Number.isFinite(temperature.value)) return temperature.value;
+            return null;
+        }
+
+        function updateHealthStrip(data) {
+            if (!data) return;
+
+            // CPU
+            const cpuPct = data.cpu && Number.isFinite(data.cpu.cpu_usage_percent)
+                ? data.cpu.cpu_usage_percent : null;
+            const cores = data.cpu && (data.cpu.total_cores || data.cpu.physical_cores);
+            const freq = data.cpu && data.cpu.current_frequency;
+            const cpuSub = [
+                cores ? cores + ' cores' : null,
+                Number.isFinite(freq) && freq > 0 ? Math.round(freq) + ' MHz' : null
+            ].filter(Boolean).join(' · ') || 'awaiting data…';
+            setStripTile('hs-strip-cpu',
+                cpuPct !== null ? cpuPct.toFixed(1) + '%' : '—',
+                cpuSub,
+                cpuPct !== null ? pickStripSeverity(cpuPct, 50, 80) : 'unknown');
+
+            // Memory
+            const memPct = data.memory && Number.isFinite(data.memory.percentage)
+                ? data.memory.percentage : null;
+            const memSub = data.memory && data.memory.total
+                ? (formatBytes(data.memory.used || 0) + ' / ' + formatBytes(data.memory.total))
+                : 'awaiting data…';
+            setStripTile('hs-strip-memory',
+                memPct !== null ? memPct.toFixed(1) + '%' : '—',
+                memSub,
+                memPct !== null ? pickStripSeverity(memPct, 75, 90) : 'unknown');
+
+            // Root storage
+            const rootPct = pickRootStoragePct(data.disk);
+            let storageSub = 'awaiting data…';
+            if (Array.isArray(data.disk)) {
+                const root = data.disk.find((p) => p && p.mountpoint === '/');
+                if (root) {
+                    storageSub = formatBytes(root.used || 0) + ' / ' + formatBytes(root.total || 0);
+                }
+            }
+            setStripTile('hs-strip-storage',
+                rootPct !== null ? rootPct.toFixed(1) + '%' : '—',
+                storageSub,
+                rootPct !== null ? pickStripSeverity(rootPct, 80, 90) : 'unknown');
+
+            // Load average — severity scales relative to core count.
+            const load = data.cpu && Array.isArray(data.cpu.load_average) ? data.cpu.load_average : null;
+            if (load && Number.isFinite(load[0])) {
+                const warnAt = Math.max(1, (cores || 1));
+                const dangerAt = Math.max(2, (cores || 1) * 2);
+                const loadSub = load.map((v) => Number.isFinite(v) ? v.toFixed(2) : '—').join(' / ');
+                setStripTile('hs-strip-load',
+                    load[0].toFixed(2),
+                    loadSub,
+                    pickStripSeverity(load[0], warnAt, dangerAt));
+            } else {
+                setStripTile('hs-strip-load', '—', '1m / 5m / 15m', 'unknown');
+            }
+
+            // Temperature
+            const tempC = pickPrimaryTempC(data.temperature);
+            if (Number.isFinite(tempC)) {
+                setStripTile('hs-strip-temp',
+                    tempC.toFixed(1) + '°C',
+                    'primary sensor',
+                    pickStripSeverity(tempC, 70, 85));
+            } else {
+                setStripTile('hs-strip-temp', '—', 'no sensors', 'unknown');
+            }
+
+            // Uptime
+            const upSec = (data.system && data.system.uptime_seconds)
+                || (data.uptime && data.uptime.seconds)
+                || null;
+            if (Number.isFinite(upSec)) {
+                setStripTile('hs-strip-uptime', formatUptime(upSec), 'since boot', 'info');
+            }
+
+            // S.M.A.R.T.
+            if (data.smart && data.smart.available && Array.isArray(data.smart.devices)) {
+                let passed = 0, failed = 0, warning = 0;
+                for (const d of data.smart.devices) {
+                    const s = ((d && d.overall_status) || 'unknown').toLowerCase();
+                    if (['passed', 'ok', 'healthy', 'success'].includes(s)) passed++;
+                    else if (['failed', 'fail', 'critical'].includes(s)) failed++;
+                    else warning++;
+                }
+                const total = passed + failed + warning;
+                const subParts = [passed + ' ok'];
+                if (warning) subParts.push(warning + ' warn');
+                if (failed) subParts.push(failed + ' fail');
+                setStripTile('hs-strip-smart', String(total), subParts.join(' · '),
+                    failed > 0 ? 'fault' : (warning > 0 ? 'warn' : 'ok'));
+            } else if (data.smart && data.smart.available === false) {
+                setStripTile('hs-strip-smart', '—', 'unavailable', 'unknown');
+            }
+        }
+
+        function pingHealthLiveDot() {
+            const dot = document.getElementById('health-live-dot');
+            if (!dot) return;
+            dot.classList.remove('ping');
+            // Force reflow so the animation restarts on every poll.
+            void dot.offsetWidth;
+            dot.classList.add('ping');
         }
 
         /* ── Tiny canvas sparkline renderer (no Chart.js, fast) ───────── */
