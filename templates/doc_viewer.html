@@ -6,21 +6,46 @@
 <!-- Mermaid.js for diagram rendering (local to avoid CDN tracking prevention) -->
 <script src="{{ url_for('static', filename='vendor/mermaid/mermaid.min.js') }}"></script>
 <script>
-    // Initialize Mermaid when DOM is ready
-    document.addEventListener('DOMContentLoaded', function() {
-        // Decode HTML entities in mermaid blocks before Mermaid processes them
-        document.querySelectorAll('.mermaid').forEach(function(el) {
-            const textarea = document.createElement('textarea');
-            textarea.innerHTML = el.innerHTML;
-            el.textContent = textarea.value;
-        });
+    (function() {
+        // Pick a Mermaid theme that matches the site's current light/dark mode.
+        function mermaidThemeForMode() {
+            return document.documentElement.getAttribute('data-theme-mode') === 'dark'
+                ? 'dark'
+                : 'default';
+        }
 
-        mermaid.initialize({
-            startOnLoad: true,
-            theme: 'default',
-            securityLevel: 'loose',
-        });
-    });
+        // Cache the original mermaid source for each diagram so we can re-render
+        // when the site theme changes without losing it after Mermaid swaps the
+        // node out for an <svg>.
+        function captureSources() {
+            document.querySelectorAll('.mermaid').forEach(function(el) {
+                if (!el.dataset.mermaidSource) {
+                    const textarea = document.createElement('textarea');
+                    textarea.innerHTML = el.innerHTML;
+                    el.dataset.mermaidSource = textarea.value;
+                    el.textContent = textarea.value;
+                }
+            });
+        }
+
+        function renderAll() {
+            captureSources();
+            mermaid.initialize({
+                startOnLoad: false,
+                theme: mermaidThemeForMode(),
+                securityLevel: 'loose',
+            });
+            document.querySelectorAll('.mermaid').forEach(function(el) {
+                el.removeAttribute('data-processed');
+                el.innerHTML = el.dataset.mermaidSource;
+            });
+            mermaid.run({ querySelector: '.mermaid' });
+        }
+
+        document.addEventListener('DOMContentLoaded', renderAll);
+        // Re-render diagrams when the user switches site theme.
+        window.addEventListener('theme-changed', renderAll);
+    })();
 </script>
 
 <style>

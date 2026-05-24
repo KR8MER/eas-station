@@ -524,6 +524,13 @@ def generate_html(stats: Dict) -> str:
             color: var(--text-color);
         }}
         
+        .progress-track {{
+            background: var(--border-color);
+            border-radius: 4px;
+            height: 8px;
+            overflow: hidden;
+        }}
+
         .progress-bar-custom {{
             background: linear-gradient(90deg, var(--gradient-start), var(--gradient-end));
             height: 8px;
@@ -718,7 +725,7 @@ def generate_html(stats: Dict) -> str:
                             <td class="text-end">{counts["comments"]:,}</td>
                             <td class="text-end">{code_pct:.0f}%</td>
                             <td>
-                                <div style="background: #e9ecef; border-radius: 4px; height: 8px; overflow: hidden;">
+                                <div class="progress-track">
                                     <div class="progress-bar-custom" style="width: {dist_pct:.1f}%;"></div>
                                 </div>
                             </td>
@@ -770,21 +777,57 @@ def generate_html(stats: Dict) -> str:
     </div>
     
     <script>
-        // Get theme-aware text color for charts
-        function getChartTextColor() {{
-            return getComputedStyle(document.documentElement).getPropertyValue('--text-color').trim() || '#333';
+        // Read a CSS variable from the documentElement, with a fallback.
+        function getCssVar(name, fallback) {{
+            const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+            return v || fallback;
         }}
-        
-        // Chart.js default configuration - use theme-aware colors
+
+        // Theme-aware text color for chart labels/legends/ticks.
+        function getChartTextColor() {{
+            return getCssVar('--text-color', '#333');
+        }}
+
+        // Theme-aware grid color: light gridlines on dark themes, dark gridlines on light.
+        function getChartGridColor() {{
+            const mode = document.documentElement.getAttribute('data-theme-mode');
+            return mode === 'dark'
+                ? 'rgba(255, 255, 255, 0.08)'
+                : 'rgba(0, 0, 0, 0.06)';
+        }}
+
+        // Apply current theme colors to every chart instance's options, then redraw.
+        function applyThemeToCharts() {{
+            const textColor = getChartTextColor();
+            const gridColor = getChartGridColor();
+            Chart.defaults.color = textColor;
+            Chart.instances.forEach(chart => {{
+                if (chart.options && chart.options.scales) {{
+                    Object.values(chart.options.scales).forEach(scale => {{
+                        if (scale.grid) scale.grid.color = gridColor;
+                        if (scale.ticks) scale.ticks.color = textColor;
+                    }});
+                }}
+                if (chart.options && chart.options.plugins && chart.options.plugins.legend) {{
+                    chart.options.plugins.legend.labels = chart.options.plugins.legend.labels || {{}};
+                    chart.options.plugins.legend.labels.color = textColor;
+                }}
+                chart.update();
+            }});
+        }}
+
+        // Chart.js default configuration - use theme-aware colors.
         Chart.defaults.font.family = "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif";
         Chart.defaults.color = getChartTextColor();
-        
-        // Update chart colors when theme changes
-        const observer = new MutationObserver(() => {{
-            Chart.defaults.color = getChartTextColor();
-            Chart.instances.forEach(chart => chart.update());
+
+        // Update chart colors when the active theme changes (data-theme or data-theme-mode).
+        const observer = new MutationObserver(applyThemeToCharts);
+        observer.observe(document.documentElement, {{
+            attributes: true,
+            attributeFilter: ['data-theme', 'data-theme-mode']
         }});
-        observer.observe(document.documentElement, {{ attributes: true, attributeFilter: ['data-theme'] }});
+        // Also reapply once theme.js has run and stamped the saved theme on the page.
+        window.addEventListener('theme-changed', applyThemeToCharts);
         
         // Code Composition Pie Chart
         const codeCompositionCtx = document.getElementById('codeCompositionChart').getContext('2d');
@@ -877,7 +920,7 @@ def generate_html(stats: Dict) -> str:
                             }}
                         }},
                         grid: {{
-                            color: 'rgba(0, 0, 0, 0.05)'
+                            color: getChartGridColor()
                         }}
                     }},
                     x: {{
@@ -937,7 +980,7 @@ def generate_html(stats: Dict) -> str:
                             }}
                         }},
                         grid: {{
-                            color: 'rgba(0, 0, 0, 0.05)'
+                            color: getChartGridColor()
                         }}
                     }},
                     y: {{
@@ -1001,7 +1044,7 @@ def generate_html(stats: Dict) -> str:
                             }}
                         }},
                         grid: {{
-                            color: 'rgba(0, 0, 0, 0.05)'
+                            color: getChartGridColor()
                         }}
                     }},
                     y: {{
