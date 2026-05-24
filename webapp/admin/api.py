@@ -1368,8 +1368,8 @@ def get_alerts():
 def get_historical_alerts():
     """Get historical alerts as GeoJSON with date filtering"""
     try:
-        start_date = request.args.get('start_date')
-        end_date = request.args.get('end_date')
+        start_date = request.args.get('start_date') or request.args.get('start')
+        end_date = request.args.get('end_date') or request.args.get('end')
         include_active = request.args.get('include_active', 'false').lower() == 'true'
 
         if include_active:
@@ -1459,6 +1459,10 @@ def get_historical_alerts():
                     sent_dt = alert.sent.replace(tzinfo=UTC_TZ) if alert.sent.tzinfo is None else alert.sent.astimezone(UTC_TZ)
                     sent_iso = sent_dt.isoformat()
 
+                description = alert.description or ''
+                if len(description) > 500:
+                    description = description[:500] + '...'
+
                 features.append(
                     {
                         'type': 'Feature',
@@ -1469,11 +1473,7 @@ def get_historical_alerts():
                             'severity': alert.severity,
                             'urgency': alert.urgency,
                             'headline': alert.headline,
-                            'description': (
-                                alert.description[:500] + '...'
-                                if len(alert.description) > 500
-                                else alert.description
-                            ),
+                            'description': description,
                             'sent': sent_iso,
                             'expires': expires_iso,
                             'area_desc': alert.area_desc,
