@@ -231,12 +231,15 @@
             <!-- Tech Stack Section -->
             <div class="footer-tech-stack">
                 <div class="footer-divider"></div>
-                <div class="tech-stack-title">
-                    <i class="fas fa-layer-group me-2"></i>Built With Modern Technologies
-                </div>
-                <div class="tech-stack-card">
-                    {% include 'partials/tech_stack_badges.html' %}
-                </div>
+                <details class="tech-stack-details">
+                    <summary class="tech-stack-title">
+                        <i class="fas fa-layer-group me-2"></i>Built With Modern Technologies
+                        <i class="fas fa-chevron-down tech-stack-chevron ms-2" aria-hidden="true"></i>
+                    </summary>
+                    <div class="tech-stack-card">
+                        {% include 'partials/tech_stack_badges.html' %}
+                    </div>
+                </details>
             </div>
 
             <!-- Disclaimer Section -->
