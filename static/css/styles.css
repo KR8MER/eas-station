@@ -1621,9 +1621,14 @@ small,
     color: white;
     font-weight: var(--font-weight-bold);
     font-size: 1.25rem;
-    padding: 0.25rem 1rem;
+    padding: 0.35rem 0.9rem;
     margin-right: 1.5rem;
     border-radius: var(--radius-lg);
+    background: rgba(15, 23, 42, 0.55);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22),
+                0 0 0 1px rgba(255, 255, 255, 0.18) inset;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
     transition: all var(--ease-fluid);
     position: relative;
     overflow: hidden;
