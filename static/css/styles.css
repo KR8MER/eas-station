@@ -7554,11 +7554,11 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
     width: 100%;
     padding: 1.25rem 1.75rem;
     border-radius: var(--radius-xl);
-    background: rgba(255, 255, 255, 0.94);
+    background: rgba(15, 23, 42, 0.55);
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
-    box-shadow: 0 14px 36px rgba(0, 0, 0, 0.22),
-                0 0 0 1px rgba(255, 255, 255, 0.55) inset;
+    box-shadow: 0 14px 36px rgba(0, 0, 0, 0.28),
+                0 0 0 1px rgba(255, 255, 255, 0.18) inset;
 }
 .eas-hero-title,
 .about-hero-title {
