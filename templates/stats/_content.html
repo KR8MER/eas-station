@@ -536,7 +536,7 @@
             <i class="fas fa-table"></i> Top Affected Boundaries
         </div>
         <div class="table-responsive">
-        <table class="data-table">
+        <table class="data-table eas-table">
             <thead>
                 <tr>
                     <th>Boundary</th>
@@ -548,10 +548,10 @@
             <tbody>
                 {% for boundary in most_affected_boundaries[:8] %}
                 <tr>
-                    <td><strong>{{ boundary.name }}</strong></td>
-                    <td><span class="badge bg-secondary">{{ boundary.type.title() }}</span></td>
-                    <td>{{ boundary.count }}</td>
-                    <td>
+                    <td data-label="Boundary"><strong>{{ boundary.name }}</strong></td>
+                    <td data-label="Type"><span class="badge bg-secondary">{{ boundary.type.title() }}</span></td>
+                    <td data-label="Alerts">{{ boundary.count }}</td>
+                    <td data-label="Impact">
                         {% if boundary.count >= 10 %}
                         <span class="impact-badge impact-high">High</span>
                         {% elif boundary.count >= 5 %}
@@ -646,7 +646,7 @@
             <i class="fas fa-bolt"></i> Broadcast Latency Details
         </div>
         <div class="table-responsive">
-        <table class="data-table">
+        <table class="data-table eas-table">
             <thead>
                 <tr>
                     <th>Metric</th>
@@ -655,20 +655,20 @@
             </thead>
             <tbody>
                 <tr>
-                    <td>Average latency</td>
-                    <td><strong>{{ (broadcast_latency.avg_seconds / 60) | round(1) }} min</strong> ({{ broadcast_latency.avg_seconds }}s)</td>
+                    <td data-label="Metric">Average latency</td>
+                    <td data-label="Value"><strong>{{ (broadcast_latency.avg_seconds / 60) | round(1) }} min</strong> ({{ broadcast_latency.avg_seconds }}s)</td>
                 </tr>
                 <tr>
-                    <td>Fastest broadcast</td>
-                    <td>{{ broadcast_latency.min_seconds }}s</td>
+                    <td data-label="Metric">Fastest broadcast</td>
+                    <td data-label="Value">{{ broadcast_latency.min_seconds }}s</td>
                 </tr>
                 <tr>
-                    <td>Slowest broadcast</td>
-                    <td>{{ broadcast_latency.max_seconds }}s</td>
+                    <td data-label="Metric">Slowest broadcast</td>
+                    <td data-label="Value">{{ broadcast_latency.max_seconds }}s</td>
                 </tr>
                 <tr>
-                    <td>Total EAS broadcasts</td>
-                    <td>{{ broadcast_latency.total_broadcasts }}</td>
+                    <td data-label="Metric">Total EAS broadcasts</td>
+                    <td data-label="Value">{{ broadcast_latency.total_broadcasts }}</td>
                 </tr>
             </tbody>
         </table>
@@ -700,7 +700,7 @@
                 <i class="fas fa-table"></i> Relay Breakdown
             </div>
             <div class="table-responsive">
-            <table class="data-table">
+            <table class="data-table eas-table">
                 <thead>
                     <tr>
                         <th>Type</th>
@@ -711,9 +711,9 @@
                 <tbody>
                     {% for r in relay_stats.by_type %}
                     <tr>
-                        <td><span class="badge bg-secondary">{{ r.type | title }}</span></td>
-                        <td>{{ r.count }}</td>
-                        <td>{{ r.avg_duration }}s</td>
+                        <td data-label="Type"><span class="badge bg-secondary">{{ r.type | title }}</span></td>
+                        <td data-label="Count">{{ r.count }}</td>
+                        <td data-label="Avg Duration">{{ r.avg_duration }}s</td>
                     </tr>
                     {% endfor %}
                 </tbody>

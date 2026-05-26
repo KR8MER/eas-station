@@ -229,7 +229,7 @@ tr.alert-superseded:hover {
                 <div class="card-body p-0">
                     {% if alerts %}
                     <div class="table-responsive">
-                        <table class="table table-hover table-modern mb-0">
+                        <table class="table table-modern eas-table mb-0">
                             <thead>
                                 {% macro sort_th(label, key) %}
                                 {% set is_active = current_filters.sort == key %}
@@ -265,10 +265,10 @@ tr.alert-superseded:hover {
                                 {% set is_expired = alert.expires | is_expired %}
                                 {% set is_superseded = alert.superseded_by_id is not none %}
                                 <tr class="{% if is_expired %}table-secondary{% elif is_superseded %}alert-superseded{% endif %}">
-                                    <td>
+                                    <td data-label="Event">
                                         <span class="badge bg-primary">{{ alert.event }}</span>
                                     </td>
-                                    <td>
+                                    <td data-label="Severity">
                                         {% if alert.severity %}
                                         <span class="badge {% if alert.severity == 'Extreme' %}bg-danger{% elif alert.severity == 'Severe' %}bg-warning{% elif alert.severity == 'Moderate' %}bg-info{% else %}bg-secondary{% endif %}">
                                             {{ alert.severity }}
@@ -277,10 +277,10 @@ tr.alert-superseded:hover {
                                         <span class="text-muted">-</span>
                                         {% endif %}
                                     </td>
-                                    <td>
+                                    <td data-label="Status">
                                         <span class="badge bg-outline-secondary">{{ alert.status }}</span>
                                     </td>
-                                    <td>
+                                    <td data-label="Source">
                                         <div class="d-flex flex-column gap-1">
                                             {% if alert.source %}
                                             <span class="badge bg-dark text-uppercase">{{ alert.source }}</span>
@@ -312,12 +312,12 @@ tr.alert-superseded:hover {
                                             {% endif %}
                                         </div>
                                     </td>
-                                    <td>
+                                    <td data-label="Sent">
                                         <small class="text-muted">
                                             {{ alert.sent | format_local_datetime(false) if alert.sent else 'Unknown' }}
                                         </small>
                                     </td>
-                                    <td>
+                                    <td data-label="Expires">
                                         {% if alert.expires %}
                                         <small class="{% if is_expired %}text-danger{% else %}text-success{% endif %}">
                                             {{ alert.expires | format_local_datetime(false) }}
@@ -326,7 +326,7 @@ tr.alert-superseded:hover {
                                         <span class="text-muted">No expiration</span>
                                         {% endif %}
                                     </td>
-                                    <td>
+                                    <td data-label="Headline">
                                         {% if alert.headline %}
                                         <div class="text-truncate" style="max-width: 200px;" title="{{ alert.headline }}">
                                             {{ alert.headline }}
@@ -335,7 +335,7 @@ tr.alert-superseded:hover {
                                         <span class="text-muted">No headline</span>
                                         {% endif %}
                                     </td>
-                                    <td>
+                                    <td data-label="Area">
                                         {% if alert.area_desc %}
                                         <div class="text-truncate" style="max-width: 150px;" title="{{ alert.area_desc }}">
                                             {{ alert.area_desc }}
@@ -344,7 +344,7 @@ tr.alert-superseded:hover {
                                         <span class="text-muted">No area description</span>
                                         {% endif %}
                                     </td>
-                                    <td>
+                                    <td data-label="Audio">
                                         {% set audio_entries = audio_map.get(alert.id, []) %}
                                         <div class="d-flex flex-column gap-1">
                                             {% if alert.ipaws_audio_url %}
@@ -382,6 +382,7 @@ tr.alert-superseded:hover {
                                         </div>
                                     </td>
                                     <td>
+                                        {# Actions cell: no data-label so it spans the row on mobile #}
                                         <div class="d-flex flex-wrap gap-1">
                                             <a href="/alerts/{{ alert.id }}" class="btn btn-sm btn-outline-primary">
                                                 <i class="fas fa-eye"></i> View

@@ -106,7 +106,7 @@
                 </div>
                 <div class="card-body">
                     <div class="table-responsive">
-                        <table class="table table-hover" id="trends-table">
+                        <table class="table eas-table" id="trends-table">
                             <thead>
                                 <tr>
                                     <th>Metric</th>
@@ -141,7 +141,7 @@
                 </div>
                 <div class="card-body">
                     <div class="table-responsive">
-                        <table class="table table-hover" id="anomalies-table">
+                        <table class="table eas-table" id="anomalies-table">
                             <thead>
                                 <tr>
                                     <th>Severity</th>
@@ -222,15 +222,15 @@
                                trend.trend_direction === 'falling' ? 'trend-falling' : 'trend-stable';
 
             row.innerHTML = `
-                <td>${trend.metric_category}.${trend.metric_name}</td>
-                <td><span class="${trendClass}"><i class="fas fa-arrow-${trend.trend_direction === 'rising' ? 'up' : trend.trend_direction === 'falling' ? 'down' : 'right'}"></i> ${trend.trend_direction}</span></td>
-                <td>${trend.trend_strength || 'N/A'}</td>
-                <td>${
+                <td data-label="Metric">${trend.metric_category}.${trend.metric_name}</td>
+                <td data-label="Direction"><span class="${trendClass}"><i class="fas fa-arrow-${trend.trend_direction === 'rising' ? 'up' : trend.trend_direction === 'falling' ? 'down' : 'right'}"></i> ${trend.trend_direction}</span></td>
+                <td data-label="Strength">${trend.trend_strength || 'N/A'}</td>
+                <td data-label="Change">${
                     trend.percent_change === null || trend.percent_change === undefined
                         ? 'N/A'
                         : trend.percent_change.toFixed(2) + '%'
                 }</td>
-                <td>${new Date(trend.analysis_time).toLocaleString()}</td>
+                <td data-label="Analysis Date">${new Date(trend.analysis_time).toLocaleString()}</td>
             `;
             tbody.appendChild(row);
         });
@@ -249,11 +249,11 @@
             const row = document.createElement('tr');
 
             row.innerHTML = `
-                <td><span class="anomaly-badge severity-${anomaly.severity}">${anomaly.severity.toUpperCase()}</span></td>
-                <td>${anomaly.metric_category}.${anomaly.metric_name}</td>
-                <td>${anomaly.anomaly_type}</td>
-                <td>${anomaly.description || 'N/A'}</td>
-                <td>${new Date(anomaly.detected_at).toLocaleString()}</td>
+                <td data-label="Severity"><span class="anomaly-badge severity-${anomaly.severity}">${anomaly.severity.toUpperCase()}</span></td>
+                <td data-label="Metric">${anomaly.metric_category}.${anomaly.metric_name}</td>
+                <td data-label="Type">${anomaly.anomaly_type}</td>
+                <td data-label="Description">${anomaly.description || 'N/A'}</td>
+                <td data-label="Detected">${new Date(anomaly.detected_at).toLocaleString()}</td>
                 <td>
                     <button class="btn btn-sm btn-outline-primary" onclick="acknowledgeAnomaly(${anomaly.id})">
                         <i class="fas fa-check"></i> Acknowledge

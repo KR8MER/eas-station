@@ -157,7 +157,7 @@
     <!-- Attempts Table -->
     <div class="admin-table-card">
         <div class="table-responsive">
-            <table class="table table-hover mb-0">
+            <table class="table eas-table mb-0">
                 <thead>
                     <tr>
                         <th>Timestamp</th>
@@ -305,11 +305,11 @@ function displayAttempts(logs) {
         
         return `
             <tr>
-                <td>${timestamp}</td>
-                <td class="admin-mono-badge">${log.ip_address || 'N/A'}</td>
-                <td><code>${log.username || 'N/A'}</code></td>
-                <td><span class="admin-badge admin-badge-danger">${reason}</span></td>
-                <td><div class="admin-output-box admin-output-box-compact">${escapeHtml(detailsStr)}</div></td>
+                <td data-label="Timestamp">${timestamp}</td>
+                <td data-label="IP Address" class="admin-mono-badge">${log.ip_address || 'N/A'}</td>
+                <td data-label="Username Attempted"><code>${log.username || 'N/A'}</code></td>
+                <td data-label="Type"><span class="admin-badge admin-badge-danger">${reason}</span></td>
+                <td data-label="Details"><div class="admin-output-box admin-output-box-compact">${escapeHtml(detailsStr)}</div></td>
             </tr>
         `;
     }).join('');
@@ -462,16 +462,16 @@ function displayIPFilters(filters) {
     if (allowlist.length > 0) {
         html += '<h6 class="text-success"><i class="bi bi-check-circle"></i> Allowlist</h6>';
         html += '<div class="table-responsive mb-3">';
-        html += '<table class="table table-sm">';
+        html += '<table class="table eas-table table-sm">';
         html += '<thead><tr><th>IP/Range</th><th>Description</th><th>Created</th><th>Status</th><th>Actions</th></tr></thead>';
         html += '<tbody>';
         allowlist.forEach(filter => {
             html += `
                 <tr>
-                    <td class="admin-mono-badge">${filter.ip_address}</td>
-                    <td>${filter.description || '-'}</td>
-                    <td>${new Date(filter.created_at).toLocaleString()}</td>
-                    <td>
+                    <td data-label="IP/Range" class="admin-mono-badge">${filter.ip_address}</td>
+                    <td data-label="Description">${filter.description || '-'}</td>
+                    <td data-label="Created">${new Date(filter.created_at).toLocaleString()}</td>
+                    <td data-label="Status">
                         <span class="badge ${filter.is_active ? 'bg-success' : 'bg-secondary'}">
                             ${filter.is_active ? 'Active' : 'Inactive'}
                         </span>
@@ -493,18 +493,18 @@ function displayIPFilters(filters) {
     if (blocklist.length > 0) {
         html += '<h6 class="text-danger"><i class="bi bi-ban"></i> Blocklist</h6>';
         html += '<div class="table-responsive">';
-        html += '<table class="table table-sm">';
+        html += '<table class="table eas-table table-sm">';
         html += '<thead><tr><th>IP/Range</th><th>Reason</th><th>Description</th><th>Expires</th><th>Status</th><th>Actions</th></tr></thead>';
         html += '<tbody>';
         blocklist.forEach(filter => {
             const expires = filter.expires_at ? new Date(filter.expires_at).toLocaleString() : 'Never';
             html += `
                 <tr>
-                    <td class="admin-mono-badge">${filter.ip_address}</td>
-                    <td><span class="badge bg-danger">${filter.reason}</span></td>
-                    <td>${filter.description || '-'}</td>
-                    <td>${expires}</td>
-                    <td>
+                    <td data-label="IP/Range" class="admin-mono-badge">${filter.ip_address}</td>
+                    <td data-label="Reason"><span class="badge bg-danger">${filter.reason}</span></td>
+                    <td data-label="Description">${filter.description || '-'}</td>
+                    <td data-label="Expires">${expires}</td>
+                    <td data-label="Status">
                         <span class="badge ${filter.is_active ? 'bg-danger' : 'bg-secondary'}">
                             ${filter.is_active ? 'Active' : 'Inactive'}
                         </span>

@@ -65,7 +65,7 @@
             </div>
             <div class="card-body">
                 <div class="table-responsive">
-                    <table class="table table-hover table-bordered align-middle mb-0">
+                    <table class="table eas-table table-bordered align-middle mb-0">
                         <caption class="caption-top text-muted small">
                             Detailed alert outcomes for this poll cycle.
                         </caption>
@@ -93,14 +93,14 @@
                                     {% set row_class = 'table-info' %}
                                 {% endif %}
                                 <tr class="{{ row_class }} align-top">
-                                    <td class="text-break">
+                                    <td data-label="Event" class="text-break">
                                         <div class="fw-semibold">{{ alert.alert_event or 'Unknown event' }}</div>
                                         <div class="text-muted small">{{ alert.source or 'Unknown source' }}</div>
                                         {% if alert.area_desc %}
                                             <div class="small text-muted">{{ alert.area_desc }}</div>
                                         {% endif %}
                                     </td>
-                                    <td class="text-break">
+                                    <td data-label="Identifier" class="text-break">
                                         <div class="font-monospace small">{{ alert.alert_identifier or alert.identifier or 'n/a' }}</div>
                                         {% if alert.raw_xml_present %}
                                             <span class="badge bg-secondary mt-1">Raw XML</span>
@@ -109,7 +109,7 @@
                                             <div class="small text-muted">UGC: {{ alert.ugc_codes|join(', ') }}</div>
                                         {% endif %}
                                     </td>
-                                    <td class="text-break">
+                                    <td data-label="Relevance" class="text-break">
                                         {% if alert.is_relevant %}
                                             <span class="badge bg-success">Accepted</span>
                                         {% else %}
@@ -120,7 +120,7 @@
                                             <div class="small">{{ alert.relevance_matches|join(', ') }}</div>
                                         {% endif %}
                                     </td>
-                                    <td class="text-break">
+                                    <td data-label="Database" class="text-break">
                                         <div class="d-flex flex-wrap gap-1">
                                             {% if alert.was_saved %}
                                                 <span class="badge bg-info text-dark">Saved</span>
@@ -138,7 +138,7 @@
                                             <div class="text-danger small">{{ alert.parse_error }}</div>
                                         {% endif %}
                                     </td>
-                                    <td class="text-break">
+                                    <td data-label="Geometry" class="text-break">
                                         <div class="small">{{ alert.geometry_type or 'None' }}{% if alert.polygon_count %} ({{ alert.polygon_count }}){% endif %}</div>
                                         {% if alert.geometry_preview %}
                                             <details class="small mt-1">
@@ -153,11 +153,11 @@
                                             </details>
                                         {% endif %}
                                     </td>
-                                    <td class="text-break">
+                                    <td data-label="Timing" class="text-break">
                                         <div class="small">Sent: {{ alert.alert_sent_display or 'Unknown' }}</div>
                                         <div class="text-muted small">Captured: {{ alert.created_at_display or 'Unknown' }}</div>
                                     </td>
-                                    <td class="text-break">
+                                    <td data-label="Notes &amp; Payloads" class="text-break">
                                         {% set note_text = alert.notes or '' %}
                                         {% if note_text %}
                                             <div class="small text-muted" style="white-space: pre-line;">{{ note_text }}</div>

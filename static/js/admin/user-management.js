@@ -135,9 +135,9 @@ async function loadUserAccounts() {
         users.forEach(user => {
             const row = document.createElement('tr');
             row.innerHTML = `
-                <th scope="row" class="text-nowrap">${user.username}</th>
-                <td class="text-nowrap">${formatUserTimestamp(user.created_at)}</td>
-                <td class="text-nowrap">${formatUserTimestamp(user.last_login_at)}</td>
+                <td data-label="Username" class="text-nowrap"><strong>${user.username}</strong></td>
+                <td data-label="Created" class="text-nowrap">${formatUserTimestamp(user.created_at)}</td>
+                <td data-label="Last Login" class="text-nowrap">${formatUserTimestamp(user.last_login_at)}</td>
                 <td class="text-end">
                     <div class="btn-group" role="group">
                         <button type="button" class="btn btn-sm btn-outline-primary" data-action="reset-password" data-user-id="${user.id}" data-username="${user.username}">

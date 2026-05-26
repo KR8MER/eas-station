@@ -1733,7 +1733,7 @@
                         </div>
                         <div class="card-body">
                             <div class="table-responsive">
-                                <table class="table table-sm align-middle mb-0">
+                                <table class="table eas-table table-sm align-middle mb-0">
                                     <thead class="table-light">
                                         <tr>
                                             <th scope="col" class="text-nowrap">Generated</th>
@@ -1746,14 +1746,14 @@
                                         {% for entry in audio_entries %}
                                         {% set meta = entry.metadata or {} %}
                                         <tr>
-                                            <td class="text-nowrap">
+                                            <td data-label="Generated" class="text-nowrap">
                                                 {{ entry.created_at | format_local_datetime(false) if entry.created_at else 'Unknown' }}
                                                 <br>
                                                 <small class="text-muted">
                                                     {{ entry.created_at | format_local_time if entry.created_at else '' }}
                                                 </small>
                                             </td>
-                                            <td>
+                                            <td data-label="Details">
                                                 <strong>{{ meta.get('event', alert.event) or 'Unknown Event' }}</strong>
                                                 {% if meta.get('severity') or alert.severity %}
                                                     <span class="badge bg-danger ms-1">{{ meta.get('severity', alert.severity) }}</span>
@@ -1778,7 +1778,7 @@
                                                     </div>
                                                 {% endif %}
                                             </td>
-                                            <td>
+                                            <td data-label="SAME Header">
                                                 {% if entry.same_header %}
                                                     {% set sh = entry.same_header %}
                                                     {% if sh | length > 48 %}

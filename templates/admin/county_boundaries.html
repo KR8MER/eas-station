@@ -205,7 +205,7 @@
                     <div id="states-table-container">
                         {% if loaded_states %}
                         <div class="table-responsive">
-                        <table class="table table-sm table-hover mb-0">
+                        <table class="table eas-table table-sm mb-0">
                             <thead>
                                 <tr>
                                     <th>State</th>
@@ -217,9 +217,9 @@
                             <tbody>
                                 {% for state in loaded_states %}
                                 <tr>
-                                    <td>{{ state.state_name }}</td>
-                                    <td><code>{{ state.stusps }}</code></td>
-                                    <td>{{ state.county_count }}</td>
+                                    <td data-label="State">{{ state.state_name }}</td>
+                                    <td data-label="Abbreviation"><code>{{ state.stusps }}</code></td>
+                                    <td data-label="Counties">{{ state.county_count }}</td>
                                     <td>
                                         <button class="btn btn-sm btn-outline-secondary view-state-map-btn me-1"
                                                 data-state="{{ state.stusps }}" title="View on map">

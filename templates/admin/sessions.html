@@ -52,7 +52,7 @@
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-hover mb-0">
+                <table class="table eas-table mb-0">
                     <thead class="table-light">
                         <tr>
                             <th>User</th>
@@ -122,11 +122,11 @@ function renderSessions(sessions) {
                </button>`
             : `<small class="text-muted">${s.ended_at ? new Date(s.ended_at).toLocaleString() : ''}</small>`;
         return `<tr>
-            <td><i class="fas fa-user me-1"></i><strong>${escHtml(s.username || '?')}</strong></td>
-            <td><code>${escHtml(s.ip_address || '—')}</code></td>
-            <td><small class="text-muted" title="${escHtml(s.user_agent || '')}">${escHtml(ua)}</small></td>
-            <td><small>${started}</small></td>
-            <td>${statusBadge}</td>
+            <td data-label="User"><i class="fas fa-user me-1"></i><strong>${escHtml(s.username || '?')}</strong></td>
+            <td data-label="IP Address"><code>${escHtml(s.ip_address || '—')}</code></td>
+            <td data-label="User Agent"><small class="text-muted" title="${escHtml(s.user_agent || '')}">${escHtml(ua)}</small></td>
+            <td data-label="Started"><small>${started}</small></td>
+            <td data-label="Status">${statusBadge}</td>
             <td>${actions}</td>
         </tr>`;
     }).join('');

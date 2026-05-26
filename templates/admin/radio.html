@@ -215,7 +215,7 @@
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-striped table-hover align-middle mb-0" id="radioReceiversTable">
+                <table class="table table-striped eas-table align-middle mb-0" id="radioReceiversTable">
                     <thead class="table-light">
                         <tr>
                             <th scope="col">Name</th>
@@ -811,12 +811,12 @@
             const monitorButtonClass = isMonitorOpen ? 'btn btn-primary' : 'btn btn-outline-primary';
 
             row.innerHTML = `
-                <td class="fw-semibold">${displayName}</td>
-                <td><code>${identifier}</code></td>
-                <td>${driver}</td>
-                <td class="text-end">${frequency}</td>
-                <td class="text-end">${sampleRate}</td>
-                <td>${renderStatusBadge(receiver.latest_status)}</td>
+                <td data-label="Name" class="fw-semibold">${displayName}</td>
+                <td data-label="Identifier"><code>${identifier}</code></td>
+                <td data-label="Driver">${driver}</td>
+                <td data-label="Frequency (MHz)" class="text-end">${frequency}</td>
+                <td data-label="Sample Rate" class="text-end">${sampleRate}</td>
+                <td data-label="Status">${renderStatusBadge(receiver.latest_status)}</td>
                 <td class="text-end">
                     <div class="btn-group btn-group-sm" role="group">
                         <button type="button" class="${monitorButtonClass}" data-action="monitor" data-id="${receiver.id}" title="Monitor audio" aria-expanded="${isMonitorOpen ? 'true' : 'false'}">

@@ -110,7 +110,7 @@
         <p class="text-muted">No pronunciation rules yet. Add one above or reload the page to seed built-in defaults.</p>
         {% else %}
         <div class="table-responsive">
-            <table class="table table-hover align-middle" id="rulesTable">
+            <table class="table eas-table align-middle" id="rulesTable">
                 <thead>
                     <tr>
                         <th>Original</th>
@@ -124,20 +124,20 @@
                 <tbody>
                 {% for rule in rules %}
                 <tr class="rule-row" data-id="{{ rule.id }}" data-builtin="{{ 'true' if rule.is_builtin else 'false' }}">
-                    <td class="original-cell">
+                    <td data-label="Original" class="original-cell">
                         <code>{{ rule.original_text }}</code>
                         {% if rule.is_builtin %}
                         <span class="badge bg-secondary badge-builtin ms-1">built-in</span>
                         {% endif %}
                     </td>
-                    <td>{{ rule.replacement_text }}</td>
-                    <td class="note-cell">{{ rule.note or '' }}</td>
-                    <td class="text-center">
+                    <td data-label="Replacement">{{ rule.replacement_text }}</td>
+                    <td data-label="Note" class="note-cell">{{ rule.note or '' }}</td>
+                    <td data-label="Case-sensitive" class="text-center">
                         <span class="badge {{ 'bg-warning text-dark' if rule.match_case else 'bg-light text-dark border' }}">
                             {{ 'Yes' if rule.match_case else 'No' }}
                         </span>
                     </td>
-                    <td class="text-center">
+                    <td data-label="Enabled" class="text-center">
                         <div class="form-check form-switch d-inline-block">
                             <input class="form-check-input enable-toggle" type="checkbox"
                                    data-id="{{ rule.id }}"

@@ -102,7 +102,7 @@
             </div>
 
             <div class="table-responsive">
-                <table class="table table-hover" id="users-table">
+                <table class="table eas-table" id="users-table">
                     <thead>
                         <tr>
                             <th>Username</th>
@@ -474,20 +474,20 @@ function renderUsers() {
 
     tbody.innerHTML = usersData.map(user => `
         <tr class="user-row" style="cursor: pointer;" data-user-id="${user.id}" data-user-role-id="${user.role_id || ''}">
-            <td><strong>${escapeHtml(user.username)}</strong></td>
-            <td>
+            <td data-label="Username"><strong>${escapeHtml(user.username)}</strong></td>
+            <td data-label="Current Role">
                 ${user.role_name ?
                     `<span class="badge bg-primary">${escapeHtml(user.role_name)}</span>` :
                     '<span class="badge bg-secondary">No Role</span>'
                 }
             </td>
-            <td>
+            <td data-label="Active">
                 ${user.is_active ?
                     '<span class="badge bg-success">Active</span>' :
                     '<span class="badge bg-danger">Inactive</span>'
                 }
             </td>
-            <td>${user.last_login_at ? new Date(user.last_login_at).toLocaleString() : 'Never'}</td>
+            <td data-label="Last Login">${user.last_login_at ? new Date(user.last_login_at).toLocaleString() : 'Never'}</td>
             <td>
                 <div class="btn-group" role="group">
                     <button class="btn btn-sm btn-primary change-role-btn" data-user-id="${user.id}" data-user-role-id="${user.role_id || ''}">

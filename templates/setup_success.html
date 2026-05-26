@@ -85,7 +85,7 @@
                         </div>
                         <div class="card-body p-0">
                             <div class="table-responsive">
-                                <table class="table table-hover mb-0">
+                                <table class="table eas-table mb-0">
                                     <thead class="table-light">
                                         <tr>
                                             <th style="width: 30%;">Variable Name</th>
@@ -96,8 +96,8 @@
                                     <tbody>
                                         {% for var in env_vars %}
                                         <tr>
-                                            <td><code>{{ var.key }}</code></td>
-                                            <td>
+                                            <td data-label="Variable Name"><code>{{ var.key }}</code></td>
+                                            <td data-label="Value">
                                                 <span class="d-inline-block text-truncate" style="max-width: 500px;" title="{{ var.value }}">
                                                     {% if var.is_sensitive %}
                                                         <span class="text-muted" id="display-{{ var.key }}">{{ var.display_value }}</span>

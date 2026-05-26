@@ -160,7 +160,7 @@
         <div class="card-body">
             {% if payload.events %}
             <div class="table-responsive">
-                <table class="table table-sm align-middle mb-0">
+                <table class="table eas-table table-sm align-middle mb-0">
                     <thead class="table-light">
                         <tr>
                             <th style="width: 200px;">Timestamp</th>
@@ -174,8 +174,8 @@
                     <tbody>
                         {% for event in payload.events %}
                         <tr>
-                            <td><small class="text-monospace">{{ format_local_datetime(event.timestamp, include_utc=True) }}</small></td>
-                            <td>
+                            <td data-label="Timestamp"><small class="text-monospace">{{ format_local_datetime(event.timestamp, include_utc=True) }}</small></td>
+                            <td data-label="Category">
                                 <span class="badge bg-{{
                                     'primary' if event.category == 'ingest'
                                     else 'info' if event.category == 'decode'
@@ -185,7 +185,7 @@
                                     else 'dark'
                                 }}">{{ payload.category_labels.get(event.category, event.category) }}</span>
                             </td>
-                            <td>
+                            <td data-label="Level">
                                 <span class="badge bg-{{
                                     'success' if event.level == 'INFO'
                                     else 'warning' if event.level == 'WARNING'
@@ -193,8 +193,8 @@
                                     else 'secondary'
                                 }}">{{ event.level }}</span>
                             </td>
-                            <td><small class="text-muted">{{ event.source }}</small></td>
-                            <td>{{ event.summary }}</td>
+                            <td data-label="Source"><small class="text-muted">{{ event.source }}</small></td>
+                            <td data-label="Event">{{ event.summary }}</td>
                             <td class="text-center">
                                 {% if event.details %}
                                 <button class="btn btn-sm btn-link p-0" type="button"
