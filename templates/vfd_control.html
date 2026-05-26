@@ -289,7 +289,7 @@
                 </div>
                 <div class="card-body">
                     <div class="table-responsive">
-                        <table class="table table-sm table-hover">
+                        <table class="table eas-table table-sm">
                             <thead>
                                 <tr>
                                     <th>Time</th>
@@ -302,9 +302,9 @@
                             <tbody id="historyTableBody">
                                 {% for display in recent_displays %}
                                 <tr>
-                                    <td>{{ display.created_at.strftime('%H:%M:%S') if display.created_at else 'N/A' }}</td>
-                                    <td><span class="badge badge-info">{{ display.content_type }}</span></td>
-                                    <td>
+                                    <td data-label="Time">{{ display.created_at.strftime('%H:%M:%S') if display.created_at else 'N/A' }}</td>
+                                    <td data-label="Type"><span class="badge badge-info">{{ display.content_type }}</span></td>
+                                    <td data-label="Content">
                                         {% if display.content_type == 'text' %}
                                             {{ display.content_data[:30] }}
                                         {% elif display.content_type == 'image' %}
@@ -313,8 +313,8 @@
                                             {{ display.content_type }}
                                         {% endif %}
                                     </td>
-                                    <td>({{ display.x_position }}, {{ display.y_position }})</td>
-                                    <td>{{ display.priority }}</td>
+                                    <td data-label="Position">({{ display.x_position }}, {{ display.y_position }})</td>
+                                    <td data-label="Priority">{{ display.priority }}</td>
                                 </tr>
                                 {% else %}
                                 <tr>

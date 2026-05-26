@@ -192,7 +192,7 @@
         </div>
         <div class="card-body">
             <div class="table-responsive">
-                <table class="table table-sm table-hover">
+                <table class="table eas-table table-sm">
                     <thead>
                         <tr>
                             <th>Time</th>
@@ -205,21 +205,21 @@
                         {% if recent_led_messages %}
                             {% for msg in recent_led_messages[:5] %}
                             <tr>
-                                <td>{{ msg.created_at.strftime('%H:%M:%S') if msg.created_at else 'N/A' }}</td>
-                                <td><span class="badge bg-warning">LED</span></td>
-                                <td>{{ msg.message_type if msg.message_type else 'Text' }}</td>
-                                <td>{{ msg.line_1[:50] if msg.line_1 else '' }}</td>
+                                <td data-label="Time">{{ msg.created_at.strftime('%H:%M:%S') if msg.created_at else 'N/A' }}</td>
+                                <td data-label="Display"><span class="badge bg-warning">LED</span></td>
+                                <td data-label="Type">{{ msg.message_type if msg.message_type else 'Text' }}</td>
+                                <td data-label="Content">{{ msg.line_1[:50] if msg.line_1 else '' }}</td>
                             </tr>
                             {% endfor %}
                         {% endif %}
-                        
+
                         {% if recent_vfd_displays %}
                             {% for display in recent_vfd_displays[:5] %}
                             <tr>
-                                <td>{{ display.created_at.strftime('%H:%M:%S') if display.created_at else 'N/A' }}</td>
-                                <td><span class="badge bg-info">VFD</span></td>
-                                <td>{{ display.content_type if display.content_type else 'Text' }}</td>
-                                <td>
+                                <td data-label="Time">{{ display.created_at.strftime('%H:%M:%S') if display.created_at else 'N/A' }}</td>
+                                <td data-label="Display"><span class="badge bg-info">VFD</span></td>
+                                <td data-label="Type">{{ display.content_type if display.content_type else 'Text' }}</td>
+                                <td data-label="Content">
                                     {% if display.content_type == 'text' %}
                                         {{ display.content_data[:50] if display.content_data else '' }}
                                     {% else %}

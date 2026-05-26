@@ -323,7 +323,7 @@
         <div class="admin-form-section" id="peersSection" style="display: none;">
             <h4>Connected Peers</h4>
             <div class="table-responsive">
-            <table class="peer-table">
+            <table class="peer-table eas-table">
                 <thead>
                     <tr>
                         <th>Hostname</th>
@@ -520,10 +520,10 @@ async function refreshStatus() {
                     const ips = (peer.ips || []).join(', ');
                     peersHtml += `
                         <tr>
-                            <td>${peer.hostname || peer.dns_name || 'Unknown'}</td>
-                            <td><code>${ips}</code></td>
-                            <td>${peer.os || '-'}</td>
-                            <td class="${onlineClass}"><i class="fas ${statusIcon}"></i> ${peer.online ? 'Online' : 'Offline'}</td>
+                            <td data-label="Hostname">${peer.hostname || peer.dns_name || 'Unknown'}</td>
+                            <td data-label="IP Address"><code>${ips}</code></td>
+                            <td data-label="OS">${peer.os || '-'}</td>
+                            <td data-label="Status" class="${onlineClass}"><i class="fas ${statusIcon}"></i> ${peer.online ? 'Online' : 'Offline'}</td>
                         </tr>`;
                 });
                 peersTableBody.innerHTML = peersHtml;

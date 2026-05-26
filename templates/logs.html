@@ -410,7 +410,7 @@
                         <h6 class="mb-0"><i class="fas fa-history"></i> Weekly Test History</h6>
                     </div>
                     <div class="table-responsive">
-                        <table class="table table-sm mb-0">
+                        <table class="table eas-table table-sm mb-0">
                             <thead class="table-light">
                                 <tr>
                                     <th>Week Starting</th>
@@ -422,10 +422,10 @@
                             <tbody>
                                 {% for row in weekly.rows[:8] %}
                                 <tr>
-                                    <td><small>{{ row.week_start.strftime('%Y-%m-%d') if row.week_start else '—' }}</small></td>
-                                    <td class="text-end">{{ row.received }}</td>
-                                    <td class="text-end">{{ row.relayed }}</td>
-                                    <td class="text-end">
+                                    <td data-label="Week Starting"><small>{{ row.week_start.strftime('%Y-%m-%d') if row.week_start else '—' }}</small></td>
+                                    <td data-label="Received" class="text-end">{{ row.received }}</td>
+                                    <td data-label="Relayed" class="text-end">{{ row.relayed }}</td>
+                                    <td data-label="Compliance" class="text-end">
                                         {% if row.compliance is not none %}
                                             {{ '%.1f'|format(row.compliance) }}%
                                         {% else %}<span class="text-muted">—</span>{% endif %}
@@ -617,7 +617,7 @@
                                      data-bs-parent="#logsAccordion">
                                     <div class="accordion-body p-0">
                                         <div class="table-responsive">
-                                            <table class="table table-sm table-hover mb-0">
+                                            <table class="table eas-table table-sm mb-0">
                                                 <thead class="table-light">
                                                     <tr>
                                                         <th style="width: 180px;"><i class="fas fa-clock"></i> Timestamp</th>
@@ -631,8 +631,8 @@
                                                 <tbody>
                                                     {% for log in category_logs %}
                                                     <tr class="log-row log-level-{{ log.level|lower }}">
-                                                        <td><small class="text-muted">{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') if log.timestamp else 'N/A' }}</small></td>
-                                                        <td>
+                                                        <td data-label="Timestamp"><small class="text-muted">{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') if log.timestamp else 'N/A' }}</small></td>
+                                                        <td data-label="Level">
                                                             <span class="badge bg-{{
                                                                 'success' if log.level == 'SUCCESS' or log.level == 'INFO'
                                                                 else 'warning' if log.level == 'WARNING'
@@ -643,8 +643,8 @@
                                                                 {{ log.level }}
                                                             </span>
                                                         </td>
-                                                        <td><small class="text-muted">{{ log.module }}</small></td>
-                                                        <td>
+                                                        <td data-label="Module"><small class="text-muted">{{ log.module }}</small></td>
+                                                        <td data-label="Alert">
                                                             {% if log.alert_identifier %}
                                                             <div class="btn-group btn-group-sm" role="group">
                                                                 <a href="/alerts/{{ log.alert_identifier }}/trail"
@@ -662,8 +662,8 @@
                                                             <span class="text-muted">—</span>
                                                             {% endif %}
                                                         </td>
-                                                        <td><span class="log-message">{{ log.message }}</span></td>
-                                                        <td class="text-center">
+                                                        <td data-label="Message"><span class="log-message">{{ log.message }}</span></td>
+                                                        <td data-label="Details" class="text-center">
                                                             {% if log.details %}
                                                             <button class="btn btn-sm btn-outline-secondary" type="button"
                                                                     data-bs-toggle="collapse"
@@ -707,7 +707,7 @@
                     {% else %}
                         <!-- Standard table display for specific log types -->
                     <div class="table-responsive">
-                        <table class="table table-sm table-hover" id="logsTable">
+                        <table class="table eas-table table-sm" id="logsTable">
                             <thead class="table-light">
                                 <tr>
                                     <th style="width: 180px;">
@@ -730,8 +730,8 @@
                             <tbody>
                                 {% for log in logs %}
                                 <tr class="log-row log-level-{{ log.level|lower }}">
-                                    <td><small class="text-muted">{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') if log.timestamp else 'N/A' }}</small></td>
-                                    <td>
+                                    <td data-label="Timestamp"><small class="text-muted">{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') if log.timestamp else 'N/A' }}</small></td>
+                                    <td data-label="Level">
                                         <span class="badge bg-{{
                                             'success' if log.level == 'SUCCESS' or log.level == 'INFO'
                                             else 'warning' if log.level == 'WARNING'
@@ -742,8 +742,8 @@
                                             {{ log.level }}
                                         </span>
                                     </td>
-                                    <td><small class="text-muted">{{ log.module }}</small></td>
-                                    <td>
+                                    <td data-label="Module"><small class="text-muted">{{ log.module }}</small></td>
+                                    <td data-label="Alert">
                                         {% if log.alert_identifier %}
                                         <div class="btn-group btn-group-sm" role="group">
                                             <a href="/alerts/{{ log.alert_identifier }}/trail"
@@ -761,8 +761,8 @@
                                         <span class="text-muted">—</span>
                                         {% endif %}
                                     </td>
-                                    <td><span class="log-message">{{ log.message }}</span></td>
-                                    <td class="text-center">
+                                    <td data-label="Message"><span class="log-message">{{ log.message }}</span></td>
+                                    <td data-label="Details" class="text-center">
                                         {% if log.details %}
                                         <button class="btn btn-sm btn-outline-secondary" type="button"
                                                 data-bs-toggle="collapse"

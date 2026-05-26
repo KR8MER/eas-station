@@ -57,7 +57,7 @@
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive">
-                        <table class="table table-sm mb-0">
+                        <table class="table eas-table table-sm mb-0">
                             <thead>
                                 <tr>
                                     <th scope="col">Code</th>
@@ -68,9 +68,9 @@
                             <tbody>
                                 {% for loc in header_detail.locations %}
                                 <tr>
-                                    <td><code>{{ loc.code }}</code></td>
-                                    <td>{{ loc.description }}<br><small class="text-muted">{{ loc.state_name }}</small></td>
-                                    <td>{{ loc.p_meaning or 'Entire area' }}</td>
+                                    <td data-label="Code"><code>{{ loc.code }}</code></td>
+                                    <td data-label="Area">{{ loc.description }}<br><small class="text-muted">{{ loc.state_name }}</small></td>
+                                    <td data-label="Portion">{{ loc.p_meaning or 'Entire area' }}</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>

@@ -143,7 +143,7 @@
 
                     <!-- Test Details Table -->
                     <div class="table-responsive">
-                        <table class="table table-sm table-hover" id="test-details-table">
+                        <table class="table eas-table table-sm" id="test-details-table">
                             <thead>
                                 <tr>
                                     <th style="width: 100px;">Status</th>
@@ -384,19 +384,23 @@ function renderTestDetails() {
         if (isProblem) row.className = 'test-error-row';
 
         const statusCell = row.insertCell();
+        statusCell.setAttribute('data-label', 'Status');
         const badge = document.createElement('span');
         badge.className = 'badge ' + statusBadgeClass(test.status);
         badge.textContent = test.status.toUpperCase();
         statusCell.appendChild(badge);
 
         const nameCell = row.insertCell();
+        nameCell.setAttribute('data-label', 'Test Name');
         nameCell.textContent = test.name;
 
         const moduleCell = row.insertCell();
+        moduleCell.setAttribute('data-label', 'Module');
         moduleCell.textContent = test.module || '';
         moduleCell.className = 'text-muted small';
 
         const timeCell = row.insertCell();
+        timeCell.setAttribute('data-label', 'Time');
         timeCell.textContent = (test.duration != null ? test.duration.toFixed(3) + 's' : '');
         timeCell.className = 'text-end small text-muted';
 

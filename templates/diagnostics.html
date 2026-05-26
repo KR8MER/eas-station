@@ -169,7 +169,7 @@
                         </div>
                         <div class="card-body p-0">
                             <div class="table-responsive">
-                            <table class="table table-sm mb-0">
+                            <table class="table eas-table table-sm mb-0">
                                 <thead>
                                     <tr>
                                         <th>Check</th>
@@ -320,13 +320,16 @@
         if (Array.isArray(data.checks) && data.checks.length) {
             data.checks.forEach(c => {
                 const row = checksBody.insertRow();
-                row.insertCell().textContent = c.name;
-                const pCell = row.insertCell(); pCell.textContent = c.passed; pCell.className = 'text-center status-pass';
-                const wCell = row.insertCell(); wCell.textContent = c.warnings; wCell.className = 'text-center status-warning';
-                const fCell = row.insertCell(); fCell.textContent = c.failed; fCell.className = 'text-center status-fail';
+                const nameCell = row.insertCell();
+                nameCell.textContent = c.name;
+                nameCell.setAttribute('data-label', 'Check');
+                const pCell = row.insertCell(); pCell.textContent = c.passed; pCell.className = 'text-center status-pass'; pCell.setAttribute('data-label', 'Passed');
+                const wCell = row.insertCell(); wCell.textContent = c.warnings; wCell.className = 'text-center status-warning'; wCell.setAttribute('data-label', 'Warn');
+                const fCell = row.insertCell(); fCell.textContent = c.failed; fCell.className = 'text-center status-fail'; fCell.setAttribute('data-label', 'Fail');
                 const tCell = row.insertCell();
                 tCell.textContent = (c.elapsed_ms != null ? c.elapsed_ms.toFixed(1) + ' ms' : '--');
                 tCell.className = 'text-end text-muted small';
+                tCell.setAttribute('data-label', 'Time');
             });
             document.getElementById('checksSection').style.display = 'block';
         } else {

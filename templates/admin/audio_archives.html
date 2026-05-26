@@ -371,7 +371,7 @@ async function loadFiles(sourceName) {
 
     let html = `
 <div class="table-responsive">
-<table class="table table-sm mb-0" style="font-size:.875rem">
+<table class="table eas-table table-sm mb-0" style="font-size:.875rem">
   <thead><tr>
     <th>Date / File</th>
     <th class="d-none d-sm-table-cell">Size</th>
@@ -388,13 +388,13 @@ async function loadFiles(sourceName) {
       html += `
   <tbody>
     <tr class="date-row table-secondary" onclick="toggleDateGroup('${groupId}')">
-      <td colspan="2"><i class="fas fa-chevron-right me-2 date-chevron-${groupId}" style="font-size:.75rem"></i>
+      <td data-label="Date" colspan="2"><i class="fas fa-chevron-right me-2 date-chevron-${groupId}" style="font-size:.75rem"></i>
         <strong>${d.date}</strong>
         <span class="text-muted ms-2">${d.files.length} file(s)</span>
       </td>
-      <td class="text-muted">${fmtDuration(totalDur)}</td>
+      <td data-label="Duration" class="text-muted">${fmtDuration(totalDur)}</td>
       <td class="d-none d-md-table-cell"></td>
-      <td class="text-end text-muted">${fmt(totalSize)}</td>
+      <td data-label="Size" class="text-end text-muted">${fmt(totalSize)}</td>
     </tr>
   </tbody>
   <tbody class="date-files" id="dg-${groupId}">`;
@@ -403,10 +403,10 @@ async function loadFiles(sourceName) {
         const dlUrl   = playUrl + '?download=1';
         html += `
     <tr class="file-row">
-      <td class="text-break-anywhere"><i class="fas fa-file-audio text-muted me-2"></i>${f.filename}</td>
-      <td class="text-muted d-none d-sm-table-cell">${f.size_human}</td>
-      <td class="text-muted">${fmtDuration(f.duration_seconds)}</td>
-      <td class="text-muted d-none d-md-table-cell">${fmtTs(f.mtime)}</td>
+      <td data-label="File" class="text-break-anywhere"><i class="fas fa-file-audio text-muted me-2"></i>${f.filename}</td>
+      <td data-label="Size" class="text-muted d-none d-sm-table-cell">${f.size_human}</td>
+      <td data-label="Duration" class="text-muted">${fmtDuration(f.duration_seconds)}</td>
+      <td data-label="Modified" class="text-muted d-none d-md-table-cell">${fmtTs(f.mtime)}</td>
       <td class="text-end" style="white-space:nowrap">
         <button class="play-btn" title="Play" onclick="playFile('${playUrl}', '${sourceName} / ${d.date} / ${f.filename}')">
           <i class="fas fa-play-circle fa-lg"></i>
@@ -515,7 +515,7 @@ async function loadHistory(sourceName) {
 
     let html = `
 <div class="table-responsive">
-<table class="table table-sm mb-0" style="font-size:.875rem">
+<table class="table eas-table table-sm mb-0" style="font-size:.875rem">
   <thead><tr>
     <th></th>
     <th>Time</th>
@@ -550,11 +550,11 @@ async function loadHistory(sourceName) {
       html += `
     <tr>
       <td>${artHtml}</td>
-      <td class="text-muted text-nowrap">${fmtTs(e.timestamp)}</td>
-      <td class="text-break-anywhere">${titleHtml}</td>
-      <td class="d-none d-sm-table-cell text-break-anywhere">${e.artist || '<span class="text-muted">—</span>'}</td>
-      <td class="d-none d-md-table-cell text-break-anywhere">${e.album  || '<span class="text-muted">—</span>'}</td>
-      <td class="d-none d-sm-table-cell text-muted">${e.length || '—'}</td>
+      <td data-label="Time" class="text-muted text-nowrap">${fmtTs(e.timestamp)}</td>
+      <td data-label="Title" class="text-break-anywhere">${titleHtml}</td>
+      <td data-label="Artist" class="d-none d-sm-table-cell text-break-anywhere">${e.artist || '<span class="text-muted">—</span>'}</td>
+      <td data-label="Album" class="d-none d-md-table-cell text-break-anywhere">${e.album  || '<span class="text-muted">—</span>'}</td>
+      <td data-label="Duration" class="d-none d-sm-table-cell text-muted">${e.length || '—'}</td>
       <td style="white-space:nowrap">${streamBtn}</td>
     </tr>`;
     }
@@ -597,15 +597,15 @@ async function loadStats(sourceName) {
       html += `
 <h6 class="text-muted mb-2">Recording History</h6>
 <div class="table-responsive">
-<table class="table table-sm mb-3" style="font-size:.875rem">
+<table class="table eas-table table-sm mb-3" style="font-size:.875rem">
   <thead><tr><th>Date</th><th>Files</th><th>Duration</th><th>Size</th></tr></thead>
   <tbody>`;
       for (const row of d.dates) {
         html += `<tr>
-          <td>${row.date}</td>
-          <td class="text-muted">${row.file_count}</td>
-          <td class="text-muted">${row.duration_human}</td>
-          <td class="text-muted">${row.total_bytes_human}</td>
+          <td data-label="Date">${row.date}</td>
+          <td data-label="Files" class="text-muted">${row.file_count}</td>
+          <td data-label="Duration" class="text-muted">${row.duration_human}</td>
+          <td data-label="Size" class="text-muted">${row.total_bytes_human}</td>
         </tr>`;
       }
       html += `</tbody></table></div>`;
@@ -615,7 +615,7 @@ async function loadStats(sourceName) {
       html += `
 <h6 class="text-muted mb-2">Top Songs</h6>
 <div class="table-responsive">
-<table class="table table-sm mb-3" style="font-size:.875rem">
+<table class="table eas-table table-sm mb-3" style="font-size:.875rem">
   <thead><tr><th></th><th>Title</th><th>Artist</th><th class="text-end">Plays</th></tr></thead>
   <tbody>`;
       for (const s of d.top_songs) {
@@ -624,9 +624,9 @@ async function loadStats(sourceName) {
           : `<div class="meta-artwork-placeholder"><i class="fas fa-music" style="font-size:.75rem"></i></div>`;
         html += `<tr>
           <td>${art}</td>
-          <td class="text-break-anywhere">${s.title || '<span class="text-muted">—</span>'}</td>
-          <td class="text-muted text-break-anywhere">${s.artist || '—'}</td>
-          <td class="text-end text-muted">${s.count}</td>
+          <td data-label="Title" class="text-break-anywhere">${s.title || '<span class="text-muted">—</span>'}</td>
+          <td data-label="Artist" class="text-muted text-break-anywhere">${s.artist || '—'}</td>
+          <td data-label="Plays" class="text-end text-muted">${s.count}</td>
         </tr>`;
       }
       html += `</tbody></table></div>`;
@@ -636,13 +636,13 @@ async function loadStats(sourceName) {
       html += `
 <h6 class="text-muted mb-2">Top Artists</h6>
 <div class="table-responsive">
-<table class="table table-sm mb-0" style="font-size:.875rem">
+<table class="table eas-table table-sm mb-0" style="font-size:.875rem">
   <thead><tr><th>Artist</th><th class="text-end">Plays</th></tr></thead>
   <tbody>`;
       for (const a of d.top_artists) {
         html += `<tr>
-          <td class="text-break-anywhere">${a.artist}</td>
-          <td class="text-end text-muted">${a.count}</td>
+          <td data-label="Artist" class="text-break-anywhere">${a.artist}</td>
+          <td data-label="Plays" class="text-end text-muted">${a.count}</td>
         </tr>`;
       }
       html += `</tbody></table></div>`;

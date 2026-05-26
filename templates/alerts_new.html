@@ -168,7 +168,7 @@
         <div class="card-body p-0">
             {% if alerts %}
             <div class="table-responsive">
-                <table class="table table-hover mb-0">
+                <table class="table eas-table mb-0">
                     <thead>
                         <tr>
                             <th>Event</th>
@@ -187,10 +187,10 @@
                         {% for alert in alerts %}
                         {% set is_expired = alert.expires | is_expired %}
                         <tr {% if is_expired %}class="table-muted"{% endif %}>
-                            <td>
+                            <td data-label="Event">
                                 <span class="badge badge-primary">{{ alert.event }}</span>
                             </td>
-                            <td>
+                            <td data-label="Severity">
                                 {% if alert.severity %}
                                 <span class="badge {% if alert.severity == 'Extreme' %}badge-danger{% elif alert.severity == 'Severe' %}badge-warning{% elif alert.severity == 'Moderate' %}badge-info{% else %}badge-secondary{% endif %}">
                                     {{ alert.severity }}
@@ -199,22 +199,22 @@
                                 <span class="text-muted">-</span>
                                 {% endif %}
                             </td>
-                            <td>
+                            <td data-label="Status">
                                 <span class="badge badge-outline">{{ alert.status }}</span>
                             </td>
-                            <td>
+                            <td data-label="Source">
                                 {% if alert.source %}
                                 <span class="badge badge-dark text-uppercase">{{ alert.source }}</span>
                                 {% else %}
                                 <span class="text-muted">Unknown</span>
                                 {% endif %}
                             </td>
-                            <td>
+                            <td data-label="Sent">
                                 <small class="text-muted">
                                     {{ alert.sent | format_local_datetime(false) if alert.sent else 'Unknown' }}
                                 </small>
                             </td>
-                            <td>
+                            <td data-label="Expires">
                                 {% if alert.expires %}
                                 <small class="{% if is_expired %}text-danger{% else %}text-success{% endif %}">
                                     {{ alert.expires | format_local_datetime(false) }}
@@ -223,7 +223,7 @@
                                 <span class="text-muted">No expiration</span>
                                 {% endif %}
                             </td>
-                            <td>
+                            <td data-label="Headline">
                                 {% if alert.headline %}
                                 <div class="text-truncate" style="max-width: 200px;" title="{{ alert.headline }}">
                                     {{ alert.headline }}
@@ -232,7 +232,7 @@
                                 <span class="text-muted">No headline</span>
                                 {% endif %}
                             </td>
-                            <td>
+                            <td data-label="Area">
                                 {% if alert.area_desc %}
                                 <div class="text-truncate" style="max-width: 150px;" title="{{ alert.area_desc }}">
                                     {{ alert.area_desc }}
@@ -241,7 +241,7 @@
                                 <span class="text-muted">No area description</span>
                                 {% endif %}
                             </td>
-                            <td>
+                            <td data-label="Audio">
                                 {% set audio_entries = audio_map.get(alert.id, []) %}
                                 {% if audio_entries %}
                                 <div class="d-flex flex-column gap-1">
@@ -270,6 +270,7 @@
                                 {% endif %}
                             </td>
                             <td>
+                                {# Actions: no data-label so it spans full width on mobile #}
                                 <a href="/alerts/{{ alert.id }}" class="btn btn-sm btn-primary">
                                     <i class="fas fa-eye"></i> View
                                 </a>

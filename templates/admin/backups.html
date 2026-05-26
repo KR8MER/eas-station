@@ -262,7 +262,7 @@
                 <div class="card-body">
                     {% if backups %}
                         <div class="table-responsive">
-                            <table class="table table-hover">
+                            <table class="table eas-table">
                                 <thead>
                                     <tr>
                                         <th>Timestamp</th>
@@ -276,20 +276,20 @@
                                 <tbody>
                                     {% for backup in backups %}
                                     <tr>
-                                        <td>
+                                        <td data-label="Timestamp">
                                             <strong>{{ backup.timestamp[:10] }}</strong><br>
                                             <small class="text-muted">{{ backup.timestamp[11:19] if backup.timestamp|length > 19 else '' }}</small>
                                         </td>
-                                        <td>
+                                        <td data-label="Label">
                                             {% if backup.label %}
                                                 <span class="badge bg-info">{{ backup.label }}</span>
                                             {% else %}
                                                 <span class="text-muted">-</span>
                                             {% endif %}
                                         </td>
-                                        <td>{{ backup.version }}</td>
-                                        <td>{{ backup.size_mb }} MB</td>
-                                        <td>
+                                        <td data-label="Version">{{ backup.version }}</td>
+                                        <td data-label="Size">{{ backup.size_mb }} MB</td>
+                                        <td data-label="Contents">
                                             <small>
                                                 {% if backup.summary.database %}
                                                     <i class="fas fa-database text-success" title="Database"></i>
