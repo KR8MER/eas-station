@@ -1,0 +1,29 @@
+{# GPIO workspace sub-navigation. Pass `active` as one of: pin-map, control, statistics #}
+<div class="container-fluid">
+    <ul class="nav nav-pills gpio-subnav flex-wrap mb-3" role="tablist" aria-label="GPIO workspace sections">
+        <li class="nav-item" role="presentation">
+            <a class="nav-link {% if active == 'pin-map' %}active{% endif %}"
+               href="{{ url_for('gpio_pin_map') }}"
+               aria-current="{{ 'page' if active == 'pin-map' else 'false' }}">
+                <i class="fas fa-map me-1"></i>Pin Map
+                <span class="d-none d-md-inline text-muted small ms-1">— assign behaviors</span>
+            </a>
+        </li>
+        <li class="nav-item" role="presentation">
+            <a class="nav-link {% if active == 'control' %}active{% endif %}"
+               href="{{ url_for('gpio_control_panel') }}"
+               aria-current="{{ 'page' if active == 'control' else 'false' }}">
+                <i class="fas fa-microchip me-1"></i>Live Control
+                <span class="d-none d-md-inline text-muted small ms-1">— activate &amp; audit</span>
+            </a>
+        </li>
+        <li class="nav-item" role="presentation">
+            <a class="nav-link {% if active == 'statistics' %}active{% endif %}"
+               href="{{ url_for('dashboard.gpio_statistics_page') }}"
+               aria-current="{{ 'page' if active == 'statistics' else 'false' }}">
+                <i class="fas fa-chart-pie me-1"></i>Statistics
+                <span class="d-none d-md-inline text-muted small ms-1">— activation analytics</span>
+            </a>
+        </li>
+    </ul>
+</div>

@@ -117,12 +117,6 @@
                 <p class="page-subtitle mb-0">Assign alert behaviors to GPIO pins (physical pin numbers 1–40, BCM identifiers)</p>
             </div>
             <div class="page-header-actions">
-                <a class="btn btn-outline-light" href="{{ url_for('gpio_control_panel') }}">
-                    <i class="fas fa-microchip me-1"></i>Control Panel
-                </a>
-                <a class="btn btn-outline-light" href="{{ url_for('dashboard.gpio_statistics_page') }}">
-                    <i class="fas fa-chart-pie me-1"></i>Statistics
-                </a>
                 <button class="btn btn-outline-light" id="reloadPinMap">
                     <i class="fas fa-rotate me-1"></i>Reload
                 </button>
@@ -130,6 +124,8 @@
         </div>
     </div>
 </div>
+
+{% with active = 'pin-map' %}{% include "partials/gpio_subnav.html" %}{% endwith %}
 
 <div class="container-fluid">
     <div id="pinMapAlert" class="alert d-none" role="alert"></div>
