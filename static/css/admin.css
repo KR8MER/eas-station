@@ -1086,3 +1086,35 @@ code {
 [data-theme="yellow"] .admin-page-header p {
     color: rgba(13, 27, 42, 0.78) !important;
 }
+
+/* ── GPIO workspace sub-navigation ──────────────────────────────────────────
+   Persistent pill nav across the 3 GPIO pages (Pin Map / Live Control /
+   Statistics) so they feel like one workspace without the routing refactor.
+   ========================================================================== */
+.gpio-subnav {
+    gap: 0.35rem;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 0.5rem;
+    margin-top: -0.5rem;
+}
+.gpio-subnav .nav-link {
+    color: var(--text-secondary, var(--text-muted));
+    background: transparent;
+    padding: 0.4rem 0.9rem;
+    border-radius: 999px;
+    font-weight: 500;
+    border: 1px solid transparent;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.gpio-subnav .nav-link:hover {
+    background: color-mix(in srgb, var(--primary-color, #0d6efd) 8%, transparent);
+    color: var(--text-color);
+}
+.gpio-subnav .nav-link.active {
+    background: var(--primary-color, #0d6efd);
+    color: #fff;
+    border-color: var(--primary-color, #0d6efd);
+}
+.gpio-subnav .nav-link.active .text-muted {
+    color: rgba(255, 255, 255, 0.78) !important;
+}

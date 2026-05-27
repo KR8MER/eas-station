@@ -10,17 +10,11 @@
                 <h1 class="page-title mb-0"><i class="fas fa-microchip me-2"></i>GPIO Control Panel</h1>
                 <p class="page-subtitle mb-0">Manage GPIO relays and peripherals with audit logging</p>
             </div>
-            <div class="page-header-actions">
-                <a class="btn btn-outline-light" href="{{ url_for('gpio_pin_map') }}">
-                    <i class="fas fa-map me-1"></i>Pin Map
-                </a>
-                <a class="btn btn-outline-light" href="{{ url_for('dashboard.gpio_statistics_page') }}">
-                    <i class="fas fa-chart-pie me-1"></i>Statistics
-                </a>
-            </div>
         </div>
     </div>
 </div>
+
+{% with active = 'control' %}{% include "partials/gpio_subnav.html" %}{% endwith %}
 
 <div class="container-fluid">
     <div class="alert alert-warning" role="alert">

@@ -9,6 +9,125 @@
         .hw-panel { display: none !important; }
         .hw-panel.active { display: block !important; }
 
+        /* Status dot rendered inline on each device tab button */
+        .hw-tab-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-left: 6px;
+            vertical-align: middle;
+            background: var(--text-muted, #888);
+            border: 1px solid color-mix(in srgb, var(--text-muted, #888) 60%, transparent);
+        }
+        .hw-tab-dot.is-on {
+            background: var(--success-color, #3fb950);
+            border-color: color-mix(in srgb, var(--success-color, #3fb950) 60%, transparent);
+            box-shadow: 0 0 4px color-mix(in srgb, var(--success-color, #3fb950) 60%, transparent);
+        }
+
+        /* Overview panel: at-a-glance device status grid */
+        .hw-overview-grid {
+            display: grid;
+            gap: 0.75rem;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        }
+        .hw-overview-card {
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md, 0.5rem);
+            padding: 0.85rem 0.95rem;
+            background: var(--surface-color);
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
+        }
+        .hw-overview-card:hover {
+            border-color: color-mix(in srgb, var(--primary-color, #0d6efd) 40%, var(--border-color));
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+        }
+        .hw-overview-card.is-on {
+            border-left: 3px solid var(--success-color, #3fb950);
+        }
+        .hw-overview-card.is-off {
+            border-left: 3px solid var(--border-color);
+            opacity: 0.85;
+        }
+        .hw-overview-head {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-weight: 600;
+            color: var(--text-color);
+        }
+        .hw-overview-head .hw-overview-icon {
+            width: 22px;
+            text-align: center;
+            color: var(--text-secondary, var(--text-muted));
+            flex-shrink: 0;
+        }
+        .hw-overview-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            margin-left: auto;
+            padding: 0.1rem 0.5rem;
+            border-radius: 999px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .hw-overview-badge.on {
+            background: color-mix(in srgb, var(--success-color, #3fb950) 18%, transparent);
+            color: var(--success-color, #3fb950);
+        }
+        .hw-overview-badge.off {
+            background: color-mix(in srgb, var(--text-muted, #888) 15%, transparent);
+            color: var(--text-muted, #888);
+        }
+        .hw-overview-meta {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            min-height: 1.1em;
+        }
+        .hw-overview-card .btn {
+            align-self: flex-start;
+        }
+        .hw-overview-summary {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1.25rem;
+            align-items: baseline;
+            margin-bottom: 1rem;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+        }
+        .hw-overview-summary strong {
+            color: var(--text-color);
+            font-size: 1.1rem;
+            margin-right: 0.25rem;
+        }
+
+        /* Section subheaders used inside consolidated device cards */
+        .hw-section + .hw-section {
+            margin-top: 1.25rem;
+            padding-top: 1rem;
+            border-top: 1px dashed var(--border-color);
+        }
+        .hw-section-title {
+            font-size: 0.78rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            margin-bottom: 0.75rem;
+        }
+        .hw-section-title i {
+            margin-right: 0.35rem;
+            opacity: 0.7;
+        }
+
         /* ── cgps-style GPS Live Panel ─────────────────────────────── */
         .gps-live-panel {
             background: var(--bg-color);
@@ -131,6 +250,26 @@
         @keyframes gpsPulse {
             0%, 100% { opacity: 1; }
             50%       { opacity: 0.25; }
+        }
+        /* Reusable GPS live-status indicators (formerly inline styles) */
+        .gps-live-pill {
+            display: none;
+            font-size: 0.6rem;
+            font-weight: normal;
+            color: #3fb950;
+            vertical-align: middle;
+            margin-left: 6px;
+        }
+        .gps-live-pill.is-visible { display: inline; }
+        .gps-live-dot {
+            display: inline-block;
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #3fb950;
+            vertical-align: middle;
+            margin-right: 3px;
+            animation: gpsPulse 1.4s ease-in-out infinite;
         }
         /* SNR color helper classes */
         .snr-s0 { background: #484f58; }   /* no signal  */
@@ -366,36 +505,75 @@
         <div class="card-header p-0 border-0">
             <ul class="nav nav-tabs hw-tabs" role="tablist">
                 <li class="nav-item" role="presentation">
-                    <button type="button" class="nav-link active" data-tab="gpio"><i class="fas fa-microchip"></i> GPIO / Relays</button>
+                    <button type="button" class="nav-link active" data-tab="overview"><i class="fas fa-th-large"></i> Overview</button>
                 </li>
                 <li class="nav-item" role="presentation">
-                    <button type="button" class="nav-link" data-tab="oled"><i class="fas fa-tv"></i> OLED Display</button>
+                    <button type="button" class="nav-link" data-tab="gpio"><i class="fas fa-microchip"></i> GPIO / Relays<span class="hw-tab-dot {% if settings.gpio_enabled %}is-on{% endif %}" aria-hidden="true"></span></button>
                 </li>
                 <li class="nav-item" role="presentation">
-                    <button type="button" class="nav-link" data-tab="led"><i class="fas fa-sign"></i> LED Sign</button>
+                    <button type="button" class="nav-link" data-tab="oled"><i class="fas fa-tv"></i> OLED Display<span class="hw-tab-dot {% if settings.oled_enabled %}is-on{% endif %}" aria-hidden="true"></span></button>
                 </li>
                 <li class="nav-item" role="presentation">
-                    <button type="button" class="nav-link" data-tab="vfd"><i class="fas fa-desktop"></i> VFD Display</button>
+                    <button type="button" class="nav-link" data-tab="led"><i class="fas fa-sign"></i> LED Sign<span class="hw-tab-dot {% if settings.led_enabled %}is-on{% endif %}" aria-hidden="true"></span></button>
                 </li>
                 <li class="nav-item" role="presentation">
-                    <button type="button" class="nav-link" data-tab="zigbee"><i class="fas fa-broadcast-tower"></i> Zigbee</button>
+                    <button type="button" class="nav-link" data-tab="vfd"><i class="fas fa-desktop"></i> VFD Display<span class="hw-tab-dot {% if settings.vfd_enabled %}is-on{% endif %}" aria-hidden="true"></span></button>
                 </li>
                 <li class="nav-item" role="presentation">
-                    <button type="button" class="nav-link" data-tab="tower-light"><i class="fas fa-traffic-light"></i> Tower Light</button>
+                    <button type="button" class="nav-link" data-tab="zigbee"><i class="fas fa-broadcast-tower"></i> Zigbee<span class="hw-tab-dot {% if settings.zigbee_enabled %}is-on{% endif %}" aria-hidden="true"></span></button>
                 </li>
                 <li class="nav-item" role="presentation">
-                    <button type="button" class="nav-link" data-tab="neopixel"><i class="fas fa-lightbulb"></i> NeoPixel</button>
+                    <button type="button" class="nav-link" data-tab="tower-light"><i class="fas fa-traffic-light"></i> Tower Light<span class="hw-tab-dot {% if settings.tower_light_enabled %}is-on{% endif %}" aria-hidden="true"></span></button>
                 </li>
                 <li class="nav-item" role="presentation">
-                    <button type="button" class="nav-link" data-tab="gps"><i class="fas fa-satellite"></i> GPS</button>
+                    <button type="button" class="nav-link" data-tab="neopixel"><i class="fas fa-lightbulb"></i> NeoPixel<span class="hw-tab-dot {% if settings.neopixel_enabled %}is-on{% endif %}" aria-hidden="true"></span></button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button type="button" class="nav-link" data-tab="gps"><i class="fas fa-satellite"></i> GPS<span class="hw-tab-dot {% if settings.gps_enabled %}is-on{% endif %}" aria-hidden="true"></span></button>
                 </li>
             </ul>
         </div>
         <div class="card-body">
             <form id="hardwareForm" method="POST" action="{{ url_for('hardware.update_hardware') }}">
 
+                <!-- Overview Panel -->
+                {% set _devices = [
+                    ('gpio',        'GPIO / Relays',  'fa-microchip',        settings.gpio_enabled,        'Drive transmitters, sirens, and indicator lights via Raspberry Pi GPIO.'),
+                    ('oled',        'OLED Display',   'fa-tv',               settings.oled_enabled,        'SSD1306 monochrome panel for status and scrolling alerts.'),
+                    ('led',         'LED Sign',       'fa-sign',             settings.led_enabled,         'BetaBrite / Alpha LED sign — network or serial.'),
+                    ('vfd',         'VFD Display',    'fa-desktop',          settings.vfd_enabled,         'Noritake GU140x32F-7000B fluorescent display.'),
+                    ('zigbee',      'Zigbee',         'fa-broadcast-tower',  settings.zigbee_enabled,      'Coordinator radio for paired Zigbee devices.'),
+                    ('tower-light', 'Tower Light',    'fa-traffic-light',    settings.tower_light_enabled, 'USB tower light with buzzer and color stages.'),
+                    ('neopixel',    'NeoPixel',       'fa-lightbulb',        settings.neopixel_enabled,    'WS2812B addressable LED strip for ambient alerting.'),
+                    ('gps',         'GPS',            'fa-satellite',        settings.gps_enabled,         'GPS HAT for time sync and live satellite diagnostics.'),
+                ] %}
+                {% set _enabled_count = _devices | selectattr(3) | list | length %}
+                <div id="panel-overview" class="hw-panel active">
+                    <div class="hw-overview-summary">
+                        <span><strong>{{ _enabled_count }}</strong> of {{ _devices | length }} devices enabled</span>
+                        <span class="text-muted">Click any card to jump to that device's settings.</span>
+                    </div>
+                    <div class="hw-overview-grid">
+                        {% for key, label, icon, is_on, desc in _devices %}
+                        <div class="hw-overview-card {{ 'is-on' if is_on else 'is-off' }}">
+                            <div class="hw-overview-head">
+                                <i class="fas {{ icon }} hw-overview-icon" aria-hidden="true"></i>
+                                <span>{{ label }}</span>
+                                <span class="hw-overview-badge {{ 'on' if is_on else 'off' }}">
+                                    {{ 'Enabled' if is_on else 'Disabled' }}
+                                </span>
+                            </div>
+                            <div class="hw-overview-meta">{{ desc }}</div>
+                            <button type="button" class="btn btn-sm btn-outline-primary hw-overview-go" data-go-to="{{ key }}">
+                                Configure <i class="fas fa-arrow-right ms-1"></i>
+                            </button>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
                 <!-- GPIO Panel -->
-                <div id="panel-gpio" class="hw-panel active">
+                <div id="panel-gpio" class="hw-panel">
                     <div class="card mb-3">
                         <div class="card-body">
                             <h5 class="card-title"><i class="fas fa-power-off me-1"></i> GPIO Control</h5>
@@ -441,116 +619,103 @@
                 <div id="panel-oled" class="hw-panel">
                     <div class="card mb-3">
                         <div class="card-body">
-                            <h5 class="card-title"><i class="fas fa-tv me-1"></i> OLED Display (SSD1306)</h5>
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="oled_enabled" name="oled_enabled" value="true" {% if settings.oled_enabled %}checked{% endif %}>
-                                <label class="form-check-label" for="oled_enabled">Enable OLED Display (128x64)</label>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="card mb-3">
-                        <div class="card-body">
-                            <h5 class="card-title">I2C Configuration</h5>
-                            <div class="row g-3">
-                                <div class="col-md-6">
-                                    <label for="oled_i2c_bus" class="form-label">I2C Bus</label>
-                                    <input type="number" class="form-control" id="oled_i2c_bus" name="oled_i2c_bus" value="{{ settings.oled_i2c_bus }}" min="0" max="10">
+                            <div class="hw-section">
+                                <div class="hw-section-title"><i class="fas fa-power-off"></i>Device &amp; Connection</div>
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input" type="checkbox" id="oled_enabled" name="oled_enabled" value="true" {% if settings.oled_enabled %}checked{% endif %}>
+                                    <label class="form-check-label" for="oled_enabled">Enable OLED Display (SSD1306, 128x64)</label>
                                 </div>
-                                <div class="col-md-6">
-                                    <label for="oled_i2c_address" class="form-label">I2C Address (hex)</label>
-                                    <input type="text" class="form-control font-monospace" id="oled_i2c_address" name="oled_i2c_address" value="0x{{ '%02x' % settings.oled_i2c_address }}" placeholder="0x3C">
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="card mb-3">
-                        <div class="card-body">
-                            <h5 class="card-title">Display Settings</h5>
-                            <div class="row g-3">
-                                <div class="col-md-3">
-                                    <label for="oled_width" class="form-label">Width (px)</label>
-                                    <input type="number" class="form-control" id="oled_width" name="oled_width" value="{{ settings.oled_width }}" min="16" max="256">
-                                </div>
-                                <div class="col-md-3">
-                                    <label for="oled_height" class="form-label">Height (px)</label>
-                                    <input type="number" class="form-control" id="oled_height" name="oled_height" value="{{ settings.oled_height }}" min="16" max="128">
-                                </div>
-                                <div class="col-md-3">
-                                    <label for="oled_rotate" class="form-label">Rotation</label>
-                                    <select class="form-select" id="oled_rotate" name="oled_rotate">
-                                        <option value="0" {% if settings.oled_rotate == 0 %}selected{% endif %}>0&deg;</option>
-                                        <option value="1" {% if settings.oled_rotate == 1 %}selected{% endif %}>90&deg;</option>
-                                        <option value="2" {% if settings.oled_rotate == 2 %}selected{% endif %}>180&deg;</option>
-                                        <option value="3" {% if settings.oled_rotate == 3 %}selected{% endif %}>270&deg;</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-3">
-                                    <label for="oled_contrast" class="form-label">Contrast</label>
-                                    <input type="number" class="form-control" id="oled_contrast" name="oled_contrast" value="{{ settings.oled_contrast if settings.oled_contrast is not none else '' }}" min="0" max="255" placeholder="Auto">
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="card mb-3">
-                        <div class="card-body">
-                            <h5 class="card-title">Front Panel Button</h5>
-                            <div class="row g-3">
-                                <div class="col-md-4">
-                                    <label for="oled_button_gpio" class="form-label">GPIO Pin (BCM)</label>
-                                    <input type="number" class="form-control" id="oled_button_gpio" name="oled_button_gpio" value="{{ settings.oled_button_gpio }}" min="2" max="27">
-                                </div>
-                                <div class="col-md-4">
-                                    <label for="oled_button_hold_seconds" class="form-label">Hold Time (sec)</label>
-                                    <input type="number" step="0.01" class="form-control" id="oled_button_hold_seconds" name="oled_button_hold_seconds" value="{{ settings.oled_button_hold_seconds }}">
-                                </div>
-                                <div class="col-md-4 d-flex align-items-end pb-2">
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" id="oled_button_active_high" name="oled_button_active_high" value="true" {% if settings.oled_button_active_high %}checked{% endif %}>
-                                        <label class="form-check-label" for="oled_button_active_high">Active High</label>
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <label for="oled_i2c_bus" class="form-label">I2C Bus</label>
+                                        <input type="number" class="form-control" id="oled_i2c_bus" name="oled_i2c_bus" value="{{ settings.oled_i2c_bus }}" min="0" max="10">
+                                        <small class="form-text text-muted">Usually <code>1</code> on Raspberry Pi 4/5 (header pins 3 &amp; 5).</small>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="oled_i2c_address" class="form-label">I2C Address (hex)</label>
+                                        <input type="text" class="form-control font-monospace" id="oled_i2c_address" name="oled_i2c_address" value="0x{{ '%02x' % settings.oled_i2c_address }}" placeholder="0x3C">
+                                        <small class="form-text text-muted">SSD1306 defaults to <code>0x3C</code>. Run <code>i2cdetect -y 1</code> to confirm.</small>
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                    </div>
 
-                    <div class="card mb-3">
-                        <div class="card-body">
-                            <h5 class="card-title">Scroll Animation</h5>
-                            <div class="row g-3">
-                                <div class="col-md-4">
-                                    <label for="oled_scroll_effect" class="form-label">Effect</label>
-                                    <select class="form-select" id="oled_scroll_effect" name="oled_scroll_effect">
-                                        <option value="scroll_left" {% if settings.oled_scroll_effect == 'scroll_left' %}selected{% endif %}>Scroll Left</option>
-                                        <option value="scroll_right" {% if settings.oled_scroll_effect == 'scroll_right' %}selected{% endif %}>Scroll Right</option>
-                                        <option value="scroll_up" {% if settings.oled_scroll_effect == 'scroll_up' %}selected{% endif %}>Scroll Up</option>
-                                        <option value="scroll_down" {% if settings.oled_scroll_effect == 'scroll_down' %}selected{% endif %}>Scroll Down</option>
-                                    </select>
+                            <div class="hw-section">
+                                <div class="hw-section-title"><i class="fas fa-tv"></i>Display</div>
+                                <div class="row g-3">
+                                    <div class="col-6 col-md-3">
+                                        <label for="oled_width" class="form-label">Width (px)</label>
+                                        <input type="number" class="form-control" id="oled_width" name="oled_width" value="{{ settings.oled_width }}" min="16" max="256">
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <label for="oled_height" class="form-label">Height (px)</label>
+                                        <input type="number" class="form-control" id="oled_height" name="oled_height" value="{{ settings.oled_height }}" min="16" max="128">
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <label for="oled_rotate" class="form-label">Rotation</label>
+                                        <select class="form-select" id="oled_rotate" name="oled_rotate">
+                                            <option value="0" {% if settings.oled_rotate == 0 %}selected{% endif %}>0&deg;</option>
+                                            <option value="1" {% if settings.oled_rotate == 1 %}selected{% endif %}>90&deg;</option>
+                                            <option value="2" {% if settings.oled_rotate == 2 %}selected{% endif %}>180&deg;</option>
+                                            <option value="3" {% if settings.oled_rotate == 3 %}selected{% endif %}>270&deg;</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <label for="oled_contrast" class="form-label">Contrast</label>
+                                        <input type="number" class="form-control" id="oled_contrast" name="oled_contrast" value="{{ settings.oled_contrast if settings.oled_contrast is not none else '' }}" min="0" max="255" placeholder="Auto">
+                                        <small class="form-text text-muted">0–255. Blank = panel default.</small>
+                                    </div>
                                 </div>
-                                <div class="col-md-4">
-                                    <label for="oled_scroll_speed" class="form-label">Speed (px/frame)</label>
-                                    <input type="number" class="form-control" id="oled_scroll_speed" name="oled_scroll_speed" value="{{ settings.oled_scroll_speed }}" min="1" max="10">
+                                <div class="row g-3 mt-1">
+                                    <div class="col-md-4">
+                                        <label for="oled_scroll_effect" class="form-label">Scroll Effect</label>
+                                        <select class="form-select" id="oled_scroll_effect" name="oled_scroll_effect">
+                                            <option value="scroll_left" {% if settings.oled_scroll_effect == 'scroll_left' %}selected{% endif %}>Scroll Left</option>
+                                            <option value="scroll_right" {% if settings.oled_scroll_effect == 'scroll_right' %}selected{% endif %}>Scroll Right</option>
+                                            <option value="scroll_up" {% if settings.oled_scroll_effect == 'scroll_up' %}selected{% endif %}>Scroll Up</option>
+                                            <option value="scroll_down" {% if settings.oled_scroll_effect == 'scroll_down' %}selected{% endif %}>Scroll Down</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-6 col-md-4">
+                                        <label for="oled_scroll_speed" class="form-label">Scroll Speed (px/frame)</label>
+                                        <input type="number" class="form-control" id="oled_scroll_speed" name="oled_scroll_speed" value="{{ settings.oled_scroll_speed }}" min="1" max="10">
+                                    </div>
+                                    <div class="col-6 col-md-4">
+                                        <label for="oled_scroll_fps" class="form-label">Scroll FPS</label>
+                                        <input type="number" class="form-control" id="oled_scroll_fps" name="oled_scroll_fps" value="{{ settings.oled_scroll_fps }}" min="5" max="60">
+                                    </div>
                                 </div>
-                                <div class="col-md-4">
-                                    <label for="oled_scroll_fps" class="form-label">FPS</label>
-                                    <input type="number" class="form-control" id="oled_scroll_fps" name="oled_scroll_fps" value="{{ settings.oled_scroll_fps }}" min="5" max="60">
+                                <div class="d-flex flex-wrap gap-3 mt-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="screens_auto_start" name="screens_auto_start" value="true" {% if settings.screens_auto_start %}checked{% endif %}>
+                                        <label class="form-check-label" for="screens_auto_start">Auto-start screen rotation</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="oled_default_invert" name="oled_default_invert" value="true" {% if settings.oled_default_invert %}checked{% endif %}>
+                                        <label class="form-check-label" for="oled_default_invert">Invert display colors</label>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    </div>
 
-                    <div class="card mb-3">
-                        <div class="card-body">
-                            <h5 class="card-title">Screen Options</h5>
-                            <div class="form-check mb-1">
-                                <input class="form-check-input" type="checkbox" id="screens_auto_start" name="screens_auto_start" value="true" {% if settings.screens_auto_start %}checked{% endif %}>
-                                <label class="form-check-label" for="screens_auto_start">Auto-start screen rotation</label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="oled_default_invert" name="oled_default_invert" value="true" {% if settings.oled_default_invert %}checked{% endif %}>
-                                <label class="form-check-label" for="oled_default_invert">Invert display colors</label>
+                            <div class="hw-section">
+                                <div class="hw-section-title"><i class="fas fa-hand-pointer"></i>Front Panel Button</div>
+                                <div class="row g-3">
+                                    <div class="col-6 col-md-4">
+                                        <label for="oled_button_gpio" class="form-label">GPIO Pin (BCM)</label>
+                                        <input type="number" class="form-control" id="oled_button_gpio" name="oled_button_gpio" value="{{ settings.oled_button_gpio }}" min="2" max="27">
+                                        <small class="form-text text-muted">BCM number (e.g. <code>17</code>), not the physical header pin.</small>
+                                    </div>
+                                    <div class="col-6 col-md-4">
+                                        <label for="oled_button_hold_seconds" class="form-label">Hold Time (sec)</label>
+                                        <input type="number" step="0.01" class="form-control" id="oled_button_hold_seconds" name="oled_button_hold_seconds" value="{{ settings.oled_button_hold_seconds }}">
+                                        <small class="form-text text-muted">How long the button must be pressed to register a long-press.</small>
+                                    </div>
+                                    <div class="col-12 col-md-4 d-flex align-items-end pb-2">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="oled_button_active_high" name="oled_button_active_high" value="true" {% if settings.oled_button_active_high %}checked{% endif %}>
+                                            <label class="form-check-label" for="oled_button_active_high">Active High</label>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -560,77 +725,67 @@
                 <div id="panel-led" class="hw-panel">
                     <div class="card mb-3">
                         <div class="card-body">
-                            <h5 class="card-title"><i class="fas fa-sign me-1"></i> LED Sign (BetaBrite/Alpha)</h5>
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="led_enabled" name="led_enabled" value="true" {% if settings.led_enabled %}checked{% endif %}>
-                                <label class="form-check-label" for="led_enabled">Enable LED Sign</label>
-                            </div>
-                        </div>
-                    </div>
+                            <div class="hw-section">
+                                <div class="hw-section-title"><i class="fas fa-power-off"></i>Device &amp; Connection</div>
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input" type="checkbox" id="led_enabled" name="led_enabled" value="true" {% if settings.led_enabled %}checked{% endif %}>
+                                    <label class="form-check-label" for="led_enabled">Enable LED Sign (BetaBrite / Alpha)</label>
+                                </div>
+                                <div class="d-flex flex-wrap gap-3 mb-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="led_connection_type" id="led_network" value="network" {% if settings.led_connection_type == 'network' %}checked{% endif %}>
+                                        <label class="form-check-label" for="led_network">Network (TCP)</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="led_connection_type" id="led_serial" value="serial" {% if settings.led_connection_type == 'serial' %}checked{% endif %} disabled>
+                                        <label class="form-check-label text-muted" for="led_serial">Serial (RS232/485) <span class="badge bg-secondary ms-1">Not yet supported</span></label>
+                                    </div>
+                                </div>
 
-                    <div class="card mb-3">
-                        <div class="card-body">
-                            <h5 class="card-title">Connection Type</h5>
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="led_connection_type" id="led_network" value="network" {% if settings.led_connection_type == 'network' %}checked{% endif %}>
-                                <label class="form-check-label" for="led_network">Network (TCP)</label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="led_connection_type" id="led_serial" value="serial" {% if settings.led_connection_type == 'serial' %}checked{% endif %} disabled>
-                                <label class="form-check-label text-muted" for="led_serial">Serial (RS232/485) <span class="badge bg-secondary ms-1">Not yet supported</span></label>
-                            </div>
-                        </div>
-                    </div>
+                                <div id="led-network-settings">
+                                    <div class="row g-3">
+                                        <div class="col-12 col-md-8">
+                                            <label for="led_ip_address" class="form-label">IP Address</label>
+                                            <input type="text" class="form-control" id="led_ip_address" name="led_ip_address" value="{{ settings.led_ip_address }}" placeholder="192.168.1.100">
+                                        </div>
+                                        <div class="col-12 col-md-4">
+                                            <label for="led_port" class="form-label">Port</label>
+                                            <input type="number" class="form-control" id="led_port" name="led_port" value="{{ settings.led_port }}" min="1" max="65535">
+                                        </div>
+                                    </div>
+                                </div>
 
-                    <div class="card mb-3" id="led-network-settings">
-                        <div class="card-body">
-                            <h5 class="card-title">Network Settings</h5>
-                            <div class="row g-3">
-                                <div class="col-md-8">
-                                    <label for="led_ip_address" class="form-label">IP Address</label>
-                                    <input type="text" class="form-control" id="led_ip_address" name="led_ip_address" value="{{ settings.led_ip_address }}" placeholder="192.168.1.100">
-                                </div>
-                                <div class="col-md-4">
-                                    <label for="led_port" class="form-label">Port</label>
-                                    <input type="number" class="form-control" id="led_port" name="led_port" value="{{ settings.led_port }}" min="1" max="65535">
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="card mb-3" id="led-serial-settings">
-                        <div class="card-body">
-                            <h5 class="card-title">Serial Settings</h5>
-                            <div class="row g-3">
-                                <div class="col-md-6">
-                                    <label for="led_serial_port" class="form-label">Serial Port</label>
-                                    <input type="text" class="form-control font-monospace" id="led_serial_port" name="led_serial_port" value="{{ settings.led_serial_port }}" placeholder="/dev/ttyUSB1">
-                                </div>
-                                <div class="col-md-3">
-                                    <label for="led_baudrate" class="form-label">Baud Rate</label>
-                                    <select class="form-select" id="led_baudrate" name="led_baudrate">
-                                        <option value="2400" {% if settings.led_baudrate == 2400 %}selected{% endif %}>2400</option>
-                                        <option value="4800" {% if settings.led_baudrate == 4800 %}selected{% endif %}>4800</option>
-                                        <option value="9600" {% if settings.led_baudrate == 9600 %}selected{% endif %}>9600</option>
-                                        <option value="19200" {% if settings.led_baudrate == 19200 %}selected{% endif %}>19200</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-3">
-                                    <label for="led_serial_mode" class="form-label">Mode</label>
-                                    <select class="form-select" id="led_serial_mode" name="led_serial_mode">
-                                        <option value="RS232" {% if settings.led_serial_mode == 'RS232' %}selected{% endif %}>RS232</option>
-                                        <option value="RS485" {% if settings.led_serial_mode == 'RS485' %}selected{% endif %}>RS485</option>
-                                    </select>
+                                <div id="led-serial-settings">
+                                    <div class="row g-3">
+                                        <div class="col-12 col-md-6">
+                                            <label for="led_serial_port" class="form-label">Serial Port</label>
+                                            <input type="text" class="form-control font-monospace" id="led_serial_port" name="led_serial_port" value="{{ settings.led_serial_port }}" placeholder="/dev/ttyUSB1">
+                                        </div>
+                                        <div class="col-6 col-md-3">
+                                            <label for="led_baudrate" class="form-label">Baud Rate</label>
+                                            <select class="form-select" id="led_baudrate" name="led_baudrate">
+                                                <option value="2400" {% if settings.led_baudrate == 2400 %}selected{% endif %}>2400</option>
+                                                <option value="4800" {% if settings.led_baudrate == 4800 %}selected{% endif %}>4800</option>
+                                                <option value="9600" {% if settings.led_baudrate == 9600 %}selected{% endif %}>9600</option>
+                                                <option value="19200" {% if settings.led_baudrate == 19200 %}selected{% endif %}>19200</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-6 col-md-3">
+                                            <label for="led_serial_mode" class="form-label">Mode</label>
+                                            <select class="form-select" id="led_serial_mode" name="led_serial_mode">
+                                                <option value="RS232" {% if settings.led_serial_mode == 'RS232' %}selected{% endif %}>RS232</option>
+                                                <option value="RS485" {% if settings.led_serial_mode == 'RS485' %}selected{% endif %}>RS485</option>
+                                            </select>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    </div>
 
-                    <div class="card mb-3">
-                        <div class="card-body">
-                            <h5 class="card-title">Default Text</h5>
-                            <textarea class="form-control" id="led_default_text" name="led_default_text" rows="3" placeholder="Line 1,Line 2,Line 3,Line 4">{{ settings.led_default_text }}</textarea>
-                            <small class="form-text text-muted">Separate lines with commas</small>
+                            <div class="hw-section">
+                                <div class="hw-section-title"><i class="fas fa-align-left"></i>Default Text</div>
+                                <textarea class="form-control" id="led_default_text" name="led_default_text" rows="3" placeholder="Line 1,Line 2,Line 3,Line 4">{{ settings.led_default_text }}</textarea>
+                                <small class="form-text text-muted">Shown when no alert is active. Separate lines with commas.</small>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -639,32 +794,28 @@
                 <div id="panel-vfd" class="hw-panel">
                     <div class="card mb-3">
                         <div class="card-body">
-                            <h5 class="card-title"><i class="fas fa-desktop me-1"></i> VFD Display (Noritake GU140x32F-7000B)</h5>
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="vfd_enabled" name="vfd_enabled" value="true" {% if settings.vfd_enabled %}checked{% endif %}>
-                                <label class="form-check-label" for="vfd_enabled">Enable VFD Display</label>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="card mb-3">
-                        <div class="card-body">
-                            <h5 class="card-title">Serial / Network Settings</h5>
-                            <div class="row g-3">
-                                <div class="col-md-8">
-                                    <label for="vfd_port" class="form-label">Port</label>
-                                    <input type="text" class="form-control font-monospace" id="vfd_port" name="vfd_port" value="{{ settings.vfd_port }}" placeholder="/dev/ttyUSB0 or socket://192.168.8.122:10001">
-                                    <small class="form-text text-muted">Serial: /dev/ttyUSB0 &middot; Network: socket://192.168.8.122:10001</small>
+                            <div class="hw-section">
+                                <div class="hw-section-title"><i class="fas fa-power-off"></i>Device</div>
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input" type="checkbox" id="vfd_enabled" name="vfd_enabled" value="true" {% if settings.vfd_enabled %}checked{% endif %}>
+                                    <label class="form-check-label" for="vfd_enabled">Enable VFD Display (Noritake GU140x32F-7000B)</label>
                                 </div>
-                                <div class="col-md-4">
-                                    <label for="vfd_baudrate" class="form-label">Baud Rate</label>
-                                    <select class="form-select" id="vfd_baudrate" name="vfd_baudrate">
-                                        <option value="9600" {% if settings.vfd_baudrate == 9600 %}selected{% endif %}>9600</option>
-                                        <option value="19200" {% if settings.vfd_baudrate == 19200 %}selected{% endif %}>19200</option>
-                                        <option value="38400" {% if settings.vfd_baudrate == 38400 %}selected{% endif %}>38400</option>
-                                        <option value="57600" {% if settings.vfd_baudrate == 57600 %}selected{% endif %}>57600</option>
-                                        <option value="115200" {% if settings.vfd_baudrate == 115200 %}selected{% endif %}>115200</option>
-                                    </select>
+                                <div class="row g-3">
+                                    <div class="col-12 col-md-8">
+                                        <label for="vfd_port" class="form-label">Port</label>
+                                        <input type="text" class="form-control font-monospace" id="vfd_port" name="vfd_port" value="{{ settings.vfd_port }}" placeholder="/dev/ttyUSB0 or socket://192.168.8.122:10001">
+                                        <small class="form-text text-muted">Serial: /dev/ttyUSB0 &middot; Network: socket://192.168.8.122:10001</small>
+                                    </div>
+                                    <div class="col-12 col-md-4">
+                                        <label for="vfd_baudrate" class="form-label">Baud Rate</label>
+                                        <select class="form-select" id="vfd_baudrate" name="vfd_baudrate">
+                                            <option value="9600" {% if settings.vfd_baudrate == 9600 %}selected{% endif %}>9600</option>
+                                            <option value="19200" {% if settings.vfd_baudrate == 19200 %}selected{% endif %}>19200</option>
+                                            <option value="38400" {% if settings.vfd_baudrate == 38400 %}selected{% endif %}>38400</option>
+                                            <option value="57600" {% if settings.vfd_baudrate == 57600 %}selected{% endif %}>57600</option>
+                                            <option value="115200" {% if settings.vfd_baudrate == 115200 %}selected{% endif %}>115200</option>
+                                        </select>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -757,54 +908,52 @@
                 <div id="panel-tower-light" class="hw-panel">
                     <div class="card mb-3">
                         <div class="card-body">
-                            <h5 class="card-title"><i class="fas fa-traffic-light me-1"></i> USB Tower Light</h5>
-                            <div class="form-check mb-2">
-                                <input class="form-check-input" type="checkbox" id="tower_light_enabled" name="tower_light_enabled" value="true" {% if settings.tower_light_enabled %}checked{% endif %}>
-                                <label class="form-check-label" for="tower_light_enabled">Enable USB Tower Light</label>
-                            </div>
-                            <p class="text-muted small mb-0">
-                                Supports Adafruit USB Tri-Color Tower Light (#5125) and compatible USB serial tower lights.
-                            </p>
-                        </div>
-                    </div>
-
-                    <div class="card mb-3">
-                        <div class="card-body">
-                            <h5 class="card-title">Serial Connection</h5>
-                            <div class="row g-3">
-                                <div class="col-md-8">
-                                    <label for="tower_light_serial_port" class="form-label">Serial Port</label>
-                                    <input type="text" class="form-control font-monospace" id="tower_light_serial_port" name="tower_light_serial_port" value="{{ settings.tower_light_serial_port }}" placeholder="/dev/ttyUSB0">
-                                    <small class="form-text text-muted">Common: /dev/ttyUSB0, /dev/ttyUSB1, /dev/ttyACM0</small>
+                            <div class="hw-section">
+                                <div class="hw-section-title"><i class="fas fa-power-off"></i>Device</div>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input" type="checkbox" id="tower_light_enabled" name="tower_light_enabled" value="true" {% if settings.tower_light_enabled %}checked{% endif %}>
+                                    <label class="form-check-label" for="tower_light_enabled">Enable USB Tower Light</label>
                                 </div>
-                                <div class="col-md-4">
-                                    <label for="tower_light_baudrate" class="form-label">Baud Rate</label>
-                                    <select class="form-select" id="tower_light_baudrate" name="tower_light_baudrate">
-                                        <option value="9600" {% if settings.tower_light_baudrate == 9600 %}selected{% endif %}>9600</option>
-                                        <option value="19200" {% if settings.tower_light_baudrate == 19200 %}selected{% endif %}>19200</option>
-                                        <option value="38400" {% if settings.tower_light_baudrate == 38400 %}selected{% endif %}>38400</option>
-                                        <option value="57600" {% if settings.tower_light_baudrate == 57600 %}selected{% endif %}>57600</option>
-                                        <option value="115200" {% if settings.tower_light_baudrate == 115200 %}selected{% endif %}>115200</option>
-                                    </select>
+                                <p class="text-muted small mb-0">
+                                    Supports Adafruit USB Tri-Color Tower Light (#5125) and compatible USB serial tower lights.
+                                </p>
+                            </div>
+
+                            <div class="hw-section">
+                                <div class="hw-section-title"><i class="fas fa-plug"></i>Serial Connection</div>
+                                <div class="row g-3">
+                                    <div class="col-12 col-md-8">
+                                        <label for="tower_light_serial_port" class="form-label">Serial Port</label>
+                                        <input type="text" class="form-control font-monospace" id="tower_light_serial_port" name="tower_light_serial_port" value="{{ settings.tower_light_serial_port }}" placeholder="/dev/ttyUSB0">
+                                        <small class="form-text text-muted">Common: /dev/ttyUSB0, /dev/ttyUSB1, /dev/ttyACM0</small>
+                                    </div>
+                                    <div class="col-12 col-md-4">
+                                        <label for="tower_light_baudrate" class="form-label">Baud Rate</label>
+                                        <select class="form-select" id="tower_light_baudrate" name="tower_light_baudrate">
+                                            <option value="9600" {% if settings.tower_light_baudrate == 9600 %}selected{% endif %}>9600</option>
+                                            <option value="19200" {% if settings.tower_light_baudrate == 19200 %}selected{% endif %}>19200</option>
+                                            <option value="38400" {% if settings.tower_light_baudrate == 38400 %}selected{% endif %}>38400</option>
+                                            <option value="57600" {% if settings.tower_light_baudrate == 57600 %}selected{% endif %}>57600</option>
+                                            <option value="115200" {% if settings.tower_light_baudrate == 115200 %}selected{% endif %}>115200</option>
+                                        </select>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    </div>
 
-                    <div class="card mb-3">
-                        <div class="card-body">
-                            <h5 class="card-title">Alert Behavior</h5>
-                            <div class="form-check mb-2">
-                                <input class="form-check-input" type="checkbox" id="tower_light_alert_buzzer" name="tower_light_alert_buzzer" value="true" {% if settings.tower_light_alert_buzzer %}checked{% endif %}>
-                                <label class="form-check-label" for="tower_light_alert_buzzer">Enable buzzer on alert</label>
-                            </div>
-                            <div class="form-check mb-2">
-                                <input class="form-check-input" type="checkbox" id="tower_light_incoming_uses_yellow" name="tower_light_incoming_uses_yellow" value="true" {% if settings.tower_light_incoming_uses_yellow %}checked{% endif %}>
-                                <label class="form-check-label" for="tower_light_incoming_uses_yellow">Use yellow for incoming (pre-alert) state</label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="tower_light_blink_on_alert" name="tower_light_blink_on_alert" value="true" {% if settings.tower_light_blink_on_alert %}checked{% endif %}>
-                                <label class="form-check-label" for="tower_light_blink_on_alert">Blink red during active alert</label>
+                            <div class="hw-section">
+                                <div class="hw-section-title"><i class="fas fa-bell"></i>Alert Behavior</div>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input" type="checkbox" id="tower_light_alert_buzzer" name="tower_light_alert_buzzer" value="true" {% if settings.tower_light_alert_buzzer %}checked{% endif %}>
+                                    <label class="form-check-label" for="tower_light_alert_buzzer">Enable buzzer on alert</label>
+                                </div>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input" type="checkbox" id="tower_light_incoming_uses_yellow" name="tower_light_incoming_uses_yellow" value="true" {% if settings.tower_light_incoming_uses_yellow %}checked{% endif %}>
+                                    <label class="form-check-label" for="tower_light_incoming_uses_yellow">Use yellow for incoming (pre-alert) state</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="tower_light_blink_on_alert" name="tower_light_blink_on_alert" value="true" {% if settings.tower_light_blink_on_alert %}checked{% endif %}>
+                                    <label class="form-check-label" for="tower_light_blink_on_alert">Blink red during active alert</label>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -814,79 +963,76 @@
                 <div id="panel-neopixel" class="hw-panel">
                     <div class="card mb-3">
                         <div class="card-body">
-                            <h5 class="card-title"><i class="fas fa-lightbulb me-1"></i> NeoPixel / WS2812B LED Strip</h5>
-                            <div class="form-check mb-2">
-                                <input class="form-check-input" type="checkbox" id="neopixel_enabled" name="neopixel_enabled" value="true" {% if settings.neopixel_enabled %}checked{% endif %}>
-                                <label class="form-check-label" for="neopixel_enabled">Enable NeoPixel LED Strip</label>
+                            <div class="hw-section">
+                                <div class="hw-section-title"><i class="fas fa-power-off"></i>Device</div>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input" type="checkbox" id="neopixel_enabled" name="neopixel_enabled" value="true" {% if settings.neopixel_enabled %}checked{% endif %}>
+                                    <label class="form-check-label" for="neopixel_enabled">Enable NeoPixel / WS2812B LED Strip</label>
+                                </div>
+                                <p class="text-muted small mb-0">
+                                    Supports WS2812B and compatible addressable LEDs on a single GPIO data pin.
+                                    Requires the <code>rpi_ws281x</code> library and root/SPI access.
+                                </p>
                             </div>
-                            <p class="text-muted small mb-0">
-                                Supports WS2812B and compatible addressable LEDs on a single GPIO data pin.
-                                Requires the <code>rpi_ws281x</code> library and root/SPI access.
-                            </p>
-                        </div>
-                    </div>
 
-                    <div class="card mb-3">
-                        <div class="card-body">
-                            <h5 class="card-title">Hardware Configuration</h5>
-                            <div class="row g-3">
-                                <div class="col-md-3">
-                                    <label for="neopixel_gpio_pin" class="form-label">GPIO Pin (BCM)</label>
-                                    <input type="number" class="form-control" id="neopixel_gpio_pin" name="neopixel_gpio_pin" value="{{ settings.neopixel_gpio_pin }}" min="2" max="27">
-                                    <small class="form-text text-muted">GPIO 18 (PWM) recommended</small>
-                                </div>
-                                <div class="col-md-3">
-                                    <label for="neopixel_num_pixels" class="form-label">LED Count</label>
-                                    <input type="number" class="form-control" id="neopixel_num_pixels" name="neopixel_num_pixels" value="{{ settings.neopixel_num_pixels }}" min="1" max="1000">
-                                </div>
-                                <div class="col-md-3">
-                                    <label for="neopixel_led_order" class="form-label">LED Order</label>
-                                    <select class="form-select" id="neopixel_led_order" name="neopixel_led_order">
-                                        <option value="GRB" {% if settings.neopixel_led_order == 'GRB' %}selected{% endif %}>GRB (most WS2812B)</option>
-                                        <option value="RGB" {% if settings.neopixel_led_order == 'RGB' %}selected{% endif %}>RGB</option>
-                                        <option value="GRBW" {% if settings.neopixel_led_order == 'GRBW' %}selected{% endif %}>GRBW (SK6812 RGBW)</option>
-                                        <option value="RGBW" {% if settings.neopixel_led_order == 'RGBW' %}selected{% endif %}>RGBW</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-3">
-                                    <label for="neopixel_brightness" class="form-label">Brightness <span id="neopixel_brightness_val">{{ settings.neopixel_brightness }}</span></label>
-                                    <input type="range" class="form-range" id="neopixel_brightness" name="neopixel_brightness" value="{{ settings.neopixel_brightness }}" min="0" max="255" oninput="document.getElementById('neopixel_brightness_val').textContent=this.value">
+                            <div class="hw-section">
+                                <div class="hw-section-title"><i class="fas fa-microchip"></i>Hardware</div>
+                                <div class="row g-3">
+                                    <div class="col-6 col-md-3">
+                                        <label for="neopixel_gpio_pin" class="form-label">GPIO Pin (BCM)</label>
+                                        <input type="number" class="form-control" id="neopixel_gpio_pin" name="neopixel_gpio_pin" value="{{ settings.neopixel_gpio_pin }}" min="2" max="27">
+                                        <small class="form-text text-muted">GPIO 18 (PWM) recommended</small>
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <label for="neopixel_num_pixels" class="form-label">LED Count</label>
+                                        <input type="number" class="form-control" id="neopixel_num_pixels" name="neopixel_num_pixels" value="{{ settings.neopixel_num_pixels }}" min="1" max="1000">
+                                        <small class="form-text text-muted">Typical strips: 30, 60, 144</small>
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <label for="neopixel_led_order" class="form-label">LED Order</label>
+                                        <select class="form-select" id="neopixel_led_order" name="neopixel_led_order">
+                                            <option value="GRB" {% if settings.neopixel_led_order == 'GRB' %}selected{% endif %}>GRB (most WS2812B)</option>
+                                            <option value="RGB" {% if settings.neopixel_led_order == 'RGB' %}selected{% endif %}>RGB</option>
+                                            <option value="GRBW" {% if settings.neopixel_led_order == 'GRBW' %}selected{% endif %}>GRBW (SK6812 RGBW)</option>
+                                            <option value="RGBW" {% if settings.neopixel_led_order == 'RGBW' %}selected{% endif %}>RGBW</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <label for="neopixel_brightness" class="form-label">Brightness <span id="neopixel_brightness_val">{{ settings.neopixel_brightness }}</span></label>
+                                        <input type="range" class="form-range" id="neopixel_brightness" name="neopixel_brightness" value="{{ settings.neopixel_brightness }}" min="0" max="255" oninput="document.getElementById('neopixel_brightness_val').textContent=this.value">
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    </div>
 
-                    <div class="card mb-3">
-                        <div class="card-body">
-                            <h5 class="card-title">Colors</h5>
-                            {% set sc = settings.neopixel_standby_color or {"r": 0, "g": 10, "b": 0} %}
-                            {% set ac = settings.neopixel_alert_color or {"r": 255, "g": 0, "b": 0} %}
-                            <div class="row g-3">
-                                <div class="col-md-6">
-                                    <label for="neopixel_standby_color" class="form-label">Standby Color</label>
-                                    <input type="color" class="form-control form-control-color" id="neopixel_standby_color" name="neopixel_standby_color" value="#{{ '%02x%02x%02x' % (sc.r, sc.g, sc.b) }}">
-                                    <small class="form-text text-muted">Shown when no alert is active</small>
-                                </div>
-                                <div class="col-md-6">
-                                    <label for="neopixel_alert_color" class="form-label">Alert Color</label>
-                                    <input type="color" class="form-control form-control-color" id="neopixel_alert_color" name="neopixel_alert_color" value="#{{ '%02x%02x%02x' % (ac.r, ac.g, ac.b) }}">
-                                    <small class="form-text text-muted">Shown during an active EAS alert</small>
+                            <div class="hw-section">
+                                <div class="hw-section-title"><i class="fas fa-palette"></i>Colors</div>
+                                {% set sc = settings.neopixel_standby_color or {"r": 0, "g": 10, "b": 0} %}
+                                {% set ac = settings.neopixel_alert_color or {"r": 255, "g": 0, "b": 0} %}
+                                <div class="row g-3">
+                                    <div class="col-12 col-md-6">
+                                        <label for="neopixel_standby_color" class="form-label">Standby Color</label>
+                                        <input type="color" class="form-control form-control-color" id="neopixel_standby_color" name="neopixel_standby_color" value="#{{ '%02x%02x%02x' % (sc.r, sc.g, sc.b) }}">
+                                        <small class="form-text text-muted">Shown when no alert is active</small>
+                                    </div>
+                                    <div class="col-12 col-md-6">
+                                        <label for="neopixel_alert_color" class="form-label">Alert Color</label>
+                                        <input type="color" class="form-control form-control-color" id="neopixel_alert_color" name="neopixel_alert_color" value="#{{ '%02x%02x%02x' % (ac.r, ac.g, ac.b) }}">
+                                        <small class="form-text text-muted">Shown during an active EAS alert</small>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    </div>
 
-                    <div class="card mb-3">
-                        <div class="card-body">
-                            <h5 class="card-title">Alert Behavior</h5>
-                            <div class="form-check mb-3">
-                                <input class="form-check-input" type="checkbox" id="neopixel_flash_on_alert" name="neopixel_flash_on_alert" value="true" {% if settings.neopixel_flash_on_alert %}checked{% endif %}>
-                                <label class="form-check-label" for="neopixel_flash_on_alert">Flash during active alert</label>
-                            </div>
-                            <div class="row g-3">
-                                <div class="col-md-4">
-                                    <label for="neopixel_flash_interval_ms" class="form-label">Flash Interval (ms)</label>
-                                    <input type="number" class="form-control" id="neopixel_flash_interval_ms" name="neopixel_flash_interval_ms" value="{{ settings.neopixel_flash_interval_ms }}" min="100" max="5000" step="50">
+                            <div class="hw-section">
+                                <div class="hw-section-title"><i class="fas fa-bell"></i>Alert Behavior</div>
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input" type="checkbox" id="neopixel_flash_on_alert" name="neopixel_flash_on_alert" value="true" {% if settings.neopixel_flash_on_alert %}checked{% endif %}>
+                                    <label class="form-check-label" for="neopixel_flash_on_alert">Flash during active alert</label>
+                                </div>
+                                <div class="row g-3">
+                                    <div class="col-6 col-md-4">
+                                        <label for="neopixel_flash_interval_ms" class="form-label">Flash Interval (ms)</label>
+                                        <input type="number" class="form-control" id="neopixel_flash_interval_ms" name="neopixel_flash_interval_ms" value="{{ settings.neopixel_flash_interval_ms }}" min="100" max="5000" step="50">
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1053,7 +1199,7 @@
                     <div class="card mb-3">
                         <div class="card-body">
                             <h5 class="card-title d-flex align-items-center justify-content-between flex-wrap gap-2">
-                                <span>Live GPS Status <span id="gps-live-badge" style="display:none;font-size:0.6rem;font-weight:normal;color:#3fb950;vertical-align:middle;margin-left:6px"><span id="gps-live-dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#3fb950;animation:gpsPulse 1.4s ease-in-out infinite;vertical-align:middle;margin-right:3px"></span>auto-refreshing</span></span>
+                                <span>Live GPS Status <span id="gps-live-badge" class="gps-live-pill"><span id="gps-live-dot" class="gps-live-dot"></span>auto-refreshing</span></span>
                                 <button type="button" class="btn btn-sm btn-outline-secondary" onclick="refreshGpsStatus()">
                                     <i class="fas fa-sync-alt"></i> Refresh
                                 </button>
@@ -1067,15 +1213,19 @@
 
                 <!-- Save / Cancel -->
                 <div id="hw-status-banner" class="d-none mt-3"></div>
-                <div class="d-flex gap-2 mt-3">
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-save"></i> Save Settings
-                    </button>
-                    <button type="button" class="btn btn-success" onclick="saveAndRestart(this)">
+                <div class="d-flex flex-wrap gap-2 align-items-center mt-3">
+                    <button type="button" class="btn btn-primary" onclick="saveAndRestart(this)" title="Save settings and restart hardware services so changes take effect immediately">
                         <i class="fas fa-bolt"></i> Save &amp; Restart
                     </button>
-                    <a href="{{ url_for('index') }}" class="btn btn-secondary">Cancel</a>
+                    <button type="submit" class="btn btn-outline-secondary" title="Save settings to the database. Most hardware changes require a service restart to take effect.">
+                        <i class="fas fa-save"></i> Save Only
+                    </button>
+                    <a href="{{ url_for('index') }}" class="btn btn-link text-muted ms-auto">Cancel</a>
                 </div>
+                <p class="text-muted small mt-2 mb-0">
+                    <i class="fas fa-info-circle me-1"></i>
+                    Most hardware changes (ports, baud rates, GPIO pins) require a service restart. Use <strong>Save &amp; Restart</strong> unless you're stacking multiple edits.
+                </p>
             </form>
         </div>
     </div>
@@ -1083,1609 +1233,13 @@
 
 <script src="{{ url_for('static', filename='js/gps_constellation_palette.js') }}"></script>
 <script>
-(function() {
-    // Tab switching
-    var tabs = document.querySelectorAll('.hw-tabs .nav-link[data-tab]');
-    var panels = document.querySelectorAll('.hw-panel');
-
-    tabs.forEach(function(tab) {
-        tab.addEventListener('click', function() {
-            var target = this.getAttribute('data-tab');
-
-            tabs.forEach(function(t) { t.classList.remove('active'); });
-            panels.forEach(function(p) { p.classList.remove('active'); });
-
-            this.classList.add('active');
-            var panel = document.getElementById('panel-' + target);
-            if (panel) panel.classList.add('active');
-
-            if (target === 'led') updateLEDConnectionVisibility();
-            if (target === 'gps') {
-                startGpsPolling();
-            } else {
-                stopGpsPolling();
-            }
-        });
-    });
-
-    // LED connection type toggle
-    function updateLEDConnectionVisibility() {
-        var networkRadio = document.getElementById('led_network');
-        var networkSettings = document.getElementById('led-network-settings');
-        var serialSettings = document.getElementById('led-serial-settings');
-        if (!networkRadio || !networkSettings || !serialSettings) return;
-
-        if (networkRadio.checked) {
-            networkSettings.style.display = '';
-            serialSettings.style.display = 'none';
-        } else {
-            networkSettings.style.display = 'none';
-            serialSettings.style.display = '';
-        }
-    }
-
-    document.querySelectorAll('input[name="led_connection_type"]').forEach(function(radio) {
-        radio.addEventListener('change', updateLEDConnectionVisibility);
-    });
-    updateLEDConnectionVisibility();
-
-    // I2C address: normalize to 0x hex on blur; accepts decimal or hex input
-    var i2cInput = document.getElementById('oled_i2c_address');
-    if (i2cInput) {
-        i2cInput.addEventListener('blur', function() {
-            var val = this.value.trim();
-            var num;
-            if (/^0x[\da-fA-F]+$/i.test(val)) {
-                num = parseInt(val, 16);
-            } else if (/^\d+$/.test(val)) {
-                num = parseInt(val, 10);
-            } else {
-                return;
-            }
-            if (!isNaN(num) && num >= 0 && num <= 127) {
-                this.value = '0x' + num.toString(16).padStart(2, '0');
-            }
-        });
-    }
-})();
-
-// ── GPS Live Panel ────────────────────────────────────────────────────
-var _gpsPollTimer  = null;
-var _gpsRendered   = false;   // true once the panel shell has been inserted
-var _gpsHandlersAttached = false; // event-delegation wiring done once
-var METERS_TO_FEET = 3.28084;
-var KNOTS_TO_MPH   = 1.15078;
-// Approx UERE for consumer GPS (5 m); used to translate HDOP into a rough
-// horizontal-accuracy estimate. Real receivers vary, so we label it "~".
-var GPS_UERE_M = 5.0;
-// Recognised NMEA sentence types — used for the per-type filter chips and
-// the rate display in the diagnostics section.
-var NMEA_TYPES = ['GGA', 'RMC', 'GSV', 'GSA', 'GLL', 'VTG'];
-
-/* Mutable client-side state preserved across polls. */
-var _gpsState = {
-    nmeaFilter: { types: null, text: '', paused: false, pauseSnapshot: null },
-    posHistory: [],          // {lat, lon, t} — last ~30 fixes for stability calc
-    posHistoryMax: 30,
-    lastCounts: null,        // sentence_counts from previous poll
-    lastCountsAt: 0,         // performance.now() at lastCounts time
-    rates: {}                // smoothed Hz per sentence type
-};
-
-function startGpsPolling() {
-    stopGpsPolling();
-    refreshGpsStatus();
-    _gpsPollTimer = setInterval(refreshGpsStatus, 2000);
-    var badge = document.getElementById('gps-live-badge');
-    if (badge) badge.style.display = '';
-}
-
-function stopGpsPolling() {
-    if (_gpsPollTimer) { clearInterval(_gpsPollTimer); _gpsPollTimer = null; }
-    var badge = document.getElementById('gps-live-badge');
-    if (badge) badge.style.display = 'none';
-}
-
-/* One-time panel shell — all dynamic content sits behind stable element IDs.
-   The NMEA filter controls live in the shell (not inside a patched slot) so
-   their DOM state — chip on/off, search text, pause toggle — survives the
-   2-second poll cycle. Only `gps-nmea-rows` is replaced each refresh. */
-function _buildGpsPanelShell() {
-    var chips = NMEA_TYPES.map(function (t) {
-        return '<button type="button" class="gps-nmea-chip on" data-nmea-filter="' + t + '">' + t + '</button>';
-    }).join('');
-    return '<div class="gps-live-panel" id="gps-panel-root">'
-        + '<div class="gps-live-header">'
-        +   '<span id="gps-hdr-badge"></span>'
-        +   '<span id="gps-hdr-vis-used" style="color:var(--text-muted)"></span>'
-        +   '<span id="gps-hdr-port"     style="color:var(--text-muted)"></span>'
-        +   '<span id="gps-hdr-constellations" style="display:inline-flex;flex-wrap:wrap;gap:4px"></span>'
-        +   '<span class="ms-auto" style="display:inline-flex;align-items:center;gap:4px">'
-        +     '<span id="gps-hdr-pps"></span>'
-        +     '<span id="gps-hdr-tsync"></span>'
-        +   '</span>'
-        + '</div>'
-        + '<div id="gps-error-hint"></div>'
-        + '<div class="gps-live-body">'
-        +   '<div class="gps-sky-col">'
-        +     '<canvas id="gps-sky-canvas" width="240" height="240" style="display:block"></canvas>'
-        +     '<div id="gps-sky-overlay"></div>'
-        +   '</div>'
-        +   '<div class="gps-sat-col"><div id="gps-sat-table-wrap"></div></div>'
-        + '</div>'
-        + '<div id="gps-nmea-wrap">'
-        +   '<div class="gps-nmea-controls">'
-        +     '<span class="gps-nmea-label">Recent NMEA</span>'
-        +     chips
-        +     '<input type="text" class="gps-nmea-search" id="gps-nmea-search" placeholder="filter…" />'
-        +     '<button type="button" class="gps-nmea-pause" id="gps-nmea-pause">&#10074;&#10074; Pause</button>'
-        +   '</div>'
-        +   '<div class="gps-nmea-rows" id="gps-nmea-rows"></div>'
-        + '</div>'
-        + '<div class="gps-fix-footer" id="gps-footer"></div>'
-        + '<details class="gps-diag" id="gps-diag">'
-        +   '<summary>Diagnostics</summary>'
-        +   '<div class="gps-diag-body" id="gps-diag-body"></div>'
-        + '</details>'
-        + '</div>';
-}
-
-/* One-time event-delegation hookup for the NMEA filter UI and the diagnostics
-   copy buttons. The targets are recreated on every poll, so we listen on the
-   stable shell root and dispatch by data-attribute. */
-function _attachGpsHandlers() {
-    if (_gpsHandlersAttached) return;
-    var root = document.getElementById('gps-panel-root');
-    if (!root) return;
-
-    // Initialise filter set with all known types enabled
-    if (_gpsState.nmeaFilter.types === null) {
-        _gpsState.nmeaFilter.types = {};
-        NMEA_TYPES.forEach(function (t) { _gpsState.nmeaFilter.types[t] = true; });
-    }
-
-    root.addEventListener('click', function (ev) {
-        var chip = ev.target.closest('[data-nmea-filter]');
-        if (chip) {
-            var t = chip.getAttribute('data-nmea-filter');
-            _gpsState.nmeaFilter.types[t] = !_gpsState.nmeaFilter.types[t];
-            chip.classList.toggle('on', !!_gpsState.nmeaFilter.types[t]);
-            _renderNmeaRows();
-            return;
-        }
-        if (ev.target.id === 'gps-nmea-pause') {
-            var f = _gpsState.nmeaFilter;
-            f.paused = !f.paused;
-            ev.target.classList.toggle('paused', f.paused);
-            ev.target.innerHTML = f.paused ? '▶ Resume' : '❚❚ Pause';
-            // Snapshot the buffer at pause time so the displayed rows freeze
-            f.pauseSnapshot = f.paused ? (_gpsState.lastSentences || []).slice() : null;
-            _renderNmeaRows();
-            return;
-        }
-        var copy = ev.target.closest('[data-copy]');
-        if (copy) {
-            var text = copy.getAttribute('data-copy');
-            _copyToClipboard(text, copy);
-            return;
-        }
-    });
-
-    var search = document.getElementById('gps-nmea-search');
-    if (search) {
-        search.addEventListener('input', function () {
-            _gpsState.nmeaFilter.text = this.value || '';
-            _renderNmeaRows();
-        });
-    }
-    _gpsHandlersAttached = true;
-}
-
-function _copyToClipboard(text, btn) {
-    var done = function () {
-        if (!btn) return;
-        var prev = btn.textContent;
-        btn.classList.add('copied');
-        btn.textContent = 'Copied!';
-        setTimeout(function () {
-            btn.classList.remove('copied');
-            btn.textContent = prev;
-        }, 1100);
+    /* Endpoint URLs from Flask; read by hardware-settings.js */
+    window.HWSettingsConfig = {
+        restartUrl: '{{ url_for("hardware.restart_hardware_services") }}',
+        updateUrl:  '{{ url_for("hardware.update_hardware") }}'
     };
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(done, function () {});
-        return;
-    }
-    var ta = document.createElement('textarea');
-    ta.value = text;
-    ta.style.position = 'fixed';
-    ta.style.opacity = '0';
-    document.body.appendChild(ta);
-    ta.select();
-    try { document.execCommand('copy'); done(); } catch (e) {}
-    document.body.removeChild(ta);
-}
-
-/* Patch a single element's innerHTML without touching any other element. */
-function _gpsSet(id, html) {
-    var el = document.getElementById(id);
-    if (el) el.innerHTML = html;
-}
-
-/* Simple HTML escaper for raw NMEA strings */
-function gpsEscapeHtml(s) {
-    return String(s)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-}
-
-/* Attribute-value escaper — also escapes the double-quote that breaks
-   `data-copy="..."` when the payload is a DMS string like 41° 0' 38.26" N. */
-function gpsEscapeAttr(s) {
-    return String(s)
-        .replace(/&/g, '&amp;')
-        .replace(/"/g, '&quot;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-}
-
-/* SNR / constellation helpers — pulled from the shared palette in
-   static/js/gps_constellation_palette.js (loaded above) so all three
-   GPS panels stay colour-consistent.  We keep local function names
-   (snrClass / constellationInfo / SNR_COLORS) so the rest of this
-   file doesn't need to change. */
-var _GPS_PALETTE = (typeof window !== 'undefined' && window.EAS_GPS_PALETTE) || null;
-function snrClass(snr) {
-    return 'snr-' + (_GPS_PALETTE ? _GPS_PALETTE.snrBucket(snr) : 's0');
-}
-var SNR_COLORS = (function () {
-    var src = _GPS_PALETTE ? _GPS_PALETTE.SNR_COLORS : {};
-    var out = {};
-    Object.keys(src).forEach(function (k) { out['snr-' + k] = src[k]; });
-    return out;
-})();
-function snrHex(snr) {
-    return _GPS_PALETTE ? _GPS_PALETTE.snrHex(snr) : '#484f58';
-}
-var CONSTELLATION_INFO = _GPS_PALETTE ? _GPS_PALETTE.CONSTELLATION_INFO : {};
-function constellationInfo(code) {
-    return _GPS_PALETTE ? _GPS_PALETTE.constInfo(code)
-                        : { color: '#8b949e', label: code || 'Unknown' };
-}
-function snrAlpha(snr) {
-    if (!_GPS_PALETTE) {
-        if (snr === null || snr === undefined) return 0.55;
-        return Math.max(0.45, Math.min(0.95, 0.4 + snr / 60));
-    }
-    return _GPS_PALETTE.snrAlpha(snr);
-}
-
-/* Read a CSS custom property from the document root */
-function _getThemeColor(varName) {
-    return getComputedStyle(document.documentElement).getPropertyValue(varName).trim() || null;
-}
-
-/* Draw the polar sky plot onto a <canvas> element */
-function drawSkyPlot(canvas, satsInView, activePrns) {
-    var ctx = canvas.getContext('2d');
-    var W = canvas.width, H = canvas.height;
-    var cx = W / 2, cy = H / 2;
-    var MAX_R = Math.min(W, H) / 2 - 16;   // leave room for N/S/E/W labels
-
-    // Read theme colors at paint time so we always match the active theme
-    var themeBg      = _getThemeColor('--bg-color')       || '#0d1117';
-    var themeBorder  = _getThemeColor('--border-color')   || '#1c2128';
-    var themeMuted   = _getThemeColor('--text-muted')     || '#2d3748';
-    var themeLabel   = _getThemeColor('--text-secondary') || '#4a6080';
-
-    ctx.clearRect(0, 0, W, H);
-
-    // Clip everything inside the horizon circle
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(cx, cy, MAX_R, 0, Math.PI * 2);
-    ctx.clip();
-
-    // Background fill
-    ctx.fillStyle = themeBg;
-    ctx.fill();
-
-    // Elevation rings: horizon (0°), 30°, 60°
-    [0, 30, 60].forEach(function (el) {
-        var r = MAX_R * (90 - el) / 90;
-        ctx.beginPath();
-        ctx.arc(cx, cy, r, 0, Math.PI * 2);
-        ctx.strokeStyle = themeBorder;
-        ctx.lineWidth = 1;
-        ctx.stroke();
-    });
-
-    // Crosshairs
-    ctx.strokeStyle = themeBorder;
-    ctx.lineWidth = 0.8;
-    ctx.beginPath();
-    ctx.moveTo(cx, cy - MAX_R); ctx.lineTo(cx, cy + MAX_R);
-    ctx.moveTo(cx - MAX_R, cy); ctx.lineTo(cx + MAX_R, cy);
-    ctx.stroke();
-
-    // Elevation labels inside the plot
-    ctx.fillStyle = themeMuted;
-    ctx.font = '8px monospace';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('30°', cx + 2, cy - MAX_R * 60 / 90);
-    ctx.fillText('60°', cx + 2, cy - MAX_R * 30 / 90);
-
-    // Zenith dot
-    ctx.beginPath();
-    ctx.arc(cx, cy, 2, 0, Math.PI * 2);
-    ctx.fillStyle = themeMuted;
-    ctx.fill();
-
-    // Satellites
-    (satsInView || []).forEach(function (sat) {
-        if (sat.elevation === null || sat.azimuth === null) return;
-        var r = MAX_R * (90 - Math.max(0, sat.elevation)) / 90;
-        var azRad = sat.azimuth * Math.PI / 180;
-        var x = cx + r * Math.sin(azRad);
-        var y = cy - r * Math.cos(azRad);
-        var isUsed = activePrns.indexOf(sat.prn) !== -1;
-        var color = constellationInfo(sat.constellation).color;
-
-        // Glow for used-in-fix sats
-        if (isUsed && sat.snr !== null) {
-            ctx.beginPath();
-            ctx.arc(x, y, 12, 0, Math.PI * 2);
-            ctx.fillStyle = color + '28';
-            ctx.fill();
-        }
-
-        // Satellite circle — colour by constellation, alpha by SNR
-        ctx.beginPath();
-        ctx.arc(x, y, 8, 0, Math.PI * 2);
-        ctx.fillStyle = color;
-        ctx.globalAlpha = snrAlpha(sat.snr);
-        ctx.fill();
-        ctx.globalAlpha = 1;
-        ctx.strokeStyle = isUsed ? '#ffffff' : themeBorder;
-        ctx.lineWidth = isUsed ? 1.5 : 0.8;
-        ctx.stroke();
-
-        // PRN label
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 7px monospace';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(sat.prn.toString(), x, y);
-    });
-
-    ctx.restore();
-
-    // Cardinal labels (outside the clip)
-    ctx.fillStyle = themeLabel;
-    ctx.font = 'bold 11px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('N', cx, cy - MAX_R - 9);
-    ctx.fillText('S', cx, cy + MAX_R + 9);
-    ctx.textAlign = 'left';
-    ctx.fillText('E', cx + MAX_R + 5, cy);
-    ctx.textAlign = 'right';
-    ctx.fillText('W', cx - MAX_R - 5, cy);
-}
-
-/* Build the satellite table HTML (cgps-style) */
-function buildSatTable(satsInView, activePrns) {
-    // Merge active PRNs that have no GSV entry so used satellites always appear
-    var gsv_prns = (satsInView || []).map(function (s) { return s.prn; });
-    var extraActive = (activePrns || []).filter(function (p) { return gsv_prns.indexOf(p) === -1; });
-    var allSats = (satsInView || []).slice();
-    extraActive.forEach(function (prn) {
-        allSats.push({ prn: prn, elevation: null, azimuth: null, snr: null });
-    });
-
-    if (allSats.length === 0) {
-        return '<div class="text-muted" style="padding:16px 4px;font-size:0.75rem">No satellite data yet&hellip;</div>';
-    }
-    // Check if we have any sky-position data at all
-    var hasPos = allSats.some(function(s) { return s.elevation !== null || s.azimuth !== null; });
-    var almanacNote = (!hasPos && allSats.length > 0)
-        ? '<div style="padding:4px 4px 8px;font-size:0.7rem;color:var(--warning-color)">'
-          + '<i class="fas fa-satellite-dish fa-fw"></i> '
-          + 'Sky positions pending &mdash; receiver is downloading almanac&sol;ephemeris data.'
-          + '</div>'
-        : '';
-    var sorted = allSats.slice().sort(function (a, b) {
-        var sa = a.snr !== null ? a.snr : -1;
-        var sb = b.snr !== null ? b.snr : -1;
-        return sb - sa;
-    });
-
-    var rows = sorted.map(function (sat) {
-        var used = activePrns.indexOf(sat.prn) !== -1;
-        var cls = used ? 'sat-used' : 'sat-unused';
-        var snr = sat.snr;
-        var barW = snr !== null ? Math.min(100, Math.round(snr / 50 * 100)) : 0;
-        var barColor = snrHex(snr);
-        var info = constellationInfo(sat.constellation);
-        var constDot = '<span title="' + info.label + '" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:' + info.color + ';margin-right:5px;vertical-align:middle"></span>';
-        var usedMark = used
-            ? '<span style="color:#3fb950">&#10003;</span>'
-            : '<span style="color:var(--border-color)">&#183;</span>';
-        return '<tr class="' + cls + '">'
-            + '<td style="text-align:right;padding-right:8px;white-space:nowrap">' + constDot + sat.prn + '</td>'
-            + '<td style="text-align:right;padding-right:8px">' + (sat.elevation !== null ? sat.elevation : '&mdash;') + '</td>'
-            + '<td style="text-align:right;padding-right:10px">' + (sat.azimuth !== null ? sat.azimuth : '&mdash;') + '</td>'
-            + '<td><span class="gps-snr-track"><span class="gps-snr-fill" style="width:' + barW + '%;background:' + barColor + '"></span></span></td>'
-            + '<td style="padding-left:5px;text-align:right">' + (snr !== null ? snr : '&mdash;') + '</td>'
-            + '<td style="padding-left:6px;text-align:center">' + usedMark + '</td>'
-            + '</tr>';
-    }).join('');
-
-    // Constellation legend — only shows the talkers actually present in this view
-    var presentConsts = {};
-    allSats.forEach(function (s) { if (s.constellation) presentConsts[s.constellation] = true; });
-    var constLegend = Object.keys(presentConsts).sort().map(function (code) {
-        var info = constellationInfo(code);
-        return '<span><span class="snr-dot" style="background:' + info.color + '"></span>' + info.label + '</span>';
-    }).join('');
-    var constLegendHtml = constLegend
-        ? '<div class="snr-legend" style="margin-top:2px">' + constLegend + '</div>'
-        : '';
-
-    return almanacNote
-        + '<div class="table-responsive">'
-        + '<table class="gps-sat-table">'
-        + '<thead><tr>'
-        + '<th style="text-align:right">Sv</th>'
-        + '<th style="text-align:right">El&deg;</th>'
-        + '<th style="text-align:right">Az&deg;</th>'
-        + '<th colspan="2">C/N&#x2080; (dBHz)</th>'
-        + '<th style="text-align:center">Fix</th>'
-        + '</tr></thead>'
-        + '<tbody>' + rows + '</tbody>'
-        + '</table>'
-        + '</div>'
-        + '<div class="snr-legend">'
-        + '<span><span class="snr-dot snr-s5"></span>&ge;45</span>'
-        + '<span><span class="snr-dot snr-s4"></span>35&ndash;44</span>'
-        + '<span><span class="snr-dot snr-s3"></span>25&ndash;34</span>'
-        + '<span><span class="snr-dot snr-s2"></span>15&ndash;24</span>'
-        + '<span><span class="snr-dot snr-s1"></span>&lt;15</span>'
-        + '<span><span class="snr-dot snr-s0"></span>no sig</span>'
-        + '</div>'
-        + constLegendHtml;
-}
-
-var GPS_NMEA_COLORS = {
-    GGA: '#3fb950', RMC: '#58a6ff', GSV: '#bc8cff',
-    GSA: '#e3b341', GLL: '#79c0ff', VTG: '#ffa657'
-};
-
-/* Render the NMEA rows panel from current state — applies type filter and
-   free-text filter. Pause freezes the visible buffer to whatever was present
-   when the user paused. */
-function _renderNmeaRows() {
-    var slot = document.getElementById('gps-nmea-rows');
-    if (!slot) return;
-    var f = _gpsState.nmeaFilter;
-    var sentences = f.paused ? (f.pauseSnapshot || []) : (_gpsState.lastSentences || []);
-    if (!sentences.length) {
-        slot.innerHTML = '<div class="gps-nmea-empty">No NMEA sentences received yet…</div>';
-        return;
-    }
-    var typeOk = f.types || {};
-    var needle = (f.text || '').toLowerCase();
-    var rows = [];
-    for (var i = sentences.length - 1; i >= 0; i--) {
-        var s = sentences[i];
-        var m = s.match(/^\$[A-Z]{2}([A-Z]{3})/);
-        var t = m ? m[1] : null;
-        if (t && Object.prototype.hasOwnProperty.call(typeOk, t) && !typeOk[t]) continue;
-        if (needle && s.toLowerCase().indexOf(needle) === -1) continue;
-        var color = (t && GPS_NMEA_COLORS[t]) || 'var(--text-muted)';
-        rows.push('<div style="color:' + color + ';white-space:pre;line-height:1.4">'
-            + gpsEscapeHtml(s) + '</div>');
-    }
-    if (!rows.length) {
-        slot.innerHTML = '<div class="gps-nmea-empty">No sentences match the current filter.</div>';
-        return;
-    }
-    slot.innerHTML = rows.join('');
-}
-
-/* Build the per-constellation chips that go in the header. Each chip shows
-   the constellation name, total satellites in view for it, and how many of
-   those are being used in the current fix. */
-function buildConstellationChips(satsInView, activePrns) {
-    if (!satsInView || !satsInView.length) return '';
-    var groups = {};
-    var activeSet = {};
-    (activePrns || []).forEach(function (p) { activeSet[p] = true; });
-    satsInView.forEach(function (s) {
-        var code = s.constellation || 'GN';
-        if (!groups[code]) groups[code] = { total: 0, used: 0 };
-        groups[code].total += 1;
-        if (activeSet[s.prn]) groups[code].used += 1;
-    });
-    return Object.keys(groups).sort().map(function (code) {
-        var info = constellationInfo(code);
-        var g = groups[code];
-        return '<span class="gps-const-chip" title="' + info.label + ' — ' + g.used + ' used of ' + g.total + ' visible">'
-            + '<span class="gps-const-dot" style="background:' + info.color + '"></span>'
-            + info.label + ' ' + g.total
-            + (g.used ? '<span class="gps-const-used">·' + g.used + '</span>' : '')
-            + '</span>';
-    }).join('');
-}
-
-/* Time-sync indicator. Hidden when use_for_time is off, since otherwise it
-   would always read "OFF" and add noise. */
-function buildTimeSyncChip(d) {
-    if (!d.use_for_time) return '';
-    if (d.time_synced) {
-        var label = d.ntp_disabled ? 'TIME · GPS' : 'TIME · synced';
-        return '<span class="gps-tsync-chip" title="System clock has been set from GPS time">'
-            + '<i class="fas fa-clock"></i> ' + label + '</span>';
-    }
-    return '<span class="gps-tsync-chip tsync-off" title="Waiting for first GPS time sync">'
-        + '<i class="far fa-clock"></i> TIME · pending</span>';
-}
-
-/* Map fix_quality enum to a short human label appended to the badge.
-   Returns empty for the default/unknown case to avoid clutter. */
-function fixQualityLabel(q) {
-    return ({
-        gps_fix:    '',
-        dgps_fix:   'DGPS',
-        pps_fix:    'PPS',
-        rtk_fix:    'RTK',
-        float_rtk:  'RTK Float',
-        estimated:  'Dead-reckon',
-        manual:     'Manual',
-        simulation: 'Sim'
-    }[q] || '');
-}
-
-/* Convert track_angle (true course) to an 8-point cardinal indicator. */
-function bearingToCardinal(deg) {
-    if (deg === null || deg === undefined || isNaN(deg)) return '';
-    var dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
-    return dirs[Math.round(((deg % 360) / 45)) % 8];
-}
-
-/* Decimal degrees → "DD° MM' SS.SS\" H" with a hemisphere letter. */
-function toDMS(deg, posChar, negChar) {
-    if (deg === null || deg === undefined || isNaN(deg)) return '—';
-    var hemi = deg >= 0 ? posChar : negChar;
-    var abs = Math.abs(deg);
-    var d = Math.floor(abs);
-    var mFloat = (abs - d) * 60;
-    var m = Math.floor(mFloat);
-    var s = (mFloat - m) * 60;
-    return d + '° ' + m + "' " + s.toFixed(2) + '" ' + hemi;
-}
-
-/* 6-character Maidenhead grid (e.g. EN80la) — handy for ham operators. */
-function toMaidenhead(lat, lon) {
-    if (lat === null || lon === null) return '—';
-    var adjLon = lon + 180;
-    var adjLat = lat + 90;
-    var fLon = Math.floor(adjLon / 20);
-    var fLat = Math.floor(adjLat / 10);
-    var sLon = Math.floor((adjLon % 20) / 2);
-    var sLat = Math.floor(adjLat % 10);
-    var subLon = Math.floor((adjLon - 20 * fLon - 2 * sLon) * 12);
-    var subLat = Math.floor((adjLat - 10 * fLat -     sLat) * 24);
-    return String.fromCharCode(65 + fLon) + String.fromCharCode(65 + fLat)
-        + sLon + sLat
-        + String.fromCharCode(97 + subLon) + String.fromCharCode(97 + subLat);
-}
-
-/* RMS scatter of recent positions, in metres — a quick smoke test for
-   "is this fix actually stable, or is it dancing?" */
-function positionStability(history) {
-    if (!history || history.length < 5) return null;
-    var n = history.length;
-    var meanLat = 0, meanLon = 0;
-    for (var i = 0; i < n; i++) { meanLat += history[i].lat; meanLon += history[i].lon; }
-    meanLat /= n; meanLon /= n;
-    var vLat = 0, vLon = 0;
-    for (var j = 0; j < n; j++) {
-        vLat += Math.pow(history[j].lat - meanLat, 2);
-        vLon += Math.pow(history[j].lon - meanLon, 2);
-    }
-    vLat /= n; vLon /= n;
-    var sdLatM = Math.sqrt(vLat) * 111320;
-    var sdLonM = Math.sqrt(vLon) * 111320 * Math.cos(meanLat * Math.PI / 180);
-    return {
-        samples: n,
-        rmsM: Math.sqrt(sdLatM * sdLatM + sdLonM * sdLonM),
-        spanS: history[n - 1].t - history[0].t
-    };
-}
-
-/* Update _gpsState.rates from the latest sentence_counts dict using a simple
-   delta over wall-clock time. Resets cleanly on counter rollover (manager
-   restart) by clamping negative deltas to 0. */
-function updateSentenceRates(counts) {
-    var nowMs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
-    if (_gpsState.lastCounts && _gpsState.lastCountsAt) {
-        var dt = (nowMs - _gpsState.lastCountsAt) / 1000;
-        if (dt > 0.1) {
-            var keys = {};
-            Object.keys(counts || {}).forEach(function (k) { keys[k] = true; });
-            Object.keys(_gpsState.lastCounts).forEach(function (k) { keys[k] = true; });
-            Object.keys(keys).forEach(function (k) {
-                var cur = (counts && counts[k]) || 0;
-                var prev = _gpsState.lastCounts[k] || 0;
-                var delta = Math.max(0, cur - prev);
-                _gpsState.rates[k] = delta / dt;
-            });
-        }
-    }
-    _gpsState.lastCounts = Object.assign({}, counts || {});
-    _gpsState.lastCountsAt = nowMs;
-}
-
-/* Build the diagnostics disclosure body — every secondary metric lives here
-   so the main panel stays focused on at-a-glance fix quality. */
-function buildDiagnostics(d, sats, activePrns, stability) {
-    function row(label, val) {
-        return '<div class="gps-diag-row">'
-            + '<span class="gps-diag-label">' + label + '</span>'
-            + '<span class="gps-diag-val">' + val + '</span></div>';
-    }
-    var rows = [];
-
-    // SNR statistics across used satellites (falls back to all in view)
-    var snrs = (sats || [])
-        .filter(function (s) { return s.snr !== null && s.snr !== undefined; })
-        .map(function (s) { return s.snr; });
-    var usedSnrs = (sats || [])
-        .filter(function (s) { return activePrns.indexOf(s.prn) !== -1
-            && s.snr !== null && s.snr !== undefined; })
-        .map(function (s) { return s.snr; });
-    var snrSet = usedSnrs.length ? usedSnrs : snrs;
-    if (snrSet.length) {
-        var avg = snrSet.reduce(function (a, b) { return a + b; }, 0) / snrSet.length;
-        var max = Math.max.apply(null, snrSet);
-        var min = Math.min.apply(null, snrSet);
-        rows.push(row('Avg C/N₀',
-            avg.toFixed(1) + ' dBHz <span style="color:var(--text-muted)">(min ' + min + ', max ' + max + ')</span>'));
-    }
-
-    // Geoid separation (height of MSL above WGS-84 ellipsoid)
-    if (d.geoid_separation_m !== null && d.geoid_separation_m !== undefined) {
-        rows.push(row('Geoid separation', d.geoid_separation_m.toFixed(1) + ' m'));
-        if (d.altitude_m !== null && d.altitude_m !== undefined) {
-            rows.push(row('Altitude (WGS-84)',
-                (d.altitude_m + d.geoid_separation_m).toFixed(1) + ' m'));
-        }
-    }
-
-    // Magnetic variation (RMC)
-    if (d.magnetic_variation !== null && d.magnetic_variation !== undefined) {
-        rows.push(row('Magnetic variation',
-            d.magnetic_variation.toFixed(1) + '° ' + (d.magnetic_variation_dir || '')));
-    }
-
-    // DGPS correction info
-    if (d.dgps_age_s !== null && d.dgps_age_s !== undefined) {
-        rows.push(row('DGPS age', d.dgps_age_s.toFixed(1) + ' s'));
-    }
-    if (d.dgps_station_id) {
-        rows.push(row('DGPS station', gpsEscapeHtml(d.dgps_station_id)));
-    }
-
-    // Position stability over recent history
-    if (stability) {
-        rows.push(row('Position stability',
-            '±' + stability.rmsM.toFixed(2) + ' m RMS '
-            + '<span style="color:var(--text-muted)">(' + stability.samples + ' samples / '
-            + Math.round(stability.spanS) + 's)</span>'));
-    }
-
-    // Parser health
-    if (d.sentence_errors !== null && d.sentence_errors !== undefined) {
-        var errColor = d.sentence_errors > 0 ? 'var(--warning-color)' : 'var(--text-muted)';
-        rows.push(row('Parse errors',
-            '<span style="color:' + errColor + '">' + d.sentence_errors + '</span>'));
-    }
-
-    // PPS pulse counter
-    if (d.pps_pulse_count) {
-        rows.push(row('PPS pulses', d.pps_pulse_count.toLocaleString()));
-    }
-
-    var html = rows.join('');
-
-    // Sentence rates row spans full width
-    var rateChips = NMEA_TYPES
-        .filter(function (t) { return _gpsState.lastCounts && _gpsState.lastCounts[t]; })
-        .map(function (t) {
-            var hz = _gpsState.rates[t];
-            var hzText = (hz !== undefined) ? hz.toFixed(1) + 'Hz' : '—';
-            return '<span class="gps-diag-rate-chip">' + t + ' <strong>' + hzText + '</strong></span>';
-        }).join('');
-    if (rateChips) {
-        html += '<div class="gps-diag-rates">'
-            + '<span class="gps-diag-label" style="font-size:0.68rem">Sentence rates &nbsp;</span>'
-            + rateChips + '</div>';
-    }
-
-    // Copy buttons — only when a position is available
-    if (d.has_fix && d.latitude !== null && d.longitude !== null) {
-        var dec = d.latitude.toFixed(6) + ', ' + d.longitude.toFixed(6);
-        var dms = toDMS(d.latitude, 'N', 'S') + ', ' + toDMS(d.longitude, 'E', 'W');
-        var grid = toMaidenhead(d.latitude, d.longitude);
-        html += '<div class="gps-diag-copy">'
-            + '<button type="button" class="gps-diag-copy-btn" data-copy="' + gpsEscapeAttr(dec) + '">'
-              + '<i class="far fa-copy fa-fw"></i> Decimal</button>'
-            + '<button type="button" class="gps-diag-copy-btn" data-copy="' + gpsEscapeAttr(dms) + '">'
-              + '<i class="far fa-copy fa-fw"></i> DMS</button>'
-            + '<button type="button" class="gps-diag-copy-btn" data-copy="' + gpsEscapeAttr(grid) + '">'
-              + '<i class="far fa-copy fa-fw"></i> ' + gpsEscapeHtml(grid) + '</button>'
-            + '</div>';
-    }
-
-    if (!html) {
-        html = '<div class="gps-diag-row" style="grid-column:1/-1">'
-            + '<span class="gps-diag-label">Awaiting data…</span></div>';
-    }
-    return html;
-}
-
-/* Build the PPS blinkenlite badge */
-function buildPpsHtml(d) {
-    var age = d.pps_pulse_age_s;
-    var pin = d.pps_gpio_pin !== undefined ? d.pps_gpio_pin : '?';
-    var active = age !== null && age < 2.5;
-    var ever   = age !== null && age >= 2.5;
-    var cls = active ? 'pps-active' : (ever ? 'pps-lost' : 'pps-inactive');
-    var txt = active
-        ? ('PPS \u00b7 ' + age.toFixed(1) + 's')
-        : 'PPS';
-    var tip = active
-        ? ('PPS active on GPIO ' + pin + ' \u2014 last pulse ' + age.toFixed(1) + 's ago')
-        : (ever ? ('PPS lost on GPIO ' + pin + ' \u2014 last pulse ' + age.toFixed(1) + 's ago')
-               : ('No PPS signal detected on GPIO ' + pin));
-    return '<span class="pps-led ' + cls + '" title="' + tip + '">'
-        + '<span class="pps-dot"></span>' + txt + '</span>';
-}
-
-/* Status badge \u2014 when we have a fix, prefer the GSA-derived 2D/3D label and
-   append the GGA fix-quality detail (DGPS / RTK / etc) when it's something
-   more interesting than a plain GPS solution. */
-function buildStatusBadge(d) {
-    var errorStatuses = ['port_not_found','port_open_failed','pyserial_missing','pynmea2_missing'];
-    var labels = {
-        'fix':'3D Fix','acquiring':'Acquiring\u2026','no_fix':'No Fix',
-        'port_not_found':'Port Not Found','port_open_failed':'Port Error',
-        'pyserial_missing':'pyserial Missing','pynmea2_missing':'pynmea2 Missing',
-        'not_started':'Not Started','disabled':'Disabled','stopped':'Stopped','reading':'Reading\u2026'
-    };
-    var lbl = labels[d.status] || d.status || 'Unknown';
-    if (d.has_fix) {
-        if (d.fix_mode === 2) lbl = '2D Fix';
-        else if (d.fix_mode === 3) lbl = '3D Fix';
-        var detail = fixQualityLabel(d.fix_quality);
-        if (detail) lbl += ' \u00b7 ' + detail;
-        return '<span style="color:#3fb950;font-weight:bold">[' + lbl + ']</span>';
-    }
-    if (d.status === 'acquiring' || d.status === 'reading')
-        return '<span style="color:var(--warning-color);font-weight:bold">[' + lbl + ']</span>';
-    if (errorStatuses.indexOf(d.status) !== -1)
-        return '<span style="color:var(--danger-color);font-weight:bold">[' + lbl + ']</span>';
-    return '<span style="color:var(--text-muted)">[' + lbl + ']</span>';
-}
-
-/* Error hint banners */
-function buildErrorHint(d) {
-    var hints = {
-        'port_not_found':
-            'Serial port <code>' + (d.serial_port||'/dev/serial0') + '</code> not found. '
-            + 'Check that the GPS HAT is connected and enable UART via <code>raspi-config</code>.',
-        'pyserial_missing':
-            '<code>pyserial</code> not installed &mdash; run: <code>pip install pyserial</code>',
-        'pynmea2_missing':
-            '<code>pynmea2</code> not installed &mdash; run: <code>pip install pynmea2</code>',
-        'port_open_failed':
-            'Could not open serial port. Check permissions and that the port is not in use by another process.'
-    };
-    var msg = hints[d.status];
-    if (msg) {
-        return '<div style="margin:0;padding:6px 12px;background:rgba(248,81,73,0.12);color:var(--danger-color);border-top:1px solid rgba(248,81,73,0.3);font-size:0.75rem">'
-            + '<i class="fas fa-exclamation-triangle me-1"></i>' + msg + '</div>';
-    }
-    // Acquiring hint: visible satellites but no position fix yet
-    if (!d.has_fix && d.status === 'acquiring') {
-        var satsVisible = (d.satellites_in_view || []).length;
-        var haveSkyPos  = (d.satellites_in_view || []).some(function(s) { return s.elevation !== null && s.azimuth !== null; });
-        var detail = haveSkyPos
-            ? 'Waiting for enough satellites to compute a 3D fix.'
-            : 'Downloading satellite almanac &amp; ephemeris data \u2014 this provides orbital positions needed to compute a fix. '
-              + 'A cold start typically takes 1&ndash;3 minutes; warm start 30&ndash;60 seconds.';
-        return '<div style="margin:0;padding:6px 12px;background:rgba(210,153,34,0.12);color:var(--warning-color);border-top:1px solid rgba(210,153,34,0.3);font-size:0.75rem">'
-            + '<i class="fas fa-satellite-dish me-1"></i>'
-            + '<strong>' + satsVisible + ' satellite' + (satsVisible !== 1 ? 's' : '') + ' in view &mdash;</strong> ' + detail
-            + '</div>';
-    }
-    return '';
-}
-
-function refreshGpsStatus() {
-    var container = document.getElementById('gps-status-card');
-    if (!container) return;
-    // Don't poll when the tab is hidden — the GPS card isn't visible and the
-    // /api/hardware/gps/status request still runs a handler on the server.
-    if (typeof document !== 'undefined' && document.hidden) return;
-    fetch('/api/hardware/gps/status')
-        .then(function (r) { return r.json(); })
-        .then(function (d) {
-            var satsInView      = d.satellites_in_view    || [];
-            var activePrns      = d.active_satellite_prns || [];
-            var recentSentences = d.recent_sentences      || [];
-            var usedCount       = activePrns.length;
-            // Fallback: when the receiver doesn't emit GSA at all (some chips
-            // need PMTK314 to enable it) but GGA reports a fix with N sats,
-            // surface that count instead of misleadingly showing "0 used".
-            if (usedCount === 0 && d.has_fix && d.satellites) {
-                usedCount = d.satellites;
-            }
-            var viewCount       = satsInView.length || (d.satellites != null ? d.satellites : 0);
-            var plottableSats   = satsInView.filter(function(s) { return s.elevation !== null && s.azimuth !== null; });
-            var pendingAlmanac  = satsInView.length > 0 && plottableSats.length === 0;
-
-            // Build the panel shell only once — never tear it down again.
-            if (!_gpsRendered) {
-                container.innerHTML = _buildGpsPanelShell();
-                _gpsRendered = true;
-                _attachGpsHandlers();
-            }
-
-            // ── Track rolling state ─────────────────────────────────
-            _gpsState.lastSentences = recentSentences;
-            updateSentenceRates(d.sentence_counts || {});
-
-            if (d.has_fix && d.latitude !== null && d.longitude !== null) {
-                var nowS = Date.now() / 1000;
-                _gpsState.posHistory.push({ lat: d.latitude, lon: d.longitude, t: nowS });
-                if (_gpsState.posHistory.length > _gpsState.posHistoryMax) {
-                    _gpsState.posHistory.shift();
-                }
-            } else if (!d.has_fix) {
-                _gpsState.posHistory = [];
-            }
-            var stability = positionStability(_gpsState.posHistory);
-
-            // ── Patch each element in-place ──────────────────────────
-            _gpsSet('gps-hdr-badge',    buildStatusBadge(d));
-            _gpsSet('gps-hdr-vis-used', viewCount + ' visible &bull; ' + usedCount + ' used');
-            _gpsSet('gps-hdr-port',
-                '<code style="color:var(--accent-color)">' + (d.serial_port||'—') + '</code>'
-                + ' &bull; ' + (d.baudrate||'9600') + 'bd');
-            _gpsSet('gps-hdr-constellations', buildConstellationChips(satsInView, activePrns));
-            _gpsSet('gps-hdr-pps',      buildPpsHtml(d));
-            _gpsSet('gps-hdr-tsync',    buildTimeSyncChip(d));
-            _gpsSet('gps-error-hint',   buildErrorHint(d));
-            _gpsSet('gps-sky-overlay',
-                pendingAlmanac
-                    ? '<div style="margin-top:4px;font-size:0.7rem;color:var(--warning-color);text-align:center">'
-                      + '<i class="fas fa-satellite-dish fa-fw"></i> Downloading sky positions&hellip;</div>'
-                    : '');
-            _gpsSet('gps-sat-table-wrap', buildSatTable(satsInView, activePrns));
-            _renderNmeaRows();
-
-            // ── Footer ───────────────────────────────────────────────
-            var footerHtml;
-            if (d.has_fix) {
-                var lat  = d.latitude  != null ? d.latitude.toFixed(6)  + '&deg;' : '&mdash;';
-                var lon  = d.longitude != null ? d.longitude.toFixed(6) + '&deg;' : '&mdash;';
-                var alt  = d.altitude_m != null ? (d.altitude_m * METERS_TO_FEET).toFixed(0) + ' ft' : '&mdash;';
-                var hdop = d.hdop != null ? d.hdop : '&mdash;';
-                var pdop = d.pdop != null ? d.pdop : null;
-                var vdop = d.vdop != null ? d.vdop : null;
-                var utc  = d.gps_utc_time || '&mdash;';
-                var spd  = d.speed_knots != null ? (d.speed_knots * KNOTS_TO_MPH).toFixed(1) + ' mph' : null;
-                var crs  = d.track_angle != null
-                    ? d.track_angle.toFixed(0) + '° ' + bearingToCardinal(d.track_angle)
-                    : null;
-                var acc  = d.hdop != null
-                    ? '~' + (d.hdop * GPS_UERE_M).toFixed(1) + ' m'
-                    : null;
-                footerHtml =
-                    '<span><span class="gps-lbl">Lat&nbsp;</span>' + lat + '</span>'
-                    + '<span><span class="gps-lbl">Lon&nbsp;</span>' + lon + '</span>'
-                    + '<span><span class="gps-lbl">Alt&nbsp;</span>' + alt + '</span>'
-                    + '<span><span class="gps-lbl">HDOP&nbsp;</span>' + hdop + '</span>'
-                    + (pdop !== null ? '<span><span class="gps-lbl">PDOP&nbsp;</span>' + pdop + '</span>' : '')
-                    + (vdop !== null ? '<span><span class="gps-lbl">VDOP&nbsp;</span>' + vdop + '</span>' : '')
-                    + (acc  !== null ? '<span title="Estimated horizontal accuracy = HDOP × ~5 m UERE"><span class="gps-lbl">Accuracy&nbsp;</span>' + acc + '</span>' : '')
-                    + (crs  !== null ? '<span><span class="gps-lbl">Course&nbsp;</span>' + crs + '</span>' : '')
-                    + (spd ? '<span><span class="gps-lbl">Speed&nbsp;</span>' + spd + '</span>' : '')
-                    + '<span><span class="gps-lbl">UTC&nbsp;</span>' + utc + '</span>';
-            } else {
-                var noFixUtc = d.gps_utc_time
-                    ? '<span><span class="gps-lbl">GPS UTC&nbsp;</span><span style="color:var(--accent-color)">' + d.gps_utc_time + '</span></span>'
-                    : '';
-                var noFixHdop = d.hdop != null
-                    ? '<span><span class="gps-lbl">HDOP&nbsp;</span>' + d.hdop + '</span>' : '';
-                var noFixPdop = d.pdop != null
-                    ? '<span><span class="gps-lbl">PDOP&nbsp;</span>' + d.pdop + '</span>' : '';
-                footerHtml =
-                    '<span style="color:var(--text-muted)">No position fix yet&hellip;</span>'
-                    + noFixUtc + noFixHdop + noFixPdop;
-            }
-            _gpsSet('gps-footer', footerHtml);
-
-            // ── Diagnostics disclosure ──────────────────────────────
-            _gpsSet('gps-diag-body', buildDiagnostics(d, satsInView, activePrns, stability));
-
-            // Redraw sky plot onto the persistent canvas — never recreated.
-            var canvas = document.getElementById('gps-sky-canvas');
-            if (canvas) drawSkyPlot(canvas, satsInView, activePrns);
-        })
-        .catch(function (err) {
-            // Allow the shell to rebuild after an error clears, and re-arm
-            // the delegated click/input handlers since the old root element
-            // will be discarded with the error markup.
-            _gpsRendered = false;
-            _gpsHandlersAttached = false;
-            var c = document.getElementById('gps-status-card');
-            if (c) c.innerHTML =
-                '<span class="text-danger small">'
-                + '<i class="fas fa-times-circle me-1"></i>Failed to load GPS status: ' + err
-                + '</span>';
-        });
-}
-
-function showHwAlert(message, type) {
-    var banner = document.getElementById('hw-status-banner');
-    if (!banner) return;
-    banner.className = 'alert alert-' + type + ' alert-dismissible fade show mt-3';
-    banner.innerHTML = message
-        + ' <button type="button" class="btn-close" onclick="this.parentElement.className=\'d-none\'"></button>';
-    banner.classList.remove('d-none');
-    banner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    if (type === 'success') {
-        setTimeout(function() { banner.classList.add('d-none'); }, 6000);
-    }
-}
-
-function restartServices(btn) {
-    if (!confirm('This will restart all EAS Station™ services. Continue?')) return;
-    var label = btn ? btn.innerHTML : '';
-    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Restarting\u2026'; }
-
-    fetch('{{ url_for("hardware.restart_hardware_services") }}', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-        if (data.success) {
-            showHwAlert('<i class="fas fa-check-circle me-1"></i> Services restarted successfully.', 'success');
-        } else {
-            showHwAlert('<i class="fas fa-exclamation-triangle me-1"></i> Restart failed: ' + data.error, 'danger');
-        }
-    })
-    .catch(function(err) {
-        showHwAlert('<i class="fas fa-exclamation-triangle me-1"></i> Error restarting services: ' + err, 'danger');
-    })
-    .finally(function() {
-        if (btn) { btn.disabled = false; btn.innerHTML = label; }
-    });
-}
-
-function saveAndRestart(btn) {
-    var form = document.getElementById('hardwareForm');
-    var formData = new FormData(form);
-    var data = {};
-
-    // Explicitly capture checkboxes — unchecked ones are absent from FormData
-    form.querySelectorAll('input[type="checkbox"]').forEach(function(cb) {
-        data[cb.name] = cb.checked;
-    });
-    // Capture all other fields
-    formData.forEach(function(value, key) {
-        if (!(key in data)) { data[key] = value; }
-    });
-
-    var label = btn ? btn.innerHTML : '';
-    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving\u2026'; }
-
-    fetch('{{ url_for("hardware.update_hardware") }}', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-    })
-    .then(function(r) {
-        if (!r.ok) return r.json().then(function(d) { throw new Error(d.error || r.statusText); });
-        return r.json();
-    })
-    .then(function(result) {
-        if (!result.success) { throw new Error(result.error || 'Save failed'); }
-        if (btn) { btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Restarting\u2026'; }
-        return fetch('{{ url_for("hardware.restart_hardware_services") }}', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-        }).then(function(r) { return r.json(); });
-    })
-    .then(function(result) {
-        if (result.success) {
-            showHwAlert('<i class="fas fa-check-circle me-1"></i> Settings saved and services restarted.', 'success');
-        } else {
-            showHwAlert('<i class="fas fa-check-circle me-1"></i> Settings saved. Restart failed: ' + (result.error || ''), 'warning');
-        }
-    })
-    .catch(function(err) {
-        showHwAlert('<i class="fas fa-exclamation-triangle me-1"></i> ' + err, 'danger');
-    })
-    .finally(function() {
-        if (btn) { btn.disabled = false; btn.innerHTML = label; }
-    });
-}
-
-// Zigbee auto-detect
-document.addEventListener('DOMContentLoaded', function() {
-    var detectBtn = document.getElementById('zigbee_detect_btn');
-    if (!detectBtn) return;
-    detectBtn.addEventListener('click', function() {
-        var btn = this;
-        var resultDiv = document.getElementById('zigbee_detect_result');
-        var portInput = document.getElementById('zigbee_port');
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Detecting...';
-        resultDiv.style.display = 'none';
-        fetch('/api/zigbee/detect')
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                if (data.success && data.devices && data.devices.length > 0) {
-                    var dev = data.devices[0];
-                    portInput.value = dev.port;
-                    var badge = dev.confidence === 'high'
-                        ? '<span class="badge bg-success">high confidence</span>'
-                        : '<span class="badge bg-warning text-dark">medium confidence</span>';
-                    resultDiv.innerHTML = '<div class="alert alert-success py-1 mb-0 small">'
-                        + '<i class="fas fa-check-circle me-1"></i> Detected: <code>'
-                        + dev.port + '</code> &mdash; ' + (dev.description || '') + ' ' + badge
-                        + (data.devices.length > 1 ? ' (' + (data.devices.length - 1) + ' other(s) found)' : '')
-                        + '</div>';
-                    resultDiv.style.display = '';
-                } else {
-                    resultDiv.innerHTML = '<div class="alert alert-warning py-1 mb-0 small">'
-                        + '<i class="fas fa-exclamation-triangle me-1"></i> No Zigbee coordinator detected. '
-                        + 'Check device connection.</div>';
-                    resultDiv.style.display = '';
-                }
-            })
-            .catch(function(err) {
-                resultDiv.innerHTML = '<div class="alert alert-danger py-1 mb-0 small">Detection failed: ' + err + '</div>';
-                resultDiv.style.display = '';
-            })
-            .finally(function() {
-                btn.disabled = false;
-                btn.innerHTML = '<i class="fas fa-search"></i> Detect';
-            });
-    });
-});
-
-/* ── GPS HAT diagnostic panel ────────────────────────────────────────
-   Populates the "GPS HAT Setup Status" card by polling
-   /admin/hardware/gps-hat/diagnostics. When the privileged helper is
-   reachable, each action is rendered with a "Run" button that POSTs
-   to the corresponding /admin/hardware/gps-hat/* endpoint and shows
-   the streamed (collected) helper output in a modal. Otherwise the
-   action stays in copy-paste mode.
-   ──────────────────────────────────────────────────────────────────── */
-(function () {
-    let _helperAvailable = false;
-    let _activeAction = null;     // currently displayed in the modal
-    let _runInFlight = false;
-    let _bsModalRef = null;       // bootstrap.Modal instance (lazy)
-    function getModal() {
-        if (_bsModalRef) return _bsModalRef;
-        const el = document.getElementById('gps-hat-action-modal');
-        if (!el || !window.bootstrap || !window.bootstrap.Modal) return null;
-        _bsModalRef = new window.bootstrap.Modal(el);
-        return _bsModalRef;
-    }
-
-    var BADGE_CLASS = {
-        ok:      'bg-success',
-        info:    'bg-info text-dark',
-        warning: 'bg-warning text-dark',
-        error:   'bg-danger',
-    };
-    var BADGE_TEXT = {
-        ok:      'All good',
-        info:    'Suggestions',
-        warning: 'Needs attention',
-        error:   'Action required',
-    };
-    var SEVERITY_CLASS = {
-        info:    'alert-info',
-        warning: 'alert-warning',
-        error:   'alert-danger',
-    };
-    var SEVERITY_ICON = {
-        info:    'fa-circle-info',
-        warning: 'fa-triangle-exclamation',
-        error:   'fa-circle-xmark',
-    };
-
-    function escapeHtml(s) {
-        if (s === null || s === undefined) return '';
-        return String(s)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;');
-    }
-
-    function renderActions(actions) {
-        if (!actions || !actions.length) {
-            return '<div class="alert alert-success py-2 mb-0 small">'
-                + '<i class="fas fa-check-circle me-1"></i> '
-                + 'Every prerequisite is in place. The GPS HAT, RTC, PPS, gpsd, and chrony all look healthy.'
-                + '</div>';
-        }
-        return actions.map(function (a, idx) {
-            var sev = a.severity || 'info';
-            var alertCls = SEVERITY_CLASS[sev] || 'alert-secondary';
-            var icon = SEVERITY_ICON[sev] || 'fa-circle-info';
-            var preconditions = '';
-            if (a.preconditions && a.preconditions.length) {
-                preconditions = '<div class="small text-muted mt-1"><em>Before running: '
-                    + a.preconditions.map(escapeHtml).join('; ') + '</em></div>';
-            }
-            var rebootHint = a.requires_reboot
-                ? '<div class="small text-muted mt-1"><i class="fas fa-power-off me-1"></i>Requires reboot to take effect.</div>'
-                : '';
-            // Action button (Tier 2): rendered only when the helper is
-            // available AND this action carries a runner spec. Otherwise
-            // we fall back to the copy-paste command box.
-            var runBtn = '';
-            if (_helperAvailable && a.runner && a.runner.endpoint) {
-                var btnLabel = a.runner.button_label || 'Run';
-                runBtn = '<button type="button" '
-                    +     'class="btn btn-sm btn-primary mt-2 gps-hat-run-btn" '
-                    +     'data-action-idx="' + idx + '">'
-                    +     '<i class="fas fa-play me-1"></i>' + escapeHtml(btnLabel)
-                    +   '</button>';
-            }
-            // Suppress the copy-paste box when a runnable button is present
-            // and the helper is up — it's just visual noise once the user
-            // can click. When the helper isn't available we still show the
-            // command so the user has a path forward.
-            var showCommand = !!a.command && !(runBtn && _helperAvailable);
-            return '<div class="alert ' + alertCls + ' py-2 mb-2">'
-                +   '<div class="d-flex align-items-start">'
-                +     '<i class="fas ' + icon + ' me-2 mt-1"></i>'
-                +     '<div class="flex-grow-1">'
-                +       '<div class="fw-semibold">' + escapeHtml(a.label || a.id) + '</div>'
-                +       (a.reason ? '<div class="small">' + escapeHtml(a.reason) + '</div>' : '')
-                +       preconditions
-                +       (showCommand
-                            ? '<pre class="mt-2 mb-0 small bg-dark text-light p-2 rounded" style="white-space:pre-wrap;"><code>'
-                                + escapeHtml(a.command) + '</code></pre>'
-                            : '')
-                +       rebootHint
-                +       runBtn
-                +     '</div>'
-                +   '</div>'
-                + '</div>';
-        }).join('');
-    }
-
-    function renderDetail(report) {
-        var rtc = report.rtc || {};
-        var pps = report.pps || {};
-        var serial = report.serial || {};
-        var pkg  = report.packages || {};
-        var svc  = report.services || {};
-        var gcf  = report.gpsd_config || {};
-        var ccf  = report.chrony_config || {};
-        var crun = report.chrony_runtime || {};
-        var cfg  = report.config_txt || {};
-
-        function row(label, value, ok) {
-            var icon = ok === true
-                ? '<i class="fas fa-check-circle text-success me-1"></i>'
-                : ok === false
-                    ? '<i class="fas fa-circle-xmark text-danger me-1"></i>'
-                    : '<i class="fas fa-circle text-muted me-1" style="font-size:.5em;vertical-align:middle;"></i>';
-            return '<div>' + icon + '<strong>' + escapeHtml(label) + ':</strong> '
-                + (value === null || value === undefined ? '<em class="text-muted">unknown</em>' : escapeHtml(value))
-                + '</div>';
-        }
-        var rtcSummary = rtc.kernel_name
-            ? rtc.kernel_name + (rtc.chip_label ? ' (' + rtc.chip_label + ')' : '')
-            : (rtc.device_present ? 'present' : 'no /dev/rtc0');
-        var ppsSummary = pps.gpio_device
-            ? pps.gpio_device.name + ' seq=' + (pps.gpio_device.assert_sequence || 0)
-            : 'no pps-gpio device';
-        // Serial owner detection requires lsof + privileges the web service
-        // user doesn't have, so we suppress the "— unknown" suffix when the
-        // probe couldn't see it. Showing the resolved device path is enough
-        // for the operator to recognise.
-        var serialSummary = serial.exists
-            ? (serial.resolved || serial.device)
-                + (serial.owner && serial.owner !== 'unknown'
-                    ? ' — ' + serial.owner
-                    : '')
-            : 'missing';
-        var pkgItems = pkg.items || [];
-        var pkgInstalled = pkgItems.filter(function (i) { return i.installed; }).length;
-        var pkgMissingRequired = (pkg.missing_required || []).length;
-        var pkgSummary = pkgItems.length === 0
-            ? 'dpkg-query unavailable'
-            : pkgMissingRequired === 0
-                ? pkgInstalled + ' / ' + pkgItems.length + ' installed'
-                : pkgMissingRequired + ' required missing';
-        var pkgList = pkgItems.map(function (i) {
-            return (i.installed ? '✅' : '❌') + ' ' + i.name + (i.version ? ' (' + i.version + ')' : '');
-        }).join('<br>') || '<em>dpkg-query unavailable</em>';
-        var svcItems = svc.items || [];
-        var svcAllActive = svcItems.length > 0
-            && svcItems.every(function (i) { return i.active === 'active'; });
-        var svcSummary = svcItems.length === 0
-            ? 'systemctl unavailable'
-            : svcAllActive
-                ? 'all units active'
-                : svcItems.filter(function (i) { return i.active !== 'active'; }).length
-                    + ' / ' + svcItems.length + ' inactive';
-        var svcList = svcItems.map(function (i) {
-            return i.unit + ': ' + i.active + ' / ' + i.enabled;
-        }).join('<br>');
-        var gpsdSummary = gcf.exists
-            ? 'DEVICES=' + (gcf.devices || '?') + '; OPTIONS=' + (gcf.options || '?')
-            : '/etc/default/gpsd missing';
-        var chronySummary = ccf.exists
-            ? ('rtcsync=' + ccf.rtcsync_enabled
-                + '; PPS refclock=' + ccf.has_pps_refclock
-                + '; SHM refclock=' + ccf.has_shm_refclock
-                + '; sources=' + ((ccf.pool_lines || []).length))
-            : '/etc/chrony/chrony.conf missing';
-        // Stratum is the headline number an operator wants to see — surface
-        // it prominently. Also flag any refclocks at Reach=0 so the user
-        // sees why they're not yet at stratum 1.
-        var chronyParts = [];
-        if (crun.tracking_ok) {
-            if (crun.stratum != null) chronyParts.push('stratum ' + crun.stratum);
-            if (crun.selected_source) chronyParts.push('source=' + crun.selected_source);
-            var offsetSrc = (crun.system_time_offset_seconds != null)
-                ? crun.system_time_offset_seconds
-                : crun.last_offset_seconds;
-            if (offsetSrc != null) {
-                chronyParts.push('offset=' + (Number(offsetSrc) * 1000).toFixed(3) + 'ms');
-            }
-            if (crun.leap_status) chronyParts.push('leap=' + crun.leap_status);
-            if ((crun.refclocks_unreached || []).length) {
-                chronyParts.push('refclocks unreached: ' + crun.refclocks_unreached.join(', '));
-            }
-        } else {
-            chronyParts.push('chronyc unavailable');
-        }
-        var chronyRunSummary = chronyParts.join('; ');
-        var configSummary = cfg.exists
-            ? (cfg.path
-                + (cfg.i2c_rtc_overlay_line ? ' [' + cfg.i2c_rtc_overlay_line + ']' : '')
-                + (cfg.pps_gpio_overlay_line ? ' [' + cfg.pps_gpio_overlay_line + ']' : ''))
-            : 'config.txt not found';
-
-        return '<div class="row g-2">'
-            + '<div class="col-md-6">'
-            +   row('RTC',           rtcSummary,    rtc.device_present)
-            +   row('PPS',           ppsSummary,    !!pps.gpio_device)
-            +   row('Serial',        serialSummary, serial.exists)
-            +   row('config.txt',    configSummary, cfg.exists)
-            + '</div>'
-            + '<div class="col-md-6">'
-            +   row('Packages',      pkgSummary,    pkgMissingRequired === 0 && pkgItems.length > 0)
-            +   '<div class="ms-3 small">' + pkgList + '</div>'
-            +   row('Services',      svcSummary,    svcItems.length > 0 ? svcAllActive : null)
-            +   '<div class="ms-3 small">' + svcList + '</div>'
-            +   row('gpsd config',   gpsdSummary,   gcf.exists)
-            +   row('chrony config', chronySummary, ccf.exists)
-            +   row('chrony status', chronyRunSummary, crun.tracking_ok)
-            + '</div>'
-            + '</div>';
-    }
-
-    let _lastActions = [];
-
-    function refresh(button) {
-        var badge   = document.getElementById('gps-hat-status-badge');
-        var actions = document.getElementById('gps-hat-actions');
-        var detail  = document.getElementById('gps-hat-detail');
-        var helperRow = document.getElementById('gps-hat-helper-status');
-        if (!badge || !actions || !detail) return;
-        badge.className = 'badge bg-secondary ms-2';
-        badge.textContent = 'Checking…';
-        if (button) {
-            button.disabled = true;
-            button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Checking';
-        }
-        fetch('/admin/hardware/gps-hat/diagnostics', {
-            credentials: 'same-origin',
-            headers: { 'Accept': 'application/json' },
-        })
-            .then(function (r) { return r.json(); })
-            .then(function (data) {
-                if (!data || !data.ok) {
-                    throw new Error((data && data.error) || 'unknown error');
-                }
-                var report = data.report;
-                _helperAvailable = !!(report.helper && report.helper.available);
-                _lastActions = report.actions || [];
-                if (helperRow) {
-                    helperRow.innerHTML = _helperAvailable
-                        ? '<i class="fas fa-plug text-success me-1"></i>'
-                            + 'Privileged helper is reachable — actions can be run from this page.'
-                        : '<i class="fas fa-plug text-warning me-1"></i>'
-                            + 'Privileged helper not reachable — install the '
-                            + '<code>eas-station-hwsetup</code> service to enable one-click fixes. '
-                            + 'Until then the commands below can be copied into a terminal.';
-                }
-                var status = report.status || 'info';
-                badge.className = 'badge ms-2 ' + (BADGE_CLASS[status] || 'bg-secondary');
-                badge.textContent = BADGE_TEXT[status] || status;
-                actions.innerHTML = renderActions(_lastActions);
-                detail.innerHTML = renderDetail(report);
-            })
-            .catch(function (err) {
-                badge.className = 'badge bg-danger ms-2';
-                badge.textContent = 'Probe failed';
-                if (helperRow) helperRow.innerHTML = '';
-                actions.innerHTML = '<div class="alert alert-danger py-2 mb-0 small">'
-                    + '<i class="fas fa-circle-xmark me-1"></i> '
-                    + 'Diagnostic probe failed: ' + escapeHtml(String(err))
-                    + '</div>';
-                detail.innerHTML = '';
-            })
-            .finally(function () {
-                if (button) {
-                    button.disabled = false;
-                    button.innerHTML = '<i class="fas fa-rotate"></i> Recheck';
-                }
-            });
-    }
-
-    /* ── Modal-driven action runner ──────────────────────────────────
-       Click handler for the "Run" buttons rendered in renderActions().
-       Opens the shared modal, populates it with the action's summary
-       and any extra-param controls, lets the operator confirm, and
-       POSTs to action.runner.endpoint. The result body is appended to
-       a <pre> in the modal so the operator can see what happened.
-       After a successful run we re-poll the diagnostics so the panel
-       reflects the new state.
-       ──────────────────────────────────────────────────────────────── */
-    function appendOutput(text) {
-        var pre = document.getElementById('gps-hat-modal-output');
-        if (!pre) return;
-        pre.textContent += text;
-        pre.scrollTop = pre.scrollHeight;
-    }
-
-    function setModalStatus(html, cls) {
-        var status = document.getElementById('gps-hat-modal-status');
-        if (!status) return;
-        status.className = 'small mt-2 ' + (cls || 'text-muted');
-        status.innerHTML = html;
-    }
-
-    function openActionModal(action) {
-        var modal = getModal();
-        if (!modal) {
-            // Bootstrap not loaded; fall back to confirm() + run inline.
-            return runActionInline(action);
-        }
-        _activeAction = action;
-        document.getElementById('gps-hat-modal-title').textContent =
-            action.runner.button_label || ('Run ' + action.id);
-        var summary = document.getElementById('gps-hat-modal-summary');
-        if (summary) {
-            summary.innerHTML = '<div class="fw-semibold">' + escapeHtml(action.label || action.id) + '</div>'
-                + (action.reason ? '<div class="small text-muted">' + escapeHtml(action.reason) + '</div>' : '')
-                + (action.runner.confirm
-                    ? '<div class="small mt-2 fst-italic">' + escapeHtml(action.runner.confirm) + '</div>'
-                    : '')
-                + (action.runner.post_action
-                    ? '<div class="small mt-2 text-muted">'
-                        + '<i class="fas fa-link me-1"></i>'
-                        + 'Will also ' + escapeHtml(action.runner.post_action.label || 'run a follow-up') + ' on success.'
-                        + '</div>'
-                    : '');
-        }
-        var extraWrap = document.getElementById('gps-hat-modal-extra-params');
-        extraWrap.innerHTML = '';
-        var extras = action.runner.extra_params || [];
-        extras.forEach(function (p) {
-            if (p.type === 'boolean') {
-                extraWrap.innerHTML += '<div class="form-check small">'
-                    + '<input class="form-check-input gps-hat-modal-extra" '
-                    +   'type="checkbox" '
-                    +   'data-extra-name="' + escapeHtml(p.name) + '" '
-                    +   'id="gps-hat-modal-extra-' + escapeHtml(p.name) + '" '
-                    +   (p.default ? 'checked' : '') + '>'
-                    + '<label class="form-check-label" '
-                    +   'for="gps-hat-modal-extra-' + escapeHtml(p.name) + '">'
-                    +   escapeHtml(p.label || p.name)
-                    + '</label>'
-                    + '</div>';
-            }
-        });
-        document.getElementById('gps-hat-modal-output').textContent = '';
-        var btnLabel = action.runner.button_label || 'Run';
-        setModalStatus(
-            'Ready to run. Press <strong>' + escapeHtml(btnLabel)
-            + '</strong> below to apply this fix, or Close to cancel.',
-            'text-muted'
-        );
-        var runBtn = document.getElementById('gps-hat-modal-run-btn');
-        if (runBtn) {
-            runBtn.disabled = false;
-            runBtn.innerHTML = '<i class="fas fa-play me-1"></i>' + escapeHtml(btnLabel);
-        }
-        modal.show();
-    }
-
-    function gatherExtraParams() {
-        var out = {};
-        var inputs = document.querySelectorAll('.gps-hat-modal-extra');
-        inputs.forEach(function (input) {
-            var name = input.getAttribute('data-extra-name');
-            if (!name) return;
-            if (input.type === 'checkbox') {
-                out[name] = input.checked;
-            } else {
-                out[name] = input.value;
-            }
-        });
-        return out;
-    }
-
-    function runActiveAction() {
-        if (_runInFlight || !_activeAction) return;
-        var action = _activeAction;
-        var runner = action.runner;
-        if (!runner || !runner.endpoint) return;
-        var body = Object.assign({}, runner.body || {}, gatherExtraParams());
-        var runBtn = document.getElementById('gps-hat-modal-run-btn');
-        if (runBtn) {
-            runBtn.disabled = true;
-            runBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Running…';
-        }
-        _runInFlight = true;
-        appendOutput('POST ' + runner.endpoint + '\n');
-        appendOutput('body: ' + JSON.stringify(body, null, 2) + '\n\n');
-        setModalStatus('Calling helper…', 'text-muted');
-        fetch(runner.endpoint, {
-            method: 'POST',
-            credentials: 'same-origin',
-            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-        })
-            .then(function (resp) {
-                return resp.json().then(function (json) {
-                    return { httpStatus: resp.status, body: json };
-                });
-            })
-            .then(function (result) {
-                var json = result.body || {};
-                if (json.stdout)  appendOutput('--- stdout ---\n' + json.stdout);
-                if (json.stderr)  appendOutput('--- stderr ---\n' + json.stderr);
-                if (!json.stdout && !json.stderr) {
-                    appendOutput('(no streamed output)\n');
-                }
-                appendOutput('\n--- result ---\n' + JSON.stringify(json, null, 2) + '\n');
-                if (json.ok) {
-                    setModalStatus(
-                        '<i class="fas fa-check-circle text-success me-1"></i>'
-                        + 'Action completed.'
-                        + (json.requires_reboot ? ' <strong>Reboot required for the change to take effect.</strong>' : '')
-                        + (json.duplicates_removed ? ' Removed ' + json.duplicates_removed + ' duplicate line(s).' : '')
-                        + ((json.skipped_directives && json.skipped_directives.length)
-                            ? ' Skipped: ' + json.skipped_directives.map(escapeHtml).join('; ') + '.'
-                            : ''),
-                        'text-success'
-                    );
-                    if (runner.post_action && runner.post_action.endpoint) {
-                        appendOutput('\n--- post-action: ' + (runner.post_action.label || 'follow-up') + ' ---\n');
-                        return fetch(runner.post_action.endpoint, {
-                            method: 'POST',
-                            credentials: 'same-origin',
-                            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
-                            body: JSON.stringify(runner.post_action.body || {}),
-                        }).then(function (r) { return r.json(); }).then(function (postJson) {
-                            if (postJson.stdout) appendOutput(postJson.stdout);
-                            if (postJson.stderr) appendOutput(postJson.stderr);
-                            appendOutput(JSON.stringify(postJson, null, 2) + '\n');
-                            if (!postJson.ok) {
-                                setModalStatus(
-                                    '<i class="fas fa-exclamation-triangle text-warning me-1"></i>'
-                                    + 'Main action succeeded but follow-up '
-                                    + escapeHtml(runner.post_action.label || '') + ' failed.',
-                                    'text-warning'
-                                );
-                            }
-                        });
-                    }
-                } else {
-                    setModalStatus(
-                        '<i class="fas fa-circle-xmark text-danger me-1"></i>'
-                        + 'Action failed: ' + escapeHtml(json.error || ('HTTP ' + result.httpStatus)),
-                        'text-danger'
-                    );
-                }
-            })
-            .catch(function (err) {
-                appendOutput('\n--- request error ---\n' + String(err) + '\n');
-                setModalStatus(
-                    '<i class="fas fa-circle-xmark text-danger me-1"></i>'
-                    + 'Request error: ' + escapeHtml(String(err)),
-                    'text-danger'
-                );
-            })
-            .finally(function () {
-                _runInFlight = false;
-                if (runBtn) {
-                    runBtn.disabled = false;
-                    runBtn.innerHTML = '<i class="fas fa-play me-1"></i>Run again';
-                }
-                // Re-poll diagnostics so the panel updates without a full
-                // page reload. Small delay so the user can read the modal.
-                setTimeout(function () { refresh(null); }, 500);
-            });
-    }
-
-    function runActionInline(action) {
-        // Bootstrap-modal-less fallback. Should only fire on environments
-        // where bootstrap.bundle.js failed to load.
-        if (!action.runner || !action.runner.endpoint) return;
-        if (action.runner.confirm && !window.confirm(action.runner.confirm)) return;
-        _activeAction = action;
-        runActiveAction();
-    }
-
-    function findActionByIndex(idx) {
-        var n = parseInt(idx, 10);
-        if (isNaN(n) || n < 0 || n >= _lastActions.length) return null;
-        return _lastActions[n];
-    }
-
-    document.addEventListener('DOMContentLoaded', function () {
-        var card = document.getElementById('gps-hat-diag-card');
-        if (!card) return;
-        var btn = document.getElementById('gps-hat-refresh-btn');
-        if (btn) {
-            btn.addEventListener('click', function () { refresh(btn); });
-        }
-        // Delegated click handler for per-action Run buttons rendered
-        // inside the actions container.
-        var actionsHost = document.getElementById('gps-hat-actions');
-        if (actionsHost) {
-            actionsHost.addEventListener('click', function (ev) {
-                var target = ev.target.closest('.gps-hat-run-btn');
-                if (!target) return;
-                ev.preventDefault();
-                var action = findActionByIndex(target.getAttribute('data-action-idx'));
-                if (action) openActionModal(action);
-            });
-        }
-        // Modal "Run" button handler.
-        var modalRunBtn = document.getElementById('gps-hat-modal-run-btn');
-        if (modalRunBtn) {
-            modalRunBtn.addEventListener('click', function () { runActiveAction(); });
-        }
-        refresh(null);
-    });
-})();
 </script>
+<script src="{{ url_for('static', filename='js/admin/hardware-settings.js') }}"></script>
 
 <!-- ──────────────────────────────────────────────────────────────────
      GPS HAT action-runner modal. Lives at the bottom of the content

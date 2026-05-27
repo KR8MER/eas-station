@@ -187,9 +187,9 @@
 
             <!-- Health Overview Cards -->
             <h2 class="section-heading">System Overview</h2>
-            <div class="row mb-4">
-                <div class="col-md-3">
-                    <div class="card">
+            <div class="row g-3 mb-4">
+                <div class="col-6 col-md-3">
+                    <div class="card h-100">
                         <div class="card-body text-center">
                             <div class="health-score-circle mx-auto" style="--score: 0" id="overall-health-circle">
                                 <div class="health-score-inner">
@@ -201,8 +201,8 @@
                         </div>
                     </div>
                 </div>
-                <div class="col-md-3">
-                    <div class="card">
+                <div class="col-6 col-md-3">
+                    <div class="card h-100">
                         <div class="card-body text-center">
                             <div class="metric-display text-success" id="active-sources-count">0</div>
                             <h3 class="h5 mb-0">Active Sources</h3>
@@ -210,8 +210,8 @@
                         </div>
                     </div>
                 </div>
-                <div class="col-md-3">
-                    <div class="card">
+                <div class="col-6 col-md-3">
+                    <div class="card h-100">
                         <div class="card-body text-center">
                             <div class="metric-display" id="total-sources-count">0</div>
                             <h3 class="h5 mb-0">Total Sources</h3>
@@ -219,8 +219,8 @@
                         </div>
                     </div>
                 </div>
-                <div class="col-md-3">
-                    <div class="card">
+                <div class="col-6 col-md-3">
+                    <div class="card h-100">
                         <div class="card-body text-center">
                             <div class="metric-display text-warning" id="alerts-count">0</div>
                             <h3 class="h5 mb-0">Alerts</h3>
@@ -289,7 +289,7 @@
                     <!-- Sample rate removed - auto-detected from HTTP streams by FFmpeg -->
                     <!-- For ALSA/PulseAudio sources, backend defaults to 44100 Hz -->
                     <div class="row">
-                        <div class="col-md-4">
+                        <div class="col-12 col-md-4">
                             <div class="mb-3">
                                 <label for="channels" class="form-label">Channels</label>
                                 <select class="form-select" id="channels">
@@ -299,14 +299,14 @@
                                 <small class="form-text text-muted">Mono recommended for most sources</small>
                             </div>
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-12 col-md-4">
                             <div class="mb-3">
                                 <label for="silenceThreshold" class="form-label">Silence Threshold (dB)</label>
                                 <input type="number" class="form-control" id="silenceThreshold" value="-60" step="0.1">
                                 <small class="form-text text-muted">Audio level below which silence is detected</small>
                             </div>
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-12 col-md-4">
                             <div class="mb-3">
                                 <label for="silenceDuration" class="form-label">Silence Duration (s)</label>
                                 <input type="number" class="form-control" id="silenceDuration" value="5" step="0.1">
@@ -358,14 +358,14 @@
                     </div>
                     <div id="editSourceTypeConfig"></div>
                     <div class="row">
-                        <div class="col-md-6">
+                        <div class="col-12 col-md-6">
                             <div class="mb-3">
                                 <label for="editPriority" class="form-label">Priority</label>
                                 <input type="number" class="form-control" id="editPriority" value="100">
                             </div>
                         </div>
-                        <div class="col-md-6">
-                            <div class="form-check mt-4">
+                        <div class="col-12 col-md-6">
+                            <div class="form-check mt-md-4">
                                 <input class="form-check-input" type="checkbox" id="editEnabled">
                                 <label class="form-check-label" for="editEnabled">
                                     Enabled
@@ -380,13 +380,13 @@
                         </div>
                     </div>
                     <div class="row">
-                        <div class="col-md-6">
+                        <div class="col-12 col-md-6">
                             <div class="mb-3">
                                 <label for="editSilenceThreshold" class="form-label">Silence Threshold (dB)</label>
                                 <input type="number" class="form-control" id="editSilenceThreshold" value="-60" step="0.1">
                             </div>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-12 col-md-6">
                             <div class="mb-3">
                                 <label for="editSilenceDuration" class="form-label">Silence Duration (s)</label>
                                 <input type="number" class="form-control" id="editSilenceDuration" value="5" step="0.1">

@@ -38,16 +38,16 @@
             </div>
             {% endif %}
 
-            <div class="row mb-4">
-                <div class="col-md-4">
-                    <div class="card bg-dark text-white">
+            <div class="row g-3 mb-4">
+                <div class="col-12 col-md-4">
+                    <div class="card bg-dark text-white h-100">
                         <div class="card-body text-center">
                             <h3 class="mb-0">{{ total_messages }}</h3>
                             <small>Archived Recordings</small>
                         </div>
                     </div>
                 </div>
-                <div class="col-md-8">
+                <div class="col-12 col-md-8">
                     <div class="card bg-light h-100">
                         <div class="card-body d-flex align-items-center justify-content-center text-muted">
                             <div class="text-center">
@@ -67,11 +67,11 @@
                 </div>
                 <div class="card-body">
                     <form method="GET" class="row g-3 align-items-end">
-                        <div class="col-md-3">
+                        <div class="col-12 col-md-3">
                             <label for="search" class="form-label">Search</label>
                             <input type="text" class="form-control" id="search" name="search" value="{{ current_filters.search or '' }}" placeholder="Search event, header, or identifier">
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-12 col-sm-6 col-md-3">
                             <label for="event" class="form-label">Event Type</label>
                             <select class="form-select" id="event" name="event">
                                 <option value="">All Events</option>
@@ -80,7 +80,7 @@
                                 {% endfor %}
                             </select>
                         </div>
-                        <div class="col-md-2">
+                        <div class="col-6 col-sm-6 col-md-2">
                             <label for="severity" class="form-label">Severity</label>
                             <select class="form-select" id="severity" name="severity">
                                 <option value="">All Severities</option>
@@ -89,7 +89,7 @@
                                 {% endfor %}
                             </select>
                         </div>
-                        <div class="col-md-2">
+                        <div class="col-6 col-sm-6 col-md-2">
                             <label for="status" class="form-label">Status</label>
                             <select class="form-select" id="status" name="status">
                                 <option value="">All Statuses</option>
@@ -98,7 +98,7 @@
                                 {% endfor %}
                             </select>
                         </div>
-                        <div class="col-md-1">
+                        <div class="col-6 col-sm-8 col-md-1">
                             <label for="per_page" class="form-label">Per Page</label>
                             <select class="form-select" id="per_page" name="per_page">
                                 <option value="25" {% if current_filters.per_page == 25 %}selected{% endif %}>25</option>
@@ -106,9 +106,10 @@
                                 <option value="100" {% if current_filters.per_page == 100 %}selected{% endif %}>100</option>
                             </select>
                         </div>
-                        <div class="col-md-1">
+                        <div class="col-6 col-sm-4 col-md-1">
+                            <label for="per_page" class="form-label d-none d-md-block">&nbsp;</label>
                             <button type="submit" class="btn btn-primary w-100">
-                                <i class="fas fa-search"></i>
+                                <i class="fas fa-search"></i><span class="d-md-none ms-1">Search</span>
                             </button>
                         </div>
                     </form>
