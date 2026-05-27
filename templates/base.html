@@ -277,6 +277,8 @@
     <script defer src="{{ url_for('static', filename='js/core/units.js') }}?v={{ static_asset_version }}"></script>
     <script defer src="{{ url_for('static', filename='js/loading-error-utils.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/accessibility-utils.js') }}"></script>
+    <!-- Tab-title alert-count badge + new-alert toasts (depends on websocket + showToast above) -->
+    <script defer src="{{ url_for('static', filename='js/core/alert-watch.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/rbds_visualization.js') }}?v={{ static_asset_version }}"></script>
 
     <!-- Visual Effects Enhancement -->
