@@ -192,6 +192,18 @@
             width: 100%;
             text-align: center;
         }
+
+        .page-header {
+            padding: 18px;
+        }
+
+        .page-header h1 {
+            font-size: 1.4rem;
+        }
+
+        .page-header p {
+            font-size: 0.95rem;
+        }
     }
 </style>
 {% endblock %}
@@ -199,12 +211,12 @@
 {% block content %}
 <div class="container-fluid mt-4">
     <div class="page-header">
-        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
-            <div>
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+            <div style="flex: 1 1 240px; min-width: 0;">
                 <h1><i class="fas fa-tv"></i> Live Display Preview</h1>
                 <p>Real-time visualization of all display outputs with proper colors and animations</p>
             </div>
-            <div style="text-align: right;">
+            <div class="page-header-controls" style="text-align: right;">
                 <button id="refresh-btn" class="btn btn-light" onclick="manualRefresh()" title="Refresh now">
                     <i class="fas fa-sync-alt"></i> Refresh
                 </button>
@@ -223,7 +235,7 @@
 
     <div class="row">
         <!-- OLED Display (128x64 Monochrome) -->
-        <div class="col-lg-4 col-md-6">
+        <div class="col-12 col-md-6 col-lg-4">
             <div class="display-container">
                 <div class="display-header">
                     <div class="display-title">
@@ -251,7 +263,7 @@
         </div>
 
         <!-- VFD Display (140x32 Graphics) -->
-        <div class="col-lg-4 col-md-6">
+        <div class="col-12 col-md-6 col-lg-4">
             <div class="display-container">
                 <div class="display-header">
                     <div class="display-title">
@@ -279,7 +291,7 @@
         </div>
 
         <!-- LED Network Sign (4 Lines x 20 Chars) -->
-        <div class="col-lg-4 col-md-6">
+        <div class="col-12 col-md-6 col-lg-4">
             <div class="display-container">
                 <div class="display-header">
                     <div class="display-title">
