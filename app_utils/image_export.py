@@ -150,10 +150,22 @@ _LAYOUT_PORTRAIT = _Layout(
     map_corner_r=0,
 )
 
+# Instagram / TikTok / Snapchat Stories & Reels (9:16) — phone-first
+# vertical layout with a tall info panel for longer descriptions.
+_LAYOUT_STORY = _Layout(
+    width=1080, height=1920,
+    header_h=140, footer_h=70,
+    map_rect=(0, 140, 1080, 800),
+    info_rect=(16, 950, 1048, 894),
+    header_scrim_w=620,
+    map_corner_r=0,
+)
+
 _LAYOUTS: Dict[str, _Layout] = {
     'landscape': _LAYOUT_LANDSCAPE,
     'square':    _LAYOUT_SQUARE,
     'portrait':  _LAYOUT_PORTRAIT,
+    'story':     _LAYOUT_STORY,
 }
 
 # Module-level constants preserved for backward compatibility — anything
@@ -1909,6 +1921,13 @@ def generate_alert_image(
         ratio = logo_h / float(logo.height)
         logo_w = max(1, int(round(logo.width * ratio)))
         logo_resized = logo.resize((logo_w, logo_h), Image.LANCZOS)
+        # Dim the wordmark slightly so it reads as a corner mark instead
+        # of competing with the headline.  Multiply the alpha channel by
+        # 0.78 — opaque enough to stay legible against the gradient,
+        # quiet enough to defer to the title.
+        r_ch, g_ch, b_ch, a_ch = logo_resized.split()
+        a_ch = a_ch.point(lambda v: int(v * 0.78))
+        logo_resized = Image.merge('RGBA', (r_ch, g_ch, b_ch, a_ch))
         lx = brand_right - logo_w
         ly = (layout.header_h - logo_h) // 2
         # Paste with the logo's own alpha so the header gradient shows through

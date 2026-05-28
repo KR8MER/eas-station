@@ -397,6 +397,7 @@ def test_short_local_dt_cross_day_includes_date():
     ("landscape", (1200,  630)),
     ("square",    (1080, 1080)),
     ("portrait",  (1080, 1350)),
+    ("story",     (1080, 1920)),
 ])
 def test_generate_alert_image_aspect_ratio(ratio, expected_size):
     alert = _FakeAlert()

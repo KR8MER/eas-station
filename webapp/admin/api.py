@@ -1146,7 +1146,7 @@ def alert_detail_pdf(alert_id):
         return redirect(url_for('api.alert_detail', alert_id=alert_id))
 
 
-_SOCIAL_IMAGE_RATIOS = {'landscape', 'square', 'portrait'}
+_SOCIAL_IMAGE_RATIOS = {'landscape', 'square', 'portrait', 'story'}
 
 
 @api_bp.route('/alerts/<int:alert_id>/export-image.png')
