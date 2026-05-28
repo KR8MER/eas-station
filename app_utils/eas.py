@@ -1338,11 +1338,22 @@ def _normalize_text_for_tts(text: str) -> str:
     # These clean up formatting conventions unique to NWS/NOAA alert text
     # before the acronym table runs.
 
-    # Asterisk removal — NWS uses "* WHAT...", "* WHERE...", "* WHEN..." etc.
+    # Asterisk handling — NWS uses "* WHAT...", "* WHERE...", "* WHEN..." etc.
     # as bullet-point markers.  TTS engines read a bare asterisk as "asterisk"
-    # which sounds unnatural.  Strip leading bullet asterisks first, then remove
-    # any remaining asterisks so they are never spoken.
+    # which sounds unnatural.  Strip leading bullet asterisks first.
     result = re.sub(r'^\s*\*\s*', '', result, flags=re.MULTILINE)
+
+    # ECIG §3.5.2 / §3.5.4: text deletions are marked with three asterisks
+    # ("***") and MUST be followed by a one-second pause in TTS / audio.
+    # Insert a sentence break (period + space) which every TTS backend in
+    # this project — Azure, espeak-ng, the local fallback — renders as an
+    # audible sentence-length pause comparable to one second.  Consume
+    # adjacent spaces/tabs so the downstream multi-space → ", " rule does
+    # not append a comma to the pause.  Run this BEFORE the remaining-
+    # asterisk strip so the markers are not erased.
+    result = re.sub(r'[ \t]*\*{3,}[ \t]*', '. ', result)
+
+    # Strip any remaining stray asterisks so they are never spoken.
     result = result.replace('*', '')
 
     # Whitespace / punctuation — convert structural whitespace to spoken
@@ -1513,11 +1524,29 @@ def _compose_message_text(alert: object, payload: Optional[Dict[str, object]] = 
         parameters = {}
 
     # ── FCC Required Text ───────────────────────────────────────────────
-    # Originator description
+    # Originator description.
+    #
+    # ECIG §3.10: when a CAP 1.1 message arrives with no originator, assume
+    # CIV.  In practice CAP 1.2 IPAWS messages always carry EAS-ORG; the
+    # fallback below only fires for non-NOAA sources missing the parameter.
+    # NOAA / NWS alerts default to WXR because their CAP feeds typically
+    # omit EAS-ORG and the National Weather Service is the implicit
+    # originator.
     eas_org_val = parameters.get('EAS-ORG')
     if isinstance(eas_org_val, list):
         eas_org_val = eas_org_val[0] if eas_org_val else None
-    originator_code = (str(eas_org_val).strip().upper() if eas_org_val else None) or 'WXR'
+    if eas_org_val:
+        originator_code = str(eas_org_val).strip().upper()
+    else:
+        alert_source = (
+            getattr(alert, 'source', None)
+            or payload.get('source')
+            or ''
+        )
+        if str(alert_source).strip().upper() in ('NOAA', 'NWS'):
+            originator_code = 'WXR'
+        else:
+            originator_code = 'CIV'  # ECIG §3.10
     originator_desc = ORIGINATOR_DESCRIPTIONS.get(originator_code, originator_code)
 
     # Event name
@@ -2090,11 +2119,18 @@ def _run_command(command: Sequence[str], logger) -> None:
             logger.warning(f"Failed to run command {' '.join(command)}: {exc}")
 
 
+#: ECIG §3.5.1 — recorded-audio download timeout cap (2 minutes).
+EMBEDDED_AUDIO_DOWNLOAD_TIMEOUT = 120
+
+#: ECIG §3.5.1 — streaming-audio fetch timeout cap (30 seconds).
+EMBEDDED_AUDIO_STREAMING_TIMEOUT = 30
+
+
 def _fetch_embedded_audio(
     resources: List[Dict[str, str]],
     target_sample_rate: int,
     logger,
-    timeout: int = 30,
+    timeout: Optional[int] = None,
 ) -> Tuple[Optional[List[int]], Optional[str]]:
     """Fetch and convert embedded audio from CAP resources.
 
@@ -2105,11 +2141,17 @@ def _fetch_embedded_audio(
     inferred from the decoded bytes so that alerts that omit MIME metadata
     still produce valid audio.
 
+    ECIG §3.5.1 caps per-resource fetch time at 2 minutes for downloads and
+    30 seconds for streaming sources; on timeout the caller falls back to
+    TTS for that alert.
+
     Args:
         resources: List of resource dicts from CAP XML parsing
         target_sample_rate: Target sample rate for output
         logger: Logger instance
-        timeout: Download timeout in seconds
+        timeout: Optional override for the per-resource timeout (seconds).
+            When ``None`` the spec-mandated cap is selected per resource
+            (streaming → 30 s, otherwise → 120 s).
 
     Returns:
         Tuple of (audio_samples, source_description) or (None, None) if no
@@ -2183,13 +2225,27 @@ def _fetch_embedded_audio(
 
         # --- external URI audio ---
         if uri:
+            # ECIG §3.5.1: streaming sources are capped at 30 s, downloadable
+            # MP3/WAV at 120 s; on timeout the loop continues to the next
+            # resource and ultimately falls back to TTS for the alert.
+            mime_lower = mime_type.lower() if mime_type else ''
+            desc_lower = resource_desc.lower() if resource_desc else ''
+            is_streaming = ('streaming' in mime_lower) or ('streaming' in desc_lower)
+            if timeout is not None:
+                per_resource_timeout = timeout
+            elif is_streaming:
+                per_resource_timeout = EMBEDDED_AUDIO_STREAMING_TIMEOUT
+            else:
+                per_resource_timeout = EMBEDDED_AUDIO_DOWNLOAD_TIMEOUT
             logger.info(
                 f"Fetching embedded audio from IPAWS: {resource_desc or 'unnamed'} "
-                f"({mime_type}) from {uri[:80]}..."
+                f"({mime_type}) from {uri[:80]}... "
+                f"[timeout={per_resource_timeout}s, "
+                f"{'streaming' if is_streaming else 'download'}]"
             )
             try:
                 # Disable proxy to allow direct download from IPAWS
-                response = requests.get(uri, timeout=timeout, stream=True, proxies={'http': None, 'https': None})
+                response = requests.get(uri, timeout=per_resource_timeout, stream=True, proxies={'http': None, 'https': None})
                 response.raise_for_status()
 
                 audio_data = response.content
