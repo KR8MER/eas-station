@@ -1146,19 +1146,27 @@ def alert_detail_pdf(alert_id):
         return redirect(url_for('api.alert_detail', alert_id=alert_id))
 
 
-_SOCIAL_IMAGE_RATIOS = {'landscape', 'square', 'portrait', 'story'}
+_SOCIAL_IMAGE_RATIOS  = {'landscape', 'square', 'portrait', 'story'}
+_SOCIAL_IMAGE_FORMATS = {'png', 'webp'}
 
 
 @api_bp.route('/alerts/<int:alert_id>/export-image.png')
 def alert_detail_image(alert_id):
-    """Generate a social-share PNG for an alert.
+    """Generate a social-share image for an alert.
 
-    Accepts a ``?ratio=`` query argument (``landscape``, ``square`` or
-    ``portrait``) so the same alert data can be rendered at the canvas
-    size each platform prefers — 1200×630 for FB/X/LinkedIn open-graph
-    cards, 1080×1080 for Instagram/Mastodon feeds, 1080×1350 for
-    Instagram 4:5 portrait posts.  Unknown values quietly fall back to
-    ``landscape``.
+    Accepts two optional query arguments:
+
+    * ``ratio`` — one of ``landscape`` (1200×630, FB/X/LinkedIn
+      open-graph cards), ``square`` (1080×1080 — Instagram, Mastodon),
+      ``portrait`` (1080×1350 — Instagram 4:5), or ``story``
+      (1080×1920 — IG / TikTok / Snap Stories & Reels).
+    * ``format`` — ``png`` (default, universal) or ``webp`` (~30%
+      smaller at equivalent quality; supported by every major social
+      platform).
+
+    Unknown values quietly fall back to ``landscape`` / ``png``.  The
+    file name and Content-Type are set from the chosen format so the
+    browser saves the file with the right extension.
     """
     try:
         from app_utils.image_export import generate_alert_image
@@ -1169,6 +1177,10 @@ def alert_detail_image(alert_id):
         ratio = (request.args.get('ratio') or 'landscape').strip().lower()
         if ratio not in _SOCIAL_IMAGE_RATIOS:
             ratio = 'landscape'
+
+        fmt = (request.args.get('format') or 'png').strip().lower()
+        if fmt not in _SOCIAL_IMAGE_FORMATS:
+            fmt = 'png'
 
         intersections = db.session.query(Intersection, Boundary).join(
             Boundary, Intersection.boundary_id == Boundary.id
@@ -1182,17 +1194,18 @@ def alert_detail_image(alert_id):
         except Exception:
             location_settings = {}
 
-        png_bytes = generate_alert_image(
+        image_bytes = generate_alert_image(
             alert, coverage_data, ipaws_data, location_settings,
-            aspect_ratio=ratio,
+            aspect_ratio=ratio, image_format=fmt,
         )
 
-        response = Response(png_bytes, mimetype='image/png')
+        mimetype = 'image/webp' if fmt == 'webp' else 'image/png'
+        response = Response(image_bytes, mimetype=mimetype)
         safe_event = (alert.event or 'alert').replace(' ', '_').lower()
-        # Include the ratio in the filename so saving multiple variants
-        # doesn't collide on disk.
+        # Include the ratio + format in the filename so saving multiple
+        # variants doesn't collide on disk.
         response.headers['Content-Disposition'] = (
-            f'attachment; filename=alert_{alert_id}_{safe_event}_{ratio}.png'
+            f'attachment; filename=alert_{alert_id}_{safe_event}_{ratio}.{fmt}'
         )
         response.headers['Cache-Control'] = 'no-cache'
         return response

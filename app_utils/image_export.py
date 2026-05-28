@@ -1807,8 +1807,9 @@ def generate_alert_image(
     ipaws_data: Optional[Dict[str, Any]],
     location_settings: Optional[Dict[str, Any]],
     aspect_ratio: str = 'landscape',
+    image_format: str = 'png',
 ) -> bytes:
-    """Generate a share-card PNG for *alert* in the requested aspect ratio.
+    """Generate a share-card image for *alert* in the requested aspect ratio.
 
     Args:
         alert:             CAPAlert model instance.
@@ -1816,12 +1817,16 @@ def generate_alert_image(
         ipaws_data:        Dict returned by _extract_alert_display_data(), may be None.
         location_settings: Dict from get_location_settings(), may be None.
         aspect_ratio:      One of ``landscape`` (1200×630, default — FB/X/LI
-            open-graph), ``square`` (1080×1080 — Instagram, Mastodon) or
-            ``portrait`` (1080×1350 — Instagram 4:5).  Unknown values fall
-            back to landscape so callers can pass any platform hint.
+            open-graph), ``square`` (1080×1080 — Instagram, Mastodon),
+            ``portrait`` (1080×1350 — Instagram 4:5) or ``story``
+            (1080×1920 — IG / TikTok / Snap).  Unknown values fall back
+            to landscape so callers can pass any platform hint.
+        image_format:      ``png`` (default, universal) or ``webp`` (lossy,
+            ~30% smaller at equivalent quality, supported by every major
+            social platform).  Unknown values fall back to ``png``.
 
     Returns:
-        Raw PNG bytes.
+        Raw image bytes in the requested container.
     """
     layout = _LAYOUTS.get(aspect_ratio, _LAYOUT_LANDSCAPE)
     fonts = _load_fonts()
@@ -2049,18 +2054,30 @@ def generate_alert_image(
     # they composite against (usually white on social feeds).
     img_rounded = _round_image_corners(img, layout.corner_r, bg=None)
 
-    # Minimal PNG metadata: passing an explicit ``pnginfo`` suppresses
-    # Pillow's default tIME chunk (which would leak a server timestamp)
-    # and any inherited EXIF, while keeping a small ``Software`` tag so
-    # exports remain auditable.  ``alert_id`` is included as a stable
-    # identifier so duplicate uploads can be deduped without leaking PII.
+    fmt = (image_format or 'png').strip().lower()
+    buf = io.BytesIO()
+
+    if fmt == 'webp':
+        # ``method=4`` is a good balance between encode time and final
+        # size; ``quality=92`` keeps the gradient header artefact-free
+        # while still saving ~30% versus the equivalent PNG.  Pillow does
+        # not add EXIF or timestamps to WebP by default, so no explicit
+        # metadata stripping step is needed.
+        img_rounded.save(buf, format='WEBP', quality=92, method=4)
+        return buf.getvalue()
+
+    # Default: PNG with minimal metadata.  Passing an explicit
+    # ``pnginfo`` suppresses Pillow's default tIME chunk (which would
+    # leak a server timestamp) and any inherited EXIF, while keeping a
+    # small ``Software`` tag so exports remain auditable.  ``alert_id``
+    # is included as a stable identifier so duplicate uploads can be
+    # deduped without leaking PII.
     pnginfo = PngImagePlugin.PngInfo()
     pnginfo.add_text('Software', 'EAS Station')
     alert_id = getattr(alert, 'id', None)
     if alert_id is not None:
         pnginfo.add_text('Source', f'alert/{alert_id}')
 
-    buf = io.BytesIO()
     img_rounded.save(buf, format='PNG', optimize=True, pnginfo=pnginfo)
     return buf.getvalue()
 

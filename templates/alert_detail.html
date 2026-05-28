@@ -1854,10 +1854,11 @@
                                             class="btn btn-outline-primary dropdown-toggle dropdown-toggle-split"
                                             data-bs-toggle="dropdown"
                                             aria-expanded="false"
-                                            title="Pick another aspect ratio">
-                                        <span class="visually-hidden">Pick a size</span>
+                                            title="Pick another size or format">
+                                        <span class="visually-hidden">Pick a size or format</span>
                                     </button>
                                     <ul class="dropdown-menu">
+                                        <li><h6 class="dropdown-header">PNG · universal</h6></li>
                                         <li>
                                             <a class="dropdown-item"
                                                href="{{ url_for('api.alert_detail_image', alert_id=alert.id, ratio='landscape') }}">
@@ -1884,6 +1885,32 @@
                                                href="{{ url_for('api.alert_detail_image', alert_id=alert.id, ratio='story') }}">
                                                 <i class="fas fa-film"></i> Story · 1080×1920
                                                 <small class="text-muted d-block ms-4">IG / TikTok / Snap 9:16</small>
+                                            </a>
+                                        </li>
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li><h6 class="dropdown-header">WebP · ~30% smaller</h6></li>
+                                        <li>
+                                            <a class="dropdown-item"
+                                               href="{{ url_for('api.alert_detail_image', alert_id=alert.id, ratio='landscape', format='webp') }}">
+                                                <i class="fas fa-image"></i> Landscape · 1200×630
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item"
+                                               href="{{ url_for('api.alert_detail_image', alert_id=alert.id, ratio='square', format='webp') }}">
+                                                <i class="fas fa-square"></i> Square · 1080×1080
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item"
+                                               href="{{ url_for('api.alert_detail_image', alert_id=alert.id, ratio='portrait', format='webp') }}">
+                                                <i class="fas fa-mobile-alt"></i> Portrait · 1080×1350
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item"
+                                               href="{{ url_for('api.alert_detail_image', alert_id=alert.id, ratio='story', format='webp') }}">
+                                                <i class="fas fa-film"></i> Story · 1080×1920
                                             </a>
                                         </li>
                                     </ul>

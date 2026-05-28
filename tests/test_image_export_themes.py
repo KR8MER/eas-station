@@ -536,6 +536,64 @@ def test_severity_pill_rendered_for_each_severity():
         assert img.size == (1200, 630), sev
 
 
+# ── WebP output ─────────────────────────────────────────────────────────────
+def test_generate_alert_image_webp_returns_valid_webp():
+    """WebP output should be a valid WebP file at the requested aspect."""
+    alert = _FakeAlert()
+    alert.id = 5500
+    alert.event = "Severe Thunderstorm Warning"
+    alert.severity = "Severe"
+    image = image_export.generate_alert_image(
+        alert, {}, None, {"county_name": "Test County, OH"},
+        aspect_ratio="square", image_format="webp",
+    )
+    # WebP files start with "RIFF" + 4 bytes length + "WEBP".
+    assert image[:4] == b"RIFF", "missing RIFF header"
+    assert image[8:12] == b"WEBP", "missing WEBP marker"
+    img = Image.open(io.BytesIO(image))
+    assert img.size == (1080, 1080)
+    assert img.format == "WEBP"
+
+
+def test_webp_is_smaller_than_png_for_same_content():
+    """At equivalent quality, WebP should beat PNG on file size — the
+    main reason to expose it as a format option.  We don't pin an exact
+    ratio because Pillow + libwebp versions differ, but the WebP output
+    must come in measurably smaller than the PNG equivalent."""
+    alert = _FakeAlert()
+    alert.id = 5501
+    alert.event = "Tornado Warning"
+    alert.severity = "Extreme"
+    alert.description = (
+        "Reports of damaging wind gusts and large hail across the warned "
+        "area. Move to an interior room on the lowest floor."
+    )
+    png_bytes  = image_export.generate_alert_image(
+        alert, {}, None, {"county_name": "Test County, OH"},
+        aspect_ratio="square", image_format="png",
+    )
+    webp_bytes = image_export.generate_alert_image(
+        alert, {}, None, {"county_name": "Test County, OH"},
+        aspect_ratio="square", image_format="webp",
+    )
+    assert len(webp_bytes) < len(png_bytes), (
+        f"WebP ({len(webp_bytes)}B) was not smaller than PNG "
+        f"({len(png_bytes)}B) for the same content"
+    )
+
+
+def test_unknown_format_falls_back_to_png():
+    """A typo in ``image_format`` should not crash — it falls back to
+    PNG so the caller still gets a usable file."""
+    alert = _FakeAlert()
+    alert.event = "Frost Advisory"
+    image = image_export.generate_alert_image(
+        alert, {}, None, {"county_name": "Test County, OH"},
+        image_format="jpg",  # not a supported format
+    )
+    assert image.startswith(b"\x89PNG"), "unknown format should fall back to PNG"
+
+
 # ── PNG metadata is minimal + reproducible ──────────────────────────────────
 def test_png_output_carries_software_tag_only():
     """Exports must not leak server timestamps via tIME and must carry a
