@@ -216,6 +216,7 @@ TILE_SIZE   = 256
 _BG         = (22,  27,  38)
 _PANEL      = (30,  36,  51)
 _CARD       = (38,  45,  63)
+_SECTION_BG = (52,  60,  80)   # slate header band for info-panel sections
 _STRIP      = (14,  18,  30)
 _DIVIDER    = (55,  65,  88)
 _TEXT       = (230, 235, 245)
@@ -1940,18 +1941,27 @@ def _render_map(geom: Dict, severity: str,
 # ─── Drawing helpers ─────────────────────────────────────────────────────────
 def _section_header(draw: ImageDraw.ImageDraw, fonts: Dict,
                     alr_clr: Tuple, ix: int, iy: int, iw: int, title: str,
-                    *, bg: Optional[Tuple[int, int, int]] = None) -> int:
-    """Draw a coloured section header; return y after it.
+                    *, bg: Optional[Tuple[int, int, int]] = None,
+                    stripe: Optional[Tuple[int, int, int]] = None) -> int:
+    """Draw a section header; return y after it.
 
-    When *bg* is provided it overrides the default ``alr_clr``-derived
-    fill — used by the instruction/action band to flag safety guidance
-    with a warning-yellow header that stands apart from the neutral
-    headline / description sections.
+    Default appearance: a neutral dark slate band with a thin
+    event-coloured stripe on the left edge.  That keeps the
+    event-theme accent threaded through every section without giving
+    HEADLINE / AFFECTED AREAS / DESCRIPTION the same loud event-colour
+    fill, which previously made them blur into a single stripe at
+    thumbnail size.  Sections that genuinely need a distinct fill
+    (the ACTION band) pass ``bg=`` to override.
     """
     h = 20
-    fill = bg if bg is not None else _darken(alr_clr, 0.25)
+    stripe_w = 4
+    fill = bg if bg is not None else _SECTION_BG
+    accent = stripe if stripe is not None else alr_clr
     draw.rectangle((ix, iy, ix + iw, iy + h), fill=fill)
-    draw.text((ix + 7, iy + (h - _th(fonts['label'], title)) // 2),
+    draw.rectangle((ix, iy, ix + stripe_w, iy + h), fill=accent)
+    # Label offset clears the stripe.
+    draw.text((ix + stripe_w + 6,
+               iy + (h - _th(fonts['label'], title)) // 2),
               title, font=fonts['label'], fill=WHITE)
     return iy + h + 2
 
@@ -2071,6 +2081,12 @@ def generate_alert_image(
     sub_y = title_y + title_h + 8
     pill_x = 18
 
+    # Severity pill — white fill with severity-coloured text so it
+    # contrasts strongly against the event-themed gradient header.  The
+    # previous severity-coloured fill blended into same-coloured
+    # gradients (e.g. orange SEVERE pill on the orange severe-storm
+    # gradient).  A small coloured top-and-bottom bracket carries the
+    # severity colour without losing the white-pill pop.
     severity_val = (getattr(alert, 'severity', '') or '').strip()
     if severity_val:
         sev_color = _SEVERITY.get(
@@ -2078,13 +2094,17 @@ def generate_alert_image(
             _SEVERITY.get('unknown', (108, 117, 125)),
         )
         pill_x = _draw_pill(draw, fonts['label'], severity_val.upper(),
-                            sev_color, pill_x, sub_y)
+                            (245, 248, 252), pill_x, sub_y,
+                            text_color=sev_color)
         pill_x += 8
 
+    # Status pill (non-Actual only) — keep neutral so it doesn't compete
+    # with the severity pill for attention.
     status_val = (getattr(alert, 'status', '') or '').strip()
     if status_val and status_val.lower() != 'actual':
         pill_x = _draw_pill(draw, fonts['label'], status_val.upper(),
-                            (108, 117, 125), pill_x, sub_y)
+                            (245, 248, 252), pill_x, sub_y,
+                            text_color=(73, 80, 96))
         pill_x += 8
 
     extras: List[str] = []
@@ -2816,6 +2836,7 @@ def _draw_instruction(draw: ImageDraw.ImageDraw, fonts: Dict, alr_clr: Tuple,
     iy = _section_header(
         draw, fonts, alr_clr, ix, iy, iw, 'ACTION',
         bg=_darken(_INSTR_ACCENT, 0.55),
+        stripe=_INSTR_ACCENT,
     )
 
     accent_w = 4  # was 3 — thicker bar reads better at thumbnail size
