@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import importlib.util
 import io
+import os
 import sys
 from pathlib import Path
 
@@ -494,6 +495,78 @@ def test_tile_cache_returns_image_on_hit(monkeypatch):
     assert tile is not None
     assert tile.size == (256, 256)
     assert calls == []
+
+
+def test_tile_disk_cache_round_trips(monkeypatch, tmp_path):
+    """A tile written to the disk cache should round-trip back without
+    touching the network on the next fetch — exercises the L2 layer
+    independently of the in-memory LRU."""
+    image_export._tile_cache_clear()
+    monkeypatch.setenv("EAS_TILE_CACHE_DIR", str(tmp_path))
+
+    # Build a tiny PNG payload and seed it into the disk cache.
+    buf = io.BytesIO()
+    Image.new("RGB", (256, 256), (60, 90, 120)).save(buf, format="PNG")
+    payload = buf.getvalue()
+    image_export._tile_disk_put((9, 13, 21), payload)
+
+    # Network access would surface immediately as a test failure.
+    monkeypatch.setattr(image_export, "_http",
+                        type("X", (), {"get": staticmethod(
+                            lambda *a, **k: (_ for _ in ()).throw(
+                                AssertionError("HTTP touched on L2 hit"))
+                        )})())
+
+    tile = image_export._fetch_tile(13, 21, 9)
+    assert tile is not None
+    assert tile.size == (256, 256)
+    # And after a hit, the L1 should be warm so a second fetch is
+    # in-process only — verify by clearing the disk file and re-fetching.
+    disk_path = image_export._tile_disk_path((9, 13, 21))
+    assert disk_path and os.path.exists(disk_path)
+    os.unlink(disk_path)
+    tile2 = image_export._fetch_tile(13, 21, 9)
+    assert tile2 is not None
+    assert tile2.size == (256, 256)
+
+
+def test_tile_disk_cache_writes_after_http_fetch(monkeypatch, tmp_path):
+    """A successful network fetch should populate the disk cache so the
+    next worker process can skip the round-trip."""
+    image_export._tile_cache_clear()
+    monkeypatch.setenv("EAS_TILE_CACHE_DIR", str(tmp_path))
+
+    buf = io.BytesIO()
+    Image.new("RGB", (256, 256), (200, 50, 50)).save(buf, format="PNG")
+    payload = buf.getvalue()
+
+    class _StubResp:
+        status_code = 200
+        content = payload
+
+    monkeypatch.setattr(image_export, "_http",
+                        type("X", (), {"get": staticmethod(
+                            lambda *a, **k: _StubResp(),
+                        )})())
+
+    tile = image_export._fetch_tile(7, 11, 6)
+    assert tile is not None
+    # File should now exist in the disk cache.
+    path = image_export._tile_disk_path((6, 7, 11))
+    assert path and os.path.isfile(path)
+    with open(path, 'rb') as f:
+        assert f.read() == payload
+
+
+def test_tile_disk_cache_disabled_when_env_empty(monkeypatch):
+    """Setting EAS_TILE_CACHE_DIR='' should disable disk caching cleanly
+    — useful for tests and read-only environments."""
+    monkeypatch.setenv("EAS_TILE_CACHE_DIR", "")
+    assert image_export._tile_disk_cache_dir() is None
+    assert image_export._tile_disk_path((5, 1, 2)) is None
+    # And put/get should silently no-op rather than crash.
+    image_export._tile_disk_put((5, 1, 2), b"x")
+    assert image_export._tile_disk_get((5, 1, 2)) is None
 
 
 def test_tile_cache_evicts_oldest(monkeypatch):

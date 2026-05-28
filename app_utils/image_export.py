@@ -1418,17 +1418,108 @@ def _tile_cache_clear() -> None:
         _TILE_CACHE.clear()
 
 
+# ── Disk-backed second-level cache ───────────────────────────────────────────
+# The in-memory LRU above covers within-process re-renders, but each fresh
+# worker process pays the OSM round-trip again — wasteful on a typical
+# multi-worker WSGI deployment (gunicorn restarts, gevent recycle).  A small
+# disk cache survives those restarts.  OSM tiles are effectively immutable
+# at our timescale; we never expire, but a future janitor task can prune by
+# mtime if the cache outgrows its quota.
+_TILE_DISK_CACHE_DIR_DEFAULT = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    'data', 'tile-cache',
+)
+
+
+def _tile_disk_cache_dir() -> Optional[str]:
+    """Return the resolved tile-cache directory, or None if disabled.
+
+    Honours the ``EAS_TILE_CACHE_DIR`` env var so deployments can point
+    the cache at a host-mounted volume.  Empty string disables disk
+    caching entirely (useful for tests and for environments where the
+    working tree is read-only).
+    """
+    path = os.environ.get('EAS_TILE_CACHE_DIR', _TILE_DISK_CACHE_DIR_DEFAULT)
+    if not path:
+        return None
+    try:
+        os.makedirs(path, exist_ok=True)
+    except OSError:
+        return None
+    return path
+
+
+def _tile_disk_path(key: Tuple[int, int, int]) -> Optional[str]:
+    """Filesystem path for a tile, or None when disk caching is disabled."""
+    base = _tile_disk_cache_dir()
+    if base is None:
+        return None
+    z, tx, ty = key
+    return os.path.join(base, f'{z}_{tx}_{ty}.png')
+
+
+def _tile_disk_get(key: Tuple[int, int, int]) -> Optional[bytes]:
+    path = _tile_disk_path(key)
+    if path is None or not os.path.isfile(path):
+        return None
+    try:
+        with open(path, 'rb') as f:
+            return f.read()
+    except OSError:
+        return None
+
+
+def _tile_disk_put(key: Tuple[int, int, int], data: bytes) -> None:
+    path = _tile_disk_path(key)
+    if path is None:
+        return
+    # Write to a sibling temp file and rename — atomic on POSIX so a
+    # concurrent reader never sees a half-written tile.
+    tmp = f'{path}.{os.getpid()}.tmp'
+    try:
+        with open(tmp, 'wb') as f:
+            f.write(data)
+        os.replace(tmp, path)
+    except OSError:
+        # Disk full / read-only filesystem / etc. — silently degrade to
+        # the in-memory cache for this render.
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+
+
 def _fetch_tile(tx: int, ty: int, z: int) -> Optional[Image.Image]:
     key = (z, tx, ty)
+
+    # L1: in-process LRU.
     cached = _tile_cache_get(key)
     if cached is not None:
         try:
             return Image.open(io.BytesIO(cached)).convert('RGB')
         except Exception:
-            # Cached entry corrupt — evict and refetch.
+            # Cached entry corrupt — evict and continue to disk.
             with _TILE_CACHE_LOCK:
                 _TILE_CACHE.pop(key, None)
 
+    # L2: disk cache.  Survives worker restarts and shared by every
+    # process pointed at the same cache directory.
+    disk = _tile_disk_get(key)
+    if disk is not None:
+        try:
+            img = Image.open(io.BytesIO(disk)).convert('RGB')
+            _tile_cache_put(key, disk)
+            return img
+        except Exception:
+            # Corrupt on-disk tile — drop it and fall through to HTTP.
+            try:
+                path = _tile_disk_path(key)
+                if path:
+                    os.unlink(path)
+            except OSError:
+                pass
+
+    # L3: live OSM fetch.
     url = f'https://tile.openstreetmap.org/{z}/{tx}/{ty}.png'
     try:
         r = _http.get(
@@ -1437,6 +1528,7 @@ def _fetch_tile(tx: int, ty: int, z: int) -> Optional[Image.Image]:
         )
         if r.status_code == 200:
             _tile_cache_put(key, r.content)
+            _tile_disk_put(key, r.content)
             return Image.open(io.BytesIO(r.content)).convert('RGB')
     except Exception:
         pass
