@@ -523,6 +523,226 @@ def _truncate(font: ImageFont.FreeTypeFont, text: str, max_w: int) -> str:
     return text + ellipsis
 
 
+def _resolve_local_tz():
+    """Return the configured location tzinfo without forcing the full
+    ``app_utils`` package init (which pulls in psutil and friends).
+
+    Honours the same ``DEFAULT_TIMEZONE`` env var that
+    ``app_utils.time.get_location_timezone`` reads, so behaviour stays
+    consistent across the rest of the app.
+    """
+    tz_name = os.environ.get('DEFAULT_TIMEZONE', 'America/New_York')
+    try:
+        from zoneinfo import ZoneInfo
+        return ZoneInfo(tz_name)
+    except Exception:
+        try:
+            import pytz
+            return pytz.timezone(tz_name)
+        except Exception:
+            from datetime import timezone
+            return timezone.utc
+
+
+def _short_local_dt(dt: Any, ref: Optional[Any] = None) -> str:
+    """Compact local-time label for the share-card footer.
+
+    Returns e.g. ``"6:29 PM EDT"`` when *dt* and *ref* share a calendar
+    day (or *ref* is None), or ``"May 19 · 6:29 PM EDT"`` when they
+    don't, so an "Expires …" stamp can never appear earlier than
+    "Issued …" on a quick read.
+    """
+    from datetime import datetime, timezone
+
+    tz = _resolve_local_tz()
+
+    def _to_local(value: Any) -> Optional[datetime]:
+        if not value:
+            return None
+        if getattr(value, 'tzinfo', None) is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.astimezone(tz)
+
+    local = _to_local(dt)
+    if local is None:
+        return ''
+
+    show_date = False
+    if ref is not None:
+        ref_local = _to_local(ref)
+        if ref_local is not None and local.date() != ref_local.date():
+            show_date = True
+
+    # %I gives zero-padded hour ("06"); strip the leading zero for the
+    # share card without relying on platform-specific %-I.
+    time_part = local.strftime('%I:%M %p %Z')
+    if time_part.startswith('0'):
+        time_part = time_part[1:]
+    if show_date:
+        date_part = local.strftime('%b %d').replace(' 0', ' ')
+        return f"{date_part} · {time_part}"
+    return time_part
+
+
+# ─── ALL-CAPS → sentence-case humanizer ─────────────────────────────────────
+# NWS CAP feeds arrive ALL-CAPS (a legacy of teletype-era systems).  Rendering
+# them shouted on a share card is the single biggest legibility hit — bodies
+# of text in caps are ~10–20% slower to read.  These helpers detect a shouted
+# string and rebuild a readable sentence-case form while keeping known
+# acronyms (NWS, EDT, MPH, …) and US state names properly capitalised.
+
+# Tokens that should remain ALL-CAPS after humanising.
+_PRESERVE_ACRONYMS = frozenset([
+    # Issuing agencies / source systems
+    'NWS', 'WFO', 'NOAA', 'NHC', 'SPC', 'WPC', 'CPC', 'IPAWS', 'FEMA',
+    'EAS', 'EOC', 'NCEP', 'NWR',
+    # Time zones (continental + AK/HI + Atlantic + Chamorro)
+    'UTC', 'GMT', 'EST', 'EDT', 'CST', 'CDT', 'MST', 'MDT', 'PST', 'PDT',
+    'AKST', 'AKDT', 'HST', 'HAST', 'AST', 'ADT', 'CHST', 'SST',
+    # Compass points
+    'N', 'NE', 'NNE', 'ENE', 'E', 'ESE', 'SE', 'SSE',
+    'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW',
+    # Units
+    'MPH', 'KPH', 'KMH', 'KTS', 'KT',
+    'AM', 'PM',
+    # Convective intensity
+    'EF0', 'EF1', 'EF2', 'EF3', 'EF4', 'EF5',
+    'F0', 'F1', 'F2', 'F3', 'F4', 'F5',
+    # Protocols / identifiers commonly in alert text
+    'CAP', 'VTEC', 'PVTEC', 'HVTEC', 'UGC', 'WMO', 'FIPS', 'SAME',
+    'AMBER', 'AWIPS',  # AMBER is technically a backronym but is brand-cased
+])
+
+# US state / territory codes (kept uppercase)
+_US_STATE_CODES = frozenset([
+    'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
+    'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD',
+    'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
+    'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC',
+    'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY',
+    'DC', 'PR', 'VI', 'GU', 'AS', 'MP',
+])
+
+# Full US state / territory names (lowercase key → display form).
+_US_STATES = {
+    'alabama': 'Alabama', 'alaska': 'Alaska', 'arizona': 'Arizona',
+    'arkansas': 'Arkansas', 'california': 'California', 'colorado': 'Colorado',
+    'connecticut': 'Connecticut', 'delaware': 'Delaware', 'florida': 'Florida',
+    'georgia': 'Georgia', 'hawaii': 'Hawaii', 'idaho': 'Idaho',
+    'illinois': 'Illinois', 'indiana': 'Indiana', 'iowa': 'Iowa',
+    'kansas': 'Kansas', 'kentucky': 'Kentucky', 'louisiana': 'Louisiana',
+    'maine': 'Maine', 'maryland': 'Maryland', 'massachusetts': 'Massachusetts',
+    'michigan': 'Michigan', 'minnesota': 'Minnesota', 'mississippi': 'Mississippi',
+    'missouri': 'Missouri', 'montana': 'Montana', 'nebraska': 'Nebraska',
+    'nevada': 'Nevada', 'ohio': 'Ohio', 'oklahoma': 'Oklahoma',
+    'oregon': 'Oregon', 'pennsylvania': 'Pennsylvania', 'tennessee': 'Tennessee',
+    'texas': 'Texas', 'utah': 'Utah', 'vermont': 'Vermont', 'virginia': 'Virginia',
+    'washington': 'Washington', 'wisconsin': 'Wisconsin', 'wyoming': 'Wyoming',
+    'guam': 'Guam',
+}
+
+# Stopwords kept lowercase when title-casing enumeration lists (cities of X, Y…).
+_LIST_STOPWORDS = frozenset([
+    'of', 'and', 'or', 'the', 'a', 'an', 'in', 'on', 'at', 'to', 'by',
+])
+
+# Triggers that flag a coming proper-noun enumeration (NWS texts list
+# affected cities/counties after these phrases).
+_LIST_TRIGGER_RE = re.compile(
+    r'\b(cities?\s+of|counties?\s+of|towns?\s+of|villages?\s+of|'
+    r'townships?\s+of|parishes?\s+of|boroughs?\s+of|community\s+of|'
+    r'communities\s+of)\b([^.]*)',
+    flags=re.IGNORECASE,
+)
+
+
+def _is_shouting(text: str, threshold: float = 0.80) -> bool:
+    """True when *text* is dominantly uppercase — likely an NWS feed string."""
+    letters = [c for c in text if c.isalpha()]
+    if len(letters) < 12:
+        return False
+    upper = sum(1 for c in letters if c.isupper())
+    return upper / len(letters) >= threshold
+
+
+def _humanize_caps_text(text: str) -> str:
+    """Convert ALL-CAPS NWS-style text to readable sentence case.
+
+    Only operates when *text* is dominantly uppercase.  The output:
+    - lowercases the body,
+    - capitalises the first letter and any letter following sentence
+      punctuation,
+    - restores known acronyms (NWS, EDT, MPH, …) and US state codes,
+    - title-cases full US state names,
+    - title-cases the proper-noun enumeration that follows triggers like
+      "cities of" / "counties of".
+    """
+    if not text or not _is_shouting(text):
+        return text
+
+    out = text.lower()
+
+    # Capitalise the very first alphabetic character.
+    for i, ch in enumerate(out):
+        if ch.isalpha():
+            out = out[:i] + ch.upper() + out[i + 1:]
+            break
+
+    # Capitalise after sentence-ending punctuation.
+    out = re.sub(
+        r'([.!?]\s+)([a-z])',
+        lambda m: m.group(1) + m.group(2).upper(),
+        out,
+    )
+
+    def _restore_word(m: 're.Match[str]') -> str:
+        word = m.group(0)
+        upper = word.upper()
+        if upper in _PRESERVE_ACRONYMS:
+            return upper
+        lower = word.lower()
+        if lower in _US_STATES:
+            return _US_STATES[lower]
+        return word
+
+    out = re.sub(r"[A-Za-z]+", _restore_word, out)
+
+    # State codes are intentionally NOT in the global preserve set — too
+    # many overlap with common English words (IN, OR, ME, HI, OK, PA, MA,
+    # LA, DE, …) so a blanket uppercase would turn "in effect" into
+    # "IN effect".  Only uppercase them when they immediately follow a
+    # comma + space, the unambiguous "City, ST" pattern NWS uses for
+    # affected areas.
+    def _state_code_after_comma(m: 're.Match[str]') -> str:
+        prefix, code = m.group(1), m.group(2)
+        return prefix + code.upper() if code.upper() in _US_STATE_CODES else m.group(0)
+
+    out = re.sub(
+        r'(,\s+)([A-Za-z]{2})(?=[\s.,;)\]!?]|$)',
+        _state_code_after_comma,
+        out,
+    )
+
+    # Title-case proper nouns inside enumeration phrases ("cities of A, B,
+    # and C") — preserves city/county names that lowercase otherwise.
+    def _title_list(m: 're.Match[str]') -> str:
+        head, body = m.group(1), m.group(2)
+
+        def _title_word(wm: 're.Match[str]') -> str:
+            w = wm.group(0)
+            if w.upper() in _PRESERVE_ACRONYMS:
+                return w.upper()
+            if w.lower() in _LIST_STOPWORDS:
+                return w.lower()
+            return w[:1].upper() + w[1:].lower()
+
+        body = re.sub(r"[A-Za-z]+", _title_word, body)
+        return head + body
+
+    out = _LIST_TRIGGER_RE.sub(_title_list, out)
+    return out
+
+
 # ─── Lightning bolt renderer (matches the site's lightning theme) ───────────
 # Ported from static/js/core/lightning.js so social-share images carry the
 # same stormy-sky visual identity as the web UI.
@@ -1470,10 +1690,16 @@ def generate_alert_image(
     # Event name (left)
     draw.text((16, 10), event_name, font=fonts['title'], fill=WHITE)
 
-    # Status sub-line
+    # Status sub-line — "Status: Actual" is the default for ~all production
+    # alerts and only crowds the header.  Surface it only for Test /
+    # Exercise / Draft / System statuses where it carries information.
     sub_parts = []
-    for attr, label in [('status', 'Status'), ('severity', 'Severity'),
-                        ('urgency', 'Urgency'), ('certainty', 'Certainty')]:
+    status_val = (getattr(alert, 'status', '') or '').strip()
+    if status_val and status_val.lower() != 'actual':
+        sub_parts.append(f'Status: {status_val}')
+    for attr, label in [('severity', 'Severity'),
+                        ('urgency', 'Urgency'),
+                        ('certainty', 'Certainty')]:
         val = getattr(alert, attr, '') or ''
         if val:
             sub_parts.append(f'{label}: {val}')
@@ -1585,16 +1811,20 @@ def generate_alert_image(
 
     timing: List[str] = []
     try:
-        from app_core.eas_storage import format_local_datetime
-        if getattr(alert, 'sent', None):
-            timing.append(f"Issued: {format_local_datetime(alert.sent, include_utc=False)}")
-        if getattr(alert, 'expires', None):
-            timing.append(f"Expires: {format_local_datetime(alert.expires, include_utc=False)}")
+        sent = getattr(alert, 'sent', None)
+        expires = getattr(alert, 'expires', None)
+        if sent:
+            timing.append(f"Issued {_short_local_dt(sent, ref=None)}")
+        if expires:
+            # When the expiration falls on a different calendar day than the
+            # issue time, include the date so "Expires 10:00 PM" isn't
+            # ambiguous; otherwise keep it to the bare time.
+            timing.append(f"Expires {_short_local_dt(expires, ref=sent)}")
     except Exception:
         pass
 
     if timing:
-        t_str = '   |   '.join(timing)
+        t_str = '  ·  '.join(timing)
         ty_pos = fy + (FOOTER_H - _th(fonts['small'], t_str)) // 2
         draw.text((12, ty_pos), t_str, font=fonts['small'], fill=_TEXT_SEC)
 
@@ -1761,6 +1991,28 @@ def _draw_coverage(draw: ImageDraw.ImageDraw, fonts: Dict, alr_clr: Tuple,
     if not coverage_data:
         return iy
 
+    # ── Decide what's worth showing ─────────────────────────────────────────
+    # When the configured county is outside the affected polygon, county
+    # coverage will be 0.0%.  Rendering a "0.0% (est.) of <County>" row with
+    # an empty bar reads as a calculation bug; suppress the row in that
+    # case.  Drop the whole section if neither the county nor any service
+    # type has measurable overlap — there is nothing left to display.
+    county = coverage_data.get('county', {}) or {}
+    county_pct = float(county.get('coverage_percentage', 0) or 0)
+    show_county_row = bool(county) and county_pct >= 0.05
+
+    svc_parts: List[str] = []
+    for stype, sdata in sorted(coverage_data.items()):
+        if stype == 'county':
+            continue
+        affected = int(sdata.get('affected_boundaries', 0) or 0)
+        total    = int(sdata.get('total_boundaries',    0) or 0)
+        if total > 0 and affected > 0:
+            svc_parts.append(f'{stype.title()}: {affected}/{total}')
+
+    if not show_county_row and not svc_parts:
+        return iy
+
     # Reserve section-header (22) + at least one row of content before
     # drawing anything — otherwise we'd leave an orphan "COVERAGE" title.
     if iy + 22 + 22 > bot:
@@ -1768,9 +2020,7 @@ def _draw_coverage(draw: ImageDraw.ImageDraw, fonts: Dict, alr_clr: Tuple,
 
     iy = _section_header(draw, fonts, alr_clr, ix, iy, iw, 'COVERAGE')
 
-    county = coverage_data.get('county', {})
-    if county:
-        pct   = float(county.get('coverage_percentage', 0))
+    if show_county_row:
         est   = county.get('is_estimated', False)
         row_h = 32
         if iy + row_h <= bot:
@@ -1778,29 +2028,24 @@ def _draw_coverage(draw: ImageDraw.ImageDraw, fonts: Dict, alr_clr: Tuple,
 
             # Percentage label
             tag  = ' (est.)' if est else ''
-            lbl  = f'{pct:.1f}%{tag} of {county_name}'
+            lbl  = f'{county_pct:.1f}%{tag} of {county_name}'
             lbl  = _truncate(fonts['small'], lbl, iw - 16)
             draw.text((ix + 8, iy + 4), lbl, font=fonts['small'], fill=_TEXT)
 
-            # Progress bar
+            # Progress bar — empty track plus a fill clamped to a true
+            # 0–100% width (no minimum-width fudge that would misrepresent
+            # near-zero coverage as a visible sliver).
             bar_x, bar_y = ix + 8, iy + 21
             bar_w, bar_h = iw - 16, 6
             draw.rounded_rectangle((bar_x, bar_y, bar_x + bar_w, bar_y + bar_h),
                                    radius=3, fill=(55, 65, 88))
-            fill_w = max(4, int(bar_w * min(pct, 100) / 100))
-            draw.rounded_rectangle((bar_x, bar_y, bar_x + fill_w, bar_y + bar_h),
-                                   radius=3, fill=_pct_bar_color(pct))
+            fill_w = int(bar_w * min(county_pct, 100) / 100)
+            if fill_w > 0:
+                draw.rounded_rectangle(
+                    (bar_x, bar_y, bar_x + fill_w, bar_y + bar_h),
+                    radius=3, fill=_pct_bar_color(county_pct),
+                )
             iy += row_h + 3
-
-    # Service counts row
-    svc_parts: List[str] = []
-    for stype, sdata in sorted(coverage_data.items()):
-        if stype == 'county':
-            continue
-        affected = int(sdata.get('affected_boundaries', 0) or 0)
-        total    = int(sdata.get('total_boundaries',    0) or 0)
-        if total > 0:
-            svc_parts.append(f'{stype.title()}: {affected}/{total}')
 
     if svc_parts and iy + 22 <= bot:
         _card_row(draw, ix, iy, iw, 22)
@@ -1989,6 +2234,9 @@ def _draw_nws_headline(draw: ImageDraw.ImageDraw, fonts: Dict, alr_clr: Tuple,
     if not text or iy + 30 > bot:
         return iy
 
+    # NWS-style headlines are often shouted; humanise before rendering.
+    text = _humanize_caps_text(text)
+
     iy = _section_header(draw, fonts, alr_clr, ix, iy, iw, 'HEADLINE')
 
     # Word-wrap (leave 10 px for the quote bar on the left)
@@ -2066,6 +2314,9 @@ def _draw_description(draw: ImageDraw.ImageDraw, fonts: Dict, alr_clr: Tuple,
     if not desc:
         return iy
 
+    # De-shout NWS text — bodies of all-caps are noticeably slower to read.
+    desc = _humanize_caps_text(desc)
+
     font = fonts['small']
     row_h = 18
     # Reserve the 22px section header + at least one row before committing.
@@ -2106,6 +2357,8 @@ def _draw_instruction(draw: ImageDraw.ImageDraw, fonts: Dict, alr_clr: Tuple,
 
     if not instr:
         return iy
+
+    instr = _humanize_caps_text(instr)
 
     font = fonts['small']
     row_h = 18

@@ -236,3 +236,152 @@ def test_generate_alert_image_with_storm_motion():
     assert png.startswith(b"\x89PNG")
     img = Image.open(io.BytesIO(png))
     assert img.size == (1200, 630)
+
+
+# ── ALL-CAPS → sentence-case humanizer ──────────────────────────────────────
+def test_is_shouting_detects_all_caps():
+    assert image_export._is_shouting(
+        "SEVERE THUNDERSTORM WATCH IN EFFECT UNTIL 10 PM EDT"
+    ) is True
+
+
+def test_is_shouting_ignores_sentence_case():
+    assert image_export._is_shouting(
+        "Severe thunderstorm watch in effect until 10 PM EDT this evening."
+    ) is False
+
+
+def test_is_shouting_short_strings_pass_through():
+    assert image_export._is_shouting("HI THERE") is False
+
+
+def test_humanize_caps_text_no_op_when_not_shouting():
+    sample = "Severe thunderstorm watch in effect until 10 PM EDT."
+    assert image_export._humanize_caps_text(sample) == sample
+
+
+def test_humanize_caps_text_sentence_case_with_acronyms():
+    src = (
+        "SEVERE THUNDERSTORM WATCH 230, PREVIOUSLY IN EFFECT UNTIL 7 PM EDT "
+        "THIS EVENING, IS NOW IN EFFECT UNTIL 10 PM EDT THIS EVENING FOR "
+        "THE FOLLOWING AREAS IN OHIO."
+    )
+    out = image_export._humanize_caps_text(src)
+
+    assert out.startswith("Severe thunderstorm watch 230"), out
+    assert "PM EDT" in out
+    assert "pm edt" not in out
+    assert "Ohio" in out
+    assert "ohio" not in out
+    assert not image_export._is_shouting(out)
+
+
+def test_humanize_caps_text_title_cases_city_list():
+    src = "THIS INCLUDES THE CITIES OF BELLEVUE, FINDLAY, AND PORT CLINTON."
+    out = image_export._humanize_caps_text(src)
+    assert "Bellevue" in out
+    assert "Findlay" in out
+    assert "Port Clinton" in out
+    assert ", and Port Clinton" in out
+
+
+def test_humanize_caps_text_state_code_after_comma():
+    """State codes are recognised only after a comma+space (e.g.
+    ``Erie, OH``).  This avoids false-positives on common English
+    words that collide with state codes (IN, OR, ME, HI, OK, …).
+    """
+    src = "AFFECTED AREAS: ERIE, OH; HANCOCK, OH; AND OTTAWA, OH."
+    out = image_export._humanize_caps_text(src)
+    # Each comma-prefixed state code uppercased.
+    assert out.count(", OH") == 3, out
+    # And no all-caps state-code-looking word was uppercased outside the
+    # comma context.
+    assert " IN " not in out
+    assert " OR " not in out
+
+
+def test_humanize_caps_text_does_not_uppercase_common_words():
+    """Words like 'in', 'or', 'me' collide with state codes — they must
+    stay lowercase when not in a ``, ST`` position."""
+    src = (
+        "THE WATCH IS NOW IN EFFECT FOR COUNTIES IN OHIO OR FLORIDA. "
+        "REPORTS HAVE COME TO ME FROM SEVERAL OBSERVERS."
+    )
+    out = image_export._humanize_caps_text(src)
+    assert " in effect" in out
+    assert " in Ohio" in out
+    assert " or Florida" in out
+    assert " to me " in out
+    # The bare standalone caps should be gone.
+    assert " IN " not in out
+    assert " OR " not in out
+    assert " ME " not in out
+
+
+def test_humanize_caps_text_preserves_acronyms():
+    src = "ISSUED BY NWS CLEVELAND AT 6 PM EDT."
+    out = image_export._humanize_caps_text(src)
+    assert "NWS" in out
+    assert "PM EDT" in out
+
+
+# ── Coverage section gating ─────────────────────────────────────────────────
+def _render_with_coverage(coverage_data):
+    alert = _FakeAlert()
+    alert.id = 4242
+    alert.event = "Severe Thunderstorm Watch"
+    alert.severity = "Severe"
+    return image_export.generate_alert_image(
+        alert, coverage_data, None,
+        {"county_name": "Putnam County, Ohio"},
+    )
+
+
+def test_coverage_section_renders_when_county_zero_and_no_services():
+    """0% county + no service hits should still produce a valid PNG (the
+    COVERAGE section is silently dropped, not an error)."""
+    png = _render_with_coverage({
+        "county": {"coverage_percentage": 0.0, "is_estimated": True},
+        "fire":   {"affected_boundaries": 0, "total_boundaries": 5},
+    })
+    assert png.startswith(b"\x89PNG")
+    img = Image.open(io.BytesIO(png))
+    assert img.size == (1200, 630)
+
+
+def test_coverage_section_kept_when_services_have_hits():
+    """0% county but service hits → section stays for the services."""
+    png = _render_with_coverage({
+        "county": {"coverage_percentage": 0.0, "is_estimated": True},
+        "fire":   {"affected_boundaries": 2, "total_boundaries": 5},
+    })
+    assert png.startswith(b"\x89PNG")
+    img = Image.open(io.BytesIO(png))
+    assert img.size == (1200, 630)
+
+
+# ── Compact footer timestamp ────────────────────────────────────────────────
+def test_short_local_dt_same_day_omits_date():
+    from datetime import datetime, timezone
+
+    sent    = datetime(2026, 5, 19, 22, 29, tzinfo=timezone.utc)
+    expires = datetime(2026, 5, 20,  1,  0, tzinfo=timezone.utc)
+
+    out_sent    = image_export._short_local_dt(sent)
+    out_expires = image_export._short_local_dt(expires, ref=sent)
+
+    assert ":" in out_sent and ("AM" in out_sent or "PM" in out_sent)
+    assert "2026" not in out_sent
+    assert "2026" not in out_expires
+
+
+def test_short_local_dt_cross_day_includes_date():
+    from datetime import datetime, timezone
+
+    sent    = datetime(2026, 5, 19, 12,  0, tzinfo=timezone.utc)
+    expires = datetime(2026, 5, 21, 12,  0, tzinfo=timezone.utc)
+
+    out = image_export._short_local_dt(expires, ref=sent)
+    months = ("Jan", "Feb", "Mar", "Apr", "May", "Jun",
+              "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+    assert any(m in out for m in months), out
