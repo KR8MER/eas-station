@@ -27,7 +27,12 @@
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
                    "Helvetica Neue", Arial, "Liberation Sans", sans-serif;
       font-weight: 700;
-      font-size: 44px;
+      /* font-size 40 (down from 44) keeps "INFRASTRUCTURE" inside the
+         viewBox across font-metric variations: Liberation Sans Bold
+         renders ~10% wider than DejaVu Sans Bold, and at 44 px the
+         trailing "E" overflowed the 2080-unit width on Linux
+         rasterisers, leaving "INFRASTRUCTUR" in the rendered PNG. */
+      font-size: 40px;
       letter-spacing: 2.5px;
       fill: rgba(255, 255, 255, 0.92);
     }
