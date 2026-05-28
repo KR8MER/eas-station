@@ -82,16 +82,92 @@ def _load_logo() -> Optional[Image.Image]:
         return None
 
 
-# ─── Canvas dimensions (Facebook recommended: 1200×630) ────────────────────
-FB_WIDTH    = 1200
-FB_HEIGHT   = 630
-HEADER_H    = 90
-FOOTER_H    = 50
-BODY_H      = FB_HEIGHT - HEADER_H - FOOTER_H   # 490
-MAP_W       = 582
-MAP_H       = BODY_H                             # 490
-INFO_X      = MAP_W + 8                          # 590
-INFO_W      = FB_WIDTH - INFO_X - 8             # 594
+# ─── Canvas layouts ─────────────────────────────────────────────────────────
+# The share card renders into one of several preset canvases that target the
+# common social-platform aspect ratios.  Each preset bundles the canvas
+# dimensions plus the rectangles for the chrome (header / footer) and the
+# two content slots (map + info panel).  The info-panel drawers (threats,
+# headline, areas, description, instructions, …) all operate on a generic
+# rectangle, so a new layout is just a different set of numbers — no new
+# drawing code per aspect ratio.
+
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class _Layout:
+    """Geometry for a single share-card aspect-ratio variant."""
+    width: int
+    height: int
+    header_h: int
+    footer_h: int
+    # Map slot rectangle: (x, y, w, h).
+    map_rect: Tuple[int, int, int, int]
+    # Info-panel slot rectangle (where text sections render).
+    info_rect: Tuple[int, int, int, int]
+    # Width of the dark scrim under the header text (left edge) for
+    # legibility against the particle layer.
+    header_scrim_w: int
+    # Whether to draw the thin vertical divider between map and info
+    # (only used in side-by-side layouts).
+    show_vertical_divider: bool = False
+    # Outer rounded-corner radius.
+    corner_r: int = 18
+    # Inner map rounded-corner radius (0 for full-bleed map).
+    map_corner_r: int = 14
+
+
+# Facebook / Twitter / LinkedIn open-graph cards — horizontal split with
+# the map on the left and the text panel on the right.
+_LAYOUT_LANDSCAPE = _Layout(
+    width=1200, height=630,
+    header_h=90, footer_h=50,
+    map_rect=(0, 90, 582, 490),
+    info_rect=(590, 98, 594, 482),
+    header_scrim_w=560,
+    show_vertical_divider=True,
+    map_corner_r=14,
+)
+
+# Instagram / Mastodon / generic square feed card — stacked layout with
+# header → map → info → footer down the centre line.
+_LAYOUT_SQUARE = _Layout(
+    width=1080, height=1080,
+    header_h=110, footer_h=60,
+    map_rect=(0, 110, 1080, 540),
+    info_rect=(16, 658, 1048, 358),
+    header_scrim_w=600,
+    map_corner_r=0,
+)
+
+# Instagram portrait (4:5) — taller info panel, slightly shorter map.
+_LAYOUT_PORTRAIT = _Layout(
+    width=1080, height=1350,
+    header_h=120, footer_h=60,
+    map_rect=(0, 120, 1080, 540),
+    info_rect=(16, 668, 1048, 615),
+    header_scrim_w=600,
+    map_corner_r=0,
+)
+
+_LAYOUTS: Dict[str, _Layout] = {
+    'landscape': _LAYOUT_LANDSCAPE,
+    'square':    _LAYOUT_SQUARE,
+    'portrait':  _LAYOUT_PORTRAIT,
+}
+
+# Module-level constants preserved for backward compatibility — anything
+# that previously imported these names still gets the original landscape
+# numbers.  New code should reach into ``_Layout`` instances instead.
+FB_WIDTH    = _LAYOUT_LANDSCAPE.width
+FB_HEIGHT   = _LAYOUT_LANDSCAPE.height
+HEADER_H    = _LAYOUT_LANDSCAPE.header_h
+FOOTER_H    = _LAYOUT_LANDSCAPE.footer_h
+BODY_H      = FB_HEIGHT - HEADER_H - FOOTER_H
+MAP_W       = _LAYOUT_LANDSCAPE.map_rect[2]
+MAP_H       = _LAYOUT_LANDSCAPE.map_rect[3]
+INFO_X      = _LAYOUT_LANDSCAPE.info_rect[0]
+INFO_W      = _LAYOUT_LANDSCAPE.info_rect[2]
 TILE_SIZE   = 256
 
 # ─── Colour palette ─────────────────────────────────────────────────────────
@@ -1090,7 +1166,8 @@ _PARTICLE_FNS = {
 
 
 def _draw_themed_header(img: Image.Image, theme: _Theme,
-                        seed: int = 0) -> None:
+                        seed: int = 0,
+                        layout: Optional[_Layout] = None) -> None:
     """Paint a themed header: diagonal gradient + event-appropriate particles.
 
     Replaces the older single-colour vertical gradient + always-bolts
@@ -1099,34 +1176,36 @@ def _draw_themed_header(img: Image.Image, theme: _Theme,
     snowflakes for winter advisories, raindrops for floods, sun rays for
     heat, etc.  See ``_THEMES`` for the full mapping.
     """
+    lay = layout or _LAYOUT_LANDSCAPE
+    canvas_w = lay.width
+    header_h = lay.header_h
     top = theme['top']
     bot = theme['bottom']
-    d = ImageDraw.Draw(img)
     # Diagonal gradient — compute t from a normal vector pointing from
     # the top-left corner to the bottom-right of the header.  Drawing per
     # row is fast enough and lets us shade left→right per row by sampling
     # the diagonal coordinate at line midpoint.
-    diag = HEADER_H + FB_WIDTH * 0.35   # how far along the diagonal we go
-    for y in range(HEADER_H):
+    diag = header_h + canvas_w * 0.35   # how far along the diagonal we go
+    for y in range(header_h):
         # Two-stop interpolation with per-row x sweep so the right side
         # of the image runs ahead of the left — diagonal feel.
-        row = Image.new('RGB', (FB_WIDTH, 1), bot)
+        row = Image.new('RGB', (canvas_w, 1), bot)
         rd = ImageDraw.Draw(row)
-        for x in range(0, FB_WIDTH, 8):   # step by 8 px — visually smooth, fast
+        for x in range(0, canvas_w, 8):   # step by 8 px — visually smooth, fast
             t = (y + x * 0.35) / diag
             t = max(0.0, min(1.0, t))
             r = int(top[0] * (1 - t) + bot[0] * t)
             g = int(top[1] * (1 - t) + bot[1] * t)
             b = int(top[2] * (1 - t) + bot[2] * t)
-            rd.line([(x, 0), (min(FB_WIDTH, x + 8), 0)], fill=(r, g, b))
+            rd.line([(x, 0), (min(canvas_w, x + 8), 0)], fill=(r, g, b))
         img.paste(row, (0, y))
     # Slight darkening at the very top edge so the title reads clearly
     # against the brighter parts of the gradient.
-    shade = Image.new('RGBA', (FB_WIDTH, HEADER_H), (0, 0, 0, 0))
+    shade = Image.new('RGBA', (canvas_w, header_h), (0, 0, 0, 0))
     sd = ImageDraw.Draw(shade)
     for y in range(28):
         a = int(60 * (1 - y / 28))
-        sd.line([(0, y), (FB_WIDTH, y)], fill=(0, 0, 0, a))
+        sd.line([(0, y), (canvas_w, y)], fill=(0, 0, 0, a))
     base = img.convert('RGBA')
     base.alpha_composite(shade)
     img.paste(base.convert('RGB'))
@@ -1135,7 +1214,7 @@ def _draw_themed_header(img: Image.Image, theme: _Theme,
     intensity = float(theme.get('particle_intensity', 1.0))
     fn = _PARTICLE_FNS.get(particle)
     if fn is not None and intensity > 0.01:
-        fn(img, (0, 0, FB_WIDTH, HEADER_H), seed=seed, intensity=intensity)
+        fn(img, (0, 0, canvas_w, header_h), seed=seed, intensity=intensity)
 
 
 # ─── Rounded-corner helpers ─────────────────────────────────────────────────
@@ -1466,8 +1545,9 @@ def _draw_storm_track(canvas: Image.Image, storm: Dict,
 
 def _render_map(geom: Dict, severity: str,
                 storm_motion: Optional[Dict] = None,
-                theme: Optional[_Theme] = None) -> Image.Image:
-    """Return a MAP_W×MAP_H RGB map image with the alert polygon overlaid.
+                theme: Optional[_Theme] = None,
+                *, map_w: int = MAP_W, map_h: int = MAP_H) -> Image.Image:
+    """Return a *map_w*×*map_h* RGB map image with the alert polygon overlaid.
 
     *theme* drives the polygon stroke / storm-motion accent colours; if
     omitted we fall back to the severity palette (legacy behaviour).
@@ -1478,11 +1558,11 @@ def _render_map(geom: Dict, severity: str,
     the share image cluttered and unreadable when multiple boundaries
     overlapped.
     """
-    fallback = Image.new('RGB', (MAP_W, MAP_H), (35, 42, 62))
+    fallback = Image.new('RGB', (map_w, map_h), (35, 42, 62))
     fd = ImageDraw.Draw(fallback)
     msg = 'Map not available'
     fonts = _load_fonts()
-    fd.text(((MAP_W - _tw(fonts['small'], msg)) // 2, MAP_H // 2 - 8),
+    fd.text(((map_w - _tw(fonts['small'], msg)) // 2, map_h // 2 - 8),
             msg, font=fonts['small'], fill=_TEXT_MUT)
 
     bbox = _geojson_bbox(geom)
@@ -1495,7 +1575,7 @@ def _render_map(geom: Dict, severity: str,
     min_lon -= lon_pad; max_lon += lon_pad
     min_lat -= lat_pad; max_lat += lat_pad
 
-    z = _best_zoom(min_lon, min_lat, max_lon, max_lat, MAP_W, MAP_H)
+    z = _best_zoom(min_lon, min_lat, max_lon, max_lat, map_w, map_h)
 
     tx_min = max(0,        int(math.floor(_lon_to_tx(min_lon, z))) - 1)
     tx_max = min(2**z - 1, int(math.ceil( _lon_to_tx(max_lon, z))) + 1)
@@ -1587,19 +1667,19 @@ def _render_map(geom: Dict, severity: str,
     cx = int((_lon_to_tx((min_lon + max_lon) / 2, z) - tx_min) * TILE_SIZE)
     cy = int((_lat_to_ty((min_lat + max_lat) / 2, z) - ty_min) * TILE_SIZE)
 
-    x1 = max(0, cx - MAP_W // 2)
-    y1 = max(0, cy - MAP_H // 2)
-    x2 = min(canvas_w, x1 + MAP_W)
-    y2 = min(canvas_h, y1 + MAP_H)
+    x1 = max(0, cx - map_w // 2)
+    y1 = max(0, cy - map_h // 2)
+    x2 = min(canvas_w, x1 + map_w)
+    y2 = min(canvas_h, y1 + map_h)
 
-    if x2 - x1 < MAP_W:
-        x1 = max(0, x2 - MAP_W)
-    if y2 - y1 < MAP_H:
-        y1 = max(0, y2 - MAP_H)
+    if x2 - x1 < map_w:
+        x1 = max(0, x2 - map_w)
+    if y2 - y1 < map_h:
+        y1 = max(0, y2 - map_h)
 
     cropped = canvas.crop((x1, y1, x2, y2))
-    if cropped.size != (MAP_W, MAP_H):
-        cropped = cropped.resize((MAP_W, MAP_H), Image.LANCZOS)
+    if cropped.size != (map_w, map_h):
+        cropped = cropped.resize((map_w, map_h), Image.LANCZOS)
 
     cd = ImageDraw.Draw(cropped)
 
@@ -1607,8 +1687,8 @@ def _render_map(geom: Dict, severity: str,
     attr     = '\u00a9 OpenStreetMap contributors'
     attr_fnt = fonts['tiny']
     aw, ah   = _tw(attr_fnt, attr), _th(attr_fnt, attr)
-    ax, ay   = MAP_W - aw - 5, MAP_H - ah - 5
-    cd.rectangle((ax - 2, ay - 1, MAP_W - 3, MAP_H - 3), fill=(0, 0, 0))
+    ax, ay   = map_w - aw - 5, map_h - ah - 5
+    cd.rectangle((ax - 2, ay - 1, map_w - 3, map_h - 3), fill=(0, 0, 0))
     cd.text((ax, ay), attr, font=attr_fnt, fill=(200, 200, 200))
 
     return cropped
@@ -1636,18 +1716,24 @@ def generate_alert_image(
     coverage_data: Dict[str, Any],
     ipaws_data: Optional[Dict[str, Any]],
     location_settings: Optional[Dict[str, Any]],
+    aspect_ratio: str = 'landscape',
 ) -> bytes:
-    """Generate a 1200×630 Facebook-ready PNG for *alert*.
+    """Generate a share-card PNG for *alert* in the requested aspect ratio.
 
     Args:
         alert:             CAPAlert model instance.
         coverage_data:     Dict returned by calculate_coverage_percentages().
         ipaws_data:        Dict returned by _extract_alert_display_data(), may be None.
         location_settings: Dict from get_location_settings(), may be None.
+        aspect_ratio:      One of ``landscape`` (1200×630, default — FB/X/LI
+            open-graph), ``square`` (1080×1080 — Instagram, Mastodon) or
+            ``portrait`` (1080×1350 — Instagram 4:5).  Unknown values fall
+            back to landscape so callers can pass any platform hint.
 
     Returns:
         Raw PNG bytes.
     """
+    layout = _LAYOUTS.get(aspect_ratio, _LAYOUT_LANDSCAPE)
     fonts = _load_fonts()
 
     severity    = (getattr(alert, 'severity', '') or '').lower()
@@ -1666,29 +1752,33 @@ def generate_alert_image(
     alert_seed = hash((getattr(alert, 'id', 0) or 0, event_name)) & 0xFFFFFFFF
 
     # ── Base canvas ──────────────────────────────────────────────────────────
-    img  = Image.new('RGB', (FB_WIDTH, FB_HEIGHT), _BG)
+    img  = Image.new('RGB', (layout.width, layout.height), _BG)
     draw = ImageDraw.Draw(img)
 
     # ── Header bar (event-themed gradient + particles) ───────────────────────
     # Diagonal gradient + event-specific particle layer (bolts for storms,
     # snowflakes for winter, raindrops for floods, sun rays for heat, ...).
-    _draw_themed_header(img, theme, seed=alert_seed)
+    _draw_themed_header(img, theme, seed=alert_seed, layout=layout)
     # Soft scrim under the title text for legibility against the particle
     # layer.  Only the left ~half — the right side is reserved for branding
     # and shows the particles clearly.
-    scrim = Image.new('RGBA', (FB_WIDTH, HEADER_H), (0, 0, 0, 0))
+    scrim = Image.new('RGBA', (layout.width, layout.header_h), (0, 0, 0, 0))
     sd = ImageDraw.Draw(scrim)
-    sd.rectangle((0, 0, 560, HEADER_H), fill=(0, 0, 0, 75))
+    sd.rectangle((0, 0, layout.header_scrim_w, layout.header_h),
+                 fill=(0, 0, 0, 75))
     base = img.convert('RGBA')
     base.alpha_composite(scrim)
     img.paste(base.convert('RGB'))
     draw = ImageDraw.Draw(img)
 
-    draw.rectangle((0, HEADER_H - 2, FB_WIDTH, HEADER_H),
+    draw.rectangle((0, layout.header_h - 2, layout.width, layout.header_h),
                    fill=_darken(alr_clr, 0.45))
 
-    # Event name (left)
-    draw.text((16, 10), event_name, font=fonts['title'], fill=WHITE)
+    # Event name (left).  Title y is tuned to leave room for the sub-line
+    # below; sub-line y sits below the title font's natural height.
+    title_y = 10
+    draw.text((16, title_y), event_name, font=fonts['title'], fill=WHITE)
+    title_h = _th(fonts['title'], event_name)
 
     # Status sub-line — "Status: Actual" is the default for ~all production
     # alerts and only crowds the header.  Surface it only for Test /
@@ -1704,7 +1794,9 @@ def generate_alert_image(
         if val:
             sub_parts.append(f'{label}: {val}')
     sub_text = '  |  '.join(sub_parts)
-    draw.text((18, 52), sub_text, font=fonts['small'], fill=(*WHITE, 200))  # type: ignore[arg-type]
+    sub_y = title_y + title_h + 8
+    draw.text((18, sub_y), sub_text, font=fonts['small'],
+              fill=(*WHITE, 200))  # type: ignore[arg-type]
 
     # Branding (top-right) — render the canonical EAS Station wordmark image
     # so updating the brand asset is just a matter of swapping the file at
@@ -1712,15 +1804,15 @@ def generate_alert_image(
     # back to the legacy text mark only if the file is missing or fails to
     # load.
     logo = _load_logo()
-    brand_right = FB_WIDTH - 16
+    brand_right = layout.width - 16
     if logo is not None:
-        logo_h = HEADER_H - 16
+        logo_h = layout.header_h - 16
         # Preserve aspect ratio
         ratio = logo_h / float(logo.height)
         logo_w = max(1, int(round(logo.width * ratio)))
         logo_resized = logo.resize((logo_w, logo_h), Image.LANCZOS)
         lx = brand_right - logo_w
-        ly = (HEADER_H - logo_h) // 2
+        ly = (layout.header_h - logo_h) // 2
         # Paste with the logo's own alpha so the header gradient shows through
         base_rgba = img.convert('RGBA')
         base_rgba.alpha_composite(logo_resized, dest=(lx, ly))
@@ -1731,17 +1823,11 @@ def generate_alert_image(
         draw.text((brand_right - _tw(fonts['head'], brand), 10),
                   brand, font=fonts['head'], fill=WHITE)
 
-    # Sent time (right, lower)
-    try:
-        from app_core.eas_storage import format_local_datetime
-        if getattr(alert, 'sent', None):
-            sent_str = format_local_datetime(alert.sent, include_utc=False)
-            draw.text((FB_WIDTH - _tw(fonts['small'], sent_str) - 16, 55),
-                      sent_str, font=fonts['small'], fill=(*WHITE, 180))  # type: ignore[arg-type]
-    except Exception:
-        pass
+    # ── Map slot ────────────────────────────────────────────────────────────
+    # Map rectangle comes from the layout: side-by-side for landscape (map
+    # on the left), stacked for square/portrait (map below the header).
+    map_x, map_y, map_w, map_h = layout.map_rect
 
-    # ── Map (left side) ──────────────────────────────────────────────────────
     # Storm motion is only meaningful for convective / wind / water events.
     # Suppress it on advisories like FROST / HEAT / FOG where the IPAWS
     # blob may still carry a stale motion vector — it adds noise without
@@ -1764,31 +1850,36 @@ def generate_alert_image(
             if geom_json:
                 map_img = _render_map(json.loads(geom_json), severity,
                                       storm_motion=storm_motion,
-                                      theme=theme)
+                                      theme=theme,
+                                      map_w=map_w, map_h=map_h)
     except Exception:
         pass
 
     if map_img is None:
-        map_img = Image.new('RGB', (MAP_W, MAP_H), (34, 42, 60))
+        map_img = Image.new('RGB', (map_w, map_h), (34, 42, 60))
         md = ImageDraw.Draw(map_img)
         lbl = 'Map not available'
-        md.text(((MAP_W - _tw(fonts['small'], lbl)) // 2, MAP_H // 2 - 8),
+        md.text(((map_w - _tw(fonts['small'], lbl)) // 2, map_h // 2 - 8),
                 lbl, font=fonts['small'], fill=_TEXT_MUT)
 
     # Round the map's corners so it sits visually inside the rounded
-    # canvas instead of butting up against sharp 90° edges.
-    map_img = _round_image_corners(map_img, MAP_CORNER_R, bg=_BG)
-    img.paste(map_img, (0, HEADER_H))
+    # canvas instead of butting up against sharp 90° edges.  Skip when
+    # the layout asked for a full-bleed map (corner_r = 0).
+    if layout.map_corner_r > 0:
+        map_img = _round_image_corners(map_img, layout.map_corner_r, bg=_BG)
+    img.paste(map_img, (map_x, map_y))
 
-    # Thin vertical separator
-    draw.line([(MAP_W, HEADER_H), (MAP_W, FB_HEIGHT - FOOTER_H)],
-              fill=_darken(alr_clr, 0.20), width=3)
+    # Thin vertical separator — only meaningful in side-by-side layouts.
+    if layout.show_vertical_divider:
+        div_x = map_x + map_w
+        draw.line([(div_x, map_y),
+                   (div_x, layout.height - layout.footer_h)],
+                  fill=_darken(alr_clr, 0.20), width=3)
 
-    # ── Info panel (right side) ───────────────────────────────────────────────
-    ix  = INFO_X
-    iw  = INFO_W
-    iy  = HEADER_H + 8
-    bot = FB_HEIGHT - FOOTER_H - 6
+    # ── Info panel ──────────────────────────────────────────────────────────
+    ix, iy_top, iw, ih = layout.info_rect
+    iy  = iy_top
+    bot = iy_top + ih
 
     # Priority order for a share card: storm threats (when dangerous), the
     # headline, WHO is affected, WHAT is happening, WHAT to do.  Coverage /
@@ -1805,9 +1896,9 @@ def generate_alert_image(
     iy = _draw_compass_section(draw, fonts, alr_clr, ix, iy, iw, bot, ipaws_data)
 
     # ── Footer ────────────────────────────────────────────────────────────────
-    fy = FB_HEIGHT - FOOTER_H
-    draw.rectangle((0, fy, FB_WIDTH, FB_HEIGHT), fill=_STRIP)
-    draw.line([(0, fy), (FB_WIDTH, fy)], fill=_DIVIDER, width=1)
+    fy = layout.height - layout.footer_h
+    draw.rectangle((0, fy, layout.width, layout.height), fill=_STRIP)
+    draw.line([(0, fy), (layout.width, fy)], fill=_DIVIDER, width=1)
 
     timing: List[str] = []
     try:
@@ -1825,12 +1916,12 @@ def generate_alert_image(
 
     if timing:
         t_str = '  ·  '.join(timing)
-        ty_pos = fy + (FOOTER_H - _th(fonts['small'], t_str)) // 2
+        ty_pos = fy + (layout.footer_h - _th(fonts['small'], t_str)) // 2
         draw.text((12, ty_pos), t_str, font=fonts['small'], fill=_TEXT_SEC)
 
     credit = 'EAS Station  •  Emergency Alert System'
-    cy_pos = fy + (FOOTER_H - _th(fonts['small'], credit)) // 2
-    draw.text((FB_WIDTH - _tw(fonts['small'], credit) - 12, cy_pos),
+    cy_pos = fy + (layout.footer_h - _th(fonts['small'], credit)) // 2
+    draw.text((layout.width - _tw(fonts['small'], credit) - 12, cy_pos),
               credit, font=fonts['small'], fill=_TEXT_MUT)
 
     # ── Round outer corners and serialise ────────────────────────────────────
@@ -1839,7 +1930,7 @@ def generate_alert_image(
     # the corner pixels fully transparent so renderers that respect alpha
     # show a true rounded shape; renderers that flatten get the matte
     # they composite against (usually white on social feeds).
-    img_rounded = _round_image_corners(img, CORNER_R, bg=None)
+    img_rounded = _round_image_corners(img, layout.corner_r, bg=None)
 
     buf = io.BytesIO()
     img_rounded.save(buf, format='PNG', optimize=True)

@@ -1146,14 +1146,29 @@ def alert_detail_pdf(alert_id):
         return redirect(url_for('api.alert_detail', alert_id=alert_id))
 
 
+_SOCIAL_IMAGE_RATIOS = {'landscape', 'square', 'portrait'}
+
+
 @api_bp.route('/alerts/<int:alert_id>/export-image.png')
 def alert_detail_image(alert_id):
-    """Generate a Facebook-ready 1200×630 PNG social media image for an alert."""
+    """Generate a social-share PNG for an alert.
+
+    Accepts a ``?ratio=`` query argument (``landscape``, ``square`` or
+    ``portrait``) so the same alert data can be rendered at the canvas
+    size each platform prefers — 1200×630 for FB/X/LinkedIn open-graph
+    cards, 1080×1080 for Instagram/Mastodon feeds, 1080×1350 for
+    Instagram 4:5 portrait posts.  Unknown values quietly fall back to
+    ``landscape``.
+    """
     try:
         from app_utils.image_export import generate_alert_image
         from app_core.location import get_location_settings
 
         alert = CAPAlert.query.get_or_404(alert_id)
+
+        ratio = (request.args.get('ratio') or 'landscape').strip().lower()
+        if ratio not in _SOCIAL_IMAGE_RATIOS:
+            ratio = 'landscape'
 
         intersections = db.session.query(Intersection, Boundary).join(
             Boundary, Intersection.boundary_id == Boundary.id
@@ -1167,12 +1182,17 @@ def alert_detail_image(alert_id):
         except Exception:
             location_settings = {}
 
-        png_bytes = generate_alert_image(alert, coverage_data, ipaws_data, location_settings)
+        png_bytes = generate_alert_image(
+            alert, coverage_data, ipaws_data, location_settings,
+            aspect_ratio=ratio,
+        )
 
         response = Response(png_bytes, mimetype='image/png')
         safe_event = (alert.event or 'alert').replace(' ', '_').lower()
+        # Include the ratio in the filename so saving multiple variants
+        # doesn't collide on disk.
         response.headers['Content-Disposition'] = (
-            f'attachment; filename=alert_{alert_id}_{safe_event}.png'
+            f'attachment; filename=alert_{alert_id}_{safe_event}_{ratio}.png'
         )
         response.headers['Cache-Control'] = 'no-cache'
         return response

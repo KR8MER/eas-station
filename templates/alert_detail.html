@@ -1844,9 +1844,43 @@
                                 <a href="{{ url_for('api.alert_detail_pdf', alert_id=alert.id) }}" target="_blank" class="btn btn-outline-secondary">
                                     <i class="fas fa-file-pdf"></i> Export PDF
                                 </a>
-                                <a href="{{ url_for('api.alert_detail_image', alert_id=alert.id) }}" class="btn btn-outline-primary" title="Download a 1200×630 PNG ready to post on Facebook">
-                                    <i class="fas fa-share-alt"></i> Export Social Image
-                                </a>
+                                <div class="btn-group" role="group" aria-label="Export Social Image">
+                                    <a href="{{ url_for('api.alert_detail_image', alert_id=alert.id, ratio='landscape') }}"
+                                       class="btn btn-outline-primary"
+                                       title="Download a 1200×630 PNG ready to post on Facebook, X/Twitter, or LinkedIn">
+                                        <i class="fas fa-share-alt"></i> Export Social Image
+                                    </a>
+                                    <button type="button"
+                                            class="btn btn-outline-primary dropdown-toggle dropdown-toggle-split"
+                                            data-bs-toggle="dropdown"
+                                            aria-expanded="false"
+                                            title="Pick another aspect ratio">
+                                        <span class="visually-hidden">Pick a size</span>
+                                    </button>
+                                    <ul class="dropdown-menu">
+                                        <li>
+                                            <a class="dropdown-item"
+                                               href="{{ url_for('api.alert_detail_image', alert_id=alert.id, ratio='landscape') }}">
+                                                <i class="fas fa-image"></i> Landscape · 1200×630
+                                                <small class="text-muted d-block ms-4">Facebook · X · LinkedIn</small>
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item"
+                                               href="{{ url_for('api.alert_detail_image', alert_id=alert.id, ratio='square') }}">
+                                                <i class="fas fa-square"></i> Square · 1080×1080
+                                                <small class="text-muted d-block ms-4">Instagram feed · Mastodon</small>
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item"
+                                               href="{{ url_for('api.alert_detail_image', alert_id=alert.id, ratio='portrait') }}">
+                                                <i class="fas fa-mobile-alt"></i> Portrait · 1080×1350
+                                                <small class="text-muted d-block ms-4">Instagram 4:5 post</small>
+                                            </a>
+                                        </li>
+                                    </ul>
+                                </div>
                                 {% if alert.vtec_office and alert.vtec_etn is not none and alert.vtec_year is not none %}
                                 <a href="{{ url_for('alerts', vtec_office=alert.vtec_office, vtec_etn=alert.vtec_etn, vtec_year=alert.vtec_year) }}" class="btn btn-outline-success">
                                     <i class="fas fa-link"></i> View Full Event Chain

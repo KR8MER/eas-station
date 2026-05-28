@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import importlib.util
 import io
+import sys
 from pathlib import Path
 
 import pytest
@@ -36,6 +37,10 @@ _MODULE_PATH = Path(__file__).resolve().parent.parent / "app_utils" / "image_exp
 _spec = importlib.util.spec_from_file_location("image_export_under_test", _MODULE_PATH)
 assert _spec is not None and _spec.loader is not None
 image_export = importlib.util.module_from_spec(_spec)
+# Register before exec so ``@dataclass`` (Python 3.11+) can resolve the
+# defining module via ``sys.modules[cls.__module__]`` while the class body
+# is still being processed.
+sys.modules[_spec.name] = image_export
 _spec.loader.exec_module(image_export)
 
 
@@ -385,3 +390,67 @@ def test_short_local_dt_cross_day_includes_date():
     months = ("Jan", "Feb", "Mar", "Apr", "May", "Jun",
               "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
     assert any(m in out for m in months), out
+
+
+# ── Multi aspect-ratio output ───────────────────────────────────────────────
+@pytest.mark.parametrize("ratio,expected_size", [
+    ("landscape", (1200,  630)),
+    ("square",    (1080, 1080)),
+    ("portrait",  (1080, 1350)),
+])
+def test_generate_alert_image_aspect_ratio(ratio, expected_size):
+    alert = _FakeAlert()
+    alert.id = 99001 + hash(ratio) % 1000
+    alert.event = "Severe Thunderstorm Watch"
+    alert.severity = "Severe"
+    alert.description = (
+        "Severe thunderstorm activity expected. Hail and damaging wind "
+        "gusts possible. Stay weather-aware."
+    )
+    png = image_export.generate_alert_image(
+        alert, {}, None,
+        {"county_name": "Test County, OH"},
+        aspect_ratio=ratio,
+    )
+    assert png.startswith(b"\x89PNG")
+    img = Image.open(io.BytesIO(png))
+    assert img.size == expected_size, (
+        f"{ratio}: got {img.size}, expected {expected_size}"
+    )
+    assert img.mode == "RGBA"
+    # Outer corners should still be transparent across every layout.
+    assert img.getpixel((0, 0))[3] == 0
+    assert img.getpixel((expected_size[0] - 1, expected_size[1] - 1))[3] == 0
+
+
+def test_generate_alert_image_unknown_ratio_falls_back_to_landscape():
+    """Unknown aspect-ratio names must not crash — they fall back to the
+    Facebook-card default so a typo in a query string still ships
+    something useful."""
+    alert = _FakeAlert()
+    alert.event = "Frost Advisory"
+    png = image_export.generate_alert_image(
+        alert, {}, None,
+        {"county_name": "Test County, OH"},
+        aspect_ratio="not-a-real-ratio",
+    )
+    img = Image.open(io.BytesIO(png))
+    assert img.size == (1200, 630)
+
+
+def test_layout_presets_are_consistent():
+    """Each preset's map_rect and info_rect should fit inside the canvas
+    and sit below the header / above the footer — guards against typos
+    in the layout table."""
+    for name, lay in image_export._LAYOUTS.items():
+        assert lay.width > 0 and lay.height > 0, name
+        # Map rect must fit inside the canvas.
+        mx, my, mw, mh = lay.map_rect
+        assert mx >= 0 and my >= lay.header_h, name
+        assert mx + mw <= lay.width, name
+        assert my + mh <= lay.height - lay.footer_h, name
+        # Info rect must fit inside the canvas.
+        ix, iy, iw, ih = lay.info_rect
+        assert ix >= 0 and iy >= lay.header_h, name
+        assert ix + iw <= lay.width, name
+        assert iy + ih <= lay.height - lay.footer_h, name
