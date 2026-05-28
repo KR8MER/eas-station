@@ -670,6 +670,31 @@ def test_webp_is_smaller_than_png_for_same_content():
     )
 
 
+def test_render_map_accepts_custom_dimensions():
+    """Rendering the map at non-default dimensions (e.g. Story's
+    1080×800 slot) should produce an image of the requested size — and
+    not crash on the polygon-stroke scaling math."""
+    geom = {
+        "type": "Polygon",
+        "coordinates": [[
+            [-83.6, 41.0], [-83.0, 41.0], [-82.6, 41.4],
+            [-83.1, 41.7], [-83.6, 41.0],
+        ]],
+    }
+    theme = image_export._resolve_theme("SEVERE THUNDERSTORM WATCH", "severe")
+    # Stub the tile fetch so the test doesn't touch the network.
+    original_fetch = image_export._fetch_tile
+    image_export._fetch_tile = lambda *a, **k: Image.new("RGB", (256, 256), (60, 60, 60))
+    try:
+        for w, h in ((582, 490), (1080, 540), (1080, 800)):
+            img = image_export._render_map(
+                geom, "severe", theme=theme, map_w=w, map_h=h,
+            )
+            assert img.size == (w, h), (w, h, img.size)
+    finally:
+        image_export._fetch_tile = original_fetch
+
+
 def test_long_event_name_fits_without_clipping():
     """A long event name on the Story layout must not run off-canvas or
     crash into the wordmark — shrink-to-fit picks a smaller title

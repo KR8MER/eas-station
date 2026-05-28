@@ -1831,6 +1831,17 @@ def _render_map(geom: Dict, severity: str,
     elif gtype == 'MultiPolygon':
         rings = [r for poly in raw_coords for r in poly]
 
+    # Stroke widths scale with the map's smallest dimension so the
+    # affected polygon reads cleanly on larger canvases (Story, Portrait)
+    # where the fixed thin stroke would otherwise look like a thread.
+    # Reference is 490 px (landscape map height), the size the original
+    # 5/3/9 px stroke values were tuned against.
+    stroke_scale = max(1.0, min(map_w, map_h) / 490.0)
+    glow_w   = max(9,  int(round(9 * stroke_scale)))
+    glow_r   = max(6,  int(round(6 * stroke_scale)))
+    casing_w = max(5,  int(round(5 * stroke_scale)))
+    core_w   = max(3,  int(round(3 * stroke_scale)))
+
     # ── Polygon glow ──────────────────────────────────────────────────────
     # A blurred wider stroke sits behind the crisp outline so the affected
     # area "lifts" off the basemap and is unmistakable at thumbnail size.
@@ -1839,8 +1850,8 @@ def _render_map(geom: Dict, severity: str,
     for ring in rings:
         pts = _to_px(ring)
         if len(pts) >= 2:
-            gd.line(pts + [pts[0]], fill=(*alr_clr, 230), width=9)
-    glow = glow.filter(ImageFilter.GaussianBlur(radius=6))
+            gd.line(pts + [pts[0]], fill=(*alr_clr, 230), width=glow_w)
+    glow = glow.filter(ImageFilter.GaussianBlur(radius=glow_r))
 
     # Semi-transparent fill
     overlay = Image.new('RGBA', canvas.size, (0, 0, 0, 0))
@@ -1861,8 +1872,8 @@ def _render_map(geom: Dict, severity: str,
         pts = _to_px(ring)
         if len(pts) >= 2:
             closed = pts + [pts[0]]
-            od.line(closed, fill=(255, 255, 255), width=5)
-            od.line(closed, fill=alr_clr,         width=3)
+            od.line(closed, fill=(255, 255, 255), width=casing_w)
+            od.line(closed, fill=alr_clr,         width=core_w)
 
     # Storm motion overlay (new cone + tapered arrow + callout)
     if storm_motion:
