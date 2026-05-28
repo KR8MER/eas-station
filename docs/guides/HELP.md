@@ -26,9 +26,9 @@ Welcome to the operator help guide for the NOAA CAP Emergency Alert System (EAS)
 3. Check **System Health** for CPU, memory, disk, receiver, and audio pipeline heartbeat metrics.
 
 ### Reviewing Compliance & Weekly Tests
-- Navigate to **Compliance** (`/admin/compliance`) for a consolidated view of received versus relayed alerts, Required Weekly Tests, and background worker activity.
+- Navigate to **Compliance** (`/admin/compliance`) for a consolidated view of CAP receipts, CAP→SAME relays, off-air decoded broadcasts (from RF/stream receivers), manual activations, Required Weekly Tests, and background worker activity.
 - Receiver health summaries, audio output heartbeat checks, and recent activity timelines pull directly from `app_core/system_health.py` and `app_core/eas_storage.py`.
-- Export CSV or PDF compliance logs from the buttons at the top of the page to generate FCC-ready documentation.
+- Export CSV or PDF compliance logs from the buttons at the top of the page to generate FCC-ready documentation. Each log entry carries the Part 11 identity fields — originator code (ORG), event code (EEE), location codes (PSSCCC), station identifier (LLLLLLLL), issue and purge times, and the action taken — per 47 CFR §§ 11.35(a) and 11.54(a)(3).
 
 ### Managing Boundaries and Alerts
 - Use the **Boundaries** module to upload county, district, or custom GIS polygons.
