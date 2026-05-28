@@ -12,7 +12,7 @@ The Broadcast Builder walks you through constructing a complete EAS SAME header 
 
 ### Opening the Broadcast Builder
 
-Click **Broadcast Builder** in the top navigation bar (requires login). The builder is available at `/broadcast-builder`.
+Click **Broadcast Builder** in the top navigation bar (requires login). The builder is served by the `eas` blueprint and lives at `/eas/`.
 
 ---
 

@@ -269,9 +269,8 @@ Click **Disconnect**, then **Connect** again to apply the new settings. Tailscal
 ## Related Documentation
 
 - [HTTPS Setup](HTTPS_SETUP.md) — Configuring SSL/TLS for the web interface
-- [Security Features](../security/SECURITY_FEATURES.md) — Overview of EAS Station™ security
+- [Security Guide](../security/SECURITY.md) — Overview of EAS Station™ security and best practices
 - [Firewall Requirements](../troubleshooting/FIREWALL_REQUIREMENTS.md) — Network port requirements
-- [Security Guide](../security/SECURITY.md) — Security best practices
 
 ---
 

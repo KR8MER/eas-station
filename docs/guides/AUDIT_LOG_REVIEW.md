@@ -129,7 +129,7 @@ grep "FAILED_LOGIN" /var/log/eas-station/security.log | \
 
 ## fail2ban Integration
 
-The security log is designed for fail2ban integration to automatically block attacking IPs at the firewall level. See [Security Features](../security/SECURITY_FEATURES.md) for fail2ban configuration instructions.
+The security log is designed for fail2ban integration to automatically block attacking IPs at the firewall level. See the [Security Guide](../security/SECURITY.md) for fail2ban configuration instructions.
 
 ---
 

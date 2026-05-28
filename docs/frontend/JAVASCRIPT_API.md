@@ -1,8 +1,24 @@
 # 🚀 EAS Station™ JavaScript API Reference
 
+> **⚠️ Reality check (May 2026):** Large parts of this document describe a planned/aspirational API surface that is not yet implemented. Treat this file as design intent, not current behaviour. The modules that are actually shipping today live under `static/js/core/` and expose the following globals:
+>
+> | Global | File | Purpose |
+> |---|---|---|
+> | `window.EASApi` | `static/js/core/api.js` | CSRF-aware `fetch` wrapper |
+> | `window.EASWebSocket` | `static/js/core/websocket.js` | Socket.IO subscribe + polling fallback |
+> | `window.EASHealth` | `static/js/core/health.js` | Health dashboard updates |
+> | `window.EASAlertWatch` | `static/js/core/alert-watch.js` | Live alert subscription |
+> | `window.EASUtils` | `static/js/core/utils.js` | `escapeHtml`, common helpers |
+> | `window.EASUnits` | `static/js/core/units.js` | Unit conversions (mph/km/h, °F/°C, …) |
+> | `window.EASVisualEffects` | `static/js/visual-effects.js` | Page chrome animations |
+> | `window.EAS_GPS_PALETTE` | `static/js/gps_constellation_palette.js` | GPS chart colour palette |
+> | `window.EAS_EVENT_CODES`, `EAS_FIPS_TREE`, `EAS_FIPS_LOOKUP`, … | `static/js/admin/core.js` | Admin-page configuration globals |
+>
+> Modules below referenced as `EASForm`, `EASTable`, `EASChart`, `EASMap`, `EASModal`, `EASSSE`, `EASTheme`, `EASNotifications`, `EASDate`, `EASString`, `EASValidation`, `EASStorage`, and `EASEvents` are **not implemented**. Anything in the sections beneath this banner that depends on them is forward-looking documentation only.
+
 ## Overview
 
-The EAS Station™ frontend includes a comprehensive JavaScript API for interacting with backend services, managing UI state, and handling real-time updates. This document provides complete reference documentation for all available APIs and modules.
+The EAS Station™ frontend includes a JavaScript API for interacting with backend services, managing UI state, and handling real-time updates. This document is the long-form design reference — see the banner above for what actually ships today.
 
 ## 📋 Table of Contents
 

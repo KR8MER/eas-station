@@ -1,5 +1,7 @@
 # API Key Management
 
+> **⚠️ Status (May 2026): planned, not yet implemented.** API key authentication, the `X-API-Key` header, the `/admin/api-keys` UI, and the per-key rate-limiting layer described in this document are part of the planned external-integration surface and are **not currently shipped**. The codebase today has no `APIKey` model, no `/admin/api-keys` route, and no `X-API-Key` middleware. Until those land, programmatic access to EAS Station™ requires reusing an authenticated session cookie (and CSRF token) from a logged-in user, or wiring your script to the same login flow a browser uses. This document is kept as the design reference for the feature.
+
 EAS Station™ provides a REST API accessible via cryptographically secure API keys. API keys allow external tools, scripts, and integrations to query alert data, system status, and perform management operations without using a web browser session.
 
 ---

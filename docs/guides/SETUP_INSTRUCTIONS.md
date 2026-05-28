@@ -141,5 +141,4 @@ Clear error messages guide you to correct any issues.
 ## Getting Help
 
 - **GitHub Issues**: https://github.com/KR8MER/eas-station/issues
-- **Documentation**: See `docs/` directory
-- **Setup Wizard Docs**: See `docs/SETUP_WIZARD.md`
+- **Documentation**: See the `docs/` directory (start with [`docs/README.md`](../README.md))

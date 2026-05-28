@@ -128,8 +128,9 @@ The installer now collects **all configuration during installation** using blue/
     - `eas-station-gps.service` - GPS manager + trends (port 5103)
     - `eas-station-displays.service` - OLED / VFD / LED rendering (port 5104)
     - `eas-station-gpio.service` - relays + alert indicators (port 5105)
-  - `eas-station-noaa-poller.service` - NOAA alerts
-  - `eas-station-ipaws-poller.service` - IPAWS alerts
+  - `eas-station-poller.service` - Unified alert poller (NOAA + IPAWS)
+  - `eas-station-hwsetup.service` - Hardware setup helper (oneshot, runs at boot)
+  - `eas-station-postal.service` - Optional local Postfix mail server
 - Reloads systemd daemon
 - Enables services for auto-start on boot
 

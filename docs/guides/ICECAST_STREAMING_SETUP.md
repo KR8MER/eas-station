@@ -75,7 +75,7 @@ ICECAST_ADMIN_PASSWORD=your-admin-password
 
 ## Stream Profiles (Mount Points)
 
-Each audio source in EAS Station™ can be assigned to a separate Icecast mount point. Navigate to **Admin → Stream Profiles** to manage them.
+Each audio source in EAS Station™ can be assigned to a separate Icecast mount point. Navigate to **Settings → Stream Profiles** (`/settings/stream-profiles`) to manage them.
 
 ### Default Mount Points
 
@@ -86,7 +86,7 @@ Each audio source in EAS Station™ can be assigned to a separate Icecast mount 
 
 ### Creating a New Stream Profile
 
-1. Go to **Admin → Stream Profiles → Add Profile**.
+1. Go to **Settings → Stream Profiles → Add Profile** (`/settings/stream-profiles`).
 2. Configure:
    - **Mount Point** — URL path (e.g., `/my-stream`)
    - **Codec** — MP3, OGG Vorbis, or PCM
@@ -124,7 +124,7 @@ Or open the URL directly in any Icecast-compatible player (Winamp, foobar2000, e
 
 ### EAS Station™ Audio Monitoring Page
 
-The built-in audio monitoring page at `/admin/audio` displays:
+The built-in audio monitoring page at `/admin/audio-sources` displays:
 - Live VU meters for each mount point
 - Stream status (connected/disconnected)
 - Listener count

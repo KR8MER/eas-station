@@ -25,12 +25,12 @@ Raspberry Pi 4 systems remain compatible for labs but no longer represent the do
 
 ## Mission and Scope
 - **Primary Goal:** Provide emergency communications teams with automated CAP-to-EAS workflow, from alert ingestion through broadcast verification, with complete compliance documentation.
-- **Drop-In Replacement Roadmap:** Implement the nine requirement areas in [`docs/roadmap/dasdec3-feature-roadmap.md`](../roadmap/dasdec3-feature-roadmap)—baseband capture, deterministic playout[...]
-- **Deployment Model:** Container-first architecture designed for on-premise or field deployments with external PostgreSQL/PostGIS database service.
+- **Drop-In Replacement Roadmap:** Targeting parity with commercial encoders across baseband capture, deterministic playout[...]
+- **Deployment Model:** Bare-metal systemd architecture for Raspberry Pi or x86 Linux nodes, with a PostgreSQL/PostGIS database service that may be local or external.
 - **Operational Focus:** Multi-source alert aggregation, automatic SAME broadcast generation, SDR-based verification, spatial boundary awareness, and audit trail management.
 
 ## Current Development Status
-See the **[Master Roadmap](../roadmap/dasdec3-feature-roadmap)** for detailed progress on all nine requirement areas, including completed features like audio ingest, security controls, and analyti[...]
+See the [Changelog](CHANGELOG) for detailed progress and recent releases, including completed features like audio ingest, security controls, and analyti[...]
 
 ## Core Services
 
@@ -40,24 +40,24 @@ See the **[Master Roadmap](../roadmap/dasdec3-feature-roadmap)** for detailed pr
 The application combines open-source tooling and optional cloud integrations. Versions below match the pinned dependencies in `requirements.txt` unless noted otherwise.
 
 ### Application Framework
-- Python 3.11 runtime (compatible with Debian bookworm SoapySDR bindings)
-- Flask 3.0.3 web framework
-- Werkzeug 3.0.6 WSGI utilities
+- Python 3.13 runtime (compatible with current Debian/Raspberry Pi OS SoapySDR bindings)
+- Flask 3.1.2 web framework
+- Werkzeug 3.1.4 WSGI utilities
 - Flask-SQLAlchemy 3.1.1 ORM integration
-- SQLAlchemy 2.0.44 ORM core
-- Gunicorn 23.0.0 production WSGI server
+- SQLAlchemy 2.0.45 ORM core
+- Gunicorn production WSGI server
 
 ### Data and Spatial Layer
-- PostgreSQL 15 with the PostGIS extension (external service)
-- GeoAlchemy2 0.15.2 for spatial ORM bindings
-- psycopg2-binary 2.9.10 PostgreSQL driver
+- PostgreSQL 17 with the PostGIS extension (external service)
+- GeoAlchemy2 0.18.1 for spatial ORM bindings
+- psycopg2-binary 2.9.11 PostgreSQL driver
 
 ### System and Utilities
-- requests 2.32.3 for CAP feed retrieval and IPAWS integration
-- pytz 2024.2 timezone utilities
-- psutil 6.1.1 system health and receiver monitoring
-- python-dotenv 1.0.1 configuration loading
-- cryptography ≥ 46.0.5 — Ed25519 signing and SHA-256 hashing backing the tamper-evident `audit_logs` chain (see `app_core/auth/audit.py::AuditLogger.verify_chain`)
+- requests 2.32.5 for CAP feed retrieval and IPAWS integration
+- pytz 2025.2 timezone utilities
+- psutil 7.1.3 system health and receiver monitoring
+- python-dotenv 1.2.1 configuration loading
+- cryptography — Ed25519 signing and SHA-256 hashing backing the tamper-evident `audit_logs` chain (see `app_core/auth/audit.py::AuditLogger.verify_chain`)
 
 ### Front-End Tooling
 - Bootstrap 5 UI framework
@@ -89,7 +89,7 @@ EAS Station™ relies on publicly available geographic data to enable spatial fi
 - **NOAA National Weather Service** - Weather forecast zone boundaries and definitions
   - Public Domain federal data
 
-For complete attribution details, see [`dependency_attribution.md`](dependency_attribution).
+For complete attribution details, see the `## 📚 Attributions & Open-Source Credits` section of the repository [`README.md`](../../README).
 
 ## Governance and Support
 - **Issue Tracking:** Use GitHub issues for bug reports and feature requests.

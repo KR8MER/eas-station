@@ -133,8 +133,8 @@ sudo ufw status verbose
 # Allow HTTPS (web interface)
 sudo firewall-cmd --permanent --add-port=443/tcp
 
-# Allow HTTP redirect (optional, recommended)
-sudo firewall-cmd --permanent --add-port=8888/tcp
+# Allow HTTP redirect (port 80 → 443)
+sudo firewall-cmd --permanent --add-service=http
 
 # Allow Icecast streaming (optional, for public audio streams)
 sudo firewall-cmd --permanent --add-port=8001/tcp
@@ -150,8 +150,8 @@ sudo firewall-cmd --list-ports
 # Allow HTTPS (web interface)
 sudo iptables -A INPUT -p tcp --dport 443 -j ACCEPT
 
-# Allow HTTP redirect (optional, recommended)
-sudo iptables -A INPUT -p tcp --dport 8888 -j ACCEPT
+# Allow HTTP redirect (port 80 → 443)
+sudo iptables -A INPUT -p tcp --dport 80 -j ACCEPT
 
 # Allow Icecast streaming (optional, for public audio streams)
 sudo iptables -A INPUT -p tcp --dport 8001 -j ACCEPT
@@ -204,12 +204,12 @@ This error indicates nginx cannot connect to the Flask backend (port 5000). Comm
 
 ### Symptom: Cannot access web interface externally
 
-1. **Check firewall rules** - Ensure ports 443 and 8888 are open
+1. **Check firewall rules** - Ensure ports 443 and 80 are open
 2. **Check cloud security groups** - Verify inbound rules allow traffic
 3. **Test local connectivity first**:
    ```bash
    curl -k https://localhost
-   curl http://localhost:8888
+   curl http://localhost
    ```
 
 ### Symptom: Icecast streams not accessible

@@ -558,7 +558,7 @@ If needed, rollback is simple:
 
 - [System Architecture](SYSTEM_ARCHITECTURE.md)
 - [Theory of Operation](THEORY_OF_OPERATION.md)
-- [Audio Processing Architecture](AUDIO_PROCESSING_ARCHITECTURE.md)
+- [EAS Decoding Summary](EAS_DECODING_SUMMARY.md)
 - [EAS Monitoring README](../../app_core/audio/README_EAS_MONITORS.md)
 
 ### Code Files

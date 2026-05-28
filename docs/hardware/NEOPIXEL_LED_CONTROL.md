@@ -111,11 +111,7 @@ If the service does not run as root, add the capability or add `AmbientCapabilit
 
 From the VFD/hardware control dashboard at `/admin/hardware`, click **Test NeoPixel Strip** to cycle through all alert colors. This verifies that wiring and software are working without waiting for a live alert.
 
-Via command line:
-
-```bash
-sudo python scripts/test_neopixel.py --pin 18 --count 30
-```
+From the running system you can also drive the strip directly through the GPIO service — see the **Test NeoPixel Strip** action on `/admin/hardware`, or call `/api/gpio/neopixel/test` from an authenticated session.
 
 ---
 

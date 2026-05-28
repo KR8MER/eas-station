@@ -75,7 +75,7 @@ The interface uses a sophisticated color system with semantic meaning:
 #### Configuration Pages
 - **Admin Panel** (`admin.html`) - Full system administration
 - **County Boundaries** (`admin/county_boundaries`) - IPAWS SAME code coverage map data
-- **Radio Settings** (`settings/radio/`) - Receiver configuration
+- **Radio Settings** (`/admin/radio`) - Receiver configuration
 - **User Management** (`admin/users/`) - Access control
 
 #### Operational Pages
