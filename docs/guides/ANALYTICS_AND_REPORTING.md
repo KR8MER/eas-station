@@ -123,20 +123,40 @@ GET /api/analytics/anomalies
 
 ### PDF Compliance Reports
 
-Navigate to **Compliance** (`/admin/compliance`) to generate FCC-ready documentation:
+Navigate to **Compliance** (`/admin/compliance`) to generate FCC-ready
+documentation:
 
 1. Select a date range using the date pickers.
-2. Click **Export PDF** to download a formatted compliance report including:
-   - Alert receipt log with timestamps
-   - Required Weekly Test (RWT) record
-   - System health summary
-   - Broadcast history
+2. Click **Export PDF** to download the **EAS Part 11 Compliance Log**, a
+   paginated landscape report whose columns satisfy 47 CFR §§ 11.35(a) and
+   11.54(a)(3):
+   - Timestamp (local / UTC)
+   - Category — `received` (CAP feeds), `relayed` (CAP→SAME), `off-air`
+     (RF/stream-decoded EAS), or `manual`
+   - Originator (ORG, 3-char SAME code + descriptive name)
+   - Event Code (EEE)
+   - Event (plain-language name)
+   - FIPS Codes (PSSCCC list)
+   - Station ID (LLLLLLLL, the 8-char identifier per § 11.31)
+   - Action Taken (`Initiated` / `Relayed` / `Not relayed` / `Received` /
+     `Decode error`)
+   - Identifier (CAP URN or full SAME header)
+   - Details (issue/purge times, forwarding reason, severity/urgency, etc.)
+
+   Cells wrap to as many lines as needed, alternating row shading separates
+   entries, and the trailing summary block breaks the totals out by
+   category, originator, and action.
 
 ### CSV Export
 
-1. Go to **Alert History** (`/admin/alerts`).
-2. Apply any filters (date range, severity, event type).
-3. Click **Export CSV** to download the filtered alert list.
+The compliance log CSV (also exported from `/admin/compliance`) carries
+the same FCC Part 11 columns as the PDF: Timestamp, Category, Originator,
+Event Code, Event, FIPS Codes, Issue Time, Purge / Expires, Station ID,
+Identifier, Status, Action Taken, Action Reason, and a JSON `Details`
+blob for any category-specific metadata that did not get its own column.
+
+To export raw CAP/alert history instead, go to **Alert History**
+(`/admin/alerts`), apply filters, and click **Export CSV**.
 
 ### Statistics Tab
 
