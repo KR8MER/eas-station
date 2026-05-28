@@ -33,7 +33,7 @@ fingerprinting now live here exactly once.
 from __future__ import annotations
 
 import logging
-from typing import Callable, List, Optional, Sequence, Tuple
+from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -275,7 +275,11 @@ def detect_endec_mode(
     if not messages:
         return ENDEC_MODE_UNKNOWN
 
+    # EAS_STATION listed first so that on a vote tie it wins over the
+    # ENDECs whose terminator bytes (0x00 / 0xFF) overlap with the FSK
+    # silence floor.  max(...) returns the first key reaching the max.
     votes: dict = {
+        ENDEC_MODE_EAS_STATION:  0.0,
         ENDEC_MODE_DEFAULT:      0.0,
         ENDEC_MODE_NWS:          0.0,
         ENDEC_MODE_NWS_CRS:      0.0,
@@ -283,12 +287,28 @@ def detect_endec_mode(
         ENDEC_MODE_SAGE_3644:    0.0,
         ENDEC_MODE_SAGE_1822:    0.0,
         ENDEC_MODE_TRILITHIC:    0.0,
-        ENDEC_MODE_EAS_STATION:  0.0,
     }
 
-    # 1. Terminator byte votes — primary ENDEC discriminator
+    # 1. Terminator byte votes — primary ENDEC discriminator.
+    # Collapse repeated per-burst entries to the MAX run length seen for
+    # each byte value, so a single noise-corrupted run cannot dominate
+    # the vote and so legitimate fingerprints aren't double-counted
+    # across all three SAME bursts.  KR8MER's 3 × 0xA9 trill is a hard
+    # signature — when it appears with a clean run length, it wins
+    # outright (no other ENDEC emits 0xA9 bytes).
     if terminator_runs:
+        max_run_per_byte: Dict[int, int] = {}
         for byte_val, run_length in terminator_runs:
+            if run_length > max_run_per_byte.get(byte_val, 0):
+                max_run_per_byte[byte_val] = run_length
+
+        if max_run_per_byte.get(0xA9, 0) >= 3:
+            # KR8MER EAS Station fingerprint is deliberate and unambiguous;
+            # short-circuit the vote so 0x00/0xFF silence-floor evidence
+            # captured on neighbouring bursts can't override it.
+            return ENDEC_MODE_EAS_STATION
+
+        for byte_val, run_length in max_run_per_byte.items():
             if byte_val == 0x00:
                 # Null-byte terminator → NWS variants.
                 # Vote strength is proportional to run length, and the specific
@@ -490,6 +510,19 @@ class SAMEDemodulatorCore:
         self._all_terminator_runs: List[Tuple[int, int]] = []  # (byte_val, run_len) per burst
         self._leading_null_detected: bool = False  # 0x00 seen just before preamble
         self._prev_decoded_byte: Optional[int] = None  # last successfully decoded byte
+        # Cap captured terminator bytes per burst.  Real ENDECs append 1-3
+        # terminator bytes after each SAME burst; anything longer is the FSK
+        # noise floor (inter-burst silence decoded as all-mark 0xFF bytes,
+        # or sustained DC as 0x00) and must not pollute the fingerprint.
+        self._post_message_bytes_captured: int = 0
+        self._MAX_TERMINATOR_BYTES_PER_BURST = 8
+
+        # Absolute sample position of the bit currently being processed.
+        # Updated by process_samples() before each _handle_bit_event() call so
+        # that burst_sample_ranges reflect the actual position of each burst
+        # in the audio (not the end-of-chunk position, which broke gap timing
+        # on batch decodes where the whole file arrives in a single chunk).
+        self._current_sample_position: int = 0
 
         # Prefix buffer for cross-chunk continuity (streaming use)
         self._prefix = np.zeros(self.corr_len - 1, dtype=np.float32)
@@ -603,7 +636,12 @@ class SAMEDemodulatorCore:
             self.sphase = int(self._dll_state[2])
             self.lasts = int(self._dll_state[3])
 
+            # Chunk-relative sample indices in out_indices[] become absolute
+            # positions by adding the chunk start.  samples_processed already
+            # advanced to end-of-chunk above (line 520) so subtract num_samples.
+            chunk_start_sample = self.samples_processed - num_samples
             for k in range(emitted):
+                self._current_sample_position = chunk_start_sample + int(out_indices[k])
                 self._handle_bit_event(
                     int(out_lasts[k]),
                     float(out_confidences[k]),
@@ -658,6 +696,7 @@ class SAMEDemodulatorCore:
             if self._post_message_mode:
                 self._flush_terminator_run()
                 self._post_message_mode = False
+                self._post_message_bytes_captured = 0
                 self._update_endec_from_evidence()
             self.synced = True
             self.byte_counter = 0
@@ -694,12 +733,39 @@ class SAMEDemodulatorCore:
                             self._flush_terminator_run()
                             self._terminator_byte = byte_val
                             self._terminator_run = 1
+                        self._post_message_bytes_captured += 1
+
+                        # KR8MER EAS Station fingerprint is a precise 3 × 0xA9
+                        # trill.  Once it's captured, lock it in immediately —
+                        # any further 0xFF accumulated during inter-burst
+                        # silence (the FSK demod outputs mark bits when the
+                        # signal goes quiet) would corrupt the fingerprint
+                        # vote with bogus SAGE_DIGITAL_3644 evidence.
+                        eas_station_locked = (
+                            self._terminator_byte == 0xA9
+                            and self._terminator_run >= 3
+                        )
+
+                        # Real ENDEC terminator runs are 1-3 bytes.  Anything
+                        # longer is signal noise — cap at MAX_TERMINATOR_BYTES
+                        # so a long silence cannot accumulate hundreds of
+                        # 0xFF/0x00 bytes into a single huge run.
+                        if (
+                            eas_station_locked
+                            or self._terminator_run >= self._MAX_TERMINATOR_BYTES_PER_BURST
+                            or self._post_message_bytes_captured >= self._MAX_TERMINATOR_BYTES_PER_BURST
+                        ):
+                            self._flush_terminator_run()
+                            self._post_message_mode = False
+                            self._post_message_bytes_captured = 0
+                            self._update_endec_from_evidence()
                     elif byte_val in (10, 13):
                         pass  # Skip CR/LF - part of FCC Section 11.31 header encoding
                     else:
                         # Non-terminator byte ends post-message capture
                         self._flush_terminator_run()
                         self._post_message_mode = False
+                        self._post_message_bytes_captured = 0
                         self._update_endec_from_evidence()
                         if byte_val != self.PREAMBLE_BYTE:
                             self.synced = False
@@ -714,7 +780,7 @@ class SAMEDemodulatorCore:
                         # Both begin with their own preamble so synced=True here
                         # means we just came off a valid 0xAB preamble run.
                         self.in_message = True
-                        self._burst_start_sample = self.samples_processed
+                        self._burst_start_sample = self._current_sample_position
                         self.current_msg = [char]
                     elif self.in_message:
                         self.current_msg.append(char)
@@ -728,6 +794,7 @@ class SAMEDemodulatorCore:
                             self.bit_confidences = []
                             self._burst_start_sample = None
                             self._post_message_mode = True
+                            self._post_message_bytes_captured = 0
                             # Keep self.synced = True for terminator capture
                         elif len(self.current_msg) > self.MAX_MSG_LEN:
                             self._reset_message_state()
@@ -770,11 +837,12 @@ class SAMEDemodulatorCore:
 
         # Record burst timing
         if self._burst_start_sample is not None:
+            burst_end_sample = self._current_sample_position
             self.burst_sample_ranges.append(
-                (self._burst_start_sample, self.samples_processed)
+                (self._burst_start_sample, burst_end_sample)
             )
             self._burst_sample_history.append(
-                (self._burst_start_sample, self.samples_processed)
+                (self._burst_start_sample, burst_end_sample)
             )
             self._burst_start_sample = None
             if len(self._burst_sample_history) > 4:

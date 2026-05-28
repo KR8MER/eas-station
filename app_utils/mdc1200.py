@@ -942,11 +942,15 @@ def decode_mdc1200_from_samples(
     samples,
     sample_rate: int,
 ) -> Optional["MDC1200Packet"]:
-    """Demodulate MDC1200 FFSK from PCM audio and return the decoded packet.
+    """Demodulate MDC1200 FFSK from PCM audio and return the first decoded packet.
 
     Runs a Goertzel FSK demodulator at 1200 baud (mark = 1200 Hz,
     space = 1800 Hz) over the provided samples, searches for the MDC1200
-    preamble + sync word, and returns the decoded packet when found.
+    preamble + sync word, and returns the first decoded packet.
+
+    For audio containing multiple MDC1200 bursts (e.g. PTT-ID Pre at the
+    start of an EAS alert *and* PTT-ID Post at the end), use
+    :func:`decode_all_mdc1200_from_samples` to recover every packet.
 
     Both single-packet (26-byte) and double-packet (40-byte) frames are
     tried; double-packet is attempted first when enough bits are available.
@@ -960,13 +964,39 @@ def decode_mdc1200_from_samples(
         Decoded :class:`MDC1200Packet` on success, ``None`` if no valid
         MDC1200 frame is found in the audio.
     """
+    packets = decode_all_mdc1200_from_samples(samples, sample_rate)
+    return packets[0] if packets else None
+
+
+def decode_all_mdc1200_from_samples(
+    samples,
+    sample_rate: int,
+) -> List["MDC1200Packet"]:
+    """Demodulate MDC1200 FFSK from PCM audio and return every valid packet.
+
+    Mirrors :func:`decode_mdc1200_from_samples` but keeps searching past
+    the first sync match so multi-burst transmissions (PTT-ID Pre + Post,
+    or chained packets) are fully recovered.  After each successful
+    decode the cursor advances past the consumed frame; on a sync hit
+    that fails CRC the cursor advances one bit so the search continues
+    without looping.
+
+    Args:
+        samples: Audio samples as a list of floats or a numpy array.
+            May be int16-range or normalised − 1.0..1.0.
+        sample_rate: Sample rate in Hz.
+
+    Returns:
+        List of decoded :class:`MDC1200Packet`, in transmission order.
+        Empty list if no valid MDC1200 frame is found.
+    """
     try:
         sample_list = [float(s) for s in samples]
     except (TypeError, ValueError):
-        return None
+        return []
 
     if len(sample_list) < int(sample_rate / MDC1200_BAUD) * 4:
-        return None
+        return []
 
     # FSK demodulate: for each bit period, compare Goertzel power at the
     # mark (1200 Hz) and space (1800 Hz) carriers.  A stronger mark power
@@ -1011,16 +1041,7 @@ def decode_mdc1200_from_samples(
     _DOUBLE_BITS = (len(MDC1200_PREAMBLE) + len(MDC1200_SYNC) + _FEC_K * 2 + len(MDC1200_INTER_PACKET_PREAMBLE) + _FEC_K * 2) * 8
 
     if len(raw_bits) < _SINGLE_BITS:
-        return None
-
-    sync_result = find_sync_in_bits(raw_bits)
-    if sync_result is None:
-        return None
-    bit_offset, polarity = sync_result
-
-    frame_bits = raw_bits[bit_offset:]
-    if polarity:
-        frame_bits = [b ^ 1 for b in frame_bits]
+        return []
 
     def _bits_to_bytes(blist: List[int], n: int) -> Optional[List[int]]:
         if len(blist) < n * 8:
@@ -1036,22 +1057,64 @@ def decode_mdc1200_from_samples(
     _SINGLE_BYTES = _SINGLE_BITS // 8
     _DOUBLE_BYTES = _DOUBLE_BITS // 8
 
-    if len(frame_bits) >= _DOUBLE_BITS:
-        double_frame = _bits_to_bytes(frame_bits, _DOUBLE_BYTES)
-        if double_frame is not None:
+    packets: List["MDC1200Packet"] = []
+    cursor = 0
+    while cursor + _SINGLE_BITS <= len(raw_bits):
+        sync_result = find_sync_in_bits(raw_bits[cursor:])
+        if sync_result is None:
+            break
+        bit_offset, polarity = sync_result
+        sync_abs = cursor + bit_offset
+
+        frame_bits = raw_bits[sync_abs:]
+        if polarity:
+            frame_bits = [b ^ 1 for b in frame_bits]
+
+        packet: Optional["MDC1200Packet"] = None
+        consumed_bits = 0
+
+        # Try single-packet decode first.  Single-packet frames end with a
+        # 4-byte 0x00 post-preamble whose layout overlaps the start of a
+        # double-packet's inter-packet preamble; decoding the same audio as
+        # a double-packet "succeeds" for any single packet (with bogus
+        # packet-2 fields and crc2_ok=False) when the trailing audio is
+        # silence.  Preferring the single-packet path avoids that misread.
+        single_frame = _bits_to_bytes(frame_bits, _SINGLE_BYTES)
+        if single_frame is not None:
             try:
-                return decode_double_packet(double_frame)
+                packet = decode_packet(single_frame)
+                consumed_bits = _SINGLE_BITS
             except MDC1200DecodeError:
                 pass
 
-    single_frame = _bits_to_bytes(frame_bits, _SINGLE_BYTES)
-    if single_frame is not None:
-        try:
-            return decode_packet(single_frame)
-        except MDC1200DecodeError:
-            pass
+        # Only promote to a double-packet decode when (a) we have enough
+        # bits, AND (b) the recovered opcode/arg is a known double-packet
+        # operation.  This stops PTT-ID Pre / Post (single-packet ops)
+        # from being mis-promoted into a double-packet with target=0x0000.
+        if (
+            packet is not None
+            and len(frame_bits) >= _DOUBLE_BITS
+            and is_double_packet_op(packet.opcode, packet.arg)
+        ):
+            double_frame = _bits_to_bytes(frame_bits, _DOUBLE_BYTES)
+            if double_frame is not None:
+                try:
+                    double_packet = decode_double_packet(double_frame)
+                    if double_packet.crc_ok and double_packet.crc2_ok:
+                        packet = double_packet
+                        consumed_bits = _DOUBLE_BITS
+                except MDC1200DecodeError:
+                    pass
 
-    return None
+        if packet is not None:
+            packets.append(packet)
+            cursor = sync_abs + consumed_bits
+        else:
+            # Failed CRC at this sync candidate — advance past it so the
+            # search continues without re-locking onto the same offset.
+            cursor = sync_abs + 1
+
+    return packets
 
 
 def find_sync_in_bits(bits: Sequence[int]) -> Optional[Tuple[int, int]]:
@@ -1126,4 +1189,5 @@ __all__ = [
     "decode_double_packet",
     "find_sync_in_bits",
     "decode_mdc1200_from_samples",
+    "decode_all_mdc1200_from_samples",
 ]

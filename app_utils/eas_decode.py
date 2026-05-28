@@ -939,17 +939,37 @@ def _bits_to_text(bits: List[int]) -> Dict[str, object]:
                 end_bit = trimmed_positions[-1] + 8
                 burst_bit_ranges.append((start_bit, end_bit))
 
-    if char_positions:
+    # Scope frame counting to bits inside the detected SAME burst regions.
+    # The scan above starts at burst_positions[0] and runs to the end of the
+    # bit stream, so without scoping every 8-bit window of inter-burst
+    # silence, the audio message, the EOM gap, and any post-alert audio gets
+    # counted as a failed frame.  On a clean signal that inflates
+    # frame_errors and drags the headline confidence down by 20% via the
+    # error-rate penalty in _calculate_adjusted_confidence().
+    def _bit_in_burst_ranges(pos: int) -> bool:
+        if not burst_bit_ranges:
+            return True
+        for start_bit, end_bit in burst_bit_ranges:
+            if start_bit <= pos < end_bit:
+                return True
+        return False
+
+    if burst_bit_ranges:
+        relevant_chars = [pos for pos in char_positions if _bit_in_burst_ranges(pos)]
+        relevant_errors = [pos for pos in error_positions if _bit_in_burst_ranges(pos)]
+        frame_errors = len(relevant_errors)
+        frame_count = len(relevant_chars) + frame_errors
+    elif char_positions:
         first_bit = char_positions[0]
         last_bit = char_positions[-1]
         relevant_errors = [
             pos for pos in error_positions if first_bit <= pos <= last_bit
         ]
+        frame_errors = len(relevant_errors)
+        frame_count = len(characters) + frame_errors
     else:
-        relevant_errors = list(error_positions)
-
-    frame_errors = len(relevant_errors)
-    frame_count = len(characters) + frame_errors
+        frame_errors = len(error_positions)
+        frame_count = len(characters) + frame_errors
 
     metadata = _process_decoded_text(
         raw_text,
