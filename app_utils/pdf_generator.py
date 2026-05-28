@@ -636,6 +636,29 @@ def generate_table_pdf(
                     # taller than a whole page would otherwise loop forever).
                     if rows_on_page > 0 and y - row_height < margin_bottom:
                         break
+
+                    # Alternating row shading + a hairline divider below the
+                    # row.  Path/fill operators have to live outside the
+                    # BT/ET text block, so we break out, draw, then resume.
+                    band_top = y + line_height - 3
+                    band_bottom = band_top - row_height
+                    band_h = band_top - band_bottom
+                    band_w = page_w - 2 * margin_x
+                    content.append("ET")
+                    if idx % 2 == 1:
+                        # Light gray fill on every other row (no stroke).
+                        content.append("q 0.94 g")
+                        content.append(
+                            f"{margin_x:.2f} {band_bottom:.2f} "
+                            f"{band_w:.2f} {band_h:.2f} re f Q"
+                        )
+                    # Hairline divider between this row and the next.
+                    content.append("q 0.80 G 0.3 w")
+                    content.append(
+                        f"{margin_x:.2f} {band_bottom:.2f} m "
+                        f"{page_w - margin_x:.2f} {band_bottom:.2f} l S Q"
+                    )
+                    content.append("BT")
                     for i, lines in enumerate(wrapped_cells):
                         for line_no, line_val in enumerate(lines):
                             emit_text(
