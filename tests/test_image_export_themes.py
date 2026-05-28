@@ -323,6 +323,21 @@ def test_humanize_caps_text_does_not_uppercase_common_words():
     assert " ME " not in out
 
 
+def test_humanize_caps_text_no_false_uppercase_after_sentence_comma():
+    """Sentence-comma + common-word patterns ("…outdoors, in a vehicle")
+    must not be confused with the "City, ST" state-code pattern."""
+    src = (
+        "IF YOU ARE OUTDOORS, IN A MOBILE HOME, OR IN A VEHICLE, MOVE "
+        "TO THE NEAREST SHELTER."
+    )
+    out = image_export._humanize_caps_text(src)
+    # These would have been mis-shouted by a too-permissive lookahead.
+    assert ", in a mobile home" in out
+    assert ", or in a vehicle" in out
+    assert "IN" not in out.split()  # no bare "IN" tokens
+    assert "OR" not in out.split()
+
+
 def test_humanize_caps_text_preserves_acronyms():
     src = "ISSUED BY NWS CLEVELAND AT 6 PM EDT."
     out = image_export._humanize_caps_text(src)

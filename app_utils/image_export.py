@@ -825,15 +825,18 @@ def _humanize_caps_text(text: str) -> str:
     # State codes are intentionally NOT in the global preserve set — too
     # many overlap with common English words (IN, OR, ME, HI, OK, PA, MA,
     # LA, DE, …) so a blanket uppercase would turn "in effect" into
-    # "IN effect".  Only uppercase them when they immediately follow a
-    # comma + space, the unambiguous "City, ST" pattern NWS uses for
-    # affected areas.
+    # "IN effect".  Only uppercase them when they appear at the END of a
+    # comma-prefixed list item — i.e. the unambiguous "City, ST" pattern
+    # closed by a list separator (``, ;``), sentence punctuation
+    # (``. ! ?``), or end-of-string.  Crucially the lookahead does NOT
+    # match a trailing space, since ``, in a vehicle`` and ``, or in a``
+    # would otherwise look identical to ``, OH `` and get mis-shouted.
     def _state_code_after_comma(m: 're.Match[str]') -> str:
         prefix, code = m.group(1), m.group(2)
         return prefix + code.upper() if code.upper() in _US_STATE_CODES else m.group(0)
 
     out = re.sub(
-        r'(,\s+)([A-Za-z]{2})(?=[\s.,;)\]!?]|$)',
+        r'(,\s+)([A-Za-z]{2})(?=[.,;:!?]|$)',
         _state_code_after_comma,
         out,
     )
@@ -1786,10 +1789,18 @@ def _render_map(geom: Dict, severity: str,
 
 # ─── Drawing helpers ─────────────────────────────────────────────────────────
 def _section_header(draw: ImageDraw.ImageDraw, fonts: Dict,
-                    alr_clr: Tuple, ix: int, iy: int, iw: int, title: str) -> int:
-    """Draw a coloured section header; return y after it."""
+                    alr_clr: Tuple, ix: int, iy: int, iw: int, title: str,
+                    *, bg: Optional[Tuple[int, int, int]] = None) -> int:
+    """Draw a coloured section header; return y after it.
+
+    When *bg* is provided it overrides the default ``alr_clr``-derived
+    fill — used by the instruction/action band to flag safety guidance
+    with a warning-yellow header that stands apart from the neutral
+    headline / description sections.
+    """
     h = 20
-    draw.rectangle((ix, iy, ix + iw, iy + h), fill=_darken(alr_clr, 0.25))
+    fill = bg if bg is not None else _darken(alr_clr, 0.25)
+    draw.rectangle((ix, iy, ix + iw, iy + h), fill=fill)
     draw.text((ix + 7, iy + (h - _th(fonts['label'], title)) // 2),
               title, font=fonts['label'], fill=WHITE)
     return iy + h + 2
@@ -2579,10 +2590,23 @@ def _draw_description(draw: ImageDraw.ImageDraw, fonts: Dict, alr_clr: Tuple,
     return iy + 4
 
 
+_INSTR_ACCENT = (255, 193, 7)  # warning-yellow accent bar
+
+
 def _draw_instruction(draw: ImageDraw.ImageDraw, fonts: Dict, alr_clr: Tuple,
                       ix: int, iy: int, iw: int, bot: int,
                       alert: Any) -> int:
-    """Render safety/action instructions with a caution-coloured accent."""
+    """Render safety guidance with a stronger visual treatment.
+
+    The CAP ``instruction`` field is the one thing on a share card a
+    reader can act on — "move to an interior room", "shelter in
+    place", "evacuate if instructed" — so it gets a warning-yellow
+    section header (visually distinct from the neutral event-coloured
+    headers used for HEADLINE / DESCRIPTION) plus a thicker accent bar
+    on each row.  The header reads "ACTION" instead of "INSTRUCTIONS"
+    because "ACTION" is shorter and imperative — it tells the reader
+    *what this section is for*, not just *what's in it*.
+    """
     instr = (getattr(alert, 'instruction', '') or '').strip()
     if not instr or iy + 30 > bot:
         return iy
@@ -2601,22 +2625,28 @@ def _draw_instruction(draw: ImageDraw.ImageDraw, fonts: Dict, alr_clr: Tuple,
     if iy + 22 + row_h > bot:
         return iy
 
-    iy = _section_header(draw, fonts, alr_clr, ix, iy, iw, 'INSTRUCTIONS')
+    # Warning-coloured section header so the action band reads as
+    # distinct from the neutral headline / description sections.  Using
+    # a deeply-darkened amber preserves WCAG-style contrast against the
+    # white label text.
+    iy = _section_header(
+        draw, fonts, alr_clr, ix, iy, iw, 'ACTION',
+        bg=_darken(_INSTR_ACCENT, 0.55),
+    )
 
-    max_w = iw - 18  # leave room for accent bar
+    accent_w = 4  # was 3 — thicker bar reads better at thumbnail size
+    max_w = iw - 12 - accent_w
     # Fill remaining vertical space instead of capping at 4 lines.
     avail_lines = max(1, (bot - iy) // (row_h + 1))
     lines = _wrap_text(font, instr, max_w, max_lines=avail_lines)
-
-    _INSTR_ACCENT = (255, 193, 7)  # warning-yellow accent bar
 
     for ltext in lines:
         if iy + row_h > bot:
             break
         _card_row(draw, ix, iy, iw, row_h)
-        # Yellow accent bar on the left edge
-        draw.rectangle((ix, iy, ix + 3, iy + row_h), fill=_INSTR_ACCENT)
-        draw.text((ix + 10, iy + (row_h - _th(font, ltext)) // 2),
+        # Warning-yellow accent bar on the left edge.
+        draw.rectangle((ix, iy, ix + accent_w, iy + row_h), fill=_INSTR_ACCENT)
+        draw.text((ix + accent_w + 7, iy + (row_h - _th(font, ltext)) // 2),
                   ltext, font=font, fill=_TEXT)
         iy += row_h + 1
 
