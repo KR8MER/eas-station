@@ -115,6 +115,10 @@ class _Layout:
     corner_r: int = 18
     # Inner map rounded-corner radius (0 for full-bleed map).
     map_corner_r: int = 14
+    # Title font size (px).  Default 30 matches the original landscape
+    # design; portrait / story preset values bump this so the headline
+    # still reads near-fullscreen on a phone.
+    title_size: int = 30
 
 
 # Facebook / Twitter / LinkedIn open-graph cards — horizontal split with
@@ -127,38 +131,45 @@ _LAYOUT_LANDSCAPE = _Layout(
     header_scrim_w=560,
     show_vertical_divider=True,
     map_corner_r=14,
+    title_size=30,
 )
 
 # Instagram / Mastodon / generic square feed card — stacked layout with
-# header → map → info → footer down the centre line.
+# header → map → info → footer down the centre line.  Header gets a
+# slightly taller bar + bigger title to balance the larger canvas.
 _LAYOUT_SQUARE = _Layout(
     width=1080, height=1080,
-    header_h=110, footer_h=60,
-    map_rect=(0, 110, 1080, 540),
-    info_rect=(16, 658, 1048, 358),
+    header_h=118, footer_h=60,
+    map_rect=(0, 118, 1080, 540),
+    info_rect=(16, 666, 1048, 354),
     header_scrim_w=600,
     map_corner_r=0,
+    title_size=36,
 )
 
 # Instagram portrait (4:5) — taller info panel, slightly shorter map.
 _LAYOUT_PORTRAIT = _Layout(
     width=1080, height=1350,
-    header_h=120, footer_h=60,
-    map_rect=(0, 120, 1080, 540),
-    info_rect=(16, 668, 1048, 615),
+    header_h=125, footer_h=60,
+    map_rect=(0, 125, 1080, 540),
+    info_rect=(16, 673, 1048, 612),
     header_scrim_w=600,
     map_corner_r=0,
+    title_size=38,
 )
 
 # Instagram / TikTok / Snapchat Stories & Reels (9:16) — phone-first
-# vertical layout with a tall info panel for longer descriptions.
+# vertical layout with a tall info panel for longer descriptions.  Title
+# is roughly 60% larger than landscape so the headline still reads at
+# arm's-length on a phone, where Stories are typically viewed.
 _LAYOUT_STORY = _Layout(
     width=1080, height=1920,
-    header_h=140, footer_h=70,
-    map_rect=(0, 140, 1080, 800),
-    info_rect=(16, 950, 1048, 894),
+    header_h=160, footer_h=70,
+    map_rect=(0, 160, 1080, 800),
+    info_rect=(16, 970, 1048, 880),
     header_scrim_w=620,
     map_corner_r=0,
+    title_size=48,
 )
 
 _LAYOUTS: Dict[str, _Layout] = {
@@ -533,6 +544,30 @@ def _theme_supports_storm_motion(theme: _Theme) -> bool:
 _FONT_CACHE: Optional[Dict[str, ImageFont.FreeTypeFont]] = None
 
 
+_FONT_REG_PATHS = [
+    '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+    '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
+    '/usr/share/fonts/truetype/freefont/FreeSans.ttf',
+]
+_FONT_BOLD_PATHS = [
+    '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+    '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
+    '/usr/share/fonts/truetype/freefont/FreeSansBold.ttf',
+]
+
+
+def _load_font(paths: List[str], size: int) -> ImageFont.FreeTypeFont:
+    """Load the first TrueType path that exists at *size* — or Pillow's
+    built-in default if none are available.  Result is not cached here;
+    callers should memoise as appropriate."""
+    for p in paths:
+        try:
+            return ImageFont.truetype(p, size)
+        except (IOError, OSError):
+            pass
+    return ImageFont.load_default(size=size)
+
+
 def _load_fonts() -> Dict[str, ImageFont.FreeTypeFont]:
     """Return a dict of sized fonts; falls back to Pillow built-in.
 
@@ -545,37 +580,30 @@ def _load_fonts() -> Dict[str, ImageFont.FreeTypeFont]:
     if _FONT_CACHE is not None:
         return _FONT_CACHE
 
-    _reg = [
-        '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
-        '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
-        '/usr/share/fonts/truetype/freefont/FreeSans.ttf',
-    ]
-    _bold = [
-        '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
-        '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
-        '/usr/share/fonts/truetype/freefont/FreeSansBold.ttf',
-    ]
-
-    def _load(paths: List[str], size: int) -> ImageFont.FreeTypeFont:
-        for p in paths:
-            try:
-                return ImageFont.truetype(p, size)
-            except (IOError, OSError):
-                pass
-        return ImageFont.load_default(size=size)
-
     _FONT_CACHE = {
-        'title':  _load(_bold, 30),
-        'head':   _load(_bold, 18),
-        'bold':   _load(_bold, 15),
-        'normal': _load(_reg,  14),
-        'small':  _load(_reg,  12),
-        'tiny':   _load(_reg,  11),
-        'label':  _load(_bold, 11),
-        'threat': _load(_bold, 15),
-        'mono':   _load(_reg,  11),
+        'title':  _load_font(_FONT_BOLD_PATHS, 30),
+        'head':   _load_font(_FONT_BOLD_PATHS, 18),
+        'bold':   _load_font(_FONT_BOLD_PATHS, 15),
+        'normal': _load_font(_FONT_REG_PATHS,  14),
+        'small':  _load_font(_FONT_REG_PATHS,  12),
+        'tiny':   _load_font(_FONT_REG_PATHS,  11),
+        'label':  _load_font(_FONT_BOLD_PATHS, 11),
+        'threat': _load_font(_FONT_BOLD_PATHS, 15),
+        'mono':   _load_font(_FONT_REG_PATHS,  11),
     }
     return _FONT_CACHE
+
+
+# Per-size title-font cache so each layout's bumped headline only pays
+# the truetype-load cost once across the process lifetime.
+_TITLE_FONT_CACHE: Dict[int, ImageFont.FreeTypeFont] = {}
+
+
+def _title_font_for(size: int) -> ImageFont.FreeTypeFont:
+    """Return the bold title font at *size*, memoised by size."""
+    if size not in _TITLE_FONT_CACHE:
+        _TITLE_FONT_CACHE[size] = _load_font(_FONT_BOLD_PATHS, size)
+    return _TITLE_FONT_CACHE[size]
 
 
 # ─── Colour helpers ──────────────────────────────────────────────────────────
@@ -1880,11 +1908,38 @@ def generate_alert_image(
     draw.rectangle((0, layout.header_h - 2, layout.width, layout.header_h),
                    fill=_darken(alr_clr, 0.45))
 
+    # Pre-compute the wordmark width so we know how much room the title
+    # has on the left.  The logo's natural aspect ratio + the capped
+    # height give us a stable footprint without drawing yet.
+    logo_preview = _load_logo()
+    logo_target_h = min(layout.header_h - 16, 74) if logo_preview else 0
+    if logo_preview and logo_preview.height:
+        logo_target_w = max(1, int(round(
+            logo_preview.width * (logo_target_h / float(logo_preview.height))
+        )))
+    else:
+        logo_target_w = 0
+
     # Event name (left).  Title y is tuned to leave room for the sub-line
-    # below; sub-line y sits below the title font's natural height.
+    # below; sub-line y sits below the title font's natural height.  The
+    # title font scales with the layout so larger canvases (Story / IG
+    # 4:5) get a headline that still reads at arm's length, with a
+    # shrink-to-fit guard so an unusually long event name (e.g. "Special
+    # Marine Warning Forecast") never crashes into the wordmark.
+    title_max_w = (layout.width - 16) - logo_target_w - 32 - 16
+    title_size = layout.title_size
+
+    def _title_font(sz: int) -> ImageFont.FreeTypeFont:
+        return fonts['title'] if sz == 30 else _title_font_for(sz)
+
+    title_font = _title_font(title_size)
+    while title_size > 22 and _tw(title_font, event_name) > title_max_w:
+        title_size -= 2
+        title_font = _title_font(title_size)
+
     title_y = 10
-    draw.text((16, title_y), event_name, font=fonts['title'], fill=WHITE)
-    title_h = _th(fonts['title'], event_name)
+    draw.text((16, title_y), event_name, font=title_font, fill=WHITE)
+    title_h = _th(title_font, event_name)
 
     # Metadata row — severity becomes a coloured pill (the single most
     # glanceable signal for "how worried should I be") with urgency /
@@ -1932,7 +1987,11 @@ def generate_alert_image(
     logo = _load_logo()
     brand_right = layout.width - 16
     if logo is not None:
-        logo_h = layout.header_h - 16
+        # Cap the wordmark height so it doesn't balloon on tall headers
+        # (Story / Portrait) — at unbounded scale the logo crowds the
+        # headline and pushes the right side off-canvas.  74 px is the
+        # original landscape size, which already reads cleanly.
+        logo_h = min(layout.header_h - 16, 74)
         # Preserve aspect ratio
         ratio = logo_h / float(logo.height)
         logo_w = max(1, int(round(logo.width * ratio)))

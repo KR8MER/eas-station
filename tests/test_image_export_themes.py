@@ -597,6 +597,46 @@ def test_webp_is_smaller_than_png_for_same_content():
     )
 
 
+def test_long_event_name_fits_without_clipping():
+    """A long event name on the Story layout must not run off-canvas or
+    crash into the wordmark — shrink-to-fit picks a smaller title
+    size until the name fits in the available left-side width."""
+    alert = _FakeAlert()
+    alert.id = 9999
+    # Deliberately verbose event string (longer than any real CAP value).
+    alert.event = "Special Marine Severe Thunderstorm Warning Forecast"
+    alert.severity = "Severe"
+    png = image_export.generate_alert_image(
+        alert, {}, None, {"county_name": "Test County, OH"},
+        aspect_ratio="story",
+    )
+    img = Image.open(io.BytesIO(png))
+    assert img.size == (1080, 1920)
+    # The title-fit loop should still leave the rightmost columns
+    # showing the wordmark (non-background pixels).  Sample a stripe
+    # just inside the right edge across the header band.
+    right_x = 1060
+    bg_alpha = img.getpixel((0, 0))[3]
+    header_samples = [img.getpixel((right_x, y)) for y in range(20, 100, 10)]
+    assert any(p[3] != bg_alpha for p in header_samples), (
+        "right edge of header band looks empty — title may have pushed "
+        "the wordmark off-canvas"
+    )
+
+
+def test_title_font_cache_memoises_sizes():
+    """``_title_font_for`` should cache loaded fonts by size so
+    repeated renders don't repay the truetype-load cost."""
+    image_export._TITLE_FONT_CACHE.clear()
+    f1 = image_export._title_font_for(42)
+    f2 = image_export._title_font_for(42)
+    assert f1 is f2
+    # Different size → different cached entry.
+    f3 = image_export._title_font_for(36)
+    assert f3 is not f1
+    assert image_export._title_font_for(36) is f3
+
+
 def test_unknown_format_falls_back_to_png():
     """A typo in ``image_format`` should not crash — it falls back to
     PNG so the caller still gets a usable file."""
