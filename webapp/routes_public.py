@@ -2219,6 +2219,16 @@ def register(app: Flask, logger) -> None:
                     report = builder(window_start=window_start, window_end=window_end)
                 except Exception as exc:
                     route_logger.error("report builder %s failed: %s", report_kind, exc)
+                    # If a query inside the builder raised, the SQLAlchemy
+                    # session/connection is left in an aborted-transaction
+                    # state.  Without a rollback every subsequent query on
+                    # this connection (including the per-request auth
+                    # permission check) hits InFailedSqlTransaction.
+                    try:
+                        from app_core.extensions import db as _db
+                        _db.session.rollback()
+                    except Exception:  # pragma: no cover - defensive
+                        route_logger.exception("rollback after report builder failure failed")
                     report = {
                         "columns": [],
                         "rows": [],

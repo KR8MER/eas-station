@@ -2332,30 +2332,66 @@ def build_initiated_alerts_report(
     }
 
 
-def _bucket_received(window_start: datetime, window_end: datetime) -> List[ReceivedEASAlert]:
-    return (
-        ReceivedEASAlert.query.filter(
+def _bucket_received(
+    window_start: datetime, window_end: datetime
+) -> List[Any]:
+    """Return lightweight Row tuples (received_at, forwarding_decision,
+    event_code, event_name) for ReceivedEASAlert in the window.
+
+    The full ORM object carries ``full_alert_data`` (JSONB) and
+    ``raw_audio_data`` (LargeBinary), both potentially multi-megabyte.
+    Loading them just to read four small columns has OOM'd workers in the
+    past, so we pull only what the report uses.
+    """
+    stmt = (
+        select(
+            ReceivedEASAlert.received_at,
+            ReceivedEASAlert.forwarding_decision,
+            ReceivedEASAlert.event_code,
+            ReceivedEASAlert.event_name,
+        )
+        .where(
             ReceivedEASAlert.received_at >= window_start,
             ReceivedEASAlert.received_at < window_end,
         )
         .order_by(ReceivedEASAlert.received_at.asc())
-        .all()
+        .execution_options(yield_per=500)
     )
+    return list(db.session.execute(stmt))
 
 
 def _bucket_initiated(window_start: datetime, window_end: datetime) -> List[Tuple[datetime, str]]:
+    """Return ``(timestamp, source)`` pairs for every initiated EAS message
+    in the window.
+
+    EASMessage carries six LargeBinary audio columns; loading the full ORM
+    row to read ``created_at`` is the difference between a few KB and a few
+    GB of working set on a busy month.  We pull just the timestamps.
+    """
     items: List[Tuple[datetime, str]] = []
-    for message in EASMessage.query.filter(
-        EASMessage.created_at >= window_start,
-        EASMessage.created_at < window_end,
-    ).all():
-        items.append((message.created_at, "auto"))
-    for activation in ManualEASActivation.query.filter(
-        ManualEASActivation.created_at >= window_start,
-        ManualEASActivation.created_at < window_end,
-    ).all():
-        ts = activation.sent_at or activation.created_at
-        items.append((ts, "manual"))
+    eas_stmt = (
+        select(EASMessage.created_at)
+        .where(
+            EASMessage.created_at >= window_start,
+            EASMessage.created_at < window_end,
+        )
+        .execution_options(yield_per=500)
+    )
+    for (created_at,) in db.session.execute(eas_stmt):
+        items.append((created_at, "auto"))
+    manual_stmt = (
+        select(
+            ManualEASActivation.sent_at,
+            ManualEASActivation.created_at,
+        )
+        .where(
+            ManualEASActivation.created_at >= window_start,
+            ManualEASActivation.created_at < window_end,
+        )
+        .execution_options(yield_per=500)
+    )
+    for sent_at, created_at in db.session.execute(manual_stmt):
+        items.append((sent_at or created_at, "manual"))
     return items
 
 
