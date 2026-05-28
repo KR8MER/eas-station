@@ -484,12 +484,14 @@ def generate_table_pdf(
         for i, col in enumerate(columns):
             label = _truncate_to_width(col.get("label", ""), col_widths[i] - 4, header_font)
             emit_text(content, "F2", header_font, col_x[i] + 1, y, label)
-        y -= line_height - 1
-        # Underline as a thin rule using a stroked path inside the text scope.
-        # We close the BT/ET block, draw the rule, and reopen the text scope.
+        # Draw the rule just below the header baseline (clear of the descender)
+        # and leave enough vertical room for the first body row's cap height so
+        # the underline never crosses the row of text below it.
         content.append("ET")
-        content.append(f"{margin_x} {y + 4:.2f} m {page_w - margin_x} {y + 4:.2f} l S")
+        rule_y = y - 4
+        content.append(f"{margin_x} {rule_y:.2f} m {page_w - margin_x} {rule_y:.2f} l S")
         content.append("BT")
+        y -= line_height + 3
         return y
 
     def render_footer(content: List[str], page_num: int, total_pages: Optional[int]) -> None:
