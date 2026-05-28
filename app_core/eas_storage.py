@@ -1587,22 +1587,53 @@ def generate_compliance_log_csv(entries: Sequence[Dict[str, Any]]) -> str:
     return output.getvalue()
 
 
-def _escape_pdf_text(value: str) -> str:
-    escaped = value.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
-    return escaped
+_COMPLIANCE_CATEGORY_LABELS: Dict[str, str] = {
+    "manual": "Manual",
+    "received": "Received",
+    "relayed": "Relayed",
+}
 
 
-def _render_pdf_page(lines: Sequence[str]) -> bytes:
-    y = 760
-    content_lines = ["BT", "/F1 10 Tf"]
-    for line in lines:
-        content_lines.append(f"1 0 0 1 40 {y} Tm ({_escape_pdf_text(line)}) Tj")
-        y -= 14
-        if y < 40:
-            y = 760
-    content_lines.append("ET")
-    stream = "\n".join(content_lines).encode("latin-1", "ignore")
-    return stream
+def _format_compliance_details(category: Optional[str], details: Any) -> str:
+    """Render the per-entry details dict as a compact, human-readable string."""
+    if not isinstance(details, dict) or not details:
+        return ""
+
+    parts: List[str] = []
+    cat = (category or "").lower()
+
+    if cat == "received":
+        for key in ("severity", "urgency", "certainty", "message_type", "scope"):
+            value = details.get(key)
+            if value:
+                parts.append(f"{key.replace('_', ' ').title()}: {value}")
+    elif cat == "relayed":
+        media: List[str] = []
+        if details.get("has_audio"):
+            media.append("audio")
+        if details.get("has_text"):
+            media.append("text")
+        if media:
+            parts.append("Media: " + ", ".join(media))
+        if details.get("cap_alert_id"):
+            parts.append(f"CAP ID: {details['cap_alert_id']}")
+    elif cat == "manual":
+        for key, label in (
+            ("event_code", "Event Code"),
+            ("message_type", "Message Type"),
+            ("same_header", "SAME"),
+        ):
+            value = details.get(key)
+            if value:
+                parts.append(f"{label}: {value}")
+
+    if not parts:
+        for key, value in details.items():
+            if value in (None, "", False):
+                continue
+            parts.append(f"{key.replace('_', ' ').title()}: {value}")
+
+    return "; ".join(parts)
 
 
 def generate_compliance_log_pdf(
@@ -1611,119 +1642,80 @@ def generate_compliance_log_pdf(
     window_start: Optional[datetime] = None,
     window_end: Optional[datetime] = None,
 ) -> bytes:
-    """Generate a minimal PDF summary for compliance logs."""
-
-    header_lines = [
-        "NOAA CAP Alerts System — EAS Compliance Log",
-        f"Generated: {format_local_datetime(utc_now(), include_utc=True)}",
-    ]
+    """Generate a paginated PDF summary for compliance log entries."""
+    from app_utils.pdf_generator import generate_table_pdf
 
     if window_start and window_end:
-        header_lines.append(
-            "Window: "
-            f"{format_local_datetime(window_start, include_utc=False)} "
+        subtitle = (
+            f"Window: {format_local_datetime(window_start, include_utc=False)} "
             f"to {format_local_datetime(window_end, include_utc=False)}"
         )
+    else:
+        subtitle = None
 
-    header_lines.append("")
-    header_lines.append(
-        "Timestamp (local/UTC) | Category | Event | Identifier | Status"
-    )
+    columns = [
+        {"label": "Timestamp (local / UTC)", "weight": 2.3},
+        {"label": "Category", "weight": 0.8},
+        {"label": "Event", "weight": 1.8},
+        {"label": "Identifier", "weight": 2.6},
+        {"label": "Status", "weight": 0.8},
+        {"label": "Details", "weight": 2.6},
+    ]
 
-    body_lines = []
+    rows: List[List[str]] = []
+    category_counts: Dict[str, int] = {}
+    status_counts: Dict[str, int] = {}
+
     for entry in entries:
-        timestamp = format_local_datetime(entry.get("timestamp"), include_utc=True)
-        body_lines.append(
-            " | ".join(
-                [
-                    timestamp,
-                    str(entry.get("category") or ""),
-                    str(entry.get("event_label") or ""),
-                    str(entry.get("identifier") or ""),
-                    str(entry.get("status") or ""),
-                ]
+        category_raw = (entry.get("category") or "").lower()
+        category_label = _COMPLIANCE_CATEGORY_LABELS.get(
+            category_raw, category_raw.title() if category_raw else ""
+        )
+        status_raw = (entry.get("status") or "").strip()
+        status_label = status_raw.title() if status_raw else ""
+
+        rows.append([
+            format_local_datetime(entry.get("timestamp"), include_utc=True),
+            category_label,
+            str(entry.get("event_label") or ""),
+            str(entry.get("identifier") or ""),
+            status_label,
+            _format_compliance_details(category_raw, entry.get("details")),
+        ])
+
+        if category_label:
+            category_counts[category_label] = category_counts.get(category_label, 0) + 1
+        if status_label:
+            status_counts[status_label] = status_counts.get(status_label, 0) + 1
+
+    summary_lines: List[str] = [f"Total entries: {len(rows)}"]
+    if category_counts:
+        summary_lines.append(
+            "By category: "
+            + ", ".join(
+                f"{label} ({count})"
+                for label, count in sorted(category_counts.items())
+            )
+        )
+    if status_counts:
+        summary_lines.append(
+            "By status: "
+            + ", ".join(
+                f"{label} ({count})"
+                for label, count in sorted(status_counts.items())
             )
         )
 
-    lines = header_lines + (body_lines or ["No compliance activity recorded."])
-
-    pages = []
-    current_page: List[str] = []
-    for line in lines:
-        current_page.append(line)
-        if len(current_page) >= 45:
-            pages.append(current_page)
-            current_page = []
-
-    if current_page:
-        pages.append(current_page)
-
-    objects: List[Tuple[int, bytes]] = []
-    font_obj_id = 3
-    page_objects: List[int] = []
-    next_obj_id = 4
-
-    for page_lines in pages:
-        content_stream = _render_pdf_page(page_lines)
-        content_obj_id = next_obj_id
-        next_obj_id += 1
-
-        stream_body = (
-            b"<< /Length "
-            + str(len(content_stream)).encode("ascii")
-            + b" >>\nstream\n"
-            + content_stream
-            + b"\nendstream"
-        )
-        objects.append((content_obj_id, stream_body))
-
-        page_obj_id = next_obj_id
-        next_obj_id += 1
-        page_objects.append(page_obj_id)
-
-        page_body = (
-            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
-            f"/Contents {content_obj_id} 0 R /Resources << /Font << /F1 {font_obj_id} 0 R >> >> >>"
-        ).encode("latin-1")
-        objects.append((page_obj_id, page_body))
-
-    pages_body = (
-        "<< /Type /Pages /Count {count} /Kids [{kids}] >>".format(
-            count=len(page_objects),
-            kids=" ".join(f"{obj_id} 0 R" for obj_id in page_objects) or "",
-        )
-    ).encode("latin-1")
-
-    catalog_body = b"<< /Type /Catalog /Pages 2 0 R >>"
-    font_body = b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"
-
-    objects.insert(0, (1, catalog_body))
-    objects.insert(1, (2, pages_body))
-    objects.insert(2, (font_obj_id, font_body))
-
-    buffer = io.BytesIO()
-    buffer.write(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
-
-    xref_positions = []
-    for obj_id, body in objects:
-        xref_positions.append(buffer.tell())
-        buffer.write(f"{obj_id} 0 obj\n".encode("latin-1"))
-        buffer.write(body)
-        buffer.write(b"\nendobj\n")
-
-    startxref = buffer.tell()
-    buffer.write(f"xref\n0 {len(objects) + 1}\n".encode("latin-1"))
-    buffer.write(b"0000000000 65535 f \n")
-    for offset in xref_positions:
-        buffer.write(f"{offset:010d} 00000 n \n".encode("latin-1"))
-
-    buffer.write(b"trailer\n")
-    buffer.write(
-        f"<< /Size {len(objects) + 1} /Root 1 0 R >>\n".encode("latin-1")
+    return generate_table_pdf(
+        "EAS Compliance Log",
+        columns,
+        rows,
+        subtitle=subtitle,
+        summary_lines=summary_lines,
+        footer_text="EAS Station™ — NOAA CAP Alerts Compliance Log",
+        landscape=True,
+        empty_message="No compliance activity recorded during this window.",
     )
-    buffer.write(f"startxref\n{startxref}\n%%EOF".encode("latin-1"))
-
-    return buffer.getvalue()
 
 
 # ---------------------------------------------------------------------------
