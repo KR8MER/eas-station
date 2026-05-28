@@ -599,6 +599,33 @@ def _truncate(font: ImageFont.FreeTypeFont, text: str, max_w: int) -> str:
     return text + ellipsis
 
 
+def _draw_pill(draw: ImageDraw.ImageDraw,
+               font: ImageFont.FreeTypeFont,
+               text: str,
+               fill: Tuple[int, int, int],
+               x: int, y: int,
+               *,
+               text_color: Tuple[int, int, int] = (255, 255, 255),
+               pad_x: int = 9, pad_y: int = 3) -> int:
+    """Draw a rounded-rectangle pill at (x, y) with *text* inside.
+
+    Returns the x-coordinate of the pill's right edge so the caller can
+    chain multiple pills horizontally without re-measuring.
+    """
+    text_w = _tw(font, text)
+    text_h = _th(font, text)
+    pill_w = text_w + pad_x * 2
+    pill_h = text_h + pad_y * 2
+    radius = max(2, pill_h // 2)
+    draw.rounded_rectangle((x, y, x + pill_w, y + pill_h),
+                           radius=radius, fill=fill)
+    # Pillow's ``getbbox`` excludes the top-side bearing of TrueType
+    # fonts, so subtract the bbox top to get the baseline-aligned y.
+    bbox_top = font.getbbox(text)[1]
+    draw.text((x + pad_x, y + pad_y - bbox_top), text, font=font, fill=text_color)
+    return x + pill_w
+
+
 def _resolve_local_tz():
     """Return the configured location tzinfo without forcing the full
     ``app_utils`` package init (which pulls in psutil and friends).
@@ -1831,23 +1858,43 @@ def generate_alert_image(
     draw.text((16, title_y), event_name, font=fonts['title'], fill=WHITE)
     title_h = _th(fonts['title'], event_name)
 
-    # Status sub-line — "Status: Actual" is the default for ~all production
-    # alerts and only crowds the header.  Surface it only for Test /
-    # Exercise / Draft / System statuses where it carries information.
-    sub_parts = []
+    # Metadata row — severity becomes a coloured pill (the single most
+    # glanceable signal for "how worried should I be") with urgency /
+    # certainty rendered as quieter secondary text.  Status renders as a
+    # neutral pill but only when it isn't the default "Actual" (which
+    # holds for ~all production alerts and just adds noise).
+    sub_y = title_y + title_h + 8
+    pill_x = 18
+
+    severity_val = (getattr(alert, 'severity', '') or '').strip()
+    if severity_val:
+        sev_color = _SEVERITY.get(
+            severity_val.lower(),
+            _SEVERITY.get('unknown', (108, 117, 125)),
+        )
+        pill_x = _draw_pill(draw, fonts['label'], severity_val.upper(),
+                            sev_color, pill_x, sub_y)
+        pill_x += 8
+
     status_val = (getattr(alert, 'status', '') or '').strip()
     if status_val and status_val.lower() != 'actual':
-        sub_parts.append(f'Status: {status_val}')
-    for attr, label in [('severity', 'Severity'),
-                        ('urgency', 'Urgency'),
-                        ('certainty', 'Certainty')]:
-        val = getattr(alert, attr, '') or ''
+        pill_x = _draw_pill(draw, fonts['label'], status_val.upper(),
+                            (108, 117, 125), pill_x, sub_y)
+        pill_x += 8
+
+    extras: List[str] = []
+    for attr, label in [('urgency', 'Urgency'), ('certainty', 'Certainty')]:
+        val = (getattr(alert, attr, '') or '').strip()
         if val:
-            sub_parts.append(f'{label}: {val}')
-    sub_text = '  |  '.join(sub_parts)
-    sub_y = title_y + title_h + 8
-    draw.text((18, sub_y), sub_text, font=fonts['small'],
-              fill=(*WHITE, 200))  # type: ignore[arg-type]
+            extras.append(f'{label}: {val}')
+    if extras:
+        extra_text = '  ·  '.join(extras)
+        # Optically centre the small text against the pill height so the
+        # baseline lines up cleanly instead of riding above the pill.
+        pill_h = _th(fonts['label'], 'Mg') + 6  # mirrors _draw_pill padding
+        extra_y = sub_y + (pill_h - _th(fonts['small'], extra_text)) // 2 - 1
+        draw.text((pill_x, extra_y), extra_text, font=fonts['small'],
+                  fill=(*WHITE, 200))  # type: ignore[arg-type]
 
     # Branding (top-right) — render the canonical EAS Station wordmark image
     # so updating the brand asset is just a matter of swapping the file at

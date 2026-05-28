@@ -497,6 +497,44 @@ def test_tile_cache_evicts_oldest(monkeypatch):
     image_export._tile_cache_clear()
 
 
+# ── Pill helper ─────────────────────────────────────────────────────────────
+def test_draw_pill_advances_x_past_pill_width():
+    """The pill helper should return the x past its right edge so callers
+    can chain pills horizontally without re-measuring."""
+    from PIL import ImageDraw as _ID
+    canvas = Image.new("RGB", (400, 60), (10, 10, 10))
+    draw = _ID.Draw(canvas)
+    fonts = image_export._load_fonts()
+
+    end_x = image_export._draw_pill(
+        draw, fonts['label'], 'SEVERE', (253, 126, 20), 18, 10,
+    )
+    assert end_x > 18, "pill end should be to the right of its start"
+
+    # And the pill should have actually drawn coloured pixels somewhere
+    # inside its claimed bounding box (top-left → end_x).
+    px = canvas.load()
+    pixels = [px[x, y] for x in range(20, end_x) for y in range(12, 28)]
+    assert any(p != (10, 10, 10) for p in pixels), (
+        "no pixels were drawn inside the pill rectangle"
+    )
+
+
+def test_severity_pill_rendered_for_each_severity():
+    """Each known severity should round-trip through generate_alert_image
+    without crashing — covers the colour-lookup branch in the header."""
+    for sev in ('Extreme', 'Severe', 'Moderate', 'Minor', 'Unknown'):
+        alert = _FakeAlert()
+        alert.id = 7000 + abs(hash(sev)) % 1000
+        alert.event = 'Severe Thunderstorm Watch'
+        alert.severity = sev
+        png = image_export.generate_alert_image(
+            alert, {}, None, {"county_name": "Test County, OH"},
+        )
+        img = Image.open(io.BytesIO(png))
+        assert img.size == (1200, 630), sev
+
+
 # ── PNG metadata is minimal + reproducible ──────────────────────────────────
 def test_png_output_carries_software_tag_only():
     """Exports must not leak server timestamps via tIME and must carry a
