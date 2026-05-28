@@ -6,7 +6,13 @@ tracks releases under the 2.x series.
 
 ## [Unreleased]
 
-- _No unreleased changes — record new work here as PRs land. Most recent cut release: 2.81.1 (2026-05-24)._
+### Fixed
+- **CAP-to-EAS pipeline now matches the ECIG Implementation Guide V1.0 in five places it previously diverged.** An audit against [`docs/ECIG-CAP-to-EAS_Implementation_Guide-V1-0.md`](../ECIG-CAP-to-EAS_Implementation_Guide-V1-0.md) surfaced five spec deviations in `app_core/audio/auto_forward.py` and `app_utils/eas.py`; all five are now closed with unit coverage in `tests/test_ecig_compliance.py`.
+  - **§3.4.1.7 — Governor's Must-Carry.** A new `_is_must_carry()` helper reads `<parameter><valueName>EAS-Must-Carry</valueName><value>True</value></parameter>` from the CAP message; when asserted, `auto_forward_cap_alert` bypasses the operator's `forwarded_event_codes` allowlist and the default RWT suppression. Location filtering and cross-source dedupe still apply, per spec. **Operator-visible:** an alert that would normally be rejected by the event-code allowlist will now be aired when the originator marks it as Must-Carry — the log line says `"EAS-Must-Carry asserted — bypassing originator and event-code filters (ECIG §3.4.1.7)"`.
+  - **§3.8 — msgType filtering.** `auto_forward_cap_alert` now rejects `Cancel` (cancelled messages MUST NOT be aired), `Ack`, `Error`, and any unknown msgType value with a reason citing `§3.8`. `Alert` and `Update` pass through to the existing supersede pipeline. Prior to this fix, the broadcast path treated every non-Test message as airable regardless of msgType.
+  - **§3.5.1 — Resource-URI fetch timeouts.** `_fetch_embedded_audio` now uses a per-resource cap: 120 s for downloadable MP3/WAV (`EMBEDDED_AUDIO_DOWNLOAD_TIMEOUT`) and 30 s for streaming sources (`EMBEDDED_AUDIO_STREAMING_TIMEOUT`). Streaming is detected from `audio/x-ipaws-streaming-audio-*` MIME or a `resourceDesc` containing "streaming". On timeout the loop falls through to TTS as before, just within a bounded time.
+  - **§3.5.2 / §3.5.4 — `***` deletion pause.** `_normalize_text_for_tts` previously stripped all asterisks, including the three-asterisk markers the spec uses for "text deleted, insert a one-second pause." It now converts runs of three or more asterisks to a sentence break (`. `) which every TTS backend in the project renders as an audible sentence-length pause. Adjacent spaces are consumed so the downstream multi-space normalizer does not append a comma to the pause.
+  - **§3.10 — Default originator when `EAS-ORG` is absent.** `_compose_message_text` previously defaulted the FCC-required-text originator to `WXR`. It now defaults to `CIV` per spec, with `WXR` retained only when the alert's `source` is `NOAA` / `NWS` (those feeds intentionally omit the parameter and are by definition `WXR`).
 
 ## [2.81.1] - 2026-05-24 - Historical alerts 500 fix
 

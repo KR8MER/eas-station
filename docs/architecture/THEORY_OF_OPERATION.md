@@ -272,6 +272,21 @@ flowchart TD
 - **Cross-source deduplication** (`app_core/audio/auto_forward.py`) — checks `eas_messages` and `manual_eas_activations` tables within a 15-minute window for same event code + overlapping FIPS codes to prevent duplicate broadcasts when the same alert arrives via IPAWS + NOAA + OTA
 - **Originator substitution** — the original alert's originator is replaced with the station's configured originator in `build_same_header()` (`app_utils/eas.py:647`)
 
+**ECIG V1.0 compliance gates** (applied by `auto_forward_cap_alert` in order; first failure short-circuits with a `reason` citing the spec section):
+
+| Order | Section | Check |
+|-------|---------|-------|
+| 1 | §3.1 | `<status>` MUST be `Actual`; Test / Exercise / Draft suppressed |
+| 2 | §3.2 | `<scope>` MUST be `Public` |
+| 3 | §3.8 | `<msgType>` MUST be `Alert` or `Update`; `Cancel`/`Ack`/`Error` suppressed |
+| 4 | §3.3 | `<expires>` MUST be in the future and after `<sent>` |
+| 5 | §3.4.1.7 | If `EAS-Must-Carry=True`, the event-code allowlist and default RWT suppression are bypassed for this alert (steps 6-7 are skipped). Location filter and dedupe still apply. |
+| 6 | — | Operator's `forwarded_event_codes` allowlist (RWT also requires explicit opt-in) |
+| 7 | VTEC | `VTEC_SKIP_ACTIONS` (CON/ROU/COR) and `VTEC_TERMINAL_ACTIONS` (CAN/EXP) suppressed; UPG bypasses dedupe |
+| 8 | — | Cross-source dedupe (event code + FIPS within 15 min) |
+
+Audio / text rendering also follows the guide: `_fetch_embedded_audio` enforces ECIG §3.5.1 fetch timeouts (120 s downloadable, 30 s streaming) and `_normalize_text_for_tts` converts the §3.5.2 / §3.5.4 `***` text-deletion marker into an audible sentence pause for every TTS backend.
+
 **Manual Path:**
 - **Workflow UI (`webapp/eas/`)** guides operators through alert selection and SAME header preview
 - **SAME Generator (`app_utils/eas.py`, `app_utils/eas_fsk.py`)** creates FCC-compliant 520⅔ baud FSK audio
