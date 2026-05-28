@@ -528,10 +528,9 @@ sudo nginx -t && sudo systemctl reload nginx
 
 ## Related Documentation
 
-- [SYSTEM_DEPENDENCIES.md](../reference/SYSTEM_DEPENDENCIES) - Infrastructure components
-- [dependency_attribution.md](../reference/dependency_attribution) - nginx and certbot attribution
-- [PORTAINER_DEPLOYMENT.md](./PORTAINER_DEPLOYMENT) - Deployment via Portainer
-- [SECURITY.md](../SECURITY) - General security guidelines
+- [SSL Web UI Guide](SSL_WEB_UI_GUIDE.md) - Managing certificates from the admin UI
+- [Firewall Requirements](../troubleshooting/FIREWALL_REQUIREMENTS.md) - Required network ports
+- [Security Guide](../security/SECURITY.md) - General security guidelines
 
 ---
 
@@ -548,5 +547,5 @@ sudo nginx -t && sudo systemctl reload nginx
 
 ---
 
-**Last Updated:** 2025-11-09
+**Last Updated:** 2026-05-28
 **Author:** KR8MER Amateur Radio Emergency Communications

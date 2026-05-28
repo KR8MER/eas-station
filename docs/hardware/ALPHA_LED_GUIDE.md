@@ -1,5 +1,7 @@
 # Alpha LED Sign Comprehensive Guide
 
+> **Note (May 2026):** The runtime LED control surface is the generic `/led_control` page and the `/api/led/*` endpoints exposed by `webapp/routes_led.py` (e.g. `/api/led/send_message`, `/api/led/brightness`, `/api/led/clear`, `/api/led/status`, `/api/led/test`). The Alpha-specific dashboard and `/api/alpha/*` endpoints documented below in §3 and §4 describe a planned protocol-aware surface that has not yet been wired up — they remain in this guide as a reference for the M-Protocol features the underlying controller supports. Treat anything in those sections as forward-looking until the routes appear in `webapp/routes_led.py`.
+
 ## 1. Overview
 
 EAS Station™ supports Alpha LED signs via the M-Protocol over a serial-to-Ethernet adapter (e.g., Waveshare). The integration provides full bidirectional control including message display, diagnostics, time/date synchronization, speaker control, brightness management, and file reading. All functions are accessible through the web UI dashboard or the Python API.
@@ -27,7 +29,7 @@ LED_SIGN_ENABLED=true            # Enable LED sign controller
 
 ### Accessing the Dashboard
 
-**URL:** `https://your-eas-station/alpha-sign`
+**URL:** `https://your-eas-station/led_control` (the current generic dashboard; a planned Alpha-specific dashboard would live at `/alpha-sign`)
 
 **Requirements:**
 - Authenticated user account

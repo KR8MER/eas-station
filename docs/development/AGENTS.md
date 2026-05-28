@@ -619,9 +619,9 @@ Before editing any template file:
 1. **Search for usage**: `grep -r "include.*filename" templates/`
 2. **Check extends**: `grep -r "extends.*filename" templates/`
 3. **Verify in Python**: `grep -r "render_template.*filename" .`
-4. **Consult documentation**: See [docs/frontend/TEMPLATE_STRUCTURE.md](../frontend/TEMPLATE_STRUCTURE)
+4. **Consult documentation**: See the [Component Library](../frontend/COMPONENT_LIBRARY.md) and [User Interface Guide](../frontend/USER_INTERFACE_GUIDE.md)
 
-**Complete template architecture documentation**: [docs/frontend/TEMPLATE_STRUCTURE.md](../frontend/TEMPLATE_STRUCTURE)
+**Template entry points**: Each Flask blueprint registers its own templates; start from `templates/base.html` and the includes in `templates/components/` (notably `navbar.html` and `footer.html`).
 
 ---
 
@@ -866,7 +866,7 @@ curl http://localhost:5000/health
 #### Configuration Flow
 
 **First Installation (Bare Metal):**
-1. Run `sudo bash bare-metal/scripts/install.sh`
+1. Run `sudo bash install.sh`
 2. Installation creates `/opt/eas-station/.env` with defaults
 3. User visits `http://localhost/setup` to complete configuration
 4. Setup Wizard writes final config to `/opt/eas-station/.env`
@@ -1151,18 +1151,19 @@ Choose the most appropriate category for your variable, or create a new one if n
 
 When adding new features that require service-level configuration:
 
-1. **Update service files** in `bare-metal/systemd/` - Modify environment variables or service settings
-2. **Document changes** in `bare-metal/README.md` - Explain new configuration options
+1. **Update service files** in `systemd/` - Modify environment variables or service settings
+2. **Document changes** in the relevant guide under `docs/` - Explain new configuration options
 3. **Test restart behavior** - Ensure services restart correctly with new settings
 
 The main service files are:
-- `eas-station-web.service` - Main web application
+- `eas-station-web.service` - Main web application (Gunicorn)
 - `eas-station-sdr.service` - SDR hardware service
 - `eas-station-audio.service` - Audio processing service
 - `eas-station-eas.service` - EAS monitoring service
 - `eas-station-hardware.target` - Bundles the five Phase 4 per-subsystem hardware units (`eas-station-network`, `-zigbee`, `-gps`, `-displays`, `-gpio`; ports 5101–5105)
-- `eas-station-noaa-poller.service` - NOAA alert poller
-- `eas-station-ipaws-poller.service` - IPAWS alert poller
+- `eas-station-poller.service` - Unified alert poller (NOAA + IPAWS)
+- `eas-station-hwsetup.service` - Hardware setup helper (oneshot at boot)
+- `eas-station-postal.service` - Optional local Postfix mail server
 
 ---
 
@@ -1223,8 +1224,8 @@ def calculate_coverage_percentages(alert_id, intersections):
 **When Creating New Documentation:**
 1. **Choose the appropriate subdirectory** based on the content type
 2. **Use descriptive filenames** in UPPERCASE_WITH_UNDERSCORES.md format
-3. **Update relevant index files** (like `docs/INDEX.md`)
-4. **Link from related documents** to ensure discoverability
+3. **Add the new file to `mkdocs.yml`** so it ships in the documentation site
+4. **Link from related documents** (especially `docs/README.md`) to ensure discoverability
 5. **NEVER create .md files in the root** unless they are README.md
 
 **When Moving/Reorganizing Documentation:**
@@ -1234,11 +1235,10 @@ def calculate_coverage_percentages(alert_id, intersections):
 4. **Test all links** to ensure they're not broken
 
 **Examples:**
-- ✅ `docs/guides/SETUP_WIZARD.md` - Setup guide
-- ✅ `docs/reference/KNOWN_BUGS.md` - Bug list
-- ✅ `docs/security/SECURITY_ANALYSIS_INDEX.md` - Security docs
+- ✅ `docs/guides/SETUP_INSTRUCTIONS.md` - Setup guide
+- ✅ `docs/security/SECURITY.md` - Security docs
 - ❌ `SETUP_GUIDE.md` (in root) - Should be in docs/guides/
-- ❌ `BUG_LIST.md` (in root) - Should be in docs/reference/
+- ❌ `BUG_LIST.md` (in root) - Should be tracked in GitHub issues, not the repo
 
 ---
 
@@ -1429,7 +1429,7 @@ pyshp==2.3.1  # Shapefile reader for converting boundary files to GeoJSON
 
 When adding system packages (apt/yum) or infrastructure programs (nginx, certbot, redis, etc.):
 
-1. **Update installation script** - Add to `bare-metal/scripts/install.sh`
+1. **Update installation script** - Add to `install.sh`
 2. **Update `docs/reference/dependency_attribution.md`** - Add to "System Package Dependencies" section
    - Package name and version
    - Purpose and what it's used for
@@ -1525,63 +1525,30 @@ Simplifies codebase by ~60 lines.
 
 ## 📖 Code Navigation & Architecture Reference
 
-### Function Tree Documentation
+The codebase favours exploration via `grep`/`find` and the architecture docs over a hand-maintained function index. Start here:
 
-For quick navigation and understanding of the codebase structure, refer to the comprehensive function tree documentation:
+- **[System Architecture](../architecture/SYSTEM_ARCHITECTURE.md)** — services, processes, data flow.
+- **[Data Flow Sequences](../architecture/DATA_FLOW_SEQUENCES.md)** — alert ingest → processing → playout, with file/line breadcrumbs into the source.
+- **[SDR Service Architecture](../architecture/SDR_SERVICE_ARCHITECTURE.md)** — `sdr_hardware_service.py` and `eas_monitoring_service.py`.
+- **[Display System Architecture](../architecture/DISPLAY_SYSTEM_ARCHITECTURE.md)** — OLED / VFD / LED rendering.
+- **[Theory of Operation](../architecture/THEORY_OF_OPERATION.md)** — SAME/FSK background and how it maps onto the code.
 
-- **`docs/reference/FUNCTION_TREE.md`** (Primary Reference)
-  - Complete catalog of all major modules, classes, and functions
-  - 24 database models, 150+ functions, 98+ classes documented
-  - Every entry includes file path, line number, and signature
-  - Module dependency graph and database schema overview
-  - **Use this to:** Find where specific functions are defined, understand module organization
+For "where does this function live?" questions, search the tree:
 
-- **`docs/reference/FUNCTION_TREE_INDEX.md`** (Quick Reference)
-  - Quick navigation guide for different user types (developers, agents, operators)
-  - Task-based lookup table (e.g., "Add API endpoint" → relevant files)
-  - Complete module file structure tree
-  - Search tips and common patterns
-  - **Use this to:** Quickly find where to add new features or fix bugs
+```bash
+# Find a Flask route
+grep -rn "@.*\.route.*'/api/alerts" webapp/
 
-- **`docs/reference/FUNCTION_TREE_SUMMARY.txt`** (Overview)
-  - Overview of documentation contents
-  - Key statistics and metrics
-  - Maintenance guidelines
-  - **Use this to:** Understand the scope and coverage of the function tree
+# Find an SQLAlchemy model
+grep -rn "class .*\(.*Base.*\)" app_core/_models_*.py
 
-### How to Use Function Tree for Development
+# Find a CLI subcommand
+grep -rn "argparse\|add_subparsers" eas-config scripts/
+```
 
-**When adding a new feature:**
-1. Search [docs/reference/FUNCTION_TREE_INDEX.md](../reference/FUNCTION_TREE_INDEX) for similar features
-2. Identify the module pattern (e.g., routes in `webapp/`, models in `app_core/`)
-3. Follow the established patterns from similar functions
-4. Update [docs/reference/FUNCTION_TREE.md](../reference/FUNCTION_TREE) if you add new significant functions or modules
+### Bug tracking
 
-**When fixing a bug:**
-1. Search [docs/reference/FUNCTION_TREE.md](../reference/FUNCTION_TREE) for the function/class mentioned in the bug report
-2. Note the file path and line number
-3. Check related functions in the same module
-4. Look for similar patterns in other modules for consistency
-
-**When exploring unfamiliar code:**
-1. Start with [docs/reference/FUNCTION_TREE_SUMMARY.txt](../reference/FUNCTION_TREE_SUMMARY.txt) to understand subsystem coverage
-2. Use [docs/reference/FUNCTION_TREE_INDEX.md](../reference/FUNCTION_TREE_INDEX) to find the subsystem you're interested in
-3. Dive into [docs/reference/FUNCTION_TREE.md](../reference/FUNCTION_TREE) for detailed function signatures and locations
-
-### Known Bugs Documentation
-
-**`docs/reference/KNOWN_BUGS.md`** contains a comprehensive list of identified issues:
-- RBAC (Role-Based Access Control) issues
-- Text-to-Speech (TTS) configuration issues
-- Display Screens page issues
-- Environment Settings page issues
-- GPIO configuration parsing issues
-- Deployment and service management issues
-
-**Before starting any work:**
-1. Check [docs/reference/KNOWN_BUGS.md](../reference/KNOWN_BUGS) to see if your issue is already documented
-2. If fixing a bug, remove it from [docs/reference/KNOWN_BUGS.md](../reference/KNOWN_BUGS) in your commit
-3. If discovering a new bug, add it to [docs/reference/KNOWN_BUGS.md](../reference/KNOWN_BUGS) with detailed analysis
+There is no in-repo bug list — open GitHub issues at <https://github.com/KR8MER/eas-station/issues> for known and new bugs. When fixing a bug, reference the issue number in the commit message and add a regression test under `tests/`.
 
 ---
 

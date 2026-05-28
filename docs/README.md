@@ -29,7 +29,7 @@ Welcome to the documentation for EAS Station™ - an Emergency Alert System plat
 
 | Guide | What You'll Learn |
 |-------|-------------------|
-| [Installation Guide](installation/README) | Bare metal deployment |
+| [Installation Guide](installation/QUICKSTART) | Bare metal deployment |
 | [SDR Setup](hardware/SDR_SETUP) | Radio receiver configuration |
 | [Firewall Requirements](troubleshooting/FIREWALL_REQUIREMENTS) | Network port configuration |
 
@@ -73,12 +73,9 @@ docs/
 ├── policies/        # Legal documents
 ├── process/         # Contributing and certification
 ├── reference/       # Reference materials
-├── roadmap/         # Feature planning
 ├── security/        # Security documentation
 └── troubleshooting/ # Problem-solving guides
 ```
-
-**[Complete Index](INDEX)** - Full list of all documentation
 
 ---
 
@@ -108,7 +105,7 @@ docs/
 
 ## Getting Help
 
-1. **Check the documentation** - Start with [INDEX](INDEX)
+1. **Check the documentation** - Start with the [User Guide](guides/HELP)
 2. **Review troubleshooting** - See [Common Issues](guides/HELP#troubleshooting)
 3. **Run diagnostics** - Use built-in diagnostic tools
 4. **Ask for help** - [GitHub Discussions](https://github.com/KR8MER/eas-station/discussions)
@@ -122,7 +119,6 @@ docs/
 |----------|------|
 | **About** | [Project Overview](reference/ABOUT) |
 | **Changelog** | [Version History](reference/CHANGELOG) |
-| **Roadmap** | [Future Features](roadmap/dasdec3-feature-roadmap) |
 | **License** | [AGPL v3](../LICENSE) (Open Source) / [Commercial](../LICENSE-COMMERCIAL) |
 
 ### Legal & Compliance
@@ -140,6 +136,6 @@ docs/
 
 ---
 
-**Last Updated**: 2026-02-13
+**Last Updated**: 2026-05-28
 
-**[Return to Main README](../README.md)** | **[View Complete Index](INDEX)**
+**[Return to Main README](../README.md)**

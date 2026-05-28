@@ -105,7 +105,7 @@ This page provides an index of all professional diagrams and flowcharts availabl
 
 **File:** [`../assets/diagrams/audio-source-routing.svg`](../assets/diagrams/audio-source-routing.svg)
 
-**Related Documentation:** [Audio Documentation](audio)
+**Related Documentation:** [Audio Monitoring Dashboard](../audio/AUDIO_MONITORING.md)
 
 ---
 
@@ -308,20 +308,6 @@ In addition to the professional SVG diagrams above, the following documentation 
 - Tracing the DSP pipeline from audio input to decoded alert
 - Contributing improvements to the shared demodulator core
 
-### Hardware Isolation Architecture (Mermaid)
-
-**File:** [docs/../architecture/HARDWARE_ISOLATION.md](../architecture/HARDWARE_ISOLATION)
-
-**Contains:**
-- USB hardware layer isolation diagram
-- SDR service / hardware service coordination sequence
-- Before/after architecture comparison (old vs. new hardware access model)
-
-**Use Cases:**
-- Understanding why USB hardware is isolated into separate services
-- Debugging USB device access issues
-- Planning new hardware integrations
-
 ### Ohio EAS Documentation (Mermaid)
 
 **File:** [docs/../reference/OHIO_EAS_DOCUMENTATION.md](../reference/OHIO_EAS_DOCUMENTATION)
@@ -343,17 +329,6 @@ In addition to the professional SVG diagrams above, the following documentation 
 - Understanding Ohio-specific EAS plan requirements
 - Planning LP-1 and LP-2 monitoring configurations
 - Understanding RWT/RMT compliance obligations
-
-### SDR Troubleshooting Flowchart (Mermaid)
-
-**File:** [docs/../troubleshooting/SDR_TROUBLESHOOTING_FLOWCHART.md](../troubleshooting/SDR_TROUBLESHOOTING_FLOWCHART)
-
-**Contains:**
-- Step-by-step SDR diagnostic decision tree from USB detection through signal quality
-
-**Use Cases:**
-- Systematic SDR problem diagnosis
-- Training new operators on SDR troubleshooting
 
 ### SDR Setup Flow (Mermaid)
 
@@ -479,11 +454,11 @@ When adding new diagrams:
 
 ## 🔗 Related Documentation
 
-- **[System Architecture](../../architecture/SYSTEM_ARCHITECTURE)** - Complete technical architecture with Mermaid diagrams
-- **[Theory of Operation](../../architecture/THEORY_OF_OPERATION)** - Conceptual overview and operational theory
-- **[Display System Architecture](../../architecture/DISPLAY_SYSTEM_ARCHITECTURE)** - OLED/VFD/LED display management
-- **[EAS Decoding Summary](../../architecture/EAS_DECODING_SUMMARY)** - Streaming vs. file decoder architecture
-- **[SDR Setup Guide](../../hardware/SDR_SETUP)** - Radio receiver configuration
+- **[System Architecture](../architecture/SYSTEM_ARCHITECTURE)** - Complete technical architecture with Mermaid diagrams
+- **[Theory of Operation](../architecture/THEORY_OF_OPERATION)** - Conceptual overview and operational theory
+- **[Display System Architecture](../architecture/DISPLAY_SYSTEM_ARCHITECTURE)** - OLED/VFD/LED display management
+- **[EAS Decoding Summary](../architecture/EAS_DECODING_SUMMARY)** - Streaming vs. file decoder architecture
+- **[SDR Setup Guide](../hardware/SDR_SETUP)** - Radio receiver configuration
 - **[Audio Documentation](../audio/AUDIO_MONITORING)** - Audio system details
 - **[Notifications Guide](../guides/notifications)** - Email and SMS notification setup
 - **[README](https://github.com/KR8MER/eas-station/blob/main/README.md)** - Project overview and quick start

@@ -264,10 +264,10 @@ This configuration works with:
 
 ## Related Documentation
 
-- [VFD Display Setup](VFD_SETUP.md)
-- [Hardware Integration Guide](../guides/HARDWARE_INTEGRATION.md)
-- [Environment Variables Reference](../reference/ENVIRONMENT_VARIABLES.md)
-- [Troubleshooting Guide](../troubleshooting/HARDWARE_TROUBLESHOOTING.md)
+- [VFD Display Setup](VFD_DISPLAY_SETUP.md)
+- [Hardware Quickstart](../guides/HARDWARE_QUICKSTART.md)
+- [Serial to Ethernet Adapters](SERIAL_TO_ETHERNET_ADAPTERS.md)
+- [SDR Master Troubleshooting](../troubleshooting/SDR_MASTER_TROUBLESHOOTING_GUIDE.md)
 
 ---
 

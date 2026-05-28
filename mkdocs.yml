@@ -123,13 +123,9 @@ extra_javascript:
 # Navigation Structure
 nav:
   - Home: README.md
-  - Documentation Index: INDEX.md
   - Installation:
       - Quick Start: installation/QUICKSTART.md
-      - Bare Metal Quick Start: installation/QUICKSTART-BARE-METAL.md
-      - Installation Guide: installation/README.md
       - Installation Details: installation/INSTALLATION_DETAILS.md
-      - Alternative Methods: installation/ALTERNATIVE_METHODS.md
   - User Guides:
       - Setup Instructions: guides/SETUP_INSTRUCTIONS.md
       - Help & Operations: guides/HELP.md
@@ -138,6 +134,8 @@ nav:
       - IPAWS Feed Integration: guides/ipaws_feed_integration.md
       - Manual EAS Events & Broadcast Builder: guides/MANUAL_EAS_EVENTS.md
       - eas-config Tool: guides/EAS_CONFIG_TOOL.md
+      - Pre/Post-Alert Signaling: guides/ALERT_SIGNALS.md
+      - TTS Normalization: guides/TTS_NORMALIZATION.md
       - Notifications (Email & SMS): guides/notifications.md
       - Local Mail Server (Postfix): guides/local_mail_server.md
       - Multi-Factor Authentication (TOTP): guides/MFA_TOTP_SETUP.md
@@ -150,42 +148,26 @@ nav:
       - SSL Web UI Guide: guides/SSL_WEB_UI_GUIDE.md
       - Tailscale VPN Setup: guides/TAILSCALE_SETUP.md
       - S.M.A.R.T. Setup: guides/SMART_SETUP.md
+  - Audio:
       - Audio Monitoring Dashboard: audio/AUDIO_MONITORING.md
+      - EAS Test Signal Pipeline: audio/EAS_TEST_SIGNAL_PIPELINE.md
   - Hardware:
       - SDR Setup Guide: hardware/SDR_SETUP.md
-      - GPIO Relay Wiring: hardware/GPIO_RELAY_WIRING.md
-      - GPIO Flash Patterns: hardware/GPIO_FLASH_PATTERNS.md
-      - GPIO OLED Status: hardware/GPIO_OLED_STATUS.md
+      - GPIO Guide: hardware/GPIO_GUIDE.md
+      - Alpha LED Sign Guide: hardware/ALPHA_LED_GUIDE.md
       - VFD Display Setup: hardware/VFD_DISPLAY_SETUP.md
       - NeoPixel LED Control: hardware/NEOPIXEL_LED_CONTROL.md
-      - Bidirectional LED Communication: hardware/BIDIRECTIONAL_LED_COMMUNICATION.md
       - GPS HAT Setup: hardware/GPS_HAT_SETUP.md
       - Argon40 Zigbee Setup: hardware/ARGON40_ZIGBEE_SETUP.md
       - Waveshare RS232 WiFi: hardware/WAVESHARE_RS232_WIFI_SETUP.md
       - Serial to Ethernet Adapters: hardware/SERIAL_TO_ETHERNET_ADAPTERS.md
-      - Alpha LED Sign (Diagnostics): hardware/ALPHA_LED_DIAGNOSTICS.md
-      - Alpha LED Sign (Time & Date Control): hardware/ALPHA_LED_TIMEDATE.md
-      - Alpha LED Sign (Advanced Control): hardware/ALPHA_LED_ADVANCED.md
-      - Alpha LED Sign (Web UI Dashboard): hardware/ALPHA_LED_WEB_UI.md
+      - Hardware Setup Helper: hardware/HWSETUP_HELPER.md
   - Troubleshooting:
-      - SDR & Radio:
-          - SDR Quick Fix Guide: troubleshooting/SDR_QUICK_FIX_GUIDE.md
-          - SDR Master Troubleshooting: troubleshooting/SDR_MASTER_TROUBLESHOOTING_GUIDE.md
-          - SDR Troubleshooting Flowchart: troubleshooting/SDR_TROUBLESHOOTING_FLOWCHART.md
-          - SDR Audio Tuning Issues: troubleshooting/SDR_AUDIO_TUNING_ISSUES.md
-          - SDR Waterfall Issues: troubleshooting/SDR_WATERFALL_TROUBLESHOOTING.md
-          - SDR Streaming Issues: troubleshooting/SDR_STREAMING_ISSUES_ANALYSIS.md
-          - Audio SDR Issues Explained: troubleshooting/AUDIO_SDR_ISSUES_EXPLAINED.md
-      - Audio:
-          - Audio Streaming Setup: troubleshooting/AUDIO_STREAMING_SETUP.md
-          - Audio Dropped Packets: troubleshooting/AUDIO_DROPPED_PACKETS.md
-          - TTS Troubleshooting: troubleshooting/TTS_TROUBLESHOOTING.md
-      - System:
-          - 502/504 Gateway Errors: troubleshooting/TROUBLESHOOTING_504_TIMEOUT.md
-          - Systemd Target Cycling: troubleshooting/SYSTEMD_TARGET_CYCLING.md
-          - Firewall Requirements: troubleshooting/FIREWALL_REQUIREMENTS.md
-          - Polling Not Working: troubleshooting/POLLING_NOT_WORKING.md
-          - Update Not Pulling Changes: troubleshooting/UPDATE_NOT_PULLING_CHANGES.md
+      - SDR Master Troubleshooting: troubleshooting/SDR_MASTER_TROUBLESHOOTING_GUIDE.md
+      - TTS Troubleshooting: troubleshooting/TTS_TROUBLESHOOTING.md
+      - 502/504 Gateway Errors: troubleshooting/TROUBLESHOOTING_504_TIMEOUT.md
+      - Firewall Requirements: troubleshooting/FIREWALL_REQUIREMENTS.md
+      - Polling Not Working: troubleshooting/POLLING_NOT_WORKING.md
   - Architecture:
       - System Architecture: architecture/SYSTEM_ARCHITECTURE.md
       - Theory of Operation: architecture/THEORY_OF_OPERATION.md
@@ -193,9 +175,8 @@ nav:
       - EAS Decoding Summary: architecture/EAS_DECODING_SUMMARY.md
       - EAS Monitor V3 Architecture: architecture/EAS_MONITOR_V3_ARCHITECTURE.md
       - Display System Architecture: architecture/DISPLAY_SYSTEM_ARCHITECTURE.md
-      - Hardware Isolation: architecture/HARDWARE_ISOLATION.md
       - SDR Service Architecture: architecture/SDR_SERVICE_ARCHITECTURE.md
-      - SDR Service Isolation: architecture/SDR_SERVICE_ISOLATION.md
+      - Alert Geometry Coverage: architecture/ALERT_GEOMETRY_COVERAGE.md
       - Design Standards: architecture/DESIGN_STANDARDS.md
   - Frontend:
       - User Interface Guide: frontend/USER_INTERFACE_GUIDE.md
@@ -204,8 +185,6 @@ nav:
       - SDR Frequency Validation: frontend/SDR_FREQUENCY_VALIDATION.md
   - Security:
       - Security Guide: security/SECURITY.md
-      - Security Features: security/SECURITY_FEATURES.md
-      - Password Guide: security/SECURITY_PASSWORD_GUIDE.md
   - Development:
       - Developer Guidelines: development/AGENTS.md
       - Contributing: process/CONTRIBUTING.md
@@ -213,17 +192,22 @@ nav:
   - Reference:
       - About: reference/ABOUT.md
       - Changelog: reference/CHANGELOG.md
-      - DASDEC-III Comparison: reference/DASDEC_COMPARISON.md
       - Diagrams Index: reference/DIAGRAMS.md
       - Ohio EAS Documentation: reference/OHIO_EAS_DOCUMENTATION.md
+      - NWS Zone Catalog: reference/NWS_ZONE_CATALOG.md
+      - NWS Alert Parameters: reference/NWS_ALERT_PARAMETERS.md
+      - FIPS Data Sources: reference/FIPS_DATA_SOURCES.md
+      - VTEC Event Linking: reference/VTEC_EVENT_LINKING.md
       - RBDS Standard: reference/RBDS_STANDARD.md
       - NRSC-4-B SAME Standard: reference/NRSC4B_SAME_STANDARD.md
-  - Roadmap:
-      - Feature Roadmap: roadmap/dasdec3-feature-roadmap.md
-      - Future Enhancements: roadmap/FUTURE_ENHANCEMENTS.md
+      - Protocols:
+          - Overview: reference/protocols/README.md
+          - SAME: reference/protocols/SAME.md
+          - MDC1200: reference/protocols/MDC1200.md
   - Maintenance:
       - Disk Space Cleanup: maintenance/DISK_SPACE_CLEANUP.md
   - Policies:
       - Terms of Use: policies/TERMS_OF_USE.md
       - Privacy Policy: policies/PRIVACY_POLICY.md
       - SMS Messaging Policy: policies/SMS_MESSAGING.md
+      - Trademark Policy: policies/TRADEMARK_POLICY.md

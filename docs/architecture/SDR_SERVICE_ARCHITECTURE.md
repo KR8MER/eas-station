@@ -4,6 +4,8 @@
 
 The EAS Station™ uses a **dual-service architecture** for SDR (Software Defined Radio) operations to ensure reliable 24/7 operation required for life-safety systems. This document describes the architecture, components, and operational details.
 
+> **Service naming:** The two processes live at the repo root and run as the `eas-station-sdr.service` and `eas-station-eas.service` (or `-audio.service`) systemd units. They were historically referenced as `sdr_service.py` and `audio_service.py`; the actual files are `sdr_hardware_service.py` and `eas_monitoring_service.py`.
+
 ## Architecture Diagram
 
 ```mermaid
@@ -12,7 +14,7 @@ flowchart TB
         usb["USB SDR Device<br/>(Airspy R2, RTL-SDR, etc.)<br/><code>/dev/bus/usb</code>"]
     end
 
-    subgraph sdr["SDR SERVICE CONTAINER — <code>sdr_service.py</code>"]
+    subgraph sdr["SDR HARDWARE SERVICE — <code>sdr_hardware_service.py</code>"]
         direction TB
         subgraph dual["Dual-Thread Architecture"]
             direction LR
@@ -30,7 +32,7 @@ flowchart TB
         keys["Keys<br/>• <code>sdr:metrics</code> (health)<br/>• <code>sdr:spectrum:{id}</code> (waterfall)<br/>• <code>sdr:ring_buffer:{id}</code> (stats)<br/>• <code>sdr:heartbeat</code><br/>• <code>sdr:commands</code> (control queue)<br/>• <code>sdr:command_result:{id}</code>"]
     end
 
-    subgraph audio["AUDIO SERVICE CONTAINER — <code>audio_service.py</code><br/>No USB access required — receives samples via Redis"]
+    subgraph audio["EAS MONITORING SERVICE — <code>eas_monitoring_service.py</code><br/>No USB access required — receives samples via Redis"]
         direction LR
         demod["Demodulation<br/>(FM, AM, …)"]
         decoder["EAS / SAME<br/>Decoder"]
@@ -45,7 +47,7 @@ flowchart TB
 
 ## Components
 
-### 1. SDR Service (`sdr_service.py`)
+### 1. SDR Hardware Service (`sdr_hardware_service.py`)
 
 **Purpose:** Dedicated service for SDR hardware operations only.
 
@@ -56,22 +58,11 @@ flowchart TB
 - Health metrics publishing
 - Control command processing
 
-**Container Requirements:**
-```yaml
-sdr-service:
-  command: ["python", "sdr_service.py"]
-  devices:
-    - /dev/bus/usb:/dev/bus/usb
-  privileged: true
-  cap_add:
-    - SYS_RAWIO
-    - SYS_ADMIN
-  ulimits:
-    memlock:
-      soft: -1
-      hard: -1
-  shm_size: '256mb'
-```
+**Runtime Requirements (bare metal systemd):**
+- Runs as the `eas-station-sdr.service` unit (see `systemd/eas-station-sdr.service`).
+- Direct USB access via the host's `/dev/bus/usb` tree (the service runs as a user in the `plugdev` group).
+- `RLIMIT_MEMLOCK` lifted so SoapySDR can lock pages for high-rate IQ capture.
+- Started by `install.sh` / `update.sh`; control via `systemctl status|restart eas-station-sdr.service`.
 
 ### 2. Ring Buffer (`app_core/radio/ring_buffer.py`)
 
@@ -110,7 +101,7 @@ buffer_size = sample_rate * 1.0
 ~~1. USB Reader Thread (Producer) - read from hardware~~
 ~~2. Processing Thread (Consumer) - FFT and analysis~~
 
-### 4. Audio Service (`audio_service.py`)
+### 4. EAS Monitoring Service (`eas_monitoring_service.py`)
 
 **Purpose:** Audio processing and EAS decoding.
 
@@ -121,10 +112,10 @@ buffer_size = sample_rate * 1.0
 - Icecast streaming output
 - Web audio streaming
 
-**Container Requirements:**
+**Runtime Requirements:**
+- Runs as the `eas-station-eas.service` and/or `eas-station-audio.service` systemd units (see `systemd/`).
 - No USB access needed
-- Standard container privileges
-- Redis connectivity only
+- Redis connectivity only (publishes/subscribes on the channels listed above)
 
 ## Redis Data Flow
 

@@ -782,8 +782,8 @@ For Redis-based IQ sample streaming:
 3. ✅ Read through Common Issues & Solutions
 4. ✅ Check existing documentation:
    - [SDR Setup Guide](../hardware/SDR_SETUP.md)
-   - [SDR Audio Tuning Issues](SDR_AUDIO_TUNING_ISSUES.md)
-   - [SDR Waterfall Troubleshooting](SDR_WATERFALL_TROUBLESHOOTING.md)
+   - [SDR Service Architecture](../architecture/SDR_SERVICE_ARCHITECTURE.md)
+   - [Frequency Validation](../frontend/SDR_FREQUENCY_VALIDATION.md)
 
 ### Providing Information
 
@@ -816,17 +816,16 @@ When asking for help, include:
 
 - **GitHub Issues:** https://github.com/KR8MER/eas-station/issues
 - **GitHub Discussions:** https://github.com/KR8MER/eas-station/discussions
-- **Documentation:** [docs/INDEX.md](../INDEX.md)
+- **Documentation:** [docs/README.md](../README.md)
 
 ---
 
 ## Related Documentation
 
 - **[SDR Setup Guide](../hardware/SDR_SETUP.md)** - Initial SDR configuration
-- **[SDR Audio Tuning Issues](SDR_AUDIO_TUNING_ISSUES.md)** - Audio-specific problems
-- **[SDR Waterfall Troubleshooting](SDR_WATERFALL_TROUBLESHOOTING.md)** - Waterfall display issues
-- **[Diagnostic Scripts README](../../scripts/diagnostics/README.md)** - Available diagnostic tools
 - **[SDR Service Architecture](../architecture/SDR_SERVICE_ARCHITECTURE.md)** - How SDR service works
+- **[SDR Frequency Validation](../frontend/SDR_FREQUENCY_VALIDATION.md)** - Frequency/sample-rate constraints
+- **[Diagnostic Scripts README](../../scripts/diagnostics/README.md)** - Available diagnostic tools
 
 ---
 
@@ -878,5 +877,5 @@ lsusb | grep -E "RTL|Airspy|Realtek"
 
 ---
 
-**Last Updated:** December 2025  
-**Version:** 2.12.x
+**Last Updated:** May 2026  
+**Tracks:** EAS Station™ 2.8x release line

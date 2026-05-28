@@ -351,8 +351,9 @@ After hardware is configured:
 - [Argon40 Zigbee Setup Guide](../hardware/ARGON40_ZIGBEE_SETUP.md)
 - [Waveshare WiFi Adapter Setup](../hardware/WAVESHARE_RS232_WIFI_SETUP.md)
 - [GPIO Pin Reference](../../app_utils/pi_pinout.py)
-- [Environment Variables Reference](../reference/ENVIRONMENT_VARIABLES.md)
-- [Hardware Service Logs](../troubleshooting/HARDWARE_TROUBLESHOOTING.md)
+- [Environment Variables Reference](../../.env.example) — canonical list with descriptions
+- [GPIO Guide](../hardware/GPIO_GUIDE.md) — pinout, wiring, and relay behaviour
+- [Hardware Setup Helper](../hardware/HWSETUP_HELPER.md) — boot-time hardware probe
 
 ---
 

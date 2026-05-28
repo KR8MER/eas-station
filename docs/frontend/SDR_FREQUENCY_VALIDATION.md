@@ -32,7 +32,7 @@ The system automatically converts these to Hz internally before saving to the da
 5. UI shows success/error message with formatted frequency
 
 **Code Location:**
-- Template: `templates/settings/radio.html` (lines 1762-1802)
+- Template: `templates/admin/radio.html`
 - Validation API: `webapp/routes_settings_radio.py` 
 - Service config: `app_core/radio/service_config.py`
 
@@ -54,7 +54,7 @@ The UI enforces this by:
 3. Populating sample rate dropdown with ONLY valid rates (2.5 MHz and 10 MHz)
 4. Showing error if invalid rate is selected
 
-**Frontend Implementation** (`templates/settings/radio.html` lines 1645-1703):
+**Frontend Implementation** (`templates/admin/radio.html`):
 ```javascript
 if (isAirspy) {
     defaultRates = [2500000, 10000000];  // Only 2.5 and 10 MHz

@@ -200,7 +200,7 @@ sudo systemctl status eas-station-sdr.service
 
 ## Next Steps
 
-- 📖 Read full [README](README.md) for detailed documentation
+- 📖 Read [Installation Details](INSTALLATION_DETAILS.md) for the full bare-metal walkthrough
 - 🔧 Configure hardware (SDR, GPIO, displays)
 - 📡 Set up your location and FIPS codes
 - 🔔 Enable alert broadcasting

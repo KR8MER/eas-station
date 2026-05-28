@@ -12,7 +12,7 @@ Welcome to the operator help guide for the NOAA CAP Emergency Alert System (EAS)
 
 ## Getting Started
 1. **Review the About document:** The [About page](../reference/ABOUT) covers system goals, core services, and the complete software stack.
-3. **Install EAS Station™:** Follow the [Installation Guide](../installation/README) for a bare-metal deployment on Debian/Ubuntu with PostgreSQL + PostGIS and Redis.
+3. **Install EAS Station™:** Follow the [Installation Quick Start](../installation/QUICKSTART) and [Installation Details](../installation/INSTALLATION_DETAILS) for a bare-metal deployment on Debian/Ubuntu with PostgreSQL + PostGIS and Redis.
 4. **Launch the stack:**
 
 ## Routine Operations
@@ -103,7 +103,7 @@ Page sections, top to bottom:
 | Collect SDR diagnostics | `bash scripts/collect_sdr_diagnostics.sh` |
 
 ## Related Documentation
-- **[Master Roadmap](../roadmap/dasdec3-feature-roadmap)** - View completed features and upcoming priorities
+- **[Changelog](../reference/CHANGELOG)** - Completed features and recent releases
 - **[System Architecture](../architecture/SYSTEM_ARCHITECTURE)** - Understand the technical design
 - **[About EAS Station™](../reference/ABOUT)** - Project mission and scope
 
