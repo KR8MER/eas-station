@@ -101,6 +101,28 @@ def _resolve_event_code(alert) -> Optional[str]:
     return None
 
 
+def _is_must_carry(raw_json: Optional[Dict]) -> bool:
+    """ECIG §3.4.1.7 — Governor's Must-Carry.
+
+    Returns True when the CAP alert carries
+    ``<parameter><valueName>EAS-Must-Carry</valueName><value>True</value></parameter>``.
+    A True value SHALL override originator and event-code filtering for
+    automatic forwarding (location filtering and duplicate prevention still
+    apply).  Only the first occurrence of the parameter is considered (per
+    §3.3.1).
+    """
+    if not isinstance(raw_json, dict):
+        return False
+    properties = raw_json.get('properties') or {}
+    parameters = properties.get('parameters') if isinstance(properties, dict) else None
+    if not isinstance(parameters, dict):
+        return False
+    value = parameters.get('EAS-Must-Carry')
+    if isinstance(value, (list, tuple)):
+        value = value[0] if value else None
+    return str(value or '').strip().lower() == 'true'
+
+
 def _alert_dedupe_lock_key(
     event_code: Optional[str],
     fips_codes: Optional[List[str]],
@@ -472,6 +494,43 @@ def auto_forward_cap_alert(
             _update_cap_forwarding_status(cap_alert, db_session, False, reason, log)
             return result
 
+        # ── ECIG §3.8: msgType handling ──────────────────────────────────────
+        # Alert  → process normally.
+        # Update → process; the cap_poller supersede pipeline replaces any
+        #          queued original (see CAPPoller._mark_vtec_chain_superseded
+        #          and _should_replace_alert) before we get here.
+        # Cancel → MUST NOT deliver the cancelled message.  An in-progress
+        #          broadcast would complete with EOM, but auto_forward only
+        #          fires for new broadcasts so a plain skip is correct.
+        # Ack/Error → not required to process.
+        message_type_raw = (
+            getattr(cap_alert, 'message_type', None)
+            or alert_data.get('message_type')
+            or alert_data.get('msgType')
+            or 'Alert'
+        )
+        msg_type = str(message_type_raw).strip().lower()
+        if msg_type in ('ack', 'error'):
+            reason = f"msgType '{message_type_raw}' is not aired (ECIG §3.8)"
+            log.debug("Auto-forward skipped for %s: %s", result['identifier'], reason)
+            result['reason'] = reason
+            _update_cap_forwarding_status(cap_alert, db_session, False, reason, log)
+            return result
+        if msg_type == 'cancel':
+            reason = (
+                f"msgType 'Cancel' — cancelled message MUST NOT be aired (ECIG §3.8)"
+            )
+            log.info("Auto-forward skipped for %s: %s", result['identifier'], reason)
+            result['reason'] = reason
+            _update_cap_forwarding_status(cap_alert, db_session, False, reason, log)
+            return result
+        if msg_type not in ('alert', 'update'):
+            reason = f"Unknown msgType '{message_type_raw}' — not aired (ECIG §3.8)"
+            log.info("Auto-forward skipped for %s: %s", result['identifier'], reason)
+            result['reason'] = reason
+            _update_cap_forwarding_status(cap_alert, db_session, False, reason, log)
+            return result
+
         # ── ECIG §3.3: expired alerts shall not be broadcast ─────────────────
         sent_dt = getattr(cap_alert, 'sent', None) or alert_data.get('sent')
         expires_dt = getattr(cap_alert, 'expires', None) or alert_data.get('expires')
@@ -496,6 +555,14 @@ def auto_forward_cap_alert(
         raw_json = alert_data.get('raw_json', {})
         fips_codes = _get_fips_from_cap_alert(cap_alert, raw_json)
         event_code = _resolve_event_code(cap_alert)
+        must_carry = _is_must_carry(raw_json)
+        if must_carry:
+            result['must_carry'] = True
+            log.info(
+                "Auto-forward %s: EAS-Must-Carry asserted — bypassing originator "
+                "and event-code filters (ECIG §3.4.1.7)",
+                result['identifier'],
+            )
 
         # Event code filtering: forward only events the operator has selected.
         # An empty allowlist means "forward all event types" — except RWT, which is
@@ -503,11 +570,13 @@ def auto_forward_cap_alert(
         # to forwarded_event_codes.  This keeps the CAP path consistent with the
         # OTA path (auto_forward_ota_alert) so test activations are not silently
         # rebroadcast just because the allowlist is empty.
+        # ECIG §3.4.1.7: when EAS-Must-Carry=True, event-code filtering is
+        # bypassed (location filtering and dedupe still apply below).
         forwarded_event_codes = eas_config.get('forwarded_event_codes') or []
         allowed = {str(c).strip().upper() for c in forwarded_event_codes if str(c).strip()}
         event_code_upper = event_code.upper() if event_code else ''
 
-        if event_code_upper == 'RWT' and 'RWT' not in allowed:
+        if not must_carry and event_code_upper == 'RWT' and 'RWT' not in allowed:
             reason = (
                 "RWT not forwarded — add 'RWT' to forwarded_event_codes to relay test activations"
             )
@@ -516,7 +585,7 @@ def auto_forward_cap_alert(
             _update_cap_forwarding_status(cap_alert, db_session, False, reason, log)
             return result
 
-        if allowed and event_code_upper not in allowed:
+        if not must_carry and allowed and event_code_upper not in allowed:
             # An unresolved event code (event_code_upper == '') with a configured
             # allowlist must also be rejected: we cannot prove the alert is on the
             # allowlist, so refuse to forward rather than silently bypassing the
