@@ -58,7 +58,9 @@ from app_utils.mdc1200 import (  # noqa: E402
     _xor_modulate,
     bytes_to_bits_msb,
     compute_crc,
+    decode_all_mdc1200_from_samples,
     decode_double_packet,
+    decode_mdc1200_from_samples,
     decode_packet,
     encode_packet,
     find_sync_in_bits,
@@ -635,3 +637,93 @@ def test_mdc1200_packet_all_checks_pass_requires_double_packet_halves():
         target_unit_id=0x2222, crc2_ok=False, fec2_ok=True,
     )
     assert pkt.all_checks_pass is False
+
+
+# ---------------------------------------------------------------------------
+# Multi-packet sample-level decoder
+# ---------------------------------------------------------------------------
+
+def test_decode_all_mdc1200_recovers_ptt_id_pre_and_post():
+    """Audio containing both PTT-ID Pre (start) and PTT-ID Post (end)
+    must yield two packets — the single-pass ``decode_mdc1200_from_samples``
+    used to return only the first sync match and silently dropped the
+    trailing Post burst that real EAS Station composites emit."""
+    import numpy as np
+
+    sr = 16000
+    amp = 0.7 * 32767
+    unit_id = 0x1F96
+
+    pre = generate_mdc1200_samples(0x01, 0x80, unit_id, sr, amp)
+    post = generate_mdc1200_samples(0x00, 0x80, unit_id, sr, amp)
+    silence = [0] * sr  # 1 second of silence between bursts
+
+    waveform = np.array(list(pre) + silence + list(post), dtype=np.float32) / 32768.0
+
+    packets = decode_all_mdc1200_from_samples(waveform, sr)
+    assert len(packets) == 2, f"Expected Pre + Post, got {len(packets)} packets"
+
+    assert packets[0].opcode == 0x01 and packets[0].arg == 0x80
+    assert packets[0].unit_id == unit_id
+    assert packets[0].crc_ok
+
+    assert packets[1].opcode == 0x00 and packets[1].arg == 0x80
+    assert packets[1].unit_id == unit_id
+    assert packets[1].crc_ok
+
+
+def test_decode_single_packet_is_not_misread_as_double_packet():
+    """A single-packet PTT-ID Pre must not be promoted into a double-
+    packet decode just because its trailing 4-byte 0x00 post-preamble
+    overlaps the start of a double-packet's inter-packet preamble.
+
+    Before this guard, ``target_unit_id`` ended up set to ``0x0000``
+    (with ``crc2_ok=False``) and the UI rendered the burst as
+    ``PTT-ID Pre → 0x0000`` — a phantom target that misled operators
+    into thinking the decoder had also recovered a Post burst.
+    """
+    import numpy as np
+
+    sr = 16000
+    amp = 0.7 * 32767
+    samples = generate_mdc1200_samples(0x01, 0x80, 0x1F96, sr, amp)
+    waveform = np.array(list(samples) + [0] * (sr // 2), dtype=np.float32) / 32768.0
+
+    packet = decode_mdc1200_from_samples(waveform, sr)
+    assert packet is not None
+    assert packet.opcode == 0x01 and packet.arg == 0x80
+    assert packet.crc_ok
+    assert packet.target_unit_id is None, (
+        f"Single-packet PTT-ID Pre must report target_unit_id=None, "
+        f"got {packet.target_unit_id!r}"
+    )
+    assert packet.is_double_packet is False
+
+
+def test_decode_all_mdc1200_returns_empty_on_silence():
+    """Pure silence must not produce any phantom packets."""
+    import numpy as np
+    sr = 16000
+    waveform = np.zeros(sr, dtype=np.float32)
+    assert decode_all_mdc1200_from_samples(waveform, sr) == []
+
+
+def test_decode_all_mdc1200_recovers_real_double_packet():
+    """A genuine double-packet op (Call Alert 0x63/0x85) must still
+    decode as a single double-packet, not be misread as two singles."""
+    import numpy as np
+    from app_utils.mdc1200 import generate_mdc1200_samples as gen
+
+    sr = 16000
+    amp = 0.7 * 32767
+    # Call Alert is in MDC1200_DOUBLE_PACKET_OPS — gen() emits 40-byte frame.
+    samples = gen(0x63, 0x85, 0x1111, sr, amp, target_unit_id=0x2222)
+    waveform = np.array(list(samples) + [0] * (sr // 2), dtype=np.float32) / 32768.0
+
+    packets = decode_all_mdc1200_from_samples(waveform, sr)
+    assert len(packets) == 1
+    pkt = packets[0]
+    assert pkt.opcode == 0x63 and pkt.arg == 0x85
+    assert pkt.unit_id == 0x1111
+    assert pkt.target_unit_id == 0x2222
+    assert pkt.crc_ok and pkt.crc2_ok

@@ -695,3 +695,49 @@ def test_dll_endec_detection_eas_station_integration() -> None:
         f"Expected EAS_STATION from 3×0xA9 terminator bytes, got {core.endec_mode!r}. "
         f"terminator_runs={core._all_terminator_runs!r}"
     )
+
+
+def test_detect_endec_eas_station_a9_beats_silence_floor_ff_noise() -> None:
+    """When the DLL captures a real KR8MER 3×0xA9 trill on every burst
+    but the FSK demod also picks up post-fingerprint silence as long
+    runs of 0xFF (mark tone), the EAS_STATION vote must still win.
+
+    Before this guard, repeated ``(0xFF, large_N)`` runs accumulated
+    enough SAGE_DIGITAL_3644 vote to tie or beat the legitimate KR8MER
+    fingerprint, and a clean EAS Station composite was misidentified as
+    SAGE DIGITAL.
+    """
+    runs = []
+    # Three bursts, each emitting the legitimate trill followed by a
+    # long silence-floor 0xFF run.
+    for _ in range(3):
+        runs.append((0xA9, 3))
+        runs.append((0xFF, 8))
+    mode = detect_endec_mode(
+        ["ZCZC-WXR-DMO-039003+0015-0001234-KR8MER-"],
+        [],
+        terminator_runs=runs,
+    )
+    assert mode == ENDEC_MODE_EAS_STATION, (
+        f"Expected EAS_STATION (0xA9 trill is unique to KR8MER), got {mode!r}"
+    )
+
+
+def test_detect_endec_deduplicates_repeated_burst_evidence() -> None:
+    """Three identical SAME bursts produce three identical terminator
+    runs; the vote must not multiply by three (which used to allow
+    accumulated 0xFF silence noise to override a single legitimate
+    fingerprint observed in a different vote slot)."""
+    # SAGE DIGITAL — 3 bursts × (0xFF, 3) should still pick SAGE_3644,
+    # but a single (0xFF, 3) entry should yield the same result.
+    mode_single = detect_endec_mode(
+        ["ZCZC-WXR-TOR-029015+0030-0181500-KOAX/NWS-"],
+        [],
+        terminator_runs=[(0xFF, 3)],
+    )
+    mode_triple = detect_endec_mode(
+        ["ZCZC-WXR-TOR-029015+0030-0181500-KOAX/NWS-"],
+        [],
+        terminator_runs=[(0xFF, 3), (0xFF, 3), (0xFF, 3)],
+    )
+    assert mode_single == mode_triple == ENDEC_MODE_SAGE_3644

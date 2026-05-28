@@ -244,7 +244,7 @@ def detect_eas_from_file(
         # MDC1200 selective-calling packets.  Uses the buffer or composite segment
         # already in memory from the SAME decode to avoid re-reading the file.
         try:
-            from app_utils.mdc1200 import decode_mdc1200_from_samples as _decode_mdc
+            from app_utils.mdc1200 import decode_all_mdc1200_from_samples as _decode_all_mdc
             mdc_audio: Optional[np.ndarray] = None
             mdc_rate: int = same_result.sample_rate or 16000
             for seg_key in ("buffer", "composite"):
@@ -265,8 +265,8 @@ def detect_eas_from_file(
                 except Exception:
                     continue
             if mdc_audio is not None:
-                pkt = _decode_mdc(mdc_audio, mdc_rate)
-                if pkt is not None:
+                packets = _decode_all_mdc(mdc_audio, mdc_rate)
+                for pkt in packets:
                     result.mdc1200_packets.append(pkt)
                     logger.info(
                         "MDC1200 packet decoded: unit_id=0x%04X op=0x%02X arg=0x%02X crc_ok=%s",
