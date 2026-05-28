@@ -55,7 +55,7 @@ import re
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests as _http
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont, PngImagePlugin
 
 # ─── Canonical brand logo ──────────────────────────────────────────────────
 # Single source of truth for the EAS Station brand logo raster used inside
@@ -70,28 +70,146 @@ _LOGO_CACHE: Optional[Image.Image] = None
 
 
 def _load_logo() -> Optional[Image.Image]:
-    """Load the canonical EAS Station logo PNG (cached, RGBA)."""
+    """Load the canonical EAS Station logo PNG (cached, RGBA).
+
+    The PNG keeps the full SVG viewBox dimensions (favicons + apple
+    touch icon assume those), but for the share-card renderer the
+    trailing transparent margin on the right (where the SVG reserved
+    blank space past "INFRASTRUCTURE") would force the visible wordmark
+    to sit ~100 px inside ``brand_right``.  We trim that right margin
+    here — and only that — so the cached image's right edge matches the
+    rightmost pixel of "STATION™".  When the renderer pastes at
+    ``brand_right - logo_w`` the visible wordmark then anchors flush
+    against the canvas right margin instead of floating away from it.
+    Vertical bounds are preserved so the height-to-width ratio (and the
+    title shrink-to-fit math that depends on it) stays the same.
+    """
     global _LOGO_CACHE
     if _LOGO_CACHE is not None:
         return _LOGO_CACHE
     try:
         with Image.open(_LOGO_PATH) as im:
-            _LOGO_CACHE = im.convert('RGBA').copy()
+            rgba = im.convert('RGBA')
+            bbox = rgba.getbbox()
+            if bbox is not None:
+                # Trim trailing right transparent margin only — leave
+                # the vertical extent and the left padding alone.
+                rgba = rgba.crop((0, 0, bbox[2], rgba.height))
+            _LOGO_CACHE = rgba.copy()
         return _LOGO_CACHE
     except Exception:
         return None
 
 
-# ─── Canvas dimensions (Facebook recommended: 1200×630) ────────────────────
-FB_WIDTH    = 1200
-FB_HEIGHT   = 630
-HEADER_H    = 90
-FOOTER_H    = 50
-BODY_H      = FB_HEIGHT - HEADER_H - FOOTER_H   # 490
-MAP_W       = 582
-MAP_H       = BODY_H                             # 490
-INFO_X      = MAP_W + 8                          # 590
-INFO_W      = FB_WIDTH - INFO_X - 8             # 594
+# ─── Canvas layouts ─────────────────────────────────────────────────────────
+# The share card renders into one of several preset canvases that target the
+# common social-platform aspect ratios.  Each preset bundles the canvas
+# dimensions plus the rectangles for the chrome (header / footer) and the
+# two content slots (map + info panel).  The info-panel drawers (threats,
+# headline, areas, description, instructions, …) all operate on a generic
+# rectangle, so a new layout is just a different set of numbers — no new
+# drawing code per aspect ratio.
+
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class _Layout:
+    """Geometry for a single share-card aspect-ratio variant."""
+    width: int
+    height: int
+    header_h: int
+    footer_h: int
+    # Map slot rectangle: (x, y, w, h).
+    map_rect: Tuple[int, int, int, int]
+    # Info-panel slot rectangle (where text sections render).
+    info_rect: Tuple[int, int, int, int]
+    # Width of the dark scrim under the header text (left edge) for
+    # legibility against the particle layer.
+    header_scrim_w: int
+    # Whether to draw the thin vertical divider between map and info
+    # (only used in side-by-side layouts).
+    show_vertical_divider: bool = False
+    # Outer rounded-corner radius.
+    corner_r: int = 18
+    # Inner map rounded-corner radius (0 for full-bleed map).
+    map_corner_r: int = 14
+    # Title font size (px).  Default 30 matches the original landscape
+    # design; portrait / story preset values bump this so the headline
+    # still reads near-fullscreen on a phone.
+    title_size: int = 30
+
+
+# Facebook / Twitter / LinkedIn open-graph cards — horizontal split with
+# the map on the left and the text panel on the right.
+_LAYOUT_LANDSCAPE = _Layout(
+    width=1200, height=630,
+    header_h=90, footer_h=50,
+    map_rect=(0, 90, 582, 490),
+    info_rect=(590, 98, 594, 482),
+    header_scrim_w=560,
+    show_vertical_divider=True,
+    map_corner_r=14,
+    title_size=30,
+)
+
+# Instagram / Mastodon / generic square feed card — stacked layout with
+# header → map → info → footer down the centre line.  Header gets a
+# slightly taller bar + bigger title to balance the larger canvas.
+_LAYOUT_SQUARE = _Layout(
+    width=1080, height=1080,
+    header_h=118, footer_h=60,
+    map_rect=(0, 118, 1080, 540),
+    info_rect=(16, 666, 1048, 354),
+    header_scrim_w=600,
+    map_corner_r=0,
+    title_size=36,
+)
+
+# Instagram portrait (4:5) — taller info panel, slightly shorter map.
+_LAYOUT_PORTRAIT = _Layout(
+    width=1080, height=1350,
+    header_h=125, footer_h=60,
+    map_rect=(0, 125, 1080, 540),
+    info_rect=(16, 673, 1048, 612),
+    header_scrim_w=600,
+    map_corner_r=0,
+    title_size=38,
+)
+
+# Instagram / TikTok / Snapchat Stories & Reels (9:16) — phone-first
+# vertical layout with a tall info panel for longer descriptions.  Title
+# is roughly 60% larger than landscape so the headline still reads at
+# arm's-length on a phone, where Stories are typically viewed.
+_LAYOUT_STORY = _Layout(
+    width=1080, height=1920,
+    header_h=160, footer_h=70,
+    map_rect=(0, 160, 1080, 800),
+    info_rect=(16, 970, 1048, 880),
+    header_scrim_w=620,
+    map_corner_r=0,
+    title_size=48,
+)
+
+_LAYOUTS: Dict[str, _Layout] = {
+    'landscape': _LAYOUT_LANDSCAPE,
+    'square':    _LAYOUT_SQUARE,
+    'portrait':  _LAYOUT_PORTRAIT,
+    'story':     _LAYOUT_STORY,
+}
+
+# Module-level constants preserved for backward compatibility — anything
+# that previously imported these names still gets the original landscape
+# numbers.  New code should reach into ``_Layout`` instances instead.
+FB_WIDTH    = _LAYOUT_LANDSCAPE.width
+FB_HEIGHT   = _LAYOUT_LANDSCAPE.height
+HEADER_H    = _LAYOUT_LANDSCAPE.header_h
+FOOTER_H    = _LAYOUT_LANDSCAPE.footer_h
+BODY_H      = FB_HEIGHT - HEADER_H - FOOTER_H
+MAP_W       = _LAYOUT_LANDSCAPE.map_rect[2]
+MAP_H       = _LAYOUT_LANDSCAPE.map_rect[3]
+INFO_X      = _LAYOUT_LANDSCAPE.info_rect[0]
+INFO_W      = _LAYOUT_LANDSCAPE.info_rect[2]
 TILE_SIZE   = 256
 
 # ─── Colour palette ─────────────────────────────────────────────────────────
@@ -445,6 +563,30 @@ def _theme_supports_storm_motion(theme: _Theme) -> bool:
 _FONT_CACHE: Optional[Dict[str, ImageFont.FreeTypeFont]] = None
 
 
+_FONT_REG_PATHS = [
+    '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+    '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
+    '/usr/share/fonts/truetype/freefont/FreeSans.ttf',
+]
+_FONT_BOLD_PATHS = [
+    '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+    '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
+    '/usr/share/fonts/truetype/freefont/FreeSansBold.ttf',
+]
+
+
+def _load_font(paths: List[str], size: int) -> ImageFont.FreeTypeFont:
+    """Load the first TrueType path that exists at *size* — or Pillow's
+    built-in default if none are available.  Result is not cached here;
+    callers should memoise as appropriate."""
+    for p in paths:
+        try:
+            return ImageFont.truetype(p, size)
+        except (IOError, OSError):
+            pass
+    return ImageFont.load_default(size=size)
+
+
 def _load_fonts() -> Dict[str, ImageFont.FreeTypeFont]:
     """Return a dict of sized fonts; falls back to Pillow built-in.
 
@@ -457,37 +599,30 @@ def _load_fonts() -> Dict[str, ImageFont.FreeTypeFont]:
     if _FONT_CACHE is not None:
         return _FONT_CACHE
 
-    _reg = [
-        '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
-        '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
-        '/usr/share/fonts/truetype/freefont/FreeSans.ttf',
-    ]
-    _bold = [
-        '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
-        '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
-        '/usr/share/fonts/truetype/freefont/FreeSansBold.ttf',
-    ]
-
-    def _load(paths: List[str], size: int) -> ImageFont.FreeTypeFont:
-        for p in paths:
-            try:
-                return ImageFont.truetype(p, size)
-            except (IOError, OSError):
-                pass
-        return ImageFont.load_default(size=size)
-
     _FONT_CACHE = {
-        'title':  _load(_bold, 30),
-        'head':   _load(_bold, 18),
-        'bold':   _load(_bold, 15),
-        'normal': _load(_reg,  14),
-        'small':  _load(_reg,  12),
-        'tiny':   _load(_reg,  11),
-        'label':  _load(_bold, 11),
-        'threat': _load(_bold, 15),
-        'mono':   _load(_reg,  11),
+        'title':  _load_font(_FONT_BOLD_PATHS, 30),
+        'head':   _load_font(_FONT_BOLD_PATHS, 18),
+        'bold':   _load_font(_FONT_BOLD_PATHS, 15),
+        'normal': _load_font(_FONT_REG_PATHS,  14),
+        'small':  _load_font(_FONT_REG_PATHS,  12),
+        'tiny':   _load_font(_FONT_REG_PATHS,  11),
+        'label':  _load_font(_FONT_BOLD_PATHS, 11),
+        'threat': _load_font(_FONT_BOLD_PATHS, 15),
+        'mono':   _load_font(_FONT_REG_PATHS,  11),
     }
     return _FONT_CACHE
+
+
+# Per-size title-font cache so each layout's bumped headline only pays
+# the truetype-load cost once across the process lifetime.
+_TITLE_FONT_CACHE: Dict[int, ImageFont.FreeTypeFont] = {}
+
+
+def _title_font_for(size: int) -> ImageFont.FreeTypeFont:
+    """Return the bold title font at *size*, memoised by size."""
+    if size not in _TITLE_FONT_CACHE:
+        _TITLE_FONT_CACHE[size] = _load_font(_FONT_BOLD_PATHS, size)
+    return _TITLE_FONT_CACHE[size]
 
 
 # ─── Colour helpers ──────────────────────────────────────────────────────────
@@ -521,6 +656,256 @@ def _truncate(font: ImageFont.FreeTypeFont, text: str, max_w: int) -> str:
     while len(text) > 0 and _tw(font, text + ellipsis) > max_w:
         text = text[:-1]
     return text + ellipsis
+
+
+def _draw_pill(draw: ImageDraw.ImageDraw,
+               font: ImageFont.FreeTypeFont,
+               text: str,
+               fill: Tuple[int, int, int],
+               x: int, y: int,
+               *,
+               text_color: Tuple[int, int, int] = (255, 255, 255),
+               pad_x: int = 9, pad_y: int = 3) -> int:
+    """Draw a rounded-rectangle pill at (x, y) with *text* inside.
+
+    Returns the x-coordinate of the pill's right edge so the caller can
+    chain multiple pills horizontally without re-measuring.
+    """
+    text_w = _tw(font, text)
+    text_h = _th(font, text)
+    pill_w = text_w + pad_x * 2
+    pill_h = text_h + pad_y * 2
+    radius = max(2, pill_h // 2)
+    draw.rounded_rectangle((x, y, x + pill_w, y + pill_h),
+                           radius=radius, fill=fill)
+    # Pillow's ``getbbox`` excludes the top-side bearing of TrueType
+    # fonts, so subtract the bbox top to get the baseline-aligned y.
+    bbox_top = font.getbbox(text)[1]
+    draw.text((x + pad_x, y + pad_y - bbox_top), text, font=font, fill=text_color)
+    return x + pill_w
+
+
+def _resolve_local_tz():
+    """Return the configured location tzinfo without forcing the full
+    ``app_utils`` package init (which pulls in psutil and friends).
+
+    Honours the same ``DEFAULT_TIMEZONE`` env var that
+    ``app_utils.time.get_location_timezone`` reads, so behaviour stays
+    consistent across the rest of the app.
+    """
+    tz_name = os.environ.get('DEFAULT_TIMEZONE', 'America/New_York')
+    try:
+        from zoneinfo import ZoneInfo
+        return ZoneInfo(tz_name)
+    except Exception:
+        try:
+            import pytz
+            return pytz.timezone(tz_name)
+        except Exception:
+            from datetime import timezone
+            return timezone.utc
+
+
+def _short_local_dt(dt: Any, ref: Optional[Any] = None) -> str:
+    """Compact local-time label for the share-card footer.
+
+    Returns e.g. ``"6:29 PM EDT"`` when *dt* and *ref* share a calendar
+    day (or *ref* is None), or ``"May 19 · 6:29 PM EDT"`` when they
+    don't, so an "Expires …" stamp can never appear earlier than
+    "Issued …" on a quick read.
+    """
+    from datetime import datetime, timezone
+
+    tz = _resolve_local_tz()
+
+    def _to_local(value: Any) -> Optional[datetime]:
+        if not value:
+            return None
+        if getattr(value, 'tzinfo', None) is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.astimezone(tz)
+
+    local = _to_local(dt)
+    if local is None:
+        return ''
+
+    show_date = False
+    if ref is not None:
+        ref_local = _to_local(ref)
+        if ref_local is not None and local.date() != ref_local.date():
+            show_date = True
+
+    # %I gives zero-padded hour ("06"); strip the leading zero for the
+    # share card without relying on platform-specific %-I.
+    time_part = local.strftime('%I:%M %p %Z')
+    if time_part.startswith('0'):
+        time_part = time_part[1:]
+    if show_date:
+        date_part = local.strftime('%b %d').replace(' 0', ' ')
+        return f"{date_part} · {time_part}"
+    return time_part
+
+
+# ─── ALL-CAPS → sentence-case humanizer ─────────────────────────────────────
+# NWS CAP feeds arrive ALL-CAPS (a legacy of teletype-era systems).  Rendering
+# them shouted on a share card is the single biggest legibility hit — bodies
+# of text in caps are ~10–20% slower to read.  These helpers detect a shouted
+# string and rebuild a readable sentence-case form while keeping known
+# acronyms (NWS, EDT, MPH, …) and US state names properly capitalised.
+
+# Tokens that should remain ALL-CAPS after humanising.
+_PRESERVE_ACRONYMS = frozenset([
+    # Issuing agencies / source systems
+    'NWS', 'WFO', 'NOAA', 'NHC', 'SPC', 'WPC', 'CPC', 'IPAWS', 'FEMA',
+    'EAS', 'EOC', 'NCEP', 'NWR',
+    # Time zones (continental + AK/HI + Atlantic + Chamorro)
+    'UTC', 'GMT', 'EST', 'EDT', 'CST', 'CDT', 'MST', 'MDT', 'PST', 'PDT',
+    'AKST', 'AKDT', 'HST', 'HAST', 'AST', 'ADT', 'CHST', 'SST',
+    # Compass points
+    'N', 'NE', 'NNE', 'ENE', 'E', 'ESE', 'SE', 'SSE',
+    'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW',
+    # Units
+    'MPH', 'KPH', 'KMH', 'KTS', 'KT',
+    'AM', 'PM',
+    # Convective intensity
+    'EF0', 'EF1', 'EF2', 'EF3', 'EF4', 'EF5',
+    'F0', 'F1', 'F2', 'F3', 'F4', 'F5',
+    # Protocols / identifiers commonly in alert text
+    'CAP', 'VTEC', 'PVTEC', 'HVTEC', 'UGC', 'WMO', 'FIPS', 'SAME',
+    'AMBER', 'AWIPS',  # AMBER is technically a backronym but is brand-cased
+])
+
+# US state / territory codes (kept uppercase)
+_US_STATE_CODES = frozenset([
+    'AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA',
+    'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD',
+    'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ',
+    'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC',
+    'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY',
+    'DC', 'PR', 'VI', 'GU', 'AS', 'MP',
+])
+
+# Full US state / territory names (lowercase key → display form).
+_US_STATES = {
+    'alabama': 'Alabama', 'alaska': 'Alaska', 'arizona': 'Arizona',
+    'arkansas': 'Arkansas', 'california': 'California', 'colorado': 'Colorado',
+    'connecticut': 'Connecticut', 'delaware': 'Delaware', 'florida': 'Florida',
+    'georgia': 'Georgia', 'hawaii': 'Hawaii', 'idaho': 'Idaho',
+    'illinois': 'Illinois', 'indiana': 'Indiana', 'iowa': 'Iowa',
+    'kansas': 'Kansas', 'kentucky': 'Kentucky', 'louisiana': 'Louisiana',
+    'maine': 'Maine', 'maryland': 'Maryland', 'massachusetts': 'Massachusetts',
+    'michigan': 'Michigan', 'minnesota': 'Minnesota', 'mississippi': 'Mississippi',
+    'missouri': 'Missouri', 'montana': 'Montana', 'nebraska': 'Nebraska',
+    'nevada': 'Nevada', 'ohio': 'Ohio', 'oklahoma': 'Oklahoma',
+    'oregon': 'Oregon', 'pennsylvania': 'Pennsylvania', 'tennessee': 'Tennessee',
+    'texas': 'Texas', 'utah': 'Utah', 'vermont': 'Vermont', 'virginia': 'Virginia',
+    'washington': 'Washington', 'wisconsin': 'Wisconsin', 'wyoming': 'Wyoming',
+    'guam': 'Guam',
+}
+
+# Stopwords kept lowercase when title-casing enumeration lists (cities of X, Y…).
+_LIST_STOPWORDS = frozenset([
+    'of', 'and', 'or', 'the', 'a', 'an', 'in', 'on', 'at', 'to', 'by',
+])
+
+# Triggers that flag a coming proper-noun enumeration (NWS texts list
+# affected cities/counties after these phrases).
+_LIST_TRIGGER_RE = re.compile(
+    r'\b(cities?\s+of|counties?\s+of|towns?\s+of|villages?\s+of|'
+    r'townships?\s+of|parishes?\s+of|boroughs?\s+of|community\s+of|'
+    r'communities\s+of)\b([^.]*)',
+    flags=re.IGNORECASE,
+)
+
+
+def _is_shouting(text: str, threshold: float = 0.80) -> bool:
+    """True when *text* is dominantly uppercase — likely an NWS feed string."""
+    letters = [c for c in text if c.isalpha()]
+    if len(letters) < 12:
+        return False
+    upper = sum(1 for c in letters if c.isupper())
+    return upper / len(letters) >= threshold
+
+
+def _humanize_caps_text(text: str) -> str:
+    """Convert ALL-CAPS NWS-style text to readable sentence case.
+
+    Only operates when *text* is dominantly uppercase.  The output:
+    - lowercases the body,
+    - capitalises the first letter and any letter following sentence
+      punctuation,
+    - restores known acronyms (NWS, EDT, MPH, …) and US state codes,
+    - title-cases full US state names,
+    - title-cases the proper-noun enumeration that follows triggers like
+      "cities of" / "counties of".
+    """
+    if not text or not _is_shouting(text):
+        return text
+
+    out = text.lower()
+
+    # Capitalise the very first alphabetic character.
+    for i, ch in enumerate(out):
+        if ch.isalpha():
+            out = out[:i] + ch.upper() + out[i + 1:]
+            break
+
+    # Capitalise after sentence-ending punctuation.
+    out = re.sub(
+        r'([.!?]\s+)([a-z])',
+        lambda m: m.group(1) + m.group(2).upper(),
+        out,
+    )
+
+    def _restore_word(m: 're.Match[str]') -> str:
+        word = m.group(0)
+        upper = word.upper()
+        if upper in _PRESERVE_ACRONYMS:
+            return upper
+        lower = word.lower()
+        if lower in _US_STATES:
+            return _US_STATES[lower]
+        return word
+
+    out = re.sub(r"[A-Za-z]+", _restore_word, out)
+
+    # State codes are intentionally NOT in the global preserve set — too
+    # many overlap with common English words (IN, OR, ME, HI, OK, PA, MA,
+    # LA, DE, …) so a blanket uppercase would turn "in effect" into
+    # "IN effect".  Only uppercase them when they appear at the END of a
+    # comma-prefixed list item — i.e. the unambiguous "City, ST" pattern
+    # closed by a list separator (``, ;``), sentence punctuation
+    # (``. ! ?``), or end-of-string.  Crucially the lookahead does NOT
+    # match a trailing space, since ``, in a vehicle`` and ``, or in a``
+    # would otherwise look identical to ``, OH `` and get mis-shouted.
+    def _state_code_after_comma(m: 're.Match[str]') -> str:
+        prefix, code = m.group(1), m.group(2)
+        return prefix + code.upper() if code.upper() in _US_STATE_CODES else m.group(0)
+
+    out = re.sub(
+        r'(,\s+)([A-Za-z]{2})(?=[.,;:!?]|$)',
+        _state_code_after_comma,
+        out,
+    )
+
+    # Title-case proper nouns inside enumeration phrases ("cities of A, B,
+    # and C") — preserves city/county names that lowercase otherwise.
+    def _title_list(m: 're.Match[str]') -> str:
+        head, body = m.group(1), m.group(2)
+
+        def _title_word(wm: 're.Match[str]') -> str:
+            w = wm.group(0)
+            if w.upper() in _PRESERVE_ACRONYMS:
+                return w.upper()
+            if w.lower() in _LIST_STOPWORDS:
+                return w.lower()
+            return w[:1].upper() + w[1:].lower()
+
+        body = re.sub(r"[A-Za-z]+", _title_word, body)
+        return head + body
+
+    out = _LIST_TRIGGER_RE.sub(_title_list, out)
+    return out
 
 
 # ─── Lightning bolt renderer (matches the site's lightning theme) ───────────
@@ -870,7 +1255,8 @@ _PARTICLE_FNS = {
 
 
 def _draw_themed_header(img: Image.Image, theme: _Theme,
-                        seed: int = 0) -> None:
+                        seed: int = 0,
+                        layout: Optional[_Layout] = None) -> None:
     """Paint a themed header: diagonal gradient + event-appropriate particles.
 
     Replaces the older single-colour vertical gradient + always-bolts
@@ -879,34 +1265,36 @@ def _draw_themed_header(img: Image.Image, theme: _Theme,
     snowflakes for winter advisories, raindrops for floods, sun rays for
     heat, etc.  See ``_THEMES`` for the full mapping.
     """
+    lay = layout or _LAYOUT_LANDSCAPE
+    canvas_w = lay.width
+    header_h = lay.header_h
     top = theme['top']
     bot = theme['bottom']
-    d = ImageDraw.Draw(img)
     # Diagonal gradient — compute t from a normal vector pointing from
     # the top-left corner to the bottom-right of the header.  Drawing per
     # row is fast enough and lets us shade left→right per row by sampling
     # the diagonal coordinate at line midpoint.
-    diag = HEADER_H + FB_WIDTH * 0.35   # how far along the diagonal we go
-    for y in range(HEADER_H):
+    diag = header_h + canvas_w * 0.35   # how far along the diagonal we go
+    for y in range(header_h):
         # Two-stop interpolation with per-row x sweep so the right side
         # of the image runs ahead of the left — diagonal feel.
-        row = Image.new('RGB', (FB_WIDTH, 1), bot)
+        row = Image.new('RGB', (canvas_w, 1), bot)
         rd = ImageDraw.Draw(row)
-        for x in range(0, FB_WIDTH, 8):   # step by 8 px — visually smooth, fast
+        for x in range(0, canvas_w, 8):   # step by 8 px — visually smooth, fast
             t = (y + x * 0.35) / diag
             t = max(0.0, min(1.0, t))
             r = int(top[0] * (1 - t) + bot[0] * t)
             g = int(top[1] * (1 - t) + bot[1] * t)
             b = int(top[2] * (1 - t) + bot[2] * t)
-            rd.line([(x, 0), (min(FB_WIDTH, x + 8), 0)], fill=(r, g, b))
+            rd.line([(x, 0), (min(canvas_w, x + 8), 0)], fill=(r, g, b))
         img.paste(row, (0, y))
     # Slight darkening at the very top edge so the title reads clearly
     # against the brighter parts of the gradient.
-    shade = Image.new('RGBA', (FB_WIDTH, HEADER_H), (0, 0, 0, 0))
+    shade = Image.new('RGBA', (canvas_w, header_h), (0, 0, 0, 0))
     sd = ImageDraw.Draw(shade)
     for y in range(28):
         a = int(60 * (1 - y / 28))
-        sd.line([(0, y), (FB_WIDTH, y)], fill=(0, 0, 0, a))
+        sd.line([(0, y), (canvas_w, y)], fill=(0, 0, 0, a))
     base = img.convert('RGBA')
     base.alpha_composite(shade)
     img.paste(base.convert('RGB'))
@@ -915,7 +1303,7 @@ def _draw_themed_header(img: Image.Image, theme: _Theme,
     intensity = float(theme.get('particle_intensity', 1.0))
     fn = _PARTICLE_FNS.get(particle)
     if fn is not None and intensity > 0.01:
-        fn(img, (0, 0, FB_WIDTH, HEADER_H), seed=seed, intensity=intensity)
+        fn(img, (0, 0, canvas_w, header_h), seed=seed, intensity=intensity)
 
 
 # ─── Rounded-corner helpers ─────────────────────────────────────────────────
@@ -1009,7 +1397,148 @@ def _best_zoom(min_lon: float, min_lat: float, max_lon: float, max_lat: float,
     return 7
 
 
+# ─── OSM tile fetch + cache ─────────────────────────────────────────────────
+# OpenStreetMap's tile-usage policy asks consumers to cache tiles aggressively;
+# every re-render of the same alert used to refetch up to 30 tiles.  This
+# bounded LRU keeps the most recently fetched tiles in memory so subsequent
+# renders within the same worker process answer instantly and stop hammering
+# tile.openstreetmap.org.  Tiles are immutable for our purposes (zoom level
+# pins the source pyramid), so caching is safe — only Pillow's underlying
+# bytes are kept; ``Image.copy()`` on read returns a fresh handle that
+# downstream code can crop/paste into without mutating the cached copy.
+
+from collections import OrderedDict
+from threading import Lock
+
+_TILE_CACHE_MAX = 256
+_TILE_CACHE: "OrderedDict[Tuple[int, int, int], bytes]" = OrderedDict()
+_TILE_CACHE_LOCK = Lock()
+
+
+def _tile_cache_get(key: Tuple[int, int, int]) -> Optional[bytes]:
+    with _TILE_CACHE_LOCK:
+        if key in _TILE_CACHE:
+            _TILE_CACHE.move_to_end(key)
+            return _TILE_CACHE[key]
+    return None
+
+
+def _tile_cache_put(key: Tuple[int, int, int], data: bytes) -> None:
+    with _TILE_CACHE_LOCK:
+        _TILE_CACHE[key] = data
+        _TILE_CACHE.move_to_end(key)
+        while len(_TILE_CACHE) > _TILE_CACHE_MAX:
+            _TILE_CACHE.popitem(last=False)
+
+
+def _tile_cache_clear() -> None:
+    """Drop every cached tile — exposed for tests; not used by the renderer."""
+    with _TILE_CACHE_LOCK:
+        _TILE_CACHE.clear()
+
+
+# ── Disk-backed second-level cache ───────────────────────────────────────────
+# The in-memory LRU above covers within-process re-renders, but each fresh
+# worker process pays the OSM round-trip again — wasteful on a typical
+# multi-worker WSGI deployment (gunicorn restarts, gevent recycle).  A small
+# disk cache survives those restarts.  OSM tiles are effectively immutable
+# at our timescale; we never expire, but a future janitor task can prune by
+# mtime if the cache outgrows its quota.
+_TILE_DISK_CACHE_DIR_DEFAULT = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    'data', 'tile-cache',
+)
+
+
+def _tile_disk_cache_dir() -> Optional[str]:
+    """Return the resolved tile-cache directory, or None if disabled.
+
+    Honours the ``EAS_TILE_CACHE_DIR`` env var so deployments can point
+    the cache at a host-mounted volume.  Empty string disables disk
+    caching entirely (useful for tests and for environments where the
+    working tree is read-only).
+    """
+    path = os.environ.get('EAS_TILE_CACHE_DIR', _TILE_DISK_CACHE_DIR_DEFAULT)
+    if not path:
+        return None
+    try:
+        os.makedirs(path, exist_ok=True)
+    except OSError:
+        return None
+    return path
+
+
+def _tile_disk_path(key: Tuple[int, int, int]) -> Optional[str]:
+    """Filesystem path for a tile, or None when disk caching is disabled."""
+    base = _tile_disk_cache_dir()
+    if base is None:
+        return None
+    z, tx, ty = key
+    return os.path.join(base, f'{z}_{tx}_{ty}.png')
+
+
+def _tile_disk_get(key: Tuple[int, int, int]) -> Optional[bytes]:
+    path = _tile_disk_path(key)
+    if path is None or not os.path.isfile(path):
+        return None
+    try:
+        with open(path, 'rb') as f:
+            return f.read()
+    except OSError:
+        return None
+
+
+def _tile_disk_put(key: Tuple[int, int, int], data: bytes) -> None:
+    path = _tile_disk_path(key)
+    if path is None:
+        return
+    # Write to a sibling temp file and rename — atomic on POSIX so a
+    # concurrent reader never sees a half-written tile.
+    tmp = f'{path}.{os.getpid()}.tmp'
+    try:
+        with open(tmp, 'wb') as f:
+            f.write(data)
+        os.replace(tmp, path)
+    except OSError:
+        # Disk full / read-only filesystem / etc. — silently degrade to
+        # the in-memory cache for this render.
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+
+
 def _fetch_tile(tx: int, ty: int, z: int) -> Optional[Image.Image]:
+    key = (z, tx, ty)
+
+    # L1: in-process LRU.
+    cached = _tile_cache_get(key)
+    if cached is not None:
+        try:
+            return Image.open(io.BytesIO(cached)).convert('RGB')
+        except Exception:
+            # Cached entry corrupt — evict and continue to disk.
+            with _TILE_CACHE_LOCK:
+                _TILE_CACHE.pop(key, None)
+
+    # L2: disk cache.  Survives worker restarts and shared by every
+    # process pointed at the same cache directory.
+    disk = _tile_disk_get(key)
+    if disk is not None:
+        try:
+            img = Image.open(io.BytesIO(disk)).convert('RGB')
+            _tile_cache_put(key, disk)
+            return img
+        except Exception:
+            # Corrupt on-disk tile — drop it and fall through to HTTP.
+            try:
+                path = _tile_disk_path(key)
+                if path:
+                    os.unlink(path)
+            except OSError:
+                pass
+
+    # L3: live OSM fetch.
     url = f'https://tile.openstreetmap.org/{z}/{tx}/{ty}.png'
     try:
         r = _http.get(
@@ -1017,6 +1546,8 @@ def _fetch_tile(tx: int, ty: int, z: int) -> Optional[Image.Image]:
             headers={'User-Agent': 'EASStation/1.0 (+https://github.com/KR8MER/eas-station)'},
         )
         if r.status_code == 200:
+            _tile_cache_put(key, r.content)
+            _tile_disk_put(key, r.content)
             return Image.open(io.BytesIO(r.content)).convert('RGB')
     except Exception:
         pass
@@ -1246,8 +1777,9 @@ def _draw_storm_track(canvas: Image.Image, storm: Dict,
 
 def _render_map(geom: Dict, severity: str,
                 storm_motion: Optional[Dict] = None,
-                theme: Optional[_Theme] = None) -> Image.Image:
-    """Return a MAP_W×MAP_H RGB map image with the alert polygon overlaid.
+                theme: Optional[_Theme] = None,
+                *, map_w: int = MAP_W, map_h: int = MAP_H) -> Image.Image:
+    """Return a *map_w*×*map_h* RGB map image with the alert polygon overlaid.
 
     *theme* drives the polygon stroke / storm-motion accent colours; if
     omitted we fall back to the severity palette (legacy behaviour).
@@ -1258,11 +1790,11 @@ def _render_map(geom: Dict, severity: str,
     the share image cluttered and unreadable when multiple boundaries
     overlapped.
     """
-    fallback = Image.new('RGB', (MAP_W, MAP_H), (35, 42, 62))
+    fallback = Image.new('RGB', (map_w, map_h), (35, 42, 62))
     fd = ImageDraw.Draw(fallback)
     msg = 'Map not available'
     fonts = _load_fonts()
-    fd.text(((MAP_W - _tw(fonts['small'], msg)) // 2, MAP_H // 2 - 8),
+    fd.text(((map_w - _tw(fonts['small'], msg)) // 2, map_h // 2 - 8),
             msg, font=fonts['small'], fill=_TEXT_MUT)
 
     bbox = _geojson_bbox(geom)
@@ -1275,7 +1807,7 @@ def _render_map(geom: Dict, severity: str,
     min_lon -= lon_pad; max_lon += lon_pad
     min_lat -= lat_pad; max_lat += lat_pad
 
-    z = _best_zoom(min_lon, min_lat, max_lon, max_lat, MAP_W, MAP_H)
+    z = _best_zoom(min_lon, min_lat, max_lon, max_lat, map_w, map_h)
 
     tx_min = max(0,        int(math.floor(_lon_to_tx(min_lon, z))) - 1)
     tx_max = min(2**z - 1, int(math.ceil( _lon_to_tx(max_lon, z))) + 1)
@@ -1318,6 +1850,17 @@ def _render_map(geom: Dict, severity: str,
     elif gtype == 'MultiPolygon':
         rings = [r for poly in raw_coords for r in poly]
 
+    # Stroke widths scale with the map's smallest dimension so the
+    # affected polygon reads cleanly on larger canvases (Story, Portrait)
+    # where the fixed thin stroke would otherwise look like a thread.
+    # Reference is 490 px (landscape map height), the size the original
+    # 5/3/9 px stroke values were tuned against.
+    stroke_scale = max(1.0, min(map_w, map_h) / 490.0)
+    glow_w   = max(9,  int(round(9 * stroke_scale)))
+    glow_r   = max(6,  int(round(6 * stroke_scale)))
+    casing_w = max(5,  int(round(5 * stroke_scale)))
+    core_w   = max(3,  int(round(3 * stroke_scale)))
+
     # ── Polygon glow ──────────────────────────────────────────────────────
     # A blurred wider stroke sits behind the crisp outline so the affected
     # area "lifts" off the basemap and is unmistakable at thumbnail size.
@@ -1326,8 +1869,8 @@ def _render_map(geom: Dict, severity: str,
     for ring in rings:
         pts = _to_px(ring)
         if len(pts) >= 2:
-            gd.line(pts + [pts[0]], fill=(*alr_clr, 230), width=9)
-    glow = glow.filter(ImageFilter.GaussianBlur(radius=6))
+            gd.line(pts + [pts[0]], fill=(*alr_clr, 230), width=glow_w)
+    glow = glow.filter(ImageFilter.GaussianBlur(radius=glow_r))
 
     # Semi-transparent fill
     overlay = Image.new('RGBA', canvas.size, (0, 0, 0, 0))
@@ -1348,8 +1891,8 @@ def _render_map(geom: Dict, severity: str,
         pts = _to_px(ring)
         if len(pts) >= 2:
             closed = pts + [pts[0]]
-            od.line(closed, fill=(255, 255, 255), width=5)
-            od.line(closed, fill=alr_clr,         width=3)
+            od.line(closed, fill=(255, 255, 255), width=casing_w)
+            od.line(closed, fill=alr_clr,         width=core_w)
 
     # Storm motion overlay (new cone + tapered arrow + callout)
     if storm_motion:
@@ -1367,19 +1910,19 @@ def _render_map(geom: Dict, severity: str,
     cx = int((_lon_to_tx((min_lon + max_lon) / 2, z) - tx_min) * TILE_SIZE)
     cy = int((_lat_to_ty((min_lat + max_lat) / 2, z) - ty_min) * TILE_SIZE)
 
-    x1 = max(0, cx - MAP_W // 2)
-    y1 = max(0, cy - MAP_H // 2)
-    x2 = min(canvas_w, x1 + MAP_W)
-    y2 = min(canvas_h, y1 + MAP_H)
+    x1 = max(0, cx - map_w // 2)
+    y1 = max(0, cy - map_h // 2)
+    x2 = min(canvas_w, x1 + map_w)
+    y2 = min(canvas_h, y1 + map_h)
 
-    if x2 - x1 < MAP_W:
-        x1 = max(0, x2 - MAP_W)
-    if y2 - y1 < MAP_H:
-        y1 = max(0, y2 - MAP_H)
+    if x2 - x1 < map_w:
+        x1 = max(0, x2 - map_w)
+    if y2 - y1 < map_h:
+        y1 = max(0, y2 - map_h)
 
     cropped = canvas.crop((x1, y1, x2, y2))
-    if cropped.size != (MAP_W, MAP_H):
-        cropped = cropped.resize((MAP_W, MAP_H), Image.LANCZOS)
+    if cropped.size != (map_w, map_h):
+        cropped = cropped.resize((map_w, map_h), Image.LANCZOS)
 
     cd = ImageDraw.Draw(cropped)
 
@@ -1387,8 +1930,8 @@ def _render_map(geom: Dict, severity: str,
     attr     = '\u00a9 OpenStreetMap contributors'
     attr_fnt = fonts['tiny']
     aw, ah   = _tw(attr_fnt, attr), _th(attr_fnt, attr)
-    ax, ay   = MAP_W - aw - 5, MAP_H - ah - 5
-    cd.rectangle((ax - 2, ay - 1, MAP_W - 3, MAP_H - 3), fill=(0, 0, 0))
+    ax, ay   = map_w - aw - 5, map_h - ah - 5
+    cd.rectangle((ax - 2, ay - 1, map_w - 3, map_h - 3), fill=(0, 0, 0))
     cd.text((ax, ay), attr, font=attr_fnt, fill=(200, 200, 200))
 
     return cropped
@@ -1396,10 +1939,18 @@ def _render_map(geom: Dict, severity: str,
 
 # ─── Drawing helpers ─────────────────────────────────────────────────────────
 def _section_header(draw: ImageDraw.ImageDraw, fonts: Dict,
-                    alr_clr: Tuple, ix: int, iy: int, iw: int, title: str) -> int:
-    """Draw a coloured section header; return y after it."""
+                    alr_clr: Tuple, ix: int, iy: int, iw: int, title: str,
+                    *, bg: Optional[Tuple[int, int, int]] = None) -> int:
+    """Draw a coloured section header; return y after it.
+
+    When *bg* is provided it overrides the default ``alr_clr``-derived
+    fill — used by the instruction/action band to flag safety guidance
+    with a warning-yellow header that stands apart from the neutral
+    headline / description sections.
+    """
     h = 20
-    draw.rectangle((ix, iy, ix + iw, iy + h), fill=_darken(alr_clr, 0.25))
+    fill = bg if bg is not None else _darken(alr_clr, 0.25)
+    draw.rectangle((ix, iy, ix + iw, iy + h), fill=fill)
     draw.text((ix + 7, iy + (h - _th(fonts['label'], title)) // 2),
               title, font=fonts['label'], fill=WHITE)
     return iy + h + 2
@@ -1416,18 +1967,29 @@ def generate_alert_image(
     coverage_data: Dict[str, Any],
     ipaws_data: Optional[Dict[str, Any]],
     location_settings: Optional[Dict[str, Any]],
+    aspect_ratio: str = 'landscape',
+    image_format: str = 'png',
 ) -> bytes:
-    """Generate a 1200×630 Facebook-ready PNG for *alert*.
+    """Generate a share-card image for *alert* in the requested aspect ratio.
 
     Args:
         alert:             CAPAlert model instance.
         coverage_data:     Dict returned by calculate_coverage_percentages().
         ipaws_data:        Dict returned by _extract_alert_display_data(), may be None.
         location_settings: Dict from get_location_settings(), may be None.
+        aspect_ratio:      One of ``landscape`` (1200×630, default — FB/X/LI
+            open-graph), ``square`` (1080×1080 — Instagram, Mastodon),
+            ``portrait`` (1080×1350 — Instagram 4:5) or ``story``
+            (1080×1920 — IG / TikTok / Snap).  Unknown values fall back
+            to landscape so callers can pass any platform hint.
+        image_format:      ``png`` (default, universal) or ``webp`` (lossy,
+            ~30% smaller at equivalent quality, supported by every major
+            social platform).  Unknown values fall back to ``png``.
 
     Returns:
-        Raw PNG bytes.
+        Raw image bytes in the requested container.
     """
+    layout = _LAYOUTS.get(aspect_ratio, _LAYOUT_LANDSCAPE)
     fonts = _load_fonts()
 
     severity    = (getattr(alert, 'severity', '') or '').lower()
@@ -1446,39 +2008,98 @@ def generate_alert_image(
     alert_seed = hash((getattr(alert, 'id', 0) or 0, event_name)) & 0xFFFFFFFF
 
     # ── Base canvas ──────────────────────────────────────────────────────────
-    img  = Image.new('RGB', (FB_WIDTH, FB_HEIGHT), _BG)
+    img  = Image.new('RGB', (layout.width, layout.height), _BG)
     draw = ImageDraw.Draw(img)
 
     # ── Header bar (event-themed gradient + particles) ───────────────────────
     # Diagonal gradient + event-specific particle layer (bolts for storms,
     # snowflakes for winter, raindrops for floods, sun rays for heat, ...).
-    _draw_themed_header(img, theme, seed=alert_seed)
+    _draw_themed_header(img, theme, seed=alert_seed, layout=layout)
     # Soft scrim under the title text for legibility against the particle
     # layer.  Only the left ~half — the right side is reserved for branding
     # and shows the particles clearly.
-    scrim = Image.new('RGBA', (FB_WIDTH, HEADER_H), (0, 0, 0, 0))
+    scrim = Image.new('RGBA', (layout.width, layout.header_h), (0, 0, 0, 0))
     sd = ImageDraw.Draw(scrim)
-    sd.rectangle((0, 0, 560, HEADER_H), fill=(0, 0, 0, 75))
+    sd.rectangle((0, 0, layout.header_scrim_w, layout.header_h),
+                 fill=(0, 0, 0, 75))
     base = img.convert('RGBA')
     base.alpha_composite(scrim)
     img.paste(base.convert('RGB'))
     draw = ImageDraw.Draw(img)
 
-    draw.rectangle((0, HEADER_H - 2, FB_WIDTH, HEADER_H),
+    draw.rectangle((0, layout.header_h - 2, layout.width, layout.header_h),
                    fill=_darken(alr_clr, 0.45))
 
-    # Event name (left)
-    draw.text((16, 10), event_name, font=fonts['title'], fill=WHITE)
+    # Pre-compute the wordmark width so we know how much room the title
+    # has on the left.  The logo's natural aspect ratio + the capped
+    # height give us a stable footprint without drawing yet.
+    logo_preview = _load_logo()
+    logo_target_h = min(layout.header_h - 16, 74) if logo_preview else 0
+    if logo_preview and logo_preview.height:
+        logo_target_w = max(1, int(round(
+            logo_preview.width * (logo_target_h / float(logo_preview.height))
+        )))
+    else:
+        logo_target_w = 0
 
-    # Status sub-line
-    sub_parts = []
-    for attr, label in [('status', 'Status'), ('severity', 'Severity'),
-                        ('urgency', 'Urgency'), ('certainty', 'Certainty')]:
-        val = getattr(alert, attr, '') or ''
+    # Event name (left).  Title y is tuned to leave room for the sub-line
+    # below; sub-line y sits below the title font's natural height.  The
+    # title font scales with the layout so larger canvases (Story / IG
+    # 4:5) get a headline that still reads at arm's length, with a
+    # shrink-to-fit guard so an unusually long event name (e.g. "Special
+    # Marine Warning Forecast") never crashes into the wordmark.
+    title_max_w = (layout.width - 16) - logo_target_w - 32 - 16
+    title_size = layout.title_size
+
+    def _title_font(sz: int) -> ImageFont.FreeTypeFont:
+        return fonts['title'] if sz == 30 else _title_font_for(sz)
+
+    title_font = _title_font(title_size)
+    while title_size > 22 and _tw(title_font, event_name) > title_max_w:
+        title_size -= 2
+        title_font = _title_font(title_size)
+
+    title_y = 10
+    draw.text((16, title_y), event_name, font=title_font, fill=WHITE)
+    title_h = _th(title_font, event_name)
+
+    # Metadata row — severity becomes a coloured pill (the single most
+    # glanceable signal for "how worried should I be") with urgency /
+    # certainty rendered as quieter secondary text.  Status renders as a
+    # neutral pill but only when it isn't the default "Actual" (which
+    # holds for ~all production alerts and just adds noise).
+    sub_y = title_y + title_h + 8
+    pill_x = 18
+
+    severity_val = (getattr(alert, 'severity', '') or '').strip()
+    if severity_val:
+        sev_color = _SEVERITY.get(
+            severity_val.lower(),
+            _SEVERITY.get('unknown', (108, 117, 125)),
+        )
+        pill_x = _draw_pill(draw, fonts['label'], severity_val.upper(),
+                            sev_color, pill_x, sub_y)
+        pill_x += 8
+
+    status_val = (getattr(alert, 'status', '') or '').strip()
+    if status_val and status_val.lower() != 'actual':
+        pill_x = _draw_pill(draw, fonts['label'], status_val.upper(),
+                            (108, 117, 125), pill_x, sub_y)
+        pill_x += 8
+
+    extras: List[str] = []
+    for attr, label in [('urgency', 'Urgency'), ('certainty', 'Certainty')]:
+        val = (getattr(alert, attr, '') or '').strip()
         if val:
-            sub_parts.append(f'{label}: {val}')
-    sub_text = '  |  '.join(sub_parts)
-    draw.text((18, 52), sub_text, font=fonts['small'], fill=(*WHITE, 200))  # type: ignore[arg-type]
+            extras.append(f'{label}: {val}')
+    if extras:
+        extra_text = '  ·  '.join(extras)
+        # Optically centre the small text against the pill height so the
+        # baseline lines up cleanly instead of riding above the pill.
+        pill_h = _th(fonts['label'], 'Mg') + 6  # mirrors _draw_pill padding
+        extra_y = sub_y + (pill_h - _th(fonts['small'], extra_text)) // 2 - 1
+        draw.text((pill_x, extra_y), extra_text, font=fonts['small'],
+                  fill=(*WHITE, 200))  # type: ignore[arg-type]
 
     # Branding (top-right) — render the canonical EAS Station wordmark image
     # so updating the brand asset is just a matter of swapping the file at
@@ -1486,15 +2107,26 @@ def generate_alert_image(
     # back to the legacy text mark only if the file is missing or fails to
     # load.
     logo = _load_logo()
-    brand_right = FB_WIDTH - 16
+    brand_right = layout.width - 16
     if logo is not None:
-        logo_h = HEADER_H - 16
+        # Cap the wordmark height so it doesn't balloon on tall headers
+        # (Story / Portrait) — at unbounded scale the logo crowds the
+        # headline and pushes the right side off-canvas.  74 px is the
+        # original landscape size, which already reads cleanly.
+        logo_h = min(layout.header_h - 16, 74)
         # Preserve aspect ratio
         ratio = logo_h / float(logo.height)
         logo_w = max(1, int(round(logo.width * ratio)))
         logo_resized = logo.resize((logo_w, logo_h), Image.LANCZOS)
+        # Dim the wordmark slightly so it reads as a corner mark instead
+        # of competing with the headline.  Multiply the alpha channel by
+        # 0.78 — opaque enough to stay legible against the gradient,
+        # quiet enough to defer to the title.
+        r_ch, g_ch, b_ch, a_ch = logo_resized.split()
+        a_ch = a_ch.point(lambda v: int(v * 0.78))
+        logo_resized = Image.merge('RGBA', (r_ch, g_ch, b_ch, a_ch))
         lx = brand_right - logo_w
-        ly = (HEADER_H - logo_h) // 2
+        ly = (layout.header_h - logo_h) // 2
         # Paste with the logo's own alpha so the header gradient shows through
         base_rgba = img.convert('RGBA')
         base_rgba.alpha_composite(logo_resized, dest=(lx, ly))
@@ -1505,17 +2137,11 @@ def generate_alert_image(
         draw.text((brand_right - _tw(fonts['head'], brand), 10),
                   brand, font=fonts['head'], fill=WHITE)
 
-    # Sent time (right, lower)
-    try:
-        from app_core.eas_storage import format_local_datetime
-        if getattr(alert, 'sent', None):
-            sent_str = format_local_datetime(alert.sent, include_utc=False)
-            draw.text((FB_WIDTH - _tw(fonts['small'], sent_str) - 16, 55),
-                      sent_str, font=fonts['small'], fill=(*WHITE, 180))  # type: ignore[arg-type]
-    except Exception:
-        pass
+    # ── Map slot ────────────────────────────────────────────────────────────
+    # Map rectangle comes from the layout: side-by-side for landscape (map
+    # on the left), stacked for square/portrait (map below the header).
+    map_x, map_y, map_w, map_h = layout.map_rect
 
-    # ── Map (left side) ──────────────────────────────────────────────────────
     # Storm motion is only meaningful for convective / wind / water events.
     # Suppress it on advisories like FROST / HEAT / FOG where the IPAWS
     # blob may still carry a stale motion vector — it adds noise without
@@ -1538,31 +2164,36 @@ def generate_alert_image(
             if geom_json:
                 map_img = _render_map(json.loads(geom_json), severity,
                                       storm_motion=storm_motion,
-                                      theme=theme)
+                                      theme=theme,
+                                      map_w=map_w, map_h=map_h)
     except Exception:
         pass
 
     if map_img is None:
-        map_img = Image.new('RGB', (MAP_W, MAP_H), (34, 42, 60))
+        map_img = Image.new('RGB', (map_w, map_h), (34, 42, 60))
         md = ImageDraw.Draw(map_img)
         lbl = 'Map not available'
-        md.text(((MAP_W - _tw(fonts['small'], lbl)) // 2, MAP_H // 2 - 8),
+        md.text(((map_w - _tw(fonts['small'], lbl)) // 2, map_h // 2 - 8),
                 lbl, font=fonts['small'], fill=_TEXT_MUT)
 
     # Round the map's corners so it sits visually inside the rounded
-    # canvas instead of butting up against sharp 90° edges.
-    map_img = _round_image_corners(map_img, MAP_CORNER_R, bg=_BG)
-    img.paste(map_img, (0, HEADER_H))
+    # canvas instead of butting up against sharp 90° edges.  Skip when
+    # the layout asked for a full-bleed map (corner_r = 0).
+    if layout.map_corner_r > 0:
+        map_img = _round_image_corners(map_img, layout.map_corner_r, bg=_BG)
+    img.paste(map_img, (map_x, map_y))
 
-    # Thin vertical separator
-    draw.line([(MAP_W, HEADER_H), (MAP_W, FB_HEIGHT - FOOTER_H)],
-              fill=_darken(alr_clr, 0.20), width=3)
+    # Thin vertical separator — only meaningful in side-by-side layouts.
+    if layout.show_vertical_divider:
+        div_x = map_x + map_w
+        draw.line([(div_x, map_y),
+                   (div_x, layout.height - layout.footer_h)],
+                  fill=_darken(alr_clr, 0.20), width=3)
 
-    # ── Info panel (right side) ───────────────────────────────────────────────
-    ix  = INFO_X
-    iw  = INFO_W
-    iy  = HEADER_H + 8
-    bot = FB_HEIGHT - FOOTER_H - 6
+    # ── Info panel ──────────────────────────────────────────────────────────
+    ix, iy_top, iw, ih = layout.info_rect
+    iy  = iy_top
+    bot = iy_top + ih
 
     # Priority order for a share card: storm threats (when dangerous), the
     # headline, WHO is affected, WHAT is happening, WHAT to do.  Coverage /
@@ -1579,28 +2210,35 @@ def generate_alert_image(
     iy = _draw_compass_section(draw, fonts, alr_clr, ix, iy, iw, bot, ipaws_data)
 
     # ── Footer ────────────────────────────────────────────────────────────────
-    fy = FB_HEIGHT - FOOTER_H
-    draw.rectangle((0, fy, FB_WIDTH, FB_HEIGHT), fill=_STRIP)
-    draw.line([(0, fy), (FB_WIDTH, fy)], fill=_DIVIDER, width=1)
+    fy = layout.height - layout.footer_h
+    draw.rectangle((0, fy, layout.width, layout.height), fill=_STRIP)
+    draw.line([(0, fy), (layout.width, fy)], fill=_DIVIDER, width=1)
 
     timing: List[str] = []
     try:
-        from app_core.eas_storage import format_local_datetime
-        if getattr(alert, 'sent', None):
-            timing.append(f"Issued: {format_local_datetime(alert.sent, include_utc=False)}")
-        if getattr(alert, 'expires', None):
-            timing.append(f"Expires: {format_local_datetime(alert.expires, include_utc=False)}")
+        sent = getattr(alert, 'sent', None)
+        expires = getattr(alert, 'expires', None)
+        if sent:
+            timing.append(f"Issued {_short_local_dt(sent, ref=None)}")
+        if expires:
+            # When the expiration falls on a different calendar day than the
+            # issue time, include the date so "Expires 10:00 PM" isn't
+            # ambiguous; otherwise keep it to the bare time.
+            timing.append(f"Expires {_short_local_dt(expires, ref=sent)}")
     except Exception:
         pass
 
     if timing:
-        t_str = '   |   '.join(timing)
-        ty_pos = fy + (FOOTER_H - _th(fonts['small'], t_str)) // 2
+        t_str = '  ·  '.join(timing)
+        ty_pos = fy + (layout.footer_h - _th(fonts['small'], t_str)) // 2
         draw.text((12, ty_pos), t_str, font=fonts['small'], fill=_TEXT_SEC)
 
-    credit = 'EAS Station  •  Emergency Alert System'
-    cy_pos = fy + (FOOTER_H - _th(fonts['small'], credit)) // 2
-    draw.text((FB_WIDTH - _tw(fonts['small'], credit) - 12, cy_pos),
+    # Footer attribution carries the trademark mark on the brand name —
+    # mirrors the wordmark in the header band so a viewer who clipped
+    # the screenshot to just the footer still sees the ™.
+    credit = 'EAS Station™  •  Emergency Alert System'
+    cy_pos = fy + (layout.footer_h - _th(fonts['small'], credit)) // 2
+    draw.text((layout.width - _tw(fonts['small'], credit) - 12, cy_pos),
               credit, font=fonts['small'], fill=_TEXT_MUT)
 
     # ── Round outer corners and serialise ────────────────────────────────────
@@ -1609,10 +2247,33 @@ def generate_alert_image(
     # the corner pixels fully transparent so renderers that respect alpha
     # show a true rounded shape; renderers that flatten get the matte
     # they composite against (usually white on social feeds).
-    img_rounded = _round_image_corners(img, CORNER_R, bg=None)
+    img_rounded = _round_image_corners(img, layout.corner_r, bg=None)
 
+    fmt = (image_format or 'png').strip().lower()
     buf = io.BytesIO()
-    img_rounded.save(buf, format='PNG', optimize=True)
+
+    if fmt == 'webp':
+        # ``method=4`` is a good balance between encode time and final
+        # size; ``quality=92`` keeps the gradient header artefact-free
+        # while still saving ~30% versus the equivalent PNG.  Pillow does
+        # not add EXIF or timestamps to WebP by default, so no explicit
+        # metadata stripping step is needed.
+        img_rounded.save(buf, format='WEBP', quality=92, method=4)
+        return buf.getvalue()
+
+    # Default: PNG with minimal metadata.  Passing an explicit
+    # ``pnginfo`` suppresses Pillow's default tIME chunk (which would
+    # leak a server timestamp) and any inherited EXIF, while keeping a
+    # small ``Software`` tag so exports remain auditable.  ``alert_id``
+    # is included as a stable identifier so duplicate uploads can be
+    # deduped without leaking PII.
+    pnginfo = PngImagePlugin.PngInfo()
+    pnginfo.add_text('Software', 'EAS Station')
+    alert_id = getattr(alert, 'id', None)
+    if alert_id is not None:
+        pnginfo.add_text('Source', f'alert/{alert_id}')
+
+    img_rounded.save(buf, format='PNG', optimize=True, pnginfo=pnginfo)
     return buf.getvalue()
 
 
@@ -1761,6 +2422,28 @@ def _draw_coverage(draw: ImageDraw.ImageDraw, fonts: Dict, alr_clr: Tuple,
     if not coverage_data:
         return iy
 
+    # ── Decide what's worth showing ─────────────────────────────────────────
+    # When the configured county is outside the affected polygon, county
+    # coverage will be 0.0%.  Rendering a "0.0% (est.) of <County>" row with
+    # an empty bar reads as a calculation bug; suppress the row in that
+    # case.  Drop the whole section if neither the county nor any service
+    # type has measurable overlap — there is nothing left to display.
+    county = coverage_data.get('county', {}) or {}
+    county_pct = float(county.get('coverage_percentage', 0) or 0)
+    show_county_row = bool(county) and county_pct >= 0.05
+
+    svc_parts: List[str] = []
+    for stype, sdata in sorted(coverage_data.items()):
+        if stype == 'county':
+            continue
+        affected = int(sdata.get('affected_boundaries', 0) or 0)
+        total    = int(sdata.get('total_boundaries',    0) or 0)
+        if total > 0 and affected > 0:
+            svc_parts.append(f'{stype.title()}: {affected}/{total}')
+
+    if not show_county_row and not svc_parts:
+        return iy
+
     # Reserve section-header (22) + at least one row of content before
     # drawing anything — otherwise we'd leave an orphan "COVERAGE" title.
     if iy + 22 + 22 > bot:
@@ -1768,9 +2451,7 @@ def _draw_coverage(draw: ImageDraw.ImageDraw, fonts: Dict, alr_clr: Tuple,
 
     iy = _section_header(draw, fonts, alr_clr, ix, iy, iw, 'COVERAGE')
 
-    county = coverage_data.get('county', {})
-    if county:
-        pct   = float(county.get('coverage_percentage', 0))
+    if show_county_row:
         est   = county.get('is_estimated', False)
         row_h = 32
         if iy + row_h <= bot:
@@ -1778,29 +2459,24 @@ def _draw_coverage(draw: ImageDraw.ImageDraw, fonts: Dict, alr_clr: Tuple,
 
             # Percentage label
             tag  = ' (est.)' if est else ''
-            lbl  = f'{pct:.1f}%{tag} of {county_name}'
+            lbl  = f'{county_pct:.1f}%{tag} of {county_name}'
             lbl  = _truncate(fonts['small'], lbl, iw - 16)
             draw.text((ix + 8, iy + 4), lbl, font=fonts['small'], fill=_TEXT)
 
-            # Progress bar
+            # Progress bar — empty track plus a fill clamped to a true
+            # 0–100% width (no minimum-width fudge that would misrepresent
+            # near-zero coverage as a visible sliver).
             bar_x, bar_y = ix + 8, iy + 21
             bar_w, bar_h = iw - 16, 6
             draw.rounded_rectangle((bar_x, bar_y, bar_x + bar_w, bar_y + bar_h),
                                    radius=3, fill=(55, 65, 88))
-            fill_w = max(4, int(bar_w * min(pct, 100) / 100))
-            draw.rounded_rectangle((bar_x, bar_y, bar_x + fill_w, bar_y + bar_h),
-                                   radius=3, fill=_pct_bar_color(pct))
+            fill_w = int(bar_w * min(county_pct, 100) / 100)
+            if fill_w > 0:
+                draw.rounded_rectangle(
+                    (bar_x, bar_y, bar_x + fill_w, bar_y + bar_h),
+                    radius=3, fill=_pct_bar_color(county_pct),
+                )
             iy += row_h + 3
-
-    # Service counts row
-    svc_parts: List[str] = []
-    for stype, sdata in sorted(coverage_data.items()):
-        if stype == 'county':
-            continue
-        affected = int(sdata.get('affected_boundaries', 0) or 0)
-        total    = int(sdata.get('total_boundaries',    0) or 0)
-        if total > 0:
-            svc_parts.append(f'{stype.title()}: {affected}/{total}')
 
     if svc_parts and iy + 22 <= bot:
         _card_row(draw, ix, iy, iw, 22)
@@ -1989,6 +2665,9 @@ def _draw_nws_headline(draw: ImageDraw.ImageDraw, fonts: Dict, alr_clr: Tuple,
     if not text or iy + 30 > bot:
         return iy
 
+    # NWS-style headlines are often shouted; humanise before rendering.
+    text = _humanize_caps_text(text)
+
     iy = _section_header(draw, fonts, alr_clr, ix, iy, iw, 'HEADLINE')
 
     # Word-wrap (leave 10 px for the quote bar on the left)
@@ -2066,6 +2745,9 @@ def _draw_description(draw: ImageDraw.ImageDraw, fonts: Dict, alr_clr: Tuple,
     if not desc:
         return iy
 
+    # De-shout NWS text — bodies of all-caps are noticeably slower to read.
+    desc = _humanize_caps_text(desc)
+
     font = fonts['small']
     row_h = 18
     # Reserve the 22px section header + at least one row before committing.
@@ -2092,10 +2774,23 @@ def _draw_description(draw: ImageDraw.ImageDraw, fonts: Dict, alr_clr: Tuple,
     return iy + 4
 
 
+_INSTR_ACCENT = (255, 193, 7)  # warning-yellow accent bar
+
+
 def _draw_instruction(draw: ImageDraw.ImageDraw, fonts: Dict, alr_clr: Tuple,
                       ix: int, iy: int, iw: int, bot: int,
                       alert: Any) -> int:
-    """Render safety/action instructions with a caution-coloured accent."""
+    """Render safety guidance with a stronger visual treatment.
+
+    The CAP ``instruction`` field is the one thing on a share card a
+    reader can act on — "move to an interior room", "shelter in
+    place", "evacuate if instructed" — so it gets a warning-yellow
+    section header (visually distinct from the neutral event-coloured
+    headers used for HEADLINE / DESCRIPTION) plus a thicker accent bar
+    on each row.  The header reads "ACTION" instead of "INSTRUCTIONS"
+    because "ACTION" is shorter and imperative — it tells the reader
+    *what this section is for*, not just *what's in it*.
+    """
     instr = (getattr(alert, 'instruction', '') or '').strip()
     if not instr or iy + 30 > bot:
         return iy
@@ -2107,27 +2802,35 @@ def _draw_instruction(draw: ImageDraw.ImageDraw, fonts: Dict, alr_clr: Tuple,
     if not instr:
         return iy
 
+    instr = _humanize_caps_text(instr)
+
     font = fonts['small']
     row_h = 18
     if iy + 22 + row_h > bot:
         return iy
 
-    iy = _section_header(draw, fonts, alr_clr, ix, iy, iw, 'INSTRUCTIONS')
+    # Warning-coloured section header so the action band reads as
+    # distinct from the neutral headline / description sections.  Using
+    # a deeply-darkened amber preserves WCAG-style contrast against the
+    # white label text.
+    iy = _section_header(
+        draw, fonts, alr_clr, ix, iy, iw, 'ACTION',
+        bg=_darken(_INSTR_ACCENT, 0.55),
+    )
 
-    max_w = iw - 18  # leave room for accent bar
+    accent_w = 4  # was 3 — thicker bar reads better at thumbnail size
+    max_w = iw - 12 - accent_w
     # Fill remaining vertical space instead of capping at 4 lines.
     avail_lines = max(1, (bot - iy) // (row_h + 1))
     lines = _wrap_text(font, instr, max_w, max_lines=avail_lines)
-
-    _INSTR_ACCENT = (255, 193, 7)  # warning-yellow accent bar
 
     for ltext in lines:
         if iy + row_h > bot:
             break
         _card_row(draw, ix, iy, iw, row_h)
-        # Yellow accent bar on the left edge
-        draw.rectangle((ix, iy, ix + 3, iy + row_h), fill=_INSTR_ACCENT)
-        draw.text((ix + 10, iy + (row_h - _th(font, ltext)) // 2),
+        # Warning-yellow accent bar on the left edge.
+        draw.rectangle((ix, iy, ix + accent_w, iy + row_h), fill=_INSTR_ACCENT)
+        draw.text((ix + accent_w + 7, iy + (row_h - _th(font, ltext)) // 2),
                   ltext, font=font, fill=_TEXT)
         iy += row_h + 1
 

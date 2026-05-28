@@ -31,6 +31,10 @@ docker-compose.override.yml
 # Development data
 dev_data/
 
+# OSM tile cache for the share-card renderer — fills up at runtime and
+# never belongs in version control.
+data/tile-cache/
+
 # MkDocs documentation build
 site/
 .cache/
