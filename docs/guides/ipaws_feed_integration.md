@@ -147,6 +147,18 @@ For push-based alert delivery instead of polling:
 3. Configure your endpoint to process both subscription confirmation and alert notification messages
 4. Keep REST polling as a fallback during SNS testing
 
+## Auto-Forward Filter Behavior
+
+EAS Station enforces the ECIG CAP-to-EAS Implementation Guide V1.0 on every alert that arrives via IPAWS or NOAA before deciding whether to put it on the air. Operators configuring the EAS broadcasting page should know about three behaviors that can produce surprising results if missed:
+
+1. **`forwarded_event_codes` is your allowlist, NOT a denylist.** When the list is empty, all event codes except `RWT` are eligible to be aired (RWT requires explicit opt-in by adding `RWT` to the list). When the list is non-empty, ONLY the listed event codes will be aired. Skipped alerts log a reason like `Event 'TOR' is not in the configured forwarding allowlist`.
+
+2. **EAS-Must-Carry overrides your event-code allowlist.** Per ECIG §3.4.1.7, when an alert's CAP message includes `<parameter><valueName>EAS-Must-Carry</valueName><value>True</value></parameter>` — typically a Governor's must-carry assertion — `auto_forward_cap_alert` bypasses both the event-code allowlist and the default RWT suppression and airs the alert anyway. Location filtering and cross-source duplicate prevention still apply. The log line is `EAS-Must-Carry asserted — bypassing originator and event-code filters (ECIG §3.4.1.7)`. This is required by the spec; there is no per-station opt-out.
+
+3. **CAP msgType filters before the allowlist runs.** Per ECIG §3.8, alerts with `<msgType>Cancel</msgType>` are never aired (cancellations must not reach the listener as a new broadcast), and `Ack` / `Error` are not processed at all. Only `Alert` and `Update` are eligible for the air chain. The reason log line cites `§3.8`.
+
+For the full sequence of filters and dedupe steps applied by the auto-forward pipeline, see the **ECIG V1.0 compliance gates** table in [`docs/architecture/THEORY_OF_OPERATION.md`](../architecture/THEORY_OF_OPERATION.md).
+
 ## Additional Resources
 
 - [IPAWS All-Hazard Info Feed overview](https://www.fema.gov/about/offices/national-continuity-programs/integrated-public-alert-warning-system/open-platform-emergency-networks)
