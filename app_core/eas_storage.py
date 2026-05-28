@@ -42,6 +42,14 @@ from app_core.models import (
     ReceivedEASAlert,
 )
 from app_utils import ALERT_SOURCE_UNKNOWN
+from app_utils.alert_sources import (
+    ALERT_SOURCE_EAS_RF,
+    ALERT_SOURCE_EAS_STREAM,
+    ALERT_SOURCE_IPAWS,
+    ALERT_SOURCE_NOAA,
+)
+from app_utils.eas import ORIGINATOR_DESCRIPTIONS
+from app_utils.eas_codes import get_event_name, get_originator_name
 from app_utils.eas_decode import (
     SAMEAudioDecodeResult,
     build_plain_language_summary,
@@ -1350,6 +1358,130 @@ def build_alert_delivery_trends(
     }
 
 
+# ---------------------------------------------------------------------------
+# FCC Part 11 log helpers
+#
+# 47 CFR § 11.35(a) and § 11.54(a)(3) require EAS Participants to record the
+# originator (ORG), event code (EEE), location codes (PSSCCC), issue time
+# (JJJHHMM), purge time (+TTTT), and station identifier (LLLLLLLL) for every
+# received and originated EAS message.  The helpers below extract those
+# fields from raw SAME headers and CAP ingest metadata so each entry in the
+# compliance log carries the full FCC-required record set.
+# ---------------------------------------------------------------------------
+
+
+# Best-effort CAP source → SAME originator code.  CAP messages do not carry a
+# SAME ORG directly; this mirrors the mapping the forwarder uses when it
+# composes outgoing SAME audio (see app_core/audio/auto_forward.py).
+_CAP_SOURCE_ORIGINATORS: Dict[str, str] = {
+    ALERT_SOURCE_NOAA: "WXR",
+    ALERT_SOURCE_IPAWS: "EAS",
+    ALERT_SOURCE_EAS_RF: "EAS",
+    ALERT_SOURCE_EAS_STREAM: "EAS",
+}
+
+
+def _parse_same_header_fields(header: Optional[str]) -> Dict[str, Any]:
+    """Return ``{originator, event_code, fips, issue_time, purge_minutes, station}``
+    extracted from a SAME header, or an empty dict if the header does not parse.
+
+    Format: ``ZCZC-ORG-EEE-PSSCCC[-PSSCCC...]+TTTT-JJJHHMM-LLLLLLLL-``
+    """
+    if not header:
+        return {}
+    text_value = header.strip()
+    if not text_value.startswith("ZCZC"):
+        return {}
+    parts = text_value.split("-")
+    if len(parts) < 6:
+        return {}
+    try:
+        originator = parts[1].strip().upper() or None
+        event_code = parts[2].strip().upper() or None
+        station = parts[-2].strip() or None  # LLLLLLLL
+        issue_time = parts[-3].strip() or None  # JJJHHMM
+        purge_field = parts[-4]  # last FIPS, carries "+TTTT"
+        purge_minutes: Optional[int] = None
+        if "+" in purge_field:
+            tttt = purge_field.split("+", 1)[1]
+            if tttt.isdigit() and len(tttt) == 4:
+                purge_minutes = int(tttt[:2]) * 60 + int(tttt[2:])
+        fips_codes: List[str] = []
+        for raw in parts[3:-3]:
+            code = raw.split("+", 1)[0]
+            code = "".join(ch for ch in code if ch.isdigit())
+            if code:
+                fips_codes.append(code.zfill(6)[:6])
+        return {
+            "originator": originator,
+            "event_code": event_code,
+            "fips": fips_codes,
+            "issue_time": issue_time,
+            "purge_minutes": purge_minutes,
+            "station": station,
+        }
+    except (IndexError, ValueError):
+        return {}
+
+
+def _format_purge_minutes(minutes: Optional[int]) -> Optional[str]:
+    if minutes is None:
+        return None
+    hours, mins = divmod(int(minutes), 60)
+    if hours and mins:
+        return f"{hours}h{mins:02d}m"
+    if hours:
+        return f"{hours}h"
+    return f"{mins}m"
+
+
+def _cap_originator_from_source(source: Optional[str]) -> Optional[str]:
+    """Map a CAP alert's ingest source to a best-effort SAME originator code."""
+    if not source:
+        return None
+    return _CAP_SOURCE_ORIGINATORS.get(source.strip().upper())
+
+
+def _cap_fips_codes(raw_json: Any) -> List[str]:
+    """Pull SAME-style 6-digit FIPS codes out of a CAP alert's raw_json."""
+    if not isinstance(raw_json, dict):
+        return []
+    seen: List[str] = []
+    info_blocks = raw_json.get("info")
+    if isinstance(info_blocks, dict):
+        info_blocks = [info_blocks]
+    if not isinstance(info_blocks, list):
+        return []
+    for info in info_blocks:
+        if not isinstance(info, dict):
+            continue
+        areas = info.get("area")
+        if isinstance(areas, dict):
+            areas = [areas]
+        if not isinstance(areas, list):
+            continue
+        for area in areas:
+            if not isinstance(area, dict):
+                continue
+            geocodes = area.get("geocode")
+            if isinstance(geocodes, dict):
+                geocodes = [geocodes]
+            if not isinstance(geocodes, list):
+                continue
+            for geo in geocodes:
+                if not isinstance(geo, dict):
+                    continue
+                name = (geo.get("valueName") or "").strip().upper()
+                value = (geo.get("value") or "").strip()
+                if name in {"SAME", "FIPS", "FIPS6"} and value:
+                    digits = "".join(ch for ch in value if ch.isdigit())
+                    if digits:
+                        code = digits.zfill(6)[:6]
+                        if code not in seen:
+                            seen.append(code)
+    return seen
+
+
 def collect_compliance_log_entries(
     window_days: int = 30,
     *,
@@ -1386,19 +1518,40 @@ def collect_compliance_log_entries(
         )
 
         for alert in alert_query:
+            originator_code = _cap_originator_from_source(alert.source)
+            originator_name = (
+                get_originator_name(originator_code) if originator_code else None
+            )
+            forwarding_reason = (alert.eas_forwarding_reason or "").strip() or None
+            if alert.eas_forwarded:
+                action_taken = "Relayed"
+            elif forwarding_reason:
+                action_taken = "Not relayed"
+            else:
+                action_taken = "Received"
             entries.append(
                 {
                     "timestamp": alert.sent,
                     "category": "received",
                     "event_label": alert.event,
+                    "event_code": None,  # CAP feeds carry no SAME code directly
+                    "originator_code": originator_code,
+                    "originator_name": originator_name,
+                    "fips_codes": _cap_fips_codes(alert.raw_json),
+                    "issue_time": alert.sent,
+                    "purge_time": alert.expires,
+                    "station": None,
                     "identifier": alert.identifier,
                     "status": alert.status,
+                    "action_taken": action_taken,
+                    "action_reason": forwarding_reason,
                     "details": {
                         "message_type": alert.message_type,
                         "scope": alert.scope,
                         "urgency": alert.urgency,
                         "severity": alert.severity,
                         "certainty": alert.certainty,
+                        "source": alert.source,
                     },
                 }
             )
@@ -1411,13 +1564,28 @@ def collect_compliance_log_entries(
 
         for message in eas_query:
             alert = message.cap_alert
+            same_fields = _parse_same_header_fields(message.same_header)
+            originator_code = same_fields.get("originator")
             entries.append(
                 {
                     "timestamp": message.created_at,
                     "category": "relayed",
-                    "event_label": alert.event if alert else None,
+                    "event_label": alert.event if alert else (
+                        get_event_name(same_fields.get("event_code"))
+                        if same_fields.get("event_code")
+                        else None
+                    ),
+                    "event_code": same_fields.get("event_code"),
+                    "originator_code": originator_code,
+                    "originator_name": get_originator_name(originator_code),
+                    "fips_codes": same_fields.get("fips") or [],
+                    "issue_time": same_fields.get("issue_time"),
+                    "purge_time": _format_purge_minutes(same_fields.get("purge_minutes")),
+                    "station": same_fields.get("station"),
                     "identifier": message.same_header,
                     "status": "relayed",
+                    "action_taken": "Relayed",
+                    "action_reason": None,
                     "details": {
                         "has_audio": bool(message.audio_data or message.audio_filename),
                         "has_text": bool(message.text_payload or message.text_filename),
@@ -1433,17 +1601,81 @@ def collect_compliance_log_entries(
 
         for activation in manual_query:
             timestamp = activation.sent_at or activation.created_at
+            same_fields = _parse_same_header_fields(activation.same_header)
+            originator_code = same_fields.get("originator")
             entries.append(
                 {
                     "timestamp": timestamp,
                     "category": "manual",
                     "event_label": activation.event_name,
+                    "event_code": activation.event_code or same_fields.get("event_code"),
+                    "originator_code": originator_code,
+                    "originator_name": get_originator_name(originator_code),
+                    "fips_codes": same_fields.get("fips") or [],
+                    "issue_time": same_fields.get("issue_time"),
+                    "purge_time": _format_purge_minutes(same_fields.get("purge_minutes")),
+                    "station": same_fields.get("station"),
                     "identifier": activation.identifier,
                     "status": activation.status,
+                    "action_taken": "Initiated",
+                    "action_reason": None,
                     "details": {
                         "event_code": activation.event_code,
                         "message_type": activation.message_type,
                         "same_header": activation.same_header,
+                    },
+                }
+            )
+
+        received_query = (
+            ReceivedEASAlert.query.filter(ReceivedEASAlert.received_at >= window_start)
+            .order_by(ReceivedEASAlert.received_at.desc())
+            .limit(MAX_ENTRIES_PER_CATEGORY)
+        )
+
+        for received in received_query:
+            same_fields = _parse_same_header_fields(received.raw_same_header)
+            originator_code = (
+                received.originator_code or same_fields.get("originator")
+            )
+            originator_name = (
+                received.originator_name
+                or get_originator_name(originator_code)
+            )
+            decision = (received.forwarding_decision or "").strip().lower()
+            if decision == "forwarded":
+                action_taken = "Relayed"
+            elif decision == "ignored":
+                action_taken = "Not relayed"
+            elif decision == "error":
+                action_taken = "Decode error"
+            else:
+                action_taken = "Received"
+            entries.append(
+                {
+                    "timestamp": received.received_at,
+                    "category": "off-air",
+                    "event_label": received.event_name
+                    or get_event_name(received.event_code),
+                    "event_code": received.event_code or same_fields.get("event_code"),
+                    "originator_code": originator_code,
+                    "originator_name": originator_name,
+                    "fips_codes": list(received.fips_codes or [])
+                    or same_fields.get("fips") or [],
+                    "issue_time": received.issue_datetime or same_fields.get("issue_time"),
+                    "purge_time": received.purge_datetime
+                    or _format_purge_minutes(same_fields.get("purge_minutes")),
+                    "station": received.callsign or same_fields.get("station"),
+                    "identifier": received.raw_same_header
+                    or f"received-eas-{received.id}",
+                    "status": received.forwarding_decision or "received",
+                    "action_taken": action_taken,
+                    "action_reason": (received.forwarding_reason or "").strip() or None,
+                    "details": {
+                        "source_name": received.source_name,
+                        "alert_source": received.alert_source,
+                        "decode_confidence": received.decode_confidence,
+                        "matched_fips": list(received.matched_fips_codes or []),
                     },
                 }
             )
@@ -1494,15 +1726,26 @@ def collect_compliance_dashboard_data(
 
         is_test_event = _event_matches_test(entry.get("event_label"))
         details = entry.get("details") or {}
-        event_code = str(details.get("event_code") or "").upper()
+        event_code = str(
+            entry.get("event_code") or details.get("event_code") or ""
+        ).upper()
         if not is_test_event and event_code not in {"RWT", "RMT"}:
             continue
 
         week_start = timestamp - timedelta(days=timestamp.weekday())
         week_key = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
 
-        if entry["category"] == "received":
+        category = entry["category"]
+        if category == "received":
             weekly_counts[week_key]["received"] += 1
+        elif category == "off-air":
+            # Off-air ReceivedEASAlert entries can be either received-and-
+            # relayed or received-and-ignored; treat them as received unless
+            # we actually forwarded them.
+            if (entry.get("action_taken") or "").lower() == "relayed":
+                weekly_counts[week_key]["relayed"] += 1
+            else:
+                weekly_counts[week_key]["received"] += 1
         else:
             weekly_counts[week_key]["relayed"] += 1
 
@@ -1555,32 +1798,94 @@ def collect_compliance_dashboard_data(
     }
 
 
+def _format_compliance_originator(entry: Dict[str, Any]) -> str:
+    """Render the originator code (and name when known) for a log entry."""
+    code = (entry.get("originator_code") or "").strip().upper() or None
+    name = (entry.get("originator_name") or "").strip() or None
+    if code and name and name.lower() != code.lower():
+        return f"{code} ({name})"
+    if code:
+        return code
+    if name:
+        return name
+    return ""
+
+
+def _format_compliance_fips(entry: Dict[str, Any], *, limit: int = 4) -> str:
+    """Render FIPS codes as comma-separated PSSCCC values with an overflow tag."""
+    codes = entry.get("fips_codes") or []
+    if not codes:
+        return ""
+    formatted = list(codes)[:limit]
+    suffix = "" if len(codes) <= limit else f", +{len(codes) - limit} more"
+    return ", ".join(formatted) + suffix
+
+
+def _format_compliance_issue(entry: Dict[str, Any]) -> str:
+    """Render the SAME issue time (datetime or JJJHHMM string) for the log."""
+    value = entry.get("issue_time")
+    if isinstance(value, datetime):
+        return format_local_datetime(value, include_utc=True)
+    return str(value or "")
+
+
+def _format_compliance_purge(entry: Dict[str, Any]) -> str:
+    """Render the SAME purge time (datetime, duration string, or empty)."""
+    value = entry.get("purge_time")
+    if isinstance(value, datetime):
+        return format_local_datetime(value, include_utc=True)
+    return str(value or "")
+
+
+_FCC_LOG_COLUMNS: Tuple[Tuple[str, str], ...] = (
+    ("Timestamp (local)", "_timestamp"),
+    ("Category", "category"),
+    ("Originator", "_originator"),
+    ("Event Code", "event_code"),
+    ("Event", "event_label"),
+    ("FIPS Codes", "_fips"),
+    ("Issue Time", "_issue"),
+    ("Purge / Expires", "_purge"),
+    ("Station ID", "station"),
+    ("Identifier", "identifier"),
+    ("Status", "status"),
+    ("Action Taken", "action_taken"),
+    ("Action Reason", "action_reason"),
+    ("Details", "_details_json"),
+)
+
+
 def generate_compliance_log_csv(entries: Sequence[Dict[str, Any]]) -> str:
-    """Generate a CSV export for compliance log entries."""
+    """Generate a CSV export for compliance log entries.
+
+    The column layout mirrors the FCC Part 11 logging requirements
+    (§§ 11.35(a), 11.54(a)(3)): originator, event code, location codes,
+    issue/purge times, station identifier, and the action taken plus reason.
+    """
 
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow([
-        "Timestamp (local)",
-        "Category",
-        "Event",
-        "Identifier",
-        "Status",
-        "Details",
-    ])
+    writer.writerow([label for label, _ in _FCC_LOG_COLUMNS])
 
     for entry in entries:
-        timestamp = format_local_datetime(entry.get("timestamp"), include_utc=True)
         details = entry.get("details") or {}
         details_json = json_dumps(details, ensure_ascii=False, sort_keys=True)
+        derived = {
+            "_timestamp": format_local_datetime(
+                entry.get("timestamp"), include_utc=True
+            ),
+            "_originator": _format_compliance_originator(entry),
+            "_fips": ", ".join(entry.get("fips_codes") or []),
+            "_issue": _format_compliance_issue(entry),
+            "_purge": _format_compliance_purge(entry),
+            "_details_json": details_json,
+        }
         writer.writerow(
             [
-                timestamp,
-                entry.get("category"),
-                entry.get("event_label"),
-                entry.get("identifier"),
-                entry.get("status"),
-                details_json,
+                derived.get(key, entry.get(key) if key != "_timestamp" else "")
+                if key.startswith("_")
+                else (entry.get(key) or "")
+                for _, key in _FCC_LOG_COLUMNS
             ]
         )
 
@@ -1591,47 +1896,56 @@ _COMPLIANCE_CATEGORY_LABELS: Dict[str, str] = {
     "manual": "Manual",
     "received": "Received",
     "relayed": "Relayed",
+    "off-air": "Off-Air",
 }
 
 
-def _format_compliance_details(category: Optional[str], details: Any) -> str:
-    """Render the per-entry details dict as a compact, human-readable string."""
-    if not isinstance(details, dict) or not details:
-        return ""
+def _format_compliance_details(entry: Dict[str, Any]) -> str:
+    """Render the per-entry FCC fields + supplementary details for the PDF.
 
+    The Part 11-required identity fields (originator/event/FIPS/etc.) get
+    their own table columns; this string fills the remaining "Details"
+    column with the Part 11 fields that didn't get a dedicated column
+    (Station ID, Issue Time, Purge Time) plus category-specific extras.
+    """
     parts: List[str] = []
-    cat = (category or "").lower()
 
-    if cat == "received":
-        for key in ("severity", "urgency", "certainty", "message_type", "scope"):
-            value = details.get(key)
-            if value:
-                parts.append(f"{key.replace('_', ' ').title()}: {value}")
-    elif cat == "relayed":
-        media: List[str] = []
-        if details.get("has_audio"):
-            media.append("audio")
-        if details.get("has_text"):
-            media.append("text")
-        if media:
-            parts.append("Media: " + ", ".join(media))
-        if details.get("cap_alert_id"):
-            parts.append(f"CAP ID: {details['cap_alert_id']}")
-    elif cat == "manual":
-        for key, label in (
-            ("event_code", "Event Code"),
-            ("message_type", "Message Type"),
-            ("same_header", "SAME"),
-        ):
-            value = details.get(key)
-            if value:
-                parts.append(f"{label}: {value}")
+    station = (entry.get("station") or "").strip()
+    if station:
+        parts.append(f"Station: {station}")
+    issue = _format_compliance_issue(entry)
+    if issue:
+        parts.append(f"Issued: {issue}")
+    purge = _format_compliance_purge(entry)
+    if purge:
+        parts.append(f"Purge: {purge}")
+    reason = (entry.get("action_reason") or "").strip()
+    if reason:
+        parts.append(f"Reason: {reason}")
 
-    if not parts:
-        for key, value in details.items():
-            if value in (None, "", False):
-                continue
-            parts.append(f"{key.replace('_', ' ').title()}: {value}")
+    details = entry.get("details") or {}
+    if isinstance(details, dict):
+        cat = (entry.get("category") or "").lower()
+        if cat == "received":
+            for key in ("severity", "urgency", "certainty"):
+                value = details.get(key)
+                if value:
+                    parts.append(f"{key.title()}: {value}")
+        elif cat == "relayed":
+            media: List[str] = []
+            if details.get("has_audio"):
+                media.append("audio")
+            if details.get("has_text"):
+                media.append("text")
+            if media:
+                parts.append("Media: " + ", ".join(media))
+        elif cat == "off-air":
+            src = details.get("source_name") or details.get("alert_source")
+            if src:
+                parts.append(f"Monitored: {src}")
+            confidence = details.get("decode_confidence")
+            if isinstance(confidence, (int, float)):
+                parts.append(f"Decode: {confidence:.0%}")
 
     return "; ".join(parts)
 
@@ -1653,40 +1967,54 @@ def generate_compliance_log_pdf(
     else:
         subtitle = None
 
+    # Column layout follows the FCC Part 11 log fields: timestamp, originator
+    # (ORG), event code (EEE), location codes (PSSCCC), action taken plus the
+    # event description and supplemental Details.  Issue/Purge/Station live in
+    # the Details column to keep the table readable in landscape A4.
     columns = [
-        {"label": "Timestamp (local / UTC)", "weight": 2.3},
-        {"label": "Category", "weight": 0.8},
-        {"label": "Event", "weight": 1.8},
-        {"label": "Identifier", "weight": 2.6},
-        {"label": "Status", "weight": 0.8},
-        {"label": "Details", "weight": 2.6},
+        {"label": "Timestamp (local / UTC)", "weight": 2.0},
+        {"label": "Category", "weight": 0.7},
+        {"label": "Originator", "weight": 1.5},
+        {"label": "Evt", "weight": 0.5},
+        {"label": "Event", "weight": 1.7},
+        {"label": "FIPS", "weight": 1.2},
+        {"label": "Action", "weight": 0.9},
+        {"label": "Identifier", "weight": 2.2},
+        {"label": "Details", "weight": 2.3},
     ]
 
     rows: List[List[str]] = []
     category_counts: Dict[str, int] = {}
-    status_counts: Dict[str, int] = {}
+    originator_counts: Dict[str, int] = {}
+    action_counts: Dict[str, int] = {}
 
     for entry in entries:
         category_raw = (entry.get("category") or "").lower()
         category_label = _COMPLIANCE_CATEGORY_LABELS.get(
             category_raw, category_raw.title() if category_raw else ""
         )
-        status_raw = (entry.get("status") or "").strip()
-        status_label = status_raw.title() if status_raw else ""
+        originator_cell = _format_compliance_originator(entry)
+        event_code = (entry.get("event_code") or "").upper()
+        action_label = (entry.get("action_taken") or "").strip()
 
         rows.append([
             format_local_datetime(entry.get("timestamp"), include_utc=True),
             category_label,
+            originator_cell,
+            event_code,
             str(entry.get("event_label") or ""),
+            _format_compliance_fips(entry),
+            action_label,
             str(entry.get("identifier") or ""),
-            status_label,
-            _format_compliance_details(category_raw, entry.get("details")),
+            _format_compliance_details(entry),
         ])
 
         if category_label:
             category_counts[category_label] = category_counts.get(category_label, 0) + 1
-        if status_label:
-            status_counts[status_label] = status_counts.get(status_label, 0) + 1
+        org_key = (entry.get("originator_code") or "—").upper()
+        originator_counts[org_key] = originator_counts.get(org_key, 0) + 1
+        if action_label:
+            action_counts[action_label] = action_counts.get(action_label, 0) + 1
 
     summary_lines: List[str] = [f"Total entries: {len(rows)}"]
     if category_counts:
@@ -1697,22 +2025,36 @@ def generate_compliance_log_pdf(
                 for label, count in sorted(category_counts.items())
             )
         )
-    if status_counts:
+    if originator_counts:
         summary_lines.append(
-            "By status: "
+            "By originator (ORG): "
             + ", ".join(
                 f"{label} ({count})"
-                for label, count in sorted(status_counts.items())
+                for label, count in sorted(originator_counts.items())
             )
         )
+    if action_counts:
+        summary_lines.append(
+            "By action: "
+            + ", ".join(
+                f"{label} ({count})"
+                for label, count in sorted(action_counts.items())
+            )
+        )
+    summary_lines.append(
+        "Per 47 CFR §§ 11.35(a) and 11.54(a)(3): each entry records the "
+        "originator (ORG), event code (EEE), location codes (PSSCCC), "
+        "station identifier (LLLLLLLL), issue and purge times, and the "
+        "action taken."
+    )
 
     return generate_table_pdf(
-        "EAS Compliance Log",
+        "EAS Part 11 Compliance Log",
         columns,
         rows,
         subtitle=subtitle,
         summary_lines=summary_lines,
-        footer_text="EAS Station™ — NOAA CAP Alerts Compliance Log",
+        footer_text="EAS Station™ — FCC Part 11 Compliance Log",
         landscape=True,
         empty_message="No compliance activity recorded during this window.",
     )
