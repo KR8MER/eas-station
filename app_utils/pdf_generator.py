@@ -356,6 +356,69 @@ def _truncate_to_width(text: Any, max_width_pts: float, font_size: int) -> str:
     return s[:best] + ellipsis
 
 
+def _wrap_to_width(
+    text: Any,
+    max_width_pts: float,
+    font_size: int,
+) -> List[str]:
+    """Wrap ``text`` into lines that each fit ``max_width_pts``.
+
+    Splits on whitespace first; when a single token is wider than the column
+    (long identifiers, FIPS lists, SAME headers), falls back to character
+    chunking so we never overflow the column boundary.  Wraps to as many
+    lines as needed — no truncation, no ellipsis — because a compliance log
+    must show the full FCC field, not a chopped prefix.
+    """
+    s = "" if text is None else str(text)
+    s = s.replace("\r\n", "\n").replace("\r", "\n")
+    if max_width_pts <= 0:
+        return [""]
+    lines: List[str] = []
+    for paragraph in s.split("\n"):
+        if not paragraph:
+            lines.append("")
+            continue
+        tokens = paragraph.split(" ")
+        current = ""
+        for token in tokens:
+            # Token alone is wider than the column → hard-break inside it.
+            if _approx_helvetica_width(token, font_size) > max_width_pts:
+                if current:
+                    lines.append(current)
+                    current = ""
+                remainder = token
+                while remainder and _approx_helvetica_width(
+                    remainder, font_size
+                ) > max_width_pts:
+                    lo, hi = 1, len(remainder)
+                    best = 1
+                    while lo <= hi:
+                        mid = (lo + hi) // 2
+                        if _approx_helvetica_width(
+                            remainder[:mid], font_size
+                        ) <= max_width_pts:
+                            best = mid
+                            lo = mid + 1
+                        else:
+                            hi = mid - 1
+                    lines.append(remainder[:best])
+                    remainder = remainder[best:]
+                current = remainder
+                continue
+            candidate = f"{current} {token}".strip() if current else token
+            if _approx_helvetica_width(candidate, font_size) <= max_width_pts:
+                current = candidate
+            else:
+                if current:
+                    lines.append(current)
+                current = token
+        if current:
+            lines.append(current)
+    if not lines:
+        lines = [""]
+    return lines
+
+
 def _assemble_pdf(page_streams: List[bytes], page_size: Tuple[int, int]) -> bytes:
     """Wrap pre-rendered content streams into a complete PDF document."""
     page_w, page_h = page_size
@@ -459,11 +522,11 @@ def generate_table_pdf(
     margin_x = 36
     margin_top = 56
     margin_bottom = 44
-    body_font = 9
-    header_font = 9
+    body_font = 8
+    header_font = 8
     title_font = 16
     subtitle_font = 11
-    line_height = 13
+    line_height = 11
 
     weights = [float(c.get("weight", 1) or 1) for c in columns]
     total_weight = sum(weights) or 1.0
@@ -494,17 +557,29 @@ def generate_table_pdf(
         return y
 
     def render_table_header(content: List[str], y: float) -> float:
-        for i, col in enumerate(columns):
-            label = _truncate_to_width(col.get("label", ""), col_widths[i] - 4, header_font)
-            emit_text(content, "F2", header_font, col_x[i] + 1, y, label)
-        # Draw the rule just below the header baseline (clear of the descender)
-        # and leave enough vertical room for the first body row's cap height so
-        # the underline never crosses the row of text below it.
+        wrapped_labels: List[List[str]] = [
+            _wrap_to_width(col.get("label", ""), col_widths[i] - 4, header_font)
+            for i, col in enumerate(columns)
+        ]
+        header_lines = max((len(lbl) for lbl in wrapped_labels), default=1)
+        for i, lines in enumerate(wrapped_labels):
+            for line_no, label_line in enumerate(lines):
+                emit_text(
+                    content,
+                    "F2",
+                    header_font,
+                    col_x[i] + 1,
+                    y - line_no * line_height,
+                    label_line,
+                )
+        # Draw the rule just below the wrapped header block so it never
+        # crosses any header line, and leave room for the first body row.
         content.append("ET")
-        rule_y = y - 4
+        header_block_h = header_lines * line_height
+        rule_y = y - header_block_h + line_height - 4
         content.append(f"{margin_x} {rule_y:.2f} m {page_w - margin_x} {rule_y:.2f} l S")
         content.append("BT")
-        y -= line_height + 3
+        y -= header_block_h + 3
         return y
 
     def render_footer(content: List[str], page_num: int, total_pages: Optional[int]) -> None:
@@ -541,14 +616,62 @@ def generate_table_pdf(
                 emit_text(content, "F1", body_font, margin_x, y - 4, empty_message)
                 y -= line_height + 4
             else:
-                while idx < n_rows and y >= margin_bottom + line_height:
+                rows_on_page = 0
+                while idx < n_rows:
                     row = row_list[idx]
+                    wrapped_cells: List[List[str]] = []
                     for i, col in enumerate(columns):
                         cell = row[i] if i < len(row) else ""
-                        text_val = _truncate_to_width(cell, col_widths[i] - 4, body_font)
-                        emit_text(content, "F1", body_font, col_x[i] + 1, y, text_val)
-                    y -= line_height
+                        wrapped_cells.append(
+                            _wrap_to_width(cell, col_widths[i] - 4, body_font)
+                        )
+                    row_lines = (
+                        max(len(cell) for cell in wrapped_cells)
+                        if wrapped_cells
+                        else 1
+                    )
+                    row_height = row_lines * line_height
+                    # Page-break if this row won't fit and we've already placed
+                    # something on this page; otherwise force it (a single row
+                    # taller than a whole page would otherwise loop forever).
+                    if rows_on_page > 0 and y - row_height < margin_bottom:
+                        break
+
+                    # Alternating row shading + a hairline divider below the
+                    # row.  Path/fill operators have to live outside the
+                    # BT/ET text block, so we break out, draw, then resume.
+                    band_top = y + line_height - 3
+                    band_bottom = band_top - row_height
+                    band_h = band_top - band_bottom
+                    band_w = page_w - 2 * margin_x
+                    content.append("ET")
+                    if idx % 2 == 1:
+                        # Light gray fill on every other row (no stroke).
+                        content.append("q 0.94 g")
+                        content.append(
+                            f"{margin_x:.2f} {band_bottom:.2f} "
+                            f"{band_w:.2f} {band_h:.2f} re f Q"
+                        )
+                    # Hairline divider between this row and the next.
+                    content.append("q 0.80 G 0.3 w")
+                    content.append(
+                        f"{margin_x:.2f} {band_bottom:.2f} m "
+                        f"{page_w - margin_x:.2f} {band_bottom:.2f} l S Q"
+                    )
+                    content.append("BT")
+                    for i, lines in enumerate(wrapped_cells):
+                        for line_no, line_val in enumerate(lines):
+                            emit_text(
+                                content,
+                                "F1",
+                                body_font,
+                                col_x[i] + 1,
+                                y - line_no * line_height,
+                                line_val,
+                            )
+                    y -= row_height
                     idx += 1
+                    rows_on_page += 1
 
             done = idx >= n_rows
             if done and summary_lines and not rendered_summary:

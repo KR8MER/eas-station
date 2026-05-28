@@ -29,8 +29,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from flask import current_app
-from sqlalchemy import or_, text
-from sqlalchemy.orm import joinedload
+from sqlalchemy import or_, select, text
+from sqlalchemy.orm import defer, joinedload
 
 from app_core.extensions import db
 from app_core.models import (
@@ -1510,11 +1510,20 @@ def collect_compliance_log_entries(
     # Define a reasonable limit for compliance log entries to prevent memory exhaustion
     MAX_ENTRIES_PER_CATEGORY = 10000
 
+    # SQLAlchemy fetches every column on the ORM model by default — including
+    # several multi-megabyte LargeBinary columns on EASMessage and a JSONB
+    # payload on ReceivedEASAlert.  Naively iterating a 30-day window can
+    # balloon a gunicorn worker to multiple GB.  We defer the heavy columns,
+    # strip the joined CAPAlert down to only what we read, and stream rows
+    # with yield_per() so the working set stays small.
+    STREAM_BATCH = 500
+
     try:
         alert_query = (
             CAPAlert.query.filter(CAPAlert.sent >= window_start)
             .order_by(CAPAlert.sent.desc())
             .limit(MAX_ENTRIES_PER_CATEGORY)
+            .yield_per(STREAM_BATCH)
         )
 
         for alert in alert_query:
@@ -1556,21 +1565,37 @@ def collect_compliance_log_entries(
                 }
             )
 
-        eas_query = (
-            EASMessage.query.options(joinedload(EASMessage.cap_alert))
-            .filter(EASMessage.created_at >= window_start)
+        # Pull only the columns we actually read from EASMessage + the joined
+        # CAPAlert.  audio_data presence is computed at the SQL level so we
+        # never transfer the megabyte-scale WAV bytes to Python just to ask
+        # "is it non-null?".
+        eas_select = (
+            select(
+                EASMessage.id,
+                EASMessage.created_at,
+                EASMessage.same_header,
+                EASMessage.audio_filename,
+                EASMessage.text_filename,
+                EASMessage.cap_alert_id,
+                EASMessage.audio_data.isnot(None).label("has_audio_blob"),
+                EASMessage.text_payload.isnot(None).label("has_text_blob"),
+                CAPAlert.event.label("cap_event"),
+            )
+            .select_from(EASMessage)
+            .outerjoin(CAPAlert, EASMessage.cap_alert_id == CAPAlert.id)
+            .where(EASMessage.created_at >= window_start)
             .order_by(EASMessage.created_at.desc())
+            .execution_options(yield_per=STREAM_BATCH)
         )
 
-        for message in eas_query:
-            alert = message.cap_alert
-            same_fields = _parse_same_header_fields(message.same_header)
+        for row in db.session.execute(eas_select):
+            same_fields = _parse_same_header_fields(row.same_header)
             originator_code = same_fields.get("originator")
             entries.append(
                 {
-                    "timestamp": message.created_at,
+                    "timestamp": row.created_at,
                     "category": "relayed",
-                    "event_label": alert.event if alert else (
+                    "event_label": row.cap_event or (
                         get_event_name(same_fields.get("event_code"))
                         if same_fields.get("event_code")
                         else None
@@ -1582,14 +1607,14 @@ def collect_compliance_log_entries(
                     "issue_time": same_fields.get("issue_time"),
                     "purge_time": _format_purge_minutes(same_fields.get("purge_minutes")),
                     "station": same_fields.get("station"),
-                    "identifier": message.same_header,
+                    "identifier": row.same_header,
                     "status": "relayed",
                     "action_taken": "Relayed",
                     "action_reason": None,
                     "details": {
-                        "has_audio": bool(message.audio_data or message.audio_filename),
-                        "has_text": bool(message.text_payload or message.text_filename),
-                        "cap_alert_id": alert.id if alert else None,
+                        "has_audio": bool(row.has_audio_blob or row.audio_filename),
+                        "has_text": bool(row.has_text_blob or row.text_filename),
+                        "cap_alert_id": row.cap_alert_id,
                     },
                 }
             )
@@ -1597,6 +1622,7 @@ def collect_compliance_log_entries(
         manual_query = (
             ManualEASActivation.query.filter(ManualEASActivation.created_at >= window_start)
             .order_by(ManualEASActivation.created_at.desc())
+            .yield_per(STREAM_BATCH)
         )
 
         for activation in manual_query:
@@ -1627,10 +1653,18 @@ def collect_compliance_log_entries(
                 }
             )
 
+        # full_alert_data (JSONB) and raw_audio_data (LargeBinary) are not
+        # rendered in the log; deferring them keeps the per-row cost down to
+        # the SAME header + a handful of small columns.
         received_query = (
-            ReceivedEASAlert.query.filter(ReceivedEASAlert.received_at >= window_start)
+            ReceivedEASAlert.query.options(
+                defer(ReceivedEASAlert.full_alert_data),
+                defer(ReceivedEASAlert.raw_audio_data),
+            )
+            .filter(ReceivedEASAlert.received_at >= window_start)
             .order_by(ReceivedEASAlert.received_at.desc())
             .limit(MAX_ENTRIES_PER_CATEGORY)
+            .yield_per(STREAM_BATCH)
         )
 
         for received in received_query:
@@ -1811,8 +1845,13 @@ def _format_compliance_originator(entry: Dict[str, Any]) -> str:
     return ""
 
 
-def _format_compliance_fips(entry: Dict[str, Any], *, limit: int = 4) -> str:
-    """Render FIPS codes as comma-separated PSSCCC values with an overflow tag."""
+def _format_compliance_fips(entry: Dict[str, Any], *, limit: int = 12) -> str:
+    """Render FIPS codes as comma-separated PSSCCC values with an overflow tag.
+
+    The renderer wraps to multiple lines, so we can list far more codes than
+    a single-line cell would allow; ``limit`` only kicks in on pathological
+    statewide alerts.
+    """
     codes = entry.get("fips_codes") or []
     if not codes:
         return ""
@@ -1910,9 +1949,7 @@ def _format_compliance_details(entry: Dict[str, Any]) -> str:
     """
     parts: List[str] = []
 
-    station = (entry.get("station") or "").strip()
-    if station:
-        parts.append(f"Station: {station}")
+    # Station ID has its own table column; do not duplicate it here.
     issue = _format_compliance_issue(entry)
     if issue:
         parts.append(f"Issued: {issue}")
@@ -1968,18 +2005,20 @@ def generate_compliance_log_pdf(
         subtitle = None
 
     # Column layout follows the FCC Part 11 log fields: timestamp, originator
-    # (ORG), event code (EEE), location codes (PSSCCC), action taken plus the
-    # event description and supplemental Details.  Issue/Purge/Station live in
-    # the Details column to keep the table readable in landscape A4.
+    # (ORG), event code (EEE), location codes (PSSCCC), station identifier
+    # (LLLLLLLL — exactly 8 chars per § 11.31), action taken plus the event
+    # description and supplemental Details.  Cells wrap to multiple lines
+    # (see pdf_generator._wrap_to_width), so weights set the wrap width.
     columns = [
-        {"label": "Timestamp (local / UTC)", "weight": 2.0},
-        {"label": "Category", "weight": 0.7},
-        {"label": "Originator", "weight": 1.5},
-        {"label": "Evt", "weight": 0.5},
-        {"label": "Event", "weight": 1.7},
-        {"label": "FIPS", "weight": 1.2},
-        {"label": "Action", "weight": 0.9},
-        {"label": "Identifier", "weight": 2.2},
+        {"label": "Timestamp (local / UTC)", "weight": 1.3},
+        {"label": "Category", "weight": 0.6},
+        {"label": "Originator (ORG)", "weight": 1.1},
+        {"label": "Event Code", "weight": 0.55},
+        {"label": "Event", "weight": 1.5},
+        {"label": "FIPS (PSSCCC)", "weight": 1.3},
+        {"label": "Station ID (LLLLLLLL)", "weight": 0.9},
+        {"label": "Action", "weight": 0.8},
+        {"label": "Identifier", "weight": 1.9},
         {"label": "Details", "weight": 2.3},
     ]
 
@@ -1996,6 +2035,7 @@ def generate_compliance_log_pdf(
         originator_cell = _format_compliance_originator(entry)
         event_code = (entry.get("event_code") or "").upper()
         action_label = (entry.get("action_taken") or "").strip()
+        station_cell = (entry.get("station") or "").strip()
 
         rows.append([
             format_local_datetime(entry.get("timestamp"), include_utc=True),
@@ -2004,6 +2044,7 @@ def generate_compliance_log_pdf(
             event_code,
             str(entry.get("event_label") or ""),
             _format_compliance_fips(entry),
+            station_cell,
             action_label,
             str(entry.get("identifier") or ""),
             _format_compliance_details(entry),
