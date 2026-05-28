@@ -70,13 +70,32 @@ _LOGO_CACHE: Optional[Image.Image] = None
 
 
 def _load_logo() -> Optional[Image.Image]:
-    """Load the canonical EAS Station logo PNG (cached, RGBA)."""
+    """Load the canonical EAS Station logo PNG (cached, RGBA).
+
+    The PNG keeps the full SVG viewBox dimensions (favicons + apple
+    touch icon assume those), but for the share-card renderer the
+    trailing transparent margin on the right (where the SVG reserved
+    blank space past "INFRASTRUCTURE") would force the visible wordmark
+    to sit ~100 px inside ``brand_right``.  We trim that right margin
+    here — and only that — so the cached image's right edge matches the
+    rightmost pixel of "STATION™".  When the renderer pastes at
+    ``brand_right - logo_w`` the visible wordmark then anchors flush
+    against the canvas right margin instead of floating away from it.
+    Vertical bounds are preserved so the height-to-width ratio (and the
+    title shrink-to-fit math that depends on it) stays the same.
+    """
     global _LOGO_CACHE
     if _LOGO_CACHE is not None:
         return _LOGO_CACHE
     try:
         with Image.open(_LOGO_PATH) as im:
-            _LOGO_CACHE = im.convert('RGBA').copy()
+            rgba = im.convert('RGBA')
+            bbox = rgba.getbbox()
+            if bbox is not None:
+                # Trim trailing right transparent margin only — leave
+                # the vertical extent and the left padding alone.
+                rgba = rgba.crop((0, 0, bbox[2], rgba.height))
+            _LOGO_CACHE = rgba.copy()
         return _LOGO_CACHE
     except Exception:
         return None
@@ -2214,7 +2233,10 @@ def generate_alert_image(
         ty_pos = fy + (layout.footer_h - _th(fonts['small'], t_str)) // 2
         draw.text((12, ty_pos), t_str, font=fonts['small'], fill=_TEXT_SEC)
 
-    credit = 'EAS Station  •  Emergency Alert System'
+    # Footer attribution carries the trademark mark on the brand name —
+    # mirrors the wordmark in the header band so a viewer who clipped
+    # the screenshot to just the footer still sees the ™.
+    credit = 'EAS Station™  •  Emergency Alert System'
     cy_pos = fy + (layout.footer_h - _th(fonts['small'], credit)) // 2
     draw.text((layout.width - _tw(fonts['small'], credit) - 12, cy_pos),
               credit, font=fonts['small'], fill=_TEXT_MUT)
