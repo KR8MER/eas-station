@@ -26,6 +26,9 @@ RWT broadcasts according to configured schedules.
 """
 
 import logging
+import os
+import subprocess
+import tempfile
 import threading
 import time
 from datetime import date, datetime, timedelta, timezone
@@ -37,10 +40,22 @@ from app_core.models import RWTScheduleConfig, ManualEASActivation, SystemLog
 from app_utils import utc_now
 from app_utils.eas import (
     EASAudioGenerator,
+    _get_oled_enabled_status,
+    _wav_duration_seconds,
     build_same_header,
+    clear_broadcast_active,
     load_eas_config,
     manual_default_same_codes,
     samples_to_wav_bytes,
+    set_broadcast_active,
+    truncate_wav_to_max_seconds,
+)
+from app_utils.gpio import (
+    GPIOActivationType,
+    GPIOBehaviorManager,
+    GPIOController,
+    load_gpio_behavior_matrix_from_db,
+    load_gpio_pin_configs_from_db,
 )
 
 logger = logging.getLogger(__name__)
@@ -127,6 +142,152 @@ def compute_next_fire(
         return window_start
 
     return None
+
+
+def _drive_rwt_airchain(
+    activation_record: ManualEASActivation,
+    composite_wav: Optional[bytes],
+    eom_wav: Optional[bytes],
+    eas_config: Dict[str, Any],
+    log: logging.Logger,
+) -> bool:
+    """Activate GPIO and play the composite WAV for an automated RWT.
+
+    Returns True if at least one GPIO pin was activated.  Mirrors the
+    manual send path in webapp/eas/workflow.py: load pin configs, build a
+    controller + behavior manager, pulse INCOMING_ALERT, hold the
+    airchain for the full playback duration, then release.
+    """
+    if not composite_wav:
+        log.warning("RWT %s has no composite audio; skipping airchain.",
+                    activation_record.identifier)
+        return False
+
+    max_activation_seconds = int(eas_config.get('max_activation_seconds', 300) or 300)
+    audio_data = composite_wav
+    if _wav_duration_seconds(audio_data) > max_activation_seconds:
+        audio_data = truncate_wav_to_max_seconds(
+            audio_data, eom_wav, max_activation_seconds,
+        )
+    playback_duration = _wav_duration_seconds(audio_data)
+
+    gpio_controller: Optional[GPIOController] = None
+    gpio_behavior_manager: Optional[GPIOBehaviorManager] = None
+    try:
+        oled_enabled = _get_oled_enabled_status()
+        gpio_configs = load_gpio_pin_configs_from_db(log, oled_enabled=oled_enabled)
+        if gpio_configs:
+            gpio_logger = log.getChild('gpio')
+            controller = GPIOController(db_session=db.session, logger=gpio_logger)
+            for cfg in gpio_configs:
+                controller.add_pin(cfg)
+            gpio_controller = controller
+            behavior_matrix = load_gpio_behavior_matrix_from_db(log)
+            gpio_behavior_manager = GPIOBehaviorManager(
+                controller=controller,
+                pin_configs=gpio_configs,
+                behavior_matrix=behavior_matrix,
+                logger=gpio_logger.getChild('behavior'),
+            )
+            controller.behavior_manager = gpio_behavior_manager
+    except Exception as exc:
+        log.warning("GPIO initialization failed for RWT %s: %s",
+                    activation_record.identifier, exc)
+
+    alert_id = activation_record.identifier
+    event_code = activation_record.event_code or 'RWT'
+    activation_reason = f"Automated RWT ({event_code})"
+    activated_any = False
+    manager_handled = False
+    tmp_file = None
+
+    try:
+        if gpio_controller:
+            try:
+                if gpio_behavior_manager:
+                    gpio_behavior_manager.trigger_incoming_alert(
+                        alert_id=alert_id, event_code=event_code,
+                    )
+                    manager_handled = gpio_behavior_manager.start_alert(
+                        alert_id=alert_id,
+                        event_code=event_code,
+                        reason=activation_reason,
+                    )
+                    activated_any = manager_handled
+                if not activated_any:
+                    activation_results = gpio_controller.activate_all(
+                        activation_type=GPIOActivationType.AUTOMATIC,
+                        operator='system',
+                        alert_id=alert_id,
+                        reason=activation_reason,
+                    )
+                    activated_any = any(activation_results.values())
+            except Exception as exc:
+                log.warning("GPIO activation failed for RWT %s: %s",
+                            alert_id, exc)
+                activated_any = False
+                manager_handled = False
+
+        set_broadcast_active(
+            event_code=event_code,
+            label='Required Weekly Test',
+            duration_seconds=playback_duration,
+            source='automated_rwt',
+        )
+
+        audio_player_cmd = eas_config.get('audio_player_cmd')
+        playout_start = time.monotonic()
+        if audio_player_cmd:
+            try:
+                tmp_file = tempfile.NamedTemporaryFile(
+                    suffix='.wav', prefix='rwt_auto_', delete=False,
+                )
+                tmp_file.write(audio_data)
+                tmp_file.flush()
+                tmp_file.close()
+                command = list(audio_player_cmd) + [tmp_file.name]
+                log.info("Playing automated RWT audio: %s", ' '.join(command))
+                subprocess.run(
+                    command, check=False, timeout=max_activation_seconds + 10,
+                )
+            except subprocess.TimeoutExpired:
+                log.warning("Audio playback timed out for RWT %s", alert_id)
+            except Exception as exc:
+                log.warning("Audio playback failed for RWT %s: %s",
+                            alert_id, exc)
+        else:
+            log.info("No audio player configured; holding GPIO for %.1fs "
+                     "while encoder plays RWT %s",
+                     playback_duration, alert_id)
+
+        # Keep the relay asserted for the full composite duration regardless
+        # of whether the player blocked — on hosts without an audio device the
+        # player can exit immediately, which would otherwise drop the airchain
+        # before the encoder finishes the SAME burst.
+        remaining = playback_duration - (time.monotonic() - playout_start)
+        if remaining > 0:
+            time.sleep(remaining)
+
+    finally:
+        if gpio_controller and activated_any:
+            try:
+                if manager_handled and gpio_behavior_manager:
+                    gpio_behavior_manager.end_alert(
+                        alert_id=alert_id, event_code=event_code,
+                    )
+                else:
+                    gpio_controller.deactivate_all()
+            except Exception as exc:
+                log.warning("GPIO release failed for RWT %s: %s",
+                            alert_id, exc)
+        clear_broadcast_active()
+        if tmp_file is not None:
+            try:
+                os.unlink(tmp_file.name)
+            except OSError:
+                pass
+
+    return activated_any
 
 
 def trigger_rwt_broadcast(config: RWTScheduleConfig, logger_instance=None) -> Dict[str, Any]:
@@ -317,11 +478,27 @@ def trigger_rwt_broadcast(config: RWTScheduleConfig, logger_instance=None) -> Di
 
         log.info("RWT broadcast sent successfully: %s", identifier)
 
+        # Drive the airchain: hold GPIO and play the composite WAV for the
+        # full duration so the encoder actually broadcasts the tones. The
+        # manual send route (webapp/eas/workflow.py:1198-1357) does this for
+        # operator-triggered RWTs; without it the automated path silently
+        # creates a database row but never asserts the relay, so no GPIO
+        # log entries appear and downstream encoders never hear the SAME
+        # burst — operators see archived RWT rows but no audit trail.
+        gpio_activated = _drive_rwt_airchain(
+            activation_record=activation_record,
+            composite_wav=composite_wav,
+            eom_wav=eom_wav,
+            eas_config=eas_config,
+            log=log,
+        )
+
         return {
             'success': True,
             'identifier': identifier,
             'activation_id': activation_record.id,
             'same_header': header,
+            'gpio_activated': gpio_activated,
         }
 
     except Exception as exc:
