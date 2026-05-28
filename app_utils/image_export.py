@@ -55,7 +55,7 @@ import re
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests as _http
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont, PngImagePlugin
 
 # ─── Canonical brand logo ──────────────────────────────────────────────────
 # Single source of truth for the EAS Station brand logo raster used inside
@@ -1308,7 +1308,57 @@ def _best_zoom(min_lon: float, min_lat: float, max_lon: float, max_lat: float,
     return 7
 
 
+# ─── OSM tile fetch + cache ─────────────────────────────────────────────────
+# OpenStreetMap's tile-usage policy asks consumers to cache tiles aggressively;
+# every re-render of the same alert used to refetch up to 30 tiles.  This
+# bounded LRU keeps the most recently fetched tiles in memory so subsequent
+# renders within the same worker process answer instantly and stop hammering
+# tile.openstreetmap.org.  Tiles are immutable for our purposes (zoom level
+# pins the source pyramid), so caching is safe — only Pillow's underlying
+# bytes are kept; ``Image.copy()`` on read returns a fresh handle that
+# downstream code can crop/paste into without mutating the cached copy.
+
+from collections import OrderedDict
+from threading import Lock
+
+_TILE_CACHE_MAX = 256
+_TILE_CACHE: "OrderedDict[Tuple[int, int, int], bytes]" = OrderedDict()
+_TILE_CACHE_LOCK = Lock()
+
+
+def _tile_cache_get(key: Tuple[int, int, int]) -> Optional[bytes]:
+    with _TILE_CACHE_LOCK:
+        if key in _TILE_CACHE:
+            _TILE_CACHE.move_to_end(key)
+            return _TILE_CACHE[key]
+    return None
+
+
+def _tile_cache_put(key: Tuple[int, int, int], data: bytes) -> None:
+    with _TILE_CACHE_LOCK:
+        _TILE_CACHE[key] = data
+        _TILE_CACHE.move_to_end(key)
+        while len(_TILE_CACHE) > _TILE_CACHE_MAX:
+            _TILE_CACHE.popitem(last=False)
+
+
+def _tile_cache_clear() -> None:
+    """Drop every cached tile — exposed for tests; not used by the renderer."""
+    with _TILE_CACHE_LOCK:
+        _TILE_CACHE.clear()
+
+
 def _fetch_tile(tx: int, ty: int, z: int) -> Optional[Image.Image]:
+    key = (z, tx, ty)
+    cached = _tile_cache_get(key)
+    if cached is not None:
+        try:
+            return Image.open(io.BytesIO(cached)).convert('RGB')
+        except Exception:
+            # Cached entry corrupt — evict and refetch.
+            with _TILE_CACHE_LOCK:
+                _TILE_CACHE.pop(key, None)
+
     url = f'https://tile.openstreetmap.org/{z}/{tx}/{ty}.png'
     try:
         r = _http.get(
@@ -1316,6 +1366,7 @@ def _fetch_tile(tx: int, ty: int, z: int) -> Optional[Image.Image]:
             headers={'User-Agent': 'EASStation/1.0 (+https://github.com/KR8MER/eas-station)'},
         )
         if r.status_code == 200:
+            _tile_cache_put(key, r.content)
             return Image.open(io.BytesIO(r.content)).convert('RGB')
     except Exception:
         pass
@@ -1932,8 +1983,19 @@ def generate_alert_image(
     # they composite against (usually white on social feeds).
     img_rounded = _round_image_corners(img, layout.corner_r, bg=None)
 
+    # Minimal PNG metadata: passing an explicit ``pnginfo`` suppresses
+    # Pillow's default tIME chunk (which would leak a server timestamp)
+    # and any inherited EXIF, while keeping a small ``Software`` tag so
+    # exports remain auditable.  ``alert_id`` is included as a stable
+    # identifier so duplicate uploads can be deduped without leaking PII.
+    pnginfo = PngImagePlugin.PngInfo()
+    pnginfo.add_text('Software', 'EAS Station')
+    alert_id = getattr(alert, 'id', None)
+    if alert_id is not None:
+        pnginfo.add_text('Source', f'alert/{alert_id}')
+
     buf = io.BytesIO()
-    img_rounded.save(buf, format='PNG', optimize=True)
+    img_rounded.save(buf, format='PNG', optimize=True, pnginfo=pnginfo)
     return buf.getvalue()
 
 

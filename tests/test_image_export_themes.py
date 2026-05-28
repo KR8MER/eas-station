@@ -454,3 +454,66 @@ def test_layout_presets_are_consistent():
         assert ix >= 0 and iy >= lay.header_h, name
         assert ix + iw <= lay.width, name
         assert iy + ih <= lay.height - lay.footer_h, name
+
+
+# ── OSM tile cache ──────────────────────────────────────────────────────────
+def test_tile_cache_returns_image_on_hit(monkeypatch):
+    """A cached tile should bypass the HTTP layer entirely."""
+    # Build a tiny PNG payload in memory and pre-load the cache.
+    buf = io.BytesIO()
+    Image.new("RGB", (256, 256), (10, 20, 30)).save(buf, format="PNG")
+    payload = buf.getvalue()
+    image_export._tile_cache_clear()
+    image_export._tile_cache_put((5, 7, 11), payload)
+
+    calls = []
+
+    def _no_network(*args, **kwargs):  # pragma: no cover - guard
+        calls.append(args)
+        raise AssertionError("network should not be touched on cache hit")
+
+    monkeypatch.setattr(image_export, "_http",
+                        type("X", (), {"get": staticmethod(_no_network)})())
+    tile = image_export._fetch_tile(7, 11, 5)
+    assert tile is not None
+    assert tile.size == (256, 256)
+    assert calls == []
+
+
+def test_tile_cache_evicts_oldest(monkeypatch):
+    """LRU eviction kicks in when the cache exceeds its bound."""
+    image_export._tile_cache_clear()
+    payload = b"\x00" * 8  # not a real PNG; we only test the OrderedDict
+    cap = image_export._TILE_CACHE_MAX
+    # Fill cache + 5 over the cap.
+    for i in range(cap + 5):
+        image_export._tile_cache_put((0, i, 0), payload)
+    # The five oldest keys (0..4) should have been evicted.
+    for i in range(5):
+        assert image_export._tile_cache_get((0, i, 0)) is None, i
+    # Newest keys still present.
+    for i in range(cap + 5 - 1, cap, -1):
+        assert image_export._tile_cache_get((0, i, 0)) == payload
+    image_export._tile_cache_clear()
+
+
+# ── PNG metadata is minimal + reproducible ──────────────────────────────────
+def test_png_output_carries_software_tag_only():
+    """Exports must not leak server timestamps via tIME and must carry a
+    stable ``Software`` marker so downstream consumers can audit the
+    source."""
+    alert = _FakeAlert()
+    alert.id = 12345
+    alert.event = "Frost Advisory"
+    png = image_export.generate_alert_image(
+        alert, {}, None, {"county_name": "Test County, OH"},
+    )
+    img = Image.open(io.BytesIO(png))
+    text_chunks = getattr(img, "text", {}) or {}
+    assert text_chunks.get("Software") == "EAS Station", text_chunks
+    assert text_chunks.get("Source") == "alert/12345", text_chunks
+    # No tIME chunk — Pillow surfaces that via ``img.info['date:modify']``
+    # when present; if it's there we leaked a timestamp.
+    info = getattr(img, "info", {}) or {}
+    assert "date:modify" not in info
+    assert "Modify Date" not in info
