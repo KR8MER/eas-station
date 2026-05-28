@@ -82,7 +82,11 @@ def _render_pdf_page(
         y -= line_height
 
     content_lines.append("ET")
-    stream = "\n".join(content_lines).encode("latin-1", "ignore")
+    # cp1252 (Windows-1252) is the byte mapping for /WinAnsiEncoding declared
+    # on the embedded fonts; it adds em/en dashes, smart quotes, ™, … etc.
+    # over plain latin-1.  Unknown characters fall back to "?" rather than
+    # vanishing silently.
+    stream = "\n".join(content_lines).encode("cp1252", "replace")
     return stream
 
 
@@ -273,7 +277,10 @@ def generate_pdf_document(
 
     # Build catalog and font
     catalog_body = b"<< /Type /Catalog /Pages 2 0 R >>"
-    font_body = b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"
+    font_body = (
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica "
+        b"/Encoding /WinAnsiEncoding >>"
+    )
 
     # Insert core objects at beginning
     objects.insert(0, (1, catalog_body))
@@ -391,8 +398,14 @@ def _assemble_pdf(page_streams: List[bytes], page_size: Tuple[int, int]) -> byte
     ).encode("latin-1")
 
     catalog_body = b"<< /Type /Catalog /Pages 2 0 R >>"
-    font_body = b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"
-    bold_body = b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>"
+    font_body = (
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica "
+        b"/Encoding /WinAnsiEncoding >>"
+    )
+    bold_body = (
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold "
+        b"/Encoding /WinAnsiEncoding >>"
+    )
 
     objects.insert(0, (1, catalog_body))
     objects.insert(1, (2, pages_body))
@@ -495,7 +508,7 @@ def generate_table_pdf(
         return y
 
     def render_footer(content: List[str], page_num: int, total_pages: Optional[int]) -> None:
-        footer = footer_text or "EAS Station — FCC Compliance Report"
+        footer = footer_text or "EAS Station™ — FCC Compliance Report"
         emit_text(content, "F1", 8, margin_x, 24, footer)
         if total_pages is not None:
             label = f"Page {page_num} of {total_pages}"
@@ -560,7 +573,7 @@ def generate_table_pdf(
 
             content.append("ET")
             render_footer(content, page_num, total_pages)
-            stream = "\n".join(content).encode("latin-1", "ignore")
+            stream = "\n".join(content).encode("cp1252", "replace")
             rendered.append(stream)
 
             if done and (rendered_summary or not summary_lines):
@@ -577,7 +590,7 @@ def generate_table_pdf(
                     y -= line_height
                 content.append("ET")
                 render_footer(content, page_num, total_pages)
-                rendered.append("\n".join(content).encode("latin-1", "ignore"))
+                rendered.append("\n".join(content).encode("cp1252", "replace"))
                 rendered_summary = True
                 break
 

@@ -1712,7 +1712,7 @@ def generate_compliance_log_pdf(
         rows,
         subtitle=subtitle,
         summary_lines=summary_lines,
-        footer_text="EAS Station — NOAA CAP Alerts Compliance Log",
+        footer_text="EAS Station™ — NOAA CAP Alerts Compliance Log",
         landscape=True,
         empty_message="No compliance activity recorded during this window.",
     )
