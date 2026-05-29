@@ -1844,15 +1844,20 @@
                                 <a href="{{ url_for('api.alert_detail_pdf', alert_id=alert.id) }}" target="_blank" class="btn btn-outline-secondary">
                                     <i class="fas fa-file-pdf"></i> Export PDF
                                 </a>
-                                <div class="dropdown d-grid">
-                                    <button type="button"
-                                            class="btn btn-outline-primary w-100"
-                                            data-bs-toggle="dropdown"
-                                            aria-expanded="false"
-                                            title="Download an image sized for Facebook, X/Twitter, Instagram, or Stories">
-                                        <i class="fas fa-share-alt"></i> Export Social Image
-                                    </button>
-                                    <ul class="dropdown-menu w-100">
+                                <button type="button"
+                                        class="btn btn-outline-primary"
+                                        data-bs-toggle="collapse"
+                                        data-bs-target="#socialExportOptions"
+                                        aria-expanded="false"
+                                        aria-controls="socialExportOptions"
+                                        title="Download an image sized for Facebook, X/Twitter, Instagram, or Stories">
+                                    <i class="fas fa-share-alt"></i> Export Social Image
+                                </button>
+                                <div class="collapse" id="socialExportOptions">
+                                    <ul class="list-unstyled mb-0 p-2"
+                                        style="border: 1px solid color-mix(in srgb, var(--border-color) 70%, transparent);
+                                               border-radius: var(--radius-xl);
+                                               background-color: color-mix(in srgb, var(--surface-color) 96%, transparent);">
                                         <li><h6 class="dropdown-header">PNG · universal</h6></li>
                                         <li>
                                             <a class="dropdown-item"
