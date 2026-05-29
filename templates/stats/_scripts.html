@@ -380,20 +380,87 @@ function updateFilterSummary(alerts) {
     summary.innerHTML = parts.join(' ');
 }
 
-function updateQuickStats(agg) {
-    const fmt = new Intl.NumberFormat();
+// ============================================
+// COUNT-UP ANIMATION (visual polish)
+// ============================================
 
-    const els = {
-        filteredTotalAlerts: fmt.format(agg.totalAlerts),
-        filteredAvgPerDay: agg.avgPerDay?.toFixed(1) || '0',
-        filteredTopSeverity: agg.topSeverity || '-',
-        filteredTopEvent: agg.topEvent || '-'
-    };
+const PREFERS_REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    Object.entries(els).forEach(([id, val]) => {
-        const el = document.getElementById(id);
-        if (el) el.textContent = val;
+function animateCount(el, target, { duration = 700, decimals = 0, prefix = '', suffix = '' } = {}) {
+    if (!el) return;
+    const fmt = new Intl.NumberFormat(undefined, {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals
     });
+    target = Number(target) || 0;
+    if (PREFERS_REDUCED_MOTION) {
+        el.textContent = prefix + fmt.format(target) + suffix;
+        return;
+    }
+    const start = performance.now();
+    function frame(now) {
+        const t = Math.min((now - start) / duration, 1);
+        const eased = 1 - Math.pow(1 - t, 3); // easeOutCubic
+        el.textContent = prefix + fmt.format(target * eased) + suffix;
+        if (t < 1) requestAnimationFrame(frame);
+        else el.textContent = prefix + fmt.format(target) + suffix;
+    }
+    requestAnimationFrame(frame);
+}
+
+// Parse a rendered stat string like "1,234", "99%", "1.5m" into its parts.
+function parseStatNumber(text) {
+    const s = String(text).replace(/,/g, '');
+    const m = s.match(/-?\d+(?:\.\d+)?/);
+    if (!m) return null;
+    const dot = m[0].indexOf('.');
+    return {
+        value: parseFloat(m[0]),
+        decimals: dot >= 0 ? m[0].length - dot - 1 : 0,
+        prefix: s.slice(0, m.index),
+        suffix: s.slice(m.index + m[0].length)
+    };
+}
+
+// Animate the server-rendered headline cards once on load. Skips dynamic
+// placeholder cards (they carry an id and are populated separately).
+function initCountUps() {
+    document.querySelectorAll('.stat-card .stat-number:not([id])').forEach(el => {
+        const parsed = parseStatNumber(el.textContent);
+        if (!parsed) return;
+        animateCount(el, parsed.value, {
+            decimals: parsed.decimals,
+            prefix: parsed.prefix,
+            suffix: parsed.suffix
+        });
+    });
+}
+
+function updateQuickStats(agg, prevAgg) {
+    animateCount(document.getElementById('filteredTotalAlerts'), agg.totalAlerts);
+    animateCount(document.getElementById('filteredAvgPerDay'), agg.avgPerDay || 0, { decimals: 1 });
+
+    const sevEl = document.getElementById('filteredTopSeverity');
+    if (sevEl) sevEl.textContent = agg.topSeverity || '-';
+    const evEl = document.getElementById('filteredTopEvent');
+    if (evEl) evEl.textContent = agg.topEvent || '-';
+
+    const deltaEl = document.getElementById('filteredTotalDelta');
+    if (deltaEl) {
+        if (prevAgg && prevAgg.totalAlerts > 0) {
+            const pct = ((agg.totalAlerts - prevAgg.totalAlerts) / prevAgg.totalAlerts) * 100;
+            const dir = pct > 0.5 ? 'up' : (pct < -0.5 ? 'down' : 'flat');
+            const arrow = dir === 'up' ? 'arrow-up' : (dir === 'down' ? 'arrow-down' : 'minus');
+            deltaEl.className = 'quick-stat-delta ' + dir;
+            deltaEl.innerHTML = `<i class="fas fa-${arrow}"></i> ${Math.abs(pct).toFixed(0)}% vs prev`;
+        } else if (prevAgg && agg.totalAlerts > 0) {
+            deltaEl.className = 'quick-stat-delta up';
+            deltaEl.innerHTML = `<i class="fas fa-arrow-up"></i> new activity`;
+        } else {
+            deltaEl.className = 'quick-stat-delta';
+            deltaEl.textContent = '';
+        }
+    }
 }
 
 function updateSystemInfo() {
@@ -1264,6 +1331,7 @@ function renderDynamicCharts(agg) {
     createHourSeverityChart(agg);
     createLeadTimeHistogramChart();
     createYoYComparisonChart();
+    createSeverityProfileChart(agg);
 }
 
 function renderStaticCharts() {
@@ -1280,12 +1348,38 @@ function renderStaticCharts() {
     computeStreakStats();
 }
 
+// Alerts in the equal-length window immediately before the current range,
+// honouring the active (non-date) filters so the comparison is apples-to-apples.
+function getPreviousPeriodAlerts() {
+    const s = state.filters.startDate, e = state.filters.endDate;
+    if (!s || !e) return null;
+    const start = new Date(s), end = new Date(e);
+    start.setHours(0, 0, 0, 0);
+    end.setHours(23, 59, 59, 999);
+    const len = end - start;
+    const prevEnd = new Date(start.getTime() - 1);
+    const prevStart = new Date(start.getTime() - len - 1);
+    return baseAlerts.filter(a => {
+        if (a.sentDate < prevStart || a.sentDate > prevEnd) return false;
+        if (state.filters.severities.size && !state.filters.severities.has(a.severity)) return false;
+        if (state.filters.statuses.size && !state.filters.statuses.has(a.status)) return false;
+        if (state.filters.events.size && !state.filters.events.has(a.event)) return false;
+        return true;
+    });
+}
+
 function updateDashboard() {
     state.filteredAlerts = getFilteredAlerts();
     updateFilterSummary(state.filteredAlerts);
     state.aggregates = aggregateAlerts(state.filteredAlerts);
-    updateQuickStats(state.aggregates);
+
+    const prevAlerts = getPreviousPeriodAlerts();
+    state.prevAggregates = prevAlerts ? aggregateAlerts(prevAlerts) : null;
+
+    updateQuickStats(state.aggregates, state.prevAggregates);
+    renderInsights(state.aggregates, state.prevAggregates);
     renderDynamicCharts(state.aggregates);
+    renderCalendarHeatmap(state.aggregates);
 
     if (!state.staticChartsInitialized) {
         renderStaticCharts();
@@ -1320,7 +1414,9 @@ function initializeDashboard() {
 
     initializeFilters();
     updateSystemInfo();
+    initCountUps();
     updateDashboard();
+    buildQuickNav();
 
     console.log('Dashboard ready');
 }
@@ -2244,6 +2340,345 @@ async function exportDashboardAsPdf() {
         alert('Could not generate PDF: ' + (err && err.message ? err.message : err));
     } finally {
         showPdfOverlay(false);
+    }
+}
+
+// ============================================
+// AUTO-INSIGHTS, ACTIVITY CALENDAR, SEVERITY PROFILE, QUICK-NAV
+// ============================================
+
+function rgbaFromHex(hex, alpha) {
+    const c = hexToRgb(hex);
+    return `rgba(${c.r}, ${c.g}, ${c.b}, ${alpha})`;
+}
+
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function formatHour12(h) {
+    const period = h < 12 ? 'AM' : 'PM';
+    const hour = h % 12 === 0 ? 12 : h % 12;
+    return `${hour} ${period}`;
+}
+
+// Which event type grew most between the first and second half of the range?
+function computeTrendingEvent(alerts) {
+    if (alerts.length < 6) return null;
+    const sorted = [...alerts].sort((a, b) => a.sentDate - b.sentDate);
+    const midTime = sorted[Math.floor(sorted.length / 2)].sentDate;
+    const first = new Map(), second = new Map();
+    sorted.forEach(a => {
+        const bucket = a.sentDate < midTime ? first : second;
+        const ev = a.event || 'Unknown';
+        bucket.set(ev, (bucket.get(ev) || 0) + 1);
+    });
+    let best = null, bestDelta = 0;
+    new Set([...first.keys(), ...second.keys()]).forEach(ev => {
+        const delta = (second.get(ev) || 0) - (first.get(ev) || 0);
+        if (delta > bestDelta) { bestDelta = delta; best = ev; }
+    });
+    return best ? { event: best, delta: bestDelta } : null;
+}
+
+function renderInsights(agg, prevAgg) {
+    const band = document.getElementById('insightsBand');
+    if (!band) return;
+
+    if (!agg || !agg.totalAlerts) {
+        band.innerHTML = '';
+        return;
+    }
+
+    const cards = [];
+
+    // 1. Trend vs previous equal-length period
+    if (prevAgg && prevAgg.totalAlerts > 0) {
+        const pct = ((agg.totalAlerts - prevAgg.totalAlerts) / prevAgg.totalAlerts) * 100;
+        const dir = pct > 0.5 ? 'up' : (pct < -0.5 ? 'down' : 'flat');
+        const icon = dir === 'up' ? 'fa-arrow-trend-up' : (dir === 'down' ? 'fa-arrow-trend-down' : 'fa-equals');
+        const verb = dir === 'up' ? 'more' : (dir === 'down' ? 'fewer' : 'same');
+        cards.push({
+            cls: dir,
+            icon: `fas ${icon}`,
+            value: `${pct >= 0 ? '+' : ''}${pct.toFixed(0)}%`,
+            label: `${verb === 'same' ? 'No change' : verb + ' than'} previous period`
+        });
+    } else {
+        cards.push({
+            cls: 'flat',
+            icon: 'fas fa-wave-square',
+            value: agg.avgPerDay ? agg.avgPerDay.toFixed(1) : '0',
+            label: 'Average alerts per day'
+        });
+    }
+
+    // 2. Busiest hour of day
+    if (agg.hourlyTotals && agg.hourlyTotals.some(v => v > 0)) {
+        let peakHour = 0;
+        agg.hourlyTotals.forEach((v, i) => { if (v > agg.hourlyTotals[peakHour]) peakHour = i; });
+        cards.push({
+            cls: 'flat',
+            icon: 'fas fa-clock',
+            value: formatHour12(peakHour),
+            label: 'Busiest hour of day'
+        });
+    }
+
+    // 3. Busiest day of week
+    if (agg.dowTotals && agg.dowTotals.some(v => v > 0)) {
+        let peakDow = 0;
+        agg.dowTotals.forEach((v, i) => { if (v > agg.dowTotals[peakDow]) peakDow = i; });
+        cards.push({
+            cls: 'flat',
+            icon: 'fas fa-calendar-week',
+            value: DAY_NAMES[peakDow],
+            label: 'Busiest day of week'
+        });
+    }
+
+    // 4. Fastest-growing event type (or fall back to most common)
+    const trending = computeTrendingEvent(state.filteredAlerts || []);
+    if (trending) {
+        cards.push({
+            cls: 'up',
+            icon: 'fas fa-fire-flame-curved',
+            value: trending.event,
+            label: `Trending up (+${trending.delta} this period)`
+        });
+    } else if (agg.topEvent && agg.topEvent !== '-') {
+        cards.push({
+            cls: 'flat',
+            icon: 'fas fa-star',
+            value: agg.topEvent,
+            label: 'Most common alert type'
+        });
+    }
+
+    band.innerHTML = cards.map(c => `
+        <div class="insight-card ${c.cls}">
+            <div class="insight-icon"><i class="${c.icon}"></i></div>
+            <div class="insight-body">
+                <span class="insight-value" title="${String(c.value).replace(/"/g, '&quot;')}">${c.value}</span>
+                <span class="insight-label">${c.label}</span>
+            </div>
+        </div>`).join('');
+}
+
+// Timezone-stable local day key (YYYY-MM-DD) so calendar cells line up with the
+// local-time day boundaries used by the filters (avoids UTC off-by-one).
+function localDayKey(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function renderCalendarHeatmap(agg) {
+    const el = document.getElementById('calendarHeatmap');
+    if (!el) return;
+
+    const alerts = state.filteredAlerts || [];
+
+    // Count alerts per local day directly from the filtered set.
+    const counts = new Map();
+    alerts.forEach(a => {
+        if (!a.sentDate) return;
+        const key = localDayKey(a.sentDate);
+        counts.set(key, (counts.get(key) || 0) + 1);
+    });
+
+    let start = state.filters.startDate ? new Date(state.filters.startDate)
+        : (alerts.length ? new Date(Math.min(...alerts.map(a => a.sentDate))) : null);
+    let end = state.filters.endDate ? new Date(state.filters.endDate)
+        : (alerts.length ? new Date(Math.max(...alerts.map(a => a.sentDate))) : null);
+
+    if (!start || !end || !alerts.length) {
+        el.innerHTML = '<div class="simple-chart" style="height:160px;"><i class="fas fa-calendar"></i><span>No activity in range</span></div>';
+        return;
+    }
+
+    start = new Date(start); start.setHours(0, 0, 0, 0);
+    end = new Date(end); end.setHours(0, 0, 0, 0);
+
+    // Cap to the most recent ~53 weeks so the grid stays readable.
+    const DAY_MS = 86400000;
+    const MAX_DAYS = 371;
+    const span = Math.round((end - start) / DAY_MS) + 1;
+    if (span > MAX_DAYS) start = new Date(end.getTime() - (MAX_DAYS - 1) * DAY_MS);
+
+    // Align grid start back to the preceding Sunday.
+    const gridStart = new Date(start);
+    gridStart.setDate(gridStart.getDate() - gridStart.getDay());
+
+    const max = Math.max(1, ...counts.values());
+
+    const weeks = [];
+    const cursor = new Date(gridStart);
+    while (cursor <= end) {
+        const week = [];
+        for (let i = 0; i < 7; i++) {
+            const key = localDayKey(cursor);
+            const inRange = cursor >= start && cursor <= end;
+            week.push({
+                key,
+                inRange,
+                count: inRange ? (counts.get(key) || 0) : null,
+                month: cursor.getMonth(),
+                dateLabel: cursor.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+            });
+            cursor.setDate(cursor.getDate() + 1);
+        }
+        weeks.push(week);
+    }
+
+    // Month labels: render on the first column where a new month begins.
+    let lastMonth = -1;
+    const monthCells = weeks.map(week => {
+        const firstInRange = week.find(d => d.inRange) || week[0];
+        const m = firstInRange.month;
+        if (m !== lastMonth) {
+            lastMonth = m;
+            return `<span>${MONTH_NAMES[m]}</span>`;
+        }
+        return '<span></span>';
+    }).join('');
+
+    const weekColumns = weeks.map(week => {
+        const cells = week.map(d => {
+            if (!d.inRange) return '<div class="cal-cell cal-cell-empty"></div>';
+            const bg = getHeatmapColor(d.count, max);
+            const plural = d.count === 1 ? 'alert' : 'alerts';
+            return `<div class="cal-cell" style="background:${bg}" title="${d.dateLabel}: ${d.count} ${plural}"></div>`;
+        }).join('');
+        return `<div class="cal-week">${cells}</div>`;
+    }).join('');
+
+    const weekdayLabels = ['', 'Mon', '', 'Wed', '', 'Fri', '']
+        .map(l => `<span>${l}</span>`).join('');
+
+    // Legend swatches from low to high intensity.
+    const legendSwatches = [0, 0.25, 0.5, 0.75, 1]
+        .map(r => `<div class="cal-cell" style="background:${getHeatmapColor(r * max, max)}"></div>`)
+        .join('');
+
+    el.innerHTML = `
+        <div class="cal-heatmap">
+            <div class="cal-weekday-col">${weekdayLabels}</div>
+            <div class="cal-body">
+                <div class="cal-months">${monthCells}</div>
+                <div class="cal-grid">${weekColumns}</div>
+            </div>
+        </div>
+        <div class="cal-legend">
+            <span>Less</span>${legendSwatches}<span>More</span>
+        </div>`;
+}
+
+function createSeverityProfileChart(agg) {
+    const id = 'severityProfileChart';
+    if (!document.getElementById(id)) return;
+
+    const current = SEVERITY_ORDER.map(s =>
+        (agg.alertBySeverity.find(x => x.severity === s)?.count) || 0);
+
+    if (current.every(v => v === 0)) return showNoData(id, 'No severity data');
+
+    const prevAgg = state.prevAggregates;
+    const previous = prevAgg
+        ? SEVERITY_ORDER.map(s => (prevAgg.alertBySeverity.find(x => x.severity === s)?.count) || 0)
+        : null;
+
+    const primary = getCSSVar('--chart-primary-start', '#667eea');
+    const muted = getCSSVar('--text-muted', '#94a3b8');
+    const grid = getChartThemeColors().gridLines;
+
+    createOrUpdateChart(id, canvas => {
+        const datasets = [{
+            label: 'Current period',
+            data: current,
+            backgroundColor: rgbaFromHex(primary, 0.25),
+            borderColor: primary,
+            borderWidth: 2,
+            pointBackgroundColor: primary,
+            pointRadius: 3
+        }];
+
+        if (previous && previous.some(v => v > 0)) {
+            datasets.push({
+                label: 'Previous period',
+                data: previous,
+                backgroundColor: rgbaFromHex(muted, 0.12),
+                borderColor: muted,
+                borderWidth: 2,
+                borderDash: [5, 4],
+                pointBackgroundColor: muted,
+                pointRadius: 2
+            });
+        }
+
+        return new Chart(canvas, {
+            type: 'radar',
+            data: { labels: SEVERITY_ORDER, datasets },
+            options: {
+                plugins: {
+                    legend: { position: 'bottom', labels: { usePointStyle: true, padding: 14 } },
+                    datalabels: { display: false }
+                },
+                scales: {
+                    r: {
+                        beginAtZero: true,
+                        grid: { color: grid },
+                        angleLines: { color: grid },
+                        ticks: { display: false, backdropColor: 'transparent' },
+                        pointLabels: { font: { size: 12, weight: '600' } }
+                    }
+                }
+            }
+        });
+    });
+}
+
+// Build the sticky section quick-nav from the section headers already in the
+// DOM, with scroll-spy highlighting the section currently in view.
+function buildQuickNav() {
+    const nav = document.getElementById('statsQuickNav');
+    if (!nav) return;
+
+    const headers = Array.from(document.querySelectorAll('.section-header'));
+    if (!headers.length) { nav.style.display = 'none'; return; }
+
+    const items = headers.map((h, i) => {
+        if (!h.id) h.id = 'stats-section-' + i;
+        const icon = h.querySelector('i')?.className || 'fas fa-chart-bar';
+        // textContent includes only the visible label (icons are glyph fonts).
+        const label = h.textContent.trim().replace(/\s+/g, ' ');
+        return { id: h.id, icon, label };
+    });
+
+    nav.innerHTML = items.map(it =>
+        `<a href="#${it.id}" data-target="${it.id}"><i class="${it.icon}"></i><span>${it.label}</span></a>`
+    ).join('');
+
+    nav.querySelectorAll('a').forEach(a => {
+        a.addEventListener('click', e => {
+            e.preventDefault();
+            document.getElementById(a.dataset.target)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+    });
+
+    if ('IntersectionObserver' in window) {
+        const linkFor = new Map(items.map(it =>
+            [it.id, nav.querySelector(`a[data-target="${it.id}"]`)]));
+        const observer = new IntersectionObserver(entries => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    nav.querySelectorAll('a').forEach(x => x.classList.remove('active'));
+                    const link = linkFor.get(entry.target.id);
+                    if (link) {
+                        link.classList.add('active');
+                        link.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+                    }
+                }
+            });
+        }, { rootMargin: '-15% 0px -75% 0px' });
+        headers.forEach(h => observer.observe(h));
     }
 }
 </script>
