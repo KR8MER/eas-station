@@ -25,7 +25,10 @@ state machine driven by ``eas:broadcast_active`` and
 of those controllers.
 """
 
-from services.gpio.alert_indicators import update_alert_indicators
+from services.gpio.alert_indicators import (
+    AlertIndicatorMonitor,
+    update_alert_indicators,
+)
 from services.gpio.init import (
     initialize_gpio_controller,
     initialize_neopixel_controller,
@@ -37,4 +40,5 @@ __all__ = [
     "initialize_neopixel_controller",
     "initialize_tower_light_controller",
     "update_alert_indicators",
+    "AlertIndicatorMonitor",
 ]

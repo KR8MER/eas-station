@@ -72,6 +72,25 @@ def _get_oled_enabled_status():
 
 _BROADCAST_STATE_KEY = 'eas:broadcast_active'
 _INCOMING_STATE_KEY = 'eas:incoming_alert'
+# Pub/sub channel the GPIO subsystem subscribes to so tower-light / NeoPixel
+# transitions fire the instant broadcast or incoming-alert state changes,
+# instead of waiting for the next 1-second poll.  The payload is just a wake-up
+# nudge ("changed"); the subscriber re-reads the state keys above to decide what
+# to do.  A periodic poll still runs in the subscriber as a safety net in case a
+# notification is ever missed (e.g. Redis reconnect).
+_INDICATOR_CHANNEL = 'eas:indicator_events'
+
+
+def _notify_indicator_change() -> None:
+    """Publish a wake-up nudge so indicator hardware reacts without polling lag."""
+    try:
+        from app_core.redis_client import get_redis_client
+        client = get_redis_client()
+        if client is None:
+            return
+        client.publish(_INDICATOR_CHANNEL, 'changed')
+    except Exception:
+        pass
 
 
 def set_incoming_alert(event_code: str = '') -> None:
@@ -91,6 +110,7 @@ def set_incoming_alert(event_code: str = '') -> None:
         client.set(_INCOMING_STATE_KEY, payload, ex=300)  # 5-minute safety TTL
     except Exception:
         pass
+    _notify_indicator_change()
 
 
 def clear_incoming_alert() -> None:
@@ -103,6 +123,7 @@ def clear_incoming_alert() -> None:
         client.delete(_INCOMING_STATE_KEY)
     except Exception:
         pass
+    _notify_indicator_change()
 
 
 def get_incoming_alert_state() -> dict:
@@ -151,6 +172,7 @@ def set_broadcast_active(
         client.delete(_INCOMING_STATE_KEY)
     except Exception:
         pass
+    _notify_indicator_change()
 
 
 def clear_broadcast_active() -> None:
@@ -163,6 +185,7 @@ def clear_broadcast_active() -> None:
         client.delete(_BROADCAST_STATE_KEY)
     except Exception:
         pass
+    _notify_indicator_change()
 
 
 def get_broadcast_state() -> dict:

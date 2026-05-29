@@ -613,6 +613,8 @@ def register(app: Flask, logger) -> None:
         try:
             pin_rows = _build_pin_rows()
             behavior_order = [
+                GPIOBehavior.TRANSMITTER_PTT,
+                GPIOBehavior.AUDIO_MUTE,
                 GPIOBehavior.DURATION_OF_ALERT,
                 GPIOBehavior.PLAYOUT,
                 GPIOBehavior.FLASH,
@@ -621,6 +623,8 @@ def register(app: Flask, logger) -> None:
                 GPIOBehavior.FORWARDING_ALERT,
             ]
             behavior_descriptions = {
+                GPIOBehavior.TRANSMITTER_PTT.value: "Key the transmitter (PTT) for the full broadcast. Assign this to the transmit relay pin.",
+                GPIOBehavior.AUDIO_MUTE.value: "Mute or duck station program audio while the EAS alert is on air.",
                 GPIOBehavior.DURATION_OF_ALERT.value: "Hold the relay active until the alert finishes.",
                 GPIOBehavior.PLAYOUT.value: "Activate while tones and audio playout are running.",
                 GPIOBehavior.FLASH.value: "Blink the pin rapidly at the start of the alert to drive strobes.",

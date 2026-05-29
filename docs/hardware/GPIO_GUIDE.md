@@ -2,14 +2,18 @@
 
 ## 1. Overview
 
-EAS Station™ provides GPIO integration for relay control, visual indicators, and OLED status displays. The GPIO subsystem is handled by the `hardware_service` (systemd unit `eas-station-hardware`). This guide covers relay wiring, the OLED status screen, and configurable flash patterns for stack lights.
+EAS Station™ provides GPIO integration for relay control, visual indicators, and OLED status displays. The GPIO subsystem runs as its own subprocess — `python -m services.gpio` (systemd unit `eas-station-gpio.service`, health endpoint on port 5105) — so a stuck GPIO ioctl can never freeze OLED rendering, GPS sampling, or the web app. This guide covers relay wiring, the alert-lifecycle **behavior matrix**, the OLED status screen, configurable flash patterns for stack lights, and the event-driven tower-light / NeoPixel indicators.
 
 **Supported GPIO configurations:**
 - **Raspberry Pi** (all models with 40-pin header) — via `gpiochip0`
+- **Raspberry Pi 5** — via the modern `lgpio` backend (imported lazily so it never deadlocks the web workers)
 - **Raspberry Pi with relay HAT** — Waveshare, Sequent Microsystems, SB Components, and similar
 - Systems with `libgpiod`-compatible GPIO chips
+- **Non-Pi / container hosts** — automatically fall back to a sysfs backend, then a simulated null backend, so the app still boots and the UI shows configured pins
 
-The software uses `libgpiod` for GPIO access, which does not require root privileges when the `eas-station` user is added to the `gpio` group.
+The software uses `gpiozero` (with optional `lgpio`) for GPIO access, which does not require root privileges when the `eas-station` user is added to the `gpio` group.
+
+> **All hardware settings are configured in the web UI** at **Admin → Hardware Settings** and stored in the database. Environment variables / `.env` keys are **not** read for GPIO, relays, NeoPixel, or the tower light.
 
 ---
 
@@ -19,7 +23,7 @@ EAS Station™ uses GPIO-controlled relays to key transmitters, activate externa
 
 ### Overview
 
-The GPIO relay integration is handled by the `hardware_service`. When an EAS alert is broadcast, the service closes the transmit relay to key the transmitter, and optionally activates additional relays for auxiliary equipment.
+The GPIO relay integration is driven by the alert pipeline (the broadcaster and the RWT scheduler) through a **behavior matrix**: you assign each pin one or more *lifecycle behaviors* (see [§5. GPIO Behaviors](#5-gpio-behaviors)) and the system keys those pins at the matching moment of an alert. When an EAS alert is broadcast, pins assigned a transmit-capable behavior close to key the transmitter, and optionally additional relays fire for auxiliary equipment, audio muting, or flashing beacons.
 
 ---
 
@@ -84,59 +88,62 @@ For standard ham radio PTT circuits, any relay rated for 10V/100mA is more than 
 
 ### Reserved GPIO Pins
 
-The following BCM pins are reserved by the Argon HAT OLED display and must not be used for relays if an Argon HAT is installed:
+The following BCM pins are reserved by the Argon HAT OLED display and are rejected for relay use **only when the OLED is enabled** in Hardware Settings:
 
 ```python
-ARGON_OLED_RESERVED_BCM = {2, 3}   # I2C SDA/SCL for OLED
+ARGON_OLED_RESERVED_BCM = {2, 3, 14}   # I2C SDA (BCM2), SCL (BCM3), TXD (BCM14)
 ```
 
-The hardware settings page lists reserved pins and will warn you if you configure a relay on a reserved pin.
+The hardware settings page lists reserved pins and the pin-config loader logs an error and drops any relay you assign to a reserved pin while OLED is on. When the OLED is disabled, these pins are available for relays like any other.
 
 ---
 
 ### Configuration
 
+GPIO is configured entirely through the web UI and stored in the database. There is **no `.env` / environment-variable path** for hardware settings.
+
 #### Via the Web Interface
 
-1. Navigate to **Admin → Hardware Settings**.
-2. Enable **GPIO Relay Control**.
-3. Set the **GPIO Chip** (default: `gpiochip0`).
-4. Configure the **Transmit Relay Pin** (BCM number).
-5. In the **GPIO Pin Map**, assign each relay function to a BCM pin:
+1. Navigate to **Admin → Hardware Settings** and enable **GPIO Relay Control**.
+2. Open **Admin → GPIO → Pin Map** (the interactive Raspberry Pi pin map).
+3. For each relay, click its BCM pin and set its options. The **pin map** is stored as a JSON object keyed by **BCM pin number** (as a string), with a config object per pin:
    ```json
    {
-     "transmit": 26,
-     "aux1": 20,
-     "aux2": 21
+     "26": {
+       "name": "Transmitter PTT",
+       "active_high": true,
+       "hold_seconds": 5.0,
+       "watchdog_seconds": 300.0
+     },
+     "20": { "name": "Program Audio Mute", "active_high": true },
+     "13": { "name": "Alert Beacon", "active_high": true,
+             "flash_enabled": true, "flash_interval_ms": 500, "flash_partner_pin": 19 }
    }
    ```
-6. In the **GPIO Behavior Matrix**, define which relay activates for which alert severity:
+4. Assign each pin one or more **behaviors** in the **behavior matrix**. The matrix is a JSON object keyed by BCM pin number, mapping to a list of *lifecycle behaviors* (NOT alert severities):
    ```json
    {
-     "transmit": ["Extreme", "Severe", "Moderate", "Minor"],
-     "aux1": ["Extreme", "Severe"],
-     "aux2": ["Extreme"]
+     "26": ["transmitter_ptt"],
+     "20": ["audio_mute"],
+     "13": ["flash"]
    }
    ```
-7. Click **Save Settings** and restart the hardware service.
+   See [§5. GPIO Behaviors](#5-gpio-behaviors) for the full list and what each one does.
+5. Click **Save Settings**. The GPIO subprocess reloads its configuration; on a fresh deploy, restart it with `sudo systemctl restart eas-station-gpio`.
 
-#### Via eas-config
+> **Startup validation.** When the behavior manager loads, it logs a warning if **no pin** is assigned a transmit-capable behavior (`Transmitter PTT`, `Duration of Alert`, or `Audio Playout`) — i.e. nothing would key your transmitter during a broadcast. It also warns about behaviors assigned to pins that aren't active, and flash partners that aren't themselves flashing. Check the `eas-station-gpio` journal after changing the matrix.
 
-```bash
-sudo eas-config
-```
+#### Field reference (per pin)
 
-Select **5. Hardware Integration → GPIO Relay Settings**.
-
-#### Via .env
-
-```
-GPIO_ENABLED=true
-GPIO_CHIP=gpiochip0
-GPIO_TRANSMIT_PIN=26
-GPIO_AUX1_PIN=20
-GPIO_AUX2_PIN=21
-```
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `name` | string | `GPIO Pin N` | Friendly label shown in the UI and logs |
+| `active_high` | bool | `true` | `true` = relay closes on HIGH; set `false` for active-low HATs |
+| `hold_seconds` | float | `5.0` | Minimum time the pin stays active before it can be released (anti-chatter) |
+| `watchdog_seconds` | float | `300.0` | Hard ceiling; the pin is force-released if it stays active longer (stuck-relay protection) |
+| `flash_enabled` | bool | `false` | Flash this pin when activated directly (manual/test). During alerts, assign the **Flash Beacon** behavior instead |
+| `flash_interval_ms` | int | `500` | Flash period, clamped to 50–5000 ms |
+| `flash_partner_pin` | int | `null` | BCM pin driven in opposite phase for two-light alternating patterns |
 
 ---
 
@@ -162,14 +169,20 @@ The log includes:
 
 #### Via the API
 
+Pins are addressed by **BCM number**. Activate and then deactivate to pulse:
+
 ```bash
-# Pulse the transmit relay for 1 second
-curl -X POST \
-  -H "X-API-Key: <key>" \
-  -H "Content-Type: application/json" \
-  -d '{"channel": "transmit", "duration_ms": 1000}' \
-  https://your-eas-station.example.com/api/hardware/gpio/pulse
+# Activate BCM 26 (e.g. the transmit relay)
+curl -X POST -H "X-API-Key: <key>" \
+  https://your-eas-station.example.com/api/gpio/activate/26
+sleep 1
+# Release it
+curl -X POST -H "X-API-Key: <key>" \
+  https://your-eas-station.example.com/api/gpio/deactivate/26
 ```
+
+Read current pin states (same shape the live dashboard consumes) with
+`GET /api/gpio/status`.
 
 #### Via Command Line
 
@@ -197,13 +210,15 @@ gpioset gpiochip0 26=0   # Open relay
 #### Fail-Safe Configuration
 
 Configure all relays to use **Normally Open (NO)** contacts for the transmitter:
-- Transmitter is **not keyed** when power is off or the service is stopped.
-- Transmitter is **not keyed** if the hardware service crashes.
+- Transmitter is **not keyed** when power is off or the GPIO service is stopped.
+- Transmitter is **not keyed** if the GPIO subprocess crashes.
 - Transmitter is **keyed only** when EAS Station™ explicitly activates the relay.
+
+On shutdown the GPIO subprocess drives every pin LOW and releases it through three independent paths — the signal handler's `finally` block, an `atexit` backstop (covers non-signal exits), and the behavior manager's `shutdown()` (stops flashing and releases held relays) — so a clean stop never leaves the transmitter keyed.
 
 #### Preventing Stuck Relays
 
-The hardware service enforces a maximum relay-active duration. If a broadcast exceeds the configured maximum, the relay is automatically released. Configure this limit in **Admin → Hardware Settings → Maximum Relay Duration (seconds)**.
+Each pin has a **watchdog** (`watchdog_seconds`, default 300 s). If a pin stays active longer than its watchdog — e.g. a broadcast hangs — the controller force-releases it and marks its state `watchdog_timeout`. This is the last-resort safety net; configure per-pin watchdog and `hold_seconds` values in the pin map (see Configuration above).
 
 ---
 
@@ -224,7 +239,7 @@ sudo udevadm control --reload-rules
 Restart the hardware service after making permission changes:
 
 ```bash
-sudo systemctl restart eas-station-hardware
+sudo systemctl restart eas-station-gpio
 ```
 
 ---
@@ -236,7 +251,7 @@ sudo systemctl restart eas-station-hardware
 ```bash
 sudo usermod -a -G gpio eas-station
 # Log out and back in, or restart the service
-sudo systemctl restart eas-station-hardware
+sudo systemctl restart eas-station-gpio
 ```
 
 #### Relay activates but transmitter does not key
@@ -263,7 +278,7 @@ The `gpio_activation_log` table may not have been created yet. Run:
 cd /opt/eas-station
 source venv/bin/activate
 alembic upgrade head
-sudo systemctl restart eas-station-hardware
+sudo systemctl restart eas-station-gpio
 ```
 
 ---
@@ -522,7 +537,7 @@ WHERE name = 'oled_gpio_status';
 
 4. **Restart hardware service**
    ```bash
-   sudo systemctl restart eas-station-hardware
+   sudo systemctl restart eas-station-gpio
    ```
 
 #### Data Not Updating
@@ -861,3 +876,72 @@ controller.deactivate(pin=17)
 - Works with both gpiozero and lgpio backends
 - Compatible with mock factory for testing
 - No changes needed to existing GPIO code
+
+---
+
+## 5. GPIO Behaviors
+
+A **behavior** ties a GPIO pin to a moment in the alert lifecycle. You assign behaviors per pin in the behavior matrix (Admin → GPIO → Pin Map). A pin may have several behaviors; the controller fires it whenever any assigned behavior is triggered.
+
+| Behavior (matrix value) | Label | When it fires | Hold / pulse |
+|-------------------------|-------|---------------|--------------|
+| `transmitter_ptt` | Transmitter PTT | The whole broadcast | **Held** for the full alert — assign this to the relay that keys your transmitter |
+| `audio_mute` | Audio Mute | The whole broadcast | **Held** — mutes/ducks station program audio (or switches the audio source) while the EAS alert is on air |
+| `duration_of_alert` | Duration of Alert | The whole broadcast | **Held** until playout finishes |
+| `playout` | Audio Playout | While tones + audio play | **Held** for the playout window |
+| `forwarding_alert` | Forwarding Alert | A *forwarded* alert (relayed from a monitoring input) | Pulses ~5 s normally; **held for the full duration** when the alert is forwarded |
+| `incoming_alert` | Incoming Alert | An alert is received, before broadcast | Pulses ~3 s |
+| `five_seconds` | 5 Second Pulse | Playout begins | Pulses 5 s |
+| `flash` | Flash Beacon | The whole broadcast | **Flashes** the pin (and its partner in opposite phase) until the alert ends |
+
+### Transmitter keying (PTT)
+
+To key a transmitter automatically you **must** assign a transmit-capable behavior — `transmitter_ptt` (recommended, purpose-built), or `duration_of_alert` / `playout` — to the relay pin. If no pin carries any of these, the behavior manager logs a startup warning and **the transmitter will not be keyed**. `transmitter_ptt` and `audio_mute` are held for the full broadcast and released (with their `hold_seconds` respected) when playout finishes.
+
+### Audio muting
+
+`audio_mute` is held for the broadcast window, so wire the relay to mute/duck your station's normal program audio (or switch the program feed to the EAS source) while the alert plays, then it releases automatically.
+
+### Flash behavior is the single flash engine
+
+There are two ways a pin can flash, and they no longer fight each other:
+
+- **`flash_enabled` in the pin config** flashes a pin when it is activated *directly* (manual activation, the test API, `activate_all` without a behavior matrix).
+- **The `flash` behavior** flashes a pin *during an alert*. It delegates to the same controller flash engine, so exactly one flash thread runs per pin and the configured `flash_partner_pin` is driven in opposite phase.
+
+**Precedence:** if a pin is assigned **both** `flash` and a hold behavior (e.g. `duration_of_alert`), `flash` wins — the pin flashes and is never also driven solid. Held relays are always driven solid even if their config happens to set `flash_enabled`.
+
+---
+
+## 6. Tower Light & NeoPixel Indicators
+
+In addition to GPIO relays, two self-contained visual indicators follow the alert lifecycle. Both are configured under **Admin → Hardware Settings** and run inside the same `eas-station-gpio` subprocess, but are **independent of the relay/behavior matrix** — they have their own state machines.
+
+### USB Tower Light (Adafruit #5125)
+
+A CH34x USB-serial tri-color stack light (red / yellow / green + buzzer), driven over `/dev/ttyUSB*` at 9600 baud. It follows a three-state machine:
+
+```
+idle (green) → incoming alert (yellow) → active broadcast (red) → idle (green)
+```
+
+Options: `alert_buzzer` (sound buzzer during active alert), `incoming_uses_yellow` (show yellow on incoming alerts), `blink_on_alert` (use hardware blink mode vs. solid).
+
+### NeoPixel / WS2812B strip
+
+An addressable LED strip on a PWM-capable pin (BCM 18 recommended). Shows a dim **standby color** when idle and the **alert color** (red, flashing by default) during an active broadcast. Configure pin, pixel count, brightness, byte order, colors, and flash. Falls back to a silent null mode when `rpi_ws281x` or DMA access is unavailable, so the rest of the system still runs.
+
+### Event-driven (no polling lag)
+
+The indicators react to two Redis keys, `eas:broadcast_active` and `eas:incoming_alert`, written by the broadcast pipeline. The GPIO subprocess updates the lights two ways at once:
+
+1. **Pub/sub listener** — the pipeline publishes a nudge on the `eas:indicator_events` channel whenever state changes, and a listener thread refreshes the indicators immediately (sub-second).
+2. **1-second safety-net poll** — re-reads the keys every second in case a notification is ever missed (e.g. a Redis reconnect).
+
+Both paths drive the same thread-safe monitor, so a single state change is applied exactly once. Previously the lights only updated on the 1-second poll, so they could lag the audio by up to a second at the start and end of an alert.
+
+---
+
+## 7. Resending a Stored Alert
+
+**Admin → EAS Messages → Resend** replays a previously generated alert's stored audio and keys GPIO exactly as a fresh alert would: it loads the same database-backed pin map and behavior matrix, triggers the incoming-alert behavior, holds the playout/transmitter/mute behaviors for the audio duration, then releases them. The original message record is not modified — a `SystemLog` entry records the resend.

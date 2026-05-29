@@ -22,6 +22,7 @@ from __future__ import annotations
 """Drive tower-light + NeoPixel based on broadcast / incoming alert state."""
 
 import logging
+import threading
 from typing import Tuple
 
 logger = logging.getLogger(__name__)
@@ -97,3 +98,42 @@ def update_alert_indicators(
                 logger.warning("Tower light end_alert (incoming expired) failed: %s", exc)
 
     return broadcast_active, incoming_active
+
+
+class AlertIndicatorMonitor:
+    """Thread-safe owner of the tower-light / NeoPixel alert-indicator state.
+
+    Wraps :func:`update_alert_indicators` so it can be driven from two places at
+    once without races:
+
+    * a **pub/sub listener thread** that calls :meth:`refresh` the instant the
+      broadcast pipeline publishes a state change (sub-second response), and
+    * a **periodic poll** that calls :meth:`refresh` every second as a safety net
+      in case a notification is ever missed (Redis reconnect, dropped message).
+
+    The previous-state tracking that used to live as two loop locals in the GPIO
+    subprocess now lives here behind a lock, so concurrent refreshes serialise
+    cleanly and a single state change can never be applied twice.
+    """
+
+    def __init__(self, tower_light_controller=None, neopixel_controller=None) -> None:
+        self.tower_light_controller = tower_light_controller
+        self.neopixel_controller = neopixel_controller
+        self._broadcast_was_active = False
+        self._incoming_was_active = False
+        self._lock = threading.Lock()
+
+    def refresh(self) -> Tuple[bool, bool]:
+        """Re-read alert state and apply any transition to the indicators.
+
+        Safe to call concurrently from the listener thread and the poll loop;
+        calls are serialised so each state change is applied exactly once.
+        """
+        with self._lock:
+            self._broadcast_was_active, self._incoming_was_active = update_alert_indicators(
+                self._broadcast_was_active,
+                self._incoming_was_active,
+                tower_light_controller=self.tower_light_controller,
+                neopixel_controller=self.neopixel_controller,
+            )
+            return self._broadcast_was_active, self._incoming_was_active
