@@ -486,6 +486,13 @@ class GPIOBehavior(Enum):
     FIVE_SECONDS = "five_seconds"
     INCOMING_ALERT = "incoming_alert"
     FORWARDING_ALERT = "forwarding_alert"
+    # Transmitter keying (PTT). Held active for the full broadcast so the
+    # external transmitter / control system stays keyed while EAS audio plays.
+    TRANSMITTER_PTT = "transmitter_ptt"
+    # Audio mute / program-audio ducking relay. Held active during playout so
+    # station program audio is muted (or switched to the EAS source) while the
+    # alert is on air, then released when playout finishes.
+    AUDIO_MUTE = "audio_mute"
 
     @classmethod
     def from_value(cls, value: str) -> Optional["GPIOBehavior"]:
@@ -511,7 +518,21 @@ GPIO_BEHAVIOR_LABELS = {
     GPIOBehavior.FIVE_SECONDS: "5 Second Pulse",
     GPIOBehavior.INCOMING_ALERT: "Incoming Alert",
     GPIOBehavior.FORWARDING_ALERT: "Forwarding Alert",
+    GPIOBehavior.TRANSMITTER_PTT: "Transmitter PTT",
+    GPIOBehavior.AUDIO_MUTE: "Audio Mute",
 }
+
+
+# Behaviors that key the station transmitter / hold the airchain for the full
+# broadcast.  Used by :meth:`GPIOBehaviorManager.validate_configuration` to warn
+# operators when no pin will key the transmitter during an alert.
+TRANSMIT_CAPABLE_BEHAVIORS = frozenset(
+    {
+        GPIOBehavior.TRANSMITTER_PTT,
+        GPIOBehavior.DURATION_OF_ALERT,
+        GPIOBehavior.PLAYOUT,
+    }
+)
 
 
 GPIO_BEHAVIOR_PULSE_DEFAULTS = {
@@ -885,6 +906,7 @@ class GPIOController:
         operator: Optional[str] = None,
         alert_id: Optional[str] = None,
         reason: Optional[str] = None,
+        flash: Optional[bool] = None,
     ) -> bool:
         """Activate a GPIO pin.
 
@@ -894,6 +916,13 @@ class GPIOController:
             operator: Username if manual/override activation
             alert_id: Alert identifier if automatic activation
             reason: Human-readable reason for activation
+            flash: Tri-state flash override.  ``None`` uses the pin's configured
+                ``flash_enabled`` flag (legacy / manual behaviour).  ``True``
+                forces the flash pattern on even when ``flash_enabled`` is unset
+                (used by the FLASH lifecycle behavior, which is the single
+                authority for flashing during an alert).  ``False`` suppresses
+                flashing so a held relay (PTT, audio mute, duration) stays solid
+                even if ``flash_enabled`` happens to be set in its config.
 
         Returns:
             True if activation succeeded, False otherwise
@@ -977,9 +1006,13 @@ class GPIOController:
                 # Start watchdog timer
                 self._start_watchdog(pin, config.watchdog_seconds)
 
-                # Start flash pattern if enabled
-                if config.flash_enabled:
-                    self._start_flash(pin)
+                # Start flash pattern.  ``flash`` overrides the pin's configured
+                # ``flash_enabled`` flag so the FLASH lifecycle behavior can be
+                # the single flash authority during an alert (flash=True) while
+                # held relays stay solid (flash=False).
+                should_flash = config.flash_enabled if flash is None else flash
+                if should_flash:
+                    self._start_flash(pin, force=True)
 
                 if self.logger:
                     self.logger.info(
@@ -1246,14 +1279,23 @@ class GPIOController:
             # Thread will exit naturally when it checks the state
             del self._watchdog_threads[pin]
 
-    def _start_flash(self, pin: int) -> None:
+    def _start_flash(self, pin: int, force: bool = False) -> None:
         """Start flash pattern for a pin (two-phase alternating with partner).
 
         Args:
             pin: Pin number to flash
+            force: When ``True`` start flashing even if ``flash_enabled`` is not
+                set on the pin config.  Used by the FLASH lifecycle behavior,
+                which assigns flashing per-alert rather than per-pin.
         """
         config = self._pins.get(pin)
-        if not config or not config.flash_enabled:
+        if not config:
+            return
+        if not config.flash_enabled and not force:
+            return
+
+        # Avoid starting a second flash thread for a pin already flashing.
+        if pin in self._flash_threads:
             return
 
         # Create stop event for this flash thread
@@ -1309,14 +1351,23 @@ class GPIOController:
                             self.logger.error(f"Error in flash pattern for pin {pin}: {exc}")
                         break
                 
-                # Cleanup: ensure pin is in proper state when flash stops
+                # Cleanup: ensure pins rest in a defined state when flash stops.
                 with self._lock:
                     device = self._devices.get(pin)
                     if device and pin in self._states:
-                        # Set to solid on if still active
+                        # Solid ON if the pin is still active, otherwise OFF so a
+                        # flash that ends mid-"off-phase" doesn't latch the relay.
                         if self._states[pin] == GPIOState.ACTIVE:
                             device.on()
-                        
+                        else:
+                            device.off()
+                    # The partner pin is driven directly by this thread and is
+                    # not tracked in the state machine, so always rest it OFF —
+                    # otherwise it can be left energised after flashing stops.
+                    partner_device = self._devices.get(partner_pin) if has_partner else None
+                    if partner_device is not None:
+                        partner_device.off()
+
             except Exception as exc:
                 if self.logger:
                     self.logger.error(f"Flash pattern thread crashed for pin {pin}: {exc}")
@@ -1390,6 +1441,16 @@ class GPIOController:
 
     def cleanup(self) -> None:
         """Cleanup all GPIO pins and stop watchdogs."""
+        # Stop any alert-lifecycle behaviors first so a manager-driven flash or
+        # hold thread can't re-energise a pin after we deactivate it below.
+        manager = getattr(self, "behavior_manager", None)
+        if manager is not None:
+            try:
+                manager.shutdown()
+            except Exception as exc:  # pragma: no cover - defensive
+                if self.logger:
+                    self.logger.warning(f"Error shutting down GPIO behavior manager: {exc}")
+
         with self._lock:
             # Deactivate all active pins
             for pin in list(self._pins.keys()):
@@ -1704,11 +1765,21 @@ class GPIOBehaviorManager:
 
         self._behavior_to_pins: Dict[GPIOBehavior, Set[int]] = {}
         self._hold_map: Dict[int, Set[GPIOBehavior]] = {}
-        self._flash_threads: Dict[int, threading.Event] = {}
+        # Pins currently flashing under the FLASH behavior.  The actual flash
+        # threads live in the controller (the single flash engine); the manager
+        # only tracks which pins it asked the controller to flash so it can stop
+        # them on end_alert / shutdown.
+        self._flash_pins: Set[int] = set()
         self._warned_unconfigured: Set[int] = set()
         self._lock = threading.RLock()
 
         self._rebuild_behavior_index()
+
+        # Surface silent-failure footguns (e.g. nothing keys the transmitter) as
+        # soon as the manager is wired up, while we still have a logger handy.
+        if self.logger:
+            for warning in self.validate_configuration():
+                self.logger.warning("GPIO behavior configuration: %s", warning)
 
     @property
     def is_configured(self) -> bool:
@@ -1773,12 +1844,27 @@ class GPIOBehaviorManager:
         reason = reason or "Automatic alert playout"
         hold_started = False
 
-        hold_behaviors = [GPIOBehavior.DURATION_OF_ALERT, GPIOBehavior.PLAYOUT]
+        # FLASH owns its pins exclusively.  A pin assigned FLASH blinks for the
+        # whole alert and is never also driven as a solid hold — otherwise the
+        # hold (solid ON) and the flash engine would fight over the same line.
+        flash_pins = self._pins_for_behavior(GPIOBehavior.FLASH)
+
+        # Behaviors that hold a relay solid for the broadcast window.
+        #   TRANSMITTER_PTT — keys the station transmitter (held for the whole alert)
+        #   AUDIO_MUTE      — mutes / ducks program audio while EAS audio is on air
+        hold_behaviors = [
+            GPIOBehavior.DURATION_OF_ALERT,
+            GPIOBehavior.PLAYOUT,
+            GPIOBehavior.TRANSMITTER_PTT,
+            GPIOBehavior.AUDIO_MUTE,
+        ]
         if forwarded:
             hold_behaviors.append(GPIOBehavior.FORWARDING_ALERT)
 
         for behavior in hold_behaviors:
             for pin in self._pins_for_behavior(behavior):
+                if pin in flash_pins:
+                    continue  # FLASH takes precedence on shared pins
                 if self._add_hold(pin, behavior, alert_id, event_code, reason):
                     hold_started = True
 
@@ -1808,7 +1894,12 @@ class GPIOBehaviorManager:
 
         reason = reason or "Alert playout completed"
 
-        hold_behaviors = [GPIOBehavior.DURATION_OF_ALERT, GPIOBehavior.PLAYOUT]
+        hold_behaviors = [
+            GPIOBehavior.DURATION_OF_ALERT,
+            GPIOBehavior.PLAYOUT,
+            GPIOBehavior.TRANSMITTER_PTT,
+            GPIOBehavior.AUDIO_MUTE,
+        ]
         if forwarded:
             hold_behaviors.append(GPIOBehavior.FORWARDING_ALERT)
 
@@ -1817,6 +1908,87 @@ class GPIOBehaviorManager:
                 self._release_hold(pin, behavior, alert_id, event_code, reason)
 
         self._stop_flash(alert_id, event_code)
+
+    def validate_configuration(self) -> List[str]:
+        """Return human-readable warnings about the behavior configuration.
+
+        Surfaces silent-failure footguns at startup so an operator finds out
+        *before* a real alert that, for example, nothing will key their
+        transmitter.  Returns an empty list when the configuration looks sound.
+        """
+
+        warnings: List[str] = []
+
+        if not self.behavior_matrix:
+            return warnings
+
+        assigned: Set[GPIOBehavior] = set()
+        for behaviors in self.behavior_matrix.values():
+            assigned.update(behaviors)
+
+        # 1. No pin will key the transmitter / hold the airchain during an alert.
+        if not (assigned & TRANSMIT_CAPABLE_BEHAVIORS):
+            transmit_labels = ", ".join(
+                sorted(GPIO_BEHAVIOR_LABELS[b] for b in TRANSMIT_CAPABLE_BEHAVIORS)
+            )
+            warnings.append(
+                "No GPIO pin is assigned a transmit-capable behavior "
+                f"({transmit_labels}); the transmitter will NOT be keyed during a "
+                "broadcast. Assign one of these behaviors to the transmit relay pin."
+            )
+
+        # 2. A behavior references a pin that is not an active GPIO pin.
+        for pin, behaviors in self.behavior_matrix.items():
+            if pin not in self.pin_configs:
+                labels = ", ".join(
+                    sorted(
+                        GPIO_BEHAVIOR_LABELS.get(b, b.value) for b in behaviors
+                    )
+                )
+                warnings.append(
+                    f"GPIO pin {pin} has behaviors assigned ({labels}) but is not an "
+                    "active pin in GPIO settings; those behaviors will be ignored."
+                )
+
+        # 3. A FLASH pin names a partner that is not itself flashing — the
+        #    alternating pattern will not work as expected.
+        flash_pins = self._behavior_to_pins.get(GPIOBehavior.FLASH, set())
+        for pin in flash_pins:
+            config = self.pin_configs.get(pin)
+            if config is None:
+                continue
+            partner = config.flash_partner_pin
+            if partner is not None and partner not in flash_pins:
+                warnings.append(
+                    f"GPIO pin {pin} flashes with partner pin {partner}, but pin "
+                    f"{partner} is not assigned the Flash Beacon behavior; the "
+                    "two-phase alternating pattern will not run."
+                )
+
+        return warnings
+
+    def shutdown(self) -> None:
+        """Release every pin the manager is holding and stop all flashing.
+
+        Called from :meth:`GPIOController.cleanup` so a process shutdown can
+        never leave a manager-driven relay energised (e.g. transmitter still
+        keyed) waiting on the watchdog timeout.
+        """
+
+        self._stop_flash(None, None)
+
+        with self._lock:
+            held = list(self._hold_map.keys())
+            self._hold_map.clear()
+
+        for pin in held:
+            try:
+                self.controller.deactivate(pin, force=True)
+            except Exception as exc:  # pragma: no cover - hardware specific
+                if self.logger:
+                    self.logger.warning(
+                        "Failed to release GPIO pin %s during shutdown: %s", pin, exc
+                    )
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -1864,11 +2036,15 @@ class GPIOBehaviorManager:
         if reason:
             activation_reason = f"{activation_reason} - {reason}"
 
+        # flash=False keeps the relay solid for the whole hold even if the pin
+        # config happens to set flash_enabled — flashing is driven exclusively
+        # by the FLASH behavior, not by held relays (PTT, audio mute, etc.).
         success = self.controller.activate(
             pin=pin,
             activation_type=GPIOActivationType.AUTOMATIC,
             alert_id=alert_id,
             reason=activation_reason,
+            flash=False,
         )
         if success:
             with self._lock:
@@ -1970,6 +2146,13 @@ class GPIOBehaviorManager:
         event_code: Optional[str],
         reason: str,
     ) -> bool:
+        """Start the FLASH behavior by delegating to the controller flash engine.
+
+        The controller is the single flash authority: ``activate(flash=True)``
+        spins up exactly one flash thread per pin and drives the configured
+        ``flash_partner_pin`` in opposite phase.  The manager only records which
+        pins it started so it can stop them in :meth:`_stop_flash`.
+        """
         pins = self._pins_for_behavior(GPIOBehavior.FLASH)
         if not pins or not self.controller:
             return False
@@ -1982,89 +2165,33 @@ class GPIOBehaviorManager:
             partner_pin = config.flash_partner_pin if config else None
             if partner_pin not in pins:
                 partner_pin = None
-            # If partner pair already staged in earlier loop iteration, skip to avoid
-            # duplicate opposing flash threads fighting each other.
+            # The controller flash thread drives both halves of a partner pair,
+            # so only start one pin per pair to avoid two threads fighting.
             if partner_pin is not None and partner_pin in staged:
                 continue
 
             with self._lock:
-                if pin in self._flash_threads:
+                if pin in self._flash_pins:
                     continue
-                stop_event = threading.Event()
-                self._flash_threads[pin] = stop_event
+                self._flash_pins.add(pin)
 
-            thread = threading.Thread(
-                target=self._flash_worker,
-                name=f"gpio-flash-{pin}",
-                kwargs={
-                    "pin": pin,
-                    "stop_event": stop_event,
-                    "alert_id": alert_id,
-                    "reason": reason,
-                    "partner_pin": partner_pin,
-                    "interval": (
-                        max(MIN_FLASH_INTERVAL_MS, min(MAX_FLASH_INTERVAL_MS, config.flash_interval_ms)) / 1000.0
-                        if config
-                        else GPIO_BEHAVIOR_PULSE_DEFAULTS.get(GPIOBehavior.FLASH, 0.35)
-                    ),
-                },
-                daemon=True,
+            ok = self.controller.activate(
+                pin=pin,
+                activation_type=GPIOActivationType.AUTOMATIC,
+                alert_id=alert_id,
+                reason=f"Flash beacon ({reason})",
+                flash=True,
             )
-            thread.start()
-            started = True
-            staged.add(pin)
-            if partner_pin is not None:
-                staged.add(partner_pin)
+            if ok:
+                started = True
+                staged.add(pin)
+                if partner_pin is not None:
+                    staged.add(partner_pin)
+            else:
+                with self._lock:
+                    self._flash_pins.discard(pin)
 
         return started
-
-    def _flash_worker(
-        self,
-        *,
-        pin: int,
-        stop_event: threading.Event,
-        alert_id: Optional[str],
-        reason: str,
-        partner_pin: Optional[int],
-        interval: float,
-    ) -> None:
-        phase = 0
-        while not stop_event.is_set():
-            if partner_pin is None:
-                active_pin = pin if phase == 0 else None
-                inactive_pin = pin if phase == 1 else None
-            else:
-                active_pin = pin if phase == 0 else partner_pin
-                inactive_pin = partner_pin if phase == 0 else pin
-
-            if stop_event.is_set():
-                break
-
-            if active_pin is not None:
-                self.controller.activate(
-                    pin=active_pin,
-                    activation_type=GPIOActivationType.AUTOMATIC,
-                    alert_id=alert_id,
-                    reason=f"Flash beacon active phase ({reason})",
-                )
-            if inactive_pin is not None:
-                try:
-                    self.controller.deactivate(inactive_pin, force=True)
-                except Exception as exc:  # pragma: no cover - hardware specific
-                    if self.logger:
-                        self.logger.warning(
-                            "Failed to step flash cycle for pin %s: %s",
-                            inactive_pin,
-                            exc,
-                        )
-
-            phase = 1 - phase
-            if stop_event.wait(interval):
-                break
-
-        stop_event.set()
-        with self._lock:
-            self._flash_threads.pop(pin, None)
 
     def _stop_flash(
         self,
@@ -2072,20 +2199,16 @@ class GPIOBehaviorManager:
         event_code: Optional[str],
     ) -> None:
         with self._lock:
-            items = list(self._flash_threads.items())
-            self._flash_threads.clear()
+            pins = list(self._flash_pins)
+            self._flash_pins.clear()
 
-        for pin, event in items:
-            event.set()
-            targets = {pin}
-            config = self.pin_configs.get(pin)
-            if config and config.flash_partner_pin is not None:
-                targets.add(config.flash_partner_pin)
-            for target_pin in targets:
-                try:
-                    self.controller.deactivate(target_pin, force=True)
-                except Exception:  # pragma: no cover - hardware specific
-                    pass
+        for pin in pins:
+            # Deactivating the pin stops the controller flash thread, which rests
+            # both the pin and its partner OFF as part of its cleanup.
+            try:
+                self.controller.deactivate(pin, force=True)
+            except Exception:  # pragma: no cover - hardware specific
+                pass
 
 
 # ---------------------------------------------------------------------------

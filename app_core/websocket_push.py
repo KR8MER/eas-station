@@ -691,31 +691,49 @@ def _emit_ipaws_status_update(app: 'Flask', socketio: 'SocketIO') -> None:
 def _emit_gpio_status_update(app: 'Flask', socketio: 'SocketIO') -> None:
     """Emit GPIO pin states.
 
-    GPIO may not be available on all systems (e.g., non-Raspberry Pi).
+    Pins are configured via the database hardware settings (not a legacy
+    ``GPIOConfig`` table), so we build a transient controller from those configs
+    and emit ``controller.get_all_states()`` — the exact same shape the
+    ``/api/gpio/status`` polling fallback returns, so the front-end's
+    ``updatePinStates`` handler can consume either source interchangeably.
+
+    GPIO may not be available on all systems (e.g., non-Raspberry Pi); in that
+    case the configured pins are still reported (state ``inactive``/``error``).
     """
     try:
-        from app_core.models import GPIOConfig
+        from app_utils.gpio import GPIOController, load_gpio_pin_configs_from_db
+        from app_core.hardware_settings import get_gpio_settings, get_oled_settings
+        from app_core.extensions import db
 
-        pins = GPIOConfig.query.all()
-        pin_states = []
-        for pin in pins:
-            pin_states.append({
-                'id': pin.id,
-                'pin_number': pin.pin_number,
-                'name': pin.name,
-                'direction': pin.direction,
-                'current_state': pin.current_state,
-                'enabled': pin.enabled,
-            })
+        if not get_gpio_settings().get('enabled', False):
+            return
+
+        # Reuse the web process's shared controller (built by the GPIO API) when
+        # present so configured pins are only set up once; otherwise build a
+        # throwaway controller just to report configured pins.
+        controller = getattr(app, 'gpio_controller', None)
+        if controller is None:
+            oled_enabled = get_oled_settings().get('enabled', False)
+            configs = load_gpio_pin_configs_from_db(oled_enabled=oled_enabled)
+            if not configs:
+                return
+            controller = GPIOController(db_session=db.session, logger=logger)
+            for cfg in configs:
+                try:
+                    controller.add_pin(cfg)
+                except Exception:
+                    pass
+
+        pin_states = list(controller.get_all_states().values())
 
         _safe_emit(socketio, 'gpio_status_update', {
             'pins': pin_states,
             'total': len(pin_states),
             'timestamp': time.time(),
         })
-    except Exception:
-        # GPIO may not be available on all systems - silently skip
-        pass
+    except Exception as exc:
+        # GPIO may not be available on all systems - log at debug and skip.
+        logger.debug(f"Error fetching GPIO status: {exc}")
 
 
 def _emit_led_status_update(app: 'Flask', socketio: 'SocketIO') -> None:

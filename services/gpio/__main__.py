@@ -36,6 +36,7 @@ pipeline).  The Flask app exists so systemd / the web UI can verify
 "is the GPIO subprocess up?" at a known port.
 """
 
+import atexit
 import logging
 import sys
 import threading
@@ -55,10 +56,10 @@ from services.common import (
     publish_gpio_metrics,
 )
 from services.gpio import (
+    AlertIndicatorMonitor,
     initialize_gpio_controller,
     initialize_neopixel_controller,
     initialize_tower_light_controller,
-    update_alert_indicators,
 )
 
 PORT = 5105
@@ -69,6 +70,41 @@ _running = True
 _gpio_controller: Optional[Any] = None
 _neopixel_controller: Optional[Any] = None
 _tower_light_controller: Optional[Any] = None
+_cleaned_up = False
+_cleanup_lock = threading.Lock()
+
+
+def _cleanup_controllers() -> None:
+    """Release every hardware controller exactly once.
+
+    Shared by the ``main()`` finally block and an ``atexit`` backstop so a
+    relay (e.g. a keyed transmitter) is never left energised on shutdown,
+    regardless of which exit path the process takes.  Idempotent and
+    thread-safe.
+    """
+    global _cleaned_up
+    with _cleanup_lock:
+        if _cleaned_up:
+            return
+        _cleaned_up = True
+
+    log = logging.getLogger(__name__)
+    if _gpio_controller is not None:
+        try:
+            if hasattr(_gpio_controller, "cleanup"):
+                _gpio_controller.cleanup()
+        except Exception as exc:
+            log.error(f"Error cleaning up GPIO: {exc}")
+    if _neopixel_controller is not None:
+        try:
+            _neopixel_controller.cleanup()
+        except Exception as exc:
+            log.error(f"Error cleaning up NeoPixel controller: {exc}")
+    if _tower_light_controller is not None:
+        try:
+            _tower_light_controller.cleanup()
+        except Exception as exc:
+            log.error(f"Error cleaning up USB tower light: {exc}")
 
 
 def _on_shutdown_signal(signum: int) -> None:
@@ -108,6 +144,49 @@ def _run_api_server(app: Flask) -> None:
         log.error(f"[{SUBSYSTEM}] API server crashed: {e}", exc_info=True)
 
 
+def _run_indicator_listener(monitor: "AlertIndicatorMonitor") -> None:
+    """Subscribe to indicator events and refresh the moment state changes.
+
+    Gives the tower light / NeoPixel sub-second response instead of waiting for
+    the 1-second poll.  Reconnects with backoff if Redis drops; the poll loop in
+    :func:`main` keeps indicators correct in the gaps.
+    """
+    log = logging.getLogger(__name__)
+    from app_utils.eas import _INDICATOR_CHANNEL
+
+    backoff = 1.0
+    while _running:
+        pubsub = None
+        try:
+            client = get_redis()
+            pubsub = client.pubsub(ignore_subscribe_messages=True)
+            pubsub.subscribe(_INDICATOR_CHANNEL)
+            log.info(f"[{SUBSYSTEM}] subscribed to indicator events on '{_INDICATOR_CHANNEL}'")
+            backoff = 1.0  # reset after a clean connection
+            # Block briefly for messages so we can still notice shutdown.
+            while _running:
+                message = pubsub.get_message(timeout=1.0)
+                if message is not None:
+                    try:
+                        monitor.refresh()
+                    except Exception as exc:
+                        log.warning(f"[{SUBSYSTEM}] indicator refresh on event failed: {exc}")
+        except Exception as exc:
+            if _running:
+                log.warning(
+                    f"[{SUBSYSTEM}] indicator listener disconnected ({exc}); "
+                    f"retrying in {backoff:.0f}s"
+                )
+                time.sleep(backoff)
+                backoff = min(backoff * 2, 30.0)
+        finally:
+            if pubsub is not None:
+                try:
+                    pubsub.close()
+                except Exception:
+                    pass
+
+
 def main() -> None:
     global _gpio_controller, _neopixel_controller, _tower_light_controller
 
@@ -141,6 +220,11 @@ def main() -> None:
             logger.info("Initializing USB tower light controller...")
             _tower_light_controller = initialize_tower_light_controller()
 
+        # Backstop: guarantee every controller is released on *any* process exit
+        # (including non-signal paths like sys.exit), not just the finally block
+        # below.  Registered atexit handlers run last-in-first-out.
+        atexit.register(_cleanup_controllers)
+
         api_app = _build_app()
         logger.info(f"Starting GPIO health server on port {PORT}...")
         api_thread = threading.Thread(
@@ -149,24 +233,32 @@ def main() -> None:
         api_thread.start()
         logger.info("✅ GPIO health server started")
 
-        # Alert-indicator state machine — runs every loop iteration
-        # (1 s resolution) because tower-light / NeoPixel transitions
-        # are user-visible and must feel "instant" relative to the
-        # operator hitting the broadcast button.
-        broadcast_was_active = False
-        incoming_was_active = False
+        # Alert-indicator state machine.  Driven two ways:
+        #   1. event-driven via a Redis pub/sub listener (sub-second response), and
+        #   2. a 1-second poll below as a safety net for any missed notification.
+        # Both call the same thread-safe monitor so a state change is applied once.
+        indicator_monitor = AlertIndicatorMonitor(
+            tower_light_controller=_tower_light_controller,
+            neopixel_controller=_neopixel_controller,
+        )
+        if _tower_light_controller or _neopixel_controller:
+            listener_thread = threading.Thread(
+                target=_run_indicator_listener,
+                args=(indicator_monitor,),
+                daemon=True,
+                name="gpio-indicator-listener",
+            )
+            listener_thread.start()
+            logger.info("✅ GPIO indicator event listener started")
+
         last_heartbeat = 0.0
 
         while _running:
             now = time.time()
             try:
                 if redis_client and (_tower_light_controller or _neopixel_controller):
-                    broadcast_was_active, incoming_was_active = update_alert_indicators(
-                        broadcast_was_active,
-                        incoming_was_active,
-                        tower_light_controller=_tower_light_controller,
-                        neopixel_controller=_neopixel_controller,
-                    )
+                    # Safety-net poll; the listener handles the fast path.
+                    indicator_monitor.refresh()
                 if now - last_heartbeat >= HEARTBEAT_INTERVAL_S:
                     publish_gpio_metrics(
                         redis_client=redis_client,
@@ -189,22 +281,7 @@ def main() -> None:
         sys.exit(1)
     finally:
         logger.info(f"[{SUBSYSTEM}] shutting down...")
-        if _gpio_controller is not None:
-            try:
-                if hasattr(_gpio_controller, "cleanup"):
-                    _gpio_controller.cleanup()
-            except Exception as exc:
-                logger.error(f"Error cleaning up GPIO: {exc}")
-        if _neopixel_controller is not None:
-            try:
-                _neopixel_controller.cleanup()
-            except Exception as exc:
-                logger.error(f"Error cleaning up NeoPixel controller: {exc}")
-        if _tower_light_controller is not None:
-            try:
-                _tower_light_controller.cleanup()
-            except Exception as exc:
-                logger.error(f"Error cleaning up USB tower light: {exc}")
+        _cleanup_controllers()
         if redis_client is not None:
             try:
                 redis_client.close()

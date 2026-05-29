@@ -191,9 +191,13 @@ def register_message_routes(bp, logger) -> None:
         import time
 
         from app_utils.eas import set_broadcast_active, clear_broadcast_active, _wav_duration_seconds
-        from app_utils.gpio import GPIOController, GPIOActivationType
-        from app_utils.gpio_behavior import GPIOBehaviorManager, load_gpio_behavior_matrix_from_db
-        from app_core.models import GPIOConfig
+        from app_utils.gpio import (
+            GPIOController,
+            GPIOActivationType,
+            GPIOBehaviorManager,
+            load_gpio_behavior_matrix_from_db,
+            load_gpio_pin_configs_from_db,
+        )
 
         message = EASMessage.query.get_or_404(message_id)
 
@@ -228,15 +232,33 @@ def register_message_routes(bp, logger) -> None:
         audio_played = False
 
         try:
-            gpio_configs = GPIOConfig.query.filter_by(enabled=True).all()
+            # Hardware settings (GPIO pins + behavior matrix) live in the
+            # database and are loaded via the same helpers the live broadcast
+            # path uses, so a resend keys exactly the same relays as a fresh
+            # alert.  Reserved-pin filtering honours the OLED setting.
+            try:
+                from app_core.hardware_settings import get_gpio_settings, get_oled_settings
+                gpio_enabled = get_gpio_settings().get('enabled', False)
+                oled_enabled = get_oled_settings().get('enabled', False)
+            except Exception:
+                gpio_enabled = False
+                oled_enabled = False
+
+            gpio_logger = logger.getChild('gpio')
+            gpio_configs = (
+                load_gpio_pin_configs_from_db(gpio_logger, oled_enabled=oled_enabled)
+                if gpio_enabled
+                else []
+            )
             if gpio_configs:
                 try:
-                    gpio_logger = logger.getChild('gpio')
                     controller = GPIOController(db_session=db.session, logger=gpio_logger)
                     for cfg in gpio_configs:
                         controller.add_pin(cfg)
                     gpio_controller = controller
-                    behavior_matrix = load_gpio_behavior_matrix_from_db(logger)
+                    behavior_matrix = load_gpio_behavior_matrix_from_db(
+                        gpio_logger, oled_enabled=oled_enabled
+                    )
                     gpio_behavior_manager = GPIOBehaviorManager(
                         controller=controller,
                         pin_configs=gpio_configs,

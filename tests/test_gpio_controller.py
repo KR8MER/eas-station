@@ -89,6 +89,65 @@ def test_add_pin_uses_null_backend_when_hardware_unavailable(monkeypatch):
     assert controller.get_state(18) == GPIOState.INACTIVE
 
 
+def _null_controller(monkeypatch):
+    """Build a controller backed by the simulated null GPIO backend."""
+    controller = GPIOController()
+    controller._gpiozero_available = False
+    monkeypatch.setattr(
+        gpio,
+        "_create_gpio_backend",
+        lambda exclude=None: gpio._NullGPIOBackend(),
+    )
+    return controller
+
+
+def test_activate_flash_true_forces_flash_without_flash_enabled(monkeypatch):
+    """activate(flash=True) starts the flash engine even when flash_enabled is unset."""
+
+    controller = _null_controller(monkeypatch)
+    controller.add_pin(GPIOPinConfig(pin=18, name="Beacon", flash_enabled=False))
+
+    try:
+        assert controller.activate(18, flash=True) is True
+        assert 18 in controller._flash_threads  # controller is the flash engine
+    finally:
+        controller.deactivate(18, force=True)
+        assert 18 not in controller._flash_threads
+
+
+def test_activate_flash_false_suppresses_configured_flash(monkeypatch):
+    """activate(flash=False) keeps a flash_enabled pin solid (no flash thread)."""
+
+    controller = _null_controller(monkeypatch)
+    controller.add_pin(GPIOPinConfig(pin=18, name="Relay", flash_enabled=True))
+
+    try:
+        assert controller.activate(18, flash=False) is True
+        assert 18 not in controller._flash_threads
+    finally:
+        controller.deactivate(18, force=True)
+
+
+def test_cleanup_invokes_behavior_manager_shutdown(monkeypatch):
+    """Controller.cleanup() should shut the attached behavior manager down."""
+
+    controller = _null_controller(monkeypatch)
+    controller.add_pin(GPIOPinConfig(pin=26, name="TX Key"))
+
+    manager = GPIOBehaviorManager(
+        controller=controller,
+        pin_configs=[GPIOPinConfig(pin=26, name="TX Key")],
+        behavior_matrix={26: {GPIOBehavior.TRANSMITTER_PTT}},
+    )
+    controller.behavior_manager = manager
+
+    calls = []
+    monkeypatch.setattr(manager, "shutdown", lambda: calls.append(True))
+
+    controller.cleanup()
+    assert calls == [True]
+
+
 def test_load_gpio_pin_configs_from_database(monkeypatch):
     """Database pin map should produce structured GPIO configurations."""
 
@@ -130,9 +189,11 @@ def test_load_gpio_pin_configs_from_database(monkeypatch):
 def test_reserved_oled_pins_rejected(monkeypatch, caplog):
     """Pins reserved for the OLED module should not be configurable when OLED is enabled."""
 
-    # Mock database returning OLED-reserved pins (BCM 2, 4, 14)
+    # Mock database returning OLED-reserved pins.  The Argon OLED module reserves
+    # the I2C lines BCM 2 (SDA) and BCM 3 (SCL) plus BCM 14 (TXD); none of these
+    # may be used for relays while OLED is enabled.
     pin_map = {
-        "4": {"name": "Button Override"},
+        "3": {"name": "SCL", "active_high": True, "hold_seconds": 1, "watchdog_seconds": 60},
         "2": {"name": "Aux", "active_high": True, "hold_seconds": 1, "watchdog_seconds": 60},
         "14": {"name": "Serial", "active_high": True, "hold_seconds": 1, "watchdog_seconds": 60},
     }
@@ -191,9 +252,13 @@ class _FakeController:
     def __init__(self):
         self.activations = []
         self.deactivations = []
+        # Records the ``flash`` override the behavior manager passed for each
+        # activation so tests can assert flash vs. solid-hold intent.
+        self.flash_calls = []
 
-    def activate(self, pin, activation_type=None, alert_id=None, reason=None):
+    def activate(self, pin, activation_type=None, alert_id=None, reason=None, flash=None):
         self.activations.append((pin, activation_type, alert_id, reason))
+        self.flash_calls.append((pin, flash))
         return True
 
     def deactivate(self, pin, force=False):
@@ -225,8 +290,13 @@ def test_gpio_state_includes_output_verification(monkeypatch):
     assert verification["observed"] == "active"
 
 
-def test_behavior_manager_flash_alternates_partner_pin():
-    """Flash behavior should alternate phase across partner pins when configured."""
+def test_behavior_manager_flash_delegates_to_controller_engine():
+    """FLASH should delegate to the controller flash engine (flash=True), once per pair.
+
+    After consolidating the two flash code paths, the controller is the single
+    flash authority: for a partner pair the manager starts exactly one pin with
+    ``flash=True`` and the controller drives the partner in opposite phase.
+    """
 
     controller = _FakeController()
     configs = [
@@ -242,13 +312,139 @@ def test_behavior_manager_flash_alternates_partner_pin():
     handled = manager.start_alert(alert_id="flash", event_code="RWT")
     assert handled is True
 
-    import time
-    time.sleep(0.18)
-    manager.end_alert(alert_id="flash", event_code="RWT")
+    # Exactly one pin of the partner pair is activated, and with flash forced on.
+    flash_activations = [c for c in controller.flash_calls if c[1] is True]
+    assert len(flash_activations) == 1
+    assert flash_activations[0][0] in (18, 23)
 
-    activated_pins = [call[0] for call in controller.activations]
-    assert 18 in activated_pins
-    assert 23 in activated_pins
+    manager.end_alert(alert_id="flash", event_code="RWT")
+    # The flashed pin is released (controller stops its flash thread on deactivate).
+    assert controller.deactivations
+    assert flash_activations[0][0] in [d[0] for d in controller.deactivations]
+
+
+def test_behavior_manager_holds_are_solid_not_flashing():
+    """Held relays (PTT, duration) must activate with flash=False even if flash_enabled."""
+
+    controller = _FakeController()
+    # Pin has flash_enabled in its config, but is assigned a *hold* behavior.
+    configs = [GPIOPinConfig(pin=17, name="TX", flash_enabled=True)]
+    manager = GPIOBehaviorManager(
+        controller=controller,
+        pin_configs=configs,
+        behavior_matrix={17: {GPIOBehavior.TRANSMITTER_PTT}},
+    )
+
+    assert manager.start_alert(alert_id="a", event_code="TOR") is True
+    # The hold must be solid: flash explicitly suppressed for the held pin.
+    assert (17, False) in controller.flash_calls
+    assert all(flash is not True for pin, flash in controller.flash_calls if pin == 17)
+
+
+def test_behavior_manager_flash_precedence_over_hold():
+    """A pin with both FLASH and a hold behavior flashes (FLASH wins, no conflict)."""
+
+    controller = _FakeController()
+    configs = [GPIOPinConfig(pin=19, name="Beacon")]
+    manager = GPIOBehaviorManager(
+        controller=controller,
+        pin_configs=configs,
+        behavior_matrix={19: {GPIOBehavior.FLASH, GPIOBehavior.DURATION_OF_ALERT}},
+    )
+
+    assert manager.start_alert(alert_id="a", event_code="TOR") is True
+    # The pin is driven exactly once, as a flash — never also as a solid hold.
+    calls_for_pin = [flash for pin, flash in controller.flash_calls if pin == 19]
+    assert calls_for_pin == [True]
+
+
+def test_behavior_manager_transmitter_and_audio_mute_hold_for_alert():
+    """TRANSMITTER_PTT and AUDIO_MUTE hold for the alert and release on end_alert."""
+
+    controller = _FakeController()
+    configs = [
+        GPIOPinConfig(pin=26, name="TX Key"),
+        GPIOPinConfig(pin=20, name="Program Mute"),
+    ]
+    manager = GPIOBehaviorManager(
+        controller=controller,
+        pin_configs=configs,
+        behavior_matrix={
+            26: {GPIOBehavior.TRANSMITTER_PTT},
+            20: {GPIOBehavior.AUDIO_MUTE},
+        },
+    )
+
+    assert manager.start_alert(alert_id="a", event_code="TOR") is True
+    activated = {c[0] for c in controller.activations}
+    assert {26, 20} <= activated
+
+    manager.end_alert(alert_id="a", event_code="TOR")
+    released = {d[0] for d in controller.deactivations}
+    assert {26, 20} <= released
+
+
+def test_validate_configuration_warns_without_transmit_behavior():
+    """validate_configuration flags a matrix that never keys the transmitter."""
+
+    controller = _FakeController()
+    configs = [GPIOPinConfig(pin=22, name="Beacon")]
+    manager = GPIOBehaviorManager(
+        controller=controller,
+        pin_configs=configs,
+        behavior_matrix={22: {GPIOBehavior.FLASH}},
+    )
+
+    warnings = manager.validate_configuration()
+    assert any("transmit-capable" in w for w in warnings)
+
+    # Assigning a transmit-capable behavior clears the warning.
+    manager.update_behavior_matrix({22: {GPIOBehavior.TRANSMITTER_PTT}})
+    assert not any("transmit-capable" in w for w in manager.validate_configuration())
+
+
+def test_validate_configuration_warns_on_unconfigured_pin_and_partner():
+    """validate_configuration flags behaviors on non-active pins and lone flash partners."""
+
+    controller = _FakeController()
+    configs = [GPIOPinConfig(pin=17, name="Red", flash_partner_pin=27)]
+    manager = GPIOBehaviorManager(
+        controller=controller,
+        pin_configs=configs,
+        behavior_matrix={
+            17: {GPIOBehavior.FLASH, GPIOBehavior.TRANSMITTER_PTT},
+            99: {GPIOBehavior.PLAYOUT},  # pin 99 not in pin_configs
+        },
+    )
+
+    warnings = manager.validate_configuration()
+    assert any("pin 99" in w for w in warnings)
+    # Pin 17 flashes with partner 27, but 27 has no FLASH behavior assigned.
+    assert any("partner pin 27" in w for w in warnings)
+
+
+def test_behavior_manager_shutdown_releases_holds_and_flash():
+    """shutdown() releases every held/flashing pin so nothing waits on the watchdog."""
+
+    controller = _FakeController()
+    configs = [
+        GPIOPinConfig(pin=26, name="TX Key"),
+        GPIOPinConfig(pin=13, name="Beacon"),
+    ]
+    manager = GPIOBehaviorManager(
+        controller=controller,
+        pin_configs=configs,
+        behavior_matrix={
+            26: {GPIOBehavior.TRANSMITTER_PTT},
+            13: {GPIOBehavior.FLASH},
+        },
+    )
+
+    assert manager.start_alert(alert_id="a", event_code="TOR") is True
+    manager.shutdown()
+
+    released = {d[0] for d in controller.deactivations}
+    assert {26, 13} <= released
 
 def test_behavior_manager_hold_lifecycle(monkeypatch):
     """Behavior manager should activate and release pins for alert duration."""
