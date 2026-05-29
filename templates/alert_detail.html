@@ -1844,20 +1844,15 @@
                                 <a href="{{ url_for('api.alert_detail_pdf', alert_id=alert.id) }}" target="_blank" class="btn btn-outline-secondary">
                                     <i class="fas fa-file-pdf"></i> Export PDF
                                 </a>
-                                <div class="btn-group" role="group" aria-label="Export Social Image">
-                                    <a href="{{ url_for('api.alert_detail_image', alert_id=alert.id, ratio='landscape') }}"
-                                       class="btn btn-outline-primary flex-grow-1"
-                                       title="Download a 1200×630 PNG ready to post on Facebook, X/Twitter, or LinkedIn">
-                                        <i class="fas fa-share-alt"></i> Export Social Image
-                                    </a>
+                                <div class="dropdown d-grid">
                                     <button type="button"
-                                            class="btn btn-outline-primary dropdown-toggle dropdown-toggle-split flex-grow-0"
+                                            class="btn btn-outline-primary w-100"
                                             data-bs-toggle="dropdown"
                                             aria-expanded="false"
-                                            title="Pick another size or format">
-                                        <span class="visually-hidden">Pick a size or format</span>
+                                            title="Download an image sized for Facebook, X/Twitter, Instagram, or Stories">
+                                        <i class="fas fa-share-alt"></i> Export Social Image
                                     </button>
-                                    <ul class="dropdown-menu">
+                                    <ul class="dropdown-menu w-100">
                                         <li><h6 class="dropdown-header">PNG · universal</h6></li>
                                         <li>
                                             <a class="dropdown-item"
