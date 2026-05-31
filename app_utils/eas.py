@@ -990,6 +990,91 @@ def describe_same_header(
     }
 
 
+# Six independent NRSC-4-B field checks emitted by ``describe_same_header``.
+# Each one that passes means a distinct byte group decoded into a value that is
+# valid per the spec — strong, decode-*correctness* evidence that the raw per-bit
+# tone margin cannot provide.
+_NRSC4B_FIELD_FLAGS: Tuple[str, ...] = (
+    'nrsc4b_valid_originator',
+    'nrsc4b_valid_event',
+    'nrsc4b_valid_purge',
+    'nrsc4b_valid_issue_time',
+    'nrsc4b_valid_location_count',
+    'nrsc4b_valid_station_id',
+)
+
+
+def score_decode_confidence(
+    fields: Optional[Dict[str, object]],
+    signal_margin: float,
+) -> float:
+    """Score how likely a decoded SAME header is correct, in [0.0, 1.0].
+
+    The DSP layer reports ``signal_margin`` = mean per-bit
+    ``|mark_power - space_power| / (mark_power + space_power)``.  Because the
+    SAME mark (2083.3 Hz) and space (1562.5 Hz) tones are separated by exactly
+    one baud (520.83 Hz), a single bit period gives only ~520 Hz of frequency
+    resolution, so the two Goertzel/correlator bins overlap heavily.  Each bin
+    captures a large share of the other tone's energy even on a flawless
+    transmission, which floors this margin near 0.5 regardless of how clean the
+    decode is.  Displaying it directly makes every real alert look "low
+    confidence" (~50-55%).
+
+    This function instead derives confidence from what actually proves a good
+    decode: the structural / NRSC-4-B field validity already computed by
+    :func:`describe_same_header`.  SAME has no per-byte checksum — its error
+    protection is the 3x burst repetition plus self-consistent framing — so a
+    header whose originator, event code, purge time, issue time, location count
+    and station ID all independently parse to spec-valid values is, for
+    practical purposes, a verified decode.  Random bit errors are very unlikely
+    to land on six simultaneously-valid fields.
+
+    Args:
+        fields: Parsed field dict from :func:`describe_same_header`.  An empty
+            or ``None`` dict (e.g. an ``NNNN`` EOM or an unparseable header)
+            falls back to ``signal_margin`` so the caller's forward gate still
+            has a value to act on.
+        signal_margin: Raw mean per-bit tone margin in [0.0, 1.0].
+
+    Returns:
+        A confidence score in [0.0, 1.0].  Fully NRSC-4-B-compliant headers
+        floor high (>=0.95) so a clean alert never displays as low confidence;
+        weakly-valid headers never read *higher* than their raw signal margin,
+        keeping the forward gate conservative against garbled decodes.
+    """
+    try:
+        margin = float(signal_margin)
+    except (TypeError, ValueError):
+        margin = 0.0
+    margin = max(0.0, min(1.0, margin))
+
+    if not fields:
+        # No parseable header to corroborate the bits — the signal margin is
+        # the only evidence we have.
+        return margin
+
+    passed = sum(1 for flag in _NRSC4B_FIELD_FLAGS if fields.get(flag))
+    structural = passed / len(_NRSC4B_FIELD_FLAGS)
+
+    # When fewer than half the fields validate, the structure is too weak to
+    # trust; fall back to the raw signal margin so we never *inflate* a suspect
+    # decode above what its FSK quality alone would justify.
+    if structural < 0.5:
+        return margin
+
+    # Structural validity dominates (it is decode-correctness evidence); the
+    # signal margin contributes a minority weight so that among equally-valid
+    # decodes, cleaner audio still ranks slightly higher.
+    confidence = 0.6 * structural + 0.4 * margin
+
+    if fields.get('nrsc4b_compliant'):
+        # Every field independently parsed to a spec-valid value — treat as a
+        # verified decode and floor the score high, nudged by signal quality.
+        confidence = max(confidence, 0.95 + 0.05 * margin)
+
+    return max(0.0, min(1.0, confidence))
+
+
 def _julian_time(dt: datetime) -> str:
     dt = dt.astimezone(timezone.utc)
     julian_day = dt.timetuple().tm_yday
@@ -3595,6 +3680,8 @@ __all__ = [
     'EASAudioGenerator',
     'build_same_header',
     'build_eom_header',
+    'describe_same_header',
+    'score_decode_confidence',
     'samples_to_wav_bytes',
     'manual_default_same_codes',
     'convert_audio_to_samples',
