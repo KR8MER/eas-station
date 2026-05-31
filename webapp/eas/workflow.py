@@ -83,6 +83,86 @@ ALLOWED_AUDIO_EXTENSIONS = {'.wav', '.mp3', '.ogg', '.aac', '.flac'}
 MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MB
 
 
+_MDC1200_OP_CODE_LABELS = {
+    'ptt_id_pre': 'PTT-ID (Pre)',
+    'ptt_id_post': 'PTT-ID (Post)',
+    'emergency': 'Emergency',
+    'request_to_talk': 'Request to Talk',
+    'remote_monitor': 'Remote Monitor',
+    'call_alert': 'Call Alert',
+    'selective_call': 'Selective Call',
+    'custom': 'Custom (raw bytes)',
+}
+
+
+def _mdc1200_op_label(op_code: Optional[str]) -> str:
+    if not op_code:
+        return 'N/A'
+    key = str(op_code).strip().lower()
+    return _MDC1200_OP_CODE_LABELS.get(key, op_code)
+
+
+def _format_signaling_lines(signaling: Optional[Dict[str, Any]]) -> List[str]:
+    """Render the saved pre/post-alert signal metadata as plain-text lines for PDF/log output."""
+    if not signaling:
+        return []
+
+    lines: List[str] = []
+    for position_key, label in (('pre_chime', 'Pre-Alert Signal'), ('post_chime', 'Post-Alert Signal')):
+        entry = signaling.get(position_key) or {}
+        profile = (entry.get('profile') or 'none').lower()
+        duration = entry.get('duration_seconds')
+        used = entry.get('used')
+
+        if profile == 'none' or not used:
+            lines.append(f"{label}: None")
+            continue
+
+        detail = profile.upper()
+        if duration:
+            try:
+                detail += f" ({float(duration):.2f}s)"
+            except (TypeError, ValueError):
+                pass
+        lines.append(f"{label}: {detail}")
+
+    mdc = signaling.get('mdc1200') or {}
+    if mdc:
+        lines.append("")
+        lines.append("MDC1200 Selective Calling:")
+        lines.append(f"  Source Unit ID: {mdc.get('unit_id', 'N/A')}")
+        target = mdc.get('target_unit_id')
+        if target:
+            lines.append(f"  Target Unit ID: {target}")
+        else:
+            lines.append("  Target Unit ID: (none — single-packet emission)")
+        lines.append(f"  Op-Code Preset: {_mdc1200_op_label(mdc.get('op_code'))}")
+        if mdc.get('pre_op_code') and mdc.get('pre_op_code') != mdc.get('op_code'):
+            lines.append(f"  Resolved Pre Op-Code: {_mdc1200_op_label(mdc.get('pre_op_code'))}")
+        if mdc.get('post_op_code') and mdc.get('post_op_code') != mdc.get('op_code'):
+            lines.append(f"  Resolved Post Op-Code: {_mdc1200_op_label(mdc.get('post_op_code'))}")
+        if mdc.get('op_code_raw') is not None:
+            lines.append(f"  Raw Op-Code Byte: 0x{int(mdc['op_code_raw']):02X} ({mdc['op_code_raw']})")
+        if mdc.get('arg_raw') is not None:
+            lines.append(f"  Raw Argument Byte: 0x{int(mdc['arg_raw']):02X} ({mdc['arg_raw']})")
+
+    dtmf_sequence = signaling.get('dtmf_sequence')
+    if dtmf_sequence:
+        lines.append("")
+        lines.append(f"DTMF Sequence: {dtmf_sequence}")
+
+    qc2 = signaling.get('qc2') or {}
+    if qc2:
+        lines.append("")
+        lines.append("QC-II Tones:")
+        lines.append(f"  Tone A: {qc2.get('tone_a_freq', 'N/A')} Hz")
+        lines.append(f"  Tone B: {qc2.get('tone_b_freq', 'N/A')} Hz")
+        if qc2.get('long_tone_enabled'):
+            lines.append(f"  Long Tone: enabled ({qc2.get('long_tone_seconds', 0)} s)")
+
+    return lines
+
+
 def _get_local_authority(user) -> Optional[LocalAuthority]:
     """Return the LocalAuthority record for a user, or None if not a local authority."""
     if not user:
@@ -749,6 +829,7 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
                 'local_authority_id': local_authority.id if local_authority else None,
                 'local_authority_name': local_authority.name if local_authority else None,
                 'local_authority_station_id': local_authority.station_id if local_authority else None,
+                'signaling': components.get('signaling') or {},
             },
             composite_audio_data=composite_component.get('wav_bytes') if composite_component else None,
             same_audio_data=same_component.get('wav_bytes') if same_component else None,
@@ -924,6 +1005,7 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
                 'duration_seconds': meta.get('duration_seconds'),
                 'size_bytes': meta.get('size_bytes'),
                 'storage_subpath': storage_subpath,
+                'profile': meta.get('profile'),
                 'download_url': download_url,
                 'stream_url': url_for('manual_eas_audio', event_id=event.id, component=component_key),
             }
@@ -942,6 +1024,9 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
                 web_parts = [web_prefix, summary_subpath] if web_prefix else [summary_subpath]
                 summary_url = url_for('static', filename='/'.join(web_parts))
 
+        metadata_payload = event.metadata_payload or {}
+        signaling = metadata_payload.get('signaling') or {}
+
         return render_template(
             'manual_eas_print.html',
             event=event,
@@ -951,6 +1036,7 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
             },
             header_detail=header_detail,
             summary_url=summary_url,
+            signaling=signaling,
         )
 
     @bp.route('/manual/events/<int:event_id>/print.pdf')
@@ -967,6 +1053,8 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
 
         event = ManualEASActivation.query.get_or_404(event_id)
         components_payload = event.components_payload or {}
+        metadata_payload = event.metadata_payload or {}
+        signaling = metadata_payload.get('signaling') or {}
 
         # Build PDF sections
         sections = []
@@ -974,20 +1062,30 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
         # Event Information
         event_info = [
             f"Event Code: {event.event_code or 'N/A'}",
+            f"Event Name: {event.event_name or 'N/A'}",
+            f"Identifier: {event.identifier or 'N/A'}",
             f"SAME Header: {event.same_header or 'N/A'}",
             f"Created: {format_local_datetime(event.created_at, include_utc=True)}",
-            f"Status: {event.status or 'N/A'}",
+            f"Status: {event.status or 'N/A'} / {event.message_type or 'N/A'}",
+            f"Tone Profile: {(event.tone_profile or 'none').title()} ({float(event.tone_seconds or 0):.1f} seconds)",
+            f"Sample Rate: {event.sample_rate or 'N/A'} Hz",
         ]
 
         if event.triggered_at:
             event_info.append(f"Triggered: {format_local_datetime(event.triggered_at, include_utc=True)}")
-        if event.event_label:
-            event_info.append(f"Event Label: {event.event_label}")
 
         sections.append({
             'heading': 'Manual EAS Activation Information',
             'content': event_info,
         })
+
+        # Pre/Post-Alert Signals (system-level chimes, MDC1200, DTMF, QC-II)
+        signal_lines = _format_signaling_lines(signaling)
+        if signal_lines:
+            sections.append({
+                'heading': 'Pre/Post-Alert Signals',
+                'content': signal_lines,
+            })
 
         # Location Information
         state_tree = get_extended_state_county_tree()
@@ -1041,10 +1139,9 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
             })
 
         # Generation Metadata
-        if event.generation_metadata:
+        if metadata_payload:
             try:
-                import json
-                metadata_str = json.dumps(event.generation_metadata, indent=2)
+                metadata_str = json.dumps(metadata_payload, indent=2, default=str)
                 # Split JSON into lines to preserve formatting in PDF
                 metadata_lines = metadata_str.split('\n')
                 sections.append({
@@ -1052,7 +1149,7 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
                     'content': metadata_lines,
                 })
             except (TypeError, ValueError) as exc:
-                logger.warning('Failed to serialize generation metadata: %s', exc)
+                workflow_logger.warning('Failed to serialize generation metadata: %s', exc)
 
         # Generate PDF
         pdf_bytes = generate_pdf_document(

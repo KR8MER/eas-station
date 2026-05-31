@@ -3113,6 +3113,50 @@ class EASAudioGenerator:
             composite_samples.extend(chime_separator)
             composite_samples.extend(post_chime_samples_list)
 
+        pre_chime_profile_norm = str(pre_chime_profile or 'none').lower()
+        post_chime_profile_norm = str(post_chime_profile or 'none').lower()
+
+        signaling_meta: Dict[str, Any] = {
+            'pre_chime': {
+                'profile': pre_chime_profile_norm,
+                'duration_seconds': float(pre_chime_duration) if pre_chime_profile_norm != 'none' else 0.0,
+                'used': bool(pre_chime_samples_list),
+            },
+            'post_chime': {
+                'profile': post_chime_profile_norm,
+                'duration_seconds': float(post_chime_duration) if post_chime_profile_norm != 'none' else 0.0,
+                'used': bool(post_chime_samples_list),
+            },
+        }
+        if pre_chime_profile_norm == 'mdc1200' or post_chime_profile_norm == 'mdc1200':
+            signaling_meta['mdc1200'] = {
+                'unit_id': int(mdc1200_unit_id or 0),
+                'target_unit_id': (
+                    int(mdc1200_target_unit_id)
+                    if mdc1200_target_unit_id not in (None, 0) else None
+                ),
+                'op_code': mdc1200_op_code,
+                'op_code_raw': (
+                    int(mdc1200_op_code_raw)
+                    if mdc1200_op_code_raw is not None else None
+                ),
+                'arg_raw': (
+                    int(mdc1200_arg_raw)
+                    if mdc1200_arg_raw is not None else None
+                ),
+                'pre_op_code': _resolve_mdc1200_op_for_position(mdc1200_op_code, 'pre'),
+                'post_op_code': _resolve_mdc1200_op_for_position(mdc1200_op_code, 'post'),
+            }
+        if pre_chime_profile_norm == 'dtmf' or post_chime_profile_norm == 'dtmf':
+            signaling_meta['dtmf_sequence'] = dtmf_seq
+        if pre_chime_profile_norm == 'qc2' or post_chime_profile_norm == 'qc2':
+            signaling_meta['qc2'] = {
+                'tone_a_freq': qc2_freq_a,
+                'tone_b_freq': qc2_freq_b,
+                'long_tone_enabled': bool(qc2_long_tone),
+                'long_tone_seconds': float(qc2_long_secs),
+            }
+
         return {
             'header': header,
             'message_text': message_text,
@@ -3130,8 +3174,9 @@ class EASAudioGenerator:
             'post_alert_samples': norm_post_alert,
             'pre_chime_samples': pre_chime_samples_list,
             'post_chime_samples': post_chime_samples_list,
-            'pre_chime_profile': str(pre_chime_profile or 'none').lower(),
-            'post_chime_profile': str(post_chime_profile or 'none').lower(),
+            'pre_chime_profile': pre_chime_profile_norm,
+            'post_chime_profile': post_chime_profile_norm,
+            'signaling': signaling_meta,
             'composite_samples': composite_samples,
             'sample_rate': self.sample_rate,
         }

@@ -112,6 +112,87 @@
                 </div>
             </div>
             {% endif %}
+
+            {% set pre_chime_meta = signaling.get('pre_chime') if signaling else None %}
+            {% set post_chime_meta = signaling.get('post_chime') if signaling else None %}
+            {% set mdc_meta = signaling.get('mdc1200') if signaling else None %}
+            {% set dtmf_seq = signaling.get('dtmf_sequence') if signaling else None %}
+            {% set qc2_meta = signaling.get('qc2') if signaling else None %}
+            <div class="card shadow-sm mt-4">
+                <div class="card-header bg-light">
+                    <strong>Pre/Post-Alert Signals</strong>
+                </div>
+                <div class="card-body">
+                    {% macro chime_badge(meta) -%}
+                        {%- if not meta or not meta.get('used') or (meta.get('profile') or 'none')|lower == 'none' -%}
+                            <span class="badge bg-secondary">None</span>
+                        {%- else -%}
+                            <span class="badge bg-info text-dark text-uppercase">{{ meta.get('profile') }}</span>
+                            {%- if meta.get('duration_seconds') %}
+                            <span class="text-muted small ms-1">({{ '%.2f'|format(meta.get('duration_seconds')) }} s)</span>
+                            {%- endif -%}
+                        {%- endif -%}
+                    {%- endmacro %}
+                    <dl class="row mb-0">
+                        <dt class="col-sm-4">Pre-Alert Signal</dt>
+                        <dd class="col-sm-8">{{ chime_badge(pre_chime_meta) }}</dd>
+                        <dt class="col-sm-4">Post-Alert Signal</dt>
+                        <dd class="col-sm-8">{{ chime_badge(post_chime_meta) }}</dd>
+
+                        {% if mdc_meta %}
+                        <dt class="col-sm-12 mt-3"><h6 class="mb-2">MDC1200 Selective Calling</h6></dt>
+                        <dt class="col-sm-4">Source Unit ID</dt>
+                        <dd class="col-sm-8"><code>{{ mdc_meta.get('unit_id', 'N/A') }}</code></dd>
+                        <dt class="col-sm-4">Target Unit ID</dt>
+                        <dd class="col-sm-8">
+                            {% if mdc_meta.get('target_unit_id') %}
+                                <code>{{ mdc_meta.get('target_unit_id') }}</code>
+                            {% else %}
+                                <span class="text-muted">None (single-packet emission)</span>
+                            {% endif %}
+                        </dd>
+                        <dt class="col-sm-4">Op-Code Preset</dt>
+                        <dd class="col-sm-8"><code>{{ mdc_meta.get('op_code', 'N/A') }}</code></dd>
+                        {% if mdc_meta.get('pre_op_code') and mdc_meta.get('pre_op_code') != mdc_meta.get('op_code') %}
+                        <dt class="col-sm-4">Resolved Pre Op-Code</dt>
+                        <dd class="col-sm-8"><code>{{ mdc_meta.get('pre_op_code') }}</code></dd>
+                        {% endif %}
+                        {% if mdc_meta.get('post_op_code') and mdc_meta.get('post_op_code') != mdc_meta.get('op_code') %}
+                        <dt class="col-sm-4">Resolved Post Op-Code</dt>
+                        <dd class="col-sm-8"><code>{{ mdc_meta.get('post_op_code') }}</code></dd>
+                        {% endif %}
+                        {% if mdc_meta.get('op_code_raw') is not none %}
+                        <dt class="col-sm-4">Raw Op-Code Byte</dt>
+                        <dd class="col-sm-8"><code>0x{{ '%02X'|format(mdc_meta.get('op_code_raw')) }} ({{ mdc_meta.get('op_code_raw') }})</code></dd>
+                        {% endif %}
+                        {% if mdc_meta.get('arg_raw') is not none %}
+                        <dt class="col-sm-4">Raw Argument Byte</dt>
+                        <dd class="col-sm-8"><code>0x{{ '%02X'|format(mdc_meta.get('arg_raw')) }} ({{ mdc_meta.get('arg_raw') }})</code></dd>
+                        {% endif %}
+                        {% endif %}
+
+                        {% if dtmf_seq %}
+                        <dt class="col-sm-4 mt-3">DTMF Sequence</dt>
+                        <dd class="col-sm-8 mt-3"><code>{{ dtmf_seq }}</code></dd>
+                        {% endif %}
+
+                        {% if qc2_meta %}
+                        <dt class="col-sm-12 mt-3"><h6 class="mb-2">QC-II Tones</h6></dt>
+                        <dt class="col-sm-4">Tone A</dt>
+                        <dd class="col-sm-8">{{ qc2_meta.get('tone_a_freq', 'N/A') }} Hz</dd>
+                        <dt class="col-sm-4">Tone B</dt>
+                        <dd class="col-sm-8">{{ qc2_meta.get('tone_b_freq', 'N/A') }} Hz</dd>
+                        {% if qc2_meta.get('long_tone_enabled') %}
+                        <dt class="col-sm-4">Long Tone</dt>
+                        <dd class="col-sm-8">Enabled ({{ qc2_meta.get('long_tone_seconds', 0) }} s)</dd>
+                        {% endif %}
+                        {% endif %}
+                    </dl>
+                    {% if not signaling %}
+                    <p class="text-muted mb-0 small">No pre/post-alert signal metadata is recorded for this activation. Newly generated alerts will include this section.</p>
+                    {% endif %}
+                </div>
+            </div>
         </div>
         <div class="col-lg-5">
             <div class="card shadow-sm">
