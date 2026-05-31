@@ -1025,6 +1025,7 @@ def admin_manual_eas_generate():
             'summary_subpath': summary_subpath,
             'web_prefix': web_prefix,
             'includes_tts': bool(tts_component),
+            'signaling': components.get('signaling') or {},
         },
     )
 
@@ -1213,6 +1214,7 @@ def manual_eas_print(event_id: int):
             'filename': meta.get('filename'),
             'duration_seconds': meta.get('duration_seconds'),
             'size_bytes': meta.get('size_bytes'),
+            'profile': meta.get('profile'),
             'download_url': download_url,
         }
 
@@ -1227,6 +1229,9 @@ def manual_eas_print(event_id: int):
     same_lookup = get_extended_same_lookup()
     header_detail = describe_same_header(event.same_header, lookup=same_lookup, state_index=state_index)
 
+    metadata_payload = event.metadata_payload or {}
+    signaling = metadata_payload.get('signaling') or {}
+
     return render_template(
         'manual_eas_print.html',
         event=event,
@@ -1235,6 +1240,7 @@ def manual_eas_print(event_id: int):
         summary_url=url_for('manual_eas_export', event_id=event.id)
         if event.summary_filename
         else None,
+        signaling=signaling,
     )
 
 @audio_bp.route('/admin/eas/manual_events/<int:event_id>/export')
