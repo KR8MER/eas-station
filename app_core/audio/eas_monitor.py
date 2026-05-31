@@ -85,6 +85,25 @@ def _same_alert_to_dict(alert: Any) -> Dict[str, Any]:
     except Exception:
         fields = {}
 
+    # The decoder reports a raw per-bit FSK tone margin, which is structurally
+    # floored near 0.5 because the SAME mark/space tones are only one baud apart
+    # (see score_decode_confidence).  Re-score the headline confidence from the
+    # NRSC-4-B structural validity of the decoded header so a clean, spec-valid
+    # alert reads high instead of perpetually "~50%".  Preserve the raw margin
+    # separately for diagnostics.
+    # Coerce to a plain Python float — the raw value may be a numpy float that
+    # would break the JSONB commit downstream (same reason 'confidence' is
+    # coerced before storage).
+    try:
+        signal_margin = float(getattr(alert, 'confidence', 0.0) or 0.0)
+    except (TypeError, ValueError):
+        signal_margin = 0.0
+    try:
+        from app_utils.eas import score_decode_confidence
+        scored_confidence = float(score_decode_confidence(fields, signal_margin))
+    except Exception:
+        scored_confidence = signal_margin
+
     # Normalise raw location strings to plain 6-digit FIPS codes
     location_codes = []
     for loc in fields.get('raw_locations', []):
@@ -112,7 +131,8 @@ def _same_alert_to_dict(alert: Any) -> Dict[str, Any]:
         'callsign': (fields.get('station_identifier') or '').strip('-').strip(),
         'issue_time': issue_time_iso,
         'purge_time': purge_time,
-        'confidence': getattr(alert, 'confidence', 0.0),
+        'confidence': scored_confidence,
+        'signal_margin': signal_margin,
         'timestamp': ts.isoformat() if hasattr(ts, 'isoformat') else str(ts),
         'endec_mode': getattr(alert, 'endec_mode', 'UNKNOWN') or 'UNKNOWN',
         'burst_timing_gaps_ms': list(getattr(alert, 'burst_timing_gaps_ms', [])),
