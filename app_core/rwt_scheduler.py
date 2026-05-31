@@ -402,15 +402,23 @@ def trigger_rwt_broadcast(config: RWTScheduleConfig, logger_instance=None) -> Di
         same_wav = _wav('same_samples')
         eom_wav = _wav('eom_samples')
         composite_wav = _wav('composite_samples')
+        pre_chime_wav = _wav('pre_chime_samples')
+        post_chime_wav = _wav('post_chime_samples')
 
         components_payload: Dict[str, Any] = {}
         for component_key, sample_key, suffix, wav in (
             ('same', 'same_samples', 'same', same_wav),
             ('eom', 'eom_samples', 'eom', eom_wav),
             ('composite', 'composite_samples', 'full', composite_wav),
+            ('pre_chime', 'pre_chime_samples', 'pre_chime', pre_chime_wav),
+            ('post_chime', 'post_chime_samples', 'post_chime', post_chime_wav),
         ):
             entry = _meta(sample_key, suffix, wav)
             if entry:
+                if component_key == 'pre_chime':
+                    entry['profile'] = components.get('pre_chime_profile')
+                elif component_key == 'post_chime':
+                    entry['profile'] = components.get('post_chime_profile')
                 components_payload[component_key] = entry
 
         # Archive any previously-active rows so the detail page surfaces the
@@ -443,10 +451,13 @@ def trigger_rwt_broadcast(config: RWTScheduleConfig, logger_instance=None) -> Di
             metadata_payload={
                 'automated': True,
                 'schedule_id': config.id,
+                'signaling': components.get('signaling') or {},
             },
             composite_audio_data=composite_wav,
             same_audio_data=same_wav,
             eom_audio_data=eom_wav,
+            pre_chime_audio_data=pre_chime_wav,
+            post_chime_audio_data=post_chime_wav,
         )
 
         db.session.add(activation_record)
