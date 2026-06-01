@@ -1818,11 +1818,10 @@ def _generate_silence(duration: float, sample_rate: int) -> List[int]:
 ALERT_CHIME_PROFILES = ('none', 'bell', 'beep', 'three_tone', 'qc2', 'dtmf', 'mdc1200')
 
 # Silence inserted between the EOM sequence and the post-alert signal (chime /
-# MDC1200 PTT-ID).  Kept short so the post-alert signaling follows promptly
-# after the End-of-Message, matching real radio behavior where PTT-ID fires
-# right at PTT release.  The standard 1.0 s end-of-message tail is still added
-# when no post-alert signal follows.
-POST_ALERT_SIGNAL_GAP_SECONDS = 0.25
+# MDC1200 PTT-ID).  A 1.0 s gap separates the End-of-Message from the
+# post-alert signaling, matching the standard 1.0 s end-of-message tail that
+# is emitted when no post-alert signal follows.
+POST_ALERT_SIGNAL_GAP_SECONDS = 1.0
 
 
 def _resolve_mdc1200_op_for_position(op_code: str, position: str) -> str:
