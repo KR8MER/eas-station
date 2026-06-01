@@ -1817,6 +1817,13 @@ def _generate_silence(duration: float, sample_rate: int) -> List[int]:
 # Allowed chime profile values for pre/post-alert chimes.
 ALERT_CHIME_PROFILES = ('none', 'bell', 'beep', 'three_tone', 'qc2', 'dtmf', 'mdc1200')
 
+# Silence inserted between the EOM sequence and the post-alert signal (chime /
+# MDC1200 PTT-ID).  Kept short so the post-alert signaling follows promptly
+# after the End-of-Message, matching real radio behavior where PTT-ID fires
+# right at PTT release.  The standard 1.0 s end-of-message tail is still added
+# when no post-alert signal follows.
+POST_ALERT_SIGNAL_GAP_SECONDS = 0.25
+
 
 def _resolve_mdc1200_op_for_position(op_code: str, position: str) -> str:
     """Auto-pair MDC1200 PTT-ID Pre/Post when used as bookend chimes.
@@ -2817,7 +2824,6 @@ class EASAudioGenerator:
             eom_raw_samples.extend(terminator_samples)
             if burst_index < 2:
                 eom_raw_samples.extend(_generate_silence(1.0, self.sample_rate))
-        eom_raw_samples.extend(_generate_silence(1.0, self.sample_rate))
         samples.extend(eom_raw_samples)
 
         # Post-alert chime (system-level, configured per-station): plays
@@ -2837,8 +2843,11 @@ class EASAudioGenerator:
             mdc1200_target_unit_id=mdc1200_target_unit_id,
         )
         if post_chime_samples:
-            samples.extend(_generate_silence(1.0, self.sample_rate))
+            samples.extend(_generate_silence(POST_ALERT_SIGNAL_GAP_SECONDS, self.sample_rate))
             samples.extend(post_chime_samples)
+        else:
+            # End-of-message tail when no post-alert signal follows.
+            samples.extend(_generate_silence(1.0, self.sample_rate))
 
         wav_bytes = samples_to_wav_bytes(samples, self.sample_rate)
         try:
@@ -3119,8 +3128,6 @@ class EASAudioGenerator:
             if burst_index < 2:
                 eom_samples.extend(_generate_silence(1.0, self.sample_rate))
 
-        eom_samples.extend(_generate_silence(1.0, self.sample_rate))
-
         # Normalize uploaded pre/post alert audio
         norm_pre_alert = (
             _normalize_audio_amplitude(pre_alert_samples, amplitude * 0.7)
@@ -3195,8 +3202,11 @@ class EASAudioGenerator:
         composite_samples.extend(trailing_silence)
         composite_samples.extend(eom_samples)
         if post_chime_samples_list:
-            composite_samples.extend(chime_separator)
+            composite_samples.extend(_generate_silence(POST_ALERT_SIGNAL_GAP_SECONDS, self.sample_rate))
             composite_samples.extend(post_chime_samples_list)
+        else:
+            # End-of-message tail when no post-alert signal follows.
+            composite_samples.extend(_generate_silence(1.0, self.sample_rate))
 
         pre_chime_profile_norm = str(pre_chime_profile or 'none').lower()
         post_chime_profile_norm = str(post_chime_profile or 'none').lower()
