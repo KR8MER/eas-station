@@ -141,10 +141,13 @@ Alert, Selective Call, etc.).
   and `selective_call` — pass through unchanged on both sides.
 
 > **Verifying generated packets.** Render any test alert and decode the
-> generated WAV with [multimon-ng](https://github.com/EliasOenal/multimon-ng):
-> `multimon-ng -a MDC -t wav <file>.wav` will print one line per packet,
-> e.g. `MDC: 0180 1234 PTT ID PRE`. Use this on the bench before going on
-> the air with a real fleet.
+> generated WAV with a dedicated MDC1200 decoder such as
+> [`mdc-decoder`](https://github.com/pabutusa/mdc-decoder), which reads a WAV
+> directly and reports the unit ID and op-code of each packet (e.g. PTT-ID Pre
+> = op 0x01 / arg 0x80). Use this on the bench before going on the air with a
+> real fleet. Note: mainline
+> [multimon-ng](https://github.com/EliasOenal/multimon-ng) has **no** MDC
+> demodulator (`MDC` is not a valid `-a` option) and cannot decode these packets.
 
 #### Two-way LMR forwarding (the canonical use case)
 
