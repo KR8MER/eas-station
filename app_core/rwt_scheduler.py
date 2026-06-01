@@ -228,12 +228,12 @@ def _drive_rwt_airchain(
                 activated_any = False
                 manager_handled = False
 
-        set_broadcast_active(
-            event_code=event_code,
-            label='Required Weekly Test',
-            duration_seconds=playback_duration,
-            source='automated_rwt',
-        )
+        # NOTE: the Redis broadcast-state marker that drives the global
+        # air-chain overlay is set *synchronously* by trigger_rwt_broadcast
+        # before this worker is dispatched, so the popup appears the moment the
+        # request returns rather than waiting for this thread to schedule past
+        # GPIO initialisation.  We only release it (clear_broadcast_active) in
+        # the finally block below once the relay is actually relinquished.
 
         audio_player_cmd = eas_config.get('audio_player_cmd')
         playout_start = time.monotonic()
@@ -547,6 +547,34 @@ def trigger_rwt_broadcast(config: RWTScheduleConfig, logger_instance=None) -> Di
 
         log.info("RWT broadcast sent successfully: %s", identifier)
 
+        # Light the global air-chain control overlay *synchronously*, on the
+        # calling thread, before handing playback to the background worker.
+        #
+        # The overlay is driven by the Redis broadcast-state marker (read 1 Hz
+        # by the WebSocket push loop / the /api/broadcast/state poll).  When the
+        # marker was written from inside the daemon thread it only landed *after*
+        # GPIO initialisation, and on a Pi the blocking GPIO C calls can stall
+        # the gevent hub long enough that the popup never appeared during the
+        # short RWT broadcast.  Writing it here — mirroring the inline manual
+        # send path (webapp/eas/workflow.py:1382-1396) — guarantees the popup
+        # is visible the instant the request returns, independent of how soon
+        # the daemon thread is scheduled.  Compute the duration with the same
+        # truncation the worker applies so the countdown matches the airchain.
+        max_activation_seconds = int(eas_config.get('max_activation_seconds', 300) or 300)
+        broadcast_audio = composite_wav
+        if broadcast_audio and _wav_duration_seconds(broadcast_audio) > max_activation_seconds:
+            broadcast_audio = truncate_wav_to_max_seconds(
+                broadcast_audio, eom_wav, max_activation_seconds,
+            )
+        broadcast_duration = _wav_duration_seconds(broadcast_audio) if broadcast_audio else 0.0
+        if broadcast_duration > 0:
+            set_broadcast_active(
+                event_code='RWT',
+                label='Required Weekly Test',
+                duration_seconds=broadcast_duration,
+                source='automated_rwt',
+            )
+
         # Drive the airchain: hold GPIO and play the composite WAV for the
         # full duration so the encoder actually broadcasts the tones. The
         # manual send route (webapp/eas/workflow.py:1198-1357) does this for
@@ -558,7 +586,9 @@ def trigger_rwt_broadcast(config: RWTScheduleConfig, logger_instance=None) -> Di
         # This runs on a background thread so the caller returns immediately:
         # the manual "Send Test RWT" button fires a blocking fetch, and
         # holding the request open for the entire broadcast froze that button
-        # on "Sending..." while suppressing the air-chain-control overlay.
+        # on "Sending..." while suppressing the air-chain-control overlay.  The
+        # broadcast-state marker set above keeps the overlay/countdown alive for
+        # the full duration; the worker clears it when playback finishes.
         activation_id = activation_record.id
         _dispatch_rwt_airchain(
             app=current_app._get_current_object(),
