@@ -34,7 +34,7 @@ import time
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
-from flask import Flask, has_app_context
+from flask import Flask, current_app, has_app_context
 from app_core.extensions import db
 from app_core.models import RWTScheduleConfig, ManualEASActivation, SystemLog
 from app_utils import utc_now
@@ -290,6 +290,64 @@ def _drive_rwt_airchain(
     return activated_any
 
 
+def _dispatch_rwt_airchain(
+    app: Flask,
+    activation_id: int,
+    composite_wav: Optional[bytes],
+    eom_wav: Optional[bytes],
+    eas_config: Dict[str, Any],
+    log: logging.Logger,
+) -> threading.Thread:
+    """Run :func:`_drive_rwt_airchain` on a daemon thread.
+
+    Holding the airchain plays the composite WAV for the full activation
+    duration (potentially several minutes) and only releases the GPIO relay
+    and the Redis broadcast-state marker afterwards.  Doing that inline blocks
+    whichever thread called :func:`trigger_rwt_broadcast`:
+
+    * the Flask request thread for the manual "Send Test RWT" button, whose
+      ``fetch('/api/rwt-schedule/test')`` then hangs for the entire broadcast
+      (operators saw an endless "Sending..." spinner), and
+    * on single-threaded deployments that same blocked request also starves
+      the ``/api/broadcast/state`` poll that drives the "air-chain under EAS
+      Station control" overlay, so the popup never appeared.
+
+    Backgrounding lets the caller return immediately while the broadcast-state
+    marker keeps the overlay/countdown alive for the full duration.  The
+    activation row is re-loaded inside the worker's own application context so
+    it isn't tied to the caller's (soon-to-close) database session.
+    """
+    def _worker() -> None:
+        try:
+            with app.app_context():
+                record = ManualEASActivation.query.get(activation_id)
+                if record is None:
+                    log.warning(
+                        "RWT airchain: activation %s no longer exists; "
+                        "skipping playback.", activation_id,
+                    )
+                    return
+                _drive_rwt_airchain(
+                    activation_record=record,
+                    composite_wav=composite_wav,
+                    eom_wav=eom_wav,
+                    eas_config=eas_config,
+                    log=log,
+                )
+        except Exception as exc:  # pragma: no cover - defensive
+            log.error(
+                "RWT airchain playback thread failed: %s", exc, exc_info=True,
+            )
+
+    thread = threading.Thread(
+        target=_worker,
+        name=f"rwt-airchain-{activation_id}",
+        daemon=True,
+    )
+    thread.start()
+    return thread
+
+
 def trigger_rwt_broadcast(config: RWTScheduleConfig, logger_instance=None) -> Dict[str, Any]:
     """Trigger an RWT broadcast with the given configuration.
 
@@ -496,8 +554,15 @@ def trigger_rwt_broadcast(config: RWTScheduleConfig, logger_instance=None) -> Di
         # creates a database row but never asserts the relay, so no GPIO
         # log entries appear and downstream encoders never hear the SAME
         # burst — operators see archived RWT rows but no audit trail.
-        gpio_activated = _drive_rwt_airchain(
-            activation_record=activation_record,
+        #
+        # This runs on a background thread so the caller returns immediately:
+        # the manual "Send Test RWT" button fires a blocking fetch, and
+        # holding the request open for the entire broadcast froze that button
+        # on "Sending..." while suppressing the air-chain-control overlay.
+        activation_id = activation_record.id
+        _dispatch_rwt_airchain(
+            app=current_app._get_current_object(),
+            activation_id=activation_id,
             composite_wav=composite_wav,
             eom_wav=eom_wav,
             eas_config=eas_config,
@@ -507,9 +572,9 @@ def trigger_rwt_broadcast(config: RWTScheduleConfig, logger_instance=None) -> Di
         return {
             'success': True,
             'identifier': identifier,
-            'activation_id': activation_record.id,
+            'activation_id': activation_id,
             'same_header': header,
-            'gpio_activated': gpio_activated,
+            'airchain_dispatched': True,
         }
 
     except Exception as exc:
