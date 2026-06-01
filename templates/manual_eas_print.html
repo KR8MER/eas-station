@@ -219,7 +219,7 @@
                                 <div>
                                     <h6 class="mb-1">{{ component_labels.get(key, key.replace('_', ' ').upper()) }}
                                         {%- if comp.profile and comp.profile != 'none' %}
-                                        <span class="badge bg-secondary fw-normal ms-1 text-lowercase">{{ comp.profile }}</span>
+                                        <span class="badge bg-secondary fw-normal ms-1 text-uppercase">{{ comp.profile }}</span>
                                         {%- endif %}
                                     </h6>
                                     <small class="text-muted">{{ comp.duration_seconds|default(0)|round(2) }} s · {{ comp.size_bytes|default(0) }} bytes</small>
