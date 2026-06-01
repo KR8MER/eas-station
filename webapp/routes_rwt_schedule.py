@@ -328,6 +328,22 @@ def register_routes(app, logger):
             if config is None:
                 return jsonify({'success': False, 'error': 'No configuration found'}), 404
 
+            # Refuse to start a second broadcast while one is already holding
+            # the airchain.  The composite now plays on a background thread, so
+            # the request returns immediately and the button re-enables right
+            # away — without this guard an operator could stack overlapping
+            # transmissions on the relay before the first one finishes.
+            from app_utils.eas import get_broadcast_state
+            broadcast_state = get_broadcast_state()
+            if broadcast_state.get('active'):
+                return jsonify({
+                    'success': False,
+                    'error': (
+                        'A broadcast is already in progress. Wait for the '
+                        'air-chain to be released before sending another RWT.'
+                    ),
+                }), 409
+
             # Import here to avoid circular dependencies
             from app_core.rwt_scheduler import trigger_rwt_broadcast
 
