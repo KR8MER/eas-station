@@ -130,8 +130,10 @@ References
 * Public algorithm summary published in the firmware comments at
   https://github.com/OneOfEleven/uv-k5-firmware-custom/blob/master/mdc1200.c
   (algorithm only — no code copied; see clean-room note above).
-* multimon-ng MDC decoder (https://github.com/EliasOenal/multimon-ng) —
-  useful for verifying generated waveforms with ``multimon-ng -a MDC``.
+* A dedicated MDC1200 decoder for verifying generated waveforms, e.g.
+  https://github.com/pabutusa/mdc-decoder (decodes a WAV directly) or
+  https://github.com/atmatthewat/mdc-encode-decode (reference modem).
+  Note: mainline multimon-ng does *not* include an MDC demodulator.
 """
 
 import math
@@ -237,8 +239,8 @@ def compute_crc(data: Sequence[int]) -> int:
     Polynomial: x^16 + x^12 + x^5 + 1 (CRC-CCITT, value 0x1021), evaluated
     in *bit-reversed* form (poly 0x8408, LSB-first feedback) with an init
     value of ``0x0000`` and a final XOR of ``0xFFFF``.  This matches the
-    on-the-wire CRC produced by Motorola subscribers and validated by
-    multimon-ng's MDC decoder.
+    on-the-wire CRC produced by Motorola subscribers and reproduced by
+    Matthew Kaufman's reference MDC modem (atmatthewat/mdc-encode-decode).
 
     Verified against the documented vector ``01 80 12 34`` → ``0x3E2E``.
 

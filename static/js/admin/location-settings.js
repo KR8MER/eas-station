@@ -1069,6 +1069,10 @@ function updateToneFieldVisibility() {
     const opCode = document.getElementById('easMdc1200OpCode')?.value || 'ptt_id_pre';
     const mdcVisible = pre === 'mdc1200' || post === 'mdc1200';
     const isMdcDoublePacket = opCode === 'call_alert' || opCode === 'selective_call';
+    // When BOTH signals are MDC1200 and the op-code is left on the PTT-ID Pre
+    // default, the backend auto-substitutes PTT-ID Post on the post side. Surface
+    // that so operators don't think pre/post is an either/or choice.
+    const mdcAutoBookend = pre === 'mdc1200' && post === 'mdc1200' && opCode === 'ptt_id_pre';
 
     const visibility = {
         'qc2': pre === 'qc2' || post === 'qc2',
@@ -1076,6 +1080,7 @@ function updateToneFieldVisibility() {
         'mdc1200': mdcVisible,
         'mdc1200-custom': mdcVisible && opCode === 'custom',
         'mdc1200-double': mdcVisible && isMdcDoublePacket,
+        'mdc1200-bookend': mdcAutoBookend,
         'pre-duration': isFreeform(pre),
         'post-duration': isFreeform(post),
     };

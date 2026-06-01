@@ -195,9 +195,9 @@ def test_resolve_op_preset_unknown_falls_back_to_ptt_id_pre():
     assert resolve_op_preset("") == MDC1200_OP_PRESETS["ptt_id_pre"]
 
 
-def test_call_alert_and_selective_call_presets_match_multimon_ng():
+def test_call_alert_and_selective_call_presets_match_reference():
     """Call Alert and Selective Call use op/arg pairs widely attested in
-    multimon-ng's MDC decoder source and Motorola CPS programming sheets.
+    Matthew Kaufman's reference MDC modem and Motorola CPS programming sheets.
     Pin them so a future refactor cannot silently change the on-air bytes."""
     assert resolve_op_preset("call_alert") == (0x63, 0x85)
     assert resolve_op_preset("selective_call") == (0x35, 0x80)
