@@ -21,7 +21,7 @@ def _manager():
     return GPSManager(config={}, redis_client=None)
 
 
-def _mon_hw_frame(*, a_status=2, a_power=1, jamming=1, noise=42, agc=8190):
+def _mon_hw_frame(*, a_status=2, a_power=1, jamming=1, jam_ind=48, noise=42, agc=8190):
     """Build a 60-byte UBX-MON-HW frame for the given field values."""
     payload = bytearray(60)
     struct.pack_into("<H", payload, 16, noise)        # noisePerMS
@@ -29,7 +29,31 @@ def _mon_hw_frame(*, a_status=2, a_power=1, jamming=1, noise=42, agc=8190):
     payload[20] = a_status                            # aStatus
     payload[21] = a_power                             # aPower
     payload[22] = (jamming & 0x03) << 2               # jammingState bits 2..3
+    payload[45] = jam_ind                             # jamInd (0..255)
     return ubx.build_poll(ubx.CLASS_MON, ubx.ID_MON_HW, bytes(payload))
+
+
+def test_parse_surfaces_jam_indicator():
+    # Mirrors the real receiver: supervisor + ITFM off (status/jamming
+    # report "unknown") but jamInd / noise / agc are live.
+    fields = ubx.parse_mon_hw(bytes(_mon_hw_frame(
+        a_status=1, a_power=2, jamming=0, jam_ind=53, noise=99, agc=2730))[6:-2])
+    assert fields["antenna_status"] == "unknown"
+    assert fields["antenna_power"] == "unknown"
+    assert fields["jamming_state"] == "unknown"
+    assert fields["jam_indicator"] == 53
+    assert fields["noise_level"] == 99
+    assert fields["agc_count"] == 2730
+
+
+def test_parse_tolerates_short_payload_without_jam_indicator():
+    # A truncated payload (< 46 bytes) still yields the base fields but
+    # no jamInd — it must come back None rather than raising.
+    short = bytearray(24)
+    short[20] = 2  # aStatus ok
+    fields = ubx.parse_mon_hw(bytes(short))
+    assert fields["antenna_status"] == "ok"
+    assert fields["jam_indicator"] is None
 
 
 def _fake_ubxtool(raw_payload):
