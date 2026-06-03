@@ -837,32 +837,93 @@ def _build_actions(report: Dict[str, Any]) -> List[Dict[str, Any]]:
         # isn't tracking yet there are bigger fish to fry.
         if chrony_run.get("tracking_ok"):
             current_stratum = chrony_run.get("stratum")
-            stratum_note = (
-                f" (currently stratum {current_stratum} via internet NTP)"
-                if current_stratum is not None else ""
+            sources = chrony_run.get("sources") or []
+            # Is chrony currently disciplined by a reference clock (PPS / GPS /
+            # NMEA — mode "#") rather than an internet peer?  The selected
+            # source carries state "*"; we also match the tracking reference
+            # name against the configured refclock names as a fallback.  This
+            # distinction matters: a station can have PPS reaching chrony fine
+            # (stratum 1, reference clock) while a *second* refclock — the
+            # coarse NMEA/GPS source gpsd would feed — sits at Reach=0 because
+            # EAS Station owns the serial port.  Without this check the old
+            # logic mislabelled that healthy state as "stratum N via internet
+            # NTP" and claimed PPS wasn't reaching when it was.
+            refclock_names = {
+                s.get("name") for s in sources if s.get("mode") == "#"
+            }
+            selected_src = next(
+                (s for s in sources if s.get("state") == "*"), None
             )
-            actions.append({
-                "id": "refclocks_unreached",
-                "severity": "info",
-                "label": (
-                    "GPS / PPS refclocks aren't reaching chrony "
-                    + stratum_note
-                ),
-                "reason": (
-                    f"chrony has the {' / '.join(unreached)} refclock(s) configured "
-                    "but Reach=0 — no samples have ever arrived. The most common "
-                    "cause is gpsd not being able to open the GPS serial port "
-                    "because EAS Station's hardware service holds it. Until the "
-                    "gpsd-as-NMEA-source feature lands, the workaround is to "
-                    "uncheck 'Enable GPS Receiver' under Admin → Hardware "
-                    "Settings → GPS, save, and let gpsd own the port. You'll "
-                    "lose the live GPS card but gain stratum-1 PPS time."
-                ),
-                "command": (
-                    "# Check who owns the serial port:\n"
-                    "sudo lsof /dev/ttyAMA10 /dev/ttyAMA0 /dev/serial0 2>/dev/null"
-                ),
-            })
+            selected_name = chrony_run.get("selected_source")
+            synced_to_refclock = bool(
+                (selected_src and selected_src.get("mode") == "#")
+                or (selected_name and selected_name in refclock_names)
+            )
+            serial_owner_cmd = (
+                "# Check who owns the serial port:\n"
+                "sudo lsof /dev/ttyAMA10 /dev/ttyAMA0 /dev/serial0 2>/dev/null"
+            )
+
+            if synced_to_refclock:
+                # A reference clock IS reaching chrony — that is what gives you
+                # reference-clock time.  Only the coarse NMEA/GPS source is
+                # starved, which is expected while EAS Station holds the serial
+                # port for the live GPS card.  Report it as the informational
+                # non-event it is; do NOT claim a fall-back to internet NTP.
+                ref_label = selected_name or "a reference clock"
+                stratum_note = (
+                    f"time is stratum {current_stratum} via {ref_label}"
+                    if current_stratum is not None
+                    else f"locked to {ref_label}"
+                )
+                actions.append({
+                    "id": "refclocks_unreached",
+                    "severity": "info",
+                    "label": (
+                        f"Coarse GPS/NMEA source isn't reaching chrony — "
+                        f"{stratum_note}"
+                    ),
+                    "reason": (
+                        f"chrony has the {' / '.join(unreached)} refclock(s) "
+                        "configured but Reach=0, so no samples are arriving from "
+                        f"them.  Your clock is fine — it is disciplined by the "
+                        f"{ref_label} reference clock.  This only means the coarse "
+                        "NMEA/GPS source gpsd would provide is starved, because "
+                        "EAS Station's hardware service holds the serial port to "
+                        "drive the live GPS card.  No action is required unless "
+                        "you want gpsd to own the port instead: until the "
+                        "gpsd-as-NMEA-source feature lands you can uncheck 'Enable "
+                        "GPS Receiver' under Admin → Hardware Settings → GPS to "
+                        "hand gpsd the port (you'll lose the live GPS card)."
+                    ),
+                    "command": serial_owner_cmd,
+                })
+            else:
+                # No refclock is selected — chrony has genuinely fallen back to
+                # an internet peer at stratum ≥ 2.
+                stratum_note = (
+                    f" (currently stratum {current_stratum} via internet NTP)"
+                    if current_stratum is not None else ""
+                )
+                actions.append({
+                    "id": "refclocks_unreached",
+                    "severity": "info",
+                    "label": (
+                        "GPS / PPS refclocks aren't reaching chrony"
+                        + stratum_note
+                    ),
+                    "reason": (
+                        f"chrony has the {' / '.join(unreached)} refclock(s) configured "
+                        "but Reach=0 — no samples have ever arrived. The most common "
+                        "cause is gpsd not being able to open the GPS serial port "
+                        "because EAS Station's hardware service holds it. Until the "
+                        "gpsd-as-NMEA-source feature lands, the workaround is to "
+                        "uncheck 'Enable GPS Receiver' under Admin → Hardware "
+                        "Settings → GPS, save, and let gpsd own the port. You'll "
+                        "lose the live GPS card but gain stratum-1 PPS time."
+                    ),
+                    "command": serial_owner_cmd,
+                })
 
     return actions
 

@@ -234,6 +234,22 @@ def _drive_rwt_airchain(
         # request returns rather than waiting for this thread to schedule past
         # GPIO initialisation.  We only release it (clear_broadcast_active) in
         # the finally block below once the relay is actually relinquished.
+        #
+        # That synchronous start_ts, however, predates the GPIO setup above —
+        # on a Pi the blocking GPIO C calls can take a second or more, so the
+        # countdown anchored to the request thread would reach 0:00 (and flip to
+        # "END OF MESSAGE") while the relay is still asserted and the audio is
+        # still playing, leaving the overlay stuck at 0:00 after the alert.
+        # Re-anchor the marker to the *actual* playout start now that GPIO is
+        # ready: the frontend re-syncs when start_ts shifts (templates/base.html
+        # ~L509), so the countdown finishes exactly when the relay is released
+        # in the finally block below and the overlay no longer lingers.
+        set_broadcast_active(
+            event_code=event_code,
+            label='Required Weekly Test',
+            duration_seconds=playback_duration,
+            source='automated_rwt',
+        )
 
         audio_player_cmd = eas_config.get('audio_player_cmd')
         playout_start = time.monotonic()
