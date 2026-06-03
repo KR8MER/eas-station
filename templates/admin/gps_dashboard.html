@@ -3568,15 +3568,17 @@
             setStripTile('strip-pps', 'ok', 'LOCKED', ppsBackend + ' · ' + ppsAge.toFixed(1) + 's');
         }
 
-        // GNSS tile (fix mode + jamming).
+        // GNSS tile (fix mode + jamming).  A 3D fix is a healthy state;
+        // only an actual interference reading (warning/critical from the
+        // ITFM monitor) degrades it.  "unknown" means the monitor isn't
+        // enabled — that's "not measured", not a fault, so it stays green.
         var fixMode = gps.fix_mode;
         var jamming = gps.jamming_state;
         if (fixMode === 3) {
-            var sub = '3D fix';
-            if (jamming && jamming !== 'ok') sub = 'RF ' + jamming;
+            var rfBad = (jamming === 'warning' || jamming === 'critical');
             setStripTile('strip-gnss',
-                (jamming && jamming !== 'ok') ? 'warn' : 'ok',
-                '3D FIX', sub);
+                rfBad ? 'warn' : 'ok',
+                '3D FIX', rfBad ? 'RF ' + jamming : '3D fix');
         } else if (fixMode === 2) {
             setStripTile('strip-gnss', 'warn', '2D FIX', 'horizontal only');
         } else if (hasFix) {
