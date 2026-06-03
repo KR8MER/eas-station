@@ -99,6 +99,33 @@ def test_poll_nav_timels_returns_leap_seconds(monkeypatch):
     assert fields["leap_source"] == "gps"
 
 
+def test_parse_nav_pvt_time_accuracy():
+    payload = bytearray(92)
+    struct.pack_into("<I", payload, 12, 22)  # tAcc = 22 ns
+    fields = ubx.parse_nav_pvt(bytes(payload))
+    assert fields["time_accuracy_ns"] == 22
+
+
+def test_parse_nav_status_spoof_state():
+    # flags2 bits 3..4 = spoofDetState; 1 = "none".
+    payload = bytearray(16)
+    payload[7] = 1 << 3
+    assert ubx.parse_nav_status(bytes(payload))["spoof_state"] == "none"
+    payload[7] = 2 << 3
+    assert ubx.parse_nav_status(bytes(payload))["spoof_state"] == "indicated"
+
+
+def test_scan_capture_extracts_nav_pvt_from_mixed_stream():
+    # tAcc must be recoverable from a capture taken for a MON-HW poll,
+    # since NAV-PVT streams alongside it.
+    pvt = bytearray(92)
+    struct.pack_into("<I", pvt, 12, 35)
+    raw = bytes(_mon_hw_frame()) + bytes(
+        ubx.build_poll(ubx.CLASS_NAV, ubx.ID_NAV_PVT, bytes(pvt)))
+    got = GPSManager._scan_capture(raw, ubx.CLASS_NAV, ubx.ID_NAV_PVT, ubx.parse_nav_pvt)
+    assert got == {"time_accuracy_ns": 35}
+
+
 def test_poll_decodes_mon_hw_from_ubxtool_capture(monkeypatch):
     mgr = _manager()
     mgr._gpsd_ubx_device = "/dev/ttyTEST"  # skip live gpsd discovery

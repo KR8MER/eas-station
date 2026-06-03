@@ -1048,6 +1048,10 @@ class GPSManager:
             "jam_indicator": None,          # 0..255 broadband CW jamming
             "noise_level": None,            # raw 16-bit "noise per ms"
             "agc_count": None,              # raw 16-bit AGC count
+            "time_accuracy_ns": None,       # NAV-PVT tAcc — receiver's own
+                                            # 1σ time estimate (ns)
+            "spoof_state": None,            # NAV-STATUS spoofDetState:
+                                            # unknown|none|indicated|multiple
             "ubx_last_poll_at": None,       # ISO timestamp of last reply
             "ubx_poll_supported": None,     # True after first reply,
                                             # False after timeout or
@@ -1347,15 +1351,31 @@ class GPSManager:
         interval = self._ubx_poll_interval_s if self._ubx_poll_interval_s > 0 else 30.0
         while self._running and self._active_source == "gpsd":
             try:
-                fields = self._poll_mon_hw_via_ubxtool()
-                if fields:
-                    self._apply_ubx_fields(fields)
+                # One capture for MON-HW also sweeps up the streaming
+                # NAV-PVT, so we get tAcc (time-accuracy estimate) for
+                # free without a second ubxtool invocation.
+                raw = self._capture_ubxtool("MON-HW")
+                if raw:
+                    mon = self._scan_capture(
+                        raw, ubx.CLASS_MON, ubx.ID_MON_HW, ubx.parse_mon_hw)
+                    if mon:
+                        self._apply_ubx_fields(mon)
+                    pvt = self._scan_capture(
+                        raw, ubx.CLASS_NAV, ubx.ID_NAV_PVT, ubx.parse_nav_pvt)
+                    if pvt:
+                        self._apply_ubx_fields(pvt)
+                # NAV-TIMELS (leap) and NAV-STATUS (spoofing) don't stream
+                # by default, so poll each explicitly.
                 leap = self._run_ubxtool_poll(
                     "NAV-TIMELS", ubx.CLASS_NAV, ubx.ID_NAV_TIMELS,
-                    ubx.parse_nav_timels,
-                )
+                    ubx.parse_nav_timels)
                 if leap:
                     self._apply_ubx_fields(leap)
+                spoof = self._run_ubxtool_poll(
+                    "NAV-STATUS", ubx.CLASS_NAV, ubx.ID_NAV_STATUS,
+                    ubx.parse_nav_status)
+                if spoof:
+                    self._apply_ubx_fields(spoof)
             except Exception as exc:  # pragma: no cover - defensive
                 self._logger.debug("gpsd UBX poll error: %s", exc)
             # Sleep in small slices so stop() stays responsive.
@@ -1379,14 +1399,23 @@ class GPSManager:
     ) -> Optional[Dict[str, Any]]:
         """Poll one UBX message through gpsd via ubxtool and decode it.
 
-        ``ubxtool`` sends the ``preset`` poll over gpsd's control channel
-        and we capture the raw byte stream it sees with ``-R``.  Parsing
-        that capture with our own :py:func:`ubx.find_frame` + ``parser``
-        reuses the binary decoders rather than scraping ubxtool's
-        human-readable text (which varies across gpsd versions).
+        Thin convenience wrapper: capture the ``preset`` poll and scan
+        the result for the requested class/id.  Returns ``None`` when no
+        matching frame arrived.
+        """
+        raw = self._capture_ubxtool(preset)
+        if not raw:
+            return None
+        return self._scan_capture(raw, want_class, want_id, parser)
 
-        Returns the most recent matching field dict in the capture, or
-        ``None`` when no frame of the requested class/id arrived.
+    def _capture_ubxtool(self, preset: str) -> Optional[bytes]:
+        """Send a ``preset`` poll through gpsd and return the raw stream.
+
+        ``ubxtool`` writes the poll over gpsd's control channel and we
+        capture the raw bytes it sees with ``-R``.  A single capture also
+        contains whatever else streams during the ~2 s window (e.g.
+        NAV-PVT), so callers can scan it for more than one message.
+        Returns ``None`` on timeout / spawn failure / empty capture.
         """
         wait_s = 2.0
         # gpsd needs the device named when several are attached (tty +
@@ -1409,12 +1438,16 @@ class GPSManager:
                 "-R", raw_path,       # save the raw device stream here
                 target,               # gpsd host:port[:device]
             ]
-            subprocess.run(
-                cmd,
-                capture_output=True,
-                timeout=wait_s + 5.0,
-                check=False,
-            )
+            try:
+                subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    timeout=wait_s + 5.0,
+                    check=False,
+                )
+            except (subprocess.TimeoutExpired, OSError) as exc:
+                self._logger.debug("ubxtool %s poll failed: %s", preset, exc)
+                return None
             with open(raw_path, "rb") as fh:
                 raw = fh.read()
         finally:
@@ -1422,11 +1455,22 @@ class GPSManager:
                 os.unlink(raw_path)
             except OSError:
                 pass
+        return raw or None
 
-        if not raw:
-            return None
+    @staticmethod
+    def _scan_capture(
+        raw: bytes,
+        want_class: int,
+        want_id: int,
+        parser,
+    ) -> Optional[Dict[str, Any]]:
+        """Scan a raw UBX capture for the freshest matching frame.
 
-        # Scan the capture for matching frames; keep the last (freshest).
+        Decodes with our own :py:func:`ubx.find_frame` + ``parser`` so we
+        reuse the tested binary decoders rather than scraping ubxtool's
+        version-dependent text.  Returns the last matching field dict, or
+        ``None`` when no frame of the requested class/id is present.
+        """
         buf = bytearray(raw)
         latest: Optional[Dict[str, Any]] = None
         while True:

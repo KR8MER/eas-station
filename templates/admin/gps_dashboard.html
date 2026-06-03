@@ -1710,6 +1710,7 @@
                     <dt data-gps-help="holdover">Holdover</dt>         <dd id="g-holdover" class="num">—</dd>
                     <dt data-gps-help="speed-cog">Speed / COG</dt>      <dd id="g-speed" class="num">—</dd>
                     <dt data-gps-help="pps-backend">PPS backend</dt>      <dd id="g-pps-backend">—</dd>
+                    <dt data-gps-help="time-accuracy">Time accuracy</dt>    <dd id="g-tacc" class="num">—</dd>
                     <dt data-gps-help="antenna">Antenna</dt>          <dd id="g-antenna">—</dd>
                     <dt data-gps-help="rf-jamming">RF / jamming</dt>     <dd id="g-jamming">—</dd>
                     <dt data-gps-help="leap-state">Leap state</dt>       <dd id="g-leap-state">—</dd>
@@ -2113,6 +2114,7 @@
                     <span><span class="swatch" style="background:#f85149;"></span><span class="label">Noise</span> <span id="ts-jam-noise" class="value">—</span></span>
                     <span><span class="swatch" style="background:#d29922;"></span><span class="label">AGC</span> <span id="ts-jam-agc" class="value">—</span></span>
                     <span><span class="label">State</span> <span id="ts-jam-state" class="value">—</span></span>
+                    <span><span class="label">Spoofing</span> <span id="ts-spoof-state" class="value">—</span></span>
                 </div>
                 <div class="gps-chart-canvas-wrap">
                     <canvas id="ts-jam-canvas" width="600" height="120" aria-label="Jamming and spoofing time-series"></canvas>
@@ -4105,6 +4107,41 @@
                 jamEl.textContent = parts.length ? parts.join(' · ') : '—';
                 if (jamming === 'ok')                     jamEl.classList.add('pos');
                 else if (jamming === 'warning' || jamming === 'critical') jamEl.classList.add('neg');
+            }
+        }
+
+        // Time accuracy — the receiver's own 1σ estimate (NAV-PVT tAcc).
+        // Sub-100 ns is excellent for a GNSS-disciplined clock.
+        var taccEl = document.getElementById('g-tacc');
+        if (taccEl) {
+            taccEl.classList.remove('pos', 'neg');
+            var tacc = gps && gps.time_accuracy_ns;
+            if (typeof tacc === 'number') {
+                taccEl.textContent = (tacc < 1000)
+                    ? tacc + ' ns'
+                    : (tacc / 1000).toFixed(1) + ' µs';
+                if (tacc <= 100) taccEl.classList.add('pos');
+                else if (tacc > 1000) taccEl.classList.add('neg');
+            } else {
+                taccEl.textContent = '—';
+            }
+        }
+
+        // Spoofing-detection state (NAV-STATUS).  "none" is the healthy
+        // reading; "unknown" means the detector isn't reporting (not a
+        // fault); "indicated"/"multiple" are real warnings.
+        var spoofEl = document.getElementById('ts-spoof-state');
+        if (spoofEl) {
+            spoofEl.classList.remove('pos', 'neg');
+            var spoof = gps && gps.spoof_state;
+            if (!spoof || spoof === 'unknown') {
+                spoofEl.textContent = (spoof === 'unknown') ? 'not monitored' : '—';
+            } else if (spoof === 'none') {
+                spoofEl.textContent = 'none';
+                spoofEl.classList.add('pos');
+            } else {
+                spoofEl.textContent = spoof.toUpperCase();
+                spoofEl.classList.add('neg');
             }
         }
 

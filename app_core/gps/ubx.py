@@ -56,8 +56,18 @@ UBX_SYNC_2 = 0x62
 CLASS_NAV = 0x01
 CLASS_MON = 0x0A
 
+ID_NAV_STATUS = 0x03
+ID_NAV_PVT = 0x07
 ID_NAV_TIMELS = 0x26
 ID_MON_HW = 0x09
+
+# UBX-NAV-STATUS flags2 spoofing-detection state (bits 3..4).
+_SPOOF_STATE = {
+    0: "unknown",   # detection deactivated / not available
+    1: "none",      # no spoofing indicated
+    2: "indicated", # spoofing indicated
+    3: "multiple",  # multiple spoofing indications
+}
 
 # UBX-MON-HW antenna-status enum (aStatus byte at offset 20 in the
 # 60-byte payload).  Mapped to the strings the dashboard renders.
@@ -243,6 +253,36 @@ def parse_nav_timels(payload: bytes) -> Dict[str, Any]:
         "leap_event_gps_week": int(date_wn) if event_valid else None,
         "leap_event_gps_dow": int(date_dn) if event_valid else None,
     }
+
+
+def parse_nav_pvt(payload: bytes) -> Dict[str, Any]:
+    """Decode the time-accuracy estimate from ``UBX-NAV-PVT``.
+
+    Only ``tAcc`` (U4 at offset 12, nanoseconds) is surfaced — it is the
+    receiver's own 1-sigma estimate of how good its time solution is,
+    which complements the PPS jitter / Allan deviation panels.  The rest
+    of the 92-byte message duplicates fix data we already get from NMEA.
+
+    Returns ``{}`` if the payload is too short to contain ``tAcc``.
+    """
+    if len(payload) < 16:
+        return {}
+    t_acc = struct.unpack_from("<I", payload, 12)[0]
+    return {"time_accuracy_ns": int(t_acc)}
+
+
+def parse_nav_status(payload: bytes) -> Dict[str, Any]:
+    """Decode the spoofing-detection state from ``UBX-NAV-STATUS``.
+
+    ``flags2`` (X1 at offset 7) carries ``spoofDetState`` in bits 3..4.
+    NMEA has no equivalent, so this is the only place spoofing awareness
+    surfaces.  Returns ``{}`` if the payload is too short.
+    """
+    if len(payload) < 8:
+        return {}
+    flags2 = payload[7]
+    spoof_bits = (flags2 >> 3) & 0x03
+    return {"spoof_state": _SPOOF_STATE.get(spoof_bits, "unknown")}
 
 
 def find_frame(buf: bytearray) -> Optional[Tuple[int, int, int, bytes]]:
