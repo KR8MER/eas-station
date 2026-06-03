@@ -1334,13 +1334,15 @@ class GPSManager:
         self._gpsd_ubx_thread.start()
 
     def _gpsd_ubx_poll_loop(self) -> None:
-        """Poll UBX-MON-HW via ubxtool on the same cadence as serial mode.
+        """Poll UBX-MON-HW + NAV-TIMELS via ubxtool on the serial cadence.
 
         Runs only while the manager is up and gpsd is the active source.
         A failed/empty poll is non-fatal: we leave ``ubx_poll_supported``
         as-is (None → the dashboard keeps showing "polling…") and retry
         on the next tick, so a transient gpsd hiccup doesn't latch the
-        tile into an error state.
+        tile into an error state.  MON-HW feeds the antenna/jamming
+        tiles; NAV-TIMELS feeds the leap-second fields — mirroring what
+        serial mode polls in :py:meth:`_maybe_send_ubx_polls`.
         """
         interval = self._ubx_poll_interval_s if self._ubx_poll_interval_s > 0 else 30.0
         while self._running and self._active_source == "gpsd":
@@ -1348,6 +1350,12 @@ class GPSManager:
                 fields = self._poll_mon_hw_via_ubxtool()
                 if fields:
                     self._apply_ubx_fields(fields)
+                leap = self._run_ubxtool_poll(
+                    "NAV-TIMELS", ubx.CLASS_NAV, ubx.ID_NAV_TIMELS,
+                    ubx.parse_nav_timels,
+                )
+                if leap:
+                    self._apply_ubx_fields(leap)
             except Exception as exc:  # pragma: no cover - defensive
                 self._logger.debug("gpsd UBX poll error: %s", exc)
             # Sleep in small slices so stop() stays responsive.
@@ -1357,16 +1365,28 @@ class GPSManager:
                 slept += 0.5
 
     def _poll_mon_hw_via_ubxtool(self) -> Optional[Dict[str, Any]]:
-        """Poll UBX-MON-HW through gpsd and return decoded fields.
+        """Poll UBX-MON-HW (antenna/jamming) through gpsd."""
+        return self._run_ubxtool_poll(
+            "MON-HW", ubx.CLASS_MON, ubx.ID_MON_HW, ubx.parse_mon_hw
+        )
 
-        ``ubxtool`` sends the poll over gpsd's control channel and we
-        capture the raw byte stream it sees with ``-R``.  Parsing that
-        capture with our own :py:func:`ubx.find_frame` / parse_mon_hw
-        reuses the binary decoder rather than scraping ubxtool's
+    def _run_ubxtool_poll(
+        self,
+        preset: str,
+        want_class: int,
+        want_id: int,
+        parser,
+    ) -> Optional[Dict[str, Any]]:
+        """Poll one UBX message through gpsd via ubxtool and decode it.
+
+        ``ubxtool`` sends the ``preset`` poll over gpsd's control channel
+        and we capture the raw byte stream it sees with ``-R``.  Parsing
+        that capture with our own :py:func:`ubx.find_frame` + ``parser``
+        reuses the binary decoders rather than scraping ubxtool's
         human-readable text (which varies across gpsd versions).
 
-        Returns the most recent MON-HW field dict in the capture, or
-        ``None`` when no frame arrived.
+        Returns the most recent matching field dict in the capture, or
+        ``None`` when no frame of the requested class/id arrived.
         """
         wait_s = 2.0
         # gpsd needs the device named when several are attached (tty +
@@ -1379,12 +1399,12 @@ class GPSManager:
         if self._gpsd_ubx_device:
             target += f":{self._gpsd_ubx_device}"
 
-        fd, raw_path = tempfile.mkstemp(prefix="ubx-monhw-", suffix=".bin")
+        fd, raw_path = tempfile.mkstemp(prefix="ubx-", suffix=".bin")
         os.close(fd)
         try:
             cmd = [
                 "ubxtool",
-                "-p", "MON-HW",       # poll the antenna/jamming message
+                "-p", preset,         # poll this message
                 "-w", str(wait_s),    # wait this long for the reply
                 "-R", raw_path,       # save the raw device stream here
                 target,               # gpsd host:port[:device]
@@ -1406,7 +1426,7 @@ class GPSManager:
         if not raw:
             return None
 
-        # Scan the capture for MON-HW frames; keep the last one (freshest).
+        # Scan the capture for matching frames; keep the last (freshest).
         buf = bytearray(raw)
         latest: Optional[Dict[str, Any]] = None
         while True:
@@ -1414,8 +1434,8 @@ class GPSManager:
             if frame is None:
                 break
             _leading, class_id, msg_id, payload = frame
-            if class_id == ubx.CLASS_MON and msg_id == ubx.ID_MON_HW:
-                parsed = ubx.parse_mon_hw(payload)
+            if class_id == want_class and msg_id == want_id:
+                parsed = parser(payload)
                 if parsed:
                     latest = parsed
         return latest
