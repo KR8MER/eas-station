@@ -49,8 +49,10 @@ import json
 import logging
 import math
 import os
+import shutil
 import socket
 import subprocess
+import tempfile
 import threading
 import time
 from collections import deque
@@ -225,6 +227,13 @@ class GPSManager:
         self._pps_kernel_device: Optional[str] = None  # e.g. "/sys/class/pps/pps0"
         self._pps_kernel_baseline_seq: Optional[int] = None
         self._pps_kernel_thread: Optional[threading.Thread] = None
+        # gpsd mode only: a side thread that shells out to ``ubxtool`` to
+        # poll UBX-MON-HW *through* gpsd.  In gpsd mode we don't own the
+        # serial port, so the in-process poller in _maybe_send_ubx_polls()
+        # can't write to the receiver — but ubxtool can, because gpsd
+        # forwards its control writes.  This is how the antenna / jamming
+        # tiles light up on a station that runs gpsd (the common case).
+        self._gpsd_ubx_thread: Optional[threading.Thread] = None
 
         # Inter-pulse intervals in nanoseconds, captured from the kernel
         # PPS device's nanosecond-precision assert timestamp.  Used by
@@ -397,12 +406,6 @@ class GPSManager:
             return False
         self._gpsd_sock = sock
         self._active_source = "gpsd"
-        # In gpsd mode we don't own the serial port and can't send UBX
-        # polls.  Mark the supported flag explicitly so the dashboard
-        # tile renders an informative "via gpsd" placeholder rather
-        # than spinning on "polling…" forever.
-        with self._lock:
-            self._fix["ubx_poll_supported"] = False
         self._running = True
         self._thread = threading.Thread(
             target=self._gpsd_reader_loop,
@@ -413,6 +416,12 @@ class GPSManager:
         # PPS monitor still works in gpsd mode — the kernel exposes
         # /sys/class/pps/pps0 regardless of who's reading the serial port.
         self._start_pps_monitor()
+        # We can't write UBX polls down the serial port (gpsd owns it),
+        # but ``ubxtool`` can poll through gpsd's control channel — so
+        # spin up a side thread that does exactly that to keep the
+        # antenna / jamming tiles populated.  ``ubx_poll_supported`` is
+        # left at None ("polling…") until the first reply lands.
+        self._start_gpsd_ubx_poller()
         self._logger.info(
             "✅ GPS reader started via gpsd at %s:%d (PPS GPIO %d, source=gpsd)",
             self._gpsd_host, self._gpsd_port, self._pps_pin,
@@ -496,6 +505,9 @@ class GPSManager:
         if self._pps_kernel_thread and self._pps_kernel_thread.is_alive():
             self._pps_kernel_thread.join(timeout=2)
         self._pps_kernel_thread = None
+        if self._gpsd_ubx_thread and self._gpsd_ubx_thread.is_alive():
+            self._gpsd_ubx_thread.join(timeout=3)
+        self._gpsd_ubx_thread = None
         self._pps_kernel_device = None
         if self._pps_gpio_active:
             try:
@@ -1265,12 +1277,130 @@ class GPSManager:
         if not fields:
             return
 
+        self._apply_ubx_fields(fields)
+
+    def _apply_ubx_fields(self, fields: Dict[str, Any]) -> None:
+        """Merge a decoded UBX field dict into the live fix under the lock.
+
+        Shared by the serial reader (:py:meth:`_handle_ubx`) and the
+        gpsd-mode ubxtool poller so both paths stamp ``ubx_last_poll_at``
+        and flip ``ubx_poll_supported`` to True identically.
+        """
         now_iso = datetime.now(timezone.utc).isoformat()
         with self._lock:
             for key, value in fields.items():
                 self._fix[key] = value
             self._fix["ubx_last_poll_at"] = now_iso
             self._fix["ubx_poll_supported"] = True
+
+    # ------------------------------------------------------------------
+    # gpsd-mode UBX polling (via ubxtool)
+    # ------------------------------------------------------------------
+    def _start_gpsd_ubx_poller(self) -> None:
+        """Launch the ubxtool-through-gpsd poll thread, if appropriate.
+
+        Honoured guards:
+          * ``_ubx_poll_interval_s <= 0`` disables polling entirely
+            (tests set this) — we mark the tile unsupported and bail.
+          * ``ubxtool`` missing from PATH — nothing we can do under
+            gpsd, so mark unsupported so the UI explains itself rather
+            than sitting on "polling…" forever.
+        """
+        if self._ubx_poll_interval_s <= 0:
+            with self._lock:
+                self._fix["ubx_poll_supported"] = False
+            return
+        if shutil.which("ubxtool") is None:
+            self._logger.info(
+                "ubxtool not found on PATH — u-blox antenna/jamming status "
+                "is unavailable while running under gpsd (install gpsd-clients)"
+            )
+            with self._lock:
+                self._fix["ubx_poll_supported"] = False
+            return
+        self._gpsd_ubx_thread = threading.Thread(
+            target=self._gpsd_ubx_poll_loop,
+            name="gps-ubx-gpsd",
+            daemon=True,
+        )
+        self._gpsd_ubx_thread.start()
+
+    def _gpsd_ubx_poll_loop(self) -> None:
+        """Poll UBX-MON-HW via ubxtool on the same cadence as serial mode.
+
+        Runs only while the manager is up and gpsd is the active source.
+        A failed/empty poll is non-fatal: we leave ``ubx_poll_supported``
+        as-is (None → the dashboard keeps showing "polling…") and retry
+        on the next tick, so a transient gpsd hiccup doesn't latch the
+        tile into an error state.
+        """
+        interval = self._ubx_poll_interval_s if self._ubx_poll_interval_s > 0 else 30.0
+        while self._running and self._active_source == "gpsd":
+            try:
+                fields = self._poll_mon_hw_via_ubxtool()
+                if fields:
+                    self._apply_ubx_fields(fields)
+            except Exception as exc:  # pragma: no cover - defensive
+                self._logger.debug("gpsd UBX poll error: %s", exc)
+            # Sleep in small slices so stop() stays responsive.
+            slept = 0.0
+            while self._running and self._active_source == "gpsd" and slept < interval:
+                time.sleep(0.5)
+                slept += 0.5
+
+    def _poll_mon_hw_via_ubxtool(self) -> Optional[Dict[str, Any]]:
+        """Poll UBX-MON-HW through gpsd and return decoded fields.
+
+        ``ubxtool`` sends the poll over gpsd's control channel and we
+        capture the raw byte stream it sees with ``-R``.  Parsing that
+        capture with our own :py:func:`ubx.find_frame` / parse_mon_hw
+        reuses the binary decoder rather than scraping ubxtool's
+        human-readable text (which varies across gpsd versions).
+
+        Returns the most recent MON-HW field dict in the capture, or
+        ``None`` when no frame arrived.
+        """
+        wait_s = 2.0
+        fd, raw_path = tempfile.mkstemp(prefix="ubx-monhw-", suffix=".bin")
+        os.close(fd)
+        try:
+            cmd = [
+                "ubxtool",
+                "-p", "MON-HW",       # poll the antenna/jamming message
+                "-w", str(wait_s),    # wait this long for the reply
+                "-R", raw_path,       # save the raw device stream here
+                f"{self._gpsd_host}:{self._gpsd_port}",
+            ]
+            subprocess.run(
+                cmd,
+                capture_output=True,
+                timeout=wait_s + 5.0,
+                check=False,
+            )
+            with open(raw_path, "rb") as fh:
+                raw = fh.read()
+        finally:
+            try:
+                os.unlink(raw_path)
+            except OSError:
+                pass
+
+        if not raw:
+            return None
+
+        # Scan the capture for MON-HW frames; keep the last one (freshest).
+        buf = bytearray(raw)
+        latest: Optional[Dict[str, Any]] = None
+        while True:
+            frame = ubx.find_frame(buf)
+            if frame is None:
+                break
+            _leading, class_id, msg_id, payload = frame
+            if class_id == ubx.CLASS_MON and msg_id == ubx.ID_MON_HW:
+                parsed = ubx.parse_mon_hw(payload)
+                if parsed:
+                    latest = parsed
+        return latest
 
     def _handle_sentence(self, msg) -> None:
         """Update internal fix state from a parsed NMEA sentence."""
