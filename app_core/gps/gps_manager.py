@@ -1045,6 +1045,7 @@ class GPSManager:
             "antenna_status": None,         # init|unknown|ok|short|open
             "antenna_power": None,          # off|on|unknown
             "jamming_state": None,          # unknown|ok|warning|critical
+            "jam_indicator": None,          # 0..255 broadband CW jamming
             "noise_level": None,            # raw 16-bit "noise per ms"
             "agc_count": None,              # raw 16-bit AGC count
             "ubx_last_poll_at": None,       # ISO timestamp of last reply

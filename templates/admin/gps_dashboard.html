@@ -4056,8 +4056,16 @@
             } else if (antStatus === null || antStatus === undefined) {
                 antEl.textContent = 'polling…';
             } else {
-                var label = antStatus.toUpperCase();
-                if (antPower) label += ' · ' + antPower.toUpperCase();
+                var label;
+                if (antStatus === 'unknown') {
+                    // The receiver's antenna supervisor isn't enabled, so
+                    // it can't report OK/OPEN/SHORT — say so plainly
+                    // rather than a bare alarming "UNKNOWN".
+                    label = 'unknown (supervisor off)';
+                } else {
+                    label = antStatus.toUpperCase();
+                    if (antPower && antPower !== 'unknown') label += ' · ' + antPower.toUpperCase();
+                }
                 antEl.textContent = label;
                 if (antStatus === 'ok')             antEl.classList.add('pos');
                 else if (antStatus === 'short' || antStatus === 'open') antEl.classList.add('neg');
@@ -4072,19 +4080,27 @@
         if (jamEl) {
             jamEl.classList.remove('pos', 'neg');
             var jamming = gps && gps.jamming_state;
+            var jamInd = gps && gps.jam_indicator;
             var noise = gps && gps.noise_level;
             var agc = gps && gps.agc_count;
-            if (jamming === null || jamming === undefined) {
+            if ((jamming === null || jamming === undefined) && typeof jamInd !== 'number') {
                 jamEl.textContent = '—';
             } else {
-                var jamLabel = jamming.toUpperCase();
-                if (typeof noise === 'number') jamLabel += ' · noise ' + noise;
+                var parts = [];
+                // The categorical ITFM state only means something once
+                // UBX-CFG-ITFM is enabled; when it reads "unknown" we
+                // lean on the raw CW indicator instead so the tile is
+                // still useful on a factory-default receiver.
+                if (jamming && jamming !== 'unknown') parts.push(jamming.toUpperCase());
+                // jamInd 0–255: broadband CW jamming indicator (live).
+                if (typeof jamInd === 'number') parts.push('jam ' + jamInd + '/255');
+                if (typeof noise === 'number') parts.push('noise ' + noise);
                 // AGC count (0–8191): how hard the receiver's automatic
                 // gain control is working.  A high value alongside low
                 // SNR points at a weak antenna / cabling rather than
                 // active jamming.
-                if (typeof agc === 'number') jamLabel += ' · agc ' + agc;
-                jamEl.textContent = jamLabel;
+                if (typeof agc === 'number') parts.push('agc ' + agc);
+                jamEl.textContent = parts.length ? parts.join(' · ') : '—';
                 if (jamming === 'ok')                     jamEl.classList.add('pos');
                 else if (jamming === 'warning' || jamming === 'critical') jamEl.classList.add('neg');
             }

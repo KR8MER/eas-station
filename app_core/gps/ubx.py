@@ -148,11 +148,20 @@ def parse_mon_hw(payload: bytes) -> Dict[str, Any]:
        22     U1    flags        (bit 0=rtcCalib, 1=safeBoot,
                                    2..3=jammingState, 4=xtalAbsent)
        23     U1    reserved1
-       24..   …     pinIrq, pullH, pullL (unused here)
+       24     U4    usedMask
+       28     U1[17] VP
+       45     U1    jamInd       (0=no CW jamming … 255=strong)
+       46..   …     reserved2, pinIrq, pullH, pullL (unused here)
 
     Older firmware reports a 56-byte payload instead; we tolerate
     either by only reading what's present.  Returns ``{}`` if the
     payload is too short to contain ``aStatus``.
+
+    ``jamInd`` is the broadband CW jamming indicator and is populated by
+    the receiver continuously — unlike the categorical ``jammingState``,
+    which only carries meaning once the ITFM monitor is enabled via
+    UBX-CFG-ITFM.  We surface both so the dashboard has a usable RF
+    figure even when ITFM is off (the common factory default).
     """
     if len(payload) < 23:
         return {}
@@ -163,11 +172,16 @@ def parse_mon_hw(payload: bytes) -> Dict[str, Any]:
     a_power = payload[21]
     flags = payload[22]
     jamming_bits = (flags >> 2) & 0x03
+    # jamInd lives at offset 45; absent on the short (56-byte) variant.
+    jam_indicator = payload[45] if len(payload) >= 46 else None
 
     return {
         "antenna_status": _ANT_STATUS.get(a_status, "unknown"),
         "antenna_power": _ANT_POWER.get(a_power, "unknown"),
         "jamming_state": _JAMMING_STATE.get(jamming_bits, "unknown"),
+        # Broadband CW jamming indicator, 0–255.  Live regardless of
+        # ITFM config, so it's the practical RF-health number.
+        "jam_indicator": int(jam_indicator) if jam_indicator is not None else None,
         "noise_level": int(noise),
         # AGC is a 16-bit count; receivers usually scale 8192 as the
         # nominal mid-point.  We expose the raw value and let the UI
