@@ -53,6 +53,7 @@ def _fake_ubxtool(raw_payload):
 
 def test_poll_decodes_mon_hw_from_ubxtool_capture(monkeypatch):
     mgr = _manager()
+    mgr._gpsd_ubx_device = "/dev/ttyTEST"  # skip live gpsd discovery
     # Capture includes leading junk + an NMEA line, like a real stream.
     raw = b"$GPGGA,foo*00\r\n\x00\x01" + bytes(_mon_hw_frame(jamming=2))
     monkeypatch.setattr(gm.subprocess, "run", _fake_ubxtool(raw))
@@ -67,10 +68,65 @@ def test_poll_decodes_mon_hw_from_ubxtool_capture(monkeypatch):
     assert fields["agc_count"] == 8190
 
 
+def test_poll_names_device_in_ubxtool_target(monkeypatch):
+    """gpsd rejects an unqualified poll when several devices are attached,
+    so the discovered device path must be appended as host:port:device."""
+    mgr = _manager()
+    mgr._gpsd_ubx_device = "/dev/ttyAMA0"
+    captured = {}
+
+    def _capture(cmd, *args, **kwargs):
+        captured["cmd"] = cmd
+        raw_path = cmd[cmd.index("-R") + 1]
+        open(raw_path, "wb").close()  # empty capture is fine here
+
+        class _C:
+            returncode = 0
+            stdout = stderr = b""
+
+        return _C()
+
+    monkeypatch.setattr(gm.subprocess, "run", _capture)
+    mgr._poll_mon_hw_via_ubxtool()
+
+    assert captured["cmd"][-1] == "127.0.0.1:2947:/dev/ttyAMA0"
+
+
 def test_poll_returns_none_when_no_frame(monkeypatch):
     mgr = _manager()
+    mgr._gpsd_ubx_device = "/dev/ttyTEST"  # skip live gpsd discovery
     monkeypatch.setattr(gm.subprocess, "run", _fake_ubxtool(b"no ubx here\r\n"))
     assert mgr._poll_mon_hw_via_ubxtool() is None
+
+
+def test_discover_gpsd_device_prefers_ublox(monkeypatch):
+    mgr = _manager()
+    reply = (
+        b'{"class":"VERSION"}\n'
+        b'{"class":"DEVICES","devices":['
+        b'{"path":"/dev/pps0","driver":"PPS"},'
+        b'{"path":"/dev/ttyAMA0","driver":"u-blox"}]}\n'
+    )
+
+    class _FakeSock:
+        def __init__(self):
+            self._buf = reply
+
+        def settimeout(self, _t):
+            pass
+
+        def sendall(self, _data):
+            pass
+
+        def recv(self, _n):
+            data, self._buf = self._buf, b""
+            return data
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(gm.socket, "create_connection", lambda *a, **k: _FakeSock())
+    assert mgr._discover_gpsd_device() == "/dev/ttyAMA0"
 
 
 def test_apply_ubx_fields_marks_supported():
