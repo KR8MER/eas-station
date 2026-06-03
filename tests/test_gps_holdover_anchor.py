@@ -8,20 +8,22 @@ was still coasting. The anchor is now persisted to Redis and restored on
 construction.
 """
 
+import json
 from datetime import datetime, timedelta, timezone
 
-import pytest
-
-from app_core.gps.gps_manager import GPSManager, REDIS_LAST_3D_KEY
+from app_core.gps.gps_manager import GPSManager, REDIS_KEY, REDIS_LAST_3D_KEY
 
 
 class FakeRedis:
-    """Minimal Redis stand-in covering the get/set the manager uses."""
+    """Minimal Redis stand-in covering the get/set/setex the manager uses."""
 
     def __init__(self):
         self.store = {}
 
     def set(self, key, value):
+        self.store[key] = value
+
+    def setex(self, key, ttl, value):
         self.store[key] = value
 
     def get(self, key):
@@ -77,3 +79,40 @@ def test_no_redis_is_tolerated():
     # Must not raise even though there is nowhere to persist.
     mgr._mark_3d_fix()
     assert mgr._last_3d_fix_at is not None
+
+
+def test_holdover_seconds_helper():
+    now = datetime.now(timezone.utc)
+    assert GPSManager._holdover_seconds(None, None, now) is None
+    assert GPSManager._holdover_seconds(now, 3, now) == 0.0
+    assert GPSManager._holdover_seconds(
+        now - timedelta(seconds=30), 1, now
+    ) == 30.0
+    # No fix_mode key at all (lost-fix payload) still yields a duration.
+    assert GPSManager._holdover_seconds(
+        now - timedelta(seconds=30), None, now
+    ) == 30.0
+
+
+def test_published_blob_includes_holdover():
+    """The Redis blob (status fallback / trend source) must carry holdover_s.
+
+    Regression: the published blob used to be the raw fix dict, omitting the
+    derived holdover_s — so any reader served from Redis rendered the
+    holdover card blank during holdover.
+    """
+    redis = FakeRedis()
+    mgr = _manager(redis)
+    mgr._mark_3d_fix()
+    # Simulate the receiver having lost its 3D fix.
+    with mgr._lock:
+        mgr._fix["fix_mode"] = 1
+        mgr._fix["has_fix"] = False
+
+    mgr._publish_current_fix(force=True)
+
+    blob = json.loads(redis.store[REDIS_KEY])
+    assert "holdover_s" in blob
+    assert isinstance(blob["holdover_s"], (int, float))
+    assert blob["holdover_s"] >= 0
+    assert blob.get("last_3d_fix_at") is not None

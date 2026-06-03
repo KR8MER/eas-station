@@ -532,6 +532,25 @@ class GPSManager:
             except Exception as exc:  # never let a Redis hiccup drop the fix
                 self._logger.debug("Failed to persist 3D-fix anchor: %s", exc)
 
+    @staticmethod
+    def _holdover_seconds(
+        last_3d: Optional[datetime],
+        fix_mode: Any,
+        now_utc: datetime,
+    ) -> Optional[float]:
+        """Seconds since the last 3D fix for the dashboard holdover timer.
+
+        ``None`` when we have never seen a 3D fix (nothing to measure from),
+        ``0.0`` while a 3D fix is currently held, otherwise the elapsed time
+        since the anchor.  Centralised so the live ``get_status()`` view and
+        the Redis-published blob never disagree.
+        """
+        if last_3d is None:
+            return None
+        if fix_mode == 3:
+            return 0.0
+        return round((now_utc - last_3d).total_seconds(), 2)
+
     def _load_persisted_3d_fix(self) -> None:
         """Restore the holdover anchor from Redis on startup, if present."""
         if self._last_3d_fix_at is not None or not self._redis:
@@ -650,18 +669,12 @@ class GPSManager:
 
         # Holdover timer — wall-clock seconds since the last 3D fix.
         # ``0`` while we currently hold a 3D fix; ``None`` when we have
-        # never seen one (e.g. cold start with no antenna).
-        if last_3d is None:
-            data["holdover_s"] = None
-            data["last_3d_fix_at"] = None
-        else:
-            data["last_3d_fix_at"] = last_3d.isoformat()
-            if data.get("fix_mode") == 3:
-                data["holdover_s"] = 0.0
-            else:
-                data["holdover_s"] = round(
-                    (now_utc - last_3d).total_seconds(), 2
-                )
+        # never seen one (e.g. cold start with no antenna).  Shared with
+        # _publish_current_fix() so the live and Redis-cached views agree.
+        data["holdover_s"] = self._holdover_seconds(
+            last_3d, data.get("fix_mode"), now_utc
+        )
+        data["last_3d_fix_at"] = last_3d.isoformat() if last_3d else None
 
         # Leap-second annunciator — Phase 2 will replace this with a
         # UBX-NAV-TIMELS poll; for now we surface a best-effort string
@@ -1527,6 +1540,17 @@ class GPSManager:
             with self._lock:
                 data = dict(self._fix)
                 data["recent_sentences"] = list(self._recent_sentences)
+                last_3d = self._last_3d_fix_at
+            # Derive the holdover timer here too — not just in get_status().
+            # Consumers that read this Redis blob (the /status fallback when
+            # the live manager handle isn't in their process, the trend
+            # sampler's cached path) would otherwise never see holdover_s and
+            # the dashboard's holdover card/tile would render blank while the
+            # receiver is in holdover.
+            data["holdover_s"] = self._holdover_seconds(
+                last_3d, data.get("fix_mode"), datetime.now(timezone.utc)
+            )
+            data["last_3d_fix_at"] = last_3d.isoformat() if last_3d else None
             self._redis.setex(REDIS_KEY, REDIS_TTL, json.dumps(data))
         except Exception as exc:
             self._logger.debug("Failed to publish GPS status to Redis: %s", exc)
