@@ -75,6 +75,57 @@ def _fake_ubxtool(raw_payload):
     return _run
 
 
+def _nav_timels_frame(*, curr_ls=18, valid=0x01, src=2):
+    """Build a 24-byte UBX-NAV-TIMELS frame (current leap seconds only)."""
+    payload = bytearray(24)
+    payload[8] = src                                 # srcOfCurrLs (2=gps)
+    struct.pack_into("<b", payload, 9, curr_ls)      # currLs (signed)
+    payload[23] = valid                              # bit0=currLsValid
+    return ubx.build_poll(ubx.CLASS_NAV, ubx.ID_NAV_TIMELS, bytes(payload))
+
+
+def test_poll_nav_timels_returns_leap_seconds(monkeypatch):
+    mgr = _manager()
+    mgr._gpsd_ubx_device = "/dev/ttyTEST"  # skip live gpsd discovery
+    raw = b"$GPGGA,foo*00\r\n" + bytes(_nav_timels_frame(curr_ls=18))
+    monkeypatch.setattr(gm.subprocess, "run", _fake_ubxtool(raw))
+
+    fields = mgr._run_ubxtool_poll(
+        "NAV-TIMELS", ubx.CLASS_NAV, ubx.ID_NAV_TIMELS, ubx.parse_nav_timels
+    )
+
+    assert fields is not None
+    assert fields["leap_seconds"] == 18
+    assert fields["leap_source"] == "gps"
+
+
+def test_parse_nav_pvt_time_accuracy():
+    payload = bytearray(92)
+    struct.pack_into("<I", payload, 12, 22)  # tAcc = 22 ns
+    fields = ubx.parse_nav_pvt(bytes(payload))
+    assert fields["time_accuracy_ns"] == 22
+
+
+def test_parse_nav_status_spoof_state():
+    # flags2 bits 3..4 = spoofDetState; 1 = "none".
+    payload = bytearray(16)
+    payload[7] = 1 << 3
+    assert ubx.parse_nav_status(bytes(payload))["spoof_state"] == "none"
+    payload[7] = 2 << 3
+    assert ubx.parse_nav_status(bytes(payload))["spoof_state"] == "indicated"
+
+
+def test_scan_capture_extracts_nav_pvt_from_mixed_stream():
+    # tAcc must be recoverable from a capture taken for a MON-HW poll,
+    # since NAV-PVT streams alongside it.
+    pvt = bytearray(92)
+    struct.pack_into("<I", pvt, 12, 35)
+    raw = bytes(_mon_hw_frame()) + bytes(
+        ubx.build_poll(ubx.CLASS_NAV, ubx.ID_NAV_PVT, bytes(pvt)))
+    got = GPSManager._scan_capture(raw, ubx.CLASS_NAV, ubx.ID_NAV_PVT, ubx.parse_nav_pvt)
+    assert got == {"time_accuracy_ns": 35}
+
+
 def test_poll_decodes_mon_hw_from_ubxtool_capture(monkeypatch):
     mgr = _manager()
     mgr._gpsd_ubx_device = "/dev/ttyTEST"  # skip live gpsd discovery
