@@ -4073,11 +4073,17 @@
             jamEl.classList.remove('pos', 'neg');
             var jamming = gps && gps.jamming_state;
             var noise = gps && gps.noise_level;
+            var agc = gps && gps.agc_count;
             if (jamming === null || jamming === undefined) {
                 jamEl.textContent = '—';
             } else {
                 var jamLabel = jamming.toUpperCase();
                 if (typeof noise === 'number') jamLabel += ' · noise ' + noise;
+                // AGC count (0–8191): how hard the receiver's automatic
+                // gain control is working.  A high value alongside low
+                // SNR points at a weak antenna / cabling rather than
+                // active jamming.
+                if (typeof agc === 'number') jamLabel += ' · agc ' + agc;
                 jamEl.textContent = jamLabel;
                 if (jamming === 'ok')                     jamEl.classList.add('pos');
                 else if (jamming === 'warning' || jamming === 'critical') jamEl.classList.add('neg');
