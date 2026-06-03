@@ -234,6 +234,13 @@ class GPSManager:
         # forwards its control writes.  This is how the antenna / jamming
         # tiles light up on a station that runs gpsd (the common case).
         self._gpsd_ubx_thread: Optional[threading.Thread] = None
+        # The GNSS device path gpsd has the receiver on (e.g.
+        # ``/dev/ttyAMA0``).  ubxtool must be told this explicitly when
+        # gpsd has more than one device attached — a station with a PPS
+        # refclock always does (the tty *and* /dev/ppsN), so gpsd rejects
+        # an unqualified poll with "No path specified in DEVICE".
+        # Discovered from gpsd's ?DEVICES reply and cached on success.
+        self._gpsd_ubx_device: Optional[str] = None
 
         # Inter-pulse intervals in nanoseconds, captured from the kernel
         # PPS device's nanosecond-precision assert timestamp.  Used by
@@ -1361,6 +1368,16 @@ class GPSManager:
         ``None`` when no frame arrived.
         """
         wait_s = 2.0
+        # gpsd needs the device named when several are attached (tty +
+        # PPS).  Discover it lazily and cache the result; until we have
+        # it, fall back to an unqualified target (works on single-device
+        # gpsd setups and degrades to a logged error otherwise).
+        if self._gpsd_ubx_device is None:
+            self._gpsd_ubx_device = self._discover_gpsd_device()
+        target = f"{self._gpsd_host}:{self._gpsd_port}"
+        if self._gpsd_ubx_device:
+            target += f":{self._gpsd_ubx_device}"
+
         fd, raw_path = tempfile.mkstemp(prefix="ubx-monhw-", suffix=".bin")
         os.close(fd)
         try:
@@ -1369,7 +1386,7 @@ class GPSManager:
                 "-p", "MON-HW",       # poll the antenna/jamming message
                 "-w", str(wait_s),    # wait this long for the reply
                 "-R", raw_path,       # save the raw device stream here
-                f"{self._gpsd_host}:{self._gpsd_port}",
+                target,               # gpsd host:port[:device]
             ]
             subprocess.run(
                 cmd,
@@ -1401,6 +1418,71 @@ class GPSManager:
                 if parsed:
                     latest = parsed
         return latest
+
+    def _discover_gpsd_device(self) -> Optional[str]:
+        """Ask gpsd for the GNSS receiver's device path via ?DEVICES.
+
+        Opens a short-lived control connection (separate from the reader
+        socket), requests the device list, and returns the path of the
+        receiver — preferring a device whose driver names u-blox, else
+        the first non-PPS tty.  Returns ``None`` on any failure; the
+        caller retries on the next poll.
+        """
+        try:
+            sock = socket.create_connection(
+                (self._gpsd_host, self._gpsd_port), timeout=3.0
+            )
+        except OSError as exc:
+            self._logger.debug("gpsd device discovery connect failed: %s", exc)
+            return None
+        try:
+            sock.settimeout(3.0)
+            sock.sendall(b"?DEVICES;\n")
+            buf = b""
+            deadline = time.monotonic() + 3.0
+            while time.monotonic() < deadline and len(buf) < 65536:
+                try:
+                    chunk = sock.recv(4096)
+                except (OSError, socket.timeout):
+                    break
+                if not chunk:
+                    break
+                buf += chunk
+                if b'"class":"DEVICES"' in buf and buf.rstrip().endswith(b"}"):
+                    break
+        finally:
+            try:
+                sock.close()
+            except OSError:
+                pass
+
+        for line in buf.split(b"\n"):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line.decode("utf-8", "replace"))
+            except (ValueError, UnicodeDecodeError):
+                continue
+            if obj.get("class") != "DEVICES":
+                continue
+            devices = obj.get("devices") or []
+            ublox = [
+                d for d in devices
+                if "blox" in str(d.get("driver", "")).lower()
+            ]
+            non_pps = [
+                d for d in devices
+                if not str(d.get("path", "")).startswith("/dev/pps")
+            ]
+            for candidate in (ublox or non_pps):
+                path = candidate.get("path")
+                if path:
+                    self._logger.info(
+                        "u-blox UBX polling will target gpsd device %s", path
+                    )
+                    return path
+        return None
 
     def _handle_sentence(self, msg) -> None:
         """Update internal fix state from a parsed NMEA sentence."""
