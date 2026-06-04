@@ -1239,11 +1239,10 @@ VFD_GPS_STATUS = {
         "type": "graphics",
         "elements": [
             {"type": "rectangle", "x": 0, "y": 0, "width": 140, "height": 32, "filled": False},
-            {"type": "text", "x": 4, "y": 2, "text": "GPS {gps.fix_quality}"},
-            {"type": "line", "x1": 4, "y1": 10, "x2": 135, "y2": 10},
-            {"type": "text", "x": 4, "y": 12, "text": "Lat {gps.latitude:.5f}"},
-            {"type": "text", "x": 4, "y": 21, "text": "Lon {gps.longitude:.5f}"},
-            {"type": "text", "x": 4, "y": 24, "text": "Sat {gps.satellites}  HDOP {gps.hdop}"},
+            {"type": "text", "x": 4, "y": 2, "text": "GPS {gps.fix_quality}  {gps.satellites}sat"},
+            {"type": "line", "x1": 4, "y1": 11, "x2": 135, "y2": 11},
+            {"type": "text", "x": 4, "y": 13, "text": "Lat {gps.latitude:.5f}"},
+            {"type": "text", "x": 4, "y": 22, "text": "Lon {gps.longitude:.5f} H{gps.hdop}"},
         ],
     },
     "data_sources": [
