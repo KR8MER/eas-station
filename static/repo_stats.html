@@ -302,7 +302,7 @@
         <div class="hero-section">
             <h1>📊 EAS Station Repository Statistics</h1>
             <p class="timestamp">
-                <i class="far fa-clock"></i> Last Updated: 2026-06-04 01:01:36 UTC
+                <i class="far fa-clock"></i> Last Updated: 2026-06-04 10:36:50 UTC
             </p>
         </div>
         
@@ -310,7 +310,7 @@
         <div class="quick-stats">
             <div class="quick-stat-item">
                 <div class="icon">📁</div>
-                <div class="value">3,111</div>
+                <div class="value">3,110</div>
                 <div class="label">Total Files</div>
             </div>
             <div class="quick-stat-item">
@@ -320,12 +320,12 @@
             </div>
             <div class="quick-stat-item">
                 <div class="icon">📝</div>
-                <div class="value">722,556</div>
+                <div class="value">722,130</div>
                 <div class="label">Total Lines</div>
             </div>
             <div class="quick-stat-item">
                 <div class="icon">💻</div>
-                <div class="value">538,535</div>
+                <div class="value">538,114</div>
                 <div class="label">Code Lines</div>
             </div>
             <div class="quick-stat-item">
@@ -426,8 +426,8 @@
                         </tr>
                         <tr>
                             <td><strong><svg viewBox="0 0 24 24" width="20" height="20" fill="#E34F26" style="vertical-align: middle; margin-right: 6px;"><path d="M1.5 0h21l-1.91 21.563L11.977 24l-8.564-2.438L1.5 0zm7.031 9.75l-.232-2.718 10.059.003.23-2.622L5.412 4.41l.698 8.01h9.126l-.326 3.426-2.91.804-2.955-.81-.188-2.11H6.248l.33 4.171L12 19.351l5.379-1.443.744-8.157H8.531z"/></svg>HTML</strong></td>
-                            <td class="text-end">84,069</td>
-                            <td class="text-end">76,196</td>
+                            <td class="text-end">83,630</td>
+                            <td class="text-end">75,765</td>
                             <td class="text-end">842</td>
                             <td class="text-end">91%</td>
                             <td>
@@ -438,8 +438,8 @@
                         </tr>
                         <tr>
                             <td><strong><svg viewBox="0 0 24 24" width="20" height="20" fill="#083fa1" style="vertical-align: middle; margin-right: 6px;"><path d="M22.27 19.385H1.73A1.73 1.73 0 010 17.655V6.345a1.73 1.73 0 011.73-1.73h20.54A1.73 1.73 0 0124 6.345v11.308a1.73 1.73 0 01-1.73 1.731zM5.769 15.923v-4.5l2.308 2.885 2.307-2.885v4.5h2.308V8.078h-2.308l-2.307 2.885-2.308-2.885H3.46v7.847zM21.232 12h-2.309V8.077h-2.307V12h-2.308l3.461 4.039z"/></svg>Markdown</strong></td>
-                            <td class="text-end">44,074</td>
-                            <td class="text-end">34,007</td>
+                            <td class="text-end">44,087</td>
+                            <td class="text-end">34,017</td>
                             <td class="text-end">0</td>
                             <td class="text-end">77%</td>
                             <td>
@@ -617,7 +617,7 @@
             data: {
                 labels: ['💻 Code', '💬 Comments', '⬜ Whitespace'],
                 datasets: [{
-                    data: [538535, 122451, 61570],
+                    data: [538114, 122451, 61565],
                     backgroundColor: [
                         'rgba(102, 126, 234, 0.8)',
                         'rgba(118, 75, 162, 0.8)',
@@ -650,7 +650,7 @@
                             label: function(context) {
                                 let label = context.label || '';
                                 let value = context.parsed || 0;
-                                let total = 722556;
+                                let total = 722130;
                                 let percentage = ((value / total) * 100).toFixed(1);
                                 return label + ': ' + value.toLocaleString() + ' lines (' + percentage + '%)';
                             }
@@ -668,7 +668,7 @@
                 labels: ["SVG", "Python", "Other", "HTML", "Markdown", "JavaScript", "Shell", "CSS", "Other Types"],
                 datasets: [{
                     label: 'Number of Files',
-                    data: [2066, 552, 129, 113, 100, 59, 42, 25, 25],
+                    data: [2066, 552, 129, 112, 100, 59, 42, 25, 25],
                     backgroundColor: 'rgba(102, 126, 234, 0.8)',
                     borderColor: 'rgba(102, 126, 234, 1)',
                     borderWidth: 2,
@@ -727,7 +727,7 @@
                 labels: ["JSON", "Python", "YAML", "HTML", "Markdown", "JavaScript", "CSS", "SVG"],
                 datasets: [{
                     label: 'Lines of Code',
-                    data: [208171, 69531, 97756, 76196, 34007, 20480, 13877, 8197],
+                    data: [208171, 69531, 97756, 75765, 34017, 20480, 13877, 8197],
                     backgroundColor: 'rgba(118, 75, 162, 0.8)',
                     borderColor: 'rgba(118, 75, 162, 1)',
                     borderWidth: 2,
