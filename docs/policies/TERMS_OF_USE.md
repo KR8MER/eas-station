@@ -78,7 +78,28 @@ Attackers gained unauthorized access to EAS encoder/decoder hardware at KRTV-TV 
 
 Source: FCC Public Advisory DA 13-108 — <https://docs.fcc.gov/public/attachments/DA-13-108A1.pdf>
 
-### Case 4 — Ongoing FCC EAS Enforcement Pattern (2013–present)
+### Case 4 — Multi-Party EAS/WEA Tone Settlements, $600,000+ in Combined Penalties (2019)
+
+On August 15, 2019, the FCC Enforcement Bureau simultaneously adopted consent decrees against four media companies for transmitting EAS or Wireless Emergency Alert (WEA) tones outside any actual emergency or authorized test, in violation of 47 C.F.R. § 11.45. The combined civil penalties exceeded **$600,000**:
+
+- **ABC, Inc. — $395,000** for broadcasting the WEA Attention Signal during a comedy segment on *Jimmy Kimmel Live!* (October 3, 2018).
+- **AMC Networks — $104,000** for transmitting EAS tones twice during *The Walking Dead* scripted drama "Omega" episode (February 2019).
+- **Discovery Communications — $68,000** for EAS tones aired on *Animal Planet* programming.
+- **Meruelo Radio Holdings — $67,000** for EAS/WEA tones aired on a radio broadcast.
+
+This action is directly applicable to the use of EAS Station™ output: it confirms that EAS/WEA tones embedded in **comedy** (*Jimmy Kimmel*) and **scripted television drama** (*The Walking Dead*) draw federal enforcement regardless of the fictional or entertainment framing of the content.
+
+Source: FCC, "FCC Settles Investigations Into Misuse of Emergency Alert Tones" (Public Notice DOC-359101A1) — <https://docs.fcc.gov/public/attachments/DOC-359101A1.pdf>
+
+### Case 5 — Paramount Global, $244,952 Consent Decree (2024)
+
+On December 18, 2024, the FCC entered a consent decree with Paramount Global resolving investigations into the transmission of EAS codes or the Attention Signal—or recordings or simulations thereof—across three CBS properties: the scripted series *Young Sheldon* (May 18, 2023), in a dramatized scene depicting characters reacting to an **impending tornado**; the syndicated program *Entertainment Tonight* (October 25, 2023); and the *CBS News Radio "Top of the Hour"* broadcast (June 6, 2024). Paramount Global agreed to a compliance plan and a **$244,952 civil penalty**.
+
+The *Young Sheldon* portion is squarely on point for this software: a **fictional, dramatized emergency** in scripted entertainment—exactly the kind of "imagined" alert scenario prohibited in Section 4c—was itself sufficient to trigger FCC enforcement.
+
+Source: FCC Consent Decree DA 24-1285 — <https://docs.fcc.gov/public/attachments/DA-24-1285A1.pdf>
+
+### Case 6 — Ongoing FCC EAS Enforcement Pattern (2013–present)
 
 Since 2013 the FCC Enforcement Bureau has entered into consent decrees and issued forfeiture orders against dozens of licensees for EAS tone misuse in advertisements, movie trailers, comedic content, podcasts, and streaming programming. Individual per-violation forfeitures have ranged from **$8,000 to $325,000**, and consent decree civil penalties have reached seven figures. Enforcement actions routinely include mandatory compliance programs, annual reporting obligations, and the possibility of license revocation under 47 U.S.C. § 312. All FCC enforcement records are publicly searchable at <https://www.fcc.gov/enforcement/orders>.
 
