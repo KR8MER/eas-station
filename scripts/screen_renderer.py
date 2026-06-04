@@ -394,6 +394,13 @@ class ScreenRenderer:
         def replace_var(match):
             var_path = match.group(1)
 
+            # Optional Python format spec after a colon, e.g. {gps.latitude:.5f}.
+            # Variable paths never contain a colon (array access uses [n]), so
+            # splitting on the first colon is unambiguous.
+            fmt = None
+            if ':' in var_path:
+                var_path, fmt = var_path.split(':', 1)
+
             # Split into variable name and property path
             if '.' in var_path:
                 var_name = var_path.split('.')[0]
@@ -405,6 +412,14 @@ class ScreenRenderer:
                     value = ""
             else:
                 value = all_data.get(var_path, "")
+
+            # Explicit format spec wins when the value supports it. Booleans are
+            # left to the Yes/No mapping below rather than being formatted.
+            if fmt and value is not None and value != "" and not isinstance(value, bool):
+                try:
+                    return format(value, fmt)
+                except (ValueError, TypeError):
+                    pass
 
             # Format the value
             if isinstance(value, float):
@@ -500,8 +515,9 @@ class ScreenRenderer:
                     'text': text,
                 })
 
-            elif elem_type == 'progress_bar':
-                # Progress bar / VU meter
+            elif elem_type in ('bar', 'progress_bar'):
+                # Progress bar / VU meter. Accepts the visual-editor 'bar' format
+                # (x, y, width, height, value, border) as well as 'progress_bar'.
                 value_template = str(element.get('value') or '0')
                 value_str = self.substitute_variables(value_template, api_data)
 
@@ -517,6 +533,7 @@ class ScreenRenderer:
                 y = element.get('y', 0)
                 width = element.get('width', 100)
                 height = element.get('height', 8)
+                border = element.get('border', True)
 
                 # Draw label if provided
                 label = element.get('label', '')
@@ -528,47 +545,98 @@ class ScreenRenderer:
                         'text': f"{label}: {value:.0f}%",
                     })
 
-                # Draw progress bar outline
-                commands.append({
-                    'type': 'rectangle',
-                    'x1': x,
-                    'y1': y,
-                    'x2': x + width,
-                    'y2': y + height,
-                    'filled': False,
-                })
-
-                # Draw filled portion
-                filled_width = int((value / 100) * (width - 2))
-                if filled_width > 0:
+                if border:
+                    # Outline plus inset fill
                     commands.append({
                         'type': 'rectangle',
-                        'x1': x + 1,
-                        'y1': y + 1,
-                        'x2': x + 1 + filled_width,
+                        'x1': x,
+                        'y1': y,
+                        'x2': x + width - 1,
                         'y2': y + height - 1,
-                        'filled': True,
+                        'filled': False,
                     })
+                    interior = max(0, width - 2)
+                    filled_width = int((value / 100) * interior)
+                    if filled_width > 0:
+                        commands.append({
+                            'type': 'rectangle',
+                            'x1': x + 1,
+                            'y1': y + 1,
+                            'x2': x + 1 + filled_width,
+                            'y2': y + height - 2,
+                            'filled': True,
+                        })
+                else:
+                    # Borderless: fill proportion of the full width
+                    filled_width = int((value / 100) * width)
+                    if filled_width > 0:
+                        commands.append({
+                            'type': 'rectangle',
+                            'x1': x,
+                            'y1': y,
+                            'x2': x + filled_width - 1,
+                            'y2': y + height - 1,
+                            'filled': True,
+                        })
 
             elif elem_type == 'rectangle':
-                # Rectangle element
+                # Rectangle element. Accepts the editor's (x, y, width, height)
+                # format and the legacy (x1, y1, x2, y2) format.
+                if 'width' in element or 'height' in element:
+                    x = element.get('x', 0)
+                    y = element.get('y', 0)
+                    x1, y1 = x, y
+                    x2 = x + element.get('width', 10) - 1
+                    y2 = y + element.get('height', 10) - 1
+                else:
+                    x1 = element.get('x1', 0)
+                    y1 = element.get('y1', 0)
+                    x2 = element.get('x2', 10)
+                    y2 = element.get('y2', 10)
                 commands.append({
                     'type': 'rectangle',
-                    'x1': element.get('x1', 0),
-                    'y1': element.get('y1', 0),
-                    'x2': element.get('x2', 10),
-                    'y2': element.get('y2', 10),
+                    'x1': x1,
+                    'y1': y1,
+                    'x2': x2,
+                    'y2': y2,
                     'filled': element.get('filled', False),
                 })
 
             elif elem_type == 'line':
-                # Line element
+                # Arbitrary line between two points
                 commands.append({
                     'type': 'line',
                     'x1': element.get('x1', 0),
                     'y1': element.get('y1', 0),
                     'x2': element.get('x2', 10),
                     'y2': element.get('y2', 10),
+                })
+
+            elif elem_type in ('hline', 'dotted_hline'):
+                # Horizontal divider -> line. The VFD has no dotted primitive,
+                # so dotted falls back to a solid line.
+                x = element.get('x', 0)
+                y = element.get('y', 0)
+                width = element.get('width', 140)
+                commands.append({
+                    'type': 'line',
+                    'x1': x,
+                    'y1': y,
+                    'x2': x + max(1, width) - 1,
+                    'y2': y,
+                })
+
+            elif elem_type == 'vline':
+                # Vertical divider -> line
+                x = element.get('x', 0)
+                y = element.get('y', 0)
+                height = element.get('height', 32)
+                commands.append({
+                    'type': 'line',
+                    'x1': x,
+                    'y1': y,
+                    'x2': x,
+                    'y2': y + max(1, height) - 1,
                 })
 
         return commands

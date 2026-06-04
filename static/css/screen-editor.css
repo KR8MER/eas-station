@@ -432,9 +432,37 @@
     color: var(--color-info);
 }
 
+/* Dynamic property fields grid */
+.fields-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 0.5rem;
+}
+
+.fields-grid .fg-12 {
+    flex: 1 1 100%;
+}
+
+.fields-grid .fg-6 {
+    flex: 1 1 calc(50% - 0.5rem);
+}
+
+.range-live {
+    font-weight: 600;
+    color: var(--color-info);
+}
+
+/* Add-element selector in the toolbar */
+.add-element-select {
+    width: auto;
+    min-width: 170px;
+    font-weight: 600;
+}
+
 .button-group {
     display: flex;
     gap: 0.5rem;
+    margin-top: 1rem;
 }
 
 .button-group .btn {

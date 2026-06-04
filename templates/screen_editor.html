@@ -71,143 +71,20 @@
                 </div>
             </div>
 
-            <!-- Element Properties Panel (Text) -->
+            <!-- Element Properties Panel (dynamic, schema-driven) -->
             <div class="panel" id="element-props-panel" style="display: none;">
                 <div class="panel-header">
-                    <i class="fas fa-font"></i> Text Properties
+                    <i class="fas fa-sliders-h" id="element-props-icon"></i>
+                    <span id="element-props-title">Element Properties</span>
                 </div>
                 <div class="panel-body">
-                    <div class="form-group">
-                        <label>Text Content *</label>
-                        <input type="text" id="elem-text" class="form-control" placeholder="{variable} or Static Text">
-                        <small class="form-text text-muted">Use {variable} for dynamic data</small>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Font Size</label>
-                        <select id="elem-font" class="form-control">
-                            <option value="small">Small (11px)</option>
-                            <option value="medium">Medium (14px)</option>
-                            <option value="large">Large (18px)</option>
-                            <option value="xlarge">X-Large (28px)</option>
-                            <option value="huge">Huge (36px)</option>
-                        </select>
-                    </div>
-
-                    <div class="row">
-                        <div class="col-6">
-                            <div class="form-group">
-                                <label>X Position</label>
-                                <input type="number" id="elem-x" class="form-control" value="0" min="0">
-                            </div>
-                        </div>
-                        <div class="col-6">
-                            <div class="form-group">
-                                <label>Y Position</label>
-                                <input type="number" id="elem-y" class="form-control" value="0" min="0">
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Max Width (px)</label>
-                        <input type="number" id="elem-max-width" class="form-control" placeholder="Auto">
-                    </div>
-
-                    <div class="form-group">
-                        <label>
-                            <input type="checkbox" id="elem-wrap">
-                            Word Wrap
-                        </label>
-                    </div>
-
-                    <div class="form-group">
-                        <label>
-                            <input type="checkbox" id="elem-invert">
-                            Invert Colors
-                        </label>
-                    </div>
-
-                    <div class="form-group">
-                        <label>
-                            <input type="checkbox" id="elem-allow-empty">
-                            Allow Empty
-                        </label>
-                    </div>
+                    <div id="element-props-fields"></div>
 
                     <div class="button-group">
                         <button id="btn-delete-element" class="btn btn-danger btn-sm">
                             <i class="fas fa-trash"></i> Delete
                         </button>
                         <button id="btn-duplicate-element" class="btn btn-secondary btn-sm">
-                            <i class="fas fa-copy"></i> Duplicate
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Bar Graph Properties Panel -->
-            <div class="panel" id="bar-props-panel" style="display: none;">
-                <div class="panel-header">
-                    <i class="fas fa-chart-bar"></i> Bar Graph Properties
-                </div>
-                <div class="panel-body">
-                    <div class="form-group">
-                        <label>Value (0–100 or {variable})</label>
-                        <input type="text" id="elem-bar-value" class="form-control" placeholder="{status.system_resources.cpu_usage_percent}">
-                        <small class="form-text text-muted">Template variable resolves to 0–100</small>
-                    </div>
-
-                    <div class="row">
-                        <div class="col-6">
-                            <div class="form-group">
-                                <label>X Position</label>
-                                <input type="number" id="elem-bar-x" class="form-control" value="0" min="0">
-                            </div>
-                        </div>
-                        <div class="col-6">
-                            <div class="form-group">
-                                <label>Y Position</label>
-                                <input type="number" id="elem-bar-y" class="form-control" value="0" min="0">
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="row">
-                        <div class="col-6">
-                            <div class="form-group">
-                                <label>Width (px)</label>
-                                <input type="number" id="elem-bar-width" class="form-control" value="80" min="4">
-                            </div>
-                        </div>
-                        <div class="col-6">
-                            <div class="form-group">
-                                <label>Height (px)</label>
-                                <input type="number" id="elem-bar-height" class="form-control" value="9" min="3">
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Preview Fill (%)
-                            <input type="range" id="elem-bar-preview" class="form-range" min="0" max="100" value="60">
-                            <span id="elem-bar-preview-value">60</span>%
-                        </label>
-                        <small class="form-text text-muted">Canvas preview only — live data used on device</small>
-                    </div>
-
-                    <div class="form-group">
-                        <label>
-                            <input type="checkbox" id="elem-bar-border" checked>
-                            Show Border
-                        </label>
-                    </div>
-
-                    <div class="button-group">
-                        <button id="btn-delete-bar" class="btn btn-danger btn-sm">
-                            <i class="fas fa-trash"></i> Delete
-                        </button>
-                        <button id="btn-duplicate-bar" class="btn btn-secondary btn-sm">
                             <i class="fas fa-copy"></i> Duplicate
                         </button>
                     </div>
@@ -254,12 +131,9 @@
         <!-- Center - Canvas Area -->
         <div class="canvas-area">
             <div class="canvas-toolbar">
-                <button id="btn-add-text" class="btn btn-primary">
-                    <i class="fas fa-font"></i> Add Text
-                </button>
-                <button id="btn-add-bar" class="btn btn-primary">
-                    <i class="fas fa-chart-bar"></i> Add Bar Graph
-                </button>
+                <select id="add-element-select" class="form-control add-element-select">
+                    <option value="">+ Add Element…</option>
+                </select>
                 <button id="btn-clear-canvas" class="btn btn-outline-secondary">
                     <i class="fas fa-eraser"></i> Clear All
                 </button>

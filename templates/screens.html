@@ -1380,6 +1380,37 @@ function renderOledElement(ctx, el) {
             ctx.lineWidth = 1;
             break;
         }
+        case 'line': {
+            ctx.strokeStyle = white;
+            ctx.lineWidth = Math.max(1, el.width || 1);
+            ctx.beginPath();
+            ctx.moveTo((el.x1 || 0) + 0.5, (el.y1 || 0) + 0.5);
+            ctx.lineTo((el.x2 || 0) + 0.5, (el.y2 || 0) + 0.5);
+            ctx.stroke();
+            ctx.lineWidth = 1;
+            break;
+        }
+        case 'circle': {
+            const ccx = el.x !== undefined ? el.x : 32;
+            const ccy = el.y !== undefined ? el.y : 32;
+            const cr = el.radius || 10;
+            ctx.beginPath();
+            ctx.arc(ccx, ccy, cr, 0, Math.PI * 2);
+            if (el.filled) { ctx.fillStyle = white; ctx.fill(); }
+            else { ctx.strokeStyle = white; ctx.lineWidth = 1; ctx.stroke(); }
+            break;
+        }
+        case 'arc': {
+            const acx = el.x !== undefined ? el.x : 32;
+            const acy = el.y !== undefined ? el.y : 32;
+            const ar = el.radius || 10;
+            ctx.strokeStyle = white;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(acx, acy, ar, (el.start || 0) * Math.PI / 180, (el.end || 0) * Math.PI / 180);
+            ctx.stroke();
+            break;
+        }
         default:
             break;
     }
