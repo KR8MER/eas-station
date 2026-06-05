@@ -4,24 +4,107 @@
 
 {% block extra_css %}
 <style>
+    /* ── Pinout diagram (visual header map) ── */
+    .pinout-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 0.75rem;
+    }
+    .pinout-svg {
+        display: block;
+        width: 100%;
+        height: auto;
+        max-width: 880px;
+        margin: 0 auto;
+    }
+    .pin-chip rect.chip-bg {
+        stroke: var(--border-color);
+        stroke-width: 1;
+        transition: fill 0.2s ease;
+    }
+    .pin-chip .chip-name {
+        font-size: 11px;
+        font-weight: 600;
+        fill: var(--text-color);
+        font-family: var(--bs-font-sans-serif, system-ui, sans-serif);
+    }
+    .pin-chip .chip-tag {
+        font-size: 9.5px;
+        fill: var(--text-muted);
+        font-family: 'Courier New', monospace;
+        letter-spacing: 0.02em;
+    }
+    .pin-chip.power rect.chip-bg   { fill: color-mix(in srgb, var(--warning-color) 22%, var(--bg-card)); }
+    .pin-chip.ground rect.chip-bg  { fill: color-mix(in srgb, var(--text-muted) 18%, var(--bg-card)); }
+    .pin-chip.gpio rect.chip-bg    { fill: color-mix(in srgb, var(--primary-color) 14%, var(--bg-card)); }
+    .pin-chip.gpio.configured rect.chip-bg {
+        fill: color-mix(in srgb, var(--success-color) 30%, var(--bg-card));
+        stroke: var(--success-color);
+    }
+    .pin-chip.reserved rect.chip-bg {
+        fill: color-mix(in srgb, var(--text-muted) 12%, var(--bg-card));
+        stroke-dasharray: 4 3;
+    }
+    .num-circle circle {
+        fill: var(--bg-primary);
+        stroke: var(--border-color);
+        stroke-width: 1;
+    }
+    .num-circle text {
+        font-size: 10px;
+        font-weight: 700;
+        fill: #ffffff;
+        font-family: 'Courier New', monospace;
+    }
+    /* Live HIGH highlight on the diagram */
+    .pin-chip.live-high rect.chip-bg {
+        fill: var(--success-color);
+        stroke: var(--success-color);
+        filter: drop-shadow(0 0 4px var(--success-color));
+    }
+    .pin-chip.live-high .chip-name,
+    .pin-chip.live-high .chip-tag { fill: #04210f; }
+    .pin-chip.live-high.pps-pulsing-chip rect.chip-bg { animation: chip-pps 1s infinite; }
+    @keyframes chip-pps {
+        0%, 100% { opacity: 1; }
+        50%      { opacity: 0.45; }
+    }
+
+    /* Legend */
+    .pinout-legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem 1.25rem;
+        font-size: 0.8rem;
+        color: var(--text-muted);
+    }
+    .pinout-legend .swatch {
+        display: inline-block;
+        width: 14px; height: 14px;
+        border-radius: 3px;
+        border: 1px solid var(--border-color);
+        vertical-align: -2px;
+        margin-right: 0.35rem;
+    }
+    .swatch.power     { background: color-mix(in srgb, var(--warning-color) 22%, var(--bg-card)); }
+    .swatch.ground    { background: color-mix(in srgb, var(--text-muted) 18%, var(--bg-card)); }
+    .swatch.gpio      { background: color-mix(in srgb, var(--primary-color) 14%, var(--bg-card)); }
+    .swatch.configured{ background: color-mix(in srgb, var(--success-color) 30%, var(--bg-card)); border-color: var(--success-color); }
+    .swatch.reserved  { background: color-mix(in srgb, var(--text-muted) 12%, var(--bg-card)); border-style: dashed; }
+
+    /* ── Configurable GPIO pin cards ── */
+    .gpio-config-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+        gap: 1rem;
+    }
     .pin-card {
         border-left: 4px solid var(--primary-color);
         height: 100%;
         transition: all 0.3s ease;
     }
-    .pin-card.power { border-left-color: var(--warning-color); }
-    .pin-card.ground { border-left-color: var(--text-muted); }
     .pin-card.gpio.configured { border-left-color: var(--success-color); }
-    .pin-card.gpio:not(.configured) { border-left-color: var(--primary-color); }
-    .pin-card.reserved {
-        border-left-color: var(--text-muted);
-        background: linear-gradient(135deg, rgba(248, 249, 250, 0.85), rgba(222, 226, 230, 0.9));
-        filter: grayscale(0.2);
-    }
-    .pin-card.reserved .card-body {
-        opacity: 0.8;
-    }
-    .pin-card.gpio.has-behavior { 
+    .pin-card.gpio.has-behavior {
         border-left-color: var(--success-color);
         box-shadow: 0 0 0 2px color-mix(in srgb, var(--success-color) 15%, transparent);
     }
@@ -54,7 +137,6 @@
     }
     .state-high .state-dot { background: #3fb950; box-shadow: 0 0 5px #3fb950; }
     .state-low  .state-dot { background: var(--text-muted); }
-    /* PPS-specific pulsing animation */
     @keyframes pps-pulse {
         0%,100% { opacity: 1; box-shadow: 0 0 4px #3fb950; }
         50%      { opacity: 0.4; box-shadow: none; }
@@ -66,9 +148,9 @@
     }
     .behavior-grid {
         display: grid;
-        gap: 0.75rem;
+        gap: 0.6rem;
     }
-    @media (min-width: 768px) {
+    @media (min-width: 992px) {
         .behavior-grid {
             grid-template-columns: repeat(2, minmax(0, 1fr));
         }
@@ -84,27 +166,8 @@
         font-weight: 600;
         color: var(--success-color);
     }
-    .unsaved-changes {
-        position: fixed;
-        bottom: 20px;
-        right: 20px;
-        z-index: 1050;
-        display: none;
-    }
-    .unsaved-changes.show {
-        display: block;
-        animation: slideInRight 0.3s ease;
-    }
-    @keyframes slideInRight {
-        from {
-            transform: translateX(100%);
-            opacity: 0;
-        }
-        to {
-            transform: translateX(0);
-            opacity: 1;
-        }
-    }
+    /* Reserved / system pin reference table */
+    .ref-table td, .ref-table th { font-size: 0.85rem; }
 </style>
 {% endblock %}
 
@@ -114,7 +177,7 @@
         <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
             <div>
                 <h1 class="page-title mb-0"><i class="fas fa-map me-2"></i>GPIO Pin Map</h1>
-                <p class="page-subtitle mb-0">Assign alert behaviors to GPIO pins (physical pin numbers 1–40, BCM identifiers)</p>
+                <p class="page-subtitle mb-0">Visual Raspberry Pi 40-pin header &mdash; assign alert behaviors to GPIO pins</p>
             </div>
             <div class="page-header-actions">
                 <button class="btn btn-outline-light" id="reloadPinMap">
@@ -130,14 +193,7 @@
 <div class="container-fluid">
     <div id="pinMapAlert" class="alert d-none" role="alert"></div>
 
-    <!-- Live pin state banner -->
-    <div class="d-flex align-items-center gap-2 mb-2 live-states-banner">
-        <span id="live-state-indicator" class="text-muted">
-            <i class="fas fa-circle-notch fa-spin me-1"></i>Loading live pin states&hellip;
-        </span>
-    </div>
-    
-    <!-- Success toast notification -->
+    <!-- Success / error toasts -->
     <div class="position-fixed top-0 end-0 p-3" style="z-index: 9999;">
         <div id="saveSuccessToast" class="toast align-items-center text-bg-success border-0" role="alert" aria-live="assertive" aria-atomic="true">
             <div class="d-flex">
@@ -159,127 +215,175 @@
         </div>
     </div>
 
-    <div class="alert alert-info" role="alert">
-        <div class="d-flex align-items-start">
-            <i class="fas fa-info-circle me-2 mt-1"></i>
-            <div>
-                <strong>How to configure GPIO behaviors:</strong>
-                <ol class="mb-0 mt-2">
-                    <li>Select a behavior for each GPIO pin you want to use (or leave as "None" to disable)</li>
-                    <li>Click <strong>"Save Pin Map"</strong> to save pin behaviors and configuration</li>
-                    <li>Restart the service for changes to take effect: <code>sudo systemctl restart eas-station.target</code></li>
-                </ol>
-                <p class="mb-0 mt-2">
-                    <small class="text-muted">
-                        <i class="fas fa-lightbulb"></i> Tip: This page now assigns behaviors and automatically
-                        creates pin configuration defaults for selected GPIO pins.
-                    </small>
-                </p>
+    {#
+        Partition pins once so we can render a clean visual map of the whole
+        header and a focused configuration grid of only the pins you can change.
+    #}
+    {% set gpio_pins = [] %}
+    {% set reserved_pins = [] %}
+    {% for row in pin_rows %}
+        {% for side in ['left', 'right'] %}
+            {% set p = row[side] %}
+            {% if p.reserved_for %}
+                {% set _ = reserved_pins.append(p) %}
+            {% elif p.is_gpio and p.bcm is not none %}
+                {% set _ = gpio_pins.append(p) %}
+            {% endif %}
+        {% endfor %}
+    {% endfor %}
+
+    <!-- ───────────────── Visual pinout diagram ───────────────── -->
+    <div class="card pinout-card mb-4">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                <h2 class="h5 mb-0"><i class="fas fa-microchip me-2 text-primary"></i>Header layout</h2>
+                <span class="live-states-banner">
+                    <span id="live-state-indicator" class="text-muted">
+                        <i class="fas fa-circle-notch fa-spin me-1"></i>Loading live pin states&hellip;
+                    </span>
+                </span>
+            </div>
+
+            {% set row_h = 34 %}
+            {% set top = 12 %}
+            {% set svg_h = top * 2 + (pin_rows | length) * row_h %}
+            <svg class="pinout-svg" viewBox="0 0 800 {{ svg_h }}" role="img"
+                 aria-label="Raspberry Pi 40-pin GPIO header diagram">
+                <title>Raspberry Pi 40-pin GPIO header</title>
+                {% for row in pin_rows %}
+                {% set y = top + loop.index0 * row_h %}
+                {% set cy = y + 13 %}
+                {% for side in ['left', 'right'] %}
+                    {% set pin = row[side] %}
+                    {% if side == 'left' %}
+                        {% set chip_x = 8 %}
+                    {% else %}
+                        {% set chip_x = 444 %}
+                    {% endif %}
+                    <g class="pin-chip {{ pin.type }}{% if pin.configured %} configured{% endif %}{% if pin.reserved_for %} reserved{% endif %}"
+                       {% if pin.is_gpio and pin.bcm is not none %}id="diagram-pin-{{ pin.bcm }}" data-bcm="{{ pin.bcm }}"{% endif %}>
+                        <title>Pin {{ pin.physical }} — {{ pin.name }}{% if pin.reserved_for %} (reserved for {{ pin.reserved_for }}){% endif %}</title>
+                        <rect class="chip-bg" x="{{ chip_x }}" y="{{ y }}" width="348" height="26" rx="7"></rect>
+                        <text class="chip-name" x="{{ chip_x + 12 }}" y="{{ cy + 4 }}" text-anchor="start">{{ pin.name }}</text>
+                        <text class="chip-tag" x="{{ chip_x + 336 }}" y="{{ cy + 4 }}" text-anchor="end">{%- if pin.reserved_for -%}
+                                🔒{% if pin.bcm is not none %} BCM {{ pin.bcm }}{% endif %}
+                            {%- elif pin.is_gpio and pin.bcm is not none -%}
+                                BCM {{ pin.bcm }}{% if pin.configured %} ✓{% endif %}
+                            {%- elif pin.type == 'power' -%}
+                                PWR
+                            {%- elif pin.type == 'ground' -%}
+                                GND
+                            {%- endif -%}</text>
+                    </g>
+                {% endfor %}
+                <!-- physical pin numbers down the center -->
+                <g class="num-circle">
+                    <circle cx="378" cy="{{ cy }}" r="14"></circle>
+                    <text x="378" y="{{ cy + 3.5 }}" text-anchor="middle">{{ row.left.physical }}</text>
+                    <circle cx="422" cy="{{ cy }}" r="14"></circle>
+                    <text x="422" y="{{ cy + 3.5 }}" text-anchor="middle">{{ row.right.physical }}</text>
+                </g>
+                {% endfor %}
+            </svg>
+
+            <div class="pinout-legend mt-3 justify-content-center">
+                <span><span class="swatch power"></span>Power</span>
+                <span><span class="swatch ground"></span>Ground</span>
+                <span><span class="swatch gpio"></span>GPIO &mdash; available</span>
+                <span><span class="swatch configured"></span>GPIO &mdash; configured</span>
+                <span><span class="swatch reserved"></span>Reserved</span>
+                <span><i class="fas fa-bolt text-success me-1"></i>Glows green when a pin reads HIGH (live)</span>
             </div>
         </div>
     </div>
 
-    {% for row in pin_rows %}
-    <div class="row g-3 align-items-stretch mb-3">
-        {% for side in ['left', 'right'] %}
-        {% set pin = row[side] %}
-        <div class="col-12 col-md-6">
-            <div class="card pin-card {{ pin.type }} {% if pin.is_gpio %}gpio{% endif %} {% if pin.configured %}configured{% endif %} {% if pin.reserved_for %}reserved{% endif %}" data-physical="{{ pin.physical }}" {% if pin.is_gpio and pin.bcm is not none %}data-bcm="{{ pin.bcm }}"{% endif %}>
-                <div class="card-body d-flex flex-column h-100">
-                    <div class="d-flex justify-content-between align-items-start mb-2">
-                        <div>
-                            <span class="badge bg-primary me-2">Pin {{ pin.physical }}</span>
-                            <strong>{{ pin.name }}</strong>
-                            {% if pin.reserved_for %}
-                                <span class="badge bg-secondary ms-2">
-                                    <i class="fas fa-lock me-1"></i> Reserved
-                                </span>
-                            {% endif %}
-                        </div>
-                        {% if pin.is_gpio and pin.bcm is not none %}
+    <!-- ───────────────── Configure GPIO behaviors ───────────────── -->
+    <div class="alert alert-info" role="alert">
+        <div class="d-flex align-items-start">
+            <i class="fas fa-info-circle me-2 mt-1"></i>
+            <div>
+                <strong>Assign a behavior to the GPIO pins you want to use</strong>
+                <ol class="mb-0 mt-2">
+                    <li>Pick a behavior for each pin below (leave as <em>None</em> to disable it).</li>
+                    <li>Click <strong>Save Pin Map</strong> &mdash; pin configuration defaults are created automatically.</li>
+                    <li>Restart the service to apply: <code>sudo systemctl restart eas-station.target</code></li>
+                </ol>
+            </div>
+        </div>
+    </div>
+
+    <h2 class="h5 mb-3"><i class="fas fa-sliders me-2 text-primary"></i>Configurable GPIO pins
+        <span class="badge bg-secondary ms-1">{{ gpio_pins | length }}</span>
+    </h2>
+
+    <div class="gpio-config-grid">
+        {% for pin in gpio_pins %}
+        <div class="card pin-card gpio {% if pin.configured %}configured{% endif %}"
+             data-physical="{{ pin.physical }}" data-bcm="{{ pin.bcm }}">
+            <div class="card-body d-flex flex-column h-100">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <div>
+                        <span class="badge bg-primary me-2">Pin {{ pin.physical }}</span>
+                        <strong>{{ pin.name }}</strong>
+                    </div>
+                    <div class="text-nowrap">
                         <span class="badge bg-dark">BCM {{ pin.bcm }}</span>
-                        <span id="live-pin-{{ pin.bcm }}" class="pin-live-state state-low ms-2" title="Live electrical state">
+                        <span id="live-pin-{{ pin.bcm }}" class="pin-live-state state-low ms-1" title="Live electrical state">
                             <span class="state-dot"></span><span class="state-label">LOW</span>
                         </span>
-                        {% endif %}
                     </div>
+                </div>
 
-                    {% if pin.description %}
-                    <p class="text-muted small mb-2">{{ pin.description }}</p>
-                    {% endif %}
+                {% if pin.description %}
+                <p class="text-muted small mb-2">{{ pin.description }}</p>
+                {% endif %}
 
-                    {% if pin.reserved_for %}
-                        <div class="alert alert-warning small mb-0" role="status">
-                            <i class="fas fa-exclamation-triangle me-1"></i>
-                            Reserved for {{ pin.reserved_for }}
-                            {% if pin.reserved_detail %}
-                                <span class="d-block text-muted">{{ pin.reserved_detail }}</span>
-                            {% endif %}
-                        </div>
-                    {% elif not pin.is_gpio %}
-                        <div class="alert alert-light border-secondary small mb-0" role="status">
-                            {% if pin.type == 'power' %}
-                                <i class="fas fa-bolt"></i> Power rail
-                            {% elif pin.type == 'ground' %}
-                                <i class="fas fa-plug"></i> Ground reference
-                            {% else %}
-                                Non-GPIO function
-                            {% endif %}
-                        </div>
-                    {% elif pin.bcm is none %}
-                        <div class="alert alert-warning small mb-0" role="status">
-                            <i class="fas fa-exclamation-triangle"></i> GPIO mapping unavailable for this pin.
-                        </div>
+                <div class="mb-3">
+                    {% if pin.configured %}
+                        <span class="badge bg-success me-2">Configured</span>
+                        <span class="text-muted small">Active {{ 'HIGH' if pin.active_high else 'LOW' }}</span>
                     {% else %}
-                        <div class="mb-3">
-                            {% if pin.configured %}
-                                <span class="badge bg-success me-2">Configured</span>
-                                <span class="text-muted small">Active {{ 'HIGH' if pin.active_high else 'LOW' }}</span>
-                            {% else %}
-                                <span class="badge bg-secondary me-2">Not configured yet</span>
-                                <span class="text-muted small">Select a behavior and save on this page to configure this pin.</span>
-                            {% endif %}
-                        </div>
-
-                        <div class="behavior-grid" aria-label="Behaviors for GPIO {{ pin.bcm }}">
-                            <div class="form-check">
-                                <input class="form-check-input behavior-radio" type="radio"
-                                       name="pin{{ pin.bcm }}-behavior"
-                                       id="pin{{ pin.bcm }}-none"
-                                       data-bcm="{{ pin.bcm }}"
-                                       data-behavior=""
-                                       value=""
-                                       {% if not pin.behaviors %}checked{% endif %}>
-                                <label class="form-check-label behavior-label" for="pin{{ pin.bcm }}-none">
-                                    <span>None</span>
-                                    <small>No automatic behavior</small>
-                                </label>
-                            </div>
-                            {% for behavior in behavior_options %}
-                            <div class="form-check">
-                                <input class="form-check-input behavior-radio" type="radio"
-                                       name="pin{{ pin.bcm }}-behavior"
-                                       id="pin{{ pin.bcm }}-{{ behavior.value }}"
-                                       data-bcm="{{ pin.bcm }}"
-                                       data-behavior="{{ behavior.value }}"
-                                       value="{{ behavior.value }}"
-                                       {% if behavior.value in pin.behaviors %}checked{% endif %}>
-                                <label class="form-check-label behavior-label" for="pin{{ pin.bcm }}-{{ behavior.value }}">
-                                    <span>{{ behavior.label }}</span>
-                                    {% if behavior.description %}
-                                    <small>{{ behavior.description }}</small>
-                                    {% endif %}
-                                </label>
-                            </div>
-                            {% endfor %}
-                        </div>
+                        <span class="badge bg-secondary me-2">Not configured yet</span>
+                        <span class="text-muted small">Select a behavior and save to configure.</span>
                     {% endif %}
+                </div>
+
+                <div class="behavior-grid mt-auto" aria-label="Behaviors for GPIO {{ pin.bcm }}">
+                    <div class="form-check">
+                        <input class="form-check-input behavior-radio" type="radio"
+                               name="pin{{ pin.bcm }}-behavior"
+                               id="pin{{ pin.bcm }}-none"
+                               data-bcm="{{ pin.bcm }}"
+                               data-behavior=""
+                               value=""
+                               {% if not pin.behaviors %}checked{% endif %}>
+                        <label class="form-check-label behavior-label" for="pin{{ pin.bcm }}-none">
+                            <span>None</span>
+                            <small>No automatic behavior</small>
+                        </label>
+                    </div>
+                    {% for behavior in behavior_options %}
+                    <div class="form-check">
+                        <input class="form-check-input behavior-radio" type="radio"
+                               name="pin{{ pin.bcm }}-behavior"
+                               id="pin{{ pin.bcm }}-{{ behavior.value }}"
+                               data-bcm="{{ pin.bcm }}"
+                               data-behavior="{{ behavior.value }}"
+                               value="{{ behavior.value }}"
+                               {% if behavior.value in pin.behaviors %}checked{% endif %}>
+                        <label class="form-check-label behavior-label" for="pin{{ pin.bcm }}-{{ behavior.value }}">
+                            <span>{{ behavior.label }}</span>
+                            {% if behavior.description %}
+                            <small>{{ behavior.description }}</small>
+                            {% endif %}
+                        </label>
+                    </div>
+                    {% endfor %}
                 </div>
             </div>
         </div>
         {% endfor %}
     </div>
-    {% endfor %}
 
     <div class="d-flex justify-content-end gap-2 mt-4">
         <button class="btn btn-outline-secondary" id="clearPinMap">
@@ -289,6 +393,55 @@
             <i class="fas fa-save"></i> Save Pin Map
         </button>
     </div>
+
+    <!-- ───────────────── Reserved / system pins (reference only) ───────────────── -->
+    {% if reserved_pins %}
+    <div class="mt-4">
+        <button class="btn btn-link p-0 text-decoration-none" type="button"
+                data-bs-toggle="collapse" data-bs-target="#reservedPins"
+                aria-expanded="false" aria-controls="reservedPins">
+            <i class="fas fa-lock me-1"></i>Reserved &amp; system pins ({{ reserved_pins | length }})
+            <i class="fas fa-chevron-down ms-1 small"></i>
+        </button>
+        <div class="collapse" id="reservedPins">
+            <div class="card mt-2">
+                <div class="card-body">
+                    <p class="text-muted small mb-2">
+                        These pins are claimed by other hardware (e.g. the Argon OLED module) and
+                        cannot be assigned alert behaviors here.
+                    </p>
+                    <div class="table-responsive">
+                        <table class="table table-sm ref-table align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Pin</th>
+                                    <th>Name</th>
+                                    <th>BCM</th>
+                                    <th>Reserved for</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for pin in reserved_pins %}
+                                <tr>
+                                    <td><span class="badge bg-secondary">{{ pin.physical }}</span></td>
+                                    <td>{{ pin.name }}</td>
+                                    <td>{% if pin.bcm is not none %}<code>BCM {{ pin.bcm }}</code>{% else %}&mdash;{% endif %}</td>
+                                    <td>
+                                        {{ pin.reserved_for }}
+                                        {% if pin.reserved_detail %}
+                                        <span class="text-muted d-block small">{{ pin.reserved_detail }}</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}
 
@@ -303,17 +456,12 @@
     const existingPinConfigMap = {{ pin_config_map|tojson }};
 
     function showMessage(message, variant) {
-        console.log(`showMessage called: ${variant} - ${message}`);
-        if (!alertBox) { 
-            console.error('Alert box element not found');
-            return; 
-        }
+        if (!alertBox) { return; }
         alertBox.className = `alert alert-${variant}`;
         alertBox.textContent = message;
         alertBox.classList.remove('d-none');
-        console.log('Alert box updated successfully');
-        
-        // Also show toast notification
+
+        // Also surface as a toast notification
         try {
             if (variant === 'success') {
                 const toast = document.getElementById('saveSuccessToast');
@@ -321,11 +469,7 @@
                 if (toast && toastMessage) {
                     toastMessage.textContent = message;
                     if (typeof bootstrap !== 'undefined' && bootstrap.Toast) {
-                        const bsToast = new bootstrap.Toast(toast, { delay: 5000 });
-                        bsToast.show();
-                        console.log('Success toast shown');
-                    } else {
-                        console.warn('Bootstrap Toast not available');
+                        new bootstrap.Toast(toast, { delay: 5000 }).show();
                     }
                 }
             } else if (variant === 'danger') {
@@ -334,17 +478,12 @@
                 if (toast && errorMessage) {
                     errorMessage.textContent = message;
                     if (typeof bootstrap !== 'undefined' && bootstrap.Toast) {
-                        const bsToast = new bootstrap.Toast(toast, { delay: 8000 });
-                        bsToast.show();
-                        console.log('Error toast shown');
-                    } else {
-                        console.warn('Bootstrap Toast not available');
+                        new bootstrap.Toast(toast, { delay: 8000 }).show();
                     }
                 }
             }
         } catch (toastError) {
             console.error('Failed to show toast notification:', toastError);
-            // Don't let toast errors break the main flow
         }
     }
 
@@ -352,7 +491,7 @@
         if (!alertBox) { return; }
         alertBox.classList.add('d-none');
     }
-    
+
     function markUnsavedChanges() {
         hasUnsavedChanges = true;
         if (saveButton) {
@@ -360,7 +499,7 @@
             saveButton.classList.remove('btn-primary');
         }
     }
-    
+
     function clearUnsavedChanges() {
         hasUnsavedChanges = false;
         if (saveButton) {
@@ -368,13 +507,11 @@
             saveButton.classList.add('btn-primary');
         }
     }
-    
+
     function updateCardHighlights() {
-        // Highlight cards that have a behavior selected
         document.querySelectorAll('.pin-card.gpio').forEach(card => {
             const bcm = card.dataset.bcm;
             if (!bcm) return;
-            
             const selected = card.querySelector(`input[name="pin${bcm}-behavior"]:checked`);
             if (selected && selected.dataset.behavior) {
                 card.classList.add('has-behavior');
@@ -386,19 +523,15 @@
 
     function buildBehaviorMatrix() {
         const matrix = {};
-        // Get all unique BCM pins from radio buttons
         const pins = new Set();
         document.querySelectorAll('.behavior-radio').forEach((radio) => {
             if (radio.dataset.bcm) {
                 pins.add(radio.dataset.bcm);
             }
         });
-        
-        // For each pin, find the selected behavior
         pins.forEach((bcm) => {
             const selected = document.querySelector(`input[name="pin${bcm}-behavior"]:checked`);
             if (selected && selected.dataset.behavior) {
-                // Store as array with single value for backward compatibility
                 matrix[bcm] = [selected.dataset.behavior];
             }
         });
@@ -408,7 +541,6 @@
     function buildPinConfigMap(matrix) {
         const pinMap = { ...existingPinConfigMap };
 
-        // Keep existing configs, and auto-create defaults for any pin with a selected behavior.
         Object.keys(matrix).forEach((bcm) => {
             if (pinMap[bcm]) {
                 return;
@@ -424,7 +556,6 @@
             };
         });
 
-        // Remove unconfigured pins that have no behavior assignment and were never configured.
         Object.keys(pinMap).forEach((bcm) => {
             if (!matrix[bcm] && !existingPinConfigMap[bcm]) {
                 delete pinMap[bcm];
@@ -435,19 +566,12 @@
     }
 
     async function saveMatrix() {
-        console.log('saveMatrix function called');
         hideMessage();
-        if (!saveButton) {
-            console.error('Save button not found!');
-            alert('Error: Save button element not found');
-            return;
-        }
+        if (!saveButton) { return; }
         saveButton.disabled = true;
         saveButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Saving';
 
         const matrix = buildBehaviorMatrix();
-        console.log('Behavior matrix to save:', matrix);
-
         const pinConfigMap = buildPinConfigMap(matrix);
 
         const payload = {
@@ -455,42 +579,25 @@
             gpio_pin_map: JSON.stringify(pinConfigMap),
         };
 
-        console.log('Payload:', payload);
-
         try {
-            console.log('Starting fetch request to /admin/hardware/update...');
             const response = await fetch('/admin/hardware/update', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
-            console.log('Fetch completed');
-
-            console.log('Response status:', response.status);
 
             const responseClone = response.clone();
             let data;
             try {
                 data = await response.json();
-                console.log('Response data:', data);
             } catch (jsonError) {
-                console.error('Failed to parse response as JSON:', jsonError);
-                try {
-                    const text = await responseClone.text();
-                    console.error('Response text:', text);
-                    throw new Error(`Server returned non-JSON response (status ${response.status}): ${text.substring(0, 200)}`);
-                } catch (textError) {
-                    console.error('Failed to read response text:', textError);
-                    throw new Error(`Server returned non-JSON response (status ${response.status}) and failed to read response text`);
-                }
+                const text = await responseClone.text();
+                throw new Error(`Server returned non-JSON response (status ${response.status}): ${text.substring(0, 200)}`);
             }
 
             if (!response.ok) {
                 if (response.status === 401) {
                     const errorMsg = 'Authentication required. You are not logged in or your session has expired.';
-                    console.error('Auth error:', errorMsg);
                     showMessage(errorMsg, 'danger');
                     setTimeout(() => {
                         if (confirm(errorMsg + '\n\nRedirect to login page?')) {
@@ -500,7 +607,6 @@
                     throw new Error(errorMsg);
                 } else if (response.status === 403) {
                     const errorMsg = 'Permission denied. You need "system.configure" permission to save GPIO settings.';
-                    console.error('Permission error:', errorMsg);
                     showMessage(errorMsg, 'danger');
                     throw new Error(errorMsg);
                 } else if (data.error) {
@@ -515,7 +621,6 @@
             }
 
             const message = 'GPIO pin behaviors and pin configuration saved successfully! Restart services for changes to take effect.';
-            console.log('About to show success message:', message);
             showMessage(message, 'success');
 
             setTimeout(() => {
@@ -537,12 +642,8 @@
             clearUnsavedChanges();
         } catch (error) {
             console.error('Failed to save pin map', error);
-            console.error('Error stack:', error.stack);
-            const errorMsg = `Failed to save behavior map: ${error.message}`;
-            console.log('About to show error message:', errorMsg);
-            showMessage(errorMsg, 'danger');
+            showMessage(`Failed to save behavior map: ${error.message}`, 'danger');
         } finally {
-            console.log('saveMatrix finally block');
             if (saveButton) {
                 saveButton.disabled = false;
                 saveButton.innerHTML = '<i class="fas fa-save"></i> Save Pin Map';
@@ -551,7 +652,6 @@
     }
 
     function clearMatrix() {
-        // Set all pins back to "None"
         document.querySelectorAll('.behavior-radio').forEach((radio) => {
             if (radio.dataset.behavior === '') {
                 radio.checked = true;
@@ -561,8 +661,7 @@
         markUnsavedChanges();
         showMessage('Cleared selections. Remember to save to persist the changes.', 'warning');
     }
-    
-    // Listen for behavior changes
+
     document.querySelectorAll('.behavior-radio').forEach((radio) => {
         radio.addEventListener('change', () => {
             updateCardHighlights();
@@ -571,12 +670,7 @@
     });
 
     if (saveButton) {
-        saveButton.addEventListener('click', () => {
-            console.log('Save button clicked!');
-            saveMatrix();
-        });
-    } else {
-        console.error('Save button element not found during initialization');
+        saveButton.addEventListener('click', saveMatrix);
     }
     if (clearButton) {
         clearButton.addEventListener('click', clearMatrix);
@@ -584,11 +678,9 @@
     if (reloadButton) {
         reloadButton.addEventListener('click', () => window.location.reload());
     }
-    
-    // Initialize card highlights on load
+
     updateCardHighlights();
-    
-    // Warn about unsaved changes
+
     window.addEventListener('beforeunload', (e) => {
         if (hasUnsavedChanges) {
             e.preventDefault();
@@ -607,30 +699,36 @@
 
         Object.values(pins).forEach(function (info) {
             const bcm = info.bcm;
-            const el  = document.getElementById('live-pin-' + bcm);
-            if (!el) return;
-
             const isHigh = !!info.is_active;
             const isPps  = info.source === 'gps_pps';
-            const label  = el.querySelector('.state-label');
-            const dot    = el.querySelector('.state-dot');
 
-            if (isHigh) {
-                highCount++;
-                el.className = 'pin-live-state state-high ms-2' + (isPps ? ' pps-pulsing' : '');
-                if (label) label.textContent = isPps ? 'PPS ✓' : 'HIGH';
-                const age = info.pps_pulse_age_s;
-                if (isPps && age != null) {
-                    el.title = 'PPS — last pulse ' + age.toFixed(1) + 's ago';
+            // Card indicator
+            const el = document.getElementById('live-pin-' + bcm);
+            if (el) {
+                const label = el.querySelector('.state-label');
+                if (isHigh) {
+                    highCount++;
+                    el.className = 'pin-live-state state-high ms-1' + (isPps ? ' pps-pulsing' : '');
+                    if (label) label.textContent = isPps ? 'PPS ✓' : 'HIGH';
+                    const age = info.pps_pulse_age_s;
+                    el.title = (isPps && age != null)
+                        ? 'PPS — last pulse ' + age.toFixed(1) + 's ago'
+                        : 'Live electrical state: HIGH';
                 } else {
-                    el.title = 'Live electrical state: HIGH';
+                    el.className = 'pin-live-state state-low ms-1';
+                    if (label) label.textContent = isPps ? 'PPS' : 'LOW';
+                    el.title = isPps ? 'PPS input — no recent pulse' : 'Live electrical state: LOW';
                 }
-            } else {
-                el.className = 'pin-live-state state-low ms-2';
-                if (label) label.textContent = isPps ? 'PPS' : 'LOW';
-                el.title = isPps
-                    ? 'PPS input — no recent pulse'
-                    : 'Live electrical state: LOW';
+            } else if (isHigh) {
+                // Pin may be a reserved/system pin without a card (e.g. PPS input)
+                highCount++;
+            }
+
+            // Diagram chip highlight
+            const chip = document.getElementById('diagram-pin-' + bcm);
+            if (chip) {
+                chip.classList.toggle('live-high', isHigh);
+                chip.classList.toggle('pps-pulsing-chip', isHigh && isPps);
             }
         });
 
@@ -659,7 +757,6 @@
         }
     }
 
-    // Initial load + periodic refresh
     pollLivePinStates();
     setInterval(pollLivePinStates, POLL_INTERVAL_MS);
 })();
