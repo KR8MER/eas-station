@@ -1849,6 +1849,50 @@ def _resolve_mdc1200_op_for_position(op_code: str, position: str) -> str:
     return op_code
 
 
+def _mdc1200_meta_target_unit_id(
+    op_code: Optional[str],
+    op_code_raw: Optional[int],
+    arg_raw: Optional[int],
+    target_unit_id: Optional[int],
+) -> Optional[int]:
+    """Return the target unit ID to advertise in signaling metadata, or ``None``.
+
+    The target unit ID is only carried on the wire by the **double-packet**
+    ops (Call Alert / Selective Call) — see ``MDC1200_DOUBLE_PACKET_OPS`` and
+    ``generate_mdc1200_samples``.  Single-packet ops (PTT-ID Pre/Post,
+    Emergency, Request-to-Talk, Remote Monitor) have no destination field, so
+    the encoder silently ignores any configured target.
+
+    This mirrors that behaviour for the UI / PDF / log: a target is only
+    surfaced when the resolved op-code actually transmits one.  Without this
+    gate the manual-activation page advertised a phantom destination (for
+    example ``PTT-ID → 65535`` / ``0xFFFF``) that never goes on air, which
+    misled operators into thinking PTT-ID had a destination.
+
+    Raw op/arg bytes (the ``custom`` preset) take precedence over the named
+    preset, matching the op/arg resolution in :func:`_generate_chime`.
+    """
+    from app_utils.mdc1200 import is_double_packet_op, resolve_op_preset
+
+    if op_code_raw is not None and arg_raw is not None:
+        try:
+            op = int(op_code_raw) & 0xFF
+            arg = int(arg_raw) & 0xFF
+        except (TypeError, ValueError):
+            op, arg = resolve_op_preset(op_code or '')
+    else:
+        op, arg = resolve_op_preset(op_code or '')
+
+    if not is_double_packet_op(op, arg):
+        return None
+    if target_unit_id in (None, 0):
+        return None
+    try:
+        return int(target_unit_id)
+    except (TypeError, ValueError):
+        return None
+
+
 # Standard DTMF tone-pair frequency map: digit -> (low Hz, high Hz).
 # Source: ITU-T Recommendation Q.23 / Q.24.
 _DTMF_FREQUENCIES: Dict[str, Tuple[float, float]] = {
@@ -3225,9 +3269,11 @@ class EASAudioGenerator:
         if pre_chime_profile_norm == 'mdc1200' or post_chime_profile_norm == 'mdc1200':
             signaling_meta['mdc1200'] = {
                 'unit_id': int(mdc1200_unit_id or 0),
-                'target_unit_id': (
-                    int(mdc1200_target_unit_id)
-                    if mdc1200_target_unit_id not in (None, 0) else None
+                'target_unit_id': _mdc1200_meta_target_unit_id(
+                    mdc1200_op_code,
+                    mdc1200_op_code_raw,
+                    mdc1200_arg_raw,
+                    mdc1200_target_unit_id,
                 ),
                 'op_code': mdc1200_op_code,
                 'op_code_raw': (

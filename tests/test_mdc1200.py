@@ -324,6 +324,42 @@ def test_smart_pairing_handles_empty_and_case_insensitivity():
 
 
 # ---------------------------------------------------------------------------
+# Signaling-metadata target gating: a configured target unit ID must only be
+# advertised for double-packet ops (Call Alert / Selective Call).  PTT-ID and
+# the other single-packet ops have no destination field on the wire, so the
+# UI/PDF/log must not show a phantom target (e.g. "PTT-ID → 0xFFFF").
+# ---------------------------------------------------------------------------
+
+def test_meta_target_suppressed_for_single_packet_ops():
+    from app_utils.eas import _mdc1200_meta_target_unit_id
+    # PTT-ID Pre/Post and the other single-packet presets ignore the target
+    # on the wire, so the metadata must report None even when one is set.
+    for preset in ("ptt_id_pre", "ptt_id_post", "emergency",
+                   "request_to_talk", "remote_monitor"):
+        assert _mdc1200_meta_target_unit_id(preset, None, None, 0xFFFF) is None, preset
+        assert _mdc1200_meta_target_unit_id(preset, None, None, 0x1234) is None, preset
+
+
+def test_meta_target_kept_for_double_packet_ops():
+    from app_utils.eas import _mdc1200_meta_target_unit_id
+    # Call Alert / Selective Call genuinely carry the target on packet 2.
+    assert _mdc1200_meta_target_unit_id("call_alert", None, None, 0x2222) == 0x2222
+    assert _mdc1200_meta_target_unit_id("selective_call", None, None, 0xFFFF) == 0xFFFF
+    # A double-packet op with no target falls back to single-packet emission,
+    # so still nothing to advertise.
+    assert _mdc1200_meta_target_unit_id("call_alert", None, None, None) is None
+    assert _mdc1200_meta_target_unit_id("call_alert", None, None, 0) is None
+
+
+def test_meta_target_uses_raw_op_arg_bytes_for_custom_preset():
+    from app_utils.eas import _mdc1200_meta_target_unit_id
+    # Custom preset: raw op/arg bytes decide single vs double packet.
+    # 0x63/0x85 == Call Alert (double), 0x01/0x80 == PTT-ID Pre (single).
+    assert _mdc1200_meta_target_unit_id("custom", 0x63, 0x85, 0x2222) == 0x2222
+    assert _mdc1200_meta_target_unit_id("custom", 0x01, 0x80, 0x2222) is None
+
+
+# ---------------------------------------------------------------------------
 # Hex inputs (operators commonly copy MDC1200 unit IDs from Motorola CPS,
 # which displays them in 4-digit hex)
 # ---------------------------------------------------------------------------
