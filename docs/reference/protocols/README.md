@@ -15,6 +15,7 @@ protocol support. Operator-facing setup instructions live under
 |---|---|---|---|
 | **SAME** — Specific Area Message Encoding (FCC 47 CFR §11.31, NRSC-4-B §4) | [SAME.md](SAME.md) | AFSK · 520.83 baud · 2083.33 / 1562.5 Hz | `app_utils/eas_fsk.py`, `app_utils/eas.py`, `app_utils/eas_decode.py`, `app_utils/eas_demod.py` |
 | **MDC1200** — Motorola 1200-baud FFSK selective calling | [MDC1200.md](MDC1200.md) | FFSK · 1200 baud · 1200 / 1800 Hz | `app_utils/mdc1200.py` |
+| **Alpha M-Protocol** — Alpha Sign Communications Protocol (9708-8061F) for the Alpha 9120C LED sign | [ALPHA_M_PROTOCOL.md](ALPHA_M_PROTOCOL.md) | RS-232/RS-485 or TCP · framed serial | `scripts/led_sign_controller.py` |
 
 For the broader RBDS Annex-D treatment of SAME (as embedded in NRSC-4-B for
 FM broadcasters), see also [`../NRSC4B_SAME_STANDARD.md`](../NRSC4B_SAME_STANDARD.md).
