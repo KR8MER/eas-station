@@ -12,6 +12,7 @@ Wants=eas-station-web.service \
       eas-station-sdr.service \
       eas-station-audio.service \
       eas-station-eas.service \
+      eas-station-endec-feeds.service \
       eas-station-hardware.target \
       eas-station-poller.service \
       eas-station-hwsetup.service

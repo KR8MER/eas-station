@@ -372,6 +372,19 @@ def _store_received_alert(
             pass
 
 
+def _publish_endec_feed(status: str, alert: Dict[str, Any]) -> None:
+    """Best-effort emit of a Sage-ENDEC decoder-status event for this alert.
+
+    Feeds the configured TCP "device feeds" (Generic CGEN, News Feed, decoder
+    status, raw encoder). Never raises — feed delivery must not affect filtering.
+    """
+    try:
+        from app_core.audio.endec_feed_publisher import publish_from_alert
+        publish_from_alert(status, alert, logger_instance=logger)
+    except Exception:
+        pass
+
+
 def create_fips_filtering_callback(
     configured_fips_codes: List[str],
     forward_callback: Callable[[Dict[str, Any]], Any],
@@ -423,6 +436,7 @@ def create_fips_filtering_callback(
 
         # If no FIPS codes configured, accept ALL alerts
         if not configured_fips_codes:
+            _publish_endec_feed('match', alert)
             log.warning(
                 f"NO FIPS FILTERING - ACCEPTING ALL: Event={event_code} | "
                 f"Originator={originator} | FIPS={','.join(alert_fips_codes) or 'NONE'}"
@@ -472,6 +486,7 @@ def create_fips_filtering_callback(
 
         if matched_fips_list:
             # FIPS match - forward alert
+            _publish_endec_feed('match', alert)
             forwarding_reason = f"FIPS match: {', '.join(matched_fips_list)}"
             log.warning(
                 f"FIPS MATCH - FORWARDING: Event={event_code} | "
@@ -512,6 +527,7 @@ def create_fips_filtering_callback(
                 )
         else:
             # No FIPS match - ignore
+            _publish_endec_feed('nomatch', alert)
             log.info(
                 f"NO FIPS MATCH - IGNORING: Event={event_code} | "
                 f"Alert FIPS={','.join(alert_fips_codes) or 'NONE'}"

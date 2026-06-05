@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+
+{% block title %}ENDEC Device Feeds - Admin - EAS Station™{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="admin-page-header header-danger">
+    <div class="container">
+        <h1><i class="fas fa-plug"></i> ENDEC Device Feeds</h1>
+        <p class="mb-0">Stream alert text over TCP in Sage-ENDEC-compatible formats for character generators, newsroom software, and capture tools</p>
+    </div>
+</div>
+
+<div class="container-fluid">
+    <div class="row mt-4">
+        <div class="col-lg-8">
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="h5 mb-0"><i class="fas fa-sliders-h"></i> Feed Configuration</h4>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        <strong>What is this?</strong> Each feed opens a TCP port and pushes a copy of
+                        every alert event (sent, matched, not-matched, duplicate) to all connected
+                        clients, formatted like a Sage Digital ENDEC's serial device ports. Connect a
+                        character generator, newsroom system, or a simple <code>nc &lt;host&gt; &lt;port&gt;</code>
+                        to consume the stream. See the
+                        <a href="https://github.com/KR8MER/eas-station/blob/main/docs/reference/protocols/SAGE_ENDEC.md" target="_blank" rel="noopener">protocol reference</a>.
+                    </div>
+
+                    <form id="endec-feeds-form">
+                        <div class="mb-3">
+                            <label for="enabled" class="form-label">Enable Device Feeds</label>
+                            <select id="enabled" name="enabled" class="form-select" required>
+                                <option value="false">Disabled</option>
+                                <option value="true">Enabled</option>
+                            </select>
+                            <div class="form-text">
+                                Master switch. When disabled, no TCP listeners run regardless of the
+                                rows below.
+                            </div>
+                        </div>
+
+                        <table class="table table-sm align-middle" id="feeds-table">
+                            <thead>
+                                <tr>
+                                    <th style="width:28%">Name</th>
+                                    <th style="width:30%">Format</th>
+                                    <th style="width:18%">TCP Port</th>
+                                    <th style="width:12%">On</th>
+                                    <th style="width:12%"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="feeds-tbody"></tbody>
+                        </table>
+
+                        <button type="button" class="btn btn-outline-secondary btn-sm mb-3" onclick="addRow()">
+                            <i class="fas fa-plus"></i> Add Feed
+                        </button>
+
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Save Settings
+                            </button>
+                            <button type="button" class="btn btn-secondary" onclick="loadSettings()">
+                                <i class="fas fa-sync"></i> Reload
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card mb-4">
+                <div class="card-header bg-info text-white">
+                    <h4 class="h5 mb-0">Format Reference</h4>
+                </div>
+                <div class="card-body small">
+                    <p><strong>Generic CGEN</strong> — <code>&lt;STX&gt;&lt;sev&gt;&lt;text&gt;&lt;ETX&gt;</code>.
+                    Severity 1/2/3 sets the display colour. For character generators.</p>
+                    <p><strong>News Feed</strong> — text framed by
+                    <code>&lt;ENDECSTART&gt;…&lt;ENDECEND&gt;</code> for newsroom/wire software.</p>
+                    <p><strong>Decoder</strong> — status lines
+                    <code>local: / match: / nomatch: / dup:</code> plus the ZCZC header and
+                    plain-language text. Great for monitoring/observability.</p>
+                    <p><strong>Encoder</strong> — raw EAS byte mirror of outgoing alerts
+                    (<code>0xAB</code> preamble + ZCZC ×3 + NNNN ×3). External decoders / capture.</p>
+                    <hr>
+                    <p class="text-muted mb-0">A change here hot-reloads the
+                    <code>eas-station-endec-feeds</code> service — no restart needed.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const FEED_FORMATS = {{ feed_formats | tojson }};
+const FORMAT_LABELS = {
+    generic_cgen: 'Generic CGEN',
+    news_feed: 'News Feed',
+    decoder: 'Decoder status',
+    encoder: 'Raw EAS Encoder',
+};
+
+function escapeHtml(str) {
+    return String(str == null ? '' : str).replace(/[&<>"']/g, c => (
+        {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
+    ));
+}
+
+function formatOptions(selected) {
+    return FEED_FORMATS.map(f =>
+        `<option value="${f}" ${f === selected ? 'selected' : ''}>${escapeHtml(FORMAT_LABELS[f] || f)}</option>`
+    ).join('');
+}
+
+function addRow(feed) {
+    feed = feed || { name: '', format: FEED_FORMATS[0], port: '', enabled: true };
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+        <td><input type="text" class="form-control form-control-sm f-name" value="${escapeHtml(feed.name)}" placeholder="my-cg"></td>
+        <td><select class="form-select form-select-sm f-format">${formatOptions(feed.format)}</select></td>
+        <td><input type="number" class="form-control form-control-sm f-port" min="1" max="65535" value="${escapeHtml(feed.port)}" placeholder="9601"></td>
+        <td class="text-center"><input type="checkbox" class="form-check-input f-enabled" ${feed.enabled ? 'checked' : ''}></td>
+        <td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger" title="Remove"><i class="fas fa-trash"></i></button></td>`;
+    tr.querySelector('button').addEventListener('click', () => tr.remove());
+    document.getElementById('feeds-tbody').appendChild(tr);
+}
+
+function collectFeeds() {
+    const feeds = [];
+    for (const tr of document.querySelectorAll('#feeds-tbody tr')) {
+        const name = tr.querySelector('.f-name').value.trim();
+        const format = tr.querySelector('.f-format').value;
+        const portRaw = tr.querySelector('.f-port').value;
+        const enabled = tr.querySelector('.f-enabled').checked;
+        if (!portRaw) continue;  // skip empty rows
+        feeds.push({ name: name || format, format, port: parseInt(portRaw, 10), enabled });
+    }
+    return feeds;
+}
+
+async function loadSettings() {
+    try {
+        const response = await fetch('/api/admin/endec_feeds/settings');
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        document.getElementById('enabled').value = data.enabled ? 'true' : 'false';
+        const tbody = document.getElementById('feeds-tbody');
+        tbody.innerHTML = '';
+        (data.feeds || []).forEach(addRow);
+        if ((data.feeds || []).length === 0) addRow();
+        showToast('Settings loaded', 'success');
+    } catch (error) {
+        console.error('Error loading settings:', error);
+        showToast(`Error loading settings: ${error.message}`, 'danger');
+    }
+}
+
+async function saveSettings(event) {
+    event.preventDefault();
+    const payload = {
+        enabled: document.getElementById('enabled').value === 'true',
+        feeds: collectFeeds(),
+    };
+    try {
+        const response = await fetch('/api/admin/endec_feeds/settings', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Failed to save settings');
+        showToast('Settings saved — feed service reloaded', 'success');
+        await loadSettings();
+    } catch (error) {
+        console.error('Error saving settings:', error);
+        showToast(`Error saving settings: ${error.message}`, 'danger');
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    loadSettings();
+    document.getElementById('endec-feeds-form').addEventListener('submit', saveSettings);
+});
+</script>
+{% endblock %}

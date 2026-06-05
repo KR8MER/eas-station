@@ -425,6 +425,33 @@ def is_duplicate_broadcast(
     return False
 
 
+def _publish_endec_feed(
+    status: str,
+    *,
+    header: str = "",
+    event_code: str = "",
+    text: str = "",
+    station_id: str = "",
+    log=None,
+) -> None:
+    """Best-effort emit of a Sage-ENDEC ``local``/``dup`` event for the device feeds.
+
+    Never raises — feed delivery must not affect the broadcast pipeline.
+    """
+    try:
+        from app_core.audio.endec_feed_publisher import publish_feed_event
+        publish_feed_event(
+            status,
+            header=header or "",
+            event_code=event_code or "",
+            text=text or "",
+            station_id=station_id or "",
+            logger_instance=log or logger,
+        )
+    except Exception:
+        pass
+
+
 def auto_forward_cap_alert(
     cap_alert,
     alert_data: Dict[str, Any],
@@ -652,6 +679,10 @@ def auto_forward_cap_alert(
                 )
                 log.info("Auto-forward skipped for %s: %s", result['identifier'], reason)
                 result['reason'] = reason
+                _publish_endec_feed(
+                    'dup', event_code=event_code,
+                    text=f"Duplicate {event_code} suppressed.", log=log,
+                )
                 _update_cap_forwarding_status(cap_alert, db_session, False, reason, log)
                 return result
 
@@ -726,6 +757,14 @@ def auto_forward_cap_alert(
             result['same_header'] = broadcast_result.get('same_header')
             result['event_code'] = broadcast_result.get('event_code')
             result['record_id'] = broadcast_result.get('record_id')
+            _publish_endec_feed(
+                'local',
+                header=broadcast_result.get('same_header', ''),
+                event_code=broadcast_result.get('event_code', '') or event_code,
+                text=(getattr(cap_alert, 'headline', '') or '').strip(),
+                station_id=str(eas_config.get('station_id', '') or ''),
+                log=log,
+            )
             _update_cap_forwarding_status(
                 cap_alert, db_session, True, reason, log,
                 audio_url=broadcast_result.get('audio_path'),
@@ -886,6 +925,10 @@ def auto_forward_ota_alert(
                     f"for the same alert within {HEADER_KEY_DEDUP_WINDOW_MINUTES}min"
                 )
                 log.info("OTA auto-forward skipped: %s", result['reason'])
+                _publish_endec_feed(
+                    'dup', header=raw_same_header or '', event_code=event_code,
+                    text=f"Duplicate {event_code} suppressed.", log=log,
+                )
                 return result
 
         # Build a CAPAlert-like object from OTA alert data
@@ -1025,6 +1068,14 @@ def auto_forward_ota_alert(
             result['forwarded'] = True
             result['same_header'] = broadcast_result.get('same_header')
             result['record_id'] = broadcast_result.get('record_id')
+            _publish_endec_feed(
+                'local',
+                header=broadcast_result.get('same_header', '') or (raw_same_header or ''),
+                event_code=broadcast_result.get('event_code', '') or event_code,
+                text=(alert_object.headline or '').strip(),
+                station_id=str(eas_config.get('station_id', '') or ''),
+                log=log,
+            )
 
             # Send email/SMS notifications for this broadcast
             try:

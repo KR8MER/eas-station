@@ -51,6 +51,7 @@ from .tailscale import register_tailscale_routes
 from .poller import poller_bp
 from .mail_server import register_mail_server_routes
 from .eas_decoder_monitor import register_blueprint as register_eas_decoder_monitor_routes
+from .endec_feeds import register_blueprint as register_endec_feeds_routes
 
 
 def register(app, logger):
@@ -91,6 +92,7 @@ def register(app, logger):
     register_tailscale_routes(app, logger)  # Tailscale VPN configuration
     register_mail_server_routes(app, logger)  # Local Postfix mail server management
     register_eas_decoder_monitor_routes(app)  # EAS decoder audio monitor settings
+    register_endec_feeds_routes(app)  # Sage-ENDEC-compatible TCP device feeds
 
     # Note: Audio controller initialization removed for separated architecture.
     # In separated architecture, audio processing runs in dedicated audio-service process.

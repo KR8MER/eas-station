@@ -702,6 +702,18 @@ class EASSettings(db.Model):
     # Event codes to auto-forward from CAP/OTA sources. Empty list = forward all.
 
     # ========================================================================
+    # ENDEC Device Feeds (Sage-ENDEC-compatible serial/TCP output)
+    # ========================================================================
+    endec_feeds_enabled = db.Column(db.Boolean, nullable=False, default=False)
+    # Master switch for the ENDEC device-feed TCP service.
+
+    endec_feeds = db.Column(JSONB, nullable=False, default=list)
+    # List of configured feeds. Each item is a dict:
+    #   {"name": str, "format": str, "port": int, "enabled": bool}
+    # where format is one of generic_cgen | news_feed | decoder | encoder.
+    # See app_utils/endec_feeds.py and docs/reference/protocols/SAGE_ENDEC.md.
+
+    # ========================================================================
     # Metadata
     # ========================================================================
     updated_at = db.Column(
@@ -748,6 +760,8 @@ class EASSettings(db.Model):
             "authorized_fips_codes": list(self.authorized_fips_codes or []),
             "authorized_event_codes": list(self.authorized_event_codes or []),
             "forwarded_event_codes": list(self.forwarded_event_codes or []),
+            "endec_feeds_enabled": bool(self.endec_feeds_enabled),
+            "endec_feeds": list(self.endec_feeds or []),
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
 
