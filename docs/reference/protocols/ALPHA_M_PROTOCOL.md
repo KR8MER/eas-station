@@ -12,6 +12,13 @@
 Status legend: ✅ conformant · ⚠️ partial / misleading · ❌ non‑conformant
 (wire bug) · ⬜ not implemented.
 
+> **Remediation status (June 2026):** the P0–P2 issues called out below have
+> been fixed in `scripts/led_sign_controller.py` and are covered by
+> `tests/test_alpha_mprotocol.py` (checksum verified against the p.60
+> `AAHELLO → 01FB` example). The ❌/⚠️ entries below are retained as the
+> historical audit and to document *why* each change was made; the "what it
+> used to do" descriptions refer to the pre‑fix code.
+
 ---
 
 ## 1. Transmission packet structure
@@ -243,25 +250,32 @@ dimensions/dot‑data format and a preceding memory‑config write.
 
 ---
 
-## 7. Prioritised remediation plan
+## 7. Remediation status
 
-1. **P0 — Checksum** (`_calculate_checksum`, 954): 16‑bit SUM, STX→ETX
-   inclusive, 4 hex digits. Validate against the p.60 worked example
-   (`AAHELLO` → `01FB`). *Without this, checksummed frames are rejected.*
-2. **P0 — `set_brightness`**: stop emitting `E$` (Clear Memory). Re‑point to
-   `E/` (0x2F) `WWww`; document Solar‑only.
-3. **P1 — Speed**: single byte `0x15`–`0x19`.
-4. **P1 — Character flash / attributes**: real codes (flash `0x07`+`'1'`,
-   wide `0x11/0x12`, descenders `0x06`+`'1'`, spacing `0x1E`+`'0'/'1'`). Fixes
-   emergency‑alert flashing.
-5. **P1 — Special‑function codes/data**: DOW → `E&` data `'1'`–`'7'`; Speaker
-   → `E!` data `'00'`/`'FF'`; Time format → fix inversion; split time/date into
-   `E␠`(`HhMm`) and `E;`(`mmddyy`); replace `set_run_mode` with Run
-   Sequence/Time‑table commands.
-6. **P2 — Housekeeping (new):** Soft Reset `E,`; Set Serial Address `E7` (2 hex);
-   Set Memory Configuration `E$ FTPSIZEQQQQ` (guard destructive `E$`-clear
-   behind explicit confirm); Run Time `E)` / Run Day `E2` tables.
-7. **P3 — Font enum names**; STRING files + Call String; Call Date `0x0B`.
+| # | Item | Status |
+|---|---|---|
+| P0 | **Checksum** → 16‑bit SUM over STX→ETX inclusive, 4 hex digits (`_calculate_checksum`) | ✅ done (test: `AAHELLO → 01FB`) |
+| P0 | **`set_brightness`** no longer emits `E$` (Clear Memory); now `E/` `WWww` | ✅ done |
+| P1 | **Speed** → single byte `0x15`–`0x19` | ✅ done |
+| P1 | **Character attributes** → flash `0x07`+`'1'`, wide `0x11/0x12`, descenders `0x06`+`'1'`, spacing `0x1E`+`'0'/'1'` (fixes alert flashing) | ✅ done |
+| P1 | **Day of Week** → `E&` data `'1'`–`'7'` | ✅ done |
+| P1 | **Speaker** → `E!` data `'00'`/`'FF'` | ✅ done |
+| P1 | **Time format** inversion fixed (`'M'`=24h, `'S'`=am/pm) | ✅ done |
+| P1 | **Time/date** split into Set Time of Day `E␠`(`HhMm`) + Set Date `E;`(`mmddyy`) | ✅ done |
+| P1 | **`set_run_mode`** no longer emits a malformed `0x2E` frame (now a logged no‑op) | ✅ done |
+| P2 | **Soft Reset** `E,` | ✅ done |
+| P2 | **Set Serial Address** `E7` (2 hex) | ✅ done |
+| P2 | **Set Memory Configuration** `E$ FTPSIZEQQQQ` + guarded **Clear Memory** | ✅ done |
+| P2 | **Run Time Table** `E)` / **Run Day Table** `E2` | ✅ done |
+| P3 | Font enum names; STRING files + Call String; Call Date `0x0B`; counters; large/RGB dots | ⬜ deferred |
+
+Implemented in `scripts/led_sign_controller.py`; verified by
+`tests/test_alpha_mprotocol.py`.
+
+> **Hardware note:** the brightness/dimming register (`E/`) is, per the
+> manual, only effective on Solar signs; a standard 9120C may ignore it.
+> The SMALL DOTS picture format (§5) remains **unverified** against the spec
+> and should be bench‑tested before relying on it.
 
 ---
 
