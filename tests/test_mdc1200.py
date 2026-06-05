@@ -708,6 +708,63 @@ def test_decode_all_mdc1200_recovers_ptt_id_pre_and_post():
     assert packets[1].crc_ok
 
 
+def test_decode_all_mdc1200_recovers_post_burst_with_clipped_post_preamble():
+    """The trailing post-alert PTT-ID burst must still decode when its
+    4-byte post-preamble (pure mark tone, no data) is clipped.
+
+    EAS Station emits the post-alert MDC burst at the very end of the
+    composite with no trailing audio, so a recording that ends at the
+    packet boundary — or that a lossy re-encode trims by a few samples —
+    loses the final mark-tone bits.  The strict ``decode_packet``
+    post-preamble check used to reject the whole burst on that account,
+    dropping the Post packet so the decoder UI showed only PTT-ID Pre.
+    """
+    import numpy as np
+
+    sr = 16000
+    amp = 0.7 * 32767
+    unit_id = 0xBEEF
+
+    pre = generate_mdc1200_samples(0x01, 0x80, unit_id, sr, amp)
+    post = generate_mdc1200_samples(0x00, 0x80, unit_id, sr, amp)
+    silence = [0] * (sr * 2)
+
+    full = list(pre) + silence + list(post)
+    # Clip the tail by ~20 samples (less than two bit periods) — enough to
+    # destroy the trailing post-preamble but not the payload or its CRC.
+    clipped = full[: len(full) - 20]
+    waveform = np.array(clipped, dtype=np.float32) / 32768.0
+
+    packets = decode_all_mdc1200_from_samples(waveform, sr)
+    assert len(packets) == 2, f"Expected Pre + Post, got {len(packets)} packets"
+    assert packets[0].opcode == 0x01 and packets[0].crc_ok
+    assert packets[1].opcode == 0x00 and packets[1].arg == 0x80
+    assert packets[1].unit_id == unit_id
+    assert packets[1].crc_ok and packets[1].fec_ok
+
+
+def test_decode_all_mdc1200_rejects_burst_truncated_into_payload():
+    """Recovery of a clipped post-preamble must not fabricate a packet when
+    the truncation reaches into the payload — the CRC/FEC guard rejects it
+    rather than emitting a phantom burst with corrupt data."""
+    import numpy as np
+
+    sr = 16000
+    amp = 0.7 * 32767
+
+    pre = generate_mdc1200_samples(0x01, 0x80, 0xBEEF, sr, amp)
+    post = generate_mdc1200_samples(0x00, 0x80, 0xBEEF, sr, amp)
+    full = list(pre) + [0] * (sr * 2) + list(post)
+    # Drop far more than the 32-bit post-preamble (~426 samples) so the cut
+    # eats into the FEC/CRC payload of the final burst.
+    clipped = full[: len(full) - 700]
+    waveform = np.array(clipped, dtype=np.float32) / 32768.0
+
+    packets = decode_all_mdc1200_from_samples(waveform, sr)
+    assert len(packets) == 1, f"Corrupt tail must be rejected, got {len(packets)}"
+    assert packets[0].opcode == 0x01 and packets[0].crc_ok
+
+
 def test_decode_single_packet_is_not_misread_as_double_packet():
     """A single-packet PTT-ID Pre must not be promoted into a double-
     packet decode just because its trailing 4-byte 0x00 post-preamble
