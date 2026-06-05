@@ -15,6 +15,7 @@ import logging
 import os
 import re
 import shutil
+import socket
 import subprocess
 from typing import Optional, Dict, Any, List, Tuple
 
@@ -22,6 +23,56 @@ logger = logging.getLogger(__name__)
 
 # Hostname validation pattern (RFC 1123)
 HOSTNAME_PATTERN = re.compile(r'^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$')
+
+
+def enable_tcp_keepalive(
+    sock: "socket.socket",
+    *,
+    idle: int = 30,
+    interval: int = 10,
+    count: int = 3,
+) -> bool:
+    """Turn on TCP keep-alive probes for a connected stream socket.
+
+    EAS Station talks to RS-232↔Ethernet adapters (LED signs, VFD
+    displays) as a TCP *client* and then holds that one connection open,
+    often idle for long stretches between alerts.  Without keep-alive,
+    a connection that silently goes half-open (adapter reboot, WiFi
+    blip, NAT idle-timeout) is only discovered on the *next* write — by
+    which point that frame is already lost.
+
+    Enabling ``SO_KEEPALIVE`` makes the OS probe the link during idle so
+    a dead adapter is detected within ``idle + interval * count`` seconds
+    and the controller can reconnect, while a healthy idle connection is
+    kept alive so the adapter never reaps it as stale.
+
+    The per-probe tuning options (``TCP_KEEPIDLE`` / ``TCP_KEEPINTVL`` /
+    ``TCP_KEEPCNT``) are Linux-specific; they are applied best-effort and
+    silently skipped on platforms that lack them.  Returns ``True`` if
+    ``SO_KEEPALIVE`` itself was set.
+    """
+    try:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+    except OSError as exc:
+        logger.debug("Could not enable SO_KEEPALIVE: %s", exc)
+        return False
+
+    # Linux-only fine-tuning; absence of any constant just means we keep
+    # the OS defaults for that knob.
+    for opt_name, value in (
+        ("TCP_KEEPIDLE", idle),
+        ("TCP_KEEPINTVL", interval),
+        ("TCP_KEEPCNT", count),
+    ):
+        opt = getattr(socket, opt_name, None)
+        if opt is None:
+            continue
+        try:
+            sock.setsockopt(socket.IPPROTO_TCP, opt, value)
+        except OSError as exc:  # pragma: no cover - platform dependent
+            logger.debug("Could not set %s: %s", opt_name, exc)
+
+    return True
 
 # Cached nmcli availability
 _nmcli_available: Optional[bool] = None

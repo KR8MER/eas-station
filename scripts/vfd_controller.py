@@ -146,6 +146,18 @@ class NoritakeVFDController:
                     stopbits=serial.STOPBITS_ONE,
                     timeout=self.timeout
                 )
+                # Enable TCP keep-alive on the underlying socket so a
+                # half-open link to the serial-to-Ethernet adapter is
+                # detected and reconnected rather than silently dropped.
+                # pyserial's socket:// handler exposes the raw socket as
+                # ``_socket``; guard in case that internal changes.
+                try:
+                    from app_utils.network import enable_tcp_keepalive
+                    raw_sock = getattr(self.serial, "_socket", None)
+                    if raw_sock is not None:
+                        enable_tcp_keepalive(raw_sock)
+                except Exception as exc:  # pragma: no cover - best effort
+                    logger.debug(f"TCP keep-alive not enabled for VFD: {exc}")
                 logger.info(f"Connecting to VFD via TCP socket: {self.port}")
             else:
                 # Traditional serial port connection
