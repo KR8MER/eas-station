@@ -738,6 +738,14 @@ class Alpha9120CController:
                 self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 self.socket.settimeout(self.timeout)
                 self.socket.connect((self.host, self.port))
+                # Keep the (usually idle) link to the serial-to-Ethernet
+                # adapter alive so a half-open connection is detected and
+                # reconnected instead of silently swallowing the next frame.
+                try:
+                    from app_utils.network import enable_tcp_keepalive
+                    enable_tcp_keepalive(self.socket)
+                except Exception as exc:  # pragma: no cover - best effort
+                    self.logger.debug("TCP keep-alive not enabled: %s", exc)
                 self.connected = True
                 self.logger.info(
                     "Connected to Alpha 9120C at %s:%s", self.host, self.port
