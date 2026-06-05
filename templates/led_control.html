@@ -1760,7 +1760,7 @@ const modeDescriptions = {
     'WIPE_RIGHT': 'Wipe from left to right', 'WIPE_UP': 'Wipe from bottom to top', 'WIPE_DOWN': 'Wipe from top to bottom',
     'AUTO_MODE': 'Automatic mode cycling', 'ROLL_IN': 'Roll to center', 'ROLL_OUT': 'Roll from center',
     'WIPE_IN': 'Wipe to center', 'WIPE_OUT': 'Wipe from center', 'COMPRESSED_ROTATE': 'Compressed rotation',
-    'EXPLODE': 'Exploding text effect', 'CLOCK': 'Clock display mode',
+    'EXPLODE': 'Exploding text effect', 'CLOCK': 'Clock-style radial wipe reveal',
     // Special "string" modes (Alpha 'n' modes) — hardware/firmware dependent
     'TWINKLE': 'Characters twinkle in brightness', 'SPARKLE': 'Sparkling shimmer effect',
     'SNOW': 'Snowfall over the text', 'INTERLOCK': 'Characters interlock into place',
@@ -3745,11 +3745,26 @@ class LEDSignSimulator {
                 break;
             }
 
-            // ── CLOCK — shows live time ──
+            // ── CLOCK — radial "clock wipe" reveal (sweeps in like a clock hand) ──
             case 'CLOCK': {
-                const now = new Date();
-                const ts2 = now.toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false});
-                ctx.fillText(ts2, x + 8, midY);
+                if (!text) break;
+                const phase = (t % dur) / dur;
+                const sweep = phase < 0.85 ? (phase / 0.85) : 1;   // reveal, then hold
+                ctx.restore(); ctx.save();
+                ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+                if (sweep < 1) {
+                    const cx = x + w / 2, cy = midY;
+                    const start = -Math.PI / 2;                    // start at 12 o'clock
+                    ctx.beginPath();
+                    ctx.moveTo(cx, cy);
+                    ctx.arc(cx, cy, Math.hypot(w, h), start, start + sweep * Math.PI * 2, false);
+                    ctx.closePath();
+                    ctx.clip();
+                }
+                ctx.font = `bold ${fontSize}px 'Courier New', monospace`;
+                ctx.textBaseline = 'middle';
+                ctx.fillStyle = fill; ctx.shadowColor = shadow; ctx.shadowBlur = 10;
+                ctx.fillText(text, x + 8, midY);
                 break;
             }
 
