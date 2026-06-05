@@ -1006,7 +1006,7 @@ OLED_EAS_DECODER = {
         ],
     },
     "data_sources": [
-        {"endpoint": "/api/eas/monitor", "var_name": "eas_monitor"},
+        {"endpoint": "/api/eas-monitor/status", "var_name": "eas_monitor"},
     ],
 }
 
@@ -1060,6 +1060,243 @@ OLED_RECEIVERS = {
     },
     "data_sources": [
         {"endpoint": "/api/monitoring/radio", "var_name": "radio"},
+    ],
+}
+
+
+# GPS / timing receiver status — fix quality, position, satellites, accuracy.
+OLED_GPS_STATUS = {
+    "name": "oled_gps_status",
+    "description": "GPS fix quality, latitude/longitude, satellites in use, and HDOP.",
+    "display_type": "oled",
+    "enabled": True,
+    "priority": 2,
+    "refresh_interval": 5,
+    "duration": 12,
+    "template_data": {
+        "clear": True,
+        "elements": [
+            {"type": "rectangle", "x": 0, "y": 0, "width": 128, "height": 12, "filled": True},
+            {"type": "icon", "name": "network", "x": 2, "y": 2, "size": 9},
+            {"type": "text", "text": "GPS", "x": 13, "y": 1, "font": "small", "invert": True},
+            {
+                "type": "text", "text": "{gps.fix_quality}",
+                "x": 125, "y": 1, "font": "small", "invert": True,
+                "align": "right", "max_width": 80, "overflow": "trim",
+            },
+            # Position block
+            {"type": "text", "text": "Lat", "x": 2, "y": 15, "font": "small"},
+            {
+                "type": "text", "text": "{gps.latitude:.5f}",
+                "x": 125, "y": 15, "font": "small", "align": "right",
+                "max_width": 100, "overflow": "trim",
+            },
+            {"type": "text", "text": "Lon", "x": 2, "y": 26, "font": "small"},
+            {
+                "type": "text", "text": "{gps.longitude:.5f}",
+                "x": 125, "y": 26, "font": "small", "align": "right",
+                "max_width": 100, "overflow": "trim",
+            },
+            {"type": "text", "text": "Alt", "x": 2, "y": 37, "font": "small"},
+            {
+                "type": "text", "text": "{gps.altitude_m:.0f} m",
+                "x": 125, "y": 37, "font": "small", "align": "right",
+                "max_width": 100, "overflow": "trim",
+            },
+            {"type": "hline", "x": 0, "y": 49, "width": 128},
+            {"type": "icon", "name": "antenna", "x": 2, "y": 52, "size": 9},
+            {"type": "text", "text": "{gps.satellites} sats", "x": 13, "y": 53, "font": "small"},
+            {
+                "type": "text", "text": "HDOP {gps.hdop}",
+                "x": 125, "y": 53, "font": "small", "align": "right",
+                "max_width": 70, "overflow": "trim",
+            },
+        ],
+    },
+    "data_sources": [
+        {"endpoint": "/api/hardware/gps/status", "var_name": "gps"},
+    ],
+}
+
+# SAME/AFSK decoder pipeline — sync state, message-in-progress, throughput.
+OLED_DECODER = {
+    "name": "oled_decoder",
+    "description": "EAS SAME/AFSK decoder sync state, bytes decoded, alerts, and scans.",
+    "display_type": "oled",
+    "enabled": True,
+    "priority": 2,
+    "refresh_interval": 3,
+    "duration": 12,
+    "template_data": {
+        "clear": True,
+        "elements": [
+            {"type": "rectangle", "x": 0, "y": 0, "width": 128, "height": 12, "filled": True},
+            {"type": "icon", "name": "antenna", "x": 2, "y": 2, "size": 9},
+            {"type": "text", "text": "DECODER", "x": 13, "y": 1, "font": "small", "invert": True},
+            {
+                "type": "text", "text": "{eas.mode}",
+                "x": 125, "y": 1, "font": "small", "invert": True,
+                "align": "right", "max_width": 70, "overflow": "trim",
+            },
+            # Health bar
+            {"type": "text", "text": "Health", "x": 2, "y": 15, "font": "small"},
+            {"type": "bar", "value": "{eas.health_percentage}", "x": 44, "y": 15, "width": 54, "height": 10},
+            {
+                "type": "text", "text": "{eas.health_percentage}%",
+                "x": 125, "y": 15, "font": "small", "align": "right",
+                "max_width": 26, "overflow": "trim",
+            },
+            # Sync + message state
+            {"type": "icon", "name": "check", "x": 2, "y": 28, "size": 8},
+            {"type": "text", "text": "Sync {eas.decoder_synced}", "x": 12, "y": 28, "font": "small"},
+            {
+                "type": "text", "text": "Msg {eas.decoder_in_message}",
+                "x": 125, "y": 28, "font": "small", "align": "right",
+                "max_width": 70, "overflow": "trim",
+            },
+            {"type": "dotted_hline", "x": 0, "y": 39, "width": 128},
+            {"type": "icon", "name": "warning", "x": 2, "y": 41, "size": 8},
+            {"type": "text", "text": "{eas.alerts_detected} alerts", "x": 12, "y": 41, "font": "small"},
+            {
+                "type": "text", "text": "{eas.scans_performed} scans",
+                "x": 125, "y": 41, "font": "small", "align": "right",
+                "max_width": 80, "overflow": "trim",
+            },
+            {
+                "type": "text", "text": "Bytes {eas.decoder_bytes_decoded}",
+                "x": 2, "y": 53, "font": "small", "max_width": 124, "overflow": "trim",
+            },
+        ],
+    },
+    "data_sources": [
+        {"endpoint": "/api/eas-monitor/status", "var_name": "eas"},
+    ],
+}
+
+# Airchain capture — is broadcast audio being captured, and for how long.
+OLED_AIRCHAIN_CAPTURE = {
+    "name": "oled_airchain_capture",
+    "description": "Airchain capture state, capture uptime, buffer fill, and throughput.",
+    "display_type": "oled",
+    "enabled": True,
+    "priority": 1,
+    "refresh_interval": 2,
+    "duration": 12,
+    "template_data": {
+        "clear": True,
+        "elements": [
+            {"type": "rectangle", "x": 0, "y": 0, "width": 128, "height": 12, "filled": True},
+            {"type": "icon", "name": "wave", "x": 2, "y": 2, "size": 9},
+            {"type": "text", "text": "AIRCHAIN", "x": 13, "y": 1, "font": "small", "invert": True},
+            {
+                "type": "text", "text": "{eas.active_sources} src",
+                "x": 125, "y": 1, "font": "small", "invert": True,
+                "align": "right", "max_width": 50, "overflow": "trim",
+            },
+            # Capture state, large
+            {"type": "text", "text": "Capturing", "x": 2, "y": 16, "font": "small"},
+            {
+                "type": "text", "text": "{eas.audio_flowing}",
+                "x": 125, "y": 15, "font": "medium", "align": "right",
+                "max_width": 60, "overflow": "trim",
+            },
+            # Capture uptime / duration
+            {"type": "icon", "name": "clock", "x": 2, "y": 29, "size": 8},
+            {
+                "type": "text", "text": "Up {eas.wall_clock_runtime_seconds:.0f}s",
+                "x": 12, "y": 29, "font": "small", "max_width": 116, "overflow": "trim",
+            },
+            # Buffer fill
+            {"type": "text", "text": "Buf", "x": 2, "y": 41, "font": "small"},
+            {"type": "bar", "value": "{eas.buffer_utilization}", "x": 28, "y": 41, "width": 70, "height": 9},
+            {
+                "type": "text", "text": "{eas.buffer_utilization:.0f}%",
+                "x": 125, "y": 41, "font": "small", "align": "right",
+                "max_width": 26, "overflow": "trim",
+            },
+            {"type": "hline", "x": 0, "y": 52, "width": 128},
+            {
+                "type": "text", "text": "{eas.samples_per_second:.0f} samples/s",
+                "x": 2, "y": 54, "font": "small", "max_width": 124, "overflow": "trim",
+            },
+        ],
+    },
+    "data_sources": [
+        {"endpoint": "/api/eas-monitor/status", "var_name": "eas"},
+    ],
+}
+
+# Compact VFD variants (140x32) for the same three subjects.
+VFD_GPS_STATUS = {
+    "name": "vfd_gps_status",
+    "description": "GPS fix, position, satellites, and HDOP on the VFD.",
+    "display_type": "vfd",
+    "enabled": True,
+    "priority": 2,
+    "refresh_interval": 5,
+    "duration": 10,
+    "template_data": {
+        "type": "graphics",
+        "elements": [
+            {"type": "rectangle", "x": 0, "y": 0, "width": 140, "height": 32, "filled": False},
+            {"type": "text", "x": 4, "y": 2, "text": "GPS {gps.fix_quality}  {gps.satellites}sat"},
+            {"type": "line", "x1": 4, "y1": 11, "x2": 135, "y2": 11},
+            {"type": "text", "x": 4, "y": 13, "text": "Lat {gps.latitude:.5f}"},
+            {"type": "text", "x": 4, "y": 22, "text": "Lon {gps.longitude:.5f} H{gps.hdop}"},
+        ],
+    },
+    "data_sources": [
+        {"endpoint": "/api/hardware/gps/status", "var_name": "gps"},
+    ],
+}
+
+VFD_DECODER = {
+    "name": "vfd_decoder",
+    "description": "EAS decoder health bar, sync state, alerts, and scans on the VFD.",
+    "display_type": "vfd",
+    "enabled": True,
+    "priority": 2,
+    "refresh_interval": 3,
+    "duration": 10,
+    "template_data": {
+        "type": "graphics",
+        "elements": [
+            {"type": "text", "x": 2, "y": 1, "text": "EAS DECODER"},
+            {
+                "type": "bar", "x": 80, "y": 1, "width": 58, "height": 7,
+                "value": "{eas.health_percentage}", "border": True,
+            },
+            {"type": "text", "x": 2, "y": 12, "text": "Sync {eas.decoder_synced} Msg {eas.decoder_in_message}"},
+            {"type": "line", "x1": 2, "y1": 21, "x2": 137, "y2": 21},
+            {"type": "text", "x": 2, "y": 23, "text": "Alerts {eas.alerts_detected}  Scans {eas.scans_performed}"},
+        ],
+    },
+    "data_sources": [
+        {"endpoint": "/api/eas-monitor/status", "var_name": "eas"},
+    ],
+}
+
+VFD_AIRCHAIN_CAPTURE = {
+    "name": "vfd_airchain_capture",
+    "description": "Airchain capture state, uptime, and buffer fill on the VFD.",
+    "display_type": "vfd",
+    "enabled": True,
+    "priority": 1,
+    "refresh_interval": 2,
+    "duration": 10,
+    "template_data": {
+        "type": "graphics",
+        "elements": [
+            {"type": "text", "x": 2, "y": 1, "text": "AIRCHAIN  Live {eas.audio_flowing}"},
+            {"type": "text", "x": 2, "y": 11, "text": "Up {eas.wall_clock_runtime_seconds:.0f}s  {eas.active_sources}src"},
+            {
+                "type": "bar", "x": 2, "y": 22, "width": 136, "height": 8,
+                "value": "{eas.buffer_utilization}", "border": True,
+            },
+        ],
+    },
+    "data_sources": [
+        {"endpoint": "/api/eas-monitor/status", "var_name": "eas"},
     ],
 }
 
@@ -1154,6 +1391,9 @@ def create_example_screens(app, display_types: Optional[Sequence[str]] = None):
                 VFD_NETWORK_STATUS,
                 VFD_TEMP_MONITORING,
                 VFD_DUAL_VU_METER,
+                VFD_GPS_STATUS,
+                VFD_DECODER,
+                VFD_AIRCHAIN_CAPTURE,
             ]
 
             vfd_screen_ids: List[Dict[str, int]] = []
@@ -1185,6 +1425,9 @@ def create_example_screens(app, display_types: Optional[Sequence[str]] = None):
                 OLED_CLOCK_FACE,
                 OLED_EAS_DECODER,
                 OLED_RECEIVERS,
+                OLED_GPS_STATUS,
+                OLED_DECODER,
+                OLED_AIRCHAIN_CAPTURE,
             ]
 
             oled_screen_ids: List[Dict[str, int]] = []

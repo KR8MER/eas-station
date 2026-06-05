@@ -157,10 +157,10 @@ def create_blueprint(*, get_flask_app: Callable[[], Flask]) -> Blueprint:
                     for command in rendered:
                         cmd_type = command.get('type')
                         if cmd_type == 'clear':
-                            vfd_controller.clear_display()
+                            vfd_controller.clear_screen()
                         elif cmd_type == 'text':
                             vfd_controller.draw_text(
-                                command.get('text', ''), command.get('x', 0), command.get('y', 0))
+                                command.get('x', 0), command.get('y', 0), command.get('text', ''))
                         elif cmd_type == 'rectangle':
                             vfd_controller.draw_rectangle(
                                 command.get('x1', 0), command.get('y1', 0),
