@@ -2673,7 +2673,19 @@ function buildQuickNav() {
                     const link = linkFor.get(entry.target.id);
                     if (link) {
                         link.classList.add('active');
-                        link.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+                        // Keep the active pill visible by scrolling the nav
+                        // horizontally only. Using link.scrollIntoView() here
+                        // would scroll the document instead: because the nav is
+                        // position: sticky, the browser yanks the whole page back
+                        // to the top, creating a scroll loop that makes the page
+                        // impossible to scroll.
+                        const navWidth = nav.clientWidth;
+                        const target = link.offsetLeft - navWidth / 2 + link.clientWidth / 2;
+                        const maxLeft = nav.scrollWidth - navWidth;
+                        nav.scrollTo({
+                            left: Math.max(0, Math.min(target, maxLeft)),
+                            behavior: 'smooth'
+                        });
                     }
                 }
             });
