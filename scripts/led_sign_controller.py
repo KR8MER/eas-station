@@ -172,6 +172,27 @@ class DisplayMode(Enum):
     EXPLODE = 'u'  # Explode
     CLOCK = 'v'  # Clock
 
+    # Special (string) display modes.  Per the Alpha M-Protocol these are
+    # encoded as the mode character 'n' followed by a one-character sub-code.
+    # Because the frame builder appends ``mode.value`` verbatim after
+    # ``ESC + position``, a two-character value (e.g. 'n0') yields exactly
+    # ``ESC + position + n + 0`` on the wire, which is the correct encoding.
+    # Hardware support depends on the sign's firmware -- verify on the
+    # physical sign before relying on any of these.
+    TWINKLE = 'n0'        # Twinkle
+    SPARKLE = 'n1'        # Sparkle
+    SNOW = 'n2'           # Snow
+    INTERLOCK = 'n3'      # Interlock
+    SWITCH = 'n4'         # Switch
+    SLIDE = 'n5'          # Slide
+    SPRAY = 'n6'          # Spray
+    STARBURST = 'n7'      # Starburst
+    WELCOME = 'n8'        # Welcome
+    SLOT_MACHINE = 'n9'   # Slot machine
+    NEWS_FLASH = 'nA'     # News flash
+    TRUMPET = 'nB'        # Trumpet animation
+    CYCLE_COLORS = 'nC'   # Cycle colors
+
 
 class Speed(Enum):
     """Speed Settings (15H + character)"""

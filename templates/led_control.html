@@ -387,6 +387,7 @@
 .ep-explode{background:rgba(220,53,69,.18);color:#ea868f}
 .ep-auto,.ep-auto-mode{background:rgba(111,66,193,.18);color:#c29ffa}
 .ep-clock{background:rgba(32,201,151,.18);color:#20c997}
+.ep-special{background:rgba(214,51,132,.18);color:#f178b6}
 
 /* Layout preset buttons */
 .layout-preset-btn {
@@ -757,6 +758,21 @@
                                                         <option value="COMPRESSED_ROTATE">🔄 Compressed Rotate</option>
                                                         <option value="EXPLODE">💥 Explode</option>
                                                         <option value="CLOCK">⏰ Clock</option>
+                                                        <optgroup label="✨ Special (firmware-dependent)">
+                                                            <option value="TWINKLE">✨ Twinkle</option>
+                                                            <option value="SPARKLE">💫 Sparkle</option>
+                                                            <option value="SNOW">❄️ Snow</option>
+                                                            <option value="INTERLOCK">🔗 Interlock</option>
+                                                            <option value="SWITCH">🔀 Switch</option>
+                                                            <option value="SLIDE">🎞️ Slide</option>
+                                                            <option value="SPRAY">🎨 Spray</option>
+                                                            <option value="STARBURST">🌟 Starburst</option>
+                                                            <option value="WELCOME">👋 Welcome</option>
+                                                            <option value="SLOT_MACHINE">🎰 Slot Machine</option>
+                                                            <option value="NEWS_FLASH">📰 News Flash</option>
+                                                            <option value="TRUMPET">🎺 Trumpet</option>
+                                                            <option value="CYCLE_COLORS">🌈 Cycle Colors</option>
+                                                        </optgroup>
                                                     </select>
                                                 </div>
                                                 <div class="col-md-4">
@@ -863,6 +879,21 @@
                                         <option value="COMPRESSED_ROTATE">🔄 Compressed Rotate</option>
                                         <option value="EXPLODE">💥 Explode</option>
                                         <option value="CLOCK">⏰ Clock</option>
+                                        <optgroup label="✨ Special (firmware-dependent)">
+                                            <option value="TWINKLE">✨ Twinkle</option>
+                                            <option value="SPARKLE">💫 Sparkle</option>
+                                            <option value="SNOW">❄️ Snow</option>
+                                            <option value="INTERLOCK">🔗 Interlock</option>
+                                            <option value="SWITCH">🔀 Switch</option>
+                                            <option value="SLIDE">🎞️ Slide</option>
+                                            <option value="SPRAY">🎨 Spray</option>
+                                            <option value="STARBURST">🌟 Starburst</option>
+                                            <option value="WELCOME">👋 Welcome</option>
+                                            <option value="SLOT_MACHINE">🎰 Slot Machine</option>
+                                            <option value="NEWS_FLASH">📰 News Flash</option>
+                                            <option value="TRUMPET">🎺 Trumpet</option>
+                                            <option value="CYCLE_COLORS">🌈 Cycle Colors</option>
+                                        </optgroup>
                                     </select>
                                 </div>
                                 <div class="col-md-6">
@@ -1729,7 +1760,15 @@ const modeDescriptions = {
     'WIPE_RIGHT': 'Wipe from left to right', 'WIPE_UP': 'Wipe from bottom to top', 'WIPE_DOWN': 'Wipe from top to bottom',
     'AUTO_MODE': 'Automatic mode cycling', 'ROLL_IN': 'Roll to center', 'ROLL_OUT': 'Roll from center',
     'WIPE_IN': 'Wipe to center', 'WIPE_OUT': 'Wipe from center', 'COMPRESSED_ROTATE': 'Compressed rotation',
-    'EXPLODE': 'Exploding text effect', 'CLOCK': 'Clock display mode'
+    'EXPLODE': 'Exploding text effect', 'CLOCK': 'Clock display mode',
+    // Special "string" modes (Alpha 'n' modes) — hardware/firmware dependent
+    'TWINKLE': 'Characters twinkle in brightness', 'SPARKLE': 'Sparkling shimmer effect',
+    'SNOW': 'Snowfall over the text', 'INTERLOCK': 'Characters interlock into place',
+    'SWITCH': 'Characters switch in alternately', 'SLIDE': 'Characters slide in one by one',
+    'SPRAY': 'Characters spray into place', 'STARBURST': 'Text bursts outward',
+    'WELCOME': 'Welcome flourish', 'SLOT_MACHINE': 'Slot-machine character spin',
+    'NEWS_FLASH': 'Emphatic news-flash blink', 'TRUMPET': 'Trumpet fanfare glow',
+    'CYCLE_COLORS': 'Text cycles through colors'
 };
 
 const MAX_LINE_LENGTH = 20;
@@ -1834,6 +1873,19 @@ function modeToEffectPill(mode) {
         case 'EXPLODE':            return ['ep-explode','EXPLODE'];
         case 'AUTO_MODE':          return ['ep-auto',   'AUTO'];
         case 'CLOCK':              return ['ep-clock',  'CLOCK'];
+        case 'TWINKLE':            return ['ep-special','TWINKLE'];
+        case 'SPARKLE':            return ['ep-special','SPARKLE'];
+        case 'SNOW':               return ['ep-special','SNOW'];
+        case 'INTERLOCK':          return ['ep-special','INTERLOCK'];
+        case 'SWITCH':             return ['ep-special','SWITCH'];
+        case 'SLIDE':              return ['ep-special','SLIDE'];
+        case 'SPRAY':              return ['ep-special','SPRAY'];
+        case 'STARBURST':          return ['ep-special','STARBURST'];
+        case 'WELCOME':            return ['ep-special','WELCOME'];
+        case 'SLOT_MACHINE':       return ['ep-special','SLOT'];
+        case 'NEWS_FLASH':         return ['ep-special','NEWS'];
+        case 'TRUMPET':            return ['ep-special','TRUMPET'];
+        case 'CYCLE_COLORS':       return ['ep-special','COLORS'];
         default:                   return ['ep-hold',   mode.replace(/_/g,' ')];
     }
 }
@@ -3523,6 +3575,174 @@ class LEDSignSimulator {
                 this._drawLine(idx, x, y, w, h);
                 line.mode = saved;
                 return;   // _drawLine already called ctx.restore()
+            }
+
+            // ── Special "string" modes (Alpha 'n' modes) ──────────────────────
+            // These are approximate previews; the real animation is rendered by
+            // the sign firmware and may differ.
+
+            // TWINKLE / SPARKLE — text holds while characters shimmer in brightness
+            case 'TWINKLE':
+            case 'SPARKLE': {
+                if (!text) break;
+                let cx = x + 8;
+                for (let i = 0; i < text.length; i++) {
+                    const ch = text[i];
+                    const cw = ctx.measureText(ch).width;
+                    ctx.globalAlpha = 0.4 + 0.6 * Math.abs(Math.sin(t * 6 + i * 1.7));
+                    ctx.fillText(ch, cx, midY);
+                    cx += cw;
+                }
+                ctx.globalAlpha = 1;
+                if (mode === 'SPARKLE') {
+                    for (let s = 0; s < 6; s++) {
+                        const sx = x + 8 + (Math.sin(t * 3 + s * 2.3) * 0.5 + 0.5) * (w - 16);
+                        const sy = y + 4 + (Math.cos(t * 4 + s * 1.1) * 0.5 + 0.5) * (h - 8);
+                        ctx.globalAlpha = Math.abs(Math.sin(t * 8 + s));
+                        ctx.fillRect(sx, sy, 2, 2);
+                    }
+                    ctx.globalAlpha = 1;
+                }
+                break;
+            }
+
+            // SNOW — text holds while flakes drift down over it
+            case 'SNOW': {
+                if (text) ctx.fillText(text, x + 8, midY);
+                ctx.fillStyle = '#ffffff'; ctx.shadowColor = '#ffffff'; ctx.shadowBlur = 4;
+                for (let s = 0; s < 14; s++) {
+                    const sx = x + 3 + ((s * 53.7) % Math.max(w - 6, 1));
+                    const sy = y + ((t * 18 + s * 31) % h);
+                    ctx.globalAlpha = 0.8;
+                    ctx.fillRect(sx, sy, 2, 2);
+                }
+                ctx.globalAlpha = 1;
+                break;
+            }
+
+            // CYCLE_COLORS — text holds while the colour cycles through the spectrum
+            case 'CYCLE_COLORS': {
+                if (!text) break;
+                const c = `hsl(${(t * 80) % 360},100%,55%)`;
+                ctx.fillStyle = c; ctx.shadowColor = c;
+                ctx.fillText(text, x + 8, midY);
+                break;
+            }
+
+            // SLOT_MACHINE — each char spins through random glyphs then settles L→R
+            case 'SLOT_MACHINE': {
+                if (!text) break;
+                const phase  = (t % dur) / dur;
+                const glyphs = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+                let cx = x + 8;
+                for (let i = 0; i < text.length; i++) {
+                    const ch = text[i];
+                    const cw = ctx.measureText(ch).width || ctx.measureText('M').width;
+                    const lockAt = ((i + 1) / (text.length + 1)) * 0.8;
+                    if (phase >= lockAt) {
+                        ctx.fillText(ch, cx, midY);
+                    } else {
+                        const g = glyphs[Math.floor(t * 30 + i * 7) % glyphs.length];
+                        ctx.globalAlpha = 0.85;
+                        ctx.fillText(g, cx, midY);
+                        ctx.globalAlpha = 1;
+                    }
+                    cx += cw;
+                }
+                break;
+            }
+
+            // SLIDE — characters slide in from the right one-by-one
+            case 'SLIDE': {
+                if (!text) break;
+                const phase = (t % dur) / dur;
+                const n = text.length;
+                let cx = x + 8;
+                for (let i = 0; i < n; i++) {
+                    const ch = text[i];
+                    const cw = ctx.measureText(ch).width;
+                    const start = (i / (n + 1)) * 0.7;
+                    const p = Math.min(Math.max((phase - start) / 0.3, 0), 1);
+                    const ease = this._easeOut(p);
+                    const drawX = (x + w) + (cx - (x + w)) * ease;
+                    ctx.globalAlpha = ease;
+                    ctx.fillText(ch, drawX, midY);
+                    cx += cw;
+                }
+                ctx.globalAlpha = 1;
+                break;
+            }
+
+            // STARBURST — text bursts outward (scale) then settles, looping
+            case 'STARBURST': {
+                if (!text) break;
+                const phase = (t % dur) / dur;
+                let scale, alpha;
+                if (phase < 0.3)      { const p = this._easeOut(phase / 0.3); scale = 0.2 + 0.8 * p; alpha = p; }
+                else if (phase < 0.8) { scale = 1; alpha = 1; }
+                else                  { const p = (phase - 0.8) / 0.2; scale = 1 + 0.6 * p; alpha = 1 - p; }
+                ctx.globalAlpha = alpha;
+                ctx.translate(x + w / 2, midY);
+                ctx.scale(scale, scale);
+                ctx.fillText(text, -ctx.measureText(text).width / 2, 0);
+                ctx.globalAlpha = 1;
+                break;
+            }
+
+            // INTERLOCK / SWITCH — alternate characters drop/rise into place
+            case 'INTERLOCK':
+            case 'SWITCH': {
+                if (!text) break;
+                const phase = (t % dur) / dur;
+                const p = Math.min(this._easeOut(phase / 0.5), 1);
+                let cx = x + 8;
+                for (let i = 0; i < text.length; i++) {
+                    const ch = text[i];
+                    const cw = ctx.measureText(ch).width;
+                    const dir = (i % 2 === 0) ? -1 : 1;
+                    ctx.globalAlpha = p;
+                    ctx.fillText(ch, cx, midY + dir * h * (1 - p));
+                    cx += cw;
+                }
+                ctx.globalAlpha = 1;
+                break;
+            }
+
+            // SPRAY — characters scatter in from random offsets then assemble
+            case 'SPRAY': {
+                if (!text) break;
+                const phase = (t % dur) / dur;
+                const p = Math.min(this._easeOut(phase / 0.6), 1);
+                let cx = x + 8;
+                for (let i = 0; i < text.length; i++) {
+                    const ch = text[i];
+                    const cw = ctx.measureText(ch).width;
+                    const jx = Math.sin(i * 12.9) * 0.5 * w * (1 - p);
+                    const jy = Math.cos(i * 78.2) * 0.5 * h * (1 - p);
+                    ctx.globalAlpha = p;
+                    ctx.fillText(ch, cx + jx, midY + jy);
+                    cx += cw;
+                }
+                ctx.globalAlpha = 1;
+                break;
+            }
+
+            // WELCOME / TRUMPET — text holds with a celebratory glow pulse
+            case 'WELCOME':
+            case 'TRUMPET': {
+                if (!text) break;
+                const pulse = 0.6 + 0.4 * Math.abs(Math.sin(t * 4));
+                ctx.shadowBlur = 6 + 18 * pulse;
+                ctx.globalAlpha = 0.7 + 0.3 * pulse;
+                ctx.fillText(text, x + 8, midY);
+                ctx.globalAlpha = 1;
+                break;
+            }
+
+            // NEWS_FLASH — text blinks on/off emphatically
+            case 'NEWS_FLASH': {
+                if (text && Math.sin(t * 8) > -0.3) ctx.fillText(text, x + 8, midY);
+                break;
             }
 
             // ── CLOCK — shows live time ──
