@@ -204,6 +204,7 @@ nav:
           - Overview: reference/protocols/README.md
           - SAME: reference/protocols/SAME.md
           - MDC1200: reference/protocols/MDC1200.md
+          - Sage Digital ENDEC: reference/protocols/SAGE_ENDEC.md
   - Maintenance:
       - Disk Space Cleanup: maintenance/DISK_SPACE_CLEANUP.md
   - Policies:

@@ -19,6 +19,11 @@ protocol support. Operator-facing setup instructions live under
 For the broader RBDS Annex-D treatment of SAME (as embedded in NRSC-4-B for
 FM broadcasters), see also [`../NRSC4B_SAME_STANDARD.md`](../NRSC4B_SAME_STANDARD.md).
 
+For a behavioral reference and gap analysis against the commercial **Sage
+Digital ENDEC** appliance — its serial/network device protocols (raw EAS
+encoder, decoder status, Generic CGEN, News Feed) and incoming-alert
+filtering/priority model — see [SAGE_ENDEC.md](SAGE_ENDEC.md).
+
 ## How they are combined
 
 Every EAS Station™ broadcast — auto-forwarded CAP/IPAWS, OTA EAS relay, or
