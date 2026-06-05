@@ -313,19 +313,32 @@ No commercial-tally relay gate, no `MIN OVERRIDE PRIO`, no Hold-Off-Night for
 overnight RMT retention. RWT/relay paths fire immediately or not at all. This
 is the clearest *operational* feature gap for broadcaster parity.
 
-### 5.5 Integration output formats — not implemented ❌
+### 5.5 Integration output formats — implemented ✅
 
-| Sage device | EAS Station |
-|---|---|
-| Generic CGEN `<STX><sev><text><ETX>` | ❌ none |
-| News Feed `<ENDECSTART>…<ENDECEND>` | ❌ none |
-| Decoder status `local:`/`match:`/`nomatch:`/`dup:` | ❌ none |
-| Raw EAS Encoder byte mirror (`0xAB`-framed) | ❌ none |
+All four Sage device-feed formats are now emitted over TCP by the
+**ENDEC Device Feeds** subsystem (configure under *Admin → ENDEC Device Feeds*):
 
-EAS Station instead publishes structured JSON to Redis
-(`eas:alerts:received`) and optional webhooks
-([`alert_forwarding.py`](../../../app_core/audio/alert_forwarding.py)) — richer,
-but **not drop-in compatible** with gear expecting the Sage serial formats.
+| Sage device | EAS Station | Where |
+|---|---|---|
+| Generic CGEN `<STX><sev><text><ETX>` | ✅ | [`endec_feeds.py:format_generic_cgen`](../../../app_utils/endec_feeds.py) |
+| News Feed `<ENDECSTART>…<ENDECEND>` | ✅ | [`endec_feeds.py:format_news_feed`](../../../app_utils/endec_feeds.py) |
+| Decoder status `local:`/`match:`/`nomatch:`/`dup:` | ✅ | [`endec_feeds.py:format_decoder_status`](../../../app_utils/endec_feeds.py) |
+| Raw EAS Encoder byte mirror (`0xAB`-framed) | ✅ (outgoing) | [`endec_feeds.py:format_raw_encoder`](../../../app_utils/endec_feeds.py) |
+
+**Architecture:** the detection/forwarding pipeline publishes a feed event to
+Redis (`eas:endec_feed`) at four points — `match`/`nomatch` in
+[`eas_monitor.py`](../../../app_core/audio/eas_monitor.py) and `dup`/`local` in
+[`auto_forward.py`](../../../app_core/audio/auto_forward.py) — via
+[`endec_feed_publisher.py`](../../../app_core/audio/endec_feed_publisher.py).
+The [`services.endec_feeds`](../../../services/endec_feeds/) daemon subscribes,
+renders each event into every configured feed's wire format, and fans the bytes
+out to connected TCP clients (one listener per feed/port). Saving the admin
+form hot-reloads the daemon over a Redis control channel. Unlike Sage's
+RS-232 ports, the transport is TCP (connect with a character generator,
+newsroom system, or `nc <host> <port>`). The pre-existing structured JSON to
+Redis (`eas:alerts:received`) and webhooks
+([`alert_forwarding.py`](../../../app_core/audio/alert_forwarding.py)) remain
+available alongside these byte-stream feeds.
 
 ### 5.6 Plain-language text — English yes, Spanish no ⚠️
 
@@ -336,14 +349,40 @@ which Sage carries for all 53 codes (manual Table 5-1).
 
 ### 5.7 Summary of actionable gaps
 
-| # | Gap | Effort | Value |
-|---|---|---|---|
-| 1 | **Generic CGEN / News Feed / Decoder-status** serial output shims | Low | Drop-in compatibility with existing CG / newsroom gear |
-| 2 | **Bilingual (Spanish) event phrases** + plain-language renderer | Medium | Part-11 bilingual-area parity; reuse Table 5-1 |
-| 3 | **Hold-off / commercial-tally + day-night RMT retention** | Medium | Real broadcaster operational requirement |
-| 4 | **Priority + action-code filter model** (Timed Relay/Ignore, priority-ranked filters) | High | Full Sage-class relay control vs. today's allow/deny |
-| 5 | **Raw EAS Encoder loopback device** (`0xAB`-framed async) | Low | Self-test harness + external-decoder interop |
+| # | Gap | Status |
+|---|---|---|
+| 1 | **Generic CGEN / News Feed / Decoder-status** output shims | ✅ Done — §5.5 (over TCP) |
+| 5 | **Raw EAS Encoder** byte mirror (`0xAB`-framed) | ✅ Done — §5.5 (outgoing alerts) |
+| 2 | **Bilingual (Spanish) event phrases** + plain-language renderer | ⬜ Open — Medium effort; reuse Table 5-1 |
+| 3 | **Hold-off / commercial-tally + day-night RMT retention** | ⬜ Open — Medium; real broadcaster requirement |
+| 4 | **Priority + action-code filter model** (Timed Relay/Ignore, priority-ranked filters) | ⬜ Open — High; full Sage-class relay control |
 
-> Items 1 and 5 are small, self-contained, and high-leverage. Items 3 and 4 are
-> the substantive operational/architectural deltas if full appliance parity is
-> a goal.
+> Items 1 and 5 shipped as the **ENDEC Device Feeds** subsystem. Items 3 and 4
+> remain the substantive operational/architectural deltas if full appliance
+> parity is a goal.
+
+---
+
+## 6. Sources, attribution & IP basis
+
+This document and the `endec_feeds` implementation are **clean-room
+interoperability work** built only from Sage's **publicly published** support
+manual:
+
+- **Facts, not expression.** What is reproduced here are functional facts —
+  wire formats, framing bytes, baud rates, event-code lists, configuration
+  values — which are not protected by copyright. The manual's prose is
+  paraphrased, not copied; only short functional snippets (format strings,
+  sample headers) are quoted.
+- **Mostly a federal standard.** The SAME signalling itself is mandated by
+  **FCC 47 CFR §11.31** and **NWS Instruction 10-1712**; it is not Sage's
+  proprietary invention.
+- **No proprietary code.** No Sage firmware or source was accessed or used.
+  Every line in `app_utils/endec_feeds.py` and `services/endec_feeds/` is
+  original to EAS Station.
+- **Trademarks** (Sage®, Chyron CODI™, VDS840EAS™, MHz Sub-Alert™) belong to
+  their owners and are referenced only descriptively; EAS Station does not
+  imply endorsement by or affiliation with Sage Alerting Systems, Inc.
+
+This mirrors standard compatibility practice ("works with X"). It is not legal
+advice; patent questions are out of scope of a manual review.
