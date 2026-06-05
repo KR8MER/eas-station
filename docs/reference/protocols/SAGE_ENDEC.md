@@ -29,6 +29,15 @@ It is **not** Sage firmware, contains no proprietary code, and the
 trademarks (Sage®, MHz Sub-Alert™, Chyron CODI™, VDS840EAS™) belong to their
 owners.
 
+**Contents**
+
+1. [On-air wire format](#1-on-air-wire-format-as-documented-by-sage)
+2. [Serial / network device protocols](#2-serial--network-device-protocols)
+3. [Incoming-alert filtering & priority model](#3-incoming-alert-filtering--priority-model-manual-54)
+4. [Operational notes worth keeping](#4-operational-notes-worth-keeping)
+5. [Gap analysis — EAS Station vs. Sage](#5-gap-analysis--eas-station-vs-sage-digital-endec)
+6. [Sources, attribution & IP basis](#6-sources-attribution--ip-basis)
+
 ---
 
 ## 1. On-air wire format (as documented by Sage)
@@ -46,6 +55,32 @@ here gives us an *independent second source* to validate the encoder against.
 | Two-tone *required for* | Monthly Test, **EAN**, **EAT** only | **not** required for weekly tests |
 | EOM | `NNNN`, sent **3×**, same FSK format as header | |
 | Preamble | ~¼ second sync sequence | (the `0xAB` byte ×16 — see §2) |
+
+The on-air timeline (manual Figure 2-1):
+
+```mermaid
+flowchart LR
+    H1["SAME header #1<br/>ZCZC-…"]
+    G1["silence<br/>1 s"]
+    H2["SAME header #2"]
+    G2["silence<br/>1 s"]
+    H3["SAME header #3"]
+    TONE["Two-tone attention<br/>853 + 960 Hz<br/><i>RMT / EAN / EAT only</i>"]
+    AUDIO["Voice / audio message<br/><i>optional</i>"]
+    E1["EOM · NNNN"]
+    E2["EOM · NNNN"]
+    E3["EOM · NNNN"]
+    H1 --> G1 --> H2 --> G2 --> H3 --> TONE --> AUDIO --> E1 --> E2 --> E3
+
+    classDef same fill:#dbeafe,stroke:#1e40af,color:#1e3a8a;
+    classDef tone fill:#fef3c7,stroke:#92400e,color:#78350f;
+    classDef audio fill:#dcfce7,stroke:#166534,color:#14532d;
+    classDef gap fill:#f1f5f9,stroke:#94a3b8,color:#475569;
+    class H1,H2,H3,E1,E2,E3 same;
+    class TONE tone;
+    class AUDIO audio;
+    class G1,G2 gap;
+```
 
 **Header anatomy (manual §2.4, "Parts of an EAS Header"):**
 
@@ -106,6 +141,29 @@ that any modern integration (or our REST/Socket.IO/Redis stack) can emit as a
 compatibility shim. Serial ports are PC-wired (pin 2 RxD, pin 3 TxD, pin 5 GND,
 pin 9 = +9 V accessory), use a null-modem cable (swap 2/3), and have a
 configurable baud rate (manual §13.1, §12.49).
+
+```mermaid
+flowchart LR
+    CORE["Sage ENDEC<br/>encode / decode core"]
+    ENC["Encoder<br/>raw EAS bytes"]
+    DEC["Decoder<br/>status lines"]
+    CG["Generic CGEN<br/>&lt;STX&gt;&lt;sev&gt;…&lt;ETX&gt;"]
+    NF["News Feed<br/>&lt;ENDECSTART&gt;…"]
+    NET["Web · Automation ·<br/>ENDEC PRO · ENDECSETD"]
+    CORE --> ENC & DEC & CG & NF & NET
+    ENC --> X1["External decoder /<br/>capture"]
+    DEC --> X2["Monitoring / logging"]
+    CG --> X3["Character generator<br/>(VDS · CODI · LED sign)"]
+    NF --> X4["Newsroom software"]
+    NET --> X5["LAN clients"]
+
+    classDef core fill:#dbeafe,stroke:#1e40af,color:#1e3a8a;
+    classDef port fill:#fef3c7,stroke:#92400e,color:#78350f;
+    classDef sink fill:#e2e8f0,stroke:#475569,color:#334155;
+    class CORE core;
+    class ENC,DEC,CG,NF,NET port;
+    class X1,X2,X3,X4,X5 sink;
+```
 
 ### 2.1 Device-type catalog (manual §12.50)
 
@@ -214,6 +272,29 @@ locations is in its location list.
 
 Each matched filter carries an **action**, a **priority** (0–63), an
 **attention-tone duration**, and a **hold** time.
+
+```mermaid
+flowchart TD
+    A["Decoded alert<br/>originator · event · locations"] --> B{"Any filter match?<br/>originator ∈ list AND<br/>event ∈ list AND<br/>≥1 location ∈ list"}
+    B -- no --> Z["Unmatched → lowest-priority<br/>'Others' filter (Timed Ignore)"]
+    B -- yes --> C["Pick highest-priority<br/>matching filter (0–63)"]
+    C --> D{"Action code"}
+    D -- "Automatic Relay" --> R1["Relay now<br/>(even while receiving)"]
+    D -- "Timed Relay / Manual" --> R2["Hold N min<br/>review · kill · send"]
+    D -- "Timed Ignore" --> R3["Hold N min → kill"]
+    D -- "Log Only" --> R4["Log / print → kill"]
+    R1 --> OUT["On air"]
+    R2 --> OUT
+
+    classDef start fill:#dbeafe,stroke:#1e40af,color:#1e3a8a;
+    classDef decision fill:#ede9fe,stroke:#5b21b6,color:#4c1d95;
+    classDef relay fill:#dcfce7,stroke:#166534,color:#14532d;
+    classDef kill fill:#fee2e2,stroke:#991b1b,color:#7f1d1d;
+    class A start;
+    class B,D decision;
+    class R1,R2,OUT relay;
+    class R3,R4,Z kill;
+```
 
 ### 3.1 Action codes (manual Table 5-2)
 
@@ -324,6 +405,33 @@ All four Sage device-feed formats are now emitted over TCP by the
 | News Feed `<ENDECSTART>…<ENDECEND>` | ✅ | [`endec_feeds.py:format_news_feed`](../../../app_utils/endec_feeds.py) |
 | Decoder status `local:`/`match:`/`nomatch:`/`dup:` | ✅ | [`endec_feeds.py:format_decoder_status`](../../../app_utils/endec_feeds.py) |
 | Raw EAS Encoder byte mirror (`0xAB`-framed) | ✅ (outgoing) | [`endec_feeds.py:format_raw_encoder`](../../../app_utils/endec_feeds.py) |
+
+```mermaid
+flowchart LR
+    M["eas_monitor.py<br/>match · nomatch"]
+    F["auto_forward.py<br/>dup · local"]
+    P["endec_feed_publisher.py"]
+    R(["Redis<br/>eas:endec_feed"])
+    D1["listener :9601<br/>generic_cgen"]
+    D2["listener :9602<br/>news_feed"]
+    D3["listener :9603<br/>decoder"]
+    M --> P
+    F --> P
+    P --> R --> D1 & D2 & D3
+    D1 --> C1["Character generator"]
+    D2 --> C2["Newsroom software"]
+    D3 --> C3["nc / monitor"]
+    ADMIN["Admin → ENDEC Device Feeds"] -. "reload" .-> R
+
+    classDef src fill:#dbeafe,stroke:#1e40af,color:#1e3a8a;
+    classDef bus fill:#fef3c7,stroke:#92400e,color:#78350f;
+    classDef svc fill:#dcfce7,stroke:#166534,color:#14532d;
+    classDef sink fill:#e2e8f0,stroke:#475569,color:#334155;
+    class M,F,P src;
+    class R bus;
+    class D1,D2,D3 svc;
+    class C1,C2,C3,ADMIN sink;
+```
 
 **Architecture:** the detection/forwarding pipeline publishes a feed event to
 Redis (`eas:endec_feed`) at four points — `match`/`nomatch` in
