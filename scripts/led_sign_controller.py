@@ -204,15 +204,22 @@ class Speed(Enum):
 
 
 class SpecialFunction(Enum):
-    """Special Functions (1EH + character)"""
-    WIDE_CHAR_ON = '0'  # Wide character on
-    WIDE_CHAR_OFF = '1'  # Wide character off
-    TRUE_DESC_ON = '2'  # True descender on
-    TRUE_DESC_OFF = '3'  # True descender off
-    CHAR_FLASH_ON = '4'  # Character flash on
-    CHAR_FLASH_OFF = '5'  # Character flash off
-    FIXED_WIDTH = '6'  # Fixed width font
-    PROP_WIDTH = '7'  # Proportional width font
+    """Character attribute control sequences (Alpha protocol ASCII table, p.80-81).
+
+    Each value is the *complete* control sequence emitted inline in a TEXT
+    file — these are distinct control codes, NOT all ``1EH`` + a digit.  The
+    earlier revision routed every attribute through ``1EH`` (character spacing)
+    with the wrong argument, so wide/descender/flash all did the wrong thing and
+    emergency-alert flashing never worked.
+    """
+    WIDE_CHAR_ON = '\x12'        # 12H = enable wide characters
+    WIDE_CHAR_OFF = '\x11'       # 11H = disable wide characters (default)
+    TRUE_DESC_ON = '\x06\x31'    # 06H + '1' = true descenders on
+    TRUE_DESC_OFF = '\x06\x30'   # 06H + '0' = true descenders off (default)
+    CHAR_FLASH_ON = '\x07\x31'   # 07H + '1' = character flash on
+    CHAR_FLASH_OFF = '\x07\x30'  # 07H + '0' = character flash off (default)
+    FIXED_WIDTH = '\x1e\x31'     # 1EH + '1' = fixed-width characters
+    PROP_WIDTH = '\x1e\x30'      # 1EH + '0' = proportional characters (default)
 
 
 class TimeFormat(Enum):
@@ -237,13 +244,27 @@ class ReadSpecialExtCommand(Enum):
 
 
 class WriteSpecialExtCommand(Enum):
-    """Type E - Write Special Functions (Extended)"""
-    SET_TIME_DATE = 0x20       # Set time and date
-    SET_DAY_OF_WEEK = 0x22     # Set day of week
-    SET_SPEAKER = 0x23         # Set speaker on/off
-    SET_TIME_FORMAT = 0x27     # Set 12h/24h time format
-    SET_RUN_MODE = 0x2E        # Set run mode (auto/manual)
-    SET_BRIGHTNESS = 0x30      # Set brightness level
+    """Write SPECIAL FUNCTION labels — the byte after ``E`` (manual Table 15).
+
+    Codes verified against Alpha Sign Communications Protocol 9708-8061F,
+    pp.21-26.  See docs/reference/protocols/ALPHA_M_PROTOCOL.md.
+    """
+    SET_TIME_OF_DAY = 0x20     # " "  Set Time of Day (HhMm, 24-hour)
+    SET_SPEAKER = 0x21         # "!"  Enable/Disable speaker ("00"/"FF")
+    SET_MEMORY = 0x24          # "$"  Clear Memory / Set Memory Configuration
+    SET_DAY_OF_WEEK = 0x26     # "&"  Set Day of Week ("1"=Sun .. "7"=Sat)
+    SET_TIME_FORMAT = 0x27     # "'"  Set Time Format ("S"=am/pm, "M"=24h)
+    SET_RUN_TIME_TABLE = 0x29  # ")"  Set Run Time Table (FQQQQ)
+    SOFT_RESET = 0x2C          # ","  Soft Reset (no data, non-destructive)
+    SET_RUN_SEQUENCE = 0x2E    # "."  Set Run Sequence (KPF)
+    SET_DIMMING = 0x2F         # "/"  Set Dimming Register (WWww, Solar signs)
+    SET_RUN_DAY_TABLE = 0x32   # "2"  Set Run Day Table (FSs)
+    SET_COUNTER = 0x35         # "5"  Set Counter
+    SET_SERIAL_ADDRESS = 0x37  # "7"  Set Serial Address (two hex chars)
+    SET_DATE = 0x3B            # ";"  Set Date (mmddyy)
+
+    # Backwards-compatibility alias: older callers referenced SET_TIME_DATE.
+    SET_TIME_DATE = 0x20
 
 
 class ReadTextCommand(Enum):
@@ -358,8 +379,12 @@ class Alpha9120CController:
         self.COLOR_CMD = '\x1C'  # Color command prefix
         self.FONT_CMD = '\x1A'  # Font command prefix
         self.MODE_CMD = '\x1B'  # Display mode command prefix
-        self.SPEED_CMD = '\x15'  # Speed command prefix
-        self.SPECIAL_CMD = '\x1E'  # Special function prefix
+        # NOTE: speed and character attributes are NOT a prefix + arg — speed is
+        # a single byte 0x15-0x19 and each attribute has its own code (see the
+        # Speed/SpecialFunction enums).  These two constants are retained only
+        # for backwards reference and are no longer used to build frames.
+        self.SPEED_CMD = '\x15'  # (legacy) Speed 1 control byte
+        self.SPECIAL_CMD = '\x1E'  # (legacy) character-spacing control code
         self.TIME_CMD = '\x13'  # Time format prefix
         self.POSITION_CMD = '\x1F'  # Position command prefix
 
@@ -915,12 +940,23 @@ class Alpha9120CController:
                         state.position = position_char
 
                     if effective_speed and state.speed != effective_speed:
-                        segment_builder += self.SPEED_CMD + effective_speed.value
+                        # Speed is a single control byte: 0x15 = Speed 1 (slow)
+                        # … 0x19 = Speed 5 (fast) — see the protocol ASCII table
+                        # (manual p.36/81).  The Speed enum values are "1".."5",
+                        # so the byte is 0x14 + N.  (The previous code emitted
+                        # 0x15 followed by the ASCII digit, which always selected
+                        # Speed 1 and printed a stray digit on the sign.)
+                        segment_builder += chr(0x14 + int(effective_speed.value))
                         state.speed = effective_speed
 
                     if combined_specials:
                         for func in combined_specials:
-                            segment_builder += self.SPECIAL_CMD + func.value
+                            # Each SpecialFunction.value is the full, correct
+                            # control sequence for that attribute (e.g. flash =
+                            # 0x07+'1', wide = 0x12); see the SpecialFunction
+                            # enum.  Do NOT prefix with 0x1E — that code is only
+                            # for character spacing.
+                            segment_builder += func.value
 
                     segment_builder += segment_text
                     content_parts.append(segment_builder)
@@ -933,7 +969,7 @@ class Alpha9120CController:
             # Complete message body
             message_body = f"{cmd}{file_label}{content}"
 
-            # Complete frame with header and checksum (checksum is XOR of bytes between STX and ETX)
+            # Complete frame with header and checksum (16-bit sum over STX..ETX)
             frame = self._build_frame_from_payload(message_body)
 
             self.logger.debug(
@@ -951,13 +987,20 @@ class Alpha9120CController:
         """Validate RGB color format (RRGGBB)"""
         return bool(re.match(r'^[0-9A-Fa-f]{6}$', rgb_color))
 
-    def _calculate_checksum(self, payload: bytes) -> str:
-        """Checksum is calculated as an XOR of bytes between STX and ETX."""
+    def _calculate_checksum(self, data: bytes) -> str:
+        """Compute the Alpha-protocol Checksum over ``data``.
 
-        checksum = 0
-        for byte in payload:
-            checksum ^= byte
-        return f"{checksum:02X}"
+        Per the manual (9708-8061F, p.11): *"Four ASCII digits that represent a
+        16-bit hexadecimal summation of all transmitted data from the previous
+        <STX> through the previous <ETX> inclusive. The most significant digit
+        is first."*  Verified against the worked example on p.60:
+        ``<STX>"AAHELLO"<ETX>`` → ``"01FB"``.
+
+        ``data`` must therefore be the bytes from ``<STX>`` through ``<ETX>``
+        inclusive.  (The previous implementation XOR'd the bytes and emitted
+        only two hex digits, which the sign rejects as an invalid checksum.)
+        """
+        return f"{sum(data) & 0xFFFF:04X}"
 
     def _build_frame_from_payload(self, payload: str) -> bytes:
         """Wrap a raw payload as a fully-compliant M-Protocol transmission.
@@ -969,15 +1012,16 @@ class Alpha9120CController:
 
         Where the leading NULLs wake up the sign's UART, ``TT`` is the
         single-character type code (e.g. ``Z`` for all signs), ``AAAA`` is
-        the two-character sign address, and ``CC`` is the two-hex-digit
-        XOR checksum of the bytes between ``STX`` (exclusive) and ``ETX``
-        (inclusive).
+        the two-character sign address, and ``CC`` is the four-hex-digit
+        16-bit summation checksum of the bytes from ``STX`` through ``ETX``
+        inclusive (see ``_calculate_checksum``).
         """
 
         payload_bytes = payload.encode("latin-1")
+        stx_bytes = self.STX.encode("latin-1")
         etx_bytes = self.ETX.encode("latin-1")
-        # Checksum is XOR of every byte after STX up to and including ETX.
-        checksum = self._calculate_checksum(payload_bytes + etx_bytes)
+        # Checksum covers <STX> through <ETX> inclusive (manual p.11/60).
+        checksum = self._calculate_checksum(stx_bytes + payload_bytes + etx_bytes)
         header = f"{self.SOH}{self.type_code}{self.sign_id}{self.STX}".encode("latin-1")
         return (
             self.WAKEUP
@@ -1484,25 +1528,50 @@ class Alpha9120CController:
             return False
 
     def set_brightness(self, level: int, auto: bool = False) -> bool:
-        """Set display brightness via the M-Protocol ``E$`` sub-command.
+        """Set sign dimming via the Set Dimming Register (``E/``, 0x2F).
 
-        The Alpha M-Protocol expresses brightness as a single hex digit
-        ``0``-``F`` (16 discrete steps) plus an automatic photocell mode
-        signalled with ``E$A``.  Some callers (and the legacy web UI)
-        pass values in the inclusive range 1-16; we accept either the
-        spec range 0-15 or 1-16 by clamping.
+        Format ``WWww`` (manual p.23):
+
+        * ``WW`` — when to dim: ``"00"`` = no dimming, ``"01"`` (dark) … ``"15"``
+          (bright) selects the ambient-light threshold at which the sign dims.
+        * ``ww`` — dimmed brightness level: ``"00"`` = 100%, ``"01"`` = 86%,
+          ``"02"`` = 72%, ``"03"`` = 58%, ``"04"`` = 44%.
+
+        ``level`` is mapped onto those five steps.  Both the 1-16 range used by
+        the web UI and a 0-100 percentage (used by the diagnostic scripts) are
+        accepted.  ``auto=True`` enables ambient-light dimming (``WW="07"``);
+        otherwise ``WW="00"``.
+
+        .. important::
+           Per the protocol this register is **only effective on Solar signs**
+           (AlphaEclipse signs use ``E@``; a standard 9120C may ignore it).
+           This replaces the previous implementation, which emitted ``E$`` —
+           the **Clear Memory / Set Memory Configuration** command — and so
+           never actually set brightness and risked corrupting the sign's
+           memory configuration.
         """
-
         try:
-            if auto:
-                payload = "E$A"
+            # Normalise the incoming level to a 0..100 percentage.
+            if level <= 16:
+                pct = max(0, min(100, round((level / 16) * 100)))
             else:
-                if level == 16:
-                    level = 15  # 1-16 → 0-15 fold-back for legacy callers
-                if not 0 <= level <= 15:
-                    raise ValueError("Brightness level must be between 0 and 15")
+                pct = max(0, min(100, int(level)))
 
-                payload = f"E${level:X}"
+            # Map percentage to the five documented brightness steps.
+            # Higher percentage -> lower dim-step number (00 = brightest).
+            if pct >= 90:
+                ww = "00"
+            elif pct >= 75:
+                ww = "01"
+            elif pct >= 60:
+                ww = "02"
+            elif pct >= 45:
+                ww = "03"
+            else:
+                ww = "04"
+
+            ww_threshold = "07" if auto else "00"
+            payload = f"E/{ww_threshold}{ww}"
             frame = self._build_frame_from_payload(payload)
             return self._send_raw_message(frame)
 
@@ -1922,87 +1991,89 @@ class Alpha9120CController:
         
         return diagnostics
 
-    def set_time_and_date(self, dt: Optional[datetime] = None) -> bool:
-        """
-        Set sign time and date (M-Protocol Type E, Function 0x20).
-        
-        Args:
-            dt: datetime object to set. If None, uses current system time.
-            
-        Returns:
-            True if successful, False otherwise
-            
-        Example:
-            >>> led = Alpha9120CController(host='192.168.8.122', port=10001)
-            >>> from datetime import datetime
-            >>> led.set_time_and_date(datetime(2025, 12, 13, 15, 30, 0))
-            True
-            
-        Note:
-            Time format is 10 bytes ASCII: HH:MM:SS\rMM/DD/YY
-            Example: "15:30:00\r12/13/25"
+    def set_time_of_day(self, dt: Optional[datetime] = None) -> bool:
+        """Set the sign's time-of-day clock (Write Special Function ``E␠``, 0x20).
+
+        Per the manual (p.21) the data is exactly four ASCII digits ``HhMm`` in
+        24-hour format (e.g. ``"1530"`` for 3:30 pm).
         """
         if dt is None:
             dt = datetime.now()
-            
-        if not self.connected or not self.socket:
-            self.logger.warning("Not connected to sign")
-            return False
-            
+
         try:
-            # Format time and date
-            # Format: HH:MM:SS\rMM/DD/YY (10 bytes)
-            time_str = dt.strftime("%H:%M:%S")
-            date_str = dt.strftime("%m/%d/%y")
-            time_date = f"{time_str}\r{date_str}"
-
-            # Build Type E (Write Special Function Extended) frame.
-            data = bytes([WriteSpecialExtCommand.SET_TIME_DATE.value]) + time_date.encode('ascii')
+            data = bytes([WriteSpecialExtCommand.SET_TIME_OF_DAY.value]) + dt.strftime("%H%M").encode("ascii")
             frame = self._build_command_frame("E", data)
-
-            self.logger.debug(f"Sent set time/date command: {time_date}")
             ack = self._send_command_and_read_ack(frame)
-
             if ack == self.ACK:
-                self.logger.info(f"Time and date set successfully: {time_date}")
+                self.logger.info("Time of day set: %s", dt.strftime("%H:%M"))
                 return True
-            elif ack == self.NAK:
-                self.logger.error("Sign returned NAK for set time/date")
-                return False
-            else:
-                self.logger.error("No acknowledgement received for set time/date")
-                return False
-
-        except Exception as e:
-            self.logger.error(f"Error setting time and date: {e}")
+            self.logger.error("Set time of day not acknowledged (ack=%r)", ack)
             return False
+        except Exception as e:
+            self.logger.error(f"Error setting time of day: {e}")
+            return False
+
+    def set_date(self, dt: Optional[datetime] = None) -> bool:
+        """Set the sign's date (Write Special Function ``E;``, 0x3B).
+
+        Per the manual (p.26) the data is six ASCII digits ``mmddyy``.
+        """
+        if dt is None:
+            dt = datetime.now()
+
+        try:
+            data = bytes([WriteSpecialExtCommand.SET_DATE.value]) + dt.strftime("%m%d%y").encode("ascii")
+            frame = self._build_command_frame("E", data)
+            ack = self._send_command_and_read_ack(frame)
+            if ack == self.ACK:
+                self.logger.info("Date set: %s", dt.strftime("%m/%d/%y"))
+                return True
+            self.logger.error("Set date not acknowledged (ack=%r)", ack)
+            return False
+        except Exception as e:
+            self.logger.error(f"Error setting date: {e}")
+            return False
+
+    def set_time_and_date(self, dt: Optional[datetime] = None) -> bool:
+        """Set both the sign's time-of-day clock and its date.
+
+        The Alpha protocol uses two *separate* Write Special Function commands
+        — Set Time of Day (``E␠``, 4 digits ``HhMm``) and Set Date (``E;``, 6
+        digits ``mmddyy``).  (The previous implementation sent a single
+        ``HH:MM:SS\\rMM/DD/YY`` string, which is not a valid data format.)
+        """
+        if dt is None:
+            dt = datetime.now()
+
+        ok_time = self.set_time_of_day(dt)
+        ok_date = self.set_date(dt)
+        return ok_time and ok_date
 
     def set_day_of_week(self, day: Optional[int] = None) -> bool:
-        """
-        Set sign day of week (M-Protocol Type E, Function 0x22).
-        
+        """Set the sign's day of week (Write Special Function ``E&``, 0x26).
+
         Args:
-            day: Day of week (0=Sunday, 1=Monday, ..., 6=Saturday)
-                 If None, uses current system day
-                 
-        Returns:
-            True if successful, False otherwise
+            day: 0=Sunday, 1=Monday, …, 6=Saturday. If None, uses today.
+
+        Per the manual (p.22) the data is one ASCII digit ``"1"``=Sunday …
+        ``"7"``=Saturday.  (The previous implementation used the wrong command
+        code 0x22 and sent ``"0"``-``"6"`` instead of ``"1"``-``"7"``.)
         """
         if day is None:
-            day = datetime.now().weekday()
-            # Convert Python weekday (0=Monday) to Alpha weekday (0=Sunday)
-            day = (day + 1) % 7
-            
+            # Python weekday(): 0=Monday … 6=Sunday → 0=Sunday … 6=Saturday.
+            day = (datetime.now().weekday() + 1) % 7
+
         if not 0 <= day <= 6:
             self.logger.error(f"Invalid day of week: {day} (must be 0-6)")
             return False
-            
+
         if not self.connected or not self.socket:
             self.logger.warning("Not connected to sign")
             return False
-            
+
         try:
-            data = bytes([WriteSpecialExtCommand.SET_DAY_OF_WEEK.value, ord('0') + day])
+            # Sign encoding is "1"=Sunday … "7"=Saturday, so add 1 to our index.
+            data = bytes([WriteSpecialExtCommand.SET_DAY_OF_WEEK.value, ord('1') + day])
             frame = self._build_command_frame("E", data)
 
             days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -2039,8 +2110,9 @@ class Alpha9120CController:
             return False
             
         try:
-            # 'S' for 24h, 'M' for 12h (per M-Protocol spec)
-            mode_byte = b'S' if format_24h else b'M'
+            # Manual p.22: "S" = Standard am/pm, "M" = 24-hour (military).
+            # (The previous code had this inverted — it sent "S" for 24-hour.)
+            mode_byte = b'M' if format_24h else b'S'
             data = bytes([WriteSpecialExtCommand.SET_TIME_FORMAT.value]) + mode_byte
             frame = self._build_command_frame("E", data)
 
@@ -2064,46 +2136,166 @@ class Alpha9120CController:
             return False
 
     def set_run_mode(self, auto: bool = True) -> bool:
+        """Deprecated — there is no auto/manual "run mode" command in the protocol.
+
+        The Alpha Sign Communications Protocol has no global auto/manual toggle;
+        scheduling is expressed through the Run Sequence (``E.``), Run Time
+        Table (``E)``) and Run Day Table (``E2``) instead.  The previous
+        implementation sent code ``0x2E`` (which is actually *Set Run Sequence*)
+        with the byte ``'A'``/``'M'``, producing a malformed frame.  This now
+        sends nothing and returns ``False`` so it can never put a bad frame on
+        the wire.  Use :meth:`set_run_time_table` / :meth:`set_run_day_table`.
         """
-        Set sign run mode to auto or manual (M-Protocol Type E, Function 0x2E).
-        
-        Args:
-            auto: True for auto mode (scheduled messages), False for manual mode
-            
-        Returns:
-            True if successful, False otherwise
-            
-        Note:
-            Auto mode allows the sign to display scheduled messages.
-            Manual mode keeps the sign displaying the current message.
+        self.logger.warning(
+            "set_run_mode() is not an M-Protocol command and is a no-op; "
+            "use set_run_time_table()/set_run_day_table() for scheduling."
+        )
+        return False
+
+    # ── Housekeeping (Write Special Function) ──────────────────────────────
+
+    def soft_reset(self) -> bool:
+        """Soft-reset the sign (Write Special Function ``E,``, 0x2C).
+
+        Causes the sign to run its power-up diagnostics.  **Non-destructive** —
+        memory is not cleared (manual p.22).
         """
-        if not self.connected or not self.socket:
-            self.logger.warning("Not connected to sign")
-            return False
-            
         try:
-            # 'A' for auto, 'M' for manual
-            mode_byte = b'A' if auto else b'M'
-            data = bytes([WriteSpecialExtCommand.SET_RUN_MODE.value]) + mode_byte
-            frame = self._build_command_frame("E", data)
-
-            mode_str = "auto" if auto else "manual"
-            self.logger.debug(f"Sent set run mode: {mode_str}")
-
+            frame = self._build_command_frame(
+                "E", bytes([WriteSpecialExtCommand.SOFT_RESET.value])
+            )
             ack = self._send_command_and_read_ack(frame)
-
-            if ack == self.ACK:
-                self.logger.info(f"Run mode set successfully: {mode_str}")
-                return True
-            elif ack == self.NAK:
-                self.logger.error("Sign returned NAK for set run mode")
-                return False
-            else:
-                self.logger.error("No acknowledgement received")
-                return False
-
+            ok = ack == self.ACK
+            self.logger.info("Soft reset %s", "acknowledged" if ok else f"not acknowledged (ack={ack!r})")
+            return ok
         except Exception as e:
-            self.logger.error(f"Error setting run mode: {e}")
+            self.logger.error(f"Error sending soft reset: {e}")
+            return False
+
+    def set_serial_address(self, address: str) -> bool:
+        """Set the sign's serial address (Write Special Function ``E7``, 0x37).
+
+        Args:
+            address: two ASCII hex characters, ``"00"``–``"FF"`` (manual p.26).
+
+        .. note::
+           After this succeeds the sign answers to the *new* address; update
+           ``self.sign_id`` / your configuration accordingly.  A hardware DIP
+           switch set to a non-``00`` address overrides this once power is
+           cycled.
+        """
+        addr = str(address).strip().upper()
+        if not re.fullmatch(r"[0-9A-F]{2}", addr):
+            self.logger.error("Invalid serial address %r (need two hex digits 00-FF)", address)
+            return False
+        try:
+            data = bytes([WriteSpecialExtCommand.SET_SERIAL_ADDRESS.value]) + addr.encode("ascii")
+            frame = self._build_command_frame("E", data)
+            ack = self._send_command_and_read_ack(frame)
+            ok = ack == self.ACK
+            if ok:
+                self.logger.info("Serial address set to %s", addr)
+            else:
+                self.logger.error("Set serial address not acknowledged (ack=%r)", ack)
+            return ok
+        except Exception as e:
+            self.logger.error(f"Error setting serial address: {e}")
+            return False
+
+    def set_run_time_table(self, file_label: str, start: int, stop: int) -> bool:
+        """Set a TEXT file's Run Time Table entry (``E)``, 0x29) — format ``FQQQQ``.
+
+        Args:
+            file_label: one-character TEXT file label.
+            start: start-time code (0x00–0xFF; see manual Appendix B).
+            stop:  stop-time code (0x00–0xFF).
+        """
+        label = (str(file_label) or "A")[:1]
+        if not (0 <= int(start) <= 0xFF and 0 <= int(stop) <= 0xFF):
+            self.logger.error("Run-time start/stop must be 0x00-0xFF")
+            return False
+        try:
+            payload = f"E)" + label + f"{int(start):02X}{int(stop):02X}"
+            frame = self._build_frame_from_payload(payload)
+            return self._send_raw_message(frame)
+        except Exception as e:
+            self.logger.error(f"Error setting run time table: {e}")
+            return False
+
+    def set_run_day_table(self, file_label: str, start_day: int, stop_day: int) -> bool:
+        """Set a TEXT file's Run Day Table entry (``E2``, 0x32) — format ``FSs``.
+
+        ``start_day``/``stop_day`` are single hex nibbles (manual p.24):
+        ``0``=Daily, ``1``=Sun … ``7``=Sat, ``8``=Mon-Fri, ``9``=Weekends,
+        ``A``=Always, ``B``=Never.
+        """
+        label = (str(file_label) or "A")[:1]
+        if not (0 <= int(start_day) <= 0xF and 0 <= int(stop_day) <= 0xF):
+            self.logger.error("Run-day start/stop must be a single hex nibble 0-F")
+            return False
+        try:
+            payload = f"E2" + label + f"{int(start_day):X}{int(stop_day):X}"
+            frame = self._build_frame_from_payload(payload)
+            return self._send_raw_message(frame)
+        except Exception as e:
+            self.logger.error(f"Error setting run day table: {e}")
+            return False
+
+    def set_memory_configuration(self, files: Sequence[Dict[str, Any]]) -> bool:
+        """Set the sign's Memory Configuration (``E$``, 0x24) — **destructive**.
+
+        Each entry in ``files`` allocates one file and must provide:
+        ``label`` (1 char), ``type`` (``"A"`` TEXT / ``"B"`` STRING /
+        ``"D"`` DOTS), ``protection`` (``"U"``/``"L"``, default ``"U"``),
+        ``size`` (int bytes, encoded as 4 hex digits), and ``qqqq`` (4-char
+        trailing field: TEXT = start+stop time e.g. ``"FF00"``; STRING =
+        ``"0000"``; DOTS = colour status).  Record format ``FTPSIZEQQQQ``
+        (manual p.21).
+
+        .. warning::
+           Writing a Memory Configuration **overwrites the previous table and
+           erases stored messages.**  Requires at least one file entry; call
+           :meth:`clear_memory` to wipe.
+        """
+        if not files:
+            self.logger.error("set_memory_configuration requires at least one file entry")
+            return False
+        try:
+            records = ""
+            for f in files:
+                label = str(f.get("label", "A"))[:1] or "A"
+                ftype = str(f.get("type", "A"))[:1].upper()
+                if ftype not in ("A", "B", "D"):
+                    self.logger.error("Invalid file type %r (A/B/D)", ftype)
+                    return False
+                prot = str(f.get("protection", "U"))[:1].upper()
+                prot = prot if prot in ("U", "L") else "U"
+                size = int(f.get("size", 0)) & 0xFFFF
+                qqqq = str(f.get("qqqq", "FF00" if ftype == "A" else "0000"))[:4].upper().ljust(4, "0")
+                records += f"{label}{ftype}{prot}{size:04X}{qqqq}"
+            frame = self._build_frame_from_payload("E$" + records)
+            return self._send_raw_message(frame)
+        except Exception as e:
+            self.logger.error(f"Error setting memory configuration: {e}")
+            return False
+
+    def clear_memory(self, confirm: bool = False) -> bool:
+        """Clear the sign's memory (``E$`` with no data) — **destructive**.
+
+        Erases all stored message files and the Memory Configuration table.
+        Guarded: pass ``confirm=True`` to actually send it.
+        """
+        if not confirm:
+            self.logger.warning("clear_memory() not sent — pass confirm=True (this erases the sign)")
+            return False
+        try:
+            frame = self._build_frame_from_payload("E$")
+            ok = self._send_raw_message(frame)
+            if ok:
+                self.logger.info("Clear Memory command sent")
+            return ok
+        except Exception as e:
+            self.logger.error(f"Error clearing memory: {e}")
             return False
 
     def sync_time_with_system(self) -> bool:
@@ -2134,26 +2326,22 @@ class Alpha9120CController:
         return True
 
     def set_speaker(self, enabled: bool = True) -> bool:
-        """
-        Enable or disable sign speaker/beep (M-Protocol Type E, Function 0x23).
-        
+        """Enable or disable the sign's speaker (Write Special Function ``E!``, 0x21).
+
         Args:
             enabled: True to enable speaker, False to disable
-            
-        Returns:
-            True if successful, False otherwise
-            
-        Note:
-            When enabled, sign will beep on message arrival.
-            Useful for audio alerts during emergencies.
+
+        Per the manual (p.21) the data is two ASCII characters: ``"00"`` =
+        enable, ``"FF"`` = disable.  (The previous implementation used the
+        wrong command code 0x23 and the bytes ``'E'``/``'D'``.)
         """
         if not self.connected or not self.socket:
             self.logger.warning("Not connected to sign")
             return False
-            
+
         try:
-            # 'E' for enable, 'D' for disable
-            state_byte = b'E' if enabled else b'D'
+            # "00" = enable speaker, "FF" = disable speaker.
+            state_byte = b'00' if enabled else b'FF'
             data = bytes([WriteSpecialExtCommand.SET_SPEAKER.value]) + state_byte
             frame = self._build_command_frame("E", data)
 

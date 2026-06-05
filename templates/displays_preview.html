@@ -100,11 +100,18 @@
         max-width: 512px;
     }
 
+    /* VFD and LED previews are server-rendered, high-resolution images with
+       baked-in glow/dot-matrix detail, so they look best with smooth scaling
+       rather than the nearest-neighbour pixelation used for the native-res
+       OLED framebuffer. */
     .vfd-canvas {
-        max-width: 420px;
+        max-width: 460px;
+        image-rendering: auto;
     }
 
     .led-canvas {
+        max-width: 512px;
+        image-rendering: auto;
     }
 
     .refresh-indicator {
@@ -132,29 +139,6 @@
     .display-specs strong {
         color: var(--text-color);
     }
-
-    .led-preview {
-        background: transparent;
-        padding: 8px;
-        font-family: 'JetBrains Mono', 'Courier New', monospace;
-        line-height: 1.6;
-        min-height: 100px;
-        width: 100%;
-        overflow-x: auto;
-    }
-
-    .led-line {
-        display: block;
-        font-size: 1.1rem;
-        font-weight: bold;
-        text-shadow: 0 0 10px currentColor;
-    }
-
-    .led-color-amber { color: var(--warning-color); }
-    .led-color-red { color: var(--danger-color); }
-    .led-color-green { color: var(--success-color); }
-    .led-color-yellow { color: var(--warning-color); }
-    .led-color-orange { color: var(--secondary-color); }
 
     .page-header {
         background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
@@ -303,12 +287,7 @@
                 </div>
 
                 <div class="display-canvas-wrapper led-wrapper">
-                    <div id="led-preview" class="led-preview">
-                        <span class="led-line led-color-amber" id="led-line-0">--------------------</span>
-                        <span class="led-line led-color-amber" id="led-line-1">  LED SIGN READY    </span>
-                        <span class="led-line led-color-amber" id="led-line-2">   Awaiting Data    </span>
-                        <span class="led-line led-color-amber" id="led-line-3">--------------------</span>
-                    </div>
+                    <canvas id="led-canvas" class="display-canvas led-canvas" width="120" height="32"></canvas>
                 </div>
 
                 <div class="display-specs">
@@ -351,6 +330,33 @@ const oledCanvas = document.getElementById('oled-canvas');
 const oledCtx = oledCanvas.getContext('2d');
 const vfdCanvas = document.getElementById('vfd-canvas');
 const vfdCtx = vfdCanvas.getContext('2d');
+const ledCanvas = document.getElementById('led-canvas');
+const ledCtx = ledCanvas.getContext('2d');
+
+// Cache the last drawn preview-image data URI per panel so we only redraw
+// (and resize the canvas to the server-rendered image) when it actually
+// changes. Avoids flicker from re-decoding an identical image every poll.
+const lastPreviewImg = { vfd: null, led: null };
+
+// Draw a server-rendered preview image (data URI) into a canvas, sizing the
+// canvas to the image so the baked-in glow/dot-matrix detail is preserved.
+// The image is high-resolution already, so smoothing (not pixelation) gives
+// the cleanest scaled-down result in the responsive layout.
+function drawPreviewImage(canvas, ctx, key, dataUri) {
+    if (lastPreviewImg[key] === dataUri) return;
+    lastPreviewImg[key] = dataUri;
+    const img = new Image();
+    img.onload = function() {
+        if (canvas.width !== img.naturalWidth || canvas.height !== img.naturalHeight) {
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+        }
+        ctx.imageSmoothingEnabled = true;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    };
+    img.src = dataUri;
+}
 
 // Scale canvases for better visibility while keeping them responsive
 const oledScale = 4;
@@ -448,40 +454,50 @@ function renderOLED(state) {
     }
 }
 
-// Render VFD display
+// Render VFD display.
+// The displays service renders the real blue-green VFD output to an image
+// (services/displays/preview_render.py) and ships it as a data URI, exactly
+// like the OLED panel. When offline, show a simple cyan idle message.
 function renderVFD(state) {
-    // Clear canvas with VFD background (hardware simulation)
-    vfdCtx.fillStyle = getDisplayColor('--display-vfd-bg', '#001a00');
-    vfdCtx.fillRect(0, 0, 140, 32);
+    if (state && state.preview_image) {
+        drawPreviewImage(vfdCanvas, vfdCtx, 'vfd', state.preview_image);
+        return;
+    }
 
-    // VFD display text (hardware characteristic bright green)
-    vfdCtx.fillStyle = getDisplayColor('--display-vfd-text', '#00ff00');
-    vfdCtx.font = '10px monospace';
+    lastPreviewImg.vfd = null;
+    if (vfdCanvas.width !== 140 || vfdCanvas.height !== 32) {
+        vfdCanvas.width = 140; vfdCanvas.height = 32;
+    }
+    vfdCtx.fillStyle = '#021410';
+    vfdCtx.fillRect(0, 0, vfdCanvas.width, vfdCanvas.height);
+    vfdCtx.fillStyle = '#6cece0';
+    vfdCtx.font = '9px monospace';
     vfdCtx.textAlign = 'center';
-
-    // Show idle state
-    vfdCtx.fillText('EAS STATION - VFD', 70, 16);
+    vfdCtx.fillText('EAS STATION', 70, 14);
     vfdCtx.font = '8px monospace';
     vfdCtx.fillText('No Active Display', 70, 26);
 }
 
-// Render LED sign
+// Render LED Network Sign.
+// The displays service renders the dot-matrix output (in the message's
+// M-Protocol colour) to an image and ships it as a data URI. When offline,
+// show a simple amber idle message.
 function renderLED(state) {
-    const color = (state.color || 'AMBER').toLowerCase();
-    const colorClass = 'led-color-' + color;
-
-    for (let i = 0; i < 4; i++) {
-        const lineEl = document.getElementById(`led-line-${i}`);
-        if (lineEl) {
-            lineEl.className = `led-line ${colorClass}`;
-            // Show placeholder if no message
-            if (!state.current_message || !state.current_message.lines || !state.current_message.lines[i]) {
-                lineEl.textContent = '                    '; // 20 spaces
-            } else {
-                lineEl.textContent = state.current_message.lines[i].padEnd(20, ' ');
-            }
-        }
+    if (state && state.preview_image) {
+        drawPreviewImage(ledCanvas, ledCtx, 'led', state.preview_image);
+        return;
     }
+
+    lastPreviewImg.led = null;
+    if (ledCanvas.width !== 120 || ledCanvas.height !== 32) {
+        ledCanvas.width = 120; ledCanvas.height = 32;
+    }
+    ledCtx.fillStyle = '#0a0908';
+    ledCtx.fillRect(0, 0, ledCanvas.width, ledCanvas.height);
+    ledCtx.fillStyle = '#ffb000';
+    ledCtx.font = '8px monospace';
+    ledCtx.textAlign = 'center';
+    ledCtx.fillText('LED SIGN READY', 60, 18);
 }
 
 // Update display states from server
