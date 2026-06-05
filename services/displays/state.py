@@ -114,6 +114,20 @@ def publish_display_state(redis_client, screen_manager) -> None:
             # Only show as enabled if both database setting is true AND controller exists
             if vfd_enabled_in_db and vfd_controller:
                 state["vfd"]["enabled"] = True
+
+                # Render a faithful preview of the blue-green VFD from the
+                # draw-commands last sent to the panel (falling back to an idle
+                # screen when nothing has been displayed yet).
+                try:
+                    from services.displays.preview_render import (
+                        render_vfd_preview, render_vfd_idle,
+                    )
+                    commands = getattr(screen_manager, "_last_vfd_commands", None) if screen_manager else None
+                    preview = render_vfd_preview(commands) if commands else render_vfd_idle()
+                    if preview:
+                        state["vfd"]["preview_image"] = preview
+                except Exception as e:
+                    logger.debug(f"Failed to render VFD preview: {e}")
         except Exception as e:
             logger.debug(f"Error getting VFD state: {e}")
 
@@ -127,6 +141,29 @@ def publish_display_state(redis_client, screen_manager) -> None:
             # Only show as enabled if both database setting is true AND controller exists
             if led_enabled_in_db and led_module.led_controller:
                 state["led"]["enabled"] = True
+
+                # Render a faithful dot-matrix preview from the LED content last
+                # rendered by the rotation engine (lines + M-Protocol colour).
+                try:
+                    from services.displays.preview_render import render_led_preview
+                    led_render = getattr(screen_manager, "_last_led_render", None) if screen_manager else None
+                    if led_render:
+                        lines = led_render.get("lines") or []
+                        color = led_render.get("color", "AMBER")
+                        state["led"]["color"] = color
+                        state["led"]["current_message"] = {
+                            "lines": [
+                                (ln.get("text", "") if isinstance(ln, dict) else str(ln))
+                                for ln in lines
+                            ]
+                        }
+                        preview = render_led_preview(lines, color)
+                    else:
+                        preview = render_led_preview(["", "EAS STATION READY", "", ""], "AMBER")
+                    if preview:
+                        state["led"]["preview_image"] = preview
+                except Exception as e:
+                    logger.debug(f"Failed to render LED preview: {e}")
         except Exception as e:
             logger.debug(f"Error getting LED state: {e}")
 

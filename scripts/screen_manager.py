@@ -149,6 +149,13 @@ class ScreenManager:
         self._last_led_update = datetime.min
         self._last_vfd_update = datetime.min
         self._last_oled_update = datetime.min
+        # Most recently rendered LED/VFD content, retained so the displays
+        # service can publish a faithful preview image of what each panel is
+        # currently showing (see services/displays/state.py).  LED keeps the
+        # ScreenRenderer output (lines + colour); VFD keeps the draw-command
+        # list that was sent to the panel.
+        self._last_led_render: Optional[Dict[str, Any]] = None
+        self._last_vfd_commands: Optional[List[Dict[str, Any]]] = None
         self._oled_button = None
         self._oled_button_actions: Deque[str] = deque()
         self._oled_button_lock = threading.Lock()
@@ -709,6 +716,9 @@ class ScreenManager:
             if not rendered:
                 return
 
+            # Retain for the live preview (see services/displays/state.py).
+            self._last_led_render = rendered
+
             # Send to LED display
             if led_module.led_controller:
                 lines = rendered.get('lines', [])
@@ -764,6 +774,9 @@ class ScreenManager:
 
             if not commands:
                 return
+
+            # Retain for the live preview (see services/displays/state.py).
+            self._last_vfd_commands = commands
 
             # Send to VFD display
             if vfd_module.vfd_controller:
