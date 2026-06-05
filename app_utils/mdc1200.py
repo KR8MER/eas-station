@@ -824,7 +824,11 @@ def _decode_info_block(payload14: Sequence[int]) -> Tuple[List[int], bool, bool]
     return list(info), fec_ok, crc_ok
 
 
-def decode_packet(frame: Sequence[int]) -> MDC1200Packet:
+def decode_packet(
+    frame: Sequence[int],
+    *,
+    require_post_preamble: bool = True,
+) -> MDC1200Packet:
     """Decode a 26-byte MDC1200 single packet.
 
     Inverse of :func:`encode_packet`.  Validates the 3-byte preamble,
@@ -836,16 +840,26 @@ def decode_packet(frame: Sequence[int]) -> MDC1200Packet:
         frame: 26-byte on-air buffer (3 preamble + 5 sync + 14 payload
             + 4 post-preamble), exactly as produced by
             :func:`encode_packet`.
+        require_post_preamble: When ``True`` (the default) the trailing
+            4-byte post-preamble must match the canonical pattern.  Set
+            ``False`` to tolerate a missing/garbled post-preamble — useful
+            when decoding the *last* burst in a recording, whose trailing
+            mark tone is frequently clipped by truncation or lossy
+            re-encoding.  The post-preamble carries no information (it is
+            pure mark tone for the receiver's benefit), so skipping the
+            check does not weaken the CRC/FEC integrity guarantees on the
+            recovered payload.
 
     Returns:
         :class:`MDC1200Packet` with op-code, argument, unit ID, status,
         and ``crc_ok`` / ``fec_ok`` flags populated.
 
     Raises:
-        MDC1200DecodeError: If the buffer is the wrong length or if any
-            of preamble / sync / post-preamble does not match the
-            canonical MDC1200 pattern.  CRC and FEC failures do *not*
-            raise — they are reported via the result fields.
+        MDC1200DecodeError: If the buffer is the wrong length or if the
+            preamble / sync word (or, when required, the post-preamble)
+            does not match the canonical MDC1200 pattern.  CRC and FEC
+            failures do *not* raise — they are reported via the result
+            fields.
     """
     expected_len = len(MDC1200_PREAMBLE) + len(MDC1200_SYNC) + (_FEC_K * 2) + len(
         MDC1200_POST_PREAMBLE
@@ -868,7 +882,7 @@ def decode_packet(frame: Sequence[int]) -> MDC1200Packet:
         raise MDC1200DecodeError(
             f"sync word mismatch: {tuple(pre_mod[pre_end:sync_end])!r}"
         )
-    if tuple(pre_mod[pay_end:]) != MDC1200_POST_PREAMBLE:
+    if require_post_preamble and tuple(pre_mod[pay_end:]) != MDC1200_POST_PREAMBLE:
         raise MDC1200DecodeError(
             f"post-preamble mismatch: {tuple(pre_mod[pay_end:])!r}"
         )
@@ -1088,6 +1102,29 @@ def decode_all_mdc1200_from_samples(
                 consumed_bits = _SINGLE_BITS
             except MDC1200DecodeError:
                 pass
+        elif len(frame_bits) >= _SINGLE_BITS - len(MDC1200_POST_PREAMBLE) * 8:
+            # The payload (preamble + sync + 14-byte info/FEC block) is fully
+            # present but the trailing post-preamble — pure mark tone, no data
+            # — was clipped.  This is the routine fate of the *last* MDC burst
+            # in a recording: EAS Station emits the post-alert PTT-ID at the
+            # very end of the composite with no trailing audio, so a file that
+            # ends at the packet boundary (or that a lossy re-encode trimmed by
+            # a few samples) loses the final mark-tone bits.  Reconstruct the
+            # missing bits with mark (1) and decode without requiring the
+            # post-preamble, accepting the packet only if its own CRC *and* FEC
+            # validate so a genuinely corrupt tail can't sneak through.
+            padded = list(frame_bits) + [1] * (_SINGLE_BITS - len(frame_bits))
+            recovered = _bits_to_bytes(padded, _SINGLE_BYTES)
+            if recovered is not None:
+                try:
+                    candidate = decode_packet(recovered, require_post_preamble=False)
+                    if candidate.crc_ok and candidate.fec_ok:
+                        packet = candidate
+                        # Only the real (un-padded) bits were consumed; advance
+                        # the cursor past them so the search loop terminates.
+                        consumed_bits = len(frame_bits)
+                except MDC1200DecodeError:
+                    pass
 
         # Only promote to a double-packet decode when (a) we have enough
         # bits, AND (b) the recovered opcode/arg is a known double-packet
