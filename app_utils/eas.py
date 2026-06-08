@@ -1621,37 +1621,36 @@ def _strip_awips_identifier(description: str, parameters: Dict[str, object]) -> 
     The identifier is an internal routing code, not narratable content, so it
     should not be spoken in the TTS voiceover.  This removes it when present.
 
-    Two detection strategies are used, in order:
-
-    1. The exact value from the CAP ``AWIPSidentifier`` parameter (most
-       reliable) when the description begins with it.
-    2. A conservative generic fallback: a first line consisting solely of
-       4-6 uppercase letters followed by a blank line — the AWIPS identifier
-       shape — when no parameter value is available or it did not match.
+    Stripping is driven solely by the exact value from the CAP
+    ``AWIPSidentifier`` parameter, and only when the description actually
+    begins with it on its own line.  Many alerts have no AWIPS identifier (and
+    some legitimately begin with a short all-caps line), so no shape-based
+    heuristic is applied — that would risk deleting real content from messages
+    that never carried an identifier.  When the parameter is absent or does not
+    match the start of the description, the text is returned unchanged.
     """
     if not description:
         return description
 
-    import re as _re
+    if not isinstance(parameters, dict):
+        return description
 
-    awips_val = parameters.get('AWIPSidentifier') if isinstance(parameters, dict) else None
+    awips_val = parameters.get('AWIPSidentifier')
     if isinstance(awips_val, list):
         awips_val = awips_val[0] if awips_val else None
+    if not awips_val:
+        return description
 
-    # Strategy 1: strip the exact identifier from the parameter when the
-    # description starts with it on its own line.
-    if awips_val:
-        awips = str(awips_val).strip()
-        if awips:
-            pattern = r'^\s*' + _re.escape(awips) + r'[ \t]*\r?\n'
-            stripped = _re.sub(pattern, '', description, count=1, flags=_re.IGNORECASE)
-            if stripped != description:
-                return stripped.lstrip('\r\n')
+    awips = str(awips_val).strip()
+    if not awips:
+        return description
 
-    # Strategy 2: generic AWIPS-shaped first line (4-6 uppercase letters)
-    # followed by a blank line.  The blank line requirement keeps this from
-    # matching legitimate short all-caps words at the start of a sentence.
-    stripped = _re.sub(r'^[ \t]*[A-Z]{4,6}[ \t]*\r?\n\r?\n', '', description, count=1)
+    import re as _re
+
+    # Strip the identifier only when the description opens with it on its own
+    # line (optional trailing spaces, then a newline).
+    pattern = r'^\s*' + _re.escape(awips) + r'[ \t]*\r?\n'
+    stripped = _re.sub(pattern, '', description, count=1, flags=_re.IGNORECASE)
     if stripped != description:
         return stripped.lstrip('\r\n')
 

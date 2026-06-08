@@ -364,12 +364,22 @@ class TestAwipsIdentifierStripped(unittest.TestCase):
         self.assertFalse(out.startswith('SVRCLE'))
         self.assertTrue(out.startswith('The National Weather Service'))
 
-    def test_strip_helper_generic_fallback(self):
-        # No parameter supplied — the generic AWIPS-shaped first line is removed.
+    def test_no_parameter_leaves_text_untouched(self):
+        # Without the AWIPSidentifier parameter we must NOT guess: even an
+        # AWIPS-shaped first line is preserved, because many messages have no
+        # identifier and stripping would delete real content.
         desc = 'SVRCLE\n\nThe National Weather Service in Cleveland has issued a'
         out = self.eas_mod._strip_awips_identifier(desc, {})
-        self.assertFalse(out.startswith('SVRCLE'))
-        self.assertTrue(out.startswith('The National Weather Service'))
+        self.assertEqual(out, desc)
+
+    def test_parameter_present_but_no_match_left_untouched(self):
+        # Parameter exists but the description does not begin with it — leave
+        # the body intact rather than stripping the wrong line.
+        desc = 'The National Weather Service in Cleveland has issued a warning.'
+        out = self.eas_mod._strip_awips_identifier(
+            desc, {'AWIPSidentifier': ['SVRCLE']}
+        )
+        self.assertEqual(out, desc)
 
     def test_narration_omits_awips_identifier(self):
         text = self._construct(
@@ -381,11 +391,13 @@ class TestAwipsIdentifierStripped(unittest.TestCase):
         self.assertNotIn('svrcle', text.lower())
         self.assertIn('national weather service', text.lower())
 
-    def test_narration_strips_without_parameter(self):
+    def test_narration_keeps_text_without_parameter(self):
+        # No AWIPSidentifier parameter — the body is narrated as-is.  We do not
+        # guess, because not every message carries an identifier.
         text = self._construct(
             'SVRCLE\n\nThe National Weather Service in Cleveland has issued a',
         )
-        self.assertNotIn('svrcle', text.lower())
+        self.assertIn('svrcle', text.lower())
 
     def test_legitimate_text_not_stripped(self):
         # A description that does not start with an AWIPS-shaped line must be
