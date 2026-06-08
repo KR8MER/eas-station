@@ -1605,6 +1605,59 @@ def _normalize_text_for_tts(text: str) -> str:
     return result
 
 
+def _strip_awips_identifier(description: str, parameters: Dict[str, object]) -> str:
+    """Strip the leading AWIPS product identifier from an NWS description.
+
+    NWS warning products begin the CAP ``<description>`` with the internal
+    AWIPS product identifier on its own line (e.g. ``"SVRCLE"`` for a Severe
+    Thunderstorm Warning from the Cleveland office), followed by a blank line
+    and the human-readable text::
+
+        SVRCLE
+
+        The National Weather Service in Cleveland has issued a
+        ...
+
+    The identifier is an internal routing code, not narratable content, so it
+    should not be spoken in the TTS voiceover.  This removes it when present.
+
+    Two detection strategies are used, in order:
+
+    1. The exact value from the CAP ``AWIPSidentifier`` parameter (most
+       reliable) when the description begins with it.
+    2. A conservative generic fallback: a first line consisting solely of
+       4-6 uppercase letters followed by a blank line — the AWIPS identifier
+       shape — when no parameter value is available or it did not match.
+    """
+    if not description:
+        return description
+
+    import re as _re
+
+    awips_val = parameters.get('AWIPSidentifier') if isinstance(parameters, dict) else None
+    if isinstance(awips_val, list):
+        awips_val = awips_val[0] if awips_val else None
+
+    # Strategy 1: strip the exact identifier from the parameter when the
+    # description starts with it on its own line.
+    if awips_val:
+        awips = str(awips_val).strip()
+        if awips:
+            pattern = r'^\s*' + _re.escape(awips) + r'[ \t]*\r?\n'
+            stripped = _re.sub(pattern, '', description, count=1, flags=_re.IGNORECASE)
+            if stripped != description:
+                return stripped.lstrip('\r\n')
+
+    # Strategy 2: generic AWIPS-shaped first line (4-6 uppercase letters)
+    # followed by a blank line.  The blank line requirement keeps this from
+    # matching legitimate short all-caps words at the start of a sentence.
+    stripped = _re.sub(r'^[ \t]*[A-Z]{4,6}[ \t]*\r?\n\r?\n', '', description, count=1)
+    if stripped != description:
+        return stripped.lstrip('\r\n')
+
+    return description
+
+
 def _compose_message_text(alert: object, payload: Optional[Dict[str, object]] = None) -> str:
     """Build the TTS narration text from the alert body.
 
@@ -1709,6 +1762,11 @@ def _compose_message_text(alert: object, payload: Optional[Dict[str, object]] = 
 
         description = str(getattr(alert, 'description', '') or '').strip()
         instruction = str(getattr(alert, 'instruction', '') or '').strip()
+
+        # Strip the leading AWIPS product identifier (e.g. "SVRCLE") that NWS
+        # places on the first line of warning descriptions — it is an internal
+        # routing code, not narratable content.
+        description = _strip_awips_identifier(description, parameters)
 
         if description:
             body_parts.append(description)

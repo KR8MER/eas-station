@@ -328,6 +328,82 @@ class TestDefaultOriginator(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# AWIPS identifier stripped from narration body
+# ---------------------------------------------------------------------------
+
+class TestAwipsIdentifierStripped(unittest.TestCase):
+    """NWS warning descriptions begin with the internal AWIPS product
+    identifier (e.g. "SVRCLE") on its own line.  It is a routing code, not
+    narratable content, and must not be spoken in the TTS voiceover."""
+
+    def setUp(self):
+        from app_utils import eas as eas_mod
+        self.eas_mod = eas_mod
+
+    def _construct(self, description, parameters=None):
+        alert = SimpleNamespace(
+            event='Severe Thunderstorm Warning',
+            description=description,
+            instruction='',
+            sent=None,
+            expires=None,
+            source='NOAA',
+        )
+        props = {'senderName': 'NWS Cleveland OH'}
+        if parameters is not None:
+            props['parameters'] = parameters
+        payload = {'raw_json': {'properties': props}, 'source': 'NOAA'}
+        with patch.object(self.eas_mod, '_load_pronunciation_rules', return_value=[]):
+            return self.eas_mod._compose_message_text(alert, payload)
+
+    def test_strip_helper_uses_parameter(self):
+        desc = 'SVRCLE\n\nThe National Weather Service in Cleveland has issued a'
+        out = self.eas_mod._strip_awips_identifier(
+            desc, {'AWIPSidentifier': ['SVRCLE']}
+        )
+        self.assertFalse(out.startswith('SVRCLE'))
+        self.assertTrue(out.startswith('The National Weather Service'))
+
+    def test_strip_helper_generic_fallback(self):
+        # No parameter supplied — the generic AWIPS-shaped first line is removed.
+        desc = 'SVRCLE\n\nThe National Weather Service in Cleveland has issued a'
+        out = self.eas_mod._strip_awips_identifier(desc, {})
+        self.assertFalse(out.startswith('SVRCLE'))
+        self.assertTrue(out.startswith('The National Weather Service'))
+
+    def test_narration_omits_awips_identifier(self):
+        text = self._construct(
+            'SVRCLE\n\nThe National Weather Service in Cleveland has issued a\n\n'
+            '* Severe Thunderstorm Warning for...',
+            parameters={'AWIPSidentifier': ['SVRCLE']},
+        )
+        # Lowercased by the normalizer; the identifier must not appear.
+        self.assertNotIn('svrcle', text.lower())
+        self.assertIn('national weather service', text.lower())
+
+    def test_narration_strips_without_parameter(self):
+        text = self._construct(
+            'SVRCLE\n\nThe National Weather Service in Cleveland has issued a',
+        )
+        self.assertNotIn('svrcle', text.lower())
+
+    def test_legitimate_text_not_stripped(self):
+        # A description that does not start with an AWIPS-shaped line must be
+        # left intact (no blank-line-delimited 4-6 letter code at the top).
+        out = self.eas_mod._strip_awips_identifier(
+            'The National Weather Service has issued a warning.', {}
+        )
+        self.assertTrue(out.startswith('The National Weather Service'))
+
+    def test_short_caps_word_without_blank_line_preserved(self):
+        # "TAKE cover now" — a single newline (not a blank line) after a caps
+        # word is normal prose, not an AWIPS header, so it is preserved.
+        desc = 'TAKE\ncover now and stay away from windows.'
+        out = self.eas_mod._strip_awips_identifier(desc, {})
+        self.assertEqual(out, desc)
+
+
+# ---------------------------------------------------------------------------
 # §3.8 — msgType filtering (Cancel/Ack/Error not aired; Alert/Update aired)
 # ---------------------------------------------------------------------------
 
