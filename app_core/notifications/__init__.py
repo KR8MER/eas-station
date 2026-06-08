@@ -62,21 +62,49 @@ def send_alert_notifications(
             return
 
         # ------------------------------------------------------------------
-        # Fetch composite audio if needed for email attachment
+        # Gather email media: composite audio, the linked CAP alert id (for
+        # the inline coverage map), and a public "listen" link.
         # ------------------------------------------------------------------
         audio_data: Optional[bytes] = None
         audio_filename: Optional[str] = None
+        cap_alert_id: Optional[int] = None
 
-        if record_id and settings.email_enabled and settings.email_attach_audio:
+        # Backwards/forwards compatible reads of the new settings columns.
+        email_html = bool(getattr(settings, "email_html", True))
+        email_include_map = bool(getattr(settings, "email_include_map", True))
+        email_audio_link = bool(getattr(settings, "email_audio_link", True))
+        email_compress_audio = bool(getattr(settings, "email_compress_audio", False))
+        public_base_url = (getattr(settings, "public_base_url", "") or "").strip()
+
+        if record_id and settings.email_enabled:
             try:
                 eas_msg = db_session.get(EASMessage, record_id)
-                if eas_msg and eas_msg.audio_data:
-                    audio_data = bytes(eas_msg.audio_data)
-                    audio_filename = eas_msg.audio_filename or "eas_alert.wav"
+                if eas_msg:
+                    cap_alert_id = getattr(eas_msg, "cap_alert_id", None)
+                    if settings.email_attach_audio and eas_msg.audio_data:
+                        audio_data = bytes(eas_msg.audio_data)
+                        audio_filename = eas_msg.audio_filename or "eas_alert.wav"
             except Exception as exc:
                 log.warning(
-                    "Could not fetch EASMessage audio for notification attachment: %s", exc
+                    "Could not fetch EASMessage for notification media: %s", exc
                 )
+
+        # Inline coverage-map image (HTML emails only).
+        map_image: Optional[bytes] = None
+        if settings.email_enabled and email_html and email_include_map and cap_alert_id:
+            try:
+                from app_core.notifications.alert_image import build_alert_image
+
+                map_image = build_alert_image(db_session, cap_alert_id, log)
+            except Exception as exc:
+                log.warning("Could not build alert coverage image: %s", exc)
+
+        # Public "listen / download" link for the broadcast audio.
+        audio_url: Optional[str] = None
+        if email_audio_link and public_base_url and record_id:
+            audio_url = (
+                f"{public_base_url.rstrip('/')}/eas_messages/{record_id}/audio?download=1"
+            )
 
         # ------------------------------------------------------------------
         # Email
@@ -103,6 +131,10 @@ def send_alert_notifications(
                         smtp_security=settings.smtp_security or "starttls",
                         audio_data=audio_data if settings.email_attach_audio else None,
                         audio_filename=audio_filename,
+                        html=email_html,
+                        map_image=map_image,
+                        audio_url=audio_url,
+                        compress_audio=email_compress_audio,
                     )
                 except Exception as exc:
                     log.error("Alert email notification failed: %s", exc)
