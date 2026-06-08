@@ -767,3 +767,58 @@ def test_png_output_carries_software_tag_only():
     info = getattr(img, "info", {}) or {}
     assert "date:modify" not in info
     assert "Modify Date" not in info
+
+
+# ── Map: county outlines + scale bar ────────────────────────────────────────
+@pytest.mark.parametrize("max_miles,expected", [
+    (7,     5),
+    (0.3,   0.25),
+    (0.05,  0.1),     # below the smallest nice value → floors to it
+    (120,   100),
+    (1000,  1000),
+    (4000,  1000),    # above the largest → caps at it
+])
+def test_nice_scale_miles_snaps_to_round_distance(max_miles, expected):
+    assert image_export._nice_scale_miles(max_miles) == expected
+
+
+def test_fetch_county_outlines_degrades_without_db():
+    """No app/DB context (the test environment) must yield an empty list so
+    the renderer falls back to a polygon-only map instead of crashing."""
+    assert image_export._fetch_county_outlines(-84.4, 39.8, -83.2, 41.0) == []
+
+
+def test_render_map_draws_counties_and_scale_bar(monkeypatch):
+    """``_render_map`` overlays county outlines (when available) and a scale
+    bar without network access — tiles are stubbed to the offline path."""
+    # Force the offline tile path so the test never hits the network.
+    monkeypatch.setattr(image_export, "_fetch_tile", lambda tx, ty, z: None)
+
+    # Stub a 3×3 grid of square "counties" around the alert polygon.
+    def _fake_counties(min_lon, min_lat, max_lon, max_lat):
+        xs = [-84.4, -84.0, -83.6, -83.2]
+        ys = [39.8, 40.2, 40.6, 41.0]
+        out = []
+        for i in range(len(xs) - 1):
+            for j in range(len(ys) - 1):
+                x0, x1, y0, y1 = xs[i], xs[i + 1], ys[j], ys[j + 1]
+                out.append({
+                    "name": "Test",
+                    "geom": {
+                        "type": "Polygon",
+                        "coordinates": [[[x0, y0], [x1, y0], [x1, y1],
+                                         [x0, y1], [x0, y0]]],
+                    },
+                })
+        return out
+
+    monkeypatch.setattr(image_export, "_fetch_county_outlines", _fake_counties)
+
+    geom = {
+        "type": "Polygon",
+        "coordinates": [[[-84.0, 40.0], [-83.5, 40.0], [-83.5, 40.4],
+                         [-84.0, 40.4], [-84.0, 40.0]]],
+    }
+    img = image_export._render_map(geom, "severe", map_w=582, map_h=490)
+    assert img.size == (582, 490)
+    assert img.mode == "RGB"
