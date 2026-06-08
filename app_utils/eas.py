@@ -1605,6 +1605,58 @@ def _normalize_text_for_tts(text: str) -> str:
     return result
 
 
+def _strip_awips_identifier(description: str, parameters: Dict[str, object]) -> str:
+    """Strip the leading AWIPS product identifier from an NWS description.
+
+    NWS warning products begin the CAP ``<description>`` with the internal
+    AWIPS product identifier on its own line (e.g. ``"SVRCLE"`` for a Severe
+    Thunderstorm Warning from the Cleveland office), followed by a blank line
+    and the human-readable text::
+
+        SVRCLE
+
+        The National Weather Service in Cleveland has issued a
+        ...
+
+    The identifier is an internal routing code, not narratable content, so it
+    should not be spoken in the TTS voiceover.  This removes it when present.
+
+    Stripping is driven solely by the exact value from the CAP
+    ``AWIPSidentifier`` parameter, and only when the description actually
+    begins with it on its own line.  Many alerts have no AWIPS identifier (and
+    some legitimately begin with a short all-caps line), so no shape-based
+    heuristic is applied — that would risk deleting real content from messages
+    that never carried an identifier.  When the parameter is absent or does not
+    match the start of the description, the text is returned unchanged.
+    """
+    if not description:
+        return description
+
+    if not isinstance(parameters, dict):
+        return description
+
+    awips_val = parameters.get('AWIPSidentifier')
+    if isinstance(awips_val, list):
+        awips_val = awips_val[0] if awips_val else None
+    if not awips_val:
+        return description
+
+    awips = str(awips_val).strip()
+    if not awips:
+        return description
+
+    import re as _re
+
+    # Strip the identifier only when the description opens with it on its own
+    # line (optional trailing spaces, then a newline).
+    pattern = r'^\s*' + _re.escape(awips) + r'[ \t]*\r?\n'
+    stripped = _re.sub(pattern, '', description, count=1, flags=_re.IGNORECASE)
+    if stripped != description:
+        return stripped.lstrip('\r\n')
+
+    return description
+
+
 def _compose_message_text(alert: object, payload: Optional[Dict[str, object]] = None) -> str:
     """Build the TTS narration text from the alert body.
 
@@ -1709,6 +1761,11 @@ def _compose_message_text(alert: object, payload: Optional[Dict[str, object]] = 
 
         description = str(getattr(alert, 'description', '') or '').strip()
         instruction = str(getattr(alert, 'instruction', '') or '').strip()
+
+        # Strip the leading AWIPS product identifier (e.g. "SVRCLE") that NWS
+        # places on the first line of warning descriptions — it is an internal
+        # routing code, not narratable content.
+        description = _strip_awips_identifier(description, parameters)
 
         if description:
             body_parts.append(description)
