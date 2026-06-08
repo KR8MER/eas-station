@@ -24,7 +24,8 @@ from __future__ import annotations
 Generates a Facebook-ready 1200×630 PNG for a given CAP alert containing:
 - A stormy-sky header with procedural lightning bolts (same visual
   language as the site's lightning theme), the event name, and severity
-- Static OpenStreetMap tile background with the alert polygon drawn on top
+- Static OpenStreetMap tile background with muted county reference
+  outlines and the alert polygon drawn on top, plus a distance scale bar
 - Storm threat badges (tornado, wind, hail) when present
 - NWS headline, affected areas, description, and safety instructions —
   the priority sections for a share card, sized to fill the available
@@ -1776,6 +1777,149 @@ def _draw_storm_track(canvas: Image.Image, storm: Dict,
                     label, font=f, fill=(255, 255, 255))
 
 
+def _fetch_county_outlines(
+    min_lon: float, min_lat: float, max_lon: float, max_lat: float,
+) -> List[Dict[str, Any]]:
+    """Return simplified GeoJSON geometries for the US counties that
+    intersect the given lon/lat bounding box.
+
+    These are drawn as muted reference lines *under* the alert polygon so
+    the affected area carries geographic context (which county / counties
+    it falls in) — mirroring the county boundaries on official NWS warning
+    graphics.
+
+    Returns an empty list when the boundary table is unavailable, empty, or
+    there is no application / database context (e.g. unit tests, an offline
+    render), so the map renderer degrades gracefully to a polygon-only view.
+    """
+    try:
+        from app_core.extensions import db
+        from sqlalchemy import text as _text
+    except Exception:
+        return []
+
+    # Simplify tolerance in degrees.  County lines are reference context,
+    # not the subject, so a coarse outline keeps the vertex count (and the
+    # draw cost) low without visibly changing the shape at share-card
+    # resolution.  Scale it to the viewport so a tightly-zoomed single-county
+    # warning still gets a faithful border.
+    tol = max(max_lon - min_lon, max_lat - min_lat, 0.01) * 0.0015
+
+    try:
+        rows = db.session.execute(
+            _text(
+                """
+                SELECT name,
+                       ST_AsGeoJSON(
+                           ST_SimplifyPreserveTopology(geom, :tol), 5
+                       ) AS gj
+                FROM us_county_boundaries
+                WHERE geom && ST_MakeEnvelope(
+                          :min_lon, :min_lat, :max_lon, :max_lat, 4326
+                      )
+                LIMIT 80
+                """
+            ),
+            {
+                "tol": tol,
+                "min_lon": min_lon, "min_lat": min_lat,
+                "max_lon": max_lon, "max_lat": max_lat,
+            },
+        ).fetchall()
+    except Exception:
+        # No table, no PostGIS, no DB session — silently skip; the alert
+        # polygon alone is still a complete map.
+        return []
+
+    out: List[Dict[str, Any]] = []
+    for row in rows:
+        try:
+            out.append({'name': row.name, 'geom': json.loads(row.gj)})
+        except Exception:
+            continue
+    return out
+
+
+# Nice round distances (miles) for the map scale bar, smallest → largest.
+_SCALE_BAR_MILES = [
+    0.1, 0.2, 0.25, 0.5, 1, 2, 3, 5, 10, 15, 20, 25, 50, 75,
+    100, 150, 200, 300, 500, 1000,
+]
+
+
+def _nice_scale_miles(max_miles: float) -> float:
+    """Return the largest 'nice' distance ≤ *max_miles* for the scale bar."""
+    pick = _SCALE_BAR_MILES[0]
+    for d in _SCALE_BAR_MILES:
+        if d <= max_miles:
+            pick = d
+        else:
+            break
+    return pick
+
+
+def _draw_scale_bar(img: Image.Image, fonts: Dict, *,
+                    center_lat: float, z: int, resize_ratio: float = 1.0) -> None:
+    """Draw a distance scale bar in the lower-left of the (cropped) map.
+
+    Gives the reader an instant sense of how large the affected area is —
+    a 5-mile hail core and a 200-mile flood watch look very different once
+    there's a ruler on the map.  Distances are shown in miles for the US
+    warning audience.
+
+    *resize_ratio* accounts for the rare case where the native tile crop was
+    resized to fit the map slot: each final pixel then covers proportionally
+    more ground, so the metres-per-pixel figure is scaled to match.
+    """
+    map_w, map_h = img.size
+    # Web-Mercator ground resolution at this latitude / zoom (256-px tiles).
+    m_per_px = (156543.03392804097 * math.cos(math.radians(center_lat))
+                / (2 ** z)) * max(resize_ratio, 1e-6)
+    if m_per_px <= 0:
+        return
+
+    # Aim for a bar no wider than ~28% of the map; snap to a nice distance.
+    max_px = map_w * 0.28
+    max_miles = (max_px * m_per_px) / 1609.344
+    if max_miles <= 0:
+        return
+    miles = _nice_scale_miles(max_miles)
+    bar_px = int(round((miles * 1609.344) / m_per_px))
+    if bar_px < 12:
+        return
+
+    label = (f'{miles:g} mi' if miles >= 1 else f'{miles:g} mi')
+
+    fnt = fonts.get('tiny', fonts.get('small'))
+    lbl_w = _tw(fnt, label)
+    lbl_h = _th(fnt, label)
+
+    pad = 5
+    x0 = 10
+    y0 = map_h - 12               # baseline of the bar
+    box_w = max(bar_px, lbl_w) + pad * 2
+    box_h = lbl_h + 12 + pad
+
+    # Dark translucent backing so the bar reads on both light and dark tiles.
+    backing = Image.new('RGBA', (box_w, box_h), (0, 0, 0, 0))
+    bd = ImageDraw.Draw(backing)
+    bd.rounded_rectangle((0, 0, box_w - 1, box_h - 1), radius=5,
+                         fill=(10, 14, 22, 165))
+    base = img.convert('RGBA')
+    base.alpha_composite(backing, dest=(x0 - pad, y0 - box_h + pad + 2))
+    img.paste(base.convert('RGB'))
+
+    d = ImageDraw.Draw(img)
+    bar_y = y0
+    # Main bar with end ticks.
+    d.line([(x0, bar_y), (x0 + bar_px, bar_y)], fill=(255, 255, 255), width=2)
+    for tx in (x0, x0 + bar_px):
+        d.line([(tx, bar_y - 4), (tx, bar_y)], fill=(255, 255, 255), width=2)
+    # Label centred over the bar.
+    d.text((x0 + (bar_px - lbl_w) // 2, bar_y - 6 - lbl_h),
+           label, font=fnt, fill=(235, 240, 248))
+
+
 def _render_map(geom: Dict, severity: str,
                 storm_motion: Optional[Dict] = None,
                 theme: Optional[_Theme] = None,
@@ -1785,11 +1929,11 @@ def _render_map(geom: Dict, severity: str,
     *theme* drives the polygon stroke / storm-motion accent colours; if
     omitted we fall back to the severity palette (legacy behaviour).
 
-    The map intentionally renders only the alert polygon (plus optional
-    storm-motion overlay) on top of OSM tiles — county/zone boundary
-    outlines and centroid name labels were removed because they made
-    the share image cluttered and unreadable when multiple boundaries
-    overlapped.
+    On top of the OSM tiles the map renders muted county reference
+    outlines, the alert polygon (plus optional storm-motion overlay), and
+    a distance scale bar.  County *name labels* are intentionally omitted —
+    they collided and cluttered the image when multiple boundaries
+    overlapped — so only the borders themselves are drawn for context.
     """
     fallback = Image.new('RGB', (map_w, map_h), (35, 42, 62))
     fd = ImageDraw.Draw(fallback)
@@ -1862,6 +2006,39 @@ def _render_map(geom: Dict, severity: str,
     casing_w = max(5,  int(round(5 * stroke_scale)))
     core_w   = max(3,  int(round(3 * stroke_scale)))
 
+    # ── County reference outlines ─────────────────────────────────────────
+    # Muted county borders drawn *under* the alert polygon give the affected
+    # area geographic context (which county / counties it covers) the way
+    # official NWS warning graphics do.  Only outlines are drawn — no name
+    # labels, which historically collided and cluttered the share image when
+    # several boundaries overlapped.  Fetched from the local PostGIS table;
+    # if it's unavailable the map simply falls back to a polygon-only view.
+    counties = _fetch_county_outlines(min_lon, min_lat, max_lon, max_lat)
+    if counties:
+        county_w = max(1, int(round(1.4 * stroke_scale)))
+        county_layer = Image.new('RGBA', canvas.size, (0, 0, 0, 0))
+        cl = ImageDraw.Draw(county_layer)
+        for county in counties:
+            cgeom = county.get('geom') or {}
+            ctype = cgeom.get('type', '')
+            ccoords = cgeom.get('coordinates', [])
+            crings: List[List] = []
+            if ctype == 'Polygon':
+                crings = ccoords
+            elif ctype == 'MultiPolygon':
+                crings = [r for poly in ccoords for r in poly]
+            for ring in crings:
+                cpts = _to_px(ring)
+                if len(cpts) >= 2:
+                    closed = cpts + [cpts[0]]
+                    # Dark casing then a light hairline so the border reads
+                    # on both bright and dark basemap tiles without shouting.
+                    cl.line(closed, fill=(18, 22, 31, 115), width=county_w + 1)
+                    cl.line(closed, fill=(238, 242, 249, 150), width=county_w)
+        base_rgba = canvas.convert('RGBA')
+        base_rgba.alpha_composite(county_layer)
+        canvas = base_rgba.convert('RGB')
+
     # ── Polygon glow ──────────────────────────────────────────────────────
     # A blurred wider stroke sits behind the crisp outline so the affected
     # area "lifts" off the basemap and is unmistakable at thumbnail size.
@@ -1901,11 +2078,11 @@ def _render_map(geom: Dict, severity: str,
                           accent=alr_clr, fonts=fonts)
         od = ImageDraw.Draw(canvas)
 
-    # ── Boundary overlays ─────────────────────────────────────────────────────
-    # Boundary outlines and centroid name labels were intentionally removed:
-    # when multiple county / zone boundaries overlapped (or sat close to the
-    # alert polygon) the labels collided and produced a cluttered, unreadable
-    # share image.  Only the alert polygon and storm-motion overlay are drawn.
+    # ── Boundary labels ───────────────────────────────────────────────────────
+    # County reference *outlines* are drawn above (under the alert polygon).
+    # Centroid name labels remain intentionally omitted: when multiple county
+    # boundaries overlapped (or sat close to the alert polygon) the labels
+    # collided and produced a cluttered, unreadable share image.
 
     # Crop to MAP_W × MAP_H centred on the padded bbox
     cx = int((_lon_to_tx((min_lon + max_lon) / 2, z) - tx_min) * TILE_SIZE)
@@ -1922,10 +2099,24 @@ def _render_map(geom: Dict, severity: str,
         y1 = max(0, y2 - map_h)
 
     cropped = canvas.crop((x1, y1, x2, y2))
+    native_crop_w = max(1, x2 - x1)
     if cropped.size != (map_w, map_h):
         cropped = cropped.resize((map_w, map_h), Image.LANCZOS)
 
     cd = ImageDraw.Draw(cropped)
+
+    # ── Distance scale bar (lower-left) ───────────────────────────────────────
+    # Gives the affected area a sense of real-world size — a 5-mile hail core
+    # reads very differently from a 200-mile flood watch once there's a ruler
+    # on the map.
+    try:
+        _draw_scale_bar(
+            cropped, fonts,
+            center_lat=(min_lat + max_lat) / 2.0, z=z,
+            resize_ratio=native_crop_w / float(map_w),
+        )
+    except Exception:
+        pass
 
     # ── OSM attribution (required by tile usage policy) ───────────────────────
     attr     = '\u00a9 OpenStreetMap contributors'
