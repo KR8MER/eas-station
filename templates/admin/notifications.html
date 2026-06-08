@@ -137,6 +137,76 @@
                         </div>
 
                         <div class="mb-3">
+                            <label for="email_compress_audio" class="form-label">
+                                <i class="fas fa-file-audio"></i> Compress Audio Attachment
+                            </label>
+                            <select class="form-select" id="email_compress_audio" name="email_compress_audio">
+                                <option value="true" {% if settings.email_compress_audio %}selected{% endif %}>Yes &ndash; transcode to MP3 (smaller)</option>
+                                <option value="false" {% if not settings.email_compress_audio %}selected{% endif %}>No &ndash; attach original WAV</option>
+                            </select>
+                            <div class="form-text">
+                                Transcodes the attached audio from WAV to a ~64&nbsp;kbps MP3 (roughly
+                                8&ndash;10&times; smaller). Requires ffmpeg; falls back to WAV automatically
+                                if encoding is unavailable.
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="email_html" class="form-label">
+                                <i class="fas fa-palette"></i> Rich HTML Emails
+                            </label>
+                            <select class="form-select" id="email_html" name="email_html">
+                                <option value="true" {% if settings.email_html %}selected{% endif %}>Yes &ndash; styled HTML body (recommended)</option>
+                                <option value="false" {% if not settings.email_html %}selected{% endif %}>No &ndash; plain text only</option>
+                            </select>
+                            <div class="form-text">
+                                Sends a branded, color-coded HTML body alongside a plain-text fallback.
+                                Required for the inline coverage map and audio link below.
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="email_include_map" class="form-label">
+                                <i class="fas fa-map-marked-alt"></i> Embed Coverage Map
+                            </label>
+                            <select class="form-select" id="email_include_map" name="email_include_map">
+                                <option value="true" {% if settings.email_include_map %}selected{% endif %}>Yes &ndash; embed an alert coverage image</option>
+                                <option value="false" {% if not settings.email_include_map %}selected{% endif %}>No</option>
+                            </select>
+                            <div class="form-text">
+                                Embeds the same coverage-map share card shown on the alert detail page
+                                inline in the HTML email. Ignored when HTML emails are disabled.
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="email_audio_link" class="form-label">
+                                <i class="fas fa-headphones"></i> Audio Listen Link
+                            </label>
+                            <select class="form-select" id="email_audio_link" name="email_audio_link">
+                                <option value="true" {% if settings.email_audio_link %}selected{% endif %}>Yes &ndash; include a "listen / download" button</option>
+                                <option value="false" {% if not settings.email_audio_link %}selected{% endif %}>No</option>
+                            </select>
+                            <div class="form-text">
+                                Adds a button linking to the broadcast audio on this station. Requires the
+                                Public Base URL below to be set.
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="public_base_url" class="form-label">
+                                <i class="fas fa-link"></i> Public Base URL
+                            </label>
+                            <input type="url" class="form-control" id="public_base_url" name="public_base_url"
+                                   value="{{ settings.public_base_url or '' }}"
+                                   placeholder="https://eas.example.com">
+                            <div class="form-text">
+                                Externally reachable URL of this EAS Station, used to build the audio
+                                listen/download link in alert emails. Leave blank to omit links.
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
                             <label for="compliance_alert_emails" class="form-label">
                                 <i class="fas fa-shield-alt"></i> Compliance / Health Alert Recipients
                             </label>

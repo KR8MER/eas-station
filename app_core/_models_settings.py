@@ -807,6 +807,22 @@ class NotificationSettings(db.Model):
     email_attach_audio = db.Column(db.Boolean, nullable=False, default=False)
     # Attach composite EAS audio file to alert notification emails
 
+    email_html = db.Column(db.Boolean, nullable=False, default=True)
+    # Send a styled HTML body (multipart/alternative) in addition to plain text
+
+    email_include_map = db.Column(db.Boolean, nullable=False, default=True)
+    # Render and embed a coverage-map image of the affected area in HTML emails
+
+    email_audio_link = db.Column(db.Boolean, nullable=False, default=True)
+    # Include a "listen / download" link to the broadcast audio (needs public_base_url)
+
+    email_compress_audio = db.Column(db.Boolean, nullable=False, default=False)
+    # Transcode the attached composite audio from WAV to MP3 to shrink the attachment
+
+    public_base_url = db.Column(db.String(255), nullable=False, default='')
+    # Externally reachable base URL of this station (e.g. https://eas.example.com),
+    # used to build links in notifications. Empty disables link generation.
+
     # ========================================================================
     # SMS Notifications
     # ========================================================================
@@ -857,6 +873,11 @@ class NotificationSettings(db.Model):
             "compliance_alert_emails": self.compliance_alert_emails or [],
             "alert_emails": self.alert_emails or [],
             "email_attach_audio": self.email_attach_audio,
+            "email_html": self.email_html,
+            "email_include_map": self.email_include_map,
+            "email_audio_link": self.email_audio_link,
+            "email_compress_audio": self.email_compress_audio,
+            "public_base_url": self.public_base_url or "",
             "sms_enabled": self.sms_enabled,
             "sms_provider": self.sms_provider or "twilio",
             "sms_account_sid": self.sms_account_sid or "",

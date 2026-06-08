@@ -1,0 +1,138 @@
+<!--
+  EAS Station - EAS alert notification email (HTML body).
+
+  Email-client-safe: table layout, inline styles only, no external CSS,
+  no flexbox/grid. Rendered standalone (outside Flask request context)
+  by app_core.notifications.email. The plain-text part remains the
+  fallback for clients that don't render HTML.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ event_label }}</title>
+</head>
+<body style="margin:0; padding:0; background-color:#eceff1; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; color:#1c2833;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#eceff1;">
+    <tr>
+      <td align="center" style="padding:24px 12px;">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0"
+               style="width:600px; max-width:100%; background-color:#ffffff; border-radius:8px; overflow:hidden; box-shadow:0 1px 4px rgba(0,0,0,0.12);">
+
+          <!-- Header band -->
+          <tr>
+            <td style="background-color:{{ accent_color }}; padding:18px 24px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="color:#ffffff; font-size:12px; letter-spacing:1px; text-transform:uppercase; opacity:0.9;">
+                    EAS Station Alert Notification
+                  </td>
+                </tr>
+                <tr>
+                  <td style="color:#ffffff; font-size:22px; font-weight:bold; padding-top:4px;">
+                    {{ event_label }}
+                  </td>
+                </tr>
+                {% if severity_label %}
+                <tr>
+                  <td style="padding-top:8px;">
+                    <span style="display:inline-block; background-color:rgba(255,255,255,0.22); color:#ffffff; font-size:12px; font-weight:bold; padding:3px 10px; border-radius:12px;">
+                      {{ severity_label }}
+                    </span>
+                  </td>
+                </tr>
+                {% endif %}
+              </table>
+            </td>
+          </tr>
+
+          <!-- Headline -->
+          {% if headline %}
+          <tr>
+            <td style="padding:20px 24px 4px 24px;">
+              <div style="font-size:17px; font-weight:600; line-height:1.4; color:#1c2833;">
+                {{ headline }}
+              </div>
+            </td>
+          </tr>
+          {% endif %}
+
+          <!-- Coverage map image (inline, optional) -->
+          {% if map_cid %}
+          <tr>
+            <td style="padding:16px 24px 4px 24px;">
+              <img src="cid:{{ map_cid }}" width="552" alt="Alert coverage map"
+                   style="display:block; width:100%; max-width:552px; height:auto; border:1px solid #d5dbdb; border-radius:6px;">
+            </td>
+          </tr>
+          {% endif %}
+
+          <!-- Details table -->
+          <tr>
+            <td style="padding:16px 24px 4px 24px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px; line-height:1.5;">
+                {% if locations %}
+                <tr>
+                  <td style="padding:6px 0; color:#5d6d7e; width:120px; vertical-align:top;">Locations</td>
+                  <td style="padding:6px 0; color:#1c2833;">{{ locations | join(', ') }}</td>
+                </tr>
+                {% endif %}
+                {% if timestamp %}
+                <tr>
+                  <td style="padding:6px 0; color:#5d6d7e; vertical-align:top;">Time</td>
+                  <td style="padding:6px 0; color:#1c2833;">{{ timestamp }}</td>
+                </tr>
+                {% endif %}
+                <tr>
+                  <td style="padding:6px 0; color:#5d6d7e; vertical-align:top;">Source</td>
+                  <td style="padding:6px 0; color:#1c2833;">{{ source }}</td>
+                </tr>
+                {% if same_header %}
+                <tr>
+                  <td style="padding:6px 0; color:#5d6d7e; vertical-align:top;">SAME&nbsp;header</td>
+                  <td style="padding:6px 0; color:#1c2833; font-family:'Courier New',monospace; font-size:12px; word-break:break-all;">{{ same_header }}</td>
+                </tr>
+                {% endif %}
+              </table>
+            </td>
+          </tr>
+
+          <!-- Audio listen/download button (optional) -->
+          {% if audio_url %}
+          <tr>
+            <td style="padding:18px 24px 4px 24px;">
+              <table role="presentation" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="background-color:{{ accent_color }}; border-radius:6px;">
+                    <a href="{{ audio_url }}"
+                       style="display:inline-block; padding:11px 22px; color:#ffffff; font-size:14px; font-weight:bold; text-decoration:none;">
+                      &#9654;&nbsp; Listen to broadcast audio
+                    </a>
+                  </td>
+                </tr>
+              </table>
+              <div style="font-size:12px; color:#85929e; padding-top:6px;">
+                Opens the alert's audio on your EAS Station.
+              </div>
+            </td>
+          </tr>
+          {% endif %}
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding:22px 24px; border-top:1px solid #eceff1;">
+              <div style="font-size:12px; color:#85929e; line-height:1.5;">
+                This is an automated notification from
+                <strong style="color:#5d6d7e;">EAS Station&trade;</strong> &mdash;
+                Emergency Alert System.
+              </div>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

@@ -51,6 +51,11 @@ def _get_or_create_settings() -> NotificationSettings:
             compliance_alert_emails=[],
             alert_emails=[],
             email_attach_audio=False,
+            email_html=True,
+            email_include_map=True,
+            email_audio_link=True,
+            email_compress_audio=False,
+            public_base_url='',
             sms_enabled=False,
             sms_provider='twilio',
             sms_account_sid='',
@@ -79,6 +84,11 @@ def _fallback_notification_settings():
         compliance_alert_emails=[],
         alert_emails=[],
         email_attach_audio=False,
+        email_html=True,
+        email_include_map=True,
+        email_audio_link=True,
+        email_compress_audio=False,
+        public_base_url='',
         sms_enabled=False,
         sms_provider='twilio',
         sms_account_sid='',
@@ -133,6 +143,19 @@ def update_notification_settings():
         settings.email_attach_audio = (
             request.form.get('email_attach_audio', 'false').lower() == 'true'
         )
+        settings.email_html = (
+            request.form.get('email_html', 'true').lower() == 'true'
+        )
+        settings.email_include_map = (
+            request.form.get('email_include_map', 'true').lower() == 'true'
+        )
+        settings.email_audio_link = (
+            request.form.get('email_audio_link', 'true').lower() == 'true'
+        )
+        settings.email_compress_audio = (
+            request.form.get('email_compress_audio', 'false').lower() == 'true'
+        )
+        settings.public_base_url = request.form.get('public_base_url', '').strip()
 
         # Only update smtp_password if a non-empty value was submitted
         new_smtp_password = request.form.get('smtp_password', '').strip()
