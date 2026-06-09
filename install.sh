@@ -2046,10 +2046,16 @@ if [ "$DB_HAS_TABLES" -eq "0" ]; then
             set +e
             INIT_OUTPUT=$(sudo -u "$SERVICE_USER" "$VENV_DIR/bin/python" -c "
 from app import app, db
+from app_core.auth.roles import initialize_default_roles_and_permissions
 with app.app_context():
     db.create_all()
-    print('✓ Database schema created successfully')
-    print('⚠️  WARNING: Initial data not populated - you may need to configure settings manually')
+    # db.create_all() builds the schema but does NOT run the data-seeding
+    # logic that lives inside the Alembic migrations. Without the default
+    # roles/permissions the administrator account created later cannot be
+    # assigned a role, so the operator is locked out. Seed them explicitly.
+    initialize_default_roles_and_permissions()
+    print('✓ Database schema created and default roles/permissions seeded')
+    print('⚠️  WARNING: Hardware/Icecast settings not populated - configure them in the web UI')
 " 2>&1)
             INIT_EXIT=$?
             set -e
@@ -2072,9 +2078,13 @@ with app.app_context():
         set +e
         INIT_OUTPUT=$(sudo -u "$SERVICE_USER" "$VENV_DIR/bin/python" -c "
 from app import app, db
+from app_core.auth.roles import initialize_default_roles_and_permissions
 with app.app_context():
     db.create_all()
-    print('✓ Database schema created')
+    # Seed default roles/permissions too - create_all() only builds the
+    # schema, and the admin account cannot be created without an admin role.
+    initialize_default_roles_and_permissions()
+    print('✓ Database schema created and default roles/permissions seeded')
     print('⚠️  WARNING: Configure hardware and Icecast settings via web UI')
 " 2>&1)
         INIT_EXIT=$?
@@ -2218,8 +2228,17 @@ with app.app_context():
     # Assign admin role - CRITICAL: Must assign role or user will have no permissions
     admin_role = Role.query.filter(func.lower(Role.name) == RoleDefinition.ADMIN.value).first()
     if not admin_role:
-        print(f"ERROR: Admin role not found in database. Roles must be created by migrations first.", file=sys.stderr)
-        print(f"Available roles: {[r.name for r in Role.query.all()]}", file=sys.stderr)
+        # Roles are normally seeded by the Alembic migrations, but if the
+        # installer fell back to db.create_all() (or seeding was skipped for
+        # any other reason) the roles table is empty and the administrator
+        # cannot be created -> the operator is locked out of the web UI.
+        # Seed the defaults now and retry instead of aborting the install.
+        print("Admin role not found - seeding default roles and permissions...", file=sys.stderr)
+        from app_core.auth.roles import initialize_default_roles_and_permissions
+        initialize_default_roles_and_permissions()
+        admin_role = Role.query.filter(func.lower(Role.name) == RoleDefinition.ADMIN.value).first()
+    if not admin_role:
+        print(f"ERROR: Admin role still missing after seeding. Available roles: {[r.name for r in Role.query.all()]}", file=sys.stderr)
         sys.exit(1)
     
     admin_user.role = admin_role
