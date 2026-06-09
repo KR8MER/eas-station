@@ -301,7 +301,7 @@ Typical power draw at the reference Pi 5 build with SDR + GPS HAT: **~12 W**. Se
 | ✅ Done | LED / OLED / VFD / NeoPixel / GPIO / Zigbee hardware integration |
 | ✅ Done | Settings Hub, web diagnostics, one-button upgrade, journalctl viewer |
 | 🔄 In Progress | Advanced relay control, multi-receiver coordination |
-| 🔄 In Progress | FCC rulemaking engagement — [comments filed](https://www.fcc.gov/ecfs/filing/status/detail/confirmation/202606082733827779) in PS Docket No. 25-224 supporting software-defined EAS (a first step toward a possible certification path) |
+| 🔄 In Progress | FCC rulemaking engagement — [comments filed](https://www.fcc.gov/ecfs/search/search-filings/filing/1060881335987) in PS Docket No. 25-224 supporting software-defined EAS (a first step toward a possible certification path) |
 | ⏳ Planned | FCC Part 11 certification documentation track |
 | ⏳ Planned | Time-series performance graphs on the GPS & Time dashboard |
 | ⏳ Planned | Cloud sync, mobile app, multi-site coordination |
