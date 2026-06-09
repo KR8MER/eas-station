@@ -61,7 +61,7 @@
                         <span class="compliance-ico"><i class="fas fa-flask"></i></span>
                         <div>
                             <p class="compliance-title">Development-Only</p>
-                            <p class="compliance-body">Experimental. Not FCC-certified. Use only in controlled lab and training environments until a certification path is established.</p>
+                            <p class="compliance-body">Experimental and <strong>not FCC-certified</strong> — use only in controlled lab and training environments for now. A certification path may be opening: the FCC's <a href="https://www.fcc.gov/ecfs/search/search-filings/filing/1060881335987" target="_blank" rel="noopener">PS Docket No. 25-224</a> proposes to permit software-defined EAS, and EAS Station™ has <a href="{{ url_for('static', filename='docs/FCC_EAS_Station_Comments_PS-Docket-25-224.pdf') }}" target="_blank" rel="noopener">filed comments</a> in support. That filing is a <em>first step</em>, not approval — treat the system as experimental until any such rules take effect.</p>
                         </div>
                     </div>
                     <div class="compliance-item lvl-danger">
@@ -784,6 +784,8 @@
                     </div>
                     <div class="col-md-6">
                         <h6 class="text-uppercase text-muted small fw-bold mb-2" style="letter-spacing: 0.06em;">External References</h6>
+                        <a class="resource-link" href="{{ url_for('static', filename='docs/FCC_EAS_Station_Comments_PS-Docket-25-224.pdf') }}" target="_blank" rel="noopener"><i class="fas fa-file-pdf"></i>Our FCC Filing &mdash; PS Docket 25-224 (PDF)</a>
+                        <a class="resource-link" href="https://www.fcc.gov/ecfs/search/search-filings/filing/1060881335987" target="_blank" rel="noopener"><i class="fas fa-landmark"></i>FCC Filing on ECFS</a>
                         <a class="resource-link" href="https://www.weather.gov/documentation/services-web-api" target="_blank" rel="noopener"><i class="fas fa-cloud-sun-rain"></i>NOAA CAP Documentation</a>
                         <a class="resource-link" href="https://www.fcc.gov/general/emergency-alert-system-eas" target="_blank" rel="noopener"><i class="fas fa-broadcast-tower"></i>FCC EAS Information</a>
                         <a class="resource-link" href="https://www.fema.gov/emergency-managers/practitioners/integrated-public-alert-warning-system" target="_blank" rel="noopener"><i class="fas fa-bell"></i>IPAWS Program</a>
