@@ -43,7 +43,7 @@ from datetime import datetime
 from sqlalchemy import func
 
 from app_core.auth.audit import AuditAction, AuditLogger
-from app_core.auth.roles import Role, RoleDefinition
+from app_core.auth.roles import PermissionDefinition, Role, RoleDefinition, has_permission
 from app_core.extensions import db
 from app_core.models import AdminUser, SystemLog
 from app_utils import utc_now
@@ -55,6 +55,11 @@ SETUP_REASON_MESSAGES = {
 }
 
 CSRF_SESSION_KEY = '_csrf_token'
+
+# The setup wizard rewrites the .env file and can expose secrets (SECRET_KEY,
+# database credentials). Outside of first-run bootstrap it must be restricted to
+# administrators, i.e. accounts that hold the system configuration permission.
+SETUP_PERMISSION = PermissionDefinition.SYSTEM_CONFIGURE.value
 
 
 def _ensure_csrf_token():
@@ -71,6 +76,51 @@ def register(app, logger):
 
     setup_logger = logger.getChild("setup")
 
+    def _deny_setup_access(*, json_response):
+        """Authorize access to a setup-wizard route.
+
+        Returns ``None`` when the request is allowed to proceed, otherwise a
+        Flask response that should be returned immediately.
+
+        Access rules:
+
+        * While ``SETUP_MODE`` is active (a fresh deployment with a missing
+          ``SECRET_KEY``/unreachable database, or before the first administrator
+          exists) the wizard stays reachable without authentication so the
+          system can be bootstrapped and the initial admin created.
+        * Once the system is running normally the wizard rewrites configuration
+          and can surface secrets, so callers must be authenticated **and** hold
+          the ``system.configure`` permission. Merely being signed in (e.g. a
+          demo, viewer, or operator account) is not sufficient.
+        """
+        if app.config.get("SETUP_MODE", False):
+            return None
+
+        current_user = getattr(g, "current_user", None)
+        is_authenticated = bool(current_user and current_user.is_authenticated)
+
+        if not is_authenticated:
+            if json_response:
+                return jsonify({"error": "Authentication required"}), 401
+            next_url = request.full_path if request.query_string else request.path
+            flash("Please sign in to access the setup wizard.")
+            return redirect(url_for("auth.login", next=next_url))
+
+        if not has_permission(SETUP_PERMISSION, current_user):
+            role = getattr(current_user, "role", None)
+            setup_logger.warning(
+                "Setup wizard access denied for user %s (role=%s): missing %s permission",
+                getattr(current_user, "id", "?"),
+                getattr(role, "name", None),
+                SETUP_PERMISSION,
+            )
+            if json_response:
+                return jsonify({"error": "Administrator privileges required"}), 403
+            flash("You do not have permission to access the setup wizard.")
+            return redirect(url_for("dashboard.admin"))
+
+        return None
+
     @app.route("/setup", methods=["GET", "POST"])
     def setup_wizard():
         setup_reasons = app.config.get("SETUP_MODE_REASONS", ())
@@ -78,16 +128,11 @@ def register(app, logger):
             SETUP_REASON_MESSAGES.get(reason, reason.replace('-', ' '))
             for reason in setup_reasons
         ]
-        setup_active = app.config.get("SETUP_MODE", False)
-        current_user = getattr(g, "current_user", None)
-        is_authenticated = bool(current_user and current_user.is_authenticated)
+        denied = _deny_setup_access(json_response=request.method != "GET")
+        if denied is not None:
+            return denied
 
-        if not setup_active and not is_authenticated:
-            next_url = request.full_path if request.query_string else request.path
-            if request.method == "GET":
-                flash("Please sign in to access the setup wizard.")
-                return redirect(url_for("auth.login", next=next_url))
-            return jsonify({"error": "Authentication required"}), 401
+        setup_active = app.config.get("SETUP_MODE", False)
 
         try:
             state = load_wizard_state()
@@ -230,12 +275,9 @@ def register(app, logger):
 
     @app.route("/setup/generate-secret", methods=["POST"])
     def setup_generate_secret():
-        setup_active = app.config.get("SETUP_MODE", False)
-        current_user = getattr(g, "current_user", None)
-        is_authenticated = bool(current_user and current_user.is_authenticated)
-
-        if not setup_active and not is_authenticated:
-            return jsonify({"error": "Authentication required"}), 401
+        denied = _deny_setup_access(json_response=True)
+        if denied is not None:
+            return denied
 
         token = generate_secret_key()
         return jsonify({"secret_key": token})
@@ -363,12 +405,9 @@ def register(app, logger):
     @app.route("/setup/success")
     def setup_success():
         """Show configuration success page with export instructions."""
-        setup_active = app.config.get("SETUP_MODE", False)
-        current_user = getattr(g, "current_user", None)
-        is_authenticated = bool(current_user and current_user.is_authenticated)
-
-        if not setup_active and not is_authenticated:
-            return redirect(url_for("auth.login"))
+        denied = _deny_setup_access(json_response=False)
+        if denied is not None:
+            return denied
 
         # Get the saved config from session
         saved_config = session.pop('_setup_saved_config', {})
@@ -399,12 +438,9 @@ def register(app, logger):
     @app.route("/setup/view-env")
     def setup_view_env():
         """View the current .env file contents for debugging."""
-        setup_active = app.config.get("SETUP_MODE", False)
-        current_user = getattr(g, "current_user", None)
-        is_authenticated = bool(current_user and current_user.is_authenticated)
-
-        if not setup_active and not is_authenticated:
-            return redirect(url_for("auth.login"))
+        denied = _deny_setup_access(json_response=False)
+        if denied is not None:
+            return denied
 
         from app_utils.setup_wizard import ENV_OUTPUT_PATH
         import os
@@ -450,12 +486,9 @@ def register(app, logger):
     @app.route("/setup/download-env")
     def setup_download_env():
         """Download the current .env file as a backup."""
-        setup_active = app.config.get("SETUP_MODE", False)
-        current_user = getattr(g, "current_user", None)
-        is_authenticated = bool(current_user and current_user.is_authenticated)
-
-        if not setup_active and not is_authenticated:
-            return redirect(url_for("auth.login"))
+        denied = _deny_setup_access(json_response=False)
+        if denied is not None:
+            return denied
 
         from app_utils.setup_wizard import ENV_OUTPUT_PATH
 
@@ -477,12 +510,9 @@ def register(app, logger):
     @app.route("/setup/upload-env", methods=["POST"])
     def setup_upload_env():
         """Upload and restore a .env file from backup."""
-        setup_active = app.config.get("SETUP_MODE", False)
-        current_user = getattr(g, "current_user", None)
-        is_authenticated = bool(current_user and current_user.is_authenticated)
-
-        if not setup_active and not is_authenticated:
-            return jsonify({"error": "Authentication required"}), 401
+        denied = _deny_setup_access(json_response=True)
+        if denied is not None:
+            return denied
 
         if 'env_file' not in request.files:
             return jsonify({"error": "No file provided"}), 400
@@ -525,12 +555,9 @@ def register(app, logger):
     @app.route("/setup/get-states", methods=["GET"])
     def setup_get_states():
         """Get list of all US states with their statewide FIPS codes."""
-        setup_active = app.config.get("SETUP_MODE", False)
-        current_user = getattr(g, "current_user", None)
-        is_authenticated = bool(current_user and current_user.is_authenticated)
-
-        if not setup_active and not is_authenticated:
-            return jsonify({"error": "Authentication required"}), 401
+        denied = _deny_setup_access(json_response=True)
+        if denied is not None:
+            return denied
 
         try:
             from app_utils.fips_codes import get_us_state_county_tree, NATIONWIDE_SAME_CODE, NATIONWIDE_LABEL
@@ -561,12 +588,9 @@ def register(app, logger):
     @app.route("/setup/get-counties/<state_code>", methods=["GET"])
     def setup_get_counties(state_code):
         """Get all counties for a specific state."""
-        setup_active = app.config.get("SETUP_MODE", False)
-        current_user = getattr(g, "current_user", None)
-        is_authenticated = bool(current_user and current_user.is_authenticated)
-
-        if not setup_active and not is_authenticated:
-            return jsonify({"error": "Authentication required"}), 401
+        denied = _deny_setup_access(json_response=True)
+        if denied is not None:
+            return denied
 
         try:
             from app_utils.fips_codes import get_us_state_county_tree
@@ -608,12 +632,9 @@ def register(app, logger):
     @app.route("/setup/lookup-county-fips", methods=["POST"])
     def setup_lookup_county_fips():
         """Look up FIPS codes for counties by state and county name."""
-        setup_active = app.config.get("SETUP_MODE", False)
-        current_user = getattr(g, "current_user", None)
-        is_authenticated = bool(current_user and current_user.is_authenticated)
-
-        if not setup_active and not is_authenticated:
-            return jsonify({"error": "Authentication required"}), 401
+        denied = _deny_setup_access(json_response=True)
+        if denied is not None:
+            return denied
 
         try:
             from app_utils.fips_codes import get_us_state_county_tree
@@ -668,12 +689,9 @@ def register(app, logger):
     @app.route("/setup/derive-zone-codes", methods=["POST"])
     def setup_derive_zone_codes():
         """Derive NWS zone codes from FIPS county codes."""
-        setup_active = app.config.get("SETUP_MODE", False)
-        current_user = getattr(g, "current_user", None)
-        is_authenticated = bool(current_user and current_user.is_authenticated)
-
-        if not setup_active and not is_authenticated:
-            return jsonify({"error": "Authentication required"}), 401
+        denied = _deny_setup_access(json_response=True)
+        if denied is not None:
+            return denied
 
         try:
             from app_core.location import _derive_county_zone_codes_from_fips
