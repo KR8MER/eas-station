@@ -171,6 +171,14 @@ ENVELOPE_RATIO_WARNING = 3.0
 CLICK_RATE_NO_CARRIER_PCT = 15.0
 ENVELOPE_RATIO_NO_CARRIER = 8.0
 
+# Carrier offset from DC (the tuned frequency).  A correctly-tuned FM capture
+# centres the station at DC; a non-trivial offset means the tuner landed off
+# frequency (bad PPM correction, mistuned channel).  A broadcast FM channel is
+# 200 kHz wide, so an offset past ~40 kHz is audibly off and past ~90 kHz
+# starts dropping the station out of the captured band entirely.
+CARRIER_OFFSET_WARNING_HZ = 40_000.0
+CARRIER_OFFSET_CRITICAL_HZ = 90_000.0
+
 # DC offset (LO leakage) — RTL-SDR direct conversion always has some DC,
 # but >0.05 of full scale is unusually high and points at a centred carrier
 # or a stuck I/Q bias.
@@ -239,6 +247,7 @@ class FrontEndReport:
     passband_3db_hz: Optional[float]
     passband_20db_hz: Optional[float]
     rbds_band_attenuation_db: Optional[float]  # at 57 kHz vs centre
+    carrier_offset_hz: Optional[float]         # captured-energy centroid vs DC
 
     # Verdicts
     verdict: str
@@ -341,6 +350,13 @@ def analyze_iq_frontend(iq: "np.ndarray", sample_rate: int) -> FrontEndReport:
     passband_20db_hz: Optional[float] = None
     passband_ref_db: Optional[float] = None
     rbds_atten_db: Optional[float] = None
+    # Carrier offset: where the captured RF energy sits relative to DC (the
+    # tuned frequency).  A correctly-tuned FM signal is centred at DC so the
+    # power-weighted centroid of the above-noise-floor energy is ~0.  A tuner
+    # that landed off frequency (wrong PPM correction, mistuned channel) shifts
+    # the whole lump, so the centroid ≈ the tuning error.  Pure noise has no
+    # above-floor energy and leaves this as None.
+    carrier_offset_hz: Optional[float] = None
 
     nperseg = min(4096, max(64, n // 4))
     if nperseg >= 64:
@@ -349,6 +365,17 @@ def analyze_iq_frontend(iq: "np.ndarray", sample_rate: int) -> FrontEndReport:
         )
         f = np.fft.fftshift(f)
         psd = np.fft.fftshift(psd)
+
+        # Power-weighted centroid of the energy that sits above the noise
+        # floor.  Subtracting a robust floor (the 10th percentile of the PSD)
+        # stops symmetric broadband noise from dragging the centroid toward 0
+        # and keeps the estimate on the actual carrier lump.
+        floor = float(np.percentile(psd, 10))
+        excess = np.maximum(psd - floor, 0.0)
+        total = float(np.sum(excess))
+        if total > 0:
+            carrier_offset_hz = float(np.sum(f * excess) / total)
+
         ref_mask = np.abs(f) <= 20_000
         if np.any(ref_mask) and np.any(psd[ref_mask] > 0):
             ref = float(np.median(psd[ref_mask]))
@@ -499,6 +526,25 @@ def analyze_iq_frontend(iq: "np.ndarray", sample_rate: int) -> FrontEndReport:
             "front-end is attenuating the RBDS subcarrier."
         )
 
+    # Carrier offset — only meaningful when a carrier is actually present
+    # (no_carrier captures have no lump to centre on, and the no_carrier
+    # finding already tells the operator to confirm the tuned frequency).
+    if not no_carrier and carrier_offset_hz is not None:
+        off_khz = carrier_offset_hz / 1000.0
+        if abs(carrier_offset_hz) >= CARRIER_OFFSET_CRITICAL_HZ:
+            _add(
+                "critical", "carrier_offset",
+                f"Captured energy is centred {off_khz:+.0f} kHz off DC — the tuner is off "
+                f"frequency by ~{abs(off_khz):.0f} kHz, pushing the station out of the captured "
+                "band. Check the PPM frequency correction and the tuned frequency."
+            )
+        elif abs(carrier_offset_hz) >= CARRIER_OFFSET_WARNING_HZ:
+            _add(
+                "warning", "carrier_offset",
+                f"Captured energy is centred {off_khz:+.0f} kHz off DC — the tuner appears "
+                f"~{abs(off_khz):.0f} kHz off frequency (PPM correction / tuned frequency)."
+            )
+
     if worst == "ok" and not findings:
         _add("ok", "frontend", "Front-end is healthy: no clipping, low click rate, flat passband.")
 
@@ -524,6 +570,7 @@ def analyze_iq_frontend(iq: "np.ndarray", sample_rate: int) -> FrontEndReport:
         passband_3db_hz=passband_3db_hz,
         passband_20db_hz=passband_20db_hz,
         rbds_band_attenuation_db=rbds_atten_db,
+        carrier_offset_hz=carrier_offset_hz,
         verdict=worst,
         findings=findings,
     )
@@ -813,6 +860,7 @@ def diagnostic_to_dict(diag: CaptureDiagnostic) -> Dict[str, Any]:
         "passband_3db_hz": _r(fe.passband_3db_hz, 0),
         "passband_20db_hz": _r(fe.passband_20db_hz, 0),
         "rbds_band_attenuation_db": _r(fe.rbds_band_attenuation_db, 2),
+        "carrier_offset_hz": _r(fe.carrier_offset_hz, 0),
         "verdict": fe.verdict,
         "findings": fe.findings,
     }

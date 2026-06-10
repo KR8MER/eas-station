@@ -303,6 +303,33 @@ def test_clean_fm_carrier_is_not_flagged_no_carrier():
     assert fe.click_rate_pct < radio_diagnostics.CLICK_RATE_NO_CARRIER_PCT, fe.click_rate_pct
 
 
+def test_offset_carrier_flags_off_frequency_tuner():
+    """A constant-envelope FM carrier shifted well off DC (a tuner that
+    landed off frequency) is flagged as ``carrier_offset`` with the offset
+    reported, and a centred carrier is not."""
+    fs = 256_000
+    base = _synthesize_fm_carrier(
+        fs=fs, duration_sec=1.0,
+        subcarriers={19_000: 0.6, 57_000: 0.1},
+    )
+    n = base.size
+    t = np.arange(n) / fs
+
+    # Centred carrier: no carrier-offset finding, centroid near DC.
+    fe0 = analyze_iq_frontend(base, fs)
+    assert "carrier_offset" not in {f["code"] for f in fe0.findings}
+    assert abs(fe0.carrier_offset_hz) < radio_diagnostics.CARRIER_OFFSET_WARNING_HZ
+
+    # Shift the whole signal +60 kHz off DC (tuner ~60 kHz off frequency).
+    offset = 60_000.0
+    shifted = (base * np.exp(2j * math.pi * offset * t)).astype(np.complex64)
+    fe = analyze_iq_frontend(shifted, fs)
+    codes = {f["code"] for f in fe.findings}
+    assert "carrier_offset" in codes, fe.findings
+    # Centroid should recover the offset to within a few kHz.
+    assert fe.carrier_offset_hz == pytest.approx(offset, abs=10_000)
+
+
 def test_diagnostic_to_dict_is_json_serialisable():
     """The dict returned by ``diagnostic_to_dict`` must round-trip
     through ``json.dumps`` so the Flask endpoint can return it directly."""
