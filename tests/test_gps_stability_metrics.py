@@ -139,6 +139,62 @@ class TestAdevNoiseFloor:
         )
 
 
+class TestTdevMtie:
+    def test_arrays_parallel_to_tau(self):
+        intervals = _white_pm_intervals(1500, sigma_x_ns=2000.0)
+        out = GPSManager._compute_allan_deviation(intervals)
+        assert len(out["tdev_s"]) == len(out["tau_s"])
+        assert len(out["mtie_s"]) == len(out["tau_s"])
+
+    def test_empty_input_carries_keys(self):
+        out = GPSManager._compute_allan_deviation([])
+        assert out["tdev_s"] == []
+        assert out["mtie_s"] == []
+
+    def test_tdev_at_tau1_recovers_sigma_x_for_white_pm(self):
+        # For white PM, Mod σ²_y(1) equals AVAR(1) = 3σ_x²/τ², so
+        # TDEV(1) = τ·Modσ_y/√3 = σ_x.  Direct calibration check.
+        sigma_x_ns = 2500.0
+        intervals = _white_pm_intervals(4000, sigma_x_ns=sigma_x_ns, seed=3)
+        out = GPSManager._compute_allan_deviation(intervals)
+        by_tau = dict(zip(out["tau_s"], out["tdev_s"]))
+        assert by_tau[1] == pytest.approx(sigma_x_ns / 1e9, rel=0.10)
+
+    def test_mtie_of_constant_frequency_offset_is_linear_in_tau(self):
+        # A clock running exactly +1 µs/s draws a clean phase ramp, so
+        # the worst excursion inside a τ-second window is exactly τ µs.
+        offset_ns = 1000
+        intervals = [NOMINAL_NS + offset_ns] * 1200
+        out = GPSManager._compute_allan_deviation(intervals)
+        by_tau = dict(zip(out["tau_s"], out["mtie_s"]))
+        assert by_tau[1] == pytest.approx(offset_ns / 1e9, rel=1e-6)
+        assert by_tau[10] == pytest.approx(10 * offset_ns / 1e9, rel=1e-6)
+        assert by_tau[100] == pytest.approx(100 * offset_ns / 1e9, rel=1e-6)
+
+    def test_mtie_catches_a_single_step(self):
+        # A one-off 5 µs phase step inside an otherwise clean run must
+        # dominate MTIE at every τ — that's the property masks rely on.
+        intervals = [NOMINAL_NS] * 600
+        intervals[300] = NOMINAL_NS + 5_000
+        out = GPSManager._compute_allan_deviation(intervals)
+        for tau, mtie in zip(out["tau_s"], out["mtie_s"]):
+            if mtie is None:
+                continue
+            assert mtie == pytest.approx(5_000 / 1e9, rel=1e-6), (
+                f"MTIE(τ={tau}) should equal the 5 µs step"
+            )
+
+    def test_tdev_none_when_buffer_too_short_for_tau(self):
+        # 250 samples: ADEV needs 2m+1 (τ=100 → 201 ✓) but TDEV needs
+        # 3m+1 (τ=100 → 301 ✗) — the slot must be None, not missing.
+        intervals = _white_pm_intervals(250, sigma_x_ns=1000.0)
+        out = GPSManager._compute_allan_deviation(intervals)
+        assert 100 in out["tau_s"]
+        idx = out["tau_s"].index(100)
+        assert out["tdev_s"][idx] is None
+        assert out["mtie_s"][idx] is not None
+
+
 class TestCpuTempHelper:
     def test_read_cpu_temp_never_raises(self):
         # Environment-dependent (containers have no thermal zones) —

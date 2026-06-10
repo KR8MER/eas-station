@@ -322,6 +322,8 @@ class TestGetStatusCaching:
         m._pps_gpio_active = False
         m._status_cache_at_mono = 0.0
         m._status_cache_min_interval_s = 1.0
+        m._adev_cache_at_mono = 0.0
+        m._adev_min_interval_s = 5.0
         m._cached_jitter = {}
         m._cached_allan = {}
         m._cached_sat_history = []
@@ -344,11 +346,24 @@ class TestGetStatusCaching:
         the cached objects are replaced, not reused."""
         m = self._build_manager()
         first = m.get_status()
-        # Force expiry by rewinding the cache timestamp past the window.
+        # Force expiry by rewinding the cache timestamps past their
+        # windows (the stability block has its own, slower throttle).
         m._status_cache_at_mono -= 10.0
+        m._adev_cache_at_mono -= 10.0
         second = m.get_status()
         assert first["allan_deviation"] is not second["allan_deviation"]
         assert first["pps_jitter"] is not second["pps_jitter"]
+
+    def test_adev_block_holds_cache_within_its_own_window(self):
+        """The expensive ADEV/TDEV/MTIE block must NOT recompute on the
+        1 s snapshot cadence — only after its own 5 s throttle."""
+        m = self._build_manager()
+        first = m.get_status()
+        # Expire the general snapshot cache but not the ADEV throttle.
+        m._status_cache_at_mono -= 2.0
+        second = m.get_status()
+        assert first["pps_jitter"] is not second["pps_jitter"]
+        assert first["allan_deviation"] is second["allan_deviation"]
 
     def test_satellite_history_is_sorted_by_constellation_and_prn(self):
         m = self._build_manager()
