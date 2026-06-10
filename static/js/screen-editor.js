@@ -3,8 +3,8 @@
  *
  * Schema-driven WYSIWYG editor. Every element type is described once in the
  * TYPES registry (defaults, property fields, canvas drawing, overlay bounds,
- * and server (de)serialisation), so the toolbar, property panel, layer list,
- * canvas preview and save payload all stay in sync automatically.
+ * resize behaviour, and server (de)serialisation), so the palette, property
+ * panel, layer list, canvas preview and save payload all stay in sync.
  *
  * Supported graphics:
  *   text, bar, rectangle, line, hline, vline, circle, arc, icon, gauge, clock
@@ -13,6 +13,10 @@
  *   - oled: full graphics set (monochrome 128x64 SSD1306)
  *   - vfd:  text + shapes the GU-7000 hardware can draw (140x32)
  *   - led:  text only (character-based sign)
+ *
+ * Editing niceties: undo/redo history, drag to move, corner handle to
+ * resize, arrow-key nudging, snap-to-grid, per-display phosphor colours,
+ * and live {now.*} variables in the preview.
  */
 
 const ScreenEditor = (function() {
@@ -23,16 +27,22 @@ const ScreenEditor = (function() {
         displayType: 'oled',
         canvasWidth: 128,
         canvasHeight: 64,
-        zoom: 1,
+        zoom: 4,
         elements: [],
         selectedElement: null,
         dataSources: [],
         isDragging: false,
+        isResizing: false,
         dragElement: null,
         dragStartX: 0,
         dragStartY: 0,
+        dragStartProps: null,
+        dragMoved: false,
         screenId: null,
-        activeDynamicInput: null
+        activeDynamicInput: null,
+        showGrid: false,
+        snapOn: false,
+        dirty: false
     };
 
     // Display dimensions by type
@@ -41,6 +51,15 @@ const ScreenEditor = (function() {
         vfd: { width: 140, height: 32 },
         led: { width: 80, height: 32 }  // Virtual dimensions for LED (4 lines x 20 chars)
     };
+
+    // Phosphor colours so the preview looks like the real hardware
+    const DISPLAY_THEMES = {
+        oled: { pix: '#d4ecff', bg: '#01040a' },   // cool blue-white OLED
+        vfd:  { pix: '#5dffc3', bg: '#001a12' },   // cyan-green VFD phosphor
+        led:  { pix: '#ffb300', bg: '#140d00' }    // amber LED matrix
+    };
+
+    function theme() { return DISPLAY_THEMES[state.displayType] || DISPLAY_THEMES.oled; }
 
     // Font sizes (actual pixel heights)
     const FONT_SIZES = {
@@ -61,14 +80,43 @@ const ScreenEditor = (function() {
 
     const ALIGN_OPTIONS = [['left', 'Left'], ['center', 'Center'], ['right', 'Right']];
 
+    // LED sign options (mirror scripts/led_sign_controller.py enums)
+    const LED_COLORS = ['AMBER', 'RED', 'GREEN', 'ORANGE', 'YELLOW', 'DIM_RED', 'DIM_GREEN',
+        'BROWN', 'RAINBOW_1', 'RAINBOW_2', 'COLOR_MIX', 'AUTO_COLOR'];
+    const LED_MODES = ['HOLD', 'ROTATE', 'FLASH', 'SCROLL', 'ROLL_LEFT', 'ROLL_RIGHT',
+        'ROLL_UP', 'ROLL_DOWN', 'WIPE_LEFT', 'WIPE_RIGHT', 'AUTO_MODE'];
+    const LED_SPEEDS = ['SPEED_1', 'SPEED_2', 'SPEED_3', 'SPEED_4', 'SPEED_5'];
+    const LED_FONTS = ['FONT_5x7', 'FONT_6x7', 'FONT_7x9', 'FONT_8x7', 'FONT_7x11',
+        'FONT_15x7', 'FONT_19x7', 'FONT_7x13', 'FONT_16x9', 'FONT_32x16'];
+
     // Built-in vector icons available on the OLED (mirrors app_core/oled.py)
     const ICON_NAMES = [
         'antenna', 'speaker', 'warning', 'check', 'cross',
         'network', 'shield', 'wave', 'clock', 'heartbeat'
     ];
 
+    // Suggested {variable} names per endpoint for the data-source modal
+    const ENDPOINT_VAR_SUGGESTIONS = {
+        '/api/system_status': 'status',
+        '/api/system_health': 'health',
+        '/api/alerts': 'alerts',
+        '/api/audio/metrics': 'audio',
+        '/api/audio/metrics/latest': 'audio',
+        '/api/audio/health': 'audio_health',
+        '/api/eas-monitor/status': 'eas',
+        '/api/hardware/gps/status': 'gps',
+        '/api/monitoring/radio': 'radio',
+        '/api/stream/status': 'stream',
+        '/api/receivers': 'receivers'
+    };
+
     // Canvas and context
     let canvas, ctx;
+
+    // Undo/redo history (JSON snapshots of elements + data sources)
+    let history = [];
+    let historyIndex = -1;
+    let nudgeCommitTimer = null;
 
     // ------------------------------------------------------------------
     // Small icon renderers for the canvas preview. These are intentionally
@@ -144,6 +192,24 @@ const ScreenEditor = (function() {
         }
     };
 
+    // Substitute built-in {now.*} variables so clocks/dates look real in the
+    // editor preview. Data-source variables are left verbatim so the user can
+    // see which fields are dynamic.
+    function previewText(text) {
+        if (!text || text.indexOf('{now.') === -1) return text;
+        const now = new Date();
+        const pad = n => String(n).padStart(2, '0');
+        const h12 = now.getHours() % 12 || 12;
+        const ampm = now.getHours() >= 12 ? 'PM' : 'AM';
+        const vars = {
+            'now.time': `${pad(h12)}:${pad(now.getMinutes())} ${ampm}`,
+            'now.time_24': `${pad(now.getHours())}:${pad(now.getMinutes())}`,
+            'now.date': `${pad(now.getMonth() + 1)}/${pad(now.getDate())}/${now.getFullYear()}`
+        };
+        vars['now.datetime'] = `${vars['now.date']} ${vars['now.time']}`;
+        return text.replace(/\{(now\.[a-z_0-9]+)\}/g, (m, key) => vars[key] !== undefined ? vars[key] : m);
+    }
+
     // ------------------------------------------------------------------
     // Property-field helpers
     // ------------------------------------------------------------------
@@ -162,9 +228,9 @@ const ScreenEditor = (function() {
     // Element type registry
     //   create()        -> default props (id added by caller)
     //   fields          -> property panel schema
-    //   draw(el)        -> render onto the canvas (white-on-black preview)
+    //   draw(el)        -> render onto the canvas (phosphor-on-black preview)
     //   bounds(el)      -> {x, y, w, h} top-left overlay box
-    //   move(el,dx,dy)  -> reposition (defaults to x/y translate)
+    //   resize(el, start, dx, dy, snap) -> apply corner-handle resize (optional)
     //   toTemplate(el)  -> server JSON
     //   fromTemplate(t) -> editor props (id added by caller)
     //   layerLabel(el)  -> short label for the layers list
@@ -190,23 +256,24 @@ const ScreenEditor = (function() {
                 const fontSize = FONT_SIZES[el.font] || 11;
                 ctx.font = `${fontSize}px monospace`;
                 ctx.textBaseline = 'top';
-                const w = Math.max(2, ctx.measureText(el.text || '').width);
+                const txt = previewText(el.text || '');
+                const w = Math.max(2, ctx.measureText(txt).width);
                 let x = el.x;
                 if (el.align === 'right') x = el.x - w;
                 else if (el.align === 'center') x = el.x - w / 2;
                 if (el.invert) {
-                    ctx.fillStyle = '#fff';
+                    ctx.fillStyle = theme().pix;
                     ctx.fillRect(x - 1, el.y - 1, w + 2, fontSize + 2);
-                    ctx.fillStyle = '#000';
+                    ctx.fillStyle = theme().bg;
                 } else {
-                    ctx.fillStyle = '#fff';
+                    ctx.fillStyle = theme().pix;
                 }
-                ctx.fillText(el.text || '', x, el.y);
+                ctx.fillText(txt, x, el.y);
             },
             bounds(el) {
                 const fontSize = FONT_SIZES[el.font] || 11;
                 ctx.font = `${fontSize}px monospace`;
-                const w = Math.max(10, ctx.measureText(el.text || '').width);
+                const w = Math.max(10, ctx.measureText(previewText(el.text || '')).width);
                 let x = el.x;
                 if (el.align === 'right') x = el.x - w;
                 else if (el.align === 'center') x = el.x - w / 2;
@@ -222,7 +289,7 @@ const ScreenEditor = (function() {
         },
 
         bar: {
-            label: 'Bar Graph', icon: 'fa-chart-bar', displays: ['oled', 'vfd'],
+            label: 'Bar', icon: 'fa-chart-bar', displays: ['oled', 'vfd'],
             create: () => ({ type: 'bar', x: 4, y: 10, width: 80, height: 9,
                 value: '50', border: true, preview: 60 }),
             fields: [
@@ -239,7 +306,7 @@ const ScreenEditor = (function() {
             draw(el) {
                 const w = Math.max(4, el.width), h = Math.max(3, el.height);
                 const pct = clamp(el.preview != null ? el.preview : 60, 0, 100);
-                ctx.strokeStyle = '#fff'; ctx.fillStyle = '#fff'; ctx.lineWidth = 1;
+                ctx.strokeStyle = theme().pix; ctx.fillStyle = theme().pix; ctx.lineWidth = 1;
                 if (el.border !== false) {
                     ctx.strokeRect(el.x + 0.5, el.y + 0.5, w - 1, h - 1);
                     const inner = Math.floor((pct / 100) * (w - 2));
@@ -250,6 +317,10 @@ const ScreenEditor = (function() {
                 }
             },
             bounds: el => ({ x: el.x, y: el.y, w: Math.max(4, el.width), h: Math.max(3, el.height) }),
+            resize(el, start, dx, dy, snap) {
+                el.width = Math.max(4, snap(start.width + dx));
+                el.height = Math.max(3, snap(start.height + dy));
+            },
             toTemplate: el => ({ type: 'bar', x: el.x, y: el.y, width: el.width,
                 height: el.height, value: el.value || '0', border: el.border !== false }),
             fromTemplate: t => ({ type: 'bar', x: t.x || 0, y: t.y || 0, width: t.width || 80,
@@ -259,7 +330,7 @@ const ScreenEditor = (function() {
         },
 
         rectangle: {
-            label: 'Rectangle', icon: 'fa-square', displays: ['oled', 'vfd'],
+            label: 'Rect', icon: 'fa-square', displays: ['oled', 'vfd'],
             create: () => ({ type: 'rectangle', x: 4, y: 4, width: 30, height: 20, filled: false }),
             fields: [
                 ...posFields(),
@@ -269,11 +340,15 @@ const ScreenEditor = (function() {
             ],
             draw(el) {
                 const w = Math.max(1, el.width), h = Math.max(1, el.height);
-                ctx.strokeStyle = '#fff'; ctx.fillStyle = '#fff'; ctx.lineWidth = 1;
+                ctx.strokeStyle = theme().pix; ctx.fillStyle = theme().pix; ctx.lineWidth = 1;
                 if (el.filled) ctx.fillRect(el.x, el.y, w, h);
                 else ctx.strokeRect(el.x + 0.5, el.y + 0.5, w - 1, h - 1);
             },
             bounds: el => ({ x: el.x, y: el.y, w: Math.max(1, el.width), h: Math.max(1, el.height) }),
+            resize(el, start, dx, dy, snap) {
+                el.width = Math.max(1, snap(start.width + dx));
+                el.height = Math.max(1, snap(start.height + dy));
+            },
             toTemplate: el => ({ type: 'rectangle', x: el.x, y: el.y, width: el.width,
                 height: el.height, filled: !!el.filled }),
             fromTemplate: t => ({ type: 'rectangle', x: t.x || 0, y: t.y || 0, width: t.width || 30,
@@ -292,7 +367,7 @@ const ScreenEditor = (function() {
                 { key: 'lineWidth', label: 'Thickness (px)', kind: 'number', min: 1 }
             ],
             draw(el) {
-                ctx.strokeStyle = '#fff';
+                ctx.strokeStyle = theme().pix;
                 ctx.lineWidth = Math.max(1, el.lineWidth || 1);
                 ctx.beginPath();
                 ctx.moveTo(el.x1 + 0.5, el.y1 + 0.5);
@@ -301,7 +376,10 @@ const ScreenEditor = (function() {
             },
             bounds: el => ({ x: Math.min(el.x1, el.x2), y: Math.min(el.y1, el.y2),
                 w: Math.max(2, Math.abs(el.x2 - el.x1)), h: Math.max(2, Math.abs(el.y2 - el.y1)) }),
-            move(el, dx, dy) { el.x1 += dx; el.y1 += dy; el.x2 += dx; el.y2 += dy; },
+            resize(el, start, dx, dy, snap) {
+                el.x2 = snap(start.x2 + dx);
+                el.y2 = snap(start.y2 + dy);
+            },
             toTemplate: el => ({ type: 'line', x1: el.x1, y1: el.y1, x2: el.x2, y2: el.y2,
                 width: el.lineWidth || 1 }),
             fromTemplate: t => ({ type: 'line', x1: t.x1 || 0, y1: t.y1 || 0, x2: t.x2 || 0,
@@ -310,7 +388,7 @@ const ScreenEditor = (function() {
         },
 
         hline: {
-            label: 'Horizontal Divider', icon: 'fa-grip-lines', displays: ['oled', 'vfd'],
+            label: 'H-Divider', icon: 'fa-grip-lines', displays: ['oled', 'vfd'],
             create: () => ({ type: 'hline', x: 0, y: 16, width: 64, dotted: false }),
             fields: [
                 ...posFields(),
@@ -318,7 +396,7 @@ const ScreenEditor = (function() {
                 { key: 'dotted', label: 'Dotted', kind: 'checkbox' }
             ],
             draw(el) {
-                ctx.strokeStyle = '#fff'; ctx.fillStyle = '#fff'; ctx.lineWidth = 1;
+                ctx.strokeStyle = theme().pix; ctx.fillStyle = theme().pix; ctx.lineWidth = 1;
                 const w = Math.max(1, el.width);
                 if (el.dotted) {
                     for (let px = 0; px < w; px += 2) ctx.fillRect(el.x + px, el.y, 1, 1);
@@ -328,6 +406,9 @@ const ScreenEditor = (function() {
                 }
             },
             bounds: el => ({ x: el.x, y: el.y - 2, w: Math.max(1, el.width), h: 5 }),
+            resize(el, start, dx, dy, snap) {
+                el.width = Math.max(1, snap(start.width + dx));
+            },
             toTemplate: el => ({ type: el.dotted ? 'dotted_hline' : 'hline', x: el.x, y: el.y, width: el.width }),
             fromTemplate: t => ({ type: 'hline', x: t.x || 0, y: t.y || 0, width: t.width || 64,
                 dotted: t.type === 'dotted_hline' }),
@@ -335,19 +416,22 @@ const ScreenEditor = (function() {
         },
 
         vline: {
-            label: 'Vertical Divider', icon: 'fa-grip-lines-vertical', displays: ['oled', 'vfd'],
+            label: 'V-Divider', icon: 'fa-grip-lines-vertical', displays: ['oled', 'vfd'],
             create: () => ({ type: 'vline', x: 16, y: 0, height: 32 }),
             fields: [
                 ...posFields(),
                 { key: 'height', label: 'Height (px)', kind: 'number', min: 1 }
             ],
             draw(el) {
-                ctx.strokeStyle = '#fff'; ctx.lineWidth = 1;
+                ctx.strokeStyle = theme().pix; ctx.lineWidth = 1;
                 const h = Math.max(1, el.height);
                 ctx.beginPath();
                 ctx.moveTo(el.x + 0.5, el.y); ctx.lineTo(el.x + 0.5, el.y + h); ctx.stroke();
             },
             bounds: el => ({ x: el.x - 2, y: el.y, w: 5, h: Math.max(1, el.height) }),
+            resize(el, start, dx, dy, snap) {
+                el.height = Math.max(1, snap(start.height + dy));
+            },
             toTemplate: el => ({ type: 'vline', x: el.x, y: el.y, height: el.height }),
             fromTemplate: t => ({ type: 'vline', x: t.x || 0, y: t.y || 0, height: t.height || 32 }),
             layerLabel: el => `V-Line ${el.height}px`
@@ -363,12 +447,15 @@ const ScreenEditor = (function() {
                 { key: 'filled', label: 'Filled', kind: 'checkbox' }
             ],
             draw(el) {
-                ctx.strokeStyle = '#fff'; ctx.fillStyle = '#fff'; ctx.lineWidth = 1;
+                ctx.strokeStyle = theme().pix; ctx.fillStyle = theme().pix; ctx.lineWidth = 1;
                 ctx.beginPath();
                 ctx.arc(el.x, el.y, Math.max(1, el.radius), 0, 2 * Math.PI);
                 if (el.filled) ctx.fill(); else ctx.stroke();
             },
             bounds: el => ({ x: el.x - el.radius, y: el.y - el.radius, w: el.radius * 2, h: el.radius * 2 }),
+            resize(el, start, dx, dy, snap) {
+                el.radius = Math.max(1, snap(start.radius + Math.round((dx + dy) / 2)));
+            },
             toTemplate: el => ({ type: 'circle', x: el.x, y: el.y, radius: el.radius, filled: !!el.filled }),
             fromTemplate: t => ({ type: 'circle', x: t.x || 32, y: t.y || 32, radius: t.radius || 12,
                 filled: !!t.filled }),
@@ -386,13 +473,16 @@ const ScreenEditor = (function() {
                 { key: 'end', label: 'End °', kind: 'number', col: 6 }
             ],
             draw(el) {
-                ctx.strokeStyle = '#fff'; ctx.lineWidth = 1;
+                ctx.strokeStyle = theme().pix; ctx.lineWidth = 1;
                 ctx.beginPath();
                 ctx.arc(el.x, el.y, Math.max(1, el.radius),
                     (el.start || 0) * Math.PI / 180, (el.end || 0) * Math.PI / 180);
                 ctx.stroke();
             },
             bounds: el => ({ x: el.x - el.radius, y: el.y - el.radius, w: el.radius * 2, h: el.radius * 2 }),
+            resize(el, start, dx, dy, snap) {
+                el.radius = Math.max(1, snap(start.radius + Math.round((dx + dy) / 2)));
+            },
             toTemplate: el => ({ type: 'arc', x: el.x, y: el.y, radius: el.radius, start: el.start, end: el.end }),
             fromTemplate: t => ({ type: 'arc', x: t.x || 32, y: t.y || 32, radius: t.radius || 14,
                 start: t.start || 0, end: t.end != null ? t.end : 180 }),
@@ -408,12 +498,15 @@ const ScreenEditor = (function() {
                 { key: 'size', label: 'Size (px)', kind: 'number', min: 6 }
             ],
             draw(el) {
-                ctx.strokeStyle = '#fff'; ctx.fillStyle = '#fff'; ctx.lineWidth = 1;
+                ctx.strokeStyle = theme().pix; ctx.fillStyle = theme().pix; ctx.lineWidth = 1;
                 const fn = ICON_DRAW[el.name];
                 if (fn) fn(ctx, el.x, el.y, Math.max(6, el.size));
                 else ctx.strokeRect(el.x + 0.5, el.y + 0.5, el.size - 1, el.size - 1);
             },
             bounds: el => ({ x: el.x, y: el.y, w: Math.max(6, el.size), h: Math.max(6, el.size) }),
+            resize(el, start, dx, dy, snap) {
+                el.size = Math.max(6, snap(start.size + Math.max(dx, dy)));
+            },
             toTemplate: el => ({ type: 'icon', name: el.name, x: el.x, y: el.y, size: el.size }),
             fromTemplate: t => ({ type: 'icon', name: t.name || 'antenna', x: t.x || 0, y: t.y || 0,
                 size: t.size || 16 }),
@@ -433,7 +526,7 @@ const ScreenEditor = (function() {
                     help: 'Canvas preview only — live data used on device' }
             ],
             draw(el) {
-                ctx.strokeStyle = '#fff'; ctx.fillStyle = '#fff'; ctx.lineWidth = 1;
+                ctx.strokeStyle = theme().pix; ctx.fillStyle = theme().pix; ctx.lineWidth = 1;
                 const r = Math.max(8, el.radius);
                 ctx.beginPath(); ctx.arc(el.x, el.y, r, Math.PI, 2 * Math.PI); ctx.stroke();
                 const pct = clamp(el.preview != null ? el.preview : 60, 0, 100);
@@ -445,6 +538,9 @@ const ScreenEditor = (function() {
                 ctx.beginPath(); ctx.arc(el.x, el.y, 1.5, 0, 2 * Math.PI); ctx.fill();
             },
             bounds: el => ({ x: el.x - el.radius, y: el.y - el.radius, w: el.radius * 2, h: el.radius + 4 }),
+            resize(el, start, dx, dy, snap) {
+                el.radius = Math.max(8, snap(start.radius + Math.round((dx + dy) / 2)));
+            },
             toTemplate: el => ({ type: 'gauge', x: el.x, y: el.y, radius: el.radius, value: el.value || '0' }),
             fromTemplate: t => ({ type: 'gauge', x: t.x || 64, y: t.y || 48, radius: t.radius || 24,
                 value: t.value != null ? String(t.value) : '50', preview: 60 }),
@@ -452,7 +548,7 @@ const ScreenEditor = (function() {
         },
 
         clock: {
-            label: 'Analog Clock', icon: 'fa-clock', displays: ['oled'],
+            label: 'Clock', icon: 'fa-clock', displays: ['oled'],
             create: () => ({ type: 'clock', x: 32, y: 32, radius: 28, showSeconds: false, showTicks: true }),
             fields: [
                 { key: 'x', label: 'Center X', kind: 'number', col: 6 },
@@ -462,7 +558,7 @@ const ScreenEditor = (function() {
                 { key: 'showSeconds', label: 'Second Hand', kind: 'checkbox' }
             ],
             draw(el) {
-                ctx.strokeStyle = '#fff'; ctx.fillStyle = '#fff'; ctx.lineWidth = 1;
+                ctx.strokeStyle = theme().pix; ctx.fillStyle = theme().pix; ctx.lineWidth = 1;
                 const r = Math.max(8, el.radius), cx = el.x, cy = el.y;
                 ctx.beginPath(); ctx.arc(cx, cy, r, 0, 2 * Math.PI); ctx.stroke();
                 if (el.showTicks) {
@@ -484,6 +580,9 @@ const ScreenEditor = (function() {
                 ctx.beginPath(); ctx.arc(cx, cy, 1.5, 0, 2 * Math.PI); ctx.fill();
             },
             bounds: el => ({ x: el.x - el.radius, y: el.y - el.radius, w: el.radius * 2, h: el.radius * 2 }),
+            resize(el, start, dx, dy, snap) {
+                el.radius = Math.max(8, snap(start.radius + Math.round((dx + dy) / 2)));
+            },
             toTemplate: el => ({ type: 'clock', x: el.x, y: el.y, radius: el.radius,
                 show_seconds: !!el.showSeconds, show_ticks: el.showTicks !== false }),
             fromTemplate: t => ({ type: 'clock', x: t.x || 32, y: t.y || 32, radius: t.radius || 28,
@@ -503,7 +602,93 @@ const ScreenEditor = (function() {
 
     function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
+    function snapValue(v) {
+        if (!state.snapOn) return v;
+        return Math.round(v / 4) * 4;
+    }
+
     function typeDef(el) { return TYPES[el.type] || TYPES.text; }
+
+    // ------------------------------------------------------------------
+    // Undo / redo history
+    // ------------------------------------------------------------------
+    function snapshot() {
+        return JSON.stringify({ elements: state.elements, dataSources: state.dataSources });
+    }
+
+    function resetHistory() {
+        history = [snapshot()];
+        historyIndex = 0;
+        updateUndoRedoButtons();
+    }
+
+    // Record the current state as an undo step and mark the screen dirty.
+    function commit() {
+        const snap = snapshot();
+        if (history[historyIndex] === snap) return;
+        history = history.slice(0, historyIndex + 1);
+        history.push(snap);
+        if (history.length > 60) history.shift();
+        historyIndex = history.length - 1;
+        updateUndoRedoButtons();
+        markDirty();
+    }
+
+    function restoreSnapshot(snap) {
+        const data = JSON.parse(snap);
+        state.elements = data.elements || [];
+        state.dataSources = data.dataSources || [];
+        if (state.selectedElement && !getElementById(state.selectedElement)) {
+            state.selectedElement = null;
+            hideElementProps();
+        } else if (state.selectedElement) {
+            showElementProps(getElementById(state.selectedElement));
+        }
+        updateLayers();
+        updateDataSourcesList();
+        render();
+        markDirty();
+    }
+
+    function undo() {
+        if (historyIndex <= 0) return;
+        historyIndex--;
+        restoreSnapshot(history[historyIndex]);
+        updateUndoRedoButtons();
+    }
+
+    function redo() {
+        if (historyIndex >= history.length - 1) return;
+        historyIndex++;
+        restoreSnapshot(history[historyIndex]);
+        updateUndoRedoButtons();
+    }
+
+    function updateUndoRedoButtons() {
+        const undoBtn = document.getElementById('btn-undo');
+        const redoBtn = document.getElementById('btn-redo');
+        if (undoBtn) undoBtn.disabled = historyIndex <= 0;
+        if (redoBtn) redoBtn.disabled = historyIndex >= history.length - 1;
+    }
+
+    function markDirty() {
+        state.dirty = true;
+    }
+
+    // ------------------------------------------------------------------
+    // Toast notifications (non-blocking replacement for alert())
+    // ------------------------------------------------------------------
+    function toast(message, kind) {
+        const el = document.createElement('div');
+        el.className = `editor-toast editor-toast-${kind || 'success'}`;
+        el.textContent = message;
+        document.body.appendChild(el);
+        requestAnimationFrame(() => el.classList.add('show'));
+        setTimeout(() => {
+            el.classList.remove('show');
+            setTimeout(() => el.remove(), 300);
+        }, 2800);
+    }
 
     // ------------------------------------------------------------------
     // Initialisation
@@ -517,29 +702,44 @@ const ScreenEditor = (function() {
             state.screenId = parseInt(screenIdInput.value);
         }
 
+        populateLedSelects();
         setupEventListeners();
         updateCanvasDimensions();
-        rebuildAddMenu();
+        updateDisplayPanels();
+        rebuildPalette();
+        resetHistory();
         render();
+    }
+
+    function populateLedSelects() {
+        const fill = (id, options, def) => {
+            const sel = document.getElementById(id);
+            if (!sel || sel.options.length) return;
+            sel.innerHTML = options.map(o =>
+                `<option value="${o}" ${o === def ? 'selected' : ''}>${o.replace(/_/g, ' ')}</option>`).join('');
+        };
+        fill('led-color', LED_COLORS, 'AMBER');
+        fill('led-mode', LED_MODES, 'HOLD');
+        fill('led-speed', LED_SPEEDS, 'SPEED_3');
+        fill('led-font', LED_FONTS, 'FONT_7x9');
     }
 
     function setupEventListeners() {
         document.getElementById('display-type').addEventListener('change', function() {
             state.displayType = this.value;
             updateCanvasDimensions();
-            updateEffectsPanel();
-            rebuildAddMenu();
+            updateDisplayPanels();
+            rebuildPalette();
             render();
+            markDirty();
         });
 
-        // Add-element selector
-        const addSelect = document.getElementById('add-element-select');
-        if (addSelect) {
-            addSelect.addEventListener('change', function() {
-                if (this.value) {
-                    addElement(this.value);
-                    this.value = '';
-                }
+        // Element palette buttons (delegated)
+        const palette = document.getElementById('element-palette');
+        if (palette) {
+            palette.addEventListener('click', function(e) {
+                const btn = e.target.closest('.palette-btn');
+                if (btn) addElement(btn.dataset.type);
             });
         }
 
@@ -550,31 +750,64 @@ const ScreenEditor = (function() {
                 render();
                 updateLayers();
                 hideElementProps();
+                commit();
             }
         });
 
-        document.getElementById('btn-zoom-in').addEventListener('click', () => changeZoom(0.25));
-        document.getElementById('btn-zoom-out').addEventListener('click', () => changeZoom(-0.25));
+        document.getElementById('btn-zoom-in').addEventListener('click', () => changeZoom(1));
+        document.getElementById('btn-zoom-out').addEventListener('click', () => changeZoom(-1));
+
+        const gridBtn = document.getElementById('btn-toggle-grid');
+        if (gridBtn) {
+            gridBtn.addEventListener('click', () => {
+                state.showGrid = !state.showGrid;
+                gridBtn.classList.toggle('active', state.showGrid);
+                updateGridOverlay();
+            });
+        }
+
+        const snapBtn = document.getElementById('btn-toggle-snap');
+        if (snapBtn) {
+            snapBtn.addEventListener('click', () => {
+                state.snapOn = !state.snapOn;
+                snapBtn.classList.toggle('active', state.snapOn);
+            });
+        }
+
+        document.getElementById('btn-undo')?.addEventListener('click', undo);
+        document.getElementById('btn-redo')?.addEventListener('click', redo);
 
         // Element actions (single shared panel)
         document.getElementById('btn-delete-element').addEventListener('click', deleteSelectedElement);
         document.getElementById('btn-duplicate-element').addEventListener('click', duplicateSelectedElement);
 
-        // Delegated property field changes
+        // Delegated property field changes: 'input' updates live, 'change'
+        // (blur / commit) records an undo step.
         document.getElementById('element-props-fields').addEventListener('input', onFieldChange);
-        document.getElementById('element-props-fields').addEventListener('change', onFieldChange);
+        document.getElementById('element-props-fields').addEventListener('change', e => {
+            onFieldChange(e);
+            commit();
+        });
 
         // Scroll effect controls
         document.getElementById('scroll-effect').addEventListener('change', function() {
             const needsSpeed = !['static', 'fade_in'].includes(this.value);
             document.getElementById('scroll-speed-group').style.display = needsSpeed ? 'block' : 'none';
             document.getElementById('scroll-fps-group').style.display = needsSpeed ? 'block' : 'none';
+            markDirty();
         });
         document.getElementById('scroll-speed').addEventListener('input', function() {
             document.getElementById('scroll-speed-value').textContent = this.value;
+            markDirty();
         });
         document.getElementById('scroll-fps').addEventListener('input', function() {
             document.getElementById('scroll-fps-value').textContent = this.value;
+            markDirty();
+        });
+
+        // LED sign option selects just mark the screen dirty; values are read on save
+        ['led-color', 'led-mode', 'led-speed', 'led-font'].forEach(id => {
+            document.getElementById(id)?.addEventListener('change', markDirty);
         });
 
         // Canvas mouse events
@@ -582,6 +815,7 @@ const ScreenEditor = (function() {
         canvasContainer.addEventListener('mousedown', handleCanvasMouseDown);
         canvasContainer.addEventListener('mousemove', handleCanvasMouseMove);
         canvasContainer.addEventListener('mouseup', handleCanvasMouseUp);
+        canvasContainer.addEventListener('mouseleave', handleCanvasMouseUp);
         canvas.addEventListener('mousemove', updateMousePosition);
 
         // Data source modal
@@ -590,6 +824,14 @@ const ScreenEditor = (function() {
         if (dataSourceModal && addDataSourceBtn) {
             addDataSourceBtn.addEventListener('click', () => new bootstrap.Modal(dataSourceModal).show());
         }
+        const endpointSelect = document.getElementById('data-source-endpoint');
+        if (endpointSelect) {
+            endpointSelect.addEventListener('change', function() {
+                const varInput = document.getElementById('data-source-var-name');
+                const suggestion = ENDPOINT_VAR_SUGGESTIONS[this.value];
+                if (varInput && suggestion && !varInput.value) varInput.value = suggestion;
+            });
+        }
         const testDataSourceBtn = document.getElementById('btn-test-data-source');
         if (testDataSourceBtn) testDataSourceBtn.addEventListener('click', testDataSource);
         const addDataSourceConfirmBtn = document.getElementById('btn-add-data-source-confirm');
@@ -597,10 +839,23 @@ const ScreenEditor = (function() {
 
         document.getElementById('btn-preview').addEventListener('click', showPreview);
         document.getElementById('btn-save').addEventListener('click', saveScreen);
+        document.getElementById('btn-send-to-display')?.addEventListener('click', sendToDisplay);
         document.addEventListener('keydown', handleKeyDown);
 
-        // Built-in variable helper clicks
-        document.querySelectorAll('#dynamic-variables, .variable-help').forEach(() => {});
+        // Settings fields mark the screen dirty
+        ['screen-name', 'screen-description', 'screen-duration'].forEach(id => {
+            document.getElementById(id)?.addEventListener('input', markDirty);
+        });
+        document.getElementById('screen-enabled')?.addEventListener('change', markDirty);
+
+        // Warn before navigating away with unsaved changes
+        window.addEventListener('beforeunload', e => {
+            if (state.dirty) {
+                e.preventDefault();
+                e.returnValue = '';
+            }
+        });
+
         bindVariableItems(document);
     }
 
@@ -621,14 +876,16 @@ const ScreenEditor = (function() {
     }
 
     // ------------------------------------------------------------------
-    // Add-element menu (filtered by display type)
+    // Element palette (filtered by display type)
     // ------------------------------------------------------------------
-    function rebuildAddMenu() {
-        const select = document.getElementById('add-element-select');
-        if (!select) return;
+    function rebuildPalette() {
+        const palette = document.getElementById('element-palette');
+        if (!palette) return;
         const available = Object.keys(TYPES).filter(k => TYPES[k].displays.includes(state.displayType));
-        select.innerHTML = '<option value="">+ Add Element…</option>' +
-            available.map(k => `<option value="${k}">${TYPES[k].label}</option>`).join('');
+        palette.innerHTML = available.map(k => `
+            <button type="button" class="palette-btn" data-type="${k}" title="Add ${TYPES[k].label}">
+                <i class="fas ${TYPES[k].icon}"></i><span>${TYPES[k].label}</span>
+            </button>`).join('');
     }
 
     function updateCanvasDimensions() {
@@ -638,11 +895,55 @@ const ScreenEditor = (function() {
         canvas.width = dims.width;
         canvas.height = dims.height;
         document.getElementById('canvas-dimensions').textContent = `${dims.width} x ${dims.height} pixels`;
+
+        const container = document.getElementById('canvas-container');
+        container.classList.remove('display-oled', 'display-vfd', 'display-led');
+        container.classList.add(`display-${state.displayType}`);
+
+        applyZoom();
     }
 
-    function updateEffectsPanel() {
-        document.getElementById('effects-panel').style.display =
-            state.displayType === 'led' ? 'none' : 'block';
+    // Show the right option panels for the current display type
+    function updateDisplayPanels() {
+        const isLed = state.displayType === 'led';
+        document.getElementById('effects-panel').style.display = isLed ? 'none' : 'block';
+        const ledPanel = document.getElementById('led-options-panel');
+        if (ledPanel) ledPanel.style.display = isLed ? 'block' : 'none';
+    }
+
+    // ------------------------------------------------------------------
+    // Zoom & grid. The canvas keeps its logical (device) resolution and is
+    // scaled up with CSS so pixels stay crisp; overlays are positioned in
+    // screen coordinates (device px * zoom).
+    // ------------------------------------------------------------------
+    function applyZoom() {
+        canvas.style.width = `${state.canvasWidth * state.zoom}px`;
+        canvas.style.height = `${state.canvasHeight * state.zoom}px`;
+        document.getElementById('zoom-level').textContent = `${state.zoom}×`;
+        updateGridOverlay();
+        updateOverlays();
+    }
+
+    function changeZoom(delta) {
+        state.zoom = clamp(state.zoom + delta, 1, 10);
+        applyZoom();
+    }
+
+    function updateGridOverlay() {
+        const grid = document.getElementById('canvas-grid');
+        if (!grid) return;
+        grid.style.display = state.showGrid ? 'block' : 'none';
+        if (!state.showGrid) return;
+        const minor = 4 * state.zoom;
+        const major = 8 * state.zoom;
+        grid.style.backgroundImage = [
+            'linear-gradient(to right, rgba(120,170,255,0.14) 1px, transparent 1px)',
+            'linear-gradient(to bottom, rgba(120,170,255,0.14) 1px, transparent 1px)',
+            'linear-gradient(to right, rgba(120,170,255,0.28) 1px, transparent 1px)',
+            'linear-gradient(to bottom, rgba(120,170,255,0.28) 1px, transparent 1px)'
+        ].join(',');
+        grid.style.backgroundSize =
+            `${minor}px ${minor}px, ${minor}px ${minor}px, ${major}px ${major}px, ${major}px ${major}px`;
     }
 
     // ------------------------------------------------------------------
@@ -656,6 +957,7 @@ const ScreenEditor = (function() {
         selectElement(element.id);
         updateLayers();
         render();
+        commit();
     }
 
     function selectElement(elementId) {
@@ -666,6 +968,14 @@ const ScreenEditor = (function() {
             updateLayers();
             render();
         }
+    }
+
+    function deselectElement() {
+        if (!state.selectedElement) return;
+        state.selectedElement = null;
+        hideElementProps();
+        updateLayers();
+        render();
     }
 
     function showElementProps(element) {
@@ -746,7 +1056,7 @@ const ScreenEditor = (function() {
         render();
     }
 
-    // Re-populate field inputs from the element (used after drag).
+    // Re-populate field inputs from the element (used after drag/resize/nudge).
     function syncFormFromElement(element) {
         if (!element || state.selectedElement !== element.id) return;
         const container = document.getElementById('element-props-fields');
@@ -769,6 +1079,7 @@ const ScreenEditor = (function() {
         hideElementProps();
         updateLayers();
         render();
+        commit();
     }
 
     function duplicateSelectedElement() {
@@ -784,6 +1095,7 @@ const ScreenEditor = (function() {
         selectElement(copy.id);
         updateLayers();
         render();
+        commit();
     }
 
     function getElementById(id) {
@@ -802,7 +1114,7 @@ const ScreenEditor = (function() {
                 <div class="empty-state">
                     <i class="fas fa-inbox"></i>
                     <p>No elements yet</p>
-                    <small>Use "+ Add Element…" to start</small>
+                    <small>Pick an element from the toolbar above the canvas</small>
                 </div>`;
             return;
         }
@@ -852,13 +1164,14 @@ const ScreenEditor = (function() {
         [state.elements[index], state.elements[newIndex]] = [state.elements[newIndex], state.elements[index]];
         updateLayers();
         render();
+        commit();
     }
 
     // ------------------------------------------------------------------
     // Canvas rendering
     // ------------------------------------------------------------------
     function render() {
-        ctx.fillStyle = '#000';
+        ctx.fillStyle = theme().bg;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         state.elements.forEach(element => {
             try { typeDef(element).draw(element); } catch (err) { /* ignore bad element */ }
@@ -868,103 +1181,205 @@ const ScreenEditor = (function() {
 
     function updateOverlays() {
         const overlaysContainer = document.getElementById('element-overlays');
+        if (!overlaysContainer) return;
         overlaysContainer.innerHTML = '';
+        const z = state.zoom;
         state.elements.forEach(element => {
             const def = typeDef(element);
             const b = def.bounds(element);
             const overlay = document.createElement('div');
             overlay.className = 'element-overlay';
-            if (state.selectedElement === element.id) overlay.classList.add('selected');
-            overlay.style.left = `${b.x}px`;
-            overlay.style.top = `${b.y}px`;
-            overlay.style.width = `${Math.max(6, b.w)}px`;
-            overlay.style.height = `${Math.max(6, b.h)}px`;
+            const selected = state.selectedElement === element.id;
+            if (selected) overlay.classList.add('selected');
+            overlay.style.left = `${b.x * z}px`;
+            overlay.style.top = `${b.y * z}px`;
+            overlay.style.width = `${Math.max(6, b.w * z)}px`;
+            overlay.style.height = `${Math.max(6, b.h * z)}px`;
             overlay.dataset.elementId = element.id;
 
             const label = document.createElement('div');
             label.className = 'element-overlay-label';
             label.textContent = def.layerLabel(element).substring(0, 22);
             overlay.appendChild(label);
+
+            // Corner resize handle for resizable elements
+            if (selected && def.resize) {
+                const handle = document.createElement('div');
+                handle.className = 'resize-handle';
+                handle.title = 'Drag to resize';
+                overlay.appendChild(handle);
+            }
+
             overlaysContainer.appendChild(overlay);
         });
     }
 
     // ------------------------------------------------------------------
-    // Canvas drag
+    // Canvas drag & resize
     // ------------------------------------------------------------------
-    function handleCanvasMouseDown(e) {
+    function canvasCoords(e) {
         const rect = canvas.getBoundingClientRect();
-        const x = Math.floor((e.clientX - rect.left) / state.zoom);
-        const y = Math.floor((e.clientY - rect.top) / state.zoom);
+        return {
+            x: Math.floor((e.clientX - rect.left) / state.zoom),
+            y: Math.floor((e.clientY - rect.top) / state.zoom)
+        };
+    }
+
+    // Keys that participate in generic move (snapshotted on drag start)
+    const MOVE_KEYS = ['x', 'y', 'x1', 'y1', 'x2', 'y2', 'width', 'height', 'radius', 'size'];
+
+    function captureStartProps(element) {
+        const props = {};
+        MOVE_KEYS.forEach(k => { if (k in element) props[k] = element[k]; });
+        return props;
+    }
+
+    function handleCanvasMouseDown(e) {
+        const pos = canvasCoords(e);
+        const handle = e.target.closest('.resize-handle');
         const overlay = e.target.closest('.element-overlay');
+
+        if (handle && overlay) {
+            const elementId = parseInt(overlay.dataset.elementId);
+            const element = getElementById(elementId);
+            if (!element) return;
+            selectElement(elementId);
+            state.isResizing = true;
+            state.dragElement = elementId;
+            state.dragStartX = pos.x;
+            state.dragStartY = pos.y;
+            state.dragStartProps = captureStartProps(element);
+            state.dragMoved = false;
+            e.preventDefault();
+            return;
+        }
+
         if (overlay) {
             const elementId = parseInt(overlay.dataset.elementId);
+            const element = getElementById(elementId);
+            if (!element) return;
             selectElement(elementId);
             state.isDragging = true;
             state.dragElement = elementId;
-            state.dragStartX = x;
-            state.dragStartY = y;
+            state.dragStartX = pos.x;
+            state.dragStartY = pos.y;
+            state.dragStartProps = captureStartProps(element);
+            state.dragMoved = false;
             e.preventDefault();
+            return;
         }
+
+        // Click on empty canvas: deselect
+        if (e.target === canvas) deselectElement();
     }
 
     function handleCanvasMouseMove(e) {
-        if (!state.isDragging || !state.dragElement) return;
-        const rect = canvas.getBoundingClientRect();
-        const x = Math.floor((e.clientX - rect.left) / state.zoom);
-        const y = Math.floor((e.clientY - rect.top) / state.zoom);
+        if ((!state.isDragging && !state.isResizing) || !state.dragElement) return;
+        const pos = canvasCoords(e);
         const element = getElementById(state.dragElement);
-        if (!element) return;
+        if (!element || !state.dragStartProps) return;
 
-        let dx = x - state.dragStartX;
-        let dy = y - state.dragStartY;
+        const tdx = pos.x - state.dragStartX;
+        const tdy = pos.y - state.dragStartY;
+        if (tdx === 0 && tdy === 0) return;
+        state.dragMoved = true;
+
         const def = typeDef(element);
-        if (def.move) def.move(element, dx, dy);
-        else {
-            element.x = clamp(element.x + dx, 0, state.canvasWidth);
-            element.y = clamp(element.y + dy, 0, state.canvasHeight);
+        const start = state.dragStartProps;
+
+        if (state.isResizing && def.resize) {
+            def.resize(element, start, tdx, tdy, snapValue);
+        } else {
+            // Generic move: translate every positional key from its start value
+            if ('x' in start) element.x = clamp(snapValue(start.x + tdx), 0, state.canvasWidth);
+            if ('y' in start) element.y = clamp(snapValue(start.y + tdy), 0, state.canvasHeight);
+            if ('x1' in start) {
+                element.x1 = snapValue(start.x1 + tdx);
+                element.y1 = snapValue(start.y1 + tdy);
+                element.x2 = snapValue(start.x2 + tdx);
+                element.y2 = snapValue(start.y2 + tdy);
+            }
         }
 
-        state.dragStartX = x;
-        state.dragStartY = y;
         syncFormFromElement(element);
         updateLayers();
         render();
     }
 
     function handleCanvasMouseUp() {
+        const moved = state.dragMoved;
         state.isDragging = false;
+        state.isResizing = false;
         state.dragElement = null;
+        state.dragStartProps = null;
+        state.dragMoved = false;
+        if (moved) commit();
     }
 
     function updateMousePosition(e) {
-        const rect = canvas.getBoundingClientRect();
-        const x = Math.floor((e.clientX - rect.left) / state.zoom);
-        const y = Math.floor((e.clientY - rect.top) / state.zoom);
-        document.getElementById('mouse-position').textContent = `X: ${x}, Y: ${y}`;
+        const pos = canvasCoords(e);
+        document.getElementById('mouse-position').textContent = `X: ${pos.x}, Y: ${pos.y}`;
     }
 
-    function changeZoom(delta) {
-        state.zoom = clamp(state.zoom + delta, 0.5, 4);
-        document.getElementById('canvas-container').style.transform = `scale(${state.zoom})`;
-        document.getElementById('zoom-level').textContent = `${Math.round(state.zoom * 100)}%`;
+    function nudgeSelected(dx, dy) {
+        const element = getElementById(state.selectedElement);
+        if (!element) return;
+        if ('x1' in element) {
+            element.x1 += dx; element.y1 += dy;
+            element.x2 += dx; element.y2 += dy;
+        } else if ('x' in element) {
+            element.x = clamp(element.x + dx, 0, state.canvasWidth);
+            element.y = clamp(element.y + dy, 0, state.canvasHeight);
+        } else {
+            return;
+        }
+        syncFormFromElement(element);
+        updateLayers();
+        render();
+        // Coalesce rapid keypresses into one undo step
+        clearTimeout(nudgeCommitTimer);
+        nudgeCommitTimer = setTimeout(commit, 400);
     }
 
     function handleKeyDown(e) {
         const inField = ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName);
+
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+            saveScreen();
+            e.preventDefault();
+            return;
+        }
+        if ((e.ctrlKey || e.metaKey) && !inField && e.key.toLowerCase() === 'z') {
+            e.shiftKey ? redo() : undo();
+            e.preventDefault();
+            return;
+        }
+        if ((e.ctrlKey || e.metaKey) && !inField && e.key.toLowerCase() === 'y') {
+            redo();
+            e.preventDefault();
+            return;
+        }
         if ((e.key === 'Delete' || e.key === 'Backspace') && state.selectedElement && !inField) {
             deleteSelectedElement();
             e.preventDefault();
+            return;
         }
         if ((e.ctrlKey || e.metaKey) && e.key === 'd' && state.selectedElement) {
             duplicateSelectedElement();
             e.preventDefault();
+            return;
         }
         if (e.key === 'Escape' && state.selectedElement) {
-            state.selectedElement = null;
-            hideElementProps();
-            updateLayers();
-            render();
+            deselectElement();
+            return;
+        }
+        if (!inField && state.selectedElement &&
+            ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+            const step = e.shiftKey ? 8 : 1;
+            const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
+            const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
+            nudgeSelected(dx, dy);
+            e.preventDefault();
         }
     }
 
@@ -973,7 +1388,7 @@ const ScreenEditor = (function() {
     // ------------------------------------------------------------------
     function testDataSource() {
         const endpoint = document.getElementById('data-source-endpoint').value;
-        if (!endpoint) { alert('Please select an endpoint'); return; }
+        if (!endpoint) { toast('Please select an endpoint', 'error'); return; }
         const preview = document.getElementById('data-source-preview');
         preview.innerHTML = '<div class="text-center"><i class="fas fa-spinner fa-spin"></i> Loading...</div>';
         preview.style.display = 'block';
@@ -986,9 +1401,10 @@ const ScreenEditor = (function() {
     function confirmAddDataSource() {
         const endpoint = document.getElementById('data-source-endpoint').value;
         const varName = document.getElementById('data-source-var-name').value;
-        if (!endpoint || !varName) { alert('Please fill in all fields'); return; }
+        if (!endpoint || !varName) { toast('Please fill in all fields', 'error'); return; }
         state.dataSources.push({ endpoint, var_name: varName });
         updateDataSourcesList();
+        commit();
         bootstrap.Modal.getInstance(document.getElementById('dataSourceModal')).hide();
         document.getElementById('data-source-endpoint').value = '';
         document.getElementById('data-source-var-name').value = '';
@@ -1012,6 +1428,7 @@ const ScreenEditor = (function() {
     function removeDataSource(index) {
         state.dataSources.splice(index, 1);
         updateDataSourcesList();
+        commit();
     }
 
     function updateDynamicVariables() {
@@ -1038,8 +1455,31 @@ const ScreenEditor = (function() {
         previewCanvas.width = canvas.width;
         previewCanvas.height = canvas.height;
         previewCtx.drawImage(canvas, 0, 0);
+        previewCanvas.style.width = `${canvas.width * 4}px`;
+        previewCanvas.style.height = `${canvas.height * 4}px`;
         const previewModal = document.getElementById('previewModal');
         if (previewModal) new bootstrap.Modal(previewModal).show();
+    }
+
+    function sendToDisplay() {
+        if (!state.screenId) {
+            toast('Save the screen first, then send it to the display', 'error');
+            return;
+        }
+        if (state.dirty) {
+            toast('You have unsaved changes — save before sending', 'error');
+            return;
+        }
+        fetch(`/api/screens/${state.screenId}/display`, {
+            method: 'POST',
+            headers: { 'X-CSRF-Token': window.CSRF_TOKEN }
+        })
+        .then(r => r.json().then(data => ({ ok: r.ok, data })))
+        .then(({ ok, data }) => {
+            if (ok) toast('Screen sent to display');
+            else toast(data.error || 'Failed to send to display', 'error');
+        })
+        .catch(err => toast('Failed to send: ' + err.message, 'error'));
     }
 
     // ------------------------------------------------------------------
@@ -1055,7 +1495,7 @@ const ScreenEditor = (function() {
             template_data: buildTemplateData(),
             data_sources: state.dataSources
         };
-        if (!screenData.name) { alert('Please enter a screen name'); return; }
+        if (!screenData.name) { toast('Please enter a screen name', 'error'); return; }
 
         const url = state.screenId ? `/api/screens/${state.screenId}` : '/api/screens';
         const method = state.screenId ? 'PUT' : 'POST';
@@ -1064,21 +1504,40 @@ const ScreenEditor = (function() {
             headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': window.CSRF_TOKEN },
             body: JSON.stringify(screenData)
         })
-        .then(r => r.json())
-        .then(data => {
-            if (data.error) alert('Error saving screen: ' + data.error);
-            else { alert('Screen saved successfully!'); window.location.href = '/screens'; }
+        .then(r => r.json().then(data => ({ ok: r.ok, data })))
+        .then(({ ok, data }) => {
+            if (!ok || data.error) {
+                toast('Error saving screen: ' + (data.error || 'unknown error'), 'error');
+                return;
+            }
+            state.dirty = false;
+            const created = !state.screenId;
+            if (created && data.id) {
+                // Stay in the editor and switch to edit mode for the new screen
+                state.screenId = data.id;
+                window.history.replaceState({}, '', `/screens/editor/${data.id}`);
+            }
+            document.getElementById('screen-name-display').textContent = screenData.name;
+            toast(created ? 'Screen created' : 'Screen saved');
         })
-        .catch(err => alert('Error saving screen: ' + err.message));
+        .catch(err => toast('Error saving screen: ' + err.message, 'error'));
     }
 
     function buildTemplateData() {
-        // LED is character-based: emit a `lines` array consumed by render_led_screen.
+        // LED is character-based: emit a `lines` array consumed by render_led_screen,
+        // plus screen-level sign options (colour, display mode, speed, font).
         if (state.displayType === 'led') {
             const lines = state.elements
                 .filter(e => e.type === 'text')
-                .map(e => ({ text: e.text, font: e.font }));
-            return { lines, clear: true };
+                .map(e => ({ text: e.text }));
+            return {
+                lines,
+                clear: true,
+                color: document.getElementById('led-color')?.value || 'AMBER',
+                mode: document.getElementById('led-mode')?.value || 'HOLD',
+                speed: document.getElementById('led-speed')?.value || 'SPEED_3',
+                font: document.getElementById('led-font')?.value || 'FONT_7x9'
+            };
         }
 
         const elements = state.elements.map(e => typeDef(e).toTemplate(e));
@@ -1112,19 +1571,21 @@ const ScreenEditor = (function() {
 
         state.displayType = screenData.display_type || 'oled';
         updateCanvasDimensions();
-        updateEffectsPanel();
-        rebuildAddMenu();
+        updateDisplayPanels();
+        rebuildPalette();
 
         const td = screenData.template_data || {};
         if (Array.isArray(td.elements) && td.elements.length) {
             state.elements = td.elements.map(elementFromTemplate);
         } else if (Array.isArray(td.lines) && td.lines.length) {
-            // Legacy lines format -> text elements
+            // Legacy lines format -> text elements, staggered vertically when
+            // a line has no explicit y so they don't pile up at (0,0).
+            const lineHeight = state.displayType === 'led' ? 8 : 13;
             state.elements = td.lines.map((line, index) => {
-                if (typeof line === 'string') {
-                    return { id: Date.now() + index, ...TYPES.text.fromTemplate({ text: line }) };
-                }
-                return { id: Date.now() + index, ...TYPES.text.fromTemplate(line) };
+                const t = typeof line === 'string' ? { text: line } : line;
+                const el = { id: Date.now() + index, ...TYPES.text.fromTemplate(t) };
+                if (t.y == null) el.y = index * lineHeight;
+                return el;
             });
         } else {
             state.elements = [];
@@ -1142,6 +1603,18 @@ const ScreenEditor = (function() {
             document.getElementById('scroll-fps-group').style.display = 'block';
         }
 
+        // LED sign options
+        if (state.displayType === 'led') {
+            const setSel = (id, value) => {
+                const sel = document.getElementById(id);
+                if (sel && value) sel.value = value;
+            };
+            setSel('led-color', td.color);
+            setSel('led-mode', td.mode);
+            setSel('led-speed', td.speed);
+            setSel('led-font', td.font);
+        }
+
         if (screenData.data_sources) {
             state.dataSources = screenData.data_sources;
             updateDataSourcesList();
@@ -1150,6 +1623,8 @@ const ScreenEditor = (function() {
         document.getElementById('screen-name-display').textContent = screenData.name || 'New Screen';
         updateLayers();
         render();
+        resetHistory();
+        state.dirty = false;
     }
 
     function escapeHtml(text) {

@@ -91,6 +91,34 @@
                 </div>
             </div>
 
+            <!-- LED Sign Options Panel (LED only) -->
+            <div class="panel" id="led-options-panel" style="display: none;">
+                <div class="panel-header">
+                    <i class="fas fa-sign"></i> LED Sign Options
+                </div>
+                <div class="panel-body">
+                    <div class="form-group">
+                        <label>Color</label>
+                        <select id="led-color" class="form-control"></select>
+                    </div>
+                    <div class="form-group">
+                        <label>Display Mode</label>
+                        <select id="led-mode" class="form-control"></select>
+                    </div>
+                    <div class="form-group">
+                        <label>Speed</label>
+                        <select id="led-speed" class="form-control"></select>
+                    </div>
+                    <div class="form-group">
+                        <label>Font</label>
+                        <select id="led-font" class="form-control"></select>
+                    </div>
+                    <small class="form-text text-muted">
+                        Applied to the whole message. The sign shows up to 4 lines of 20 characters.
+                    </small>
+                </div>
+            </div>
+
             <!-- Scroll Effects Panel (OLED/VFD only) -->
             <div class="panel" id="effects-panel">
                 <div class="panel-header">
@@ -131,33 +159,49 @@
         <!-- Center - Canvas Area -->
         <div class="canvas-area">
             <div class="canvas-toolbar">
-                <select id="add-element-select" class="form-control add-element-select">
-                    <option value="">+ Add Element…</option>
-                </select>
-                <button id="btn-clear-canvas" class="btn btn-outline-secondary">
-                    <i class="fas fa-eraser"></i> Clear All
+                <div id="element-palette" class="element-palette"></div>
+                <div class="toolbar-divider"></div>
+                <button id="btn-undo" class="btn btn-sm btn-outline-secondary" title="Undo (Ctrl+Z)" disabled>
+                    <i class="fas fa-undo"></i>
+                </button>
+                <button id="btn-redo" class="btn btn-sm btn-outline-secondary" title="Redo (Ctrl+Shift+Z)" disabled>
+                    <i class="fas fa-redo"></i>
                 </button>
                 <div class="toolbar-divider"></div>
+                <button id="btn-toggle-grid" class="btn btn-sm btn-outline-secondary" title="Show grid">
+                    <i class="fas fa-border-all"></i>
+                </button>
+                <button id="btn-toggle-snap" class="btn btn-sm btn-outline-secondary" title="Snap to 4px grid">
+                    <i class="fas fa-magnet"></i>
+                </button>
+                <button id="btn-clear-canvas" class="btn btn-sm btn-outline-secondary" title="Remove all elements">
+                    <i class="fas fa-eraser"></i>
+                </button>
                 <div class="zoom-controls">
-                    <button id="btn-zoom-out" class="btn btn-sm btn-outline-secondary">
+                    <button id="btn-zoom-out" class="btn btn-sm btn-outline-secondary" title="Zoom out">
                         <i class="fas fa-search-minus"></i>
                     </button>
-                    <span id="zoom-level">100%</span>
-                    <button id="btn-zoom-in" class="btn btn-sm btn-outline-secondary">
+                    <span id="zoom-level">4×</span>
+                    <button id="btn-zoom-in" class="btn btn-sm btn-outline-secondary" title="Zoom in">
                         <i class="fas fa-search-plus"></i>
                     </button>
                 </div>
             </div>
 
             <div class="canvas-wrapper">
-                <div class="canvas-container" id="canvas-container">
+                <div class="canvas-container display-oled" id="canvas-container">
                     <canvas id="display-canvas" width="128" height="64"></canvas>
+                    <div id="canvas-grid"></div>
                     <div id="element-overlays"></div>
                 </div>
                 <div class="canvas-info">
                     <span id="canvas-dimensions">128 x 64 pixels</span>
                     <span class="separator">|</span>
                     <span id="mouse-position">X: 0, Y: 0</span>
+                </div>
+                <div class="canvas-hints">
+                    Drag to move &middot; corner handle to resize &middot; arrow keys to nudge (Shift = 8px)
+                    &middot; Del to delete &middot; Ctrl+Z undo &middot; Ctrl+D duplicate &middot; Ctrl+S save
                 </div>
             </div>
         </div>
@@ -175,7 +219,7 @@
                         <div class="empty-state">
                             <i class="fas fa-inbox"></i>
                             <p>No elements yet</p>
-                            <small>Click "Add Text Element" to start</small>
+                            <small>Pick an element from the toolbar above the canvas</small>
                         </div>
                     </div>
                 </div>
@@ -244,8 +288,14 @@
                     <select id="data-source-endpoint" class="form-control">
                         <option value="">Select an endpoint...</option>
                         <option value="/api/system_status">System Status</option>
-                        <option value="/api/audio/metrics">Audio Metrics</option>
+                        <option value="/api/system_health">System Health</option>
                         <option value="/api/alerts">Active Alerts</option>
+                        <option value="/api/audio/metrics">Audio Metrics</option>
+                        <option value="/api/audio/metrics/latest">Audio Metrics (Latest)</option>
+                        <option value="/api/audio/health">Audio Health</option>
+                        <option value="/api/eas-monitor/status">EAS Decoder Status</option>
+                        <option value="/api/hardware/gps/status">GPS Status</option>
+                        <option value="/api/monitoring/radio">Radio Monitoring</option>
                         <option value="/api/stream/status">Stream Status</option>
                         <option value="/api/receivers">Radio Receivers</option>
                     </select>
@@ -281,7 +331,7 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body text-center">
-                <canvas id="preview-canvas" width="128" height="64" style="border: 2px solid #333; max-width: 100%; height: auto;"></canvas>
+                <canvas id="preview-canvas" width="128" height="64" style="border: 2px solid #333; border-radius: 6px; max-width: 100%; image-rendering: pixelated;"></canvas>
                 <div class="mt-3">
                     <button id="btn-send-to-display" class="btn btn-success">
                         <i class="fas fa-paper-plane"></i> Send to Display Now

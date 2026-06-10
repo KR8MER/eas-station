@@ -240,6 +240,81 @@
 .color-preset-orange { background: color-mix(in srgb, orange 100%, transparent) !important; color: white !important; }
 .color-preset-purple { background: color-mix(in srgb, purple 100%, transparent) !important; color: white !important; }
 
+/* Status chips in the hero card */
+.led-status-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+.led-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.25rem 0.65rem;
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    background: var(--surface-color);
+    font-size: 0.8rem;
+    white-space: nowrap;
+}
+.led-chip i { opacity: 0.6; }
+.led-chip-ok {
+    border-color: color-mix(in srgb, var(--success-color) 50%, transparent);
+    background: color-mix(in srgb, var(--success-color) 10%, transparent);
+}
+
+.led-quick-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+/* Keep the 8 tabs on one scrollable row instead of wrapping into a mess */
+#ledTabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+}
+#ledTabs .nav-link { white-space: nowrap; }
+
+/* Collapsible per-line options */
+.line-options-toggle {
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    padding: 0 0.4rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+.line-options-toggle:hover { color: var(--primary-color); }
+.line-options-toggle[aria-expanded="true"] { color: var(--primary-color); }
+
+/* Collapsible debug terminal */
+details.debug-details > summary {
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 0.9rem;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--surface-color);
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+details.debug-details > summary::-webkit-details-marker { display: none; }
+details.debug-details > summary .summary-chevron { transition: transform 0.2s; margin-left: auto; }
+details.debug-details[open] > summary .summary-chevron { transform: rotate(180deg); }
+details.debug-details[open] > summary { border-radius: 8px 8px 0 0; }
+details.debug-details > .debug-details-body {
+    border: 1px solid var(--border-color);
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    padding: 0.9rem;
+}
+
 @media (max-width: 768px) {
     .tab-content { padding: 1rem; }
     .feature-group { padding: 10px; }
@@ -497,80 +572,67 @@
 
 {% block content %}
 <div class="container-fluid py-4">
-<!-- LED Status Overview -->
+<!-- LED Status + Quick Actions hero -->
 <div class="card mb-4">
-    <div class="card-header bg-primary text-white">
-        <h5 class="mb-0">
-            <i class="fas fa-tv"></i> LED Sign Status
-            <small class="ms-2 opacity-75">Alpha 9120C M-Protocol</small>
-        </h5>
-    </div>
     <div class="card-body">
-        <div class="row">
-            <div class="col-md-6">
+        <div class="row g-4 align-items-center">
+            <div class="col-lg-6">
                 <div id="led-status-display">
-                    <div class="d-flex align-items-center mb-3">
-                        <span class="status-indicator status-connected"></span>
-                        <strong>LED Sign: Ready</strong>
+                    <h5 class="mb-1">
+                        <i class="fas fa-tv text-primary"></i> LED Sign
+                        <small class="text-muted fw-normal">Alpha 9120C &middot; M-Protocol</small>
+                    </h5>
+                    <div class="led-status-chips my-3">
+                        <span class="led-chip led-chip-ok">
+                            <span class="status-indicator status-connected"></span> Connected
+                        </span>
+                        <span class="led-chip">
+                            <i class="fas fa-network-wired"></i>
+                            {{ led_status.host if led_status else '192.168.1.100' }}:{{ led_status.port if led_status else '10001' }}
+                        </span>
+                        <span class="led-chip">
+                            <i class="fas fa-grip"></i> 4 lines &times; 20 chars
+                        </span>
+                        <span class="led-chip">
+                            <i class="fas fa-clock"></i> Updated <span id="last-update-time">just now</span>
+                        </span>
                     </div>
-                    <div class="alert alert-success mb-3">
-                        <div><strong>Status:</strong> Connected and ready</div>
-                        <div><strong>Location:</strong> {{ led_status.host if led_status else '192.168.1.100' }}:{{ led_status.port if led_status else '10001' }}</div>
-                        <div><strong>Last Update:</strong> <span id="last-update-time">Just now</span></div>
-                        <div><strong>Features:</strong> RGB Support, Graphics, 4 Lines × 20 Chars</div>
-                    </div>
-                    <div class="alert alert-info mb-0">
-                        <div><strong><i class="fas fa-network-wired"></i> Connection:</strong> {{ led_status.host if led_status else '192.168.1.100' }}:{{ led_status.port if led_status else '10001' }}</div>
-                        <small class="text-muted d-block mt-2">
-                            To configure connection settings (IP address, port, serial mode, baud rate), visit 
-                            <a href="/admin/hardware" class="alert-link"><strong>Hardware Settings</strong></a> → LED Sign tab.
-                        </small>
+                    <small class="text-muted d-block mb-3">
+                        Connection settings (IP, port, serial mode, baud rate) live in
+                        <a href="/admin/hardware"><strong>Hardware Settings</strong></a> &rarr; LED Sign.
+                    </small>
+                    <div class="led-quick-actions">
+                        <button class="btn btn-sm btn-success" onclick="sendDefaultMessage()">
+                            <i class="fas fa-home"></i> Default Message
+                        </button>
+                        <button class="btn btn-sm btn-warning" onclick="clearDisplay()">
+                            <i class="fas fa-eraser"></i> Clear Display
+                        </button>
+                        <button class="btn btn-sm btn-outline-info" onclick="testAllFeatures()">
+                            <i class="fas fa-vial"></i> Test
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="loadMessageHistory()">
+                            <i class="fas fa-history"></i> History
+                        </button>
+                        <button class="btn btn-sm btn-outline-primary" onclick="reconnectLED()" id="reconnectBtn">
+                            <i class="fas fa-plug"></i> Reconnect
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="loadLEDStatus()">
+                            <i class="fas fa-sync"></i> Refresh
+                        </button>
                     </div>
                 </div>
             </div>
-            <div class="col-md-6">
+            <div class="col-lg-6">
                 <div class="message-preview" id="message-preview">
                     {% set preview_lines = location_settings.led_default_lines or ['LINE 1', 'LINE 2', 'LINE 3', 'LINE 4'] %}
                     {% for line in preview_lines %}
                     <div class="preview-line">{{ line }}</div>
                     {% endfor %}
                 </div>
+                <small class="text-muted d-block text-center mt-1">Default sign message</small>
             </div>
         </div>
-    </div>
-</div>
-
-<!-- Quick Action Buttons -->
-<div class="row mb-4 g-2">
-    <div class="col-md-2 col-sm-6">
-        <button class="btn btn-success w-100" onclick="sendDefaultMessage()">
-            <i class="fas fa-home"></i> Default Message
-        </button>
-    </div>
-    <div class="col-md-2 col-sm-6">
-        <button class="btn btn-warning w-100" onclick="clearDisplay()">
-            <i class="fas fa-eraser"></i> Clear Display
-        </button>
-    </div>
-    <div class="col-md-2 col-sm-6">
-        <button class="btn btn-info w-100" onclick="testAllFeatures()">
-            <i class="fas fa-cog"></i> Test Features
-        </button>
-    </div>
-    <div class="col-md-2 col-sm-6">
-        <button class="btn btn-secondary w-100" onclick="loadMessageHistory()">
-            <i class="fas fa-history"></i> Message History
-        </button>
-    </div>
-    <div class="col-md-2 col-sm-6">
-        <button class="btn btn-primary w-100" onclick="reconnectLED()" id="reconnectBtn">
-            <i class="fas fa-plug"></i> Reconnect
-        </button>
-    </div>
-    <div class="col-md-2 col-sm-6">
-        <button class="btn btn-outline-secondary w-100" onclick="loadLEDStatus()">
-            <i class="fas fa-sync"></i> Refresh
-        </button>
     </div>
 </div>
 
@@ -651,51 +713,6 @@
                 </small>
             </div>
 
-            <!-- ══ Protocol Debug Terminal — what is actually going to the sign ══ -->
-            <div class="mb-4" id="debug-terminal-block">
-                <div class="d-flex align-items-center justify-content-between mb-2">
-                    <label class="form-label fw-semibold mb-0">
-                        <i class="fas fa-terminal text-success"></i> Protocol Debug Terminal
-                        <small class="text-muted ms-1" style="font-weight:normal">M-Protocol bytes sent to the sign</small>
-                    </label>
-                    <div class="d-flex align-items-center gap-2">
-                        <span class="badge bg-secondary" id="debug-frame-count" style="font-size:.7em">0 frames</span>
-                        <div class="form-check form-switch m-0" title="Show hexadecimal byte dump">
-                            <input class="form-check-input" type="checkbox" id="debug-show-hex" checked>
-                            <label class="form-check-label small" for="debug-show-hex">Hex</label>
-                        </div>
-                        <div class="form-check form-switch m-0" title="Show ASCII / control-byte view">
-                            <input class="form-check-input" type="checkbox" id="debug-show-ascii" checked>
-                            <label class="form-check-label small" for="debug-show-ascii">ASCII</label>
-                        </div>
-                        <div class="form-check form-switch m-0" title="Auto-scroll to newest frame">
-                            <input class="form-check-input" type="checkbox" id="debug-auto-scroll" checked>
-                            <label class="form-check-label small" for="debug-auto-scroll">Auto-scroll</label>
-                        </div>
-                        <button type="button" class="btn btn-sm btn-outline-secondary"
-                                style="font-size:.75em;padding:2px 8px"
-                                id="debug-pause-btn" onclick="toggleDebugPause()"
-                                title="Pause/Resume frame polling">⏸ Pause</button>
-                        <button type="button" class="btn btn-sm btn-outline-danger"
-                                style="font-size:.75em;padding:2px 8px"
-                                onclick="clearDebugTerminal()"
-                                title="Clear the debug ring buffer">
-                            <i class="fas fa-trash"></i> Clear
-                        </button>
-                    </div>
-                </div>
-                <div id="debug-terminal" class="debug-terminal" aria-live="polite">
-                    <div class="debug-terminal-empty text-center py-3">
-                        <i class="fas fa-satellite-dish opacity-50"></i><br>
-                        <small>No frames captured yet — send a message to see the M-Protocol bytes.</small>
-                    </div>
-                </div>
-                <small class="text-muted d-block mt-1">
-                    Frames: <code class="small">&lt;NUL&gt;×5 &lt;SOH&gt; TT AA &lt;STX&gt; payload &lt;ETX&gt; CC &lt;EOT&gt;</code>
-                    — the most recent <span id="debug-buffer-size">50</span> frames are kept.
-                </small>
-            </div>
-
             <form id="custom-message-form">
                 <div class="row">
                     <div class="col-lg-8">
@@ -703,7 +720,7 @@
                         {% set positions = [' ', '!', '"', '#'] %}
                         <div class="feature-group">
                             <h6><i class="fas fa-keyboard"></i> Message Designer</h6>
-                            <p class="text-muted small mb-3">Click the line cards to edit text, choose colours and effects, and preview exactly how the sign will render each line.</p>
+                            <p class="text-muted small mb-3">Type directly into each line. Use the <i class="fas fa-sliders-h"></i> button on a card for per-line colour, effect and speed overrides.</p>
                             <div class="row g-3">
                                 {% for idx in range(4) %}
                                 <div class="col-xl-6">
@@ -712,10 +729,16 @@
                                             <span class="fw-semibold">Line {{ idx + 1 }}</span>
                                             <span class="effect-pill ep-hold" id="line{{ idx + 1 }}-effect">HOLD</span>
                                             <span class="char-count" id="line{{ idx + 1 }}-count">0 / 20</span>
+                                            <button type="button" class="line-options-toggle" data-bs-toggle="collapse"
+                                                    data-bs-target="#line{{ idx + 1 }}-options" aria-expanded="false"
+                                                    aria-controls="line{{ idx + 1 }}-options" title="Colour, effect & speed options">
+                                                <i class="fas fa-sliders-h"></i>
+                                            </button>
                                         </div>
                                         <div class="card-body">
                                             <div class="line-preview" id="line{{ idx + 1 }}-editor" contenteditable="true" data-line-index="{{ idx }}" data-placeholder="Line {{ idx + 1 }} text"></div>
-                                            <div class="row g-2 mt-3 line-controls">
+                                            <div class="collapse" id="line{{ idx + 1 }}-options">
+                                            <div class="row g-2 mt-2 line-controls">
                                                 <div class="col-md-4">
                                                     <label class="form-label">Colour</label>
                                                     <select class="form-select line-color" data-line-index="{{ idx }}">
@@ -804,6 +827,7 @@
                                                     <i class="fas fa-backspace"></i> Clear line
                                                 </button>
                                             </div>
+                                            </div><!-- /.collapse line options -->
                                         </div>
                                     </div>
                                 </div>
@@ -811,12 +835,12 @@
                             </div>
                         </div>
 
-                        <!-- Color & Font Selection -->
+                        <!-- Message defaults: colour, font, effects, priority, typography -->
                         <div class="feature-group">
-                            <h6><i class="fas fa-paint-brush"></i> Default Colour &amp; Font</h6>
-                            <p class="text-muted small">Applied whenever a line card is set to "Use default" for colour or font.</p>
-                            <div class="row">
-                                <div class="col-md-6">
+                            <h6><i class="fas fa-sliders-h"></i> Message Defaults</h6>
+                            <p class="text-muted small">Used wherever a line card is set to "Use default" — line-specific settings always win.</p>
+                            <div class="row g-3">
+                                <div class="col-md-4 col-sm-6">
                                     <label for="custom-color" class="form-label">Color</label>
                                     <select class="form-select" id="custom-color" onchange="updatePreview()">
                                         <option value="RED">🔴 Red</option>
@@ -833,7 +857,7 @@
                                         <option value="AUTO_COLOR">🔄 Auto Color</option>
                                     </select>
                                 </div>
-                                <div class="col-md-6">
+                                <div class="col-md-4 col-sm-6">
                                     <label for="custom-font" class="form-label">Font Size</label>
                                     <select class="form-select" id="custom-font" onchange="updatePreview()">
                                         <option value="FONT_5x7">5×7 (Tiny)</option>
@@ -848,15 +872,7 @@
                                         <option value="FONT_32x16">32×16 (Huge)</option>
                                     </select>
                                 </div>
-                            </div>
-                        </div>
-
-                        <!-- Display Effects -->
-                        <div class="feature-group">
-                            <h6><i class="fas fa-magic"></i> Default Display Effects</h6>
-                            <p class="text-muted small">Line-specific settings override these defaults; otherwise they control the animation applied on the sign.</p>
-                            <div class="row">
-                                <div class="col-md-6">
+                                <div class="col-md-4 col-sm-6">
                                     <label for="custom-mode" class="form-label">Display Mode</label>
                                     <select class="form-select" id="custom-mode" onchange="updatePreview()">
                                         <option value="HOLD" selected>📌 Hold (Static)</option>
@@ -896,7 +912,7 @@
                                         </optgroup>
                                     </select>
                                 </div>
-                                <div class="col-md-6">
+                                <div class="col-md-4 col-sm-6">
                                     <label for="custom-speed" class="form-label">Animation Speed</label>
                                     <select class="form-select" id="custom-speed">
                                         <option value="SPEED_1">🐌 Slowest</option>
@@ -906,14 +922,7 @@
                                         <option value="SPEED_5">🏎️ Fastest</option>
                                     </select>
                                 </div>
-                            </div>
-                        </div>
-
-                        <!-- Priority & Settings -->
-                        <div class="feature-group">
-                            <h6><i class="fas fa-exclamation"></i> Priority & Settings</h6>
-                            <div class="row">
-                                <div class="col-md-6">
+                                <div class="col-md-4 col-sm-6">
                                     <label for="custom-priority" class="form-label">Message Priority</label>
                                     <select class="form-select" id="custom-priority">
                                         <option value="0">🚨 Emergency</option>
@@ -922,29 +931,19 @@
                                         <option value="3">📝 Low</option>
                                     </select>
                                 </div>
-                                <div class="col-md-6">
+                                <div class="col-md-4 col-sm-6">
                                     <label for="custom-hold" class="form-label">Hold Time (seconds)</label>
                                     <input type="number" class="form-control" id="custom-hold" min="1" max="60" value="5">
                                 </div>
-                            </div>
-                        </div>
-
-                        <!-- Special Functions -->
-                        <div class="feature-group">
-                            <h6><i class="fas fa-star"></i> Typography Options</h6>
-                            <p class="text-muted small">Line-specific flash, wide, and descender toggles are available on each editor card. Use these controls to set the default font width for the entire message.</p>
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <div class="special-function-group">
-                                        <h6 class="mb-2">Font Width</h6>
-                                        <div class="form-check">
-                                            <input class="form-check-input" type="radio" name="font-style" id="fixed-width" value="FIXED_WIDTH">
-                                            <label class="form-check-label" for="fixed-width">Fixed Width Font</label>
-                                        </div>
-                                        <div class="form-check">
-                                            <input class="form-check-input" type="radio" name="font-style" id="prop-width" value="PROP_WIDTH" checked>
-                                            <label class="form-check-label" for="prop-width">Proportional Width Font</label>
-                                        </div>
+                                <div class="col-md-4 col-sm-6">
+                                    <label class="form-label d-block">Font Width</label>
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="radio" name="font-style" id="prop-width" value="PROP_WIDTH" checked>
+                                        <label class="form-check-label" for="prop-width">Proportional</label>
+                                    </div>
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="radio" name="font-style" id="fixed-width" value="FIXED_WIDTH">
+                                        <label class="form-check-label" for="fixed-width">Fixed</label>
                                     </div>
                                 </div>
                             </div>
@@ -998,6 +997,52 @@
                     </div>
                 </div>
             </form>
+
+            <!-- ══ Protocol Debug Terminal — what is actually going to the sign ══ -->
+            <details class="debug-details mt-4" id="debug-terminal-block">
+                <summary>
+                    <i class="fas fa-terminal text-success"></i> Protocol Debug Terminal
+                    <small class="text-muted fw-normal">M-Protocol bytes sent to the sign</small>
+                    <span class="badge bg-secondary" id="debug-frame-count" style="font-size:.7em">0 frames</span>
+                    <i class="fas fa-chevron-down summary-chevron"></i>
+                </summary>
+                <div class="debug-details-body">
+                    <div class="d-flex align-items-center justify-content-end flex-wrap gap-2 mb-2">
+                        <div class="form-check form-switch m-0" title="Show hexadecimal byte dump">
+                            <input class="form-check-input" type="checkbox" id="debug-show-hex" checked>
+                            <label class="form-check-label small" for="debug-show-hex">Hex</label>
+                        </div>
+                        <div class="form-check form-switch m-0" title="Show ASCII / control-byte view">
+                            <input class="form-check-input" type="checkbox" id="debug-show-ascii" checked>
+                            <label class="form-check-label small" for="debug-show-ascii">ASCII</label>
+                        </div>
+                        <div class="form-check form-switch m-0" title="Auto-scroll to newest frame">
+                            <input class="form-check-input" type="checkbox" id="debug-auto-scroll" checked>
+                            <label class="form-check-label small" for="debug-auto-scroll">Auto-scroll</label>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                style="font-size:.75em;padding:2px 8px"
+                                id="debug-pause-btn" onclick="toggleDebugPause()"
+                                title="Pause/Resume frame polling">⏸ Pause</button>
+                        <button type="button" class="btn btn-sm btn-outline-danger"
+                                style="font-size:.75em;padding:2px 8px"
+                                onclick="clearDebugTerminal()"
+                                title="Clear the debug ring buffer">
+                            <i class="fas fa-trash"></i> Clear
+                        </button>
+                    </div>
+                    <div id="debug-terminal" class="debug-terminal" aria-live="polite">
+                        <div class="debug-terminal-empty text-center py-3">
+                            <i class="fas fa-satellite-dish opacity-50"></i><br>
+                            <small>No frames captured yet — send a message to see the M-Protocol bytes.</small>
+                        </div>
+                    </div>
+                    <small class="text-muted d-block mt-1">
+                        Frames: <code class="small">&lt;NUL&gt;×5 &lt;SOH&gt; TT AA &lt;STX&gt; payload &lt;ETX&gt; CC &lt;EOT&gt;</code>
+                        — the most recent <span id="debug-buffer-size">50</span> frames are kept.
+                    </small>
+                </div>
+            </details>
         </div>
 
         <!-- RGB Message Tab -->
