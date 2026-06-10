@@ -1998,6 +1998,36 @@
         </div>
 
         <!-- ============================================================
+             TDEV & MTIE — the telecom time-domain stability pair, on
+             log-log axes with the ITU-T G.811 PRC wander masks dashed
+             in.  MTIE answers "worst phase excursion in any τ-second
+             window"; TDEV is what the G.811 time-transfer masks are
+             written against.  Both come from the same PPS phase ring
+             as the Allan chart, so the local timestamping noise floor
+             applies here too.
+             ============================================================ -->
+        <div class="col-12 col-xl-6">
+            <div class="gps-card h-100 gps-chart-card">
+                <div class="gps-card-head">
+                    <h3><i class="fas fa-ruler-combined me-1"></i> TDEV &amp; MTIE <span class="gps-help-anchor" data-gps-help="tdev-mtie"></span></h3>
+                    <div class="badge-area">
+                        <span class="text-muted small">log-log · dashed = G.811 PRC masks</span>
+                    </div>
+                </div>
+                <div class="chart-meta">
+                    <span><span class="swatch" style="background:#3fb950;"></span><span class="label">TDEV@10s</span> <span id="ts-tdev-10" class="value">—</span></span>
+                    <span><span class="swatch" style="background:#58a6ff;"></span><span class="label">MTIE@100s</span> <span id="ts-mtie-100" class="value">—</span></span>
+                    <span><span class="label">G.811</span> <span id="ts-tdev-verdict" class="value">—</span></span>
+                    <span><span class="label">samples</span> <span id="ts-tdev-n" class="value">0</span></span>
+                </div>
+                <div class="gps-chart-canvas-wrap">
+                    <canvas id="ts-tdev-canvas" width="600" height="160" aria-label="TDEV and MTIE log-log plot"></canvas>
+                    <div id="ts-tdev-empty" class="gps-chart-empty">Need ≥4 PPS pulses…</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================================
              SNR vs ELEVATION — scatter plot of every satellite in view.
              Diagnostic for antenna obstruction, multipath, and noisy LNAs:
              a healthy install shows SNR climbing roughly linearly with
@@ -2045,6 +2075,139 @@
                 <div class="gps-chart-canvas-wrap">
                     <canvas id="ts-hold-canvas" width="600" height="110" aria-label="Holdover history sparkline"></canvas>
                     <div id="ts-hold-empty" class="gps-chart-empty">Collecting samples…</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================================
+             STABILITY TREND — σ_y(τ=10 s) and σ_y(τ=100 s) archived
+             over the selected window.  A single ADEV reading only says
+             "now"; this is what catches an oscillator that's slowly
+             going bad over days.
+             ============================================================ -->
+        <div class="col-12 col-xl-6">
+            <div class="gps-card h-100 gps-chart-card">
+                <div class="gps-card-head">
+                    <h3><i class="fas fa-chart-area me-1"></i> Stability Trend <span class="gps-help-anchor" data-gps-help="stability-trend"></span></h3>
+                    <div class="badge-area">
+                        <span class="text-muted small">σ_y over time · lower is better</span>
+                    </div>
+                </div>
+                <div class="chart-meta">
+                    <span><span class="swatch" style="background:#bc8cff;"></span><span class="label">τ=10 s</span> <span id="ts-adevtrend-10" class="value">—</span></span>
+                    <span><span class="swatch" style="background:#3fb950;"></span><span class="label">τ=100 s</span> <span id="ts-adevtrend-100" class="value">—</span></span>
+                    <span><span class="label">samples</span> <span id="ts-adevtrend-n" class="value">0</span></span>
+                </div>
+                <div class="gps-chart-canvas-wrap">
+                    <canvas id="ts-adevtrend-canvas" width="600" height="110" aria-label="Allan deviation trend sparkline"></canvas>
+                    <div id="ts-adevtrend-empty" class="gps-chart-empty">Collecting samples…</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================================
+             OSCILLATOR SKEW — chrony's own frequency-uncertainty
+             estimate over time.  Unlike the PPS-derived ADEV this is
+             immune to local timestamping noise, which makes it the most
+             honest long-term "is the oscillator stable?" series we have.
+             ============================================================ -->
+        <div class="col-12 col-xl-6">
+            <div class="gps-card h-100 gps-chart-card">
+                <div class="gps-card-head">
+                    <h3><i class="fas fa-arrows-left-right-to-line me-1"></i> Oscillator Skew <span class="gps-help-anchor" data-gps-help="skew-trend"></span></h3>
+                    <div class="badge-area">
+                        <span class="text-muted small">chrony skew · ppm</span>
+                    </div>
+                </div>
+                <div class="chart-meta">
+                    <span><span class="swatch" style="background:#d29922;"></span><span class="label">Now</span> <span id="ts-skew-now" class="value">—</span></span>
+                    <span><span class="label">min</span> <span id="ts-skew-min" class="value">—</span></span>
+                    <span><span class="label">max</span> <span id="ts-skew-max" class="value">—</span></span>
+                    <span><span class="label">samples</span> <span id="ts-skew-n" class="value">0</span></span>
+                </div>
+                <div class="gps-chart-canvas-wrap">
+                    <canvas id="ts-skew-canvas" width="600" height="110" aria-label="Chrony skew sparkline"></canvas>
+                    <div id="ts-skew-empty" class="gps-chart-empty">Collecting samples…</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================================
+             SATELLITE COUNT HISTORY — used-in-fix vs visible over the
+             selected window.  Makes slow constellation losses (a tree
+             growing in, a failing LNA) visible as a narrowing gap.
+             ============================================================ -->
+        <div class="col-12 col-xl-6">
+            <div class="gps-card h-100 gps-chart-card">
+                <div class="gps-card-head">
+                    <h3><i class="fas fa-satellite me-1"></i> Satellite Counts <span class="gps-help-anchor" data-gps-help="sat-count-history"></span></h3>
+                    <div class="badge-area">
+                        <span class="text-muted small">used in fix vs visible</span>
+                    </div>
+                </div>
+                <div class="chart-meta">
+                    <span><span class="swatch" style="background:#3fb950;"></span><span class="label">used</span> <span id="ts-sats-used" class="value">—</span></span>
+                    <span><span class="swatch" style="background:#58a6ff;"></span><span class="label">visible</span> <span id="ts-sats-visible" class="value">—</span></span>
+                    <span><span class="label">samples</span> <span id="ts-sats-n" class="value">0</span></span>
+                </div>
+                <div class="gps-chart-canvas-wrap">
+                    <canvas id="ts-sats-canvas" width="600" height="110" aria-label="Satellite count history sparkline"></canvas>
+                    <div id="ts-sats-empty" class="gps-chart-empty">Collecting samples…</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================================
+             TEMPERATURE vs FREQUENCY — scatter of host SoC temperature
+             against chrony's applied frequency correction across the
+             selected window.  A TCXO's drift is mostly thermal: a tight
+             diagonal here quantifies the board's ppm/°C sensitivity and
+             explains "stability got worse at 2 PM" mysteries.
+             ============================================================ -->
+        <div class="col-12 col-xl-6">
+            <div class="gps-card h-100 gps-chart-card">
+                <div class="gps-card-head">
+                    <h3><i class="fas fa-temperature-half me-1"></i> Temp vs Frequency <span class="gps-help-anchor" data-gps-help="temp-vs-freq"></span></h3>
+                    <div class="badge-area">
+                        <span class="text-muted small">thermal sensitivity scatter</span>
+                    </div>
+                </div>
+                <div class="chart-meta">
+                    <span><span class="label">temp</span> <span id="ts-tempfreq-temp" class="value">—</span></span>
+                    <span><span class="label">freq</span> <span id="ts-tempfreq-freq" class="value">—</span></span>
+                    <span><span class="label">sensitivity</span> <span id="ts-tempfreq-slope" class="value">—</span></span>
+                    <span><span class="label">samples</span> <span id="ts-tempfreq-n" class="value">0</span></span>
+                </div>
+                <div class="gps-chart-canvas-wrap">
+                    <canvas id="ts-tempfreq-canvas" width="600" height="160" aria-label="Temperature vs frequency scatter"></canvas>
+                    <div id="ts-tempfreq-empty" class="gps-chart-empty">Collecting temperature samples…</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================================
+             POSITION WANDER — fix scatter around the window's median
+             position, in metres east/north, with CEP50/CEP95 circles.
+             A stationary antenna should pile up inside a few metres;
+             a drifting or jumping cloud means multipath — or spoofing.
+             ============================================================ -->
+        <div class="col-12 col-xl-6">
+            <div class="gps-card h-100 gps-chart-card">
+                <div class="gps-card-head">
+                    <h3><i class="fas fa-crosshairs me-1"></i> Position Wander <span class="gps-help-anchor" data-gps-help="position-wander"></span></h3>
+                    <div class="badge-area">
+                        <span class="text-muted small">metres from median · CEP circles</span>
+                    </div>
+                </div>
+                <div class="chart-meta">
+                    <span><span class="label">CEP50</span> <span id="ts-poswander-cep50" class="value">—</span></span>
+                    <span><span class="label">CEP95</span> <span id="ts-poswander-cep95" class="value">—</span></span>
+                    <span><span class="label">max</span> <span id="ts-poswander-max" class="value">—</span></span>
+                    <span><span class="label">samples</span> <span id="ts-poswander-n" class="value">0</span></span>
+                </div>
+                <div class="gps-chart-canvas-wrap">
+                    <canvas id="ts-poswander-canvas" width="600" height="160" aria-label="Position wander scatter"></canvas>
+                    <div id="ts-poswander-empty" class="gps-chart-empty">Collecting position samples…</div>
                 </div>
             </div>
         </div>
@@ -4322,6 +4485,7 @@
             ringPush(ts.rms,   sampleTs, pickNum(s2.rms_offset_s));
             ringPush(ts.freq,  sampleTs, pickNum(s2.frequency_ppm));
             ringPush(ts.resid, sampleTs, pickNum(s2.residual_freq_ppm));
+            ringPush(ts.skew,  sampleTs, pickNum(s2.skew_ppm));
             ringPush(ts.hdop,  sampleTs, pickNum(s2.hdop));
             ringPush(ts.vdop,  sampleTs, pickNum(s2.vdop));
             ringPush(ts.pdop,  sampleTs, pickNum(s2.pdop));
@@ -4329,6 +4493,13 @@
             ringPush(ts.hold,  sampleTs, pickNum(s2.holdover_s));
             ringPush(ts.noise, sampleTs, pickNum(s2.noise_level));
             ringPush(ts.agc,   sampleTs, pickNum(s2.agc_count));
+            ringPush(ts.adev10,      sampleTs, pickNum(s2.adev_10s));
+            ringPush(ts.adev100,     sampleTs, pickNum(s2.adev_100s));
+            ringPush(ts.satsUsed,    sampleTs, pickNum(s2.sats_used));
+            ringPush(ts.satsVisible, sampleTs, pickNum(s2.sats_visible));
+            ringPush(ts.temp, sampleTs, pickNum(s2.cpu_temp_c));
+            ringPush(ts.lat,  sampleTs, pickNum(s2.lat));
+            ringPush(ts.lon,  sampleTs, pickNum(s2.lon));
             // Jamming state stored as a raw string; bypass ringPush's
             // numeric coercion so non-numeric values aren't dropped.
             ts.jam.t.push(sampleTs);
@@ -4691,6 +4862,7 @@
         rms:   makeRing(),  // chrony rms_offset_s           (seconds)
         freq:  makeRing(),  // chrony frequency_ppm          (ppm)
         resid: makeRing(),  // chrony residual_freq_ppm      (ppm)
+        skew:  makeRing(),  // chrony skew_ppm               (ppm)
         hdop:  makeRing(),  // gps hdop                      (unitless)
         vdop:  makeRing(),  // gps vdop                      (unitless)
         pdop:  makeRing(),  // gps pdop                      (unitless)
@@ -4698,7 +4870,14 @@
         hold:  makeRing(),  // gps holdover_s                (seconds)
         noise: makeRing(),  // UBX-MON-HW noise_level        (raw 16-bit)
         agc:   makeRing(),  // UBX-MON-HW agc_count          (raw 16-bit)
-        jam:   makeRing()   // jamming_state string per sample
+        jam:   makeRing(),  // jamming_state string per sample
+        adev10:  makeRing(),  // σ_y(τ=10 s)                 (dimensionless)
+        adev100: makeRing(),  // σ_y(τ=100 s)                (dimensionless)
+        satsUsed:    makeRing(),  // satellites used in fix  (count)
+        satsVisible: makeRing(),  // satellites in view      (count)
+        temp: makeRing(),   // host SoC temperature          (°C)
+        lat:  makeRing(),   // fix latitude                  (degrees)
+        lon:  makeRing()    // fix longitude                 (degrees)
     };
 
     // ── Per-PRN SNR history.  Map of ``"<prn_string>" → { meta, ring }``.
@@ -4736,9 +4915,29 @@
         ringPush(ts.rms,   now, typeof t.rms_offset_s  === 'number' ? t.rms_offset_s  : null);
         ringPush(ts.freq,  now, typeof t.frequency_ppm === 'number' ? t.frequency_ppm : null);
         ringPush(ts.resid, now, typeof t.residual_freq_ppm === 'number' ? t.residual_freq_ppm : null);
+        ringPush(ts.skew,  now, typeof t.skew_ppm === 'number' ? t.skew_ppm : null);
         ringPush(ts.hdop,  now, typeof g.hdop === 'number' ? g.hdop : null);
         ringPush(ts.vdop,  now, typeof g.vdop === 'number' ? g.vdop : null);
         ringPush(ts.pdop,  now, typeof g.pdop === 'number' ? g.pdop : null);
+
+        // Stability-trend slices from the live ADEV payload.
+        var adevLive = g.allan_deviation || null;
+        var a10 = null, a100 = null;
+        if (adevLive && Array.isArray(adevLive.tau_s) && Array.isArray(adevLive.sigma_y)) {
+            for (var ai = 0; ai < adevLive.tau_s.length; ai++) {
+                if (adevLive.tau_s[ai] === 10)  a10  = adevLive.sigma_y[ai];
+                if (adevLive.tau_s[ai] === 100) a100 = adevLive.sigma_y[ai];
+            }
+        }
+        ringPush(ts.adev10,  now, a10);
+        ringPush(ts.adev100, now, a100);
+
+        // Satellite counts, host temperature, and fix position.
+        ringPush(ts.satsUsed,    now, (g.active_satellite_prns || []).length);
+        ringPush(ts.satsVisible, now, (g.satellites_in_view || []).length);
+        ringPush(ts.temp, now, typeof g.cpu_temp_c === 'number' ? g.cpu_temp_c : null);
+        ringPush(ts.lat,  now, typeof g.latitude  === 'number' ? g.latitude  : null);
+        ringPush(ts.lon,  now, typeof g.longitude === 'number' ? g.longitude : null);
 
         // Average SNR for the SNR-history series.
         var sats = (g.satellites_in_view || []).filter(function (s) { return typeof s.snr === 'number'; });
@@ -4857,6 +5056,43 @@
         drawSparkline('ts-hold-canvas', [
             { buffer: ts.hold, color: '#d29922' }
         ], { emptyEl: 'ts-hold-empty', includeZero: true, formatter: fmtDuration });
+
+        // Stability trend — σ_y(10 s) / σ_y(100 s) archived over the
+        // selected window.  Catches slow oscillator degradation that a
+        // single live ADEV reading can't show.
+        var a10s = ringStats(ts.adev10), a100s = ringStats(ts.adev100);
+        setText('ts-adevtrend-10',  fmtAdev(a10s.last));
+        setText('ts-adevtrend-100', fmtAdev(a100s.last));
+        setText('ts-adevtrend-n', Math.max(a10s.count, a100s.count));
+        drawSparkline('ts-adevtrend-canvas', [
+            { buffer: ts.adev10,  color: '#bc8cff', label: 'τ=10s' },
+            { buffer: ts.adev100, color: '#3fb950', label: 'τ=100s' }
+        ], { emptyEl: 'ts-adevtrend-empty', includeZero: true, formatter: fmtAdev });
+
+        // Oscillator skew — chrony's frequency-uncertainty estimate.
+        var sk = ringStats(ts.skew);
+        setText('ts-skew-now', fmtPpmTight(sk.last));
+        setText('ts-skew-min', fmtPpmTight(sk.min));
+        setText('ts-skew-max', fmtPpmTight(sk.max));
+        setText('ts-skew-n', sk.count);
+        drawSparkline('ts-skew-canvas', [
+            { buffer: ts.skew, color: '#d29922' }
+        ], { emptyEl: 'ts-skew-empty', includeZero: true, formatter: fmtPpmTight });
+
+        // Satellite counts — used-in-fix vs visible.
+        function fmtCount(v) { return (v === null || v === undefined) ? '—' : String(Math.round(v)); }
+        var su = ringStats(ts.satsUsed), sv = ringStats(ts.satsVisible);
+        setText('ts-sats-used',    fmtCount(su.last));
+        setText('ts-sats-visible', fmtCount(sv.last));
+        setText('ts-sats-n', Math.max(su.count, sv.count));
+        drawSparkline('ts-sats-canvas', [
+            { buffer: ts.satsVisible, color: '#58a6ff', label: 'visible' },
+            { buffer: ts.satsUsed,    color: '#3fb950', label: 'used' }
+        ], { emptyEl: 'ts-sats-empty', includeZero: true, formatter: fmtCount });
+
+        // Correlation scatters fed from the same rings.
+        renderTempFreqScatter();
+        renderPositionWander();
     }
 
     // ── PPS jitter histogram — vertical bars sized to bucket counts.
@@ -5230,6 +5466,458 @@
             var logTau = logTauMin + frac * (logTauMax - logTauMin);
             var tauVal = Math.pow(10, logTau);
             return { html: '<div class="ts">τ ≈ ' + tauVal.toFixed(1) + ' s</div>' };
+        });
+    }
+
+    // ── TDEV & MTIE log-log plot with the ITU-T G.811 PRC wander
+    //    masks.  Both series come from the same PPS phase ring as the
+    //    Allan chart (parallel arrays on the allan_deviation payload).
+    //
+    //    G.811 masks (µs), per the 09/97 recommendation:
+    //      MTIE(τ) ≤ 0.000275·τ + 0.025   for τ ≤ 1000 s
+    //      MTIE(τ) ≤ 0.00001·τ  + 0.29    for τ > 1000 s
+    //      TDEV(τ) ≤ 0.003                for τ ≤ 25 s     (3 ns)
+    //      TDEV(τ) ≤ 0.00012·τ            for 25 < τ ≤ 250 s
+    //      TDEV(τ) ≤ 0.03                 for τ > 250 s    (30 ns)
+    //    Local PPS timestamping noise is part of what we measure, so
+    //    "above mask" can mean the measurement chain, not the clock —
+    //    the help popover spells that caveat out.
+    function g811MtieMaskS(tau) {
+        return (tau <= 1000 ? 0.000275 * tau + 0.025 : 0.00001 * tau + 0.29) * 1e-6;
+    }
+    function g811TdevMaskS(tau) {
+        var ns = (tau <= 25) ? 3 : (tau <= 250 ? 0.12 * tau : 30);
+        return ns * 1e-9;
+    }
+    function renderTdevMtie(adev) {
+        var emptyEl = document.getElementById('ts-tdev-empty');
+        var canvas = document.getElementById('ts-tdev-canvas');
+        var points = [];   // { tau, tdev?, mtie? }
+        if (adev && Array.isArray(adev.tau_s)) {
+            for (var i = 0; i < adev.tau_s.length; i++) {
+                var tdev = Array.isArray(adev.tdev_s) ? adev.tdev_s[i] : null;
+                var mtie = Array.isArray(adev.mtie_s) ? adev.mtie_s[i] : null;
+                if ((typeof tdev === 'number' && tdev > 0) || (typeof mtie === 'number' && mtie > 0)) {
+                    points.push({ tau: adev.tau_s[i], tdev: tdev, mtie: mtie });
+                }
+            }
+        }
+        if (!points.length) {
+            if (emptyEl) emptyEl.style.display = '';
+            setText('ts-tdev-10', '—');
+            setText('ts-mtie-100', '—');
+            setText('ts-tdev-verdict', '—');
+            setText('ts-tdev-n', adev && adev.sample_count ? adev.sample_count : 0);
+            if (canvas) canvas._hoverHitTest = null;
+            return;
+        }
+        if (!canvas) return;
+        if (emptyEl) emptyEl.style.display = 'none';
+        setText('ts-tdev-n', adev.sample_count);
+
+        var tdev10 = null, mtie100 = null;
+        points.forEach(function (p) {
+            if (p.tau === 10 && typeof p.tdev === 'number') tdev10 = p.tdev;
+            if (p.tau === 100 && typeof p.mtie === 'number') mtie100 = p.mtie;
+        });
+        setText('ts-tdev-10', tdev10 !== null ? fmtSeconds(tdev10) : '—');
+        setText('ts-mtie-100', mtie100 !== null ? fmtSeconds(mtie100) : '—');
+
+        // Mask verdict across every available point.  "within" means
+        // both series clear their G.811 masks at every measured τ.
+        var anyAbove = false, anyChecked = false;
+        points.forEach(function (p) {
+            if (typeof p.tdev === 'number' && p.tdev > 0) {
+                anyChecked = true;
+                if (p.tdev > g811TdevMaskS(p.tau)) anyAbove = true;
+            }
+            if (typeof p.mtie === 'number' && p.mtie > 0) {
+                anyChecked = true;
+                if (p.mtie > g811MtieMaskS(p.tau)) anyAbove = true;
+            }
+        });
+        setText('ts-tdev-verdict', !anyChecked ? '—' : (anyAbove ? 'above mask' : 'within mask'));
+
+        var fit = fitCanvas(canvas);
+        var ctx = fit.ctx, W = fit.w, H = fit.h;
+        ctx.clearRect(0, 0, W, H);
+
+        var pad = { l: 56, r: 12, t: 10, b: 28 };
+        var plotW = W - pad.l - pad.r;
+        var plotH = H - pad.t - pad.b;
+
+        var logTauMin = 0, logTauMax = 2;
+        points.forEach(function (p) {
+            var lt = Math.log10(p.tau);
+            if (isFinite(lt) && lt > logTauMax) logTauMax = Math.ceil(lt);
+        });
+        // Y range: fit data plus both masks across the τ span.
+        var vMin = Infinity, vMax = -Infinity;
+        function consider(v) {
+            if (typeof v === 'number' && isFinite(v) && v > 0) {
+                if (v < vMin) vMin = v;
+                if (v > vMax) vMax = v;
+            }
+        }
+        points.forEach(function (p) { consider(p.tdev); consider(p.mtie); });
+        [Math.pow(10, logTauMin), Math.pow(10, logTauMax)].forEach(function (tau) {
+            consider(g811MtieMaskS(tau));
+            consider(g811TdevMaskS(tau));
+        });
+        if (!isFinite(vMin) || !isFinite(vMax)) return;
+        var logVMin = Math.floor(Math.log10(vMin) - 0.5);
+        var logVMax = Math.ceil(Math.log10(vMax) + 0.5);
+        if (logVMax - logVMin < 2) logVMax = logVMin + 2;
+
+        function xOf(tau) { return pad.l + plotW * ((Math.log10(tau) - logTauMin) / (logTauMax - logTauMin)); }
+        function yOf(v)   { return pad.t + plotH * (1 - (Math.log10(v) - logVMin) / (logVMax - logVMin)); }
+
+        // Grid (decade lines, both axes).
+        ctx.strokeStyle = 'rgba(127,127,127,0.18)';
+        ctx.lineWidth = 1;
+        ctx.font = '10px ui-monospace, monospace';
+        ctx.fillStyle = 'rgba(127,127,127,0.85)';
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'right';
+        for (var ly = logVMin; ly <= logVMax; ly++) {
+            var yy = yOf(Math.pow(10, ly));
+            ctx.beginPath(); ctx.moveTo(pad.l, yy); ctx.lineTo(pad.l + plotW, yy); ctx.stroke();
+            ctx.fillText('10' + fmtSuperExp(ly) + ' s', pad.l - 4, yy);
+        }
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        for (var lx = logTauMin; lx <= logTauMax; lx++) {
+            var xx = xOf(Math.pow(10, lx));
+            ctx.beginPath(); ctx.moveTo(xx, pad.t); ctx.lineTo(xx, pad.t + plotH); ctx.stroke();
+            ctx.fillText(Math.pow(10, lx) + ' s', xx, pad.t + plotH + 4);
+        }
+
+        // G.811 masks — piecewise-linear in log-log space, so sample a
+        // few τ per decade rather than drawing two straight segments.
+        function drawMask(maskFn, color) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1.2;
+            ctx.setLineDash([5, 4]);
+            ctx.beginPath();
+            var startedMask = false;
+            for (var s = 0; s <= 40; s++) {
+                var tau = Math.pow(10, logTauMin + (logTauMax - logTauMin) * s / 40);
+                var v = maskFn(tau);
+                var px = xOf(tau), py = yOf(v);
+                if (!startedMask) { ctx.moveTo(px, py); startedMask = true; }
+                else ctx.lineTo(px, py);
+            }
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+        drawMask(g811MtieMaskS, 'rgba(88,166,255,0.45)');
+        drawMask(g811TdevMaskS, 'rgba(63,185,80,0.45)');
+
+        // Traces + markers.
+        function drawSeries(key, color) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1.8;
+            ctx.beginPath();
+            var started = false;
+            points.forEach(function (p) {
+                var v = p[key];
+                if (typeof v !== 'number' || !isFinite(v) || v <= 0) return;
+                var px = xOf(p.tau), py = yOf(v);
+                if (!started) { ctx.moveTo(px, py); started = true; }
+                else ctx.lineTo(px, py);
+            });
+            ctx.stroke();
+            ctx.fillStyle = color;
+            points.forEach(function (p) {
+                var v = p[key];
+                if (typeof v !== 'number' || !isFinite(v) || v <= 0) return;
+                ctx.beginPath();
+                ctx.arc(xOf(p.tau), yOf(v), 3, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+        drawSeries('mtie', '#58a6ff');
+        drawSeries('tdev', '#3fb950');
+
+        // Hover: nearest marker across both series, with the relevant
+        // mask value at that τ for context.
+        _installChartHover(canvas, function (mx, my) {
+            if (mx < pad.l || mx > pad.l + plotW) return null;
+            if (my < pad.t || my > pad.t + plotH) return null;
+            var best = null, bestD = 1e9;
+            points.forEach(function (p) {
+                [['tdev', '#3fb950', 'TDEV', g811TdevMaskS],
+                 ['mtie', '#58a6ff', 'MTIE', g811MtieMaskS]].forEach(function (row) {
+                    var v = p[row[0]];
+                    if (typeof v !== 'number' || !isFinite(v) || v <= 0) return;
+                    var dx = xOf(p.tau) - mx, dy = yOf(v) - my;
+                    var d = Math.sqrt(dx * dx + dy * dy);
+                    if (d < bestD) {
+                        bestD = d;
+                        best = { tau: p.tau, v: v, color: row[1], label: row[2], mask: row[3](p.tau) };
+                    }
+                });
+            });
+            if (!best || bestD > 30) {
+                var frac = (mx - pad.l) / plotW;
+                var tauVal = Math.pow(10, logTauMin + frac * (logTauMax - logTauMin));
+                return { html: '<div class="ts">τ ≈ ' + tauVal.toFixed(1) + ' s</div>' };
+            }
+            var html = '<div class="ts">τ = ' + best.tau + ' s</div>'
+                     + '<div class="row">'
+                     +   '<span class="sw" style="background:' + best.color + '"></span>'
+                     +   '<span>' + best.label + ' = ' + escapeHtml(fmtSeconds(best.v)) + '</span>'
+                     + '</div>'
+                     + '<div class="row"><span>G.811 mask ' + escapeHtml(fmtSeconds(best.mask)) + '</span></div>';
+            return { snapX: xOf(best.tau), html: html };
+        });
+    }
+
+    // ── Temperature vs frequency scatter.  Pairs the host-SoC
+    //    temperature ring against chrony's applied frequency ring
+    //    (same per-sample indexes) and fits a least-squares slope so
+    //    the operator gets a ppm/°C sensitivity number for the board.
+    function renderTempFreqScatter() {
+        var canvas = document.getElementById('ts-tempfreq-canvas');
+        if (!canvas) return;
+        var emptyEl = document.getElementById('ts-tempfreq-empty');
+
+        var pairs = [];
+        var nMax = Math.min(ts.temp.v.length, ts.freq.v.length);
+        for (var i = 0; i < nMax; i++) {
+            var tv = ts.temp.v[i], fv = ts.freq.v[i];
+            if (tv === null || fv === null || tv === undefined || fv === undefined) continue;
+            if (isNaN(tv) || isNaN(fv)) continue;
+            pairs.push({ t: tv, f: fv, ts: ts.temp.t[i] });
+        }
+
+        var last = pairs.length ? pairs[pairs.length - 1] : null;
+        setText('ts-tempfreq-temp', last ? last.t.toFixed(1) + ' °C' : '—');
+        setText('ts-tempfreq-freq', last ? fmtPpmTight(last.f) : '—');
+        setText('ts-tempfreq-n', pairs.length);
+        if (pairs.length < 2) {
+            if (emptyEl) emptyEl.style.display = '';
+            setText('ts-tempfreq-slope', '—');
+            var fitE = fitCanvas(canvas);
+            fitE.ctx.clearRect(0, 0, fitE.w, fitE.h);
+            canvas._hoverHitTest = null;
+            return;
+        }
+        if (emptyEl) emptyEl.style.display = 'none';
+
+        // Least-squares slope (ppm per °C) — only meaningful once the
+        // window spans some actual temperature variation.
+        var n = pairs.length;
+        var sumT = 0, sumF = 0;
+        pairs.forEach(function (p) { sumT += p.t; sumF += p.f; });
+        var meanT = sumT / n, meanF = sumF / n;
+        var covTF = 0, varT = 0;
+        pairs.forEach(function (p) {
+            covTF += (p.t - meanT) * (p.f - meanF);
+            varT  += (p.t - meanT) * (p.t - meanT);
+        });
+        var tempSpan = 0;
+        var tMin = Infinity, tMax = -Infinity, fMin = Infinity, fMax = -Infinity;
+        pairs.forEach(function (p) {
+            if (p.t < tMin) tMin = p.t;
+            if (p.t > tMax) tMax = p.t;
+            if (p.f < fMin) fMin = p.f;
+            if (p.f > fMax) fMax = p.f;
+        });
+        tempSpan = tMax - tMin;
+        var slope = (varT > 0 && tempSpan >= 0.5) ? covTF / varT : null;
+        setText('ts-tempfreq-slope', slope !== null ? slope.toFixed(3) + ' ppm/°C' : '—');
+
+        // Pad the axes so a tight cluster doesn't sit on the rim.
+        var tPad = Math.max(0.5, (tMax - tMin) * 0.1);
+        var fPad = Math.max(0.005, (fMax - fMin) * 0.1);
+        tMin -= tPad; tMax += tPad;
+        fMin -= fPad; fMax += fPad;
+
+        var fit = fitCanvas(canvas);
+        var ctx = fit.ctx, W = fit.w, H = fit.h;
+        ctx.clearRect(0, 0, W, H);
+        var pad = { l: 56, r: 10, t: 10, b: 28 };
+        var plotW = W - pad.l - pad.r;
+        var plotH = H - pad.t - pad.b;
+        function xOf(t) { return pad.l + plotW * ((t - tMin) / (tMax - tMin)); }
+        function yOf(f) { return pad.t + plotH * (1 - (f - fMin) / (fMax - fMin)); }
+
+        // Simple 4×4 grid with edge labels.
+        ctx.strokeStyle = 'rgba(127,127,127,0.18)';
+        ctx.lineWidth = 1;
+        ctx.font = '10px ui-monospace, monospace';
+        ctx.fillStyle = 'rgba(127,127,127,0.85)';
+        for (var gx = 0; gx <= 4; gx++) {
+            var tVal = tMin + (tMax - tMin) * gx / 4;
+            var x = xOf(tVal);
+            ctx.beginPath(); ctx.moveTo(x, pad.t); ctx.lineTo(x, pad.t + plotH); ctx.stroke();
+            ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+            ctx.fillText(tVal.toFixed(1) + '°', x, pad.t + plotH + 4);
+        }
+        for (var gy = 0; gy <= 4; gy++) {
+            var fVal = fMin + (fMax - fMin) * gy / 4;
+            var y = yOf(fVal);
+            ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + plotW, y); ctx.stroke();
+            ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+            ctx.fillText(fVal.toFixed(3), pad.l - 4, y);
+        }
+
+        // Fitted trend line under the dots.
+        if (slope !== null) {
+            ctx.strokeStyle = 'rgba(210,153,34,0.6)';
+            ctx.setLineDash([4, 3]);
+            ctx.beginPath();
+            ctx.moveTo(xOf(tMin), yOf(meanF + slope * (tMin - meanT)));
+            ctx.lineTo(xOf(tMax), yOf(meanF + slope * (tMax - meanT)));
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
+        // Dots — translucent so density reads as colour; latest solid.
+        ctx.fillStyle = 'rgba(249,115,22,0.45)';
+        pairs.forEach(function (p) {
+            ctx.beginPath();
+            ctx.arc(xOf(p.t), yOf(p.f), 2.5, 0, Math.PI * 2);
+            ctx.fill();
+        });
+        ctx.fillStyle = '#f97316';
+        ctx.beginPath();
+        ctx.arc(xOf(last.t), yOf(last.f), 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        _installChartHover(canvas, function (mx, my) {
+            if (mx < pad.l || mx > pad.l + plotW) return null;
+            if (my < pad.t || my > pad.t + plotH) return null;
+            var bestI = -1, bestD = 1e9;
+            for (var i = 0; i < pairs.length; i++) {
+                var dx = xOf(pairs[i].t) - mx, dy = yOf(pairs[i].f) - my;
+                var d = Math.sqrt(dx * dx + dy * dy);
+                if (d < bestD) { bestD = d; bestI = i; }
+            }
+            if (bestI < 0 || bestD > 12) return null;
+            var p = pairs[bestI];
+            return { html: '<div class="ts">' + new Date(p.ts).toLocaleTimeString() + '</div>'
+                         + '<div class="row"><span>' + p.t.toFixed(1) + ' °C</span></div>'
+                         + '<div class="row"><span>' + escapeHtml(fmtPpmTight(p.f)) + '</span></div>' };
+        });
+    }
+
+    // ── Position wander scatter.  Plots every archived fix as metres
+    //    east/north of the window's median position with CEP50/CEP95
+    //    circles.  A stationary antenna should pile up inside a few
+    //    metres; drift = multipath, a jump = spoofing or a bad almanac.
+    function renderPositionWander() {
+        var canvas = document.getElementById('ts-poswander-canvas');
+        if (!canvas) return;
+        var emptyEl = document.getElementById('ts-poswander-empty');
+
+        var lats = [], lons = [], times = [];
+        var nMax = Math.min(ts.lat.v.length, ts.lon.v.length);
+        for (var i = 0; i < nMax; i++) {
+            var la = ts.lat.v[i], lo = ts.lon.v[i];
+            if (la === null || lo === null || la === undefined || lo === undefined) continue;
+            if (isNaN(la) || isNaN(lo)) continue;
+            lats.push(la); lons.push(lo); times.push(ts.lat.t[i]);
+        }
+        setText('ts-poswander-n', lats.length);
+        if (lats.length < 2) {
+            if (emptyEl) emptyEl.style.display = '';
+            setText('ts-poswander-cep50', '—');
+            setText('ts-poswander-cep95', '—');
+            setText('ts-poswander-max', '—');
+            var fitE = fitCanvas(canvas);
+            fitE.ctx.clearRect(0, 0, fitE.w, fitE.h);
+            canvas._hoverHitTest = null;
+            return;
+        }
+        if (emptyEl) emptyEl.style.display = 'none';
+
+        function median(arr) {
+            var s = arr.slice().sort(function (a, b) { return a - b; });
+            return s[Math.floor(s.length / 2)];
+        }
+        var latMed = median(lats), lonMed = median(lons);
+        var mPerDegLat = 111320;
+        var mPerDegLon = 111320 * Math.cos(latMed * Math.PI / 180);
+        var pts = [];
+        for (var j = 0; j < lats.length; j++) {
+            var e = (lons[j] - lonMed) * mPerDegLon;
+            var nn = (lats[j] - latMed) * mPerDegLat;
+            pts.push({ e: e, n: nn, r: Math.sqrt(e * e + nn * nn), ts: times[j] });
+        }
+        var radii = pts.map(function (p) { return p.r; }).sort(function (a, b) { return a - b; });
+        var cep50 = radii[Math.floor(radii.length * 0.50)];
+        var cep95 = radii[Math.min(radii.length - 1, Math.floor(radii.length * 0.95))];
+        var rMax = radii[radii.length - 1];
+        function fmtM(v) { return v >= 1000 ? (v / 1000).toFixed(2) + ' km' : v.toFixed(1) + ' m'; }
+        setText('ts-poswander-cep50', fmtM(cep50));
+        setText('ts-poswander-cep95', fmtM(cep95));
+        setText('ts-poswander-max', fmtM(rMax));
+
+        var fit = fitCanvas(canvas);
+        var ctx = fit.ctx, W = fit.w, H = fit.h;
+        ctx.clearRect(0, 0, W, H);
+        var pad = 14;
+        var cx = W / 2, cy = H / 2;
+        // Scale: CEP95 (or max) plus headroom, floor 2 m so a rock-
+        // steady fix still renders sensible circles.
+        var scaleR = Math.max(2, rMax * 1.15);
+        var pxPerM = (Math.min(W, H) / 2 - pad) / scaleR;
+
+        // Crosshair through the median position.
+        ctx.strokeStyle = 'rgba(127,127,127,0.25)';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(pad, cy); ctx.lineTo(W - pad, cy); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cx, pad); ctx.lineTo(cx, H - pad); ctx.stroke();
+
+        // CEP circles with radius labels.
+        ctx.font = '10px ui-monospace, monospace';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'bottom';
+        [[cep50, 'rgba(63,185,80,0.7)', 'CEP50'], [cep95, 'rgba(210,153,34,0.7)', 'CEP95']].forEach(function (row) {
+            var r = row[0] * pxPerM;
+            if (!isFinite(r) || r <= 0) return;
+            ctx.strokeStyle = row[1];
+            ctx.setLineDash([4, 3]);
+            ctx.beginPath();
+            ctx.arc(cx, cy, r, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.fillStyle = row[1];
+            ctx.fillText(row[2] + ' ' + fmtM(row[0]), cx + r * 0.7071 + 3, cy - r * 0.7071 - 2);
+        });
+
+        // Dots — translucent; latest fix solid + ringed.
+        ctx.fillStyle = 'rgba(88,166,255,0.45)';
+        pts.forEach(function (p) {
+            ctx.beginPath();
+            ctx.arc(cx + p.e * pxPerM, cy - p.n * pxPerM, 2.5, 0, Math.PI * 2);
+            ctx.fill();
+        });
+        var lastP = pts[pts.length - 1];
+        ctx.fillStyle = '#58a6ff';
+        ctx.beginPath();
+        ctx.arc(cx + lastP.e * pxPerM, cy - lastP.n * pxPerM, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#e6edf3';
+        ctx.beginPath();
+        ctx.arc(cx + lastP.e * pxPerM, cy - lastP.n * pxPerM, 6, 0, Math.PI * 2);
+        ctx.stroke();
+
+        _installChartHover(canvas, function (mx, my) {
+            var bestI = -1, bestD = 1e9;
+            for (var i = 0; i < pts.length; i++) {
+                var dx = (cx + pts[i].e * pxPerM) - mx;
+                var dy = (cy - pts[i].n * pxPerM) - my;
+                var d = Math.sqrt(dx * dx + dy * dy);
+                if (d < bestD) { bestD = d; bestI = i; }
+            }
+            if (bestI < 0 || bestD > 12) return null;
+            var p = pts[bestI];
+            return { html: '<div class="ts">' + new Date(p.ts).toLocaleTimeString() + '</div>'
+                         + '<div class="row"><span>' + fmtM(p.r) + ' from median</span></div>'
+                         + '<div class="row"><span>E ' + p.e.toFixed(1) + ' m · N ' + p.n.toFixed(1) + ' m</span></div>' };
         });
     }
 
@@ -5902,6 +6590,7 @@
         // already owns the rolling window we'd otherwise build here.
         renderJitterHistogram(gps.pps_jitter || null);
         renderAllanDeviation(gps.allan_deviation || null);
+        renderTdevMtie(gps.allan_deviation || null);
         renderElevationScatter(gps.satellites_in_view || []);
 
         // New panels (per-PRN heatmap, leap countdown, jamming
@@ -5982,6 +6671,11 @@
                 renderTimeSeriesCharts();
                 renderPrnHeatmap();
                 renderJammingTimeSeries();
+                // Log-log panels read straight from the last snapshot.
+                if (lastSnapshot && lastSnapshot.gps) {
+                    renderAllanDeviation(lastSnapshot.gps.allan_deviation || null);
+                    renderTdevMtie(lastSnapshot.gps.allan_deviation || null);
+                }
             }, 120);
         });
 
@@ -7194,6 +7888,107 @@
                 'Deliberate jamming',
                 'Nearby cellular / Wi-Fi repeater',
                 'Faulty SMPS in the rack'
+            ]
+        },
+        'tdev-mtie': {
+            title: 'TDEV &amp; MTIE',
+            acronyms: 'tdev mtie prc',
+            means: 'The telecom time-domain stability pair, from the same PPS phase record as the Allan chart. MTIE(τ) is the worst peak-to-peak phase excursion inside any τ-second window — the "how far did the clock ever stray" number. TDEV(τ) is the time deviation (via the modified Allan variance) that the ITU-T G.811 wander masks are written against. The dashed lines are the G.811 Primary Reference Clock masks.',
+            matters: 'These are the curves a telecom auditor would ask for. MTIE catches single ugly excursions that averages hide; TDEV characterises the wander spectrum. Caveat: we measure through the local PPS timestamping chain, so µs-level scheduler jitter is included — "above mask" at short τ usually indicts the measurement, not the clock. Watch the trend and the long-τ end, where timestamping noise averages away.',
+            ranges: [
+                { level: 'excellent',  range: 'both curves under their masks at every τ' },
+                { level: 'watch',      range: 'short-τ points above mask (likely timestamping noise)' },
+                { level: 'bad',        range: 'long-τ MTIE above mask or growing run-to-run' }
+            ],
+            causes: [
+                'CPU scheduler latency spikes (short-τ violations)',
+                'Thermal frequency drift (long-τ TDEV rise)',
+                'Phase steps from a flapping PPS source (MTIE jumps)'
+            ]
+        },
+        'stability-trend': {
+            title: 'Stability Trend',
+            acronyms: 'allan',
+            means: 'Archived history of the short-term Allan deviation at τ=10 s and τ=100 s, one point per trend sample, across the selected window.',
+            matters: 'The live Allan chart only says "now". An oscillator that is slowly going bad — drying capacitor, failing TCXO, creeping thermal problem — shows up here as a multi-day upward grind long before any single reading looks alarming.',
+            ranges: [
+                { level: 'excellent',  range: 'flat or falling' },
+                { level: 'watch',      range: 'diurnal swings (thermal coupling)' },
+                { level: 'bad',        range: 'sustained upward trend across days' }
+            ],
+            causes: [
+                'Ambient temperature cycling (HVAC, sunlight on the case)',
+                'Aging oscillator',
+                'Growing system load adding PPS timestamping noise'
+            ]
+        },
+        'skew-trend': {
+            title: 'Oscillator Skew',
+            acronyms: 'ppm',
+            means: 'chrony\'s own uncertainty estimate on its frequency measurement, in ppm, archived over the selected window. Computed from the regression chrony runs over its measurement history.',
+            matters: 'Unlike the PPS-derived Allan deviation, skew is immune to local timestamping noise — chrony already filtered it. This makes it the most honest long-term "is the oscillator stable?" series on the page, and it is what the Health Summary\'s Oscillator Stability verdict reads.',
+            ranges: [
+                { level: 'excellent',  range: '< 0.05 ppm' },
+                { level: 'good',       range: '0.05 – 0.5 ppm' },
+                { level: 'watch',      range: '0.5 – 5 ppm' },
+                { level: 'bad',        range: '> 5 ppm' }
+            ],
+            causes: [
+                'Loop still converging after a restart',
+                'Temperature swings disturbing the oscillator',
+                'Reference flapping (PPS dropouts) restarting the regression'
+            ]
+        },
+        'sat-count-history': {
+            title: 'Satellite Counts',
+            acronyms: 'gnss prn',
+            means: 'Used-in-fix vs visible satellite counts over the selected window.',
+            matters: 'A healthy install keeps a comfortable gap between the two lines. The "visible" line sagging over weeks means the antenna\'s sky view is degrading (foliage, new construction); "used" dropping while "visible" holds points at signal quality, not geometry.',
+            ranges: [
+                { level: 'excellent',  range: '≥ 8 used, steady' },
+                { level: 'good',       range: '5 – 8 used' },
+                { level: 'watch',      range: '4 used (minimum for 3D)' },
+                { level: 'bad',        range: '< 4 used — no 3D fix' }
+            ],
+            causes: [
+                'Seasonal foliage growth',
+                'Antenna moved or obstruction added',
+                'Failing LNA dropping marginal satellites first'
+            ]
+        },
+        'temp-vs-freq': {
+            title: 'Temp vs Frequency',
+            acronyms: 'ppm tcxo',
+            means: 'Scatter of host SoC temperature against chrony\'s applied frequency correction, one dot per trend sample. The dashed line is the least-squares fit; its slope is your board\'s thermal sensitivity in ppm/°C.',
+            matters: 'Crystal drift is mostly thermal. A tight diagonal is normal physics — but its slope predicts how hard chrony has to work when the room temperature moves, and a previously-tight cloud turning fuzzy means something else (aging, supply noise) started dominating. Explains "stability gets worse every afternoon" in one glance.',
+            ranges: [
+                { level: 'excellent',  range: '|slope| < 0.1 ppm/°C, tight cloud' },
+                { level: 'good',       range: '0.1 – 0.5 ppm/°C' },
+                { level: 'watch',      range: '> 0.5 ppm/°C — consider airflow / enclosure' },
+                { level: 'bad',        range: 'scattered cloud with no fit — non-thermal instability' }
+            ],
+            causes: [
+                'HVAC cycling in the equipment room',
+                'Self-heating under variable CPU load',
+                'Sunlight on the enclosure'
+            ]
+        },
+        'position-wander': {
+            title: 'Position Wander',
+            acronyms: 'cep gnss',
+            means: 'Every archived fix plotted in metres east/north of the window\'s median position. CEP50/CEP95 circles enclose 50 % and 95 % of fixes.',
+            matters: 'A stationary antenna should pile its fixes inside a few metres. A slowly breathing cloud tracks satellite geometry (normal); a drifting centre or a sudden coherent jump is multipath, a bad almanac — or spoofing, which is why this sits next to the jamming panel.',
+            ranges: [
+                { level: 'excellent',  range: 'CEP95 < 5 m' },
+                { level: 'good',       range: 'CEP95 5 – 15 m' },
+                { level: 'watch',      range: 'CEP95 > 15 m or drifting centre' },
+                { level: 'bad',        range: 'coherent jumps — investigate spoofing' }
+            ],
+            causes: [
+                'Multipath from nearby structures',
+                'Poor satellite geometry (high DOP)',
+                'Spoofing / meaconing',
+                'Antenna actually moving (check the mount)'
             ]
         },
         'almanac-ephemeris': {

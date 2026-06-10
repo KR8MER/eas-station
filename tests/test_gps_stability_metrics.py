@@ -195,6 +195,77 @@ class TestTdevMtie:
         assert out["mtie_s"][idx] is not None
 
 
+class TestTrendCollection:
+    """The trend sampler must pick up the new stability/thermal/position
+    fields from ``get_status()`` so the dashboard's history panels have
+    something to draw."""
+
+    class _StubManager:
+        def __init__(self, status):
+            self._status = status
+
+        def get_status(self):
+            return self._status
+
+    def test_collect_gps_status_extracts_new_fields(self):
+        from services.gps import trends as gps_trends
+
+        status = {
+            "hdop": 1.0,
+            "satellites_in_view": [
+                {"prn": 5, "snr": 40, "constellation": "GP"},
+                {"prn": 7, "snr": 0, "constellation": "GP"},
+                {"prn": 12, "snr": 35, "constellation": "GL"},
+            ],
+            "active_satellite_prns": [5, 12],
+            "allan_deviation": {
+                "tau_s": [1, 10, 100],
+                "sigma_y": [3.8e-6, 3.8e-7, 4.2e-8],
+            },
+            "cpu_temp_c": 52.3,
+            "latitude": 41.0105,
+            "longitude": -84.0458,
+        }
+        out = gps_trends.collect_gps_status(self._StubManager(status))
+        assert out["sats_used"] == 2.0
+        assert out["sats_visible"] == 3.0
+        assert out["adev_10s"] == pytest.approx(3.8e-7)
+        assert out["adev_100s"] == pytest.approx(4.2e-8)
+        assert out["cpu_temp_c"] == pytest.approx(52.3)
+        assert out["lat"] == pytest.approx(41.0105)
+        assert out["lon"] == pytest.approx(-84.0458)
+
+    def test_collect_gps_status_tolerates_missing_new_fields(self):
+        from services.gps import trends as gps_trends
+
+        out = gps_trends.collect_gps_status(self._StubManager({"hdop": 2.0}))
+        assert out["sats_used"] == 0.0
+        assert out["sats_visible"] == 0.0
+        assert out["adev_10s"] is None
+        assert out["adev_100s"] is None
+        assert out["cpu_temp_c"] is None
+        assert out["lat"] is None
+        assert out["lon"] is None
+
+    def test_new_fields_aggregate_through_rollups(self):
+        from services.gps import trends as gps_trends
+
+        rows = [
+            {"t": 0,     "skew_ppm": 0.010, "cpu_temp_c": 50.0, "adev_10s": 3.0e-7,
+             "sats_used": 10.0, "lat": 41.0, "lon": -84.0},
+            {"t": 20000, "skew_ppm": 0.014, "cpu_temp_c": 52.0, "adev_10s": 5.0e-7,
+             "sats_used": 12.0, "lat": 41.0, "lon": -84.0},
+        ]
+        out = gps_trends.aggregate_samples(rows, 0, 60_000)
+        assert out["skew_ppm"] == pytest.approx(0.012)
+        assert out["cpu_temp_c"] == pytest.approx(51.0)
+        assert out["adev_10s"] == pytest.approx(4.0e-7)
+        assert out["sats_used"] == pytest.approx(11.0)
+        assert out["sats_used_max"] == 12.0
+        assert out["lat"] == pytest.approx(41.0)
+        assert out["lon"] == pytest.approx(-84.0)
+
+
 class TestCpuTempHelper:
     def test_read_cpu_temp_never_raises(self):
         # Environment-dependent (containers have no thermal zones) —
