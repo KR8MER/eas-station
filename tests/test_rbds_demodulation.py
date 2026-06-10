@@ -343,15 +343,21 @@ def test_rbds_post_mix_lowpass_rejects_stereo_sideband_artifact():
     null at 2375 Hz).  This test verifies that rejection at 4 kHz is at least
     40 dB stronger than the worst-case 7.5 kHz design it replaced, which is
     well into the stopband and far below the RBDS signal level.
+
+    The filter is designed and applied at the post-decimation rate (~25 kHz)
+    — running it at the full multiplex rate required 501 taps and dominated
+    worker CPU — so its response is evaluated at that rate here.
     """
     sr = 250_000
     worker = _make_worker(sample_rate=sr)
     h = worker._rbds_lowpass
+    design_rate = worker._rbds_post_decim_rate
+    assert design_rate == 25_000  # 250 kHz / RBDS_INTERMEDIATE_RATE decimation
 
     def _gain_db(freq_hz: float) -> float:
         n = np.arange(len(h), dtype=np.float64)
         mid = (len(h) - 1) / 2.0
-        gain = float(np.abs(np.sum(h * np.exp(-1j * 2.0 * np.pi * freq_hz * (n - mid) / sr))))
+        gain = float(np.abs(np.sum(h * np.exp(-1j * 2.0 * np.pi * freq_hz * (n - mid) / design_rate))))
         return 20.0 * np.log10(max(gain, 1e-12))
 
     # Passband: at 1187.5 Hz (peak of the RBDS biphase main lobe) the filter
@@ -827,6 +833,127 @@ def test_rbds_uncorrectable_block_does_not_shift_grid():
     assert published == [(0x5555, 0x6666, 0x7777, 0x8888)]
     assert worker._stats.blocks_bit_slips == 0
     assert worker._stats.blocks_uncorrected == 1
+    worker.stop()
+
+
+def test_rbds_slip_recovery_suppressed_during_bad_streak():
+    """Slip hypotheses must not be tested during sustained garbage.
+
+    During a dropped-chunk discontinuity or deep fade, a "clean" CRC match
+    at ±1 bit is a coincidence, and realigning onto it keeps a dead sync
+    alive — bridging through data that should fail out to presync.  With a
+    failure streak at/above the suppression threshold, a one-bit-shifted
+    stream must NOT be slip-recovered.
+    """
+    worker = _make_worker()
+    _force_synced_confirmed(worker)
+    worker._rbds_consecutive_crc_failures = 2  # sustained bad streak
+
+    published: list[tuple[int, int, int, int]] = []
+    worker._rbds_decoder.process_group = lambda group: published.append(tuple(group))  # type: ignore[assignment]
+
+    bits: list[int] = [1]  # stray bit shifts the whole stream one bit late
+    for block_no, dataword in enumerate((0x1111, 0x2222, 0x3333, 0x4444)):
+        bits.extend(_bits_for_valid_block(worker, dataword, block_no))
+    worker._rbds_bit_buffer = bits
+    worker._decode_rbds_groups()
+
+    assert worker._stats.blocks_bit_slips == 0
+    assert published == []
+    worker.stop()
+
+
+def test_rbds_early_confirmation_deferred_on_dirty_window():
+    """A dirty tentative window must wait for the full 50-block verdict.
+
+    Right after a lock on a marginal channel the carrier/timing loops are
+    often still settling; publishing that shaky period is how FEC
+    false-fixes reach the UI.  With >20% uncorrected blocks in the window,
+    confirmation (and therefore publishing) must wait for the 50-block
+    boundary even though enough good groups have completed.
+    """
+    worker = _make_worker()
+    _force_synced_tentative(worker, block_number=0)
+
+    published: list[tuple[int, int, int, int]] = []
+    worker._rbds_decoder.process_group = lambda group: published.append(tuple(group))  # type: ignore[assignment]
+
+    # 12 uncorrectable blocks (a garbage checkword no offset word matches,
+    # ≥2 bits from every valid offset so single-bit FEC can't bridge it),
+    # then 38 clean blocks → 9 complete groups.  wrong=12 means the ≤20%
+    # cleanliness predicate can never pass inside this 50-block window.
+    bits: list[int] = []
+    bad_crc = worker._calc_syndrome(0xDEAD, 16)
+    bad_block = (0xDEAD << 10) | (bad_crc ^ 0x155)
+    bad_bits = [(bad_block >> i) & 1 for i in range(25, -1, -1)]
+    for _ in range(12):
+        bits.extend(bad_bits)
+    for i in range(38):
+        bits.extend(_bits_for_valid_block(worker, 0x2000 + i, i % 4))
+    worker._rbds_bit_buffer = bits
+    worker._decode_rbds_groups()
+
+    assert worker._rbds_synced is True
+    assert worker._rbds_sync_tentative is False, (
+        "the 9 good groups must confirm sync at the window boundary"
+    )
+    assert worker._stats.sync_acquired_unix is not None
+    # Nothing published mid-window: confirmation came at the boundary, after
+    # the last group of the window had already completed.
+    assert published == []
+    assert worker._stats.groups_decoded == 0
+    worker.stop()
+
+
+def test_rbds_burst_fec_suppressed_while_tentative():
+    """Burst-FEC repairs must not ratify a tentative lock.
+
+    While tentative, every accepted block feeds the confirmation count and
+    the first published groups, so only clean and single-bit repairs (whose
+    false-positive rate is far lower) may contribute.  A group whose C
+    block needs a burst repair must not complete.
+    """
+    worker = _make_worker()
+    _force_synced_tentative(worker, block_number=0)
+
+    bits: list[int] = []
+    bits.extend(_bits_for_valid_block(worker, 0x4FB5, 0))
+    bits.extend(_bits_for_valid_block(worker, 0x1234, 1))
+    c_bits = _bits_for_valid_block(worker, 0xABCD, 2)
+    for pos in (11, 12, 13):  # 3-bit contiguous burst (word bits 12-14)
+        c_bits[pos] ^= 1
+    bits.extend(c_bits)
+    bits.extend(_bits_for_valid_block(worker, 0x5678, 3))
+    worker._rbds_bit_buffer = bits
+    worker._decode_rbds_groups()
+
+    assert worker._rbds_tentative_good_groups == 0
+    assert worker._stats.blocks_fec_burst == 0
+    assert worker._stats.blocks_uncorrected == 1
+    worker.stop()
+
+
+def test_rbds_burst_fec_active_after_confirmation():
+    """The same burst-damaged group must repair fine once sync is confirmed."""
+    worker = _make_worker()
+    _force_synced_confirmed(worker)
+
+    published: list[tuple[int, int, int, int]] = []
+    worker._rbds_decoder.process_group = lambda group: published.append(tuple(group))  # type: ignore[assignment]
+
+    bits: list[int] = []
+    bits.extend(_bits_for_valid_block(worker, 0x4FB5, 0))
+    bits.extend(_bits_for_valid_block(worker, 0x1234, 1))
+    c_bits = _bits_for_valid_block(worker, 0xABCD, 2)
+    for pos in (11, 12, 13):  # 3-bit contiguous burst (word bits 12-14)
+        c_bits[pos] ^= 1
+    bits.extend(c_bits)
+    bits.extend(_bits_for_valid_block(worker, 0x5678, 3))
+    worker._rbds_bit_buffer = bits
+    worker._decode_rbds_groups()
+
+    assert published == [(0x4FB5, 0x1234, 0xABCD, 0x5678)]
+    assert worker._stats.blocks_fec_burst == 1
     worker.stop()
 
 

@@ -2423,6 +2423,10 @@
                         <hr>
                         <p class="mb-1"><strong>Troubleshooting tips:</strong></p>
                         <ul class="mb-0">
+                            <li>A dongle that is currently streaming for a receiver normally
+                                shows up here as <em>in use</em>. If it doesn't appear at all,
+                                check the Receiver Fleet status above — you may need to stop
+                                the receiver and rescan to re-detect the hardware.</li>
                             <li>Ensure your SDR is plugged into a USB port</li>
                             <li>Check USB connection with <code>lsusb</code></li>
                             <li>Verify device permissions (user may need to be in 'plugdev' group)</li>
@@ -2444,11 +2448,14 @@
             data.devices.forEach((device, idx) => {
                 const deviceName = escapeHtml(device.label || device.product || `Device ${idx + 1}`);
                 const driver = escapeHtml(device.driver || 'unknown');
+                const inUseBadge = device.in_use
+                    ? ' <span class="badge bg-warning text-dark">in use</span>'
+                    : '';
 
                 html += `
                     <div class="card mb-3">
                         <div class="card-header d-flex justify-content-between align-items-center">
-                            <strong><i class="fas fa-broadcast-tower"></i> ${deviceName}</strong>
+                            <strong><i class="fas fa-broadcast-tower"></i> ${deviceName}${inUseBadge}</strong>
                             <button class="btn btn-sm btn-primary" onclick="useDiscoveredDevice(${idx})">
                                 <i class="fas fa-plus"></i> Add This Device
                             </button>

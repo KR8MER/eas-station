@@ -1356,6 +1356,62 @@ def publish_sdr_metrics(redis_client):
         logger.error(f"Error publishing SDR metrics: {e}")
 
 
+def _augment_discovery_with_active_receivers(devices):
+    """Add hardware held by loaded receivers to discovery results as in-use.
+
+    librtlsdr claims the USB interface exclusively while a receiver is
+    streaming, so an RTL-SDR that is busy decoding disappears from
+    SoapySDR / SoapySDRUtil enumeration entirely.  Without this, clicking
+    "Discover USB Devices" on a healthy single-dongle system reports
+    "No SDR devices found" — indistinguishable from unplugged hardware,
+    which sends operators chasing cables and udev rules while the radio
+    is happily decoding in the background.
+    """
+    radio_manager = _state.radio_manager
+    if radio_manager is None:
+        return devices
+
+    enumerated = {
+        (str(dev.get("driver") or "").lower(), str(dev.get("serial") or ""))
+        for dev in devices
+    }
+    try:
+        receivers = dict(getattr(radio_manager, "_receivers", {}) or {})
+    except Exception:
+        return devices
+
+    for identifier, receiver in receivers.items():
+        config = getattr(receiver, "config", None)
+        driver = str(getattr(config, "driver", "") or "") if config else ""
+        if not driver:
+            continue
+        serial = str(getattr(config, "serial", "") or "")
+        key = (driver.lower(), serial)
+        # Enumeration already sees this device (idle, or the driver allows
+        # concurrent enumeration) — don't duplicate it.
+        if key in enumerated:
+            continue
+        # A serial-less config can't be matched exactly: only synthesize an
+        # entry if enumeration found nothing at all for this driver,
+        # otherwise we'd double-report the same dongle.
+        if not serial and any(d == driver.lower() for d, _ in enumerated):
+            continue
+        try:
+            running = bool(receiver.is_running())
+        except Exception:
+            running = False
+        state = "in use by" if running else "assigned to"
+        devices.append({
+            "driver": driver,
+            "serial": serial,
+            "label": f"{driver} ({state} receiver '{identifier}')",
+            "in_use": running,
+            "receiver_identifier": identifier,
+        })
+        enumerated.add(key)
+    return devices
+
+
 def process_commands(redis_client):
     """Process control commands from Redis."""
     try:
@@ -1376,6 +1432,15 @@ def process_commands(redis_client):
             try:
                 from app_core.radio.discovery import enumerate_devices
                 devices = enumerate_devices()
+                # Hardware that is currently held open by a loaded receiver
+                # is invisible to enumeration (exclusive USB claim); report
+                # it as an in-use device instead of pretending it's absent.
+                try:
+                    devices = _augment_discovery_with_active_receivers(devices)
+                except Exception as aug_exc:
+                    logger.debug(
+                        f"Could not augment discovery with active receivers: {aug_exc}"
+                    )
                 if devices:
                     logger.info(f"📡 Device discovery found {len(devices)} device(s):")
                     for dev in devices:
