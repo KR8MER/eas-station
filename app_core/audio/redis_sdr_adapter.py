@@ -470,6 +470,7 @@ class RedisSDRSourceAdapter(AudioSourceAdapter):
                     self.metrics.metadata['rbds_blocks_fec_single'] = decoder_stats.blocks_fec_single
                     self.metrics.metadata['rbds_blocks_fec_burst'] = decoder_stats.blocks_fec_burst
                     self.metrics.metadata['rbds_blocks_uncorrected'] = decoder_stats.blocks_uncorrected
+                    self.metrics.metadata['rbds_blocks_bit_slips'] = decoder_stats.blocks_bit_slips
                     self.metrics.metadata['rbds_groups_decoded'] = decoder_stats.groups_decoded
                     self.metrics.metadata['rbds_sync_acquired_unix'] = decoder_stats.sync_acquired_unix
                     self.metrics.metadata['rbds_sync_lost_count'] = decoder_stats.sync_lost_count

@@ -494,8 +494,16 @@ def _force_synced_tentative(worker: RBDSWorker, *, block_number: int = 0) -> Non
     worker._rbds_group_assembly_started = False
     worker._rbds_inverted_polarity = False
     worker._rbds_reg = 0
+    worker._rbds_reg_wide = 0
+    worker._rbds_slip_retry_pending = False
     worker._rbds_group_good_blocks_counter = 0
     worker._rbds_consecutive_crc_failures = 0
+
+
+def _force_synced_confirmed(worker: RBDSWorker, *, block_number: int = 0) -> None:
+    """Drive the worker into synced+confirmed state (publishing enabled)."""
+    _force_synced_tentative(worker, block_number=block_number)
+    worker._rbds_sync_tentative = False
 
 
 def test_rbds_lock_starts_in_tentative_state():
@@ -582,7 +590,14 @@ def test_rbds_lock_resets_per_sync_stats_but_keeps_sync_lost_count():
 
 
 def test_rbds_tentative_sync_confirms_with_enough_good_groups():
-    """≥ _RBDS_TENTATIVE_GOOD_GROUPS fully-decoded groups in 50 blocks → CONFIRMED."""
+    """≥ _RBDS_TENTATIVE_GOOD_GROUPS fully-decoded groups → CONFIRMED.
+
+    Confirmation fires inline the moment the Nth good group completes (not
+    at the 50-block window boundary), and from the confirming group onward
+    everything is published.  Groups decoded *before* the threshold stay
+    suppressed — if the lock had turned out to be false those are exactly
+    the bogus PI/group-type values we don't want surfaced.
+    """
     worker = _make_worker()
     _force_synced_tentative(worker, block_number=0)
 
@@ -605,14 +620,43 @@ def test_rbds_tentative_sync_confirms_with_enough_good_groups():
     assert worker._rbds_synced is True
     assert worker._rbds_sync_tentative is False, "sync should have been confirmed"
     assert worker._stats.sync_acquired_unix is not None
-    # While tentative, process_group must not have been called once: every
-    # one of the 12 complete groups was suppressed.
-    assert published == [], (
-        "process_group must not be called while sync is tentative; got "
+    # Groups 1-2 were suppressed (still tentative); the confirming 3rd group
+    # and the 9 that follow it are published.
+    assert len(published) == 10, (
+        "expected the confirming group plus all later groups to publish; got "
         f"{len(published)} publishes"
     )
-    # And groups_decoded must not have been bumped during tentative either.
-    assert worker._stats.groups_decoded == 0
+    assert published[0] == (0xABCD + 8, 0xABCD + 9, 0xABCD + 10, 0xABCD + 11)
+    assert worker._stats.groups_decoded == 10
+    worker.stop()
+
+
+def test_rbds_tentative_sync_confirms_immediately_at_threshold():
+    """Confirmation must not wait for the 50-block window boundary.
+
+    Three good groups are 104 bits of CRC-validated evidence each; once the
+    threshold is met, waiting out the rest of the 50-block window only
+    delayed first published data by up to ~0.8 s on a healthy channel.
+    """
+    worker = _make_worker()
+    _force_synced_tentative(worker, block_number=0)
+
+    published: list[tuple[int, int, int, int]] = []
+    worker._rbds_decoder.process_group = lambda group: published.append(tuple(group))  # type: ignore[assignment]
+
+    # Exactly 3 full groups (12 blocks) — well short of the 50-block window.
+    bits: list[int] = []
+    for i in range(12):
+        bits.extend(_bits_for_valid_block(worker, 0x1000 + i, i % 4))
+    worker._rbds_bit_buffer = bits
+    worker._decode_rbds_groups()
+
+    assert worker._rbds_synced is True
+    assert worker._rbds_sync_tentative is False, "threshold reached → confirmed"
+    assert worker._stats.sync_acquired_unix is not None
+    # The confirming (3rd) group publishes; the first two stay suppressed.
+    assert published == [(0x1008, 0x1009, 0x100A, 0x100B)]
+    assert worker._stats.groups_decoded == 1
     worker.stop()
 
 
@@ -670,6 +714,119 @@ def test_rbds_tentative_sync_does_not_publish_groups_mid_window():
     assert worker._rbds_tentative_good_groups == 1
     assert published == []
     assert worker._stats.groups_decoded == 0
+    worker.stop()
+
+
+# ---------------------------------------------------------------------------
+# Clock-slip recovery tests
+#
+# M&M symbol timing can insert or drop a symbol during a fade.  Without
+# recovery, a single slipped bit misaligns the 26-bit block grid and every
+# subsequent block fails CRC until the 50-block sync-quality window drops
+# sync — a ~1 s outage plus full reacquisition for a one-bit problem.  The
+# decoder tests both ±1-bit hypotheses when a block fails all repair paths
+# and realigns the grid in place when one passes the CRC cleanly.
+# ---------------------------------------------------------------------------
+
+
+def test_rbds_bit_slip_late_recovered_without_sync_loss():
+    """An inserted symbol (+1 bit) mid-group must not kill the group or sync.
+
+    The stray bit pushes block C one bit late; the decoder defers the verdict
+    by one bit, finds a clean C there, and realigns — the group still
+    completes and no uncorrected block is recorded.
+    """
+    worker = _make_worker()
+    _force_synced_confirmed(worker)
+
+    published: list[tuple[int, int, int, int]] = []
+    worker._rbds_decoder.process_group = lambda group: published.append(tuple(group))  # type: ignore[assignment]
+
+    bits: list[int] = []
+    bits.extend(_bits_for_valid_block(worker, 0x1111, 0))
+    bits.extend(_bits_for_valid_block(worker, 0x2222, 1))
+    bits.append(0)  # spurious extra bit: M&M emitted one symbol too many
+    bits.extend(_bits_for_valid_block(worker, 0x3333, 2))
+    bits.extend(_bits_for_valid_block(worker, 0x4444, 3))
+    worker._rbds_bit_buffer = bits
+    worker._decode_rbds_groups()
+
+    assert worker._rbds_synced is True
+    assert published == [(0x1111, 0x2222, 0x3333, 0x4444)]
+    assert worker._stats.blocks_bit_slips == 1
+    assert worker._stats.blocks_uncorrected == 0
+    worker.stop()
+
+
+def test_rbds_bit_slip_early_recovered_without_sync_loss():
+    """A dropped symbol (-1 bit) must not cost more than the damaged block.
+
+    Block C loses its last (checkword) bit.  The damaged C either still
+    passes as-is or is repaired by single-bit FEC (only its checkword was
+    hit), and the decoder realigns on the next block via the shadow
+    register's -1-bit window — so *both* groups decode with the correct
+    datawords.  Before slip recovery this scenario failed every block until
+    sync dropped.
+    """
+    worker = _make_worker()
+    _force_synced_confirmed(worker)
+
+    published: list[tuple[int, int, int, int]] = []
+    worker._rbds_decoder.process_group = lambda group: published.append(tuple(group))  # type: ignore[assignment]
+
+    bits: list[int] = []
+    bits.extend(_bits_for_valid_block(worker, 0x1111, 0))
+    bits.extend(_bits_for_valid_block(worker, 0x2222, 1))
+    bits.extend(_bits_for_valid_block(worker, 0x3333, 2)[:-1])  # dropped symbol
+    bits.extend(_bits_for_valid_block(worker, 0x4444, 3))
+    for block_no, dataword in enumerate((0x5555, 0x6666, 0x7777, 0x8888)):
+        bits.extend(_bits_for_valid_block(worker, dataword, block_no))
+    worker._rbds_bit_buffer = bits
+    worker._decode_rbds_groups()
+
+    assert worker._rbds_synced is True
+    assert published == [
+        (0x1111, 0x2222, 0x3333, 0x4444),
+        (0x5555, 0x6666, 0x7777, 0x8888),
+    ]
+    assert worker._stats.blocks_bit_slips == 1
+    assert worker._stats.blocks_uncorrected == 0
+    worker.stop()
+
+
+def test_rbds_uncorrectable_block_does_not_shift_grid():
+    """A noise-corrupted block must not trigger a false slip realignment.
+
+    Scattered (non-burst) errors beyond FEC reach fail both ±1-bit
+    hypotheses; the decoder must restore the original block grid after the
+    deferred retry so the very next block — and the next group — decode at
+    the unshifted positions.
+    """
+    worker = _make_worker()
+    _force_synced_confirmed(worker)
+
+    published: list[tuple[int, int, int, int]] = []
+    worker._rbds_decoder.process_group = lambda group: published.append(tuple(group))  # type: ignore[assignment]
+
+    bits: list[int] = []
+    bits.extend(_bits_for_valid_block(worker, 0x1111, 0))
+    bits.extend(_bits_for_valid_block(worker, 0x2222, 1))
+    corrupted = _bits_for_valid_block(worker, 0x3333, 2)
+    for pos in (3, 11, 19):  # scattered errors: beyond single-bit and burst FEC
+        corrupted[pos] ^= 1
+    bits.extend(corrupted)
+    bits.extend(_bits_for_valid_block(worker, 0x4444, 3))
+    for block_no, dataword in enumerate((0x5555, 0x6666, 0x7777, 0x8888)):
+        bits.extend(_bits_for_valid_block(worker, dataword, block_no))
+    worker._rbds_bit_buffer = bits
+    worker._decode_rbds_groups()
+
+    assert worker._rbds_synced is True
+    # Group 1 is lost to the corrupt C, but block D and all of group 2 must
+    # decode at the original grid positions.
+    assert published == [(0x5555, 0x6666, 0x7777, 0x8888)]
+    assert worker._stats.blocks_bit_slips == 0
+    assert worker._stats.blocks_uncorrected == 1
     worker.stop()
 
 
