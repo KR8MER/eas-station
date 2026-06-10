@@ -343,15 +343,21 @@ def test_rbds_post_mix_lowpass_rejects_stereo_sideband_artifact():
     null at 2375 Hz).  This test verifies that rejection at 4 kHz is at least
     40 dB stronger than the worst-case 7.5 kHz design it replaced, which is
     well into the stopband and far below the RBDS signal level.
+
+    The filter is designed and applied at the post-decimation rate (~25 kHz)
+    — running it at the full multiplex rate required 501 taps and dominated
+    worker CPU — so its response is evaluated at that rate here.
     """
     sr = 250_000
     worker = _make_worker(sample_rate=sr)
     h = worker._rbds_lowpass
+    design_rate = worker._rbds_post_decim_rate
+    assert design_rate == 25_000  # 250 kHz / RBDS_INTERMEDIATE_RATE decimation
 
     def _gain_db(freq_hz: float) -> float:
         n = np.arange(len(h), dtype=np.float64)
         mid = (len(h) - 1) / 2.0
-        gain = float(np.abs(np.sum(h * np.exp(-1j * 2.0 * np.pi * freq_hz * (n - mid) / sr))))
+        gain = float(np.abs(np.sum(h * np.exp(-1j * 2.0 * np.pi * freq_hz * (n - mid) / design_rate))))
         return 20.0 * np.log10(max(gain, 1e-12))
 
     # Passband: at 1187.5 Hz (peak of the RBDS biphase main lobe) the filter

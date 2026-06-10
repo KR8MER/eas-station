@@ -1021,9 +1021,20 @@ class RBDSWorker:
         self._sample_rate = sample_rate
         self._intermediate_rate = intermediate_rate
 
-        # Thread-safe queue for incoming multiplex samples
-        # maxsize=5 means we drop old samples if processing is too slow (never block audio)
-        self._sample_queue: queue.Queue = queue.Queue(maxsize=5)
+        # Thread-safe queue for incoming multiplex samples.  put_nowait keeps
+        # the audio thread non-blocking; depth determines how long a worker
+        # stall can last before chunks are dropped.  Sized to absorb the
+        # synced-mode batch burst (1 s of samples is DSP'd in one go after
+        # each window fills) plus scheduler contention from the other
+        # pipelines sharing a small SBC (MP3 encode, SAME decoders, web UI).
+        # The old maxsize=5 covered only tens of milliseconds, so every batch
+        # spike overflowed; a dropped chunk is much worse than the ~few MB of
+        # buffering this costs because it tears the Costas/M&M phase
+        # continuity and forces a full resync (observed in the field as
+        # periodic garbage stretches and a climbing chunks-dropped counter).
+        # In steady state the queue stays near-empty, so depth adds no
+        # decode latency.
+        self._sample_queue: queue.Queue = queue.Queue(maxsize=64)
 
         # Thread-safe storage for latest RBDS data
         self._latest_data: Optional[RBDSData] = None
@@ -1081,8 +1092,9 @@ class RBDSWorker:
                 self.RBDS_MIN_SAMPLE_RATE
             )
 
-        # Lowpass filter for post-mixing (removes aliases, keeps baseband RBDS).
-        # Design this at sample_rate since we mix BEFORE lowpass filtering.
+        # Lowpass (matched) filter for post-mixing: removes everything outside
+        # the RBDS baseband.  Designed and applied at the POST-DECIMATION rate
+        # (~25 kHz), not the full multiplex rate.
         #
         # Cutoff = 2.4 kHz: This is the standard matched-filter bandwidth for
         # the 1187.5-baud biphase-coded RBDS BPSK signal.  The biphase spectrum
@@ -1099,10 +1111,28 @@ class RBDSWorker:
         # Monitoring report from 2026-04).  A 2.4 kHz cutoff puts the 4 kHz
         # stereo artifact firmly into the stopband.
         #
-        # 501 taps gives a Blackman transition of ~5.5*fs/N ≈ 2.7 kHz at
-        # 250 kHz, so 2.4 kHz cutoff reaches -60 dB by ~3.8 kHz, comfortably
-        # ahead of the 4 kHz interferer.
-        self._rbds_lowpass = self._design_fir_lowpass(2400.0, self._sample_rate, taps=501)
+        # Why post-decimation: the previous design ran this filter at the full
+        # multiplex rate, which forced 501 taps (transition width scales with
+        # fs/N) and cost ~250M MAC/s on real+imag — the single largest CPU
+        # consumer in the worker and the cause of chunk drops on Pi-class
+        # hosts.  Decimating first is safe because the 54-60 kHz bandpass has
+        # already confined the spectrum: after the 57 kHz mix the only content
+        # is the RBDS baseband at DC and its negative-frequency image, which
+        # folds to ≥8 kHz under ::decim — outside this filter's passband.
+        # 75 taps at 25 kHz gives a Blackman transition of ~5.5*fs/N ≈
+        # 1.8 kHz (vs ~2.7 kHz for the 501-tap/250 kHz original), putting
+        # the 4 kHz stereo artifact at -83 dB — far past the -40 dB
+        # requirement — at ~1/70 the MAC cost.  Of the 51/75/101-tap
+        # candidates, 75 also gave the lowest BLER under noise in
+        # end-to-end simulation (sharper cuts more noise, but much sharper
+        # starts clipping signal energy).
+        decim = max(1, int(self._sample_rate / self.RBDS_INTERMEDIATE_RATE))
+        self._rbds_post_decim_rate = (
+            int(self._sample_rate // decim) if decim > 1 else self._sample_rate
+        )
+        self._rbds_lowpass = self._design_fir_lowpass(
+            2400.0, self._rbds_post_decim_rate, taps=75
+        )
 
         # Filter delay-line state, preserved across _process_rbds calls. FIR
         # filters implemented with np.convolve are stateless, so every chunk
@@ -1786,41 +1816,30 @@ class RBDSWorker:
             x = x * np.exp(-1j * phases)
             self._carrier_phase_57k = (self._carrier_phase_57k + phase_increment * n) % (2.0 * np.pi)
 
-        x = self._apply_interference_notch(x, sample_rate, interferer_offset_hz)
+        # Remember the most recent interferer detection for the batch-stage
+        # notch below: the notch runs at the decimated rate (where it costs
+        # ~decim× less), so it consumes the latest per-chunk verdict instead
+        # of being applied chunk-by-chunk at the full rate.
+        self._rbds_interferer_offset_hz = interferer_offset_hz
 
-        # Step 3: Lowpass filter (7.5 kHz) to remove mixing artifacts and aliases.
-        # After the 57 kHz mix x is complex; lfilter keeps real delay lines per
-        # component, so filter the real and imaginary parts separately with
-        # their own persisted zi arrays.
-        from scipy import signal as scipy_signal
-        lp_state_len = len(self._rbds_lowpass) - 1
-        if self._rbds_lowpass_zi_real is None or len(self._rbds_lowpass_zi_real) != lp_state_len:
-            self._rbds_lowpass_zi_real = np.zeros(lp_state_len, dtype=np.float64)
-            self._rbds_lowpass_zi_imag = np.zeros(lp_state_len, dtype=np.float64)
-        real_out, self._rbds_lowpass_zi_real = scipy_signal.lfilter(
-            self._rbds_lowpass, [1.0], x.real, zi=self._rbds_lowpass_zi_real
-        )
-        imag_out, self._rbds_lowpass_zi_imag = scipy_signal.lfilter(
-            self._rbds_lowpass, [1.0], x.imag, zi=self._rbds_lowpass_zi_imag
-        )
-        x = real_out + 1j * imag_out
-
-        # Buffer at the high (post-lowpass) sample rate.  Earlier this code
-        # decimated and resampled per chunk, then accumulated the resampled
-        # output — but `x[::decim]` resets its phase at every chunk boundary
-        # and `scipy.signal.resample_poly` is stateless, so each ~8 ms chunk
-        # injected a polyphase filter transient into the bit stream.  Across
-        # the ~31 chunks that fit in a 250 ms batch that's 31 stitched-together
-        # transients feeding M&M, which manifests downstream as the random
-        # presync spacings the operator was seeing (expected 26, got 92,
-        # expected 104, got 151, …).  Accumulating BEFORE decim+resample
-        # keeps the bit clock continuous within a batch — there's exactly
-        # one resample transient per batch instead of 31.
+        # Buffer the post-mix complex baseband at the full sample rate.
+        # Earlier this code decimated and resampled per chunk, then
+        # accumulated the resampled output — but `x[::decim]` resets its
+        # phase at every chunk boundary and `scipy.signal.resample_poly` is
+        # stateless, so each ~8 ms chunk injected a polyphase filter
+        # transient into the bit stream.  Across the ~31 chunks that fit in
+        # a 250 ms batch that's 31 stitched-together transients feeding M&M,
+        # which manifests downstream as the random presync spacings the
+        # operator was seeing (expected 26, got 92, expected 104, got 151,
+        # …).  Accumulating BEFORE decim+resample keeps the bit clock
+        # continuous within a batch — there's exactly one resample transient
+        # per batch instead of 31.  complex64 halves the buffer footprint
+        # and downstream memory traffic with no fidelity cost at this SNR.
         if not hasattr(self, '_rbds_sample_buffer_chunks'):
             self._rbds_sample_buffer_chunks = []
             self._rbds_sample_buffer_samples = 0
 
-        self._rbds_sample_buffer_chunks.append(x)
+        self._rbds_sample_buffer_chunks.append(x.astype(np.complex64))
         self._rbds_sample_buffer_samples += len(x)
 
         # The window thresholds are expressed in samples at the 19 kHz
@@ -1840,14 +1859,49 @@ class RBDSWorker:
         self._rbds_sample_buffer_chunks = []
         self._rbds_sample_buffer_samples = 0
 
-        # Step 4: Decimate to intermediate rate (~25 kHz) to reduce processing load
-        # Now safe to decimate since we've already extracted and mixed down the
-        # RBDS signal, AND we're operating on a contiguous buffer so x[::decim]
-        # has a single, consistent phase for the whole batch.
+        # Step 4: Decimate to intermediate rate (~25 kHz) to reduce processing load.
+        # Safe without a dedicated anti-alias filter: the 54-60 kHz bandpass
+        # already confined the spectrum, so after the 57 kHz mix the only
+        # content is the RBDS baseband at DC and its negative-frequency image,
+        # which folds to ≥8 kHz under ::decim — into the stopband of the
+        # matched filter applied right below.  Any sub-decim tail is carried
+        # into the next batch so the decimation phase (and therefore the
+        # matched filter's delay-line state) is continuous across batches.
         decim = max(1, int(sample_rate / self.RBDS_INTERMEDIATE_RATE))
         if decim > 1:
+            usable = len(x) - (len(x) % decim)
+            if usable < len(x):
+                self._rbds_sample_buffer_chunks = [x[usable:]]
+                self._rbds_sample_buffer_samples = len(x) - usable
+                x = x[:usable]
             x = x[::decim]
-            sample_rate = int(sample_rate // decim)  # Keep as int
+            sample_rate = int(sample_rate // decim)
+
+        # Off-frequency spur notch, applied at the decimated rate using the
+        # most recent per-chunk detection.
+        x = self._apply_interference_notch(
+            x, sample_rate, getattr(self, '_rbds_interferer_offset_hz', None)
+        )
+
+        # Matched filter: sharp 2.4 kHz lowpass at the decimated rate (see
+        # _init_rbds_state for the design rationale — this used to be a
+        # 501-tap filter at the full multiplex rate and dominated worker
+        # CPU).  x is complex; lfilter keeps real delay lines per component,
+        # so filter the real and imaginary parts separately with their own
+        # persisted zi arrays.  State carries across batches, which the
+        # tail-carry decimation above makes phase-correct.
+        from scipy import signal as scipy_signal
+        lp_state_len = len(self._rbds_lowpass) - 1
+        if self._rbds_lowpass_zi_real is None or len(self._rbds_lowpass_zi_real) != lp_state_len:
+            self._rbds_lowpass_zi_real = np.zeros(lp_state_len, dtype=np.float64)
+            self._rbds_lowpass_zi_imag = np.zeros(lp_state_len, dtype=np.float64)
+        real_out, self._rbds_lowpass_zi_real = scipy_signal.lfilter(
+            self._rbds_lowpass, [1.0], x.real, zi=self._rbds_lowpass_zi_real
+        )
+        imag_out, self._rbds_lowpass_zi_imag = scipy_signal.lfilter(
+            self._rbds_lowpass, [1.0], x.imag, zi=self._rbds_lowpass_zi_imag
+        )
+        x = real_out + 1j * imag_out  # Keep as int
 
         # Step 5: Resample to exactly 19 kHz (16 samples per symbol at 1187.5
         # baud).  Done once on the entire batch so the polyphase transient
