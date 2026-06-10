@@ -403,4 +403,4 @@ Refer back to this document whenever you need a grounded explanation of what hap
 ---
 
 **Last Updated:** 2025-12-16
-**Related Documents:** [System Architecture](SYSTEM_ARCHITECTURE), [Data Flow Sequences](DATA_FLOW_SEQUENCES), [Diagrams Index](../reference/DIAGRAMS)
+**Related Documents:** [System Architecture](SYSTEM_ARCHITECTURE.md), [Data Flow Sequences](DATA_FLOW_SEQUENCES.md), [Diagrams Index](../reference/DIAGRAMS.md)

@@ -830,4 +830,4 @@ After setup, verify:
 
 *If you encounter issues not covered in the Troubleshooting section, check [GitHub Issues](https://github.com/KR8MER/eas-station/issues) or [GitHub Discussions](https://github.com/KR8MER/eas-station/discussions).*
 
-*For reference on remote debugging concepts and advanced IDE features, see the [PyCharm Debugging Guide](../docs/guides/PYCHARM_DEBUGGING.md) which covers topics applicable to all remote development.*
+

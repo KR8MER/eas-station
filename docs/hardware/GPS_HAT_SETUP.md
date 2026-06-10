@@ -5,6 +5,8 @@ EAS Station™ supports two NMEA-0183 GPS HATs out of the box:
 - **Uputronics Raspberry Pi GPS/RTC Expansion Board** *(recommended default)* — u-blox MAX-M8Q multi-GNSS receiver with PPS on **BCM 18**, battery-backed RTC (DS3231 on older revisions, RV-3028-C7 on current revisions), and a low-profile stacking GPIO header.
 - **Adafruit Ultimate GPS HAT (#2324)** *(legacy / alternative)* — MTK3339 GPS-only receiver with PPS on **BCM 4** and a tall non-stacking GPIO header.
 
+> **Pin conflict note:** BCM 18 (used by the Uputronics PPS line) is also the default NeoPixel data pin. If you run both, move the NeoPixel strip to another PWM-capable pin — see [NeoPixel LED Control](NEOPIXEL_LED_CONTROL.md).
+
 When enabled, the GPS module provides:
 
 - **Station coordinates** — automatic lat/lon for location-based alert filtering

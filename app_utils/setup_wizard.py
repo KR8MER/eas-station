@@ -551,7 +551,7 @@ ICECAST_FIELDS = [
     WizardField(
         key="ICECAST_EXTERNAL_PORT",
         label="External Port",
-        description="Icecast external port for browser/remote access (default: 8001).",
+        description="Icecast external port for browser/remote access. Keep equal to ICECAST_PORT (default: 8000) unless a reverse proxy exposes Icecast on a different public port.",
         required=False,
         validator=_validate_port,
     ),

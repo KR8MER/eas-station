@@ -70,21 +70,7 @@ A logout/login or service restart is required for group changes to take effect.
    sudo systemctl restart eas-station-hardware
    ```
 
-### Via eas-config
-
-```bash
-sudo eas-config
-```
-
-Select **5. Hardware Integration → VFD Display Settings**.
-
-### Via .env (Manual)
-
-```
-VFD_ENABLED=true
-VFD_PORT=/dev/ttyUSB0
-VFD_BAUDRATE=9600
-```
+> **Note:** VFD settings are stored in the database (`hardware_settings` table) and managed through the web UI shown above. The `eas-config` TUI no longer edits hardware settings — its Hardware Integration entry points to the web UI. Legacy `VFD_*` environment variables in `.env` are imported once during the initial migration and are **not** read at runtime afterwards.
 
 ---
 
@@ -112,6 +98,8 @@ The VFD control interface is available at `/vfd_control` in the web UI.
 | `POST` | `/api/vfd/test` | Send test pattern |
 
 **Send a message via API:**
+
+> **Note:** API-key authentication (`X-API-Key`) is **planned but not yet implemented** — see [API Key Management](../guides/API_KEY_MANAGEMENT.md). Until it ships, these endpoints require an authenticated browser session (log in first and reuse the session cookie).
 
 ```bash
 curl -X POST \

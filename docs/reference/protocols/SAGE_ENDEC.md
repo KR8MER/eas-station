@@ -86,13 +86,16 @@ flowchart LR
 
 ```
 ZCZC-ORG-EEE-PSSCCC-PSSCCC…+TTTT-JJJHHMM-LLLLLLLL-
-      │   │   │            │     │        └ 8-char sending-station ID
-      │   │   │            │     └ origination time, UTC (Julian day + HHMM)
-      │   │   │            └ duration the alert stays valid (+TTTT)
-      │   │   └ up to 31 location codes (P = part-of-county, SSCCC = FIPS)
-      │   └ event code (EEE)
-      └ originator (ORG)
 ```
+
+| Field | Meaning |
+|-------|---------|
+| `ORG` | Originator |
+| `EEE` | Event code |
+| `PSSCCC` | Up to 31 location codes (P = part-of-county, SSCCC = FIPS) |
+| `+TTTT` | Duration the alert stays valid |
+| `JJJHHMM` | Origination time, UTC (Julian day + HHMM) |
+| `LLLLLLLL` | 8-char sending-station ID |
 
 - **Originators (ORG):** Broadcast/Cable (`EAS`), Civil Authorities (`CIV`),
   National Weather Service (`WXR`), Primary Entry Point (`PEP`), Emergency

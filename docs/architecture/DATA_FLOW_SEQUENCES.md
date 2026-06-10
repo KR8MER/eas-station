@@ -6,7 +6,7 @@ This document provides detailed sequence diagrams showing how data flows through
 
 **Purpose:** Visualize complete data processing paths through the system
 **Audience:** Developers, system architects, and operators understanding data flows
-**Related:** [System Architecture](SYSTEM_ARCHITECTURE), [Theory of Operation](THEORY_OF_OPERATION)
+**Related:** [System Architecture](SYSTEM_ARCHITECTURE.md), [Theory of Operation](THEORY_OF_OPERATION.md)
 
 ---
 
@@ -849,9 +849,9 @@ Each diagram shows:
 - The system maintains comprehensive audit trails at each stage
 
 **Related Documentation:**
-- [System Architecture](SYSTEM_ARCHITECTURE) - Component diagrams and relationships
-- [Theory of Operation](THEORY_OF_OPERATION) - Conceptual overview
-- [Alert Geometry and Coverage Calculation](ALERT_GEOMETRY_COVERAGE) - Geometry priority chain, SAME/FIPS fallback, and coverage button flow
+- [System Architecture](SYSTEM_ARCHITECTURE.md) - Component diagrams and relationships
+- [Theory of Operation](THEORY_OF_OPERATION.md) - Conceptual overview
+- [Alert Geometry and Coverage Calculation](ALERT_GEOMETRY_COVERAGE.md) - Geometry priority chain, SAME/FIPS fallback, and coverage button flow
 - [Diagrams Index](../reference/DIAGRAMS.md) - All available diagrams
 
 ---

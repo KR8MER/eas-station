@@ -15,7 +15,7 @@ These ports need to be accessible from outside the host for normal operation:
 | **443** | TCP | HTTPS (nginx) | Web interface (primary access). Uses SSL/TLS encryption. **Auto-configured in bare-metal install.** |
 | **80** | TCP | HTTP (nginx) | Redirects to HTTPS. Also needed for Let's Encrypt certificate renewal. **Auto-configured in bare-metal install.** |
 | **22** | TCP | SSH | Remote server access for management. **Auto-configured in bare-metal install.** |
-| **8001** | TCP | Icecast | Audio streaming server for public stream access (configurable via `ICECAST_PORT`). **Manual configuration required.** |
+| **8000** | TCP | Icecast | Audio streaming server for public stream access. Icecast listens on `ICECAST_PORT` (default **8000**); `ICECAST_EXTERNAL_PORT` controls the port advertised in stream URLs and should stay equal to it unless a reverse proxy exposes Icecast on a different public port. **Manual configuration required.** |
 
 
 These ports are used internally between services and should **not** be exposed to the internet:
@@ -31,7 +31,7 @@ These ports are used internally between services and should **not** be exposed t
 | **5105** | TCP | GPIO Subsystem | Relays + alert indicators (health endpoint only). |
 | **5432** | TCP | PostgreSQL | Database (embedded profile or external). |
 | **6379** | TCP | Redis | In-memory cache for real-time updates. |
-| **8000** | TCP | Icecast (internal) | Internal Icecast port (proxied to 8001 externally). |
+| **8000** | TCP | Icecast (listen port) | Icecast listen port — expose directly or front it with a proxy. |
 
 ## Automatic Firewall Configuration (Bare-Metal)
 
@@ -97,7 +97,7 @@ With these firewall rules in place, you can access your EAS Station™ from any 
 
 ```bash
 # Allow Icecast streaming (for public audio streams)
-sudo ufw allow 8001/tcp
+sudo ufw allow 8000/tcp
 
 # Verify rules
 sudo ufw status verbose
@@ -118,7 +118,7 @@ sudo ufw allow 80/tcp   # HTTP
 sudo ufw allow 443/tcp  # HTTPS
 
 # Optional: Allow Icecast streaming
-sudo ufw allow 8001/tcp
+sudo ufw allow 8000/tcp
 
 # Enable firewall
 sudo ufw enable
@@ -137,7 +137,7 @@ sudo firewall-cmd --permanent --add-port=443/tcp
 sudo firewall-cmd --permanent --add-service=http
 
 # Allow Icecast streaming (optional, for public audio streams)
-sudo firewall-cmd --permanent --add-port=8001/tcp
+sudo firewall-cmd --permanent --add-port=8000/tcp
 
 # Reload and verify
 sudo firewall-cmd --reload
@@ -154,7 +154,7 @@ sudo iptables -A INPUT -p tcp --dport 443 -j ACCEPT
 sudo iptables -A INPUT -p tcp --dport 80 -j ACCEPT
 
 # Allow Icecast streaming (optional, for public audio streams)
-sudo iptables -A INPUT -p tcp --dport 8001 -j ACCEPT
+sudo iptables -A INPUT -p tcp --dport 8000 -j ACCEPT
 
 # Save rules (varies by distribution)
 sudo netfilter-persistent save  # Debian/Ubuntu
@@ -179,7 +179,7 @@ If running on a cloud provider (AWS, Azure, GCP, DigitalOcean, etc.), you also n
 
 | Direction | Port | Protocol | Source | Description |
 |-----------|------|----------|--------|-------------|
-| Inbound | 8001 | TCP | 0.0.0.0/0 | Icecast audio streaming (if public streams enabled) |
+| Inbound | 8000 | TCP | 0.0.0.0/0 | Icecast audio streaming (if public streams enabled) |
 
 ## Troubleshooting Connection Issues
 
@@ -191,15 +191,21 @@ connect() failed (111: Connection refused) while connecting to upstream
 
 This error indicates nginx cannot connect to the Flask backend (port 5000). Common causes:
 
-1. **Flask app not running** - Check if the app container is healthy:
+1. **Flask app not running** - Check if the web service is healthy:
    ```bash
+   systemctl status eas-station-web
+   sudo journalctl -u eas-station-web -n 50 --no-pager
    ```
 
 2. **Database migration errors** - The app may fail to start due to database issues:
    ```bash
+   sudo journalctl -u eas-station-web -n 200 --no-pager | grep -iE "alembic|migration|database"
    ```
 
    ```bash
+   # Verify PostgreSQL is up and the database exists
+   systemctl status postgresql
+   sudo -u postgres psql -d alerts -c 'SELECT 1;'
    ```
 
 ### Symptom: Cannot access web interface externally
@@ -216,15 +222,17 @@ This error indicates nginx cannot connect to the Flask backend (port 5000). Comm
 
 1. **Verify Icecast is running**:
    ```bash
+   systemctl status icecast2
    ```
 
-2. **Check port mapping**:
+2. **Check the listen port**:
    ```bash
+   sudo ss -tlnp | grep 8000
    ```
 
 3. **Test local access**:
    ```bash
-   curl http://localhost:8001/status-json.xsl
+   curl http://localhost:8000/status-json.xsl
    ```
 
 ## Related Documentation

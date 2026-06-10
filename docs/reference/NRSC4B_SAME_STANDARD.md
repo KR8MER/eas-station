@@ -104,10 +104,13 @@ Each six-digit FIPS-based code identifies a geographic area:
 
 ```
 P  SS  CCC
-│  │   └─ County FIPS (001–999; 000 = entire state)
-│  └───── State FIPS (two digits)
-└──────── Subdivision/priority digit
 ```
+
+| Digits | Field |
+|--------|-------|
+| `P` | Subdivision/priority digit |
+| `SS` | State FIPS (two digits) |
+| `CCC` | County FIPS (001–999; 000 = entire state) |
 
 **Constraints:**
 - Minimum 1, maximum **31** location codes per header.

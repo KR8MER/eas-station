@@ -23,11 +23,13 @@ from __future__ import annotations
 
 import json
 import logging
+import subprocess
 from typing import Dict, List, Any
 
 from flask import Blueprint, jsonify, render_template, request, flash, redirect, url_for
 from sqlalchemy import text
 
+from app_core.auth.roles import require_permission
 from app_core.extensions import db
 from app_core.models import RadioReceiver
 from app_core.config import get_sdr_service
@@ -45,12 +47,14 @@ def register_audio_sdr_fix_routes(app):
 
 
 @audio_sdr_fix_bp.route('/admin/audio-sdr-fix')
+@require_permission('system.configure')
 def audio_sdr_fix_page():
     """Display the audio/SDR configuration fix page."""
     return render_template('admin/audio_sdr_fix.html')
 
 
 @audio_sdr_fix_bp.route('/api/admin/audio-sdr-fix/diagnose', methods=['GET'])
+@require_permission('system.configure')
 def diagnose_audio_sdr():
     """Diagnose audio/SDR configuration issues."""
     try:
@@ -164,6 +168,7 @@ def diagnose_audio_sdr():
 
 
 @audio_sdr_fix_bp.route('/api/admin/audio-sdr-fix/apply', methods=['POST'])
+@require_permission('system.configure')
 def apply_audio_sdr_fixes():
     """Apply fixes to audio/SDR configuration."""
     try:
@@ -255,13 +260,43 @@ def apply_audio_sdr_fixes():
 
 
 @audio_sdr_fix_bp.route('/api/admin/audio-sdr-fix/restart-service', methods=['POST'])
+@require_permission('system.configure')
 def restart_sdr_service():
-    """Request to restart SDR service (requires external action)."""
-    # This endpoint just acknowledges the request
-    # Actual restart needs to be done via systemctl from the host
+    """Restart the SDR service so applied sample-rate fixes take effect."""
     sdr_service = get_sdr_service()
-    return jsonify({
-        'success': True,
-        'message': f'Please restart the SDR service manually using: sudo systemctl restart {sdr_service}',
-        'command': f'sudo systemctl restart {sdr_service}'
-    })
+    manual_command = f'sudo systemctl restart {sdr_service}'
+    try:
+        result = subprocess.run(
+            ['sudo', 'systemctl', 'restart', sdr_service],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if result.returncode == 0:
+            logger.info("Restarted SDR service %s after audio/SDR fix", sdr_service)
+            return jsonify({
+                'success': True,
+                'message': f'SDR service {sdr_service} restarted successfully',
+            })
+        logger.error("Failed to restart %s: %s", sdr_service, result.stderr)
+        return jsonify({
+            'success': False,
+            'error': result.stderr.strip() or f'systemctl exited with code {result.returncode}',
+            'message': f'Automatic restart failed — run manually: {manual_command}',
+            'command': manual_command,
+        }), 500
+    except subprocess.TimeoutExpired:
+        return jsonify({
+            'success': False,
+            'error': 'Timed out waiting for systemctl',
+            'message': f'Automatic restart timed out — run manually: {manual_command}',
+            'command': manual_command,
+        }), 500
+    except FileNotFoundError:
+        # systemctl/sudo unavailable (e.g. development environment)
+        return jsonify({
+            'success': False,
+            'error': 'systemctl is not available on this host',
+            'message': f'Run manually: {manual_command}',
+            'command': manual_command,
+        }), 500

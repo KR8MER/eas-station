@@ -134,7 +134,7 @@ If you enable the SMS notification feature, the following terms apply to you as 
 - Message frequency varies with EAS alert volume and may be high during active weather or emergency events. Disclose expected frequency to recipients prior to consent.
 - The project maintainers disclaim all liability for your use of the SMS feature, including any regulatory violations, carrier fees, or claims arising from messages sent through your deployment.
 
-See the [SMS Messaging Policy](/sms-compliance) page for the consumer-facing disclosures required by Twilio and carriers.
+See the [SMS Messaging Policy](SMS_MESSAGING.md) (served live at `/sms-compliance` on your EAS Station™ instance) for the consumer-facing disclosures required by Twilio and carriers.
 
 ## 7. Security Expectations
 - You are responsible for securing any deployment, including network isolation, credential management, TLS termination, and operating system hardening.
@@ -147,7 +147,7 @@ See the [SMS Messaging Policy](/sms-compliance) page for the consumer-facing dis
 ## 9. Licensing & Contributions
 - The EAS Station™ source code is dual-licensed under the [GNU Affero General Public License v3 (AGPL-3.0)](../../LICENSE) and a [Commercial License](../../LICENSE-COMMERCIAL). AGPL availability is not limited to non-commercial users; commercial users may also use AGPL if they comply with its terms. Copyright remains with Timothy Kramer (KR8MER).
 - By submitting code, documentation, or other content, contributors agree that their work is provided under the AGPL-3.0 license unless a separate commercial agreement is in place.
-- All commits must include a Developer Certificate of Origin (DCO) sign-off line (`Signed-off-by`) affirming that the contributor has the right to submit the work under the project license. Instructions are provided in [CONTRIBUTING.md](../process/CONTRIBUTING).
+- All commits must include a Developer Certificate of Origin (DCO) sign-off line (`Signed-off-by`) affirming that the contributor has the right to submit the work under the project license. Instructions are provided in [CONTRIBUTING.md](../process/CONTRIBUTING.md).
 
 ## 10. Updates & Change Control
 - These terms may change as the project evolves. Continued use of the repository or website after an update constitutes acceptance of the revised terms.

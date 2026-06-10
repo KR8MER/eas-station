@@ -100,7 +100,7 @@ show_main_menu() {
             "2" "Database Configuration (PostgreSQL settings)" \
             "3" "Alert Sources (NOAA, IPAWS, Manual)" \
             "4" "Audio Settings (Receivers, Icecast, Broadcasts)" \
-            "5" "Hardware Integration (GPIO, LED Signs, VFD)" \
+            "5" "Hardware Integration (managed in the web UI)" \
             "6" "Network Settings (Firewall, Remote Access)" \
             "7" "Advanced Options (Logging, Performance)" \
             "8" "View Current Configuration" \
@@ -491,57 +491,7 @@ audio_settings_menu() {
 
 # Hardware Integration Menu
 hardware_integration_menu() {
-    while true; do
-        GPIO_ENABLED=$(get_config_value "GPIO_ENABLED" "false")
-        LED_SIGN_ENABLED=$(get_config_value "LED_SIGN_ENABLED" "false")
-        VFD_DISPLAY_ENABLED=$(get_config_value "VFD_DISPLAY_ENABLED" "false")
-        
-        CHOICE=$(whiptail --title "Hardware Integration" --menu "\nCurrent Hardware Settings:\nGPIO Integration: $GPIO_ENABLED\nLED Sign: $LED_SIGN_ENABLED\nVFD Display: $VFD_DISPLAY_ENABLED\n\nSelect option:" 18 78 5 \
-            "1" "Toggle GPIO Integration" \
-            "2" "Toggle LED Sign Support" \
-            "3" "Toggle VFD Display Support" \
-            "4" "Configure GPIO Pins" \
-            "5" "Back to Main Menu" \
-            3>&1 1>&2 2>&3)
-        
-        exitstatus=$?
-        if [ $exitstatus != 0 ] || [ "$CHOICE" = "5" ]; then
-            return
-        fi
-        
-        case "$CHOICE" in
-            1)
-                if [ "$GPIO_ENABLED" = "true" ]; then
-                    NEW_VALUE="false"
-                else
-                    NEW_VALUE="true"
-                fi
-                set_config_value "GPIO_ENABLED" "$NEW_VALUE"
-                whiptail --msgbox "GPIO Integration: $NEW_VALUE" 8 60
-                ;;
-            2)
-                if [ "$LED_SIGN_ENABLED" = "true" ]; then
-                    NEW_VALUE="false"
-                else
-                    NEW_VALUE="true"
-                fi
-                set_config_value "LED_SIGN_ENABLED" "$NEW_VALUE"
-                whiptail --msgbox "LED Sign Support: $NEW_VALUE" 8 60
-                ;;
-            3)
-                if [ "$VFD_DISPLAY_ENABLED" = "true" ]; then
-                    NEW_VALUE="false"
-                else
-                    NEW_VALUE="true"
-                fi
-                set_config_value "VFD_DISPLAY_ENABLED" "$NEW_VALUE"
-                whiptail --msgbox "VFD Display Support: $NEW_VALUE" 8 60
-                ;;
-            4)
-                whiptail --msgbox "GPIO pin configuration is stored in .env file.\n\nKey settings:\n- GPIO_RELAY_PINS\n- GPIO_LED_PINS\n- GPIO_BUTTON_PINS\n\nEdit $CONFIG_FILE for advanced settings." 14 70
-                ;;
-        esac
-    done
+    whiptail --title "Hardware Integration" --msgbox "\nHardware settings (GPIO, relays, OLED, LED signs, VFD, NeoPixel, Zigbee) are now configured in the web UI and stored in the database:\n\n    Settings -> Hardware Settings\n    https://<your-server>/admin/hardware\n\nEnvironment variables in .env are no longer read for hardware configuration." 16 70
 }
 
 # Network Settings Menu
