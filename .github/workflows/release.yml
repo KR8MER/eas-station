@@ -1,0 +1,127 @@
+name: Release
+
+# Publishes a signed GitHub Release whenever the VERSION file changes on main
+# (or when run manually). Artifacts are signed keylessly with GitHub artifact
+# attestations (Sigstore-backed SLSA build provenance) — there are no signing
+# keys to manage or rotate. See docs/process/RELEASING.md for the full process
+# and verification instructions.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - VERSION
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine version
+        id: version
+        run: |
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::VERSION file contains an invalid version: '$VERSION'"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Check whether this version is already released
+        id: guard
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${{ steps.version.outputs.tag }}" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::notice::Release ${{ steps.version.outputs.tag }} already exists — nothing to do."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Python
+        if: steps.guard.outputs.exists == 'false'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Validate release metadata
+        if: steps.guard.outputs.exists == 'false'
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest
+          python -m pytest -q tests/test_release_metadata.py
+
+      - name: Build source tarball
+        if: steps.guard.outputs.exists == 'false'
+        run: |
+          mkdir -p dist
+          git archive \
+            --format=tar.gz \
+            --prefix="eas-station-${{ steps.version.outputs.version }}/" \
+            --output="dist/eas-station-${{ steps.version.outputs.version }}.tar.gz" \
+            HEAD
+
+      - name: Generate checksums
+        if: steps.guard.outputs.exists == 'false'
+        working-directory: dist
+        run: sha256sum eas-station-*.tar.gz > SHA256SUMS
+
+      - name: Sign artifacts (Sigstore build provenance attestation)
+        if: steps.guard.outputs.exists == 'false'
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            dist/eas-station-*.tar.gz
+            dist/SHA256SUMS
+
+      - name: Extract release notes from changelog
+        if: steps.guard.outputs.exists == 'false'
+        id: notes
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          awk -v ver="$VERSION" '
+            $0 ~ "^## \\[" ver "\\]" { capture = 1; next }
+            capture && /^## \[/ { exit }
+            capture { print }
+          ' docs/reference/CHANGELOG.md > release-notes.md
+          if [ -s release-notes.md ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::No CHANGELOG.md section found for $VERSION — falling back to auto-generated notes."
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create tag and GitHub release
+        if: steps.guard.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTES_ARGS=(--generate-notes)
+          if [ "${{ steps.notes.outputs.found }}" = "true" ]; then
+            NOTES_ARGS=(--notes-file release-notes.md)
+          fi
+          gh release create "${{ steps.version.outputs.tag }}" \
+            dist/eas-station-*.tar.gz \
+            dist/SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "EAS Station ${{ steps.version.outputs.version }}" \
+            "${NOTES_ARGS[@]}"
