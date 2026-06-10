@@ -222,6 +222,87 @@ def test_out_of_band_subcarriers_marked_when_sample_rate_is_narrow():
     assert sc_by_id["pilot_19k"]["present"]
 
 
+def _synthesize_fm_carrier(
+    fs: int,
+    duration_sec: float,
+    subcarriers: dict,
+    deviation_hz: float = 50_000.0,
+    seed: int = 99,
+) -> np.ndarray:
+    """Build a constant-envelope FM IQ stream from an MPX of tones.
+
+    Unlike ``_synthesize_clean_capture`` (which uses an AWGN IQ stand-in),
+    this genuinely FM-modulates the multiplex so the IQ has the
+    constant-envelope property the front-end check relies on — exactly what a
+    healthy capture of a real station looks like.
+    """
+    rng = np.random.default_rng(seed)
+    n = int(fs * duration_sec)
+    t = np.arange(n) / fs
+    mpx = np.zeros(n, dtype=np.float64)
+    for freq, amp in subcarriers.items():
+        mpx += amp * np.cos(2 * math.pi * freq * t + rng.uniform(0, 2 * math.pi))
+    mpx /= max(np.max(np.abs(mpx)), 1e-9)
+    phase = 2 * math.pi * np.cumsum(mpx) * deviation_hz / fs
+    return np.exp(1j * phase).astype(np.complex64)
+
+
+def test_noise_capture_flags_no_carrier_not_if_filter():
+    """A capture that is pure band-limited noise (antenna disconnected /
+    gain too low / tuned off-channel) must be reported as ``no_carrier`` —
+    NOT as an IF/anti-alias filter problem or a discriminator-click problem.
+
+    This is the operator-facing regression behind the screenshot: a strong
+    RSSI + "Locked" receiver whose audio is white noise.  Rayleigh-distributed
+    noise has an envelope P99/P01 ≈ 20 and a ~30% click rate, which previously
+    produced a confidently-wrong "IF filter too narrow" critical.
+    """
+    fs = 256_000
+    rng = np.random.default_rng(2026)
+    n = fs * 1
+    # Band-limit complex AWGN to the post-decimation passband so it matches a
+    # real noise-floor capture (flat to ~108 kHz, then rolls off).
+    noise = (rng.standard_normal(n) + 1j * rng.standard_normal(n)).astype(np.complex64)
+    from scipy import signal as _sig  # local import; scipy is a test dep
+    h = _sig.firwin(257, 108_000.0, window="blackman", fs=fs)
+    iq = _sig.lfilter(h, 1.0, noise).astype(np.complex64)
+
+    diag = analyze_capture(iq, fs)
+    out = diagnostic_to_dict(diag)
+    fe = out["frontend"]
+    codes = {f["code"] for f in fe["findings"]}
+
+    # The whole point: it's a no-carrier capture, and we must NOT mislead the
+    # operator toward the IF filter or the discriminator.
+    assert "no_carrier" in codes, fe["findings"]
+    assert "envelope_ratio" not in codes, fe["findings"]
+    assert "discriminator_clicks" not in codes, fe["findings"]
+    assert fe["verdict"] == "critical"
+
+    # Summary leads with the real cause and mentions the actionable checks.
+    summary = " ".join(out["summary_messages"]).lower()
+    assert "no fm carrier" in summary or "no carrier" in summary
+    assert "antenna" in summary or "gain" in summary
+
+
+def test_clean_fm_carrier_is_not_flagged_no_carrier():
+    """A genuine constant-envelope FM signal must never be mistaken for the
+    noise floor, even though a clipped FM signal can legitimately raise the
+    envelope ratio."""
+    fs = 256_000
+    iq = _synthesize_fm_carrier(
+        fs=fs,
+        duration_sec=1.0,
+        subcarriers={19_000: 0.6, 38_000: 0.3, 57_000: 0.1},
+    )
+    fe = analyze_iq_frontend(iq, fs)
+    codes = {f["code"] for f in fe.findings}
+    assert "no_carrier" not in codes, fe.findings
+    # Constant-envelope FM: P99/P01 stays near 1 and clicks stay low.
+    assert fe.envelope_ratio < radio_diagnostics.ENVELOPE_RATIO_NO_CARRIER, fe.envelope_ratio
+    assert fe.click_rate_pct < radio_diagnostics.CLICK_RATE_NO_CARRIER_PCT, fe.click_rate_pct
+
+
 def test_diagnostic_to_dict_is_json_serialisable():
     """The dict returned by ``diagnostic_to_dict`` must round-trip
     through ``json.dumps`` so the Flask endpoint can return it directly."""

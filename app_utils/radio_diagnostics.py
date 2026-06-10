@@ -158,6 +158,19 @@ CLICK_RATE_WARNING_PCT = 1.0
 ENVELOPE_RATIO_CRITICAL = 6.0
 ENVELOPE_RATIO_WARNING = 3.0
 
+# No-carrier / noise-dominated capture.  A genuine FM carrier is
+# constant-envelope (P99/P01 → 1) and tracks its modulation smoothly, so the
+# discriminator-click rate stays low.  Band-limited complex noise with *no*
+# carrier is Rayleigh-distributed (P99/P01 ≈ 20) and its instantaneous phase
+# walks randomly, so a large fraction of phase steps exceed 0.6π.  When BOTH
+# hold the capture contains no demodulable FM signal — the receiver is locked
+# to the noise floor (antenna disconnected, RF gain too low, or tuned
+# off-channel), which sounds like white noise on the audio output.  Detected
+# as its own finding so the dashboard stops blaming the IF / anti-alias filter
+# (the envelope and click findings below) for what is really "no signal".
+CLICK_RATE_NO_CARRIER_PCT = 15.0
+ENVELOPE_RATIO_NO_CARRIER = 8.0
+
 # DC offset (LO leakage) — RTL-SDR direct conversion always has some DC,
 # but >0.05 of full scale is unusually high and points at a centred carrier
 # or a stuck I/Q bias.
@@ -384,6 +397,29 @@ def analyze_iq_frontend(iq: "np.ndarray", sample_rate: int) -> FrontEndReport:
         if severity_rank.get(level, 0) > severity_rank.get(worst, 0):
             worst = level
 
+    # No-carrier check first: a noise-dominated capture trips the envelope and
+    # click thresholds below, but their messages ("IF filter too narrow",
+    # "clicks dominate the noise floor") send the operator down the wrong path.
+    # When the IQ is statistically indistinguishable from band-limited noise we
+    # say so plainly and suppress those misleading follow-on findings.
+    no_carrier = (
+        click_rate >= CLICK_RATE_NO_CARRIER_PCT
+        and env_ratio >= ENVELOPE_RATIO_NO_CARRIER
+    )
+    if no_carrier:
+        _add(
+            "critical", "no_carrier",
+            f"No FM carrier in this capture: envelope P99/P01 = {env_ratio:.1f} "
+            "(a constant-envelope FM carrier is ~1) and "
+            f"{click_rate:.1f}% of phase steps exceed 0.6π — the IQ is "
+            "indistinguishable from band-limited noise, which is what white "
+            "noise on the audio sounds like. The receiver is locked to the "
+            "noise floor, not a station. Check the antenna connection, raise "
+            "the RF gain (Auto-Calibrate Gain), and confirm the tuned "
+            "frequency. The subcarrier SNRs below are not meaningful until a "
+            "carrier is present."
+        )
+
     if clip_any >= CLIPPING_FRACTION_CRITICAL:
         _add(
             "critical", "saturation",
@@ -408,25 +444,30 @@ def analyze_iq_frontend(iq: "np.ndarray", sample_rate: int) -> FrontEndReport:
             f"Elevated DC offset ({dc_mag:.3f}) — expected for centred-carrier RTL2832, but worth noting."
         )
 
-    if click_rate >= CLICK_RATE_CRITICAL_PCT:
+    # The click-rate and envelope-ratio findings below assume a carrier is
+    # present and diagnose how the front end is treating it.  When there is no
+    # carrier (no_carrier above) both thresholds trip on noise alone and their
+    # messages are misleading, so we suppress them in favour of the single
+    # "no_carrier" finding.
+    if not no_carrier and click_rate >= CLICK_RATE_CRITICAL_PCT:
         _add(
             "critical", "discriminator_clicks",
             f"FM discriminator click rate {click_rate:.2f}% — clicks dominate the noise floor "
             "around 57 kHz; RBDS decode is almost certainly impossible. Check antenna / signal strength."
         )
-    elif click_rate >= CLICK_RATE_WARNING_PCT:
+    elif not no_carrier and click_rate >= CLICK_RATE_WARNING_PCT:
         _add(
             "warning", "discriminator_clicks",
             f"FM discriminator click rate {click_rate:.2f}% — elevated; RBDS BLER will be poor."
         )
 
-    if env_ratio >= ENVELOPE_RATIO_CRITICAL:
+    if not no_carrier and env_ratio >= ENVELOPE_RATIO_CRITICAL:
         _add(
             "critical", "envelope_ratio",
             f"Envelope P99/P01 = {env_ratio:.1f} — upstream IF / anti-alias filter is too narrow; "
             "FM shoulders being clipped (AM-to-PM distortion)."
         )
-    elif env_ratio >= ENVELOPE_RATIO_WARNING:
+    elif not no_carrier and env_ratio >= ENVELOPE_RATIO_WARNING:
         _add(
             "warning", "envelope_ratio",
             f"Envelope P99/P01 = {env_ratio:.1f} — slightly elevated."
@@ -681,8 +722,26 @@ def analyze_capture(
                 risk = "low"
             reasons.append(f"Front-end: {finding['message']}")
 
+    # No-carrier captures dominate the verdict: every subcarrier SNR is noise
+    # vs noise, so lead with the real problem and don't frame it as RBDS being
+    # "suppressed" by the front end (it isn't — there's simply no signal).
+    no_carrier = any(f["code"] == "no_carrier" for f in frontend.findings)
+
     # Summary text.
     summary_messages: List[str] = []
+    if no_carrier:
+        summary_messages.append(
+            "No FM carrier present — the capture is band-limited noise "
+            "(white noise on the audio). Check the antenna, RF gain, and "
+            "tuned frequency; the subcarrier SNRs below are not meaningful "
+            "until a carrier is acquired."
+        )
+        if risk in ("none", "low"):
+            risk = "elevated"
+        reasons.append(
+            "Capture contains no FM carrier (noise floor only) — RBDS cannot "
+            "decode until the front end delivers a signal."
+        )
     if rbds is not None and rbds.snr_db is not None:
         summary_messages.append(
             f"57 kHz RBDS subcarrier: {rbds.snr_db:.1f} dB SNR ({rbds.verdict})."
