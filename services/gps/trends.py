@@ -111,7 +111,7 @@ def new_last_bucket_ids() -> Dict[str, Optional[int]]:
 
 
 def collect_chrony_tracking() -> Dict[str, Optional[float]]:
-    """Run ``chronyc -c tracking`` and return the four fields the trend
+    """Run ``chronyc -c tracking`` and return the fields the trend
     charts care about.  Missing/unparseable fields come back as ``None``;
     if chronyc isn't installed at all we return an empty dict so callers
     can detect "no chrony data this tick" without faking values.
@@ -135,6 +135,11 @@ def collect_chrony_tracking() -> Dict[str, Optional[float]]:
             "rms_offset_s":      parsed.get("rms_offset_s"),
             "frequency_ppm":     parsed.get("frequency_ppm"),
             "residual_freq_ppm": parsed.get("residual_freq_ppm"),
+            # Skew is chrony's own estimate of frequency-measurement
+            # uncertainty — the most honest single-number "oscillator
+            # stability" signal we have, so the dashboard trends it.
+            "skew_ppm":          parsed.get("skew_ppm"),
+            "root_dispersion_s": parsed.get("root_dispersion_s"),
         }
     except Exception as exc:
         logger.debug("Trend sampler: chronyc tracking failed: %s", exc)
@@ -202,6 +207,22 @@ def collect_gps_status(gps_manager) -> Dict[str, Any]:
     if jamming_state is not None:
         jamming_state = str(jamming_state)
 
+    # Short-term Allan deviation slices for the stability-trend chart.
+    # A single σ_y reading only says "now"; archiving τ=10 s / τ=100 s
+    # over days is what actually catches a slowly degrading oscillator.
+    adev = status.get("allan_deviation") or {}
+    adev_10s = adev_100s = None
+    tau_list = adev.get("tau_s")
+    sigma_list = adev.get("sigma_y")
+    if isinstance(tau_list, list) and isinstance(sigma_list, list):
+        for tau, sigma in zip(tau_list, sigma_list):
+            if tau == 10:
+                adev_10s = _num(sigma)
+            elif tau == 100:
+                adev_100s = _num(sigma)
+
+    active_prns = status.get("active_satellite_prns") or []
+
     return {
         "hdop":            _num(status.get("hdop")),
         "vdop":            _num(status.get("vdop")),
@@ -213,6 +234,18 @@ def collect_gps_status(gps_manager) -> Dict[str, Any]:
         "noise_level":     _num(status.get("noise_level")),
         "agc_count":       _num(status.get("agc_count")),
         "jamming_state":   jamming_state,
+        # Satellite counts — "used in fix" vs "in view" history makes
+        # slow constellation losses visible without the SNR heatmap.
+        "sats_used":       float(len(active_prns)) if isinstance(active_prns, list) else None,
+        "sats_visible":    float(len(sats_in_view)),
+        # Stability + thermal correlation series.
+        "adev_10s":        adev_10s,
+        "adev_100s":       adev_100s,
+        "cpu_temp_c":      _num(status.get("cpu_temp_c")),
+        # Position for the wander/CEP scatter — multipath and spoofing
+        # both show up as the fix walking away from the site's median.
+        "lat":             _num(status.get("latitude")),
+        "lon":             _num(status.get("longitude")),
         # Per-PRN SNR map.  Always present (possibly empty) so the
         # dashboard can distinguish "no data this tick" from "row
         # predates the per-PRN feature".
@@ -247,8 +280,11 @@ def aggregate_samples(
     # Numeric fields we want to average across the bucket.
     NUM_FIELDS = (
         "last_offset_s", "rms_offset_s", "frequency_ppm", "residual_freq_ppm",
+        "skew_ppm", "root_dispersion_s",
         "hdop", "vdop", "pdop", "avg_snr", "fix_age_s", "holdover_s",
         "pps_jitter_ns", "noise_level", "agc_count",
+        "sats_used", "sats_visible", "adev_10s", "adev_100s",
+        "cpu_temp_c", "lat", "lon",
     )
 
     sums: "Dict[str, float]" = {}
