@@ -99,11 +99,12 @@
 }
 
 .canvas-toolbar {
-    padding: 0.75rem 1rem;
+    padding: 0.5rem 1rem;
     background: var(--card-bg, #fff);
     border-bottom: 1px solid var(--border-color, #dee2e6);
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 0.5rem;
 }
 
@@ -140,11 +141,23 @@
 
 .canvas-container {
     position: relative;
-    background: var(--bg-primary);
-    border: 3px solid var(--color-border-dark);
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    transform-origin: center center;
+    background: #000;
+    border: 6px solid #1b1f24;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45), inset 0 0 18px rgba(0, 0, 0, 0.8);
+}
+
+/* Per-display "bezel" glow so the preview feels like the real hardware */
+.canvas-container.display-oled {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45), 0 0 22px rgba(120, 180, 255, 0.18);
+}
+
+.canvas-container.display-vfd {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45), 0 0 22px rgba(60, 255, 190, 0.18);
+}
+
+.canvas-container.display-led {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45), 0 0 22px rgba(255, 170, 0, 0.2);
 }
 
 #display-canvas {
@@ -152,6 +165,16 @@
     image-rendering: pixelated;
     image-rendering: crisp-edges;
     cursor: crosshair;
+}
+
+#canvas-grid {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    display: none;
 }
 
 #element-overlays {
@@ -165,22 +188,34 @@
 
 .element-overlay {
     position: absolute;
-    border: 2px dashed var(--color-info);
-    background: var(--color-info-light);
+    border: 1px dashed rgba(59, 130, 246, 0.55);
+    background: transparent;
     cursor: move;
     pointer-events: all;
-    transition: border-color 0.2s;
+    transition: border-color 0.15s, background 0.15s;
 }
 
 .element-overlay:hover {
-    border-color: var(--color-info-dark);
-    background: rgba(59, 130, 246, 0.2);
+    border-color: var(--color-info-dark, #2563eb);
+    background: rgba(59, 130, 246, 0.12);
 }
 
 .element-overlay.selected {
-    border-color: var(--color-warning);
-    background: var(--color-warning-light);
-    border-style: solid;
+    border: 1px solid var(--color-warning, #f59e0b);
+    background: rgba(245, 158, 11, 0.08);
+}
+
+.resize-handle {
+    position: absolute;
+    right: -6px;
+    bottom: -6px;
+    width: 11px;
+    height: 11px;
+    border-radius: 2px;
+    background: var(--color-warning, #f59e0b);
+    border: 1px solid #fff;
+    cursor: nwse-resize;
+    pointer-events: all;
 }
 
 .element-overlay-label {
@@ -452,11 +487,83 @@
     color: var(--color-info);
 }
 
-/* Add-element selector in the toolbar */
-.add-element-select {
-    width: auto;
-    min-width: 170px;
-    font-weight: 600;
+/* Element palette in the toolbar */
+.element-palette {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}
+
+.palette-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 0.35rem 0.5rem;
+    min-width: 52px;
+    border: 1px solid var(--border-color, #dee2e6);
+    border-radius: 6px;
+    background: var(--bg-primary, #f8f9fa);
+    color: var(--text-primary, #212529);
+    cursor: pointer;
+    font-size: 0.7rem;
+    line-height: 1;
+    transition: all 0.15s;
+}
+
+.palette-btn i {
+    font-size: 0.9rem;
+}
+
+.palette-btn:hover {
+    border-color: var(--color-info, #3b82f6);
+    background: var(--color-info-light, rgba(59, 130, 246, 0.12));
+    color: var(--color-info, #3b82f6);
+}
+
+/* Toolbar toggle buttons (grid / snap) */
+.canvas-toolbar .btn.active {
+    background: var(--color-info, #3b82f6);
+    border-color: var(--color-info, #3b82f6);
+    color: #fff;
+}
+
+.canvas-hints {
+    margin-top: 0.5rem;
+    font-size: 0.75rem;
+    color: var(--text-secondary, #6c757d);
+    text-align: center;
+}
+
+/* Toast notifications */
+.editor-toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translate(-50%, 16px);
+    padding: 0.6rem 1.2rem;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 0.9rem;
+    font-weight: 500;
+    z-index: 2000;
+    opacity: 0;
+    transition: opacity 0.25s, transform 0.25s;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+    pointer-events: none;
+}
+
+.editor-toast.show {
+    opacity: 1;
+    transform: translate(-50%, 0);
+}
+
+.editor-toast-success {
+    background: #16a34a;
+}
+
+.editor-toast-error {
+    background: #dc2626;
 }
 
 .button-group {

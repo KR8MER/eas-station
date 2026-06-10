@@ -283,39 +283,28 @@ VFD_SYSTEM_METERS = {
     "template_data": {
         "type": "graphics",
         "elements": [
+            # Title row with decorative rule filling the remaining width
+            {"type": "text", "x": 0, "y": 0, "text": "SYSTEM"},
+            {"type": "line", "x1": 44, "y1": 3, "x2": 139, "y2": 3},
+            # Three aligned meter rows: label, bordered bar, value column
+            {"type": "text", "x": 0, "y": 8, "text": "CPU"},
             {
-                "type": "text",
-                "x": 2,
-                "y": 1,
-                "text": "SYSTEM RESOURCES"
+                "type": "bar", "x": 22, "y": 8, "width": 88, "height": 7,
+                "value": "{status.system_resources.cpu_usage_percent}", "border": True,
             },
+            {"type": "text", "x": 114, "y": 8, "text": "{status.system_resources.cpu_usage_percent}%"},
+            {"type": "text", "x": 0, "y": 16, "text": "MEM"},
             {
-                "type": "progress_bar",
-                "x": 10,
-                "y": 8,
-                "width": 120,
-                "height": 6,
-                "value": "{status.system_resources.cpu_usage_percent}",
-                "label": "CPU"
+                "type": "bar", "x": 22, "y": 16, "width": 88, "height": 7,
+                "value": "{status.system_resources.memory_usage_percent}", "border": True,
             },
+            {"type": "text", "x": 114, "y": 16, "text": "{status.system_resources.memory_usage_percent}%"},
+            {"type": "text", "x": 0, "y": 24, "text": "DSK"},
             {
-                "type": "progress_bar",
-                "x": 10,
-                "y": 17,
-                "width": 120,
-                "height": 6,
-                "value": "{status.system_resources.memory_usage_percent}",
-                "label": "MEM"
+                "type": "bar", "x": 22, "y": 24, "width": 88, "height": 7,
+                "value": "{status.system_resources.disk_usage_percent}", "border": True,
             },
-            {
-                "type": "progress_bar",
-                "x": 10,
-                "y": 26,
-                "width": 120,
-                "height": 6,
-                "value": "{status.system_resources.disk_usage_percent}",
-                "label": "DSK"
-            }
+            {"type": "text", "x": 114, "y": 24, "text": "{status.system_resources.disk_usage_percent}%"},
         ]
     },
     "data_sources": [
@@ -337,30 +326,27 @@ VFD_AUDIO_VU_METER = {
     "template_data": {
         "type": "graphics",
         "elements": [
+            # Title row with decorative rule
+            {"type": "text", "x": 0, "y": 0, "text": "AUDIO"},
+            {"type": "line", "x1": 38, "y1": 3, "x2": 139, "y2": 3},
+            # PEAK meter row
+            {"type": "text", "x": 0, "y": 9, "text": "PK"},
             {
-                "type": "text",
-                "x": 2,
-                "y": 1,
-                "text": "AUDIO LEVELS"
+                "type": "bar", "x": 16, "y": 9, "width": 100, "height": 8,
+                "value": "{audio.peak_level_percent}", "border": True,
             },
+            {"type": "text", "x": 120, "y": 9, "text": "{audio.peak_level_percent}"},
+            # Scale ticks at 25/50/75% shared between the meters
+            {"type": "vline", "x": 41, "y": 18, "height": 2},
+            {"type": "vline", "x": 66, "y": 18, "height": 2},
+            {"type": "vline", "x": 91, "y": 18, "height": 2},
+            # RMS meter row
+            {"type": "text", "x": 0, "y": 22, "text": "RMS"},
             {
-                "type": "progress_bar",
-                "x": 10,
-                "y": 12,
-                "width": 120,
-                "height": 8,
-                "value": "{audio.peak_level_percent}",
-                "label": "PEAK"
+                "type": "bar", "x": 16, "y": 22, "width": 100, "height": 8,
+                "value": "{audio.rms_level_percent}", "border": True,
             },
-            {
-                "type": "progress_bar",
-                "x": 10,
-                "y": 23,
-                "width": 120,
-                "height": 8,
-                "value": "{audio.rms_level_percent}",
-                "label": "RMS"
-            }
+            {"type": "text", "x": 120, "y": 22, "text": "{audio.rms_level_percent}"},
         ]
     },
     "data_sources": [
@@ -449,39 +435,21 @@ VFD_NETWORK_STATUS = {
     "template_data": {
         "type": "graphics",
         "elements": [
-            {
-                "type": "rectangle",
-                "x1": 2,
-                "y1": 2,
-                "x2": 137,
-                "y2": 29,
-                "filled": False
-            },
-            {
-                "type": "text",
-                "x": 6,
-                "y": 5,
-                "text": "NETWORK STATUS"
-            },
-            {
-                "type": "line",
-                "x1": 6,
-                "y1": 13,
-                "x2": 133,
-                "y2": 13
-            },
-            {
-                "type": "text",
-                "x": 6,
-                "y": 16,
-                "text": "IP: {network.ip_address}"
-            },
-            {
-                "type": "text",
-                "x": 6,
-                "y": 24,
-                "text": "Uptime: {network.uptime_human}"
-            }
+            # Corner brackets instead of a full frame for a cleaner look
+            {"type": "line", "x1": 0, "y1": 0, "x2": 12, "y2": 0},
+            {"type": "line", "x1": 0, "y1": 0, "x2": 0, "y2": 8},
+            {"type": "line", "x1": 127, "y1": 0, "x2": 139, "y2": 0},
+            {"type": "line", "x1": 139, "y1": 0, "x2": 139, "y2": 8},
+            {"type": "line", "x1": 0, "y1": 31, "x2": 12, "y2": 31},
+            {"type": "line", "x1": 0, "y1": 23, "x2": 0, "y2": 31},
+            {"type": "line", "x1": 127, "y1": 31, "x2": 139, "y2": 31},
+            {"type": "line", "x1": 139, "y1": 23, "x2": 139, "y2": 31},
+            # Centered title ("NETWORK" = 7 chars x 6px = 42px wide)
+            {"type": "text", "x": 49, "y": 2, "text": "NETWORK"},
+            {"type": "line", "x1": 20, "y1": 11, "x2": 119, "y2": 11},
+            # IP and uptime rows
+            {"type": "text", "x": 8, "y": 14, "text": "IP {network.ip_address}"},
+            {"type": "text", "x": 8, "y": 23, "text": "Up {network.uptime_human}"}
         ]
     },
     "data_sources": [
@@ -666,7 +634,7 @@ OLED_SYSTEM_OVERVIEW = {
 
 OLED_ALERT_SUMMARY = {
     "name": "oled_alert_summary",
-    "description": "Active alert highlight with event, severity, and affected area.",
+    "description": "Active alert spotlight with warning banner, event, severity, and area.",
     "display_type": "oled",
     "enabled": True,
     "priority": 2,
@@ -674,38 +642,40 @@ OLED_ALERT_SUMMARY = {
     "duration": 12,
     "template_data": {
         "clear": True,
-        "lines": [
+        "elements": [
+            # Inverted header banner with warning icon and active count
+            {"type": "rectangle", "x": 0, "y": 0, "width": 128, "height": 12, "filled": True},
+            {"type": "icon", "name": "warning", "x": 2, "y": 2, "size": 9},
+            {"type": "text", "text": "ALERTS", "x": 14, "y": 1, "font": "small", "invert": True},
             {
-                "text": "◢ ALERT STACK ◣",
-                "font": "medium",
-                "wrap": False,
-                "invert": True,
-                "spacing": 1,
+                "type": "text", "text": "{alerts.metadata.total_features} active",
+                "x": 125, "y": 1, "font": "small", "invert": True,
+                "align": "right", "max_width": 60, "overflow": "trim",
+            },
+            # Event name, prominent
+            {
+                "type": "text", "text": "{alerts.features[0].properties.event}",
+                "x": 2, "y": 15, "font": "medium",
+                "max_width": 124, "overflow": "ellipsis", "allow_empty": True,
+            },
+            # Severity / expiry row
+            {
+                "type": "text", "text": "Sev {alerts.features[0].properties.severity}",
+                "x": 2, "y": 31, "font": "small",
+                "max_width": 64, "overflow": "trim", "allow_empty": True,
             },
             {
-                "text": "Active {alerts.metadata.total_features}",
-                "font": "small",
-                "wrap": False,
-                "y": 15,
+                "type": "text", "text": "Exp {alerts.features[0].properties.expires_iso}",
+                "x": 125, "y": 31, "font": "small", "align": "right",
+                "max_width": 60, "overflow": "trim", "allow_empty": True,
             },
+            {"type": "dotted_hline", "x": 0, "y": 44, "width": 128},
+            # Affected area footer with shield icon
+            {"type": "icon", "name": "shield", "x": 2, "y": 49, "size": 11},
             {
-                "text": "{alerts.features[0].properties.event}",
-                "font": "medium",
-                "y": 26,
-                "max_width": 124,
-                "allow_empty": True,
-            },
-            {
-                "text": "Severity {alerts.features[0].properties.severity}  ·  Exp {alerts.features[0].properties.expires_iso}",
-                "y": 40,
-                "allow_empty": True,
-                "max_width": 124,
-            },
-            {
-                "text": "Area {alerts.features[0].properties.area_desc}",
-                "y": 52,
-                "max_width": 124,
-                "allow_empty": True,
+                "type": "text", "text": "{alerts.features[0].properties.area_desc}",
+                "x": 17, "y": 50, "font": "small",
+                "max_width": 109, "overflow": "ellipsis", "allow_empty": True,
             },
         ],
     },
@@ -724,41 +694,40 @@ OLED_NETWORK_BEACON = {
     "duration": 12,
     "template_data": {
         "clear": True,
-        "lines": [
+        "elements": [
+            # Inverted header banner with network icon and interface name
+            {"type": "rectangle", "x": 0, "y": 0, "width": 128, "height": 12, "filled": True},
+            {"type": "icon", "name": "network", "x": 2, "y": 2, "size": 9},
+            {"type": "text", "text": "NETWORK", "x": 14, "y": 1, "font": "small", "invert": True},
             {
-                "text": "◢ NETWORK BEACON ◣",
-                "font": "medium",
-                "wrap": False,
-                "invert": True,
-                "spacing": 1,
+                "type": "text", "text": "{health.network.primary_interface_name}",
+                "x": 125, "y": 1, "font": "small", "invert": True,
+                "align": "right", "max_width": 50, "overflow": "trim",
+            },
+            # Hostname, prominent
+            {
+                "type": "text", "text": "{health.system.hostname}",
+                "x": 2, "y": 15, "font": "medium",
+                "max_width": 124, "overflow": "ellipsis",
+            },
+            # IPv4 address, prominent
+            {
+                "type": "text", "text": "{health.network.primary_ipv4}",
+                "x": 2, "y": 31, "font": "medium",
+                "max_width": 124, "overflow": "trim", "allow_empty": True,
+            },
+            {"type": "hline", "x": 0, "y": 47, "width": 128},
+            # Footer: uptime left, link speed right
+            {"type": "icon", "name": "clock", "x": 2, "y": 51, "size": 8},
+            {
+                "type": "text", "text": "Up {health.system.uptime_human}",
+                "x": 13, "y": 52, "font": "small",
+                "max_width": 70, "overflow": "trim", "allow_empty": True,
             },
             {
-                "text": "{health.system.hostname}",
-                "font": "small",
-                "wrap": False,
-                "y": 15,
-                "max_width": 124,
-            },
-            {
-                "text": "Uptime {health.system.uptime_human}",
-                "y": 27,
-                "allow_empty": True,
-            },
-            {
-                "text": "LAN {health.network.primary_interface_name}",
-                "y": 39,
-                "allow_empty": True,
-            },
-            {
-                "text": "{health.network.primary_ipv4}",
-                "y": 49,
-                "allow_empty": True,
-            },
-            {
-                "text": "Speed {health.network.primary_interface.speed_mbps} Mbps  MTU {health.network.primary_interface.mtu}",
-                "y": 59,
-                "allow_empty": True,
-                "max_width": 124,
+                "type": "text", "text": "{health.network.primary_interface.speed_mbps}Mb",
+                "x": 125, "y": 52, "font": "small", "align": "right",
+                "max_width": 40, "overflow": "trim", "allow_empty": True,
             },
         ],
     },
@@ -777,36 +746,41 @@ OLED_IPAWS_POLL_WATCH = {
     "duration": 12,
     "template_data": {
         "clear": True,
-        "lines": [
+        "elements": [
+            # Inverted header banner with shield icon and current time
+            {"type": "rectangle", "x": 0, "y": 0, "width": 128, "height": 12, "filled": True},
+            {"type": "icon", "name": "shield", "x": 2, "y": 2, "size": 9},
+            {"type": "text", "text": "IPAWS POLLER", "x": 14, "y": 1, "font": "small", "invert": True},
             {
-                "text": "◢ IPAWS POLLER ◣",
-                "font": "medium",
-                "wrap": False,
-                "invert": True,
-                "spacing": 1,
+                "type": "text", "text": "{now.time_24}",
+                "x": 125, "y": 1, "font": "small", "invert": True, "align": "right",
+            },
+            # Poll status, prominent, with check icon
+            {"type": "icon", "name": "check", "x": 2, "y": 16, "size": 10},
+            {
+                "type": "text", "text": "{status.last_poll.status}",
+                "x": 16, "y": 15, "font": "medium",
+                "max_width": 108, "overflow": "trim", "allow_empty": True,
+            },
+            {"type": "dotted_hline", "x": 0, "y": 31, "width": 128},
+            # New vs fetched alert counts
+            {
+                "type": "text", "text": "+{status.last_poll.alerts_new} new",
+                "x": 2, "y": 35, "font": "small",
+                "max_width": 60, "overflow": "trim", "allow_empty": True,
             },
             {
-                "text": "Last {status.last_poll.local_timestamp}",
-                "y": 17,
-                "allow_empty": True,
-                "max_width": 124,
+                "type": "text", "text": "{status.last_poll.alerts_fetched} fetched",
+                "x": 125, "y": 35, "font": "small", "align": "right",
+                "max_width": 64, "overflow": "trim", "allow_empty": True,
             },
+            {"type": "hline", "x": 0, "y": 47, "width": 128},
+            # Last poll timestamp footer
+            {"type": "icon", "name": "clock", "x": 2, "y": 51, "size": 8},
             {
-                "text": "Status {status.last_poll.status}",
-                "y": 29,
-                "allow_empty": True,
-            },
-            {
-                "text": "+{status.last_poll.alerts_new} new / {status.last_poll.alerts_fetched} fetched",
-                "y": 41,
-                "allow_empty": True,
-                "max_width": 124,
-            },
-            {
-                "text": "Source {status.last_poll.data_source}",
-                "y": 53,
-                "allow_empty": True,
-                "max_width": 124,
+                "type": "text", "text": "Last {status.last_poll.local_timestamp}",
+                "x": 13, "y": 52, "font": "small",
+                "max_width": 113, "overflow": "trim", "allow_empty": True,
             },
         ],
     },
@@ -825,36 +799,46 @@ OLED_AUDIO_HEALTH_MATRIX = {
     "duration": 12,
     "template_data": {
         "clear": True,
-        "lines": [
+        "elements": [
+            # Inverted header banner with heartbeat icon and overall status
+            {"type": "rectangle", "x": 0, "y": 0, "width": 128, "height": 12, "filled": True},
+            {"type": "icon", "name": "heartbeat", "x": 2, "y": 2, "size": 9},
+            {"type": "text", "text": "AUDIO HEALTH", "x": 14, "y": 1, "font": "small", "invert": True},
             {
-                "text": "◢ AUDIO HEALTH ◣",
-                "font": "medium",
-                "wrap": False,
-                "invert": True,
-                "spacing": 1,
+                "type": "text", "text": "{audio_health.overall_status}",
+                "x": 125, "y": 1, "font": "small", "invert": True,
+                "align": "right", "max_width": 48, "overflow": "trim",
+            },
+            # Health score bar row
+            {"type": "text", "text": "Score", "x": 2, "y": 16, "font": "small"},
+            {
+                "type": "bar", "value": "{audio_health.overall_health_score}",
+                "x": 36, "y": 15, "width": 62, "height": 10,
             },
             {
-                "text": "Score {audio_health.overall_health_score}% ({audio_health.overall_status})",
-                "y": 15,
-                "allow_empty": True,
-                "max_width": 124,
+                "type": "text", "text": "{audio_health.overall_health_score}%",
+                "x": 125, "y": 16, "font": "small", "align": "right",
+                "max_width": 26, "overflow": "trim", "allow_empty": True,
+            },
+            {"type": "dotted_hline", "x": 0, "y": 30, "width": 128},
+            # Active source count
+            {
+                "type": "text", "text": "Sources {audio_health.active_sources}/{audio_health.total_sources} active",
+                "x": 2, "y": 34, "font": "small",
+                "max_width": 124, "overflow": "trim", "allow_empty": True,
+            },
+            {"type": "hline", "x": 0, "y": 46, "width": 128},
+            # First-source diagnosis footer
+            {"type": "icon", "name": "wave", "x": 2, "y": 50, "size": 9},
+            {
+                "type": "text", "text": "{audio_health.health_records[0].source_name}",
+                "x": 14, "y": 51, "font": "small",
+                "max_width": 74, "overflow": "ellipsis", "allow_empty": True,
             },
             {
-                "text": "Active {audio_health.active_sources}/{audio_health.total_sources}",
-                "y": 27,
-                "allow_empty": True,
-            },
-            {
-                "text": "{audio_health.health_records[0].source_name}",
-                "y": 39,
-                "allow_empty": True,
-                "max_width": 124,
-            },
-            {
-                "text": "Healthy {audio_health.health_records[0].is_healthy}  Silence {audio_health.health_records[0].silence_detected}",
-                "y": 51,
-                "allow_empty": True,
-                "max_width": 124,
+                "type": "text", "text": "OK {audio_health.health_records[0].is_healthy}",
+                "x": 125, "y": 51, "font": "small", "align": "right",
+                "max_width": 36, "overflow": "trim", "allow_empty": True,
             },
         ],
     },
