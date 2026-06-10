@@ -1,6 +1,6 @@
 # Audio/SDR Configuration Fix Tool
 
-EAS Station™ includes a built-in diagnostic page that detects and repairs the most common sample-rate misconfiguration in SDR setups: an **audio** sample rate accidentally stored where an **IQ** (RF) sample rate belongs, or vice versa. The page lives at `/admin/audio-sdr-fix` (it is not linked from the navigation menus — enter the URL directly while logged in).
+EAS Station™ includes a built-in diagnostic page that detects and repairs the most common sample-rate misconfiguration in SDR setups: an **audio** sample rate accidentally stored where an **IQ** (RF) sample rate belongs, or vice versa. The page lives at `/admin/audio-sdr-fix`, reachable from **Settings → Audio/SDR Fix** (`/settings`). It requires the `system.configure` permission.
 
 ---
 
@@ -50,7 +50,7 @@ The response lists each change with old and new values, and the page automatical
 
 ## Restarting the SDR Service
 
-The new sample rates are stored in the database but the running SDR service keeps using its old values until restarted. The tool's **Step 3** panel shows the command — the `POST /api/admin/audio-sdr-fix/restart-service` endpoint does **not** restart anything itself; it only returns the command for you to run on the host:
+The new sample rates are stored in the database but the running SDR service keeps using its old values until restarted. The tool's **Step 3** panel has a **Restart SDR Service Now** button (`POST /api/admin/audio-sdr-fix/restart-service`) that restarts the unit via `systemctl`. If the automatic restart fails (e.g., `sudo` rights are missing), the response includes the command to run manually on the host:
 
 ```bash
 sudo systemctl restart eas-station-sdr.service
@@ -58,7 +58,7 @@ sudo systemctl restart eas-station-sdr.service
 
 After the restart, verify:
 
-- Icecast mount points are listed (default `http://<host>:8001/`)
+- Icecast mount points are listed (default `http://<host>:8000/`)
 - The waterfall display (`/admin/radio`) shows the correct MHz frequency scale
 - Streams play clear audio with no squeal
 
@@ -71,7 +71,7 @@ After the restart, verify:
 | `GET` | `/admin/audio-sdr-fix` | Diagnostic page (HTML) |
 | `GET` | `/api/admin/audio-sdr-fix/diagnose` | Scan enabled receivers/sources, return issues as JSON |
 | `POST` | `/api/admin/audio-sdr-fix/apply` | Apply the fixes described above (`{"auto_fix": true}`) |
-| `POST` | `/api/admin/audio-sdr-fix/restart-service` | Returns the manual `systemctl` restart command (does not restart) |
+| `POST` | `/api/admin/audio-sdr-fix/restart-service` | Restarts the SDR service via `systemctl` (returns the manual command if the restart fails) |
 
 All routes require a logged-in session (the application's deny-by-default guard); the POST endpoints additionally require the standard CSRF header when called outside the page.
 

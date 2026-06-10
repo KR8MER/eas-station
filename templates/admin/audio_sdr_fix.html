@@ -78,7 +78,11 @@
                 </div>
                 <div class="card-body">
                     <p>Configuration has been updated! Now restart the SDR service to apply the changes.</p>
-                    <p><strong>Run this command on your Raspberry Pi:</strong></p>
+                    <button id="restartBtn" class="btn btn-warning mb-3" onclick="restartSdrService()">
+                        <i class="fas fa-sync-alt"></i> Restart SDR Service Now
+                    </button>
+                    <div id="restartResult" style="display: none;"></div>
+                    <p><strong>Or run this command manually:</strong></p>
                     <div class="alert alert-dark">
                         <code id="restartCommand">sudo systemctl restart eas-station-sdr.service</code>
                         <button class="btn btn-sm btn-outline-secondary ml-2" onclick="copyToClipboard()">
@@ -87,7 +91,7 @@
                     </div>
                     <p class="text-muted mb-0">After restarting, check:</p>
                     <ul class="text-muted">
-                        <li>Icecast mount points: <a href="http://localhost:8001/" target="_blank">http://localhost:8001/</a></li>
+                        <li>Icecast mount points: <a href="http://localhost:8000/" target="_blank">http://localhost:8000/</a></li>
                         <li>Waterfall display: <a href="/admin/radio" target="_blank">/admin/radio</a></li>
                         <li>Listen to streams - should be clear audio, no squeal</li>
                     </ul>
@@ -360,6 +364,39 @@ function copyToClipboard() {
     navigator.clipboard.writeText(command).then(() => {
         alert('Command copied to clipboard!');
     });
+}
+
+async function restartSdrService() {
+    const btn = document.getElementById('restartBtn');
+    const resultDiv = document.getElementById('restartResult');
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Restarting...';
+    resultDiv.style.display = 'none';
+
+    try {
+        const response = await fetch('/api/admin/audio-sdr-fix/restart-service', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({})
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            resultDiv.innerHTML = `<div class="alert alert-success"><i class="fas fa-check-circle"></i> ${data.message}</div>`;
+        } else {
+            resultDiv.innerHTML = `<div class="alert alert-danger"><i class="fas fa-exclamation-triangle"></i> ${data.message || data.error}</div>`;
+        }
+    } catch (error) {
+        resultDiv.innerHTML = `<div class="alert alert-danger"><i class="fas fa-exclamation-triangle"></i> Restart request failed: ${error.message}</div>`;
+    } finally {
+        resultDiv.style.display = 'block';
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-sync-alt"></i> Restart SDR Service Now';
+    }
 }
 </script>
 {% endblock %}

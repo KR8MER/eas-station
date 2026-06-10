@@ -70,15 +70,7 @@ A logout/login or service restart is required for group changes to take effect.
    sudo systemctl restart eas-station-hardware
    ```
 
-### Via eas-config
-
-```bash
-sudo eas-config
-```
-
-Select **5. Hardware Integration → VFD Display Settings**.
-
-> **Note:** VFD settings are stored in the database (`hardware_settings` table) and managed through the web UI. Legacy `VFD_*` environment variables in `.env` are imported once during the initial migration and are **not** read at runtime afterwards.
+> **Note:** VFD settings are stored in the database (`hardware_settings` table) and managed through the web UI shown above. The `eas-config` TUI no longer edits hardware settings — its Hardware Integration entry points to the web UI. Legacy `VFD_*` environment variables in `.env` are imported once during the initial migration and are **not** read at runtime afterwards.
 
 ---
 

@@ -267,6 +267,18 @@
 
         {% if can_manage_config %}
         <div class="col-sm-6 col-md-4 col-xl-3">
+            <a href="/admin/audio-sdr-fix" class="settings-card">
+                <div class="settings-card-icon"><i class="fas fa-wrench"></i></div>
+                <div class="settings-card-body">
+                    <div class="settings-card-title">Audio/SDR Fix</div>
+                    <p class="settings-card-desc">Diagnose and correct IQ/audio sample-rate misconfigurations.</p>
+                </div>
+            </a>
+        </div>
+        {% endif %}
+
+        {% if can_manage_config %}
+        <div class="col-sm-6 col-md-4 col-xl-3">
             <a href="/admin/hardware" class="settings-card">
                 <div class="settings-card-icon"><i class="fas fa-sliders"></i></div>
                 <div class="settings-card-body">

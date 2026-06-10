@@ -15,7 +15,7 @@ These ports need to be accessible from outside the host for normal operation:
 | **443** | TCP | HTTPS (nginx) | Web interface (primary access). Uses SSL/TLS encryption. **Auto-configured in bare-metal install.** |
 | **80** | TCP | HTTP (nginx) | Redirects to HTTPS. Also needed for Let's Encrypt certificate renewal. **Auto-configured in bare-metal install.** |
 | **22** | TCP | SSH | Remote server access for management. **Auto-configured in bare-metal install.** |
-| **8000** | TCP | Icecast | Audio streaming server for public stream access. Icecast listens on `ICECAST_PORT` (default **8000**). The default `.env` written by `install.sh` also sets `ICECAST_EXTERNAL_PORT=8001` for advertised stream URLs — unless you run a proxy on 8001, set both values to the same port. **Manual configuration required.** |
+| **8000** | TCP | Icecast | Audio streaming server for public stream access. Icecast listens on `ICECAST_PORT` (default **8000**); `ICECAST_EXTERNAL_PORT` controls the port advertised in stream URLs and should stay equal to it unless a reverse proxy exposes Icecast on a different public port. **Manual configuration required.** |
 
 
 These ports are used internally between services and should **not** be exposed to the internet:
@@ -97,7 +97,7 @@ With these firewall rules in place, you can access your EAS Station™ from any 
 
 ```bash
 # Allow Icecast streaming (for public audio streams)
-sudo ufw allow 8001/tcp
+sudo ufw allow 8000/tcp
 
 # Verify rules
 sudo ufw status verbose
@@ -118,7 +118,7 @@ sudo ufw allow 80/tcp   # HTTP
 sudo ufw allow 443/tcp  # HTTPS
 
 # Optional: Allow Icecast streaming
-sudo ufw allow 8001/tcp
+sudo ufw allow 8000/tcp
 
 # Enable firewall
 sudo ufw enable
@@ -137,7 +137,7 @@ sudo firewall-cmd --permanent --add-port=443/tcp
 sudo firewall-cmd --permanent --add-service=http
 
 # Allow Icecast streaming (optional, for public audio streams)
-sudo firewall-cmd --permanent --add-port=8001/tcp
+sudo firewall-cmd --permanent --add-port=8000/tcp
 
 # Reload and verify
 sudo firewall-cmd --reload
@@ -154,7 +154,7 @@ sudo iptables -A INPUT -p tcp --dport 443 -j ACCEPT
 sudo iptables -A INPUT -p tcp --dport 80 -j ACCEPT
 
 # Allow Icecast streaming (optional, for public audio streams)
-sudo iptables -A INPUT -p tcp --dport 8001 -j ACCEPT
+sudo iptables -A INPUT -p tcp --dport 8000 -j ACCEPT
 
 # Save rules (varies by distribution)
 sudo netfilter-persistent save  # Debian/Ubuntu
@@ -179,7 +179,7 @@ If running on a cloud provider (AWS, Azure, GCP, DigitalOcean, etc.), you also n
 
 | Direction | Port | Protocol | Source | Description |
 |-----------|------|----------|--------|-------------|
-| Inbound | 8001 | TCP | 0.0.0.0/0 | Icecast audio streaming (if public streams enabled) |
+| Inbound | 8000 | TCP | 0.0.0.0/0 | Icecast audio streaming (if public streams enabled) |
 
 ## Troubleshooting Connection Issues
 
@@ -232,7 +232,7 @@ This error indicates nginx cannot connect to the Flask backend (port 5000). Comm
 
 3. **Test local access**:
    ```bash
-   curl http://localhost:8001/status-json.xsl
+   curl http://localhost:8000/status-json.xsl
    ```
 
 ## Related Documentation

@@ -38,7 +38,7 @@ When you launch `eas-config`, the main menu appears:
    2  Database Configuration  (PostgreSQL settings)
    3  Alert Sources           (NOAA, IPAWS, Manual)
    4  Audio Settings          (Receivers, Icecast, Broadcasts)
-   5  Hardware Integration    (GPIO, LED Signs, VFD)
+   5  Hardware Integration    (managed in the web UI)
    6  Network Settings        (Firewall, Remote Access)
    7  Advanced Options        (Logging, Performance)
    8  View Current Configuration
@@ -113,18 +113,10 @@ Configure audio inputs, Icecast streaming, and EAS broadcast parameters.
 
 ### 5. Hardware Integration
 
-Configure GPIO relays, LED signs, and VFD displays.
+Hardware settings (GPIO, relays, OLED, LED signs, VFD, NeoPixel, Zigbee) are configured in the **web UI** and stored in the database — this menu entry simply points you there:
 
-| Option | Variable | Description |
-|--------|----------|-------------|
-| GPIO Enabled | `GPIO_ENABLED` | Enable/disable GPIO relay control |
-| GPIO Chip | `GPIO_CHIP` | GPIO chip device (e.g., `gpiochip0`) |
-| Transmit Relay Pin | `GPIO_TRANSMIT_PIN` | BCM pin number for transmitter relay |
-| LED Sign Enabled | `LED_SIGN_ENABLED` | Enable/disable Alpha protocol LED sign |
-| LED Sign Port | `LED_SIGN_PORT` | Serial port (e.g., `/dev/ttyUSB0`) |
-| LED Sign Baud Rate | `LED_SIGN_BAUDRATE` | Serial baud rate (default: 9600) |
-| VFD Enabled | `VFD_ENABLED` | Enable/disable Noritake VFD display |
-| VFD Port | `VFD_PORT` | Serial port for VFD |
+- Navigate to **Settings → Hardware Settings** (`/admin/hardware`).
+- Environment variables in `.env` are no longer read for hardware configuration; legacy values were imported once during the database migration.
 
 ---
 
