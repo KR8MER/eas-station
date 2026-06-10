@@ -869,6 +869,12 @@ class RBDSDecoderStats:
     blocks_fec_single: int = 0  # repaired by single-bit corrector
     blocks_fec_burst: int = 0   # repaired by burst-trapping decoder
     blocks_uncorrected: int = 0
+    # Blocks recovered by ±1-bit clock-slip realignment: the block grid was
+    # shifted one bit by an M&M symbol-timing slip and the decoder realigned
+    # in place instead of dropping sync.  These blocks also count in
+    # blocks_ok (they passed CRC cleanly once realigned); a high rate here
+    # with low BLER points at symbol-timing trouble, not RF noise.
+    blocks_bit_slips: int = 0
     groups_decoded: int = 0
     sync_acquired_unix: Optional[float] = None
     sync_lost_count: int = 0
@@ -1489,6 +1495,7 @@ class RBDSWorker:
                 blocks_fec_single=self._stats.blocks_fec_single,
                 blocks_fec_burst=self._stats.blocks_fec_burst,
                 blocks_uncorrected=self._stats.blocks_uncorrected,
+                blocks_bit_slips=self._stats.blocks_bit_slips,
                 groups_decoded=self._stats.groups_decoded,
                 sync_acquired_unix=self._stats.sync_acquired_unix,
                 sync_lost_count=self._stats.sync_lost_count,
@@ -1564,6 +1571,9 @@ class RBDSWorker:
             '_rbds_bytes_array',
             '_rbds_global_bit_counter',
             '_rbds_inverted_polarity',
+            '_rbds_reg_wide',
+            '_rbds_slip_retry_pending',
+            '_rbds_slip_saved_word',
             '_rbds_sync_tentative',
             '_rbds_tentative_good_groups',
             '_rbds_sample_buffer',
@@ -2273,6 +2283,19 @@ class RBDSWorker:
             self._rbds_bytes_array = bytearray(8)
             self._rbds_global_bit_counter = 0  # CRITICAL: maintain across buffer clears
             self._rbds_inverted_polarity = False
+            # Clock-slip recovery state (synced mode only).  _rbds_reg_wide is
+            # a 27-bit shadow of _rbds_reg so the "-1 bit" hypothesis (block
+            # boundary was one bit earlier) can be tested after the newest bit
+            # has already shifted in; _rbds_slip_retry_pending defers the
+            # verdict on a failed block by one bit to test the "+1 bit"
+            # hypothesis (boundary is one bit later).  See the slip-recovery
+            # comments in the synced-mode block handler.
+            self._rbds_reg_wide = 0
+            self._rbds_slip_retry_pending = False
+            # Polarity-adjusted word from the expected block boundary, kept
+            # across the one-bit deferral so the FEC fallback can repair the
+            # original (unshifted) word if the +1 hypothesis fails.
+            self._rbds_slip_saved_word = 0
             # Tentative-sync state: when the presync state machine declares a
             # lock we do NOT immediately trust it.  The presync gate accepts a
             # candidate after only 2 spacing-confirmed syndrome hits (~52 bits
@@ -2425,6 +2448,13 @@ class RBDSWorker:
                             # disabling the corrector that's most useful right
                             # when we're trying to ratify a tentative sync.
                             self._rbds_consecutive_crc_failures = 0
+                            # Seed the slip-recovery shadow register from the
+                            # presync register so the very first synced block
+                            # can already test the -1-bit hypothesis, and make
+                            # sure no stale deferred retry survives from a
+                            # previous lock.
+                            self._rbds_reg_wide = self._rbds_reg
+                            self._rbds_slip_retry_pending = False
                             # Update polarity to match the triggering block so synced-mode
                             # CRC checks use the correct inversion flag.
                             self._rbds_inverted_polarity = polarity
@@ -2455,6 +2485,12 @@ class RBDSWorker:
             
             else:
                 # SYNCED MODE (python-radio logic)
+                # Shadow register for slip recovery: one bit wider than
+                # _rbds_reg so the 26-bit window ending one bit *earlier*
+                # is still recoverable after the newest bit shifts in.
+                # Updated only while synced to keep the presync hot path
+                # untouched; seeded from _rbds_reg at sync acquisition.
+                self._rbds_reg_wide = ((self._rbds_reg_wide << 1) | bits[i]) & 0x7FFFFFF
                 if self._rbds_block_bit_counter < 25:
                     self._rbds_block_bit_counter += 1
                 else:
@@ -2573,33 +2609,114 @@ class RBDSWorker:
                             return True, fixed, 'burst'
                         return False, candidate_word, 'fail'
 
+                    # Block decision with clock-slip recovery.  A single M&M
+                    # symbol-timing slip shifts the 26-bit block grid by one
+                    # bit and, without recovery, every subsequent block fails
+                    # CRC until the 50-block window drops sync — a ~1 s outage
+                    # plus full reacquisition for a one-bit problem.  When the
+                    # block fails the clean CRC check we therefore test the
+                    # two ±1-bit grid hypotheses BEFORE attempting FEC:
+                    # a slipped word is a shifted codeword, which lands within
+                    # 1 bit of some *other* valid codeword often enough that
+                    # the single-bit corrector will occasionally "repair" it
+                    # into a wrong-but-valid dataword.  Slip hypotheses are
+                    # accepted only on a *clean* CRC pass (never via FEC):
+                    # a false realignment corrupts every following block,
+                    # which is worse than one lost block.
+                    #
+                    # Decision order per block:
+                    #   1. clean CRC at the expected boundary       → good
+                    #   2. clean CRC one bit earlier (-1, via the
+                    #      shadow register)                         → realign
+                    #   3. defer one bit; clean CRC one bit later
+                    #      (+1)                                     → realign
+                    #   4. FEC + polarity recovery on the word from
+                    #      the original boundary                    → repair
+                    # Steps 3 and 4 happen on the deferred retry pass; stats,
+                    # group assembly and sync-quality bookkeeping run exactly
+                    # once per block, on whichever pass reaches a verdict.
                     good_block = False
+                    slip_recovered = False
+                    # Value _rbds_block_bit_counter is reset to after this
+                    # block; 1 when one bit of the next block (or of the
+                    # restored grid) has already been consumed.
+                    next_block_bit_counter = 0
+                    retry_pass = self._rbds_slip_retry_pending
+                    self._rbds_slip_retry_pending = False
                     block_word = self._rbds_reg ^ 0x3FFFFFF if self._rbds_inverted_polarity else self._rbds_reg
 
-                    corrected, corrected_word, repair_path = _repair_block(
-                        block_word, self._rbds_block_number
-                    )
-                    if corrected:
-                        block_word = corrected_word
-                        good_block = True
-                    else:
-                        # If current polarity suddenly fails CRC but opposite polarity passes,
-                        # recover immediately instead of waiting for a full sync-loss window.
-                        alternate_block_word = block_word ^ 0x3FFFFFF
-                        corrected_alt, corrected_alt_word, alt_path = _repair_block(
-                            alternate_block_word, self._rbds_block_number
-                        )
-                        if corrected_alt:
-                            self._rbds_inverted_polarity = not self._rbds_inverted_polarity
-                            block_word = corrected_alt_word
-                            repair_path = alt_path
+                    if not retry_pass:
+                        if _crc_ok_for_block(block_word, self._rbds_block_number):
                             good_block = True
-                            logger.info(
-                                "RBDS polarity flipped while synced; continuing decode (%s polarity)",
-                                "inverted" if self._rbds_inverted_polarity else "normal",
-                            )
+                            repair_path = 'clean'
                         else:
-                            self._rbds_wrong_blocks_counter += 1
+                            # Early hypothesis (-1): the true boundary was one
+                            # bit ago; the shadow register still holds that
+                            # 26-bit window.
+                            early_word = (self._rbds_reg_wide >> 1) & 0x3FFFFFF
+                            if self._rbds_inverted_polarity:
+                                early_word ^= 0x3FFFFFF
+                            if _crc_ok_for_block(early_word, self._rbds_block_number):
+                                block_word = early_word
+                                good_block = True
+                                slip_recovered = True
+                                repair_path = 'clean'
+                                # The newest bit already belongs to the next
+                                # block on the realigned grid.
+                                next_block_bit_counter = 1
+                                logger.info(
+                                    "RBDS bit slip (-1) recovered at block %d; grid realigned in place",
+                                    self._rbds_block_number,
+                                )
+                            else:
+                                # Late hypothesis (+1) needs one more bit:
+                                # save the word from the expected boundary for
+                                # the FEC fallback and re-enter block
+                                # processing on the next bit.
+                                self._rbds_slip_saved_word = block_word
+                                self._rbds_slip_retry_pending = True
+                                self._rbds_block_bit_counter = 25
+                                continue
+                    elif _crc_ok_for_block(block_word, self._rbds_block_number):
+                        # Late-slip (+1) confirmed: a clean block sits one bit
+                        # past the expected boundary.  Keep the shifted grid.
+                        good_block = True
+                        slip_recovered = True
+                        repair_path = 'clean'
+                        logger.info(
+                            "RBDS bit slip (+1) recovered at block %d; grid realigned in place",
+                            self._rbds_block_number,
+                        )
+                    else:
+                        # No slip: fall back to FEC on the word captured at
+                        # the original boundary, then restore the original
+                        # grid (the deferral consumed one extra bit).
+                        next_block_bit_counter = 1
+                        original_word = self._rbds_slip_saved_word
+                        corrected, corrected_word, repair_path = _repair_block(
+                            original_word, self._rbds_block_number
+                        )
+                        if corrected:
+                            block_word = corrected_word
+                            good_block = True
+                        else:
+                            # If current polarity suddenly fails CRC but opposite polarity passes,
+                            # recover immediately instead of waiting for a full sync-loss window.
+                            alternate_block_word = original_word ^ 0x3FFFFFF
+                            corrected_alt, corrected_alt_word, alt_path = _repair_block(
+                                alternate_block_word, self._rbds_block_number
+                            )
+                            if corrected_alt:
+                                self._rbds_inverted_polarity = not self._rbds_inverted_polarity
+                                block_word = corrected_alt_word
+                                repair_path = alt_path
+                                good_block = True
+                                logger.info(
+                                    "RBDS polarity flipped while synced; continuing decode (%s polarity)",
+                                    "inverted" if self._rbds_inverted_polarity else "normal",
+                                )
+                            else:
+                                self._rbds_wrong_blocks_counter += 1
 
                     # Attribute this block to the FEC counters.  'clean' means
                     # the syndrome was zero before any FEC; the others are
@@ -2607,6 +2724,8 @@ class RBDSWorker:
                     # NRSC-4-B BLER computation surfaced via get_stats().
                     with self._stats_lock:
                         self._stats.blocks_total += 1
+                        if slip_recovered:
+                            self._stats.blocks_bit_slips += 1
                         if repair_path == 'clean':
                             self._stats.blocks_ok += 1
                         elif repair_path == 'single':
@@ -2648,22 +2767,54 @@ class RBDSWorker:
                                 program_identification = group_0
 
                                 if self._rbds_sync_tentative:
-                                    # Sync not yet confirmed: count this group
-                                    # toward the confirmation threshold but do
-                                    # NOT publish to the RBDSDecoder (which
-                                    # feeds the UI) and do NOT bump the
-                                    # groups_decoded stat.  If the lock turns
-                                    # out to be false the discarded group is
-                                    # exactly the kind of bogus PI/group-type
-                                    # we don't want to surface.
                                     self._rbds_tentative_good_groups += 1
-                                    logger.debug(
-                                        "RBDS tentative group %d/%d: PI=0x%04X type=%d (not published)",
-                                        self._rbds_tentative_good_groups,
-                                        self._RBDS_TENTATIVE_GOOD_GROUPS,
-                                        program_identification,
-                                        group_type,
-                                    )
+                                    if (
+                                        self._rbds_tentative_good_groups
+                                        >= self._RBDS_TENTATIVE_GOOD_GROUPS
+                                    ):
+                                        # Confirm the lock the moment the Nth
+                                        # fully-decoded group completes instead
+                                        # of waiting for the 50-block window
+                                        # boundary.  Each 4-block group is 104
+                                        # bits of CRC-validated evidence — by
+                                        # the Nth the odds of a false lock are
+                                        # negligible, and waiting out the rest
+                                        # of the window only delayed first
+                                        # published data by up to ~0.8 s on a
+                                        # healthy channel.  The confirming
+                                        # group itself is published below: it
+                                        # passed the same CRC gauntlet as
+                                        # everything that will follow it.
+                                        logger.info(
+                                            "RBDS sync CONFIRMED (%d good groups after %d blocks)",
+                                            self._rbds_tentative_good_groups,
+                                            self._rbds_blocks_counter + 1,
+                                        )
+                                        self._rbds_sync_tentative = False
+                                        with self._stats_lock:
+                                            self._stats.sync_acquired_unix = time.time()
+                                        self._rbds_decoder.process_group(
+                                            (group_0, group_1, group_2, group_3)
+                                        )
+                                        changed = True
+                                        with self._stats_lock:
+                                            self._stats.groups_decoded += 1
+                                    else:
+                                        # Below the confirmation threshold:
+                                        # count the group but do NOT publish to
+                                        # the RBDSDecoder (which feeds the UI)
+                                        # and do NOT bump groups_decoded.  If
+                                        # the lock turns out to be false this
+                                        # is exactly the kind of bogus
+                                        # PI/group-type we don't want to
+                                        # surface.
+                                        logger.debug(
+                                            "RBDS tentative group %d/%d: PI=0x%04X type=%d (not published)",
+                                            self._rbds_tentative_good_groups,
+                                            self._RBDS_TENTATIVE_GOOD_GROUPS,
+                                            program_identification,
+                                            group_type,
+                                        )
                                 else:
                                     # Update our RBDSData decoder
                                     self._rbds_decoder.process_group((group_0, group_1, group_2, group_3))
@@ -2673,46 +2824,34 @@ class RBDSWorker:
 
                                     logger.info("RBDS group: PI=0x%04X type=%s", program_identification, group_type)
                     
-                    # Reset for next block
-                    self._rbds_block_bit_counter = 0
+                    # Reset for next block.  next_block_bit_counter is 1 when
+                    # slip recovery already consumed one bit of the next block
+                    # (or of the restored grid after a failed retry), 0 otherwise.
+                    self._rbds_block_bit_counter = next_block_bit_counter
                     self._rbds_block_number = (self._rbds_block_number + 1) % 4
                     self._rbds_blocks_counter += 1
                     
                     # Check sync quality every 50 blocks
                     if self._rbds_blocks_counter == 50:
                         if self._rbds_sync_tentative:
-                            # Tentative-sync confirmation window: confirm only
-                            # if at least _RBDS_TENTATIVE_GOOD_GROUPS fully-
-                            # decoded groups landed in this window.  This
-                            # ratifies the presync state machine's lock
-                            # against actual valid RBDS frames before we
-                            # publish anything to the UI or start the
-                            # sync_acquired_unix clock.
-                            if self._rbds_tentative_good_groups >= self._RBDS_TENTATIVE_GOOD_GROUPS:
-                                logger.info(
-                                    "RBDS sync CONFIRMED (%d good groups, %d bad blocks on %d total)",
-                                    self._rbds_tentative_good_groups,
-                                    self._rbds_wrong_blocks_counter,
-                                    50,
-                                )
-                                self._rbds_sync_tentative = False
-                                with self._stats_lock:
-                                    self._stats.sync_acquired_unix = time.time()
-                            else:
-                                # Quality gate failed: drop back to presync
-                                # silently.  This was a false lock — never
-                                # surfaced to the UI — so we deliberately do
-                                # NOT bump sync_lost_count (that counter is
-                                # for *real* drops the operator should see).
-                                logger.info(
-                                    "RBDS tentative sync REJECTED (only %d good groups, %d bad blocks on %d total)",
-                                    self._rbds_tentative_good_groups,
-                                    self._rbds_wrong_blocks_counter,
-                                    50,
-                                )
-                                self._rbds_synced = False
-                                self._rbds_presync = False
-                                self._rbds_sync_tentative = False
+                            # Confirmation happens inline the moment the Nth
+                            # good group completes (see group assembly above),
+                            # so reaching the window boundary still tentative
+                            # means the lock never produced enough valid
+                            # groups.  Drop back to presync silently: this was
+                            # a false lock — never surfaced to the UI — so we
+                            # deliberately do NOT bump sync_lost_count (that
+                            # counter is for *real* drops the operator should
+                            # see).
+                            logger.info(
+                                "RBDS tentative sync REJECTED (only %d good groups, %d bad blocks on %d total)",
+                                self._rbds_tentative_good_groups,
+                                self._rbds_wrong_blocks_counter,
+                                50,
+                            )
+                            self._rbds_synced = False
+                            self._rbds_presync = False
+                            self._rbds_sync_tentative = False
                             self._rbds_tentative_good_groups = 0
                         elif self._rbds_wrong_blocks_counter > 35:
                             logger.info("RBDS SYNC LOST (%d bad blocks on %d total)", self._rbds_wrong_blocks_counter, self._rbds_blocks_counter)
