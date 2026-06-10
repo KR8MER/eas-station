@@ -4,7 +4,7 @@ This playbook summarizes the timing, redundancy, verification, and compliance co
 
 ## Timing and Signal Fidelity
 - **Deterministic timing:** Lock system clocks with chrony disciplined by GPS PPS; alert when drift exceeds tolerance for SAME frame spacing or attention tone cadence.
-- **Test harness:** Measure SAME header spacing, 1600/800 Hz AFSK at 520.83 bps, attention tone duration/levels, and EOM handling through both loopback and over-the-air captures.
+- **Test harness:** Measure SAME header spacing, AFSK mark/space tones (2083⅓ Hz / 1562.5 Hz) at 520.83 bps, attention tone duration/levels (853 + 960 Hz dual-tone), and EOM handling through both loopback and over-the-air captures.
 - **SAME alignment:** Validate header start offsets, inter-frame spacing, and bit timing against tolerances before releases.
 - **Attention tone checks:** Verify tone length, level matching, and stereo balance on each build.
 - **EOM handling:** Confirm three clean EOM bursts terminate playback and clear encoder/decoder states.
