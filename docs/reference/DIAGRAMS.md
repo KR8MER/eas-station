@@ -79,7 +79,7 @@ This page provides an index of all professional diagrams and flowcharts availabl
 
 **File:** [`../assets/diagrams/sdr-setup-flow.svg`](../assets/diagrams/sdr-setup-flow.svg)
 
-**Related Documentation:** [SDR Setup Guide](../hardware/SDR_SETUP)
+**Related Documentation:** [SDR Setup Guide](../hardware/SDR_SETUP.md)
 
 ---
 
@@ -214,7 +214,7 @@ In addition to the professional SVG diagrams above, the following documentation 
 
 ### Data Flow Sequences (Mermaid)
 
-**File:** [docs/../architecture/DATA_FLOW_SEQUENCES.md](../architecture/DATA_FLOW_SEQUENCES)
+**File:** [docs/../architecture/DATA_FLOW_SEQUENCES.md](../architecture/DATA_FLOW_SEQUENCES.md)
 
 **Contains:**
 - **Alert Processing Data Flow** - Complete CAP alert path from fetch to storage
@@ -238,7 +238,7 @@ In addition to the professional SVG diagrams above, the following documentation 
 
 ### System Architecture (Mermaid)
 
-**File:** [docs/../architecture/SYSTEM_ARCHITECTURE.md](../architecture/SYSTEM_ARCHITECTURE)
+**File:** [docs/../architecture/SYSTEM_ARCHITECTURE.md](../architecture/SYSTEM_ARCHITECTURE.md)
 
 **Contains:**
 - High-level architecture graph
@@ -263,7 +263,7 @@ In addition to the professional SVG diagrams above, the following documentation 
 
 ### Theory of Operation (Mermaid)
 
-**File:** [docs/../architecture/THEORY_OF_OPERATION.md](../architecture/THEORY_OF_OPERATION)
+**File:** [docs/../architecture/THEORY_OF_OPERATION.md](../architecture/THEORY_OF_OPERATION.md)
 
 **Contains:**
 - High-level flow diagram
@@ -272,7 +272,7 @@ In addition to the professional SVG diagrams above, the following documentation 
 
 ### Display System Architecture (Mermaid)
 
-**File:** [docs/../architecture/DISPLAY_SYSTEM_ARCHITECTURE.md](../architecture/DISPLAY_SYSTEM_ARCHITECTURE)
+**File:** [docs/../architecture/DISPLAY_SYSTEM_ARCHITECTURE.md](../architecture/DISPLAY_SYSTEM_ARCHITECTURE.md)
 
 **Contains:**
 - OLED preview system architecture
@@ -297,7 +297,7 @@ In addition to the professional SVG diagrams above, the following documentation 
 
 ### EAS Decoding Architecture (Mermaid)
 
-**File:** [docs/../architecture/EAS_DECODING_SUMMARY.md](../architecture/EAS_DECODING_SUMMARY)
+**File:** [docs/../architecture/EAS_DECODING_SUMMARY.md](../architecture/EAS_DECODING_SUMMARY.md)
 
 **Contains:**
 - Shared `SAMEDemodulatorCore` architecture showing how both the streaming and file decoders share a single DSP engine
@@ -310,7 +310,7 @@ In addition to the professional SVG diagrams above, the following documentation 
 
 ### Ohio EAS Documentation (Mermaid)
 
-**File:** [docs/../reference/OHIO_EAS_DOCUMENTATION.md](../reference/OHIO_EAS_DOCUMENTATION)
+**File:** [docs/../reference/OHIO_EAS_DOCUMENTATION.md](../reference/OHIO_EAS_DOCUMENTATION.md)
 
 **Contains:**
 - Ohio EAS coverage and county hierarchy
@@ -332,7 +332,7 @@ In addition to the professional SVG diagrams above, the following documentation 
 
 ### SDR Setup Flow (Mermaid)
 
-**File:** [docs/../hardware/SDR_SETUP.md](../hardware/SDR_SETUP)
+**File:** [docs/../hardware/SDR_SETUP.md](../hardware/SDR_SETUP.md)
 
 **Contains:**
 - Three-phase SDR setup flowchart (hardware, software configuration, testing)
@@ -343,7 +343,7 @@ In addition to the professional SVG diagrams above, the following documentation 
 
 ### Notification Delivery Flow (Mermaid)
 
-**File:** [docs/../guides/notifications.md](../guides/notifications)
+**File:** [docs/../guides/notifications.md](../guides/notifications.md)
 
 **Contains:**
 - Sequence diagram showing how EAS alerts trigger email (SMTP) and SMS (Twilio) notifications after a broadcast
@@ -354,7 +354,7 @@ In addition to the professional SVG diagrams above, the following documentation 
 
 ### Alert Geometry and Coverage Calculation (Mermaid)
 
-**File:** [docs/../architecture/ALERT_GEOMETRY_COVERAGE.md](../architecture/ALERT_GEOMETRY_COVERAGE)
+**File:** [docs/../architecture/ALERT_GEOMETRY_COVERAGE.md](../architecture/ALERT_GEOMETRY_COVERAGE.md)
 
 **Contains:**
 - **Geometry Resolution Priority Chain** — Flowchart showing the three-priority
@@ -380,7 +380,7 @@ In addition to the professional SVG diagrams above, the following documentation 
 
 ### EAS Test Signal Pipeline (Mermaid)
 
-**File:** [docs/../audio/EAS_TEST_SIGNAL_PIPELINE.md](../audio/EAS_TEST_SIGNAL_PIPELINE)
+**File:** [docs/../audio/EAS_TEST_SIGNAL_PIPELINE.md](../audio/EAS_TEST_SIGNAL_PIPELINE.md)
 
 **Contains:**
 - End-to-end flowchart of the **Inject Test Signal** feature, from operator button click through FSK generation → SAME decoder → EASBroadcaster → Icecast stream → stream listeners
@@ -454,13 +454,13 @@ When adding new diagrams:
 
 ## 🔗 Related Documentation
 
-- **[System Architecture](../architecture/SYSTEM_ARCHITECTURE)** - Complete technical architecture with Mermaid diagrams
-- **[Theory of Operation](../architecture/THEORY_OF_OPERATION)** - Conceptual overview and operational theory
-- **[Display System Architecture](../architecture/DISPLAY_SYSTEM_ARCHITECTURE)** - OLED/VFD/LED display management
-- **[EAS Decoding Summary](../architecture/EAS_DECODING_SUMMARY)** - Streaming vs. file decoder architecture
-- **[SDR Setup Guide](../hardware/SDR_SETUP)** - Radio receiver configuration
-- **[Audio Documentation](../audio/AUDIO_MONITORING)** - Audio system details
-- **[Notifications Guide](../guides/notifications)** - Email and SMS notification setup
+- **[System Architecture](../architecture/SYSTEM_ARCHITECTURE.md)** - Complete technical architecture with Mermaid diagrams
+- **[Theory of Operation](../architecture/THEORY_OF_OPERATION.md)** - Conceptual overview and operational theory
+- **[Display System Architecture](../architecture/DISPLAY_SYSTEM_ARCHITECTURE.md)** - OLED/VFD/LED display management
+- **[EAS Decoding Summary](../architecture/EAS_DECODING_SUMMARY.md)** - Streaming vs. file decoder architecture
+- **[SDR Setup Guide](../hardware/SDR_SETUP.md)** - Radio receiver configuration
+- **[Audio Documentation](../audio/AUDIO_MONITORING.md)** - Audio system details
+- **[Notifications Guide](../guides/notifications.md)** - Email and SMS notification setup
 - **[README](https://github.com/KR8MER/eas-station/blob/main/README.md)** - Project overview and quick start
 
 ---

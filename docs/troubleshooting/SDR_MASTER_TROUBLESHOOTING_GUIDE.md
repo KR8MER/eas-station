@@ -80,7 +80,9 @@ Run through this checklist before proceeding with detailed troubleshooting:
    - If nothing appears, try a different USB port or cable
    - Avoid unpowered USB hubs
 
+2. **Check kernel detection:**
    ```bash
+   sudo dmesg | grep -iE "rtl|airspy|usb" | tail -20
    ```
 
 3. **Check driver installation (Native):**
@@ -148,6 +150,7 @@ Run through this checklist before proceeding with detailed troubleshooting:
 
 5. **Check audio service logs:**
    ```bash
+   sudo journalctl -u eas-station-audio -n 100 --no-pager
    ```
 
 ---
@@ -299,16 +302,16 @@ This was caused by incorrect use of FFmpeg `-re` flag for live hardware capture.
    # Stop other SDR software (GQRX, CubicSDR, etc.)
    ```
 
-   ```yaml
-   services:
-     sdr-service:
-       devices:
-         - /dev/bus/usb:/dev/bus/usb  # Should be present
-       privileged: true  # May be needed for some devices
+2. **Check device permissions:**
+   ```bash
+   # The service user must be in the plugdev group
+   groups eas-station | grep plugdev
+   ls -la /dev/bus/usb/*/
    ```
 
 3. **Check for sample rate overflow:**
    ```bash
+   sudo journalctl -u eas-station-sdr -n 200 --no-pager | grep -iE "overflow|dropped"
    ```
    - If present, try lower sample rate (e.g., 2.0 MHz instead of 2.4 MHz)
 
@@ -347,6 +350,7 @@ This was caused by incorrect use of FFmpeg `-re` flag for live hardware capture.
 3. **Check firmware version:**
    ```bash
    # Check Airspy firmware
+   airspy_info
    ```
 
 ---
@@ -362,14 +366,17 @@ This was caused by incorrect use of FFmpeg `-re` flag for live hardware capture.
 
 1. **Restart services after configuration changes:**
    ```bash
+   sudo systemctl restart eas-station-sdr eas-station-audio
    ```
 
 2. **Check database connection:**
    ```bash
+   sudo -u postgres psql -d alerts -c 'SELECT 1;'
    ```
 
 3. **Verify changes were saved:**
    ```bash
+   sudo -u postgres psql -d alerts -c "SELECT identifier, frequency_hz, sample_rate, gain FROM radio_receivers;"
    ```
 
 ---
@@ -434,14 +441,17 @@ lsusb | grep -E "RTL|Airspy|Realtek"
 
 ```bash
 # Check all services
+systemctl list-units 'eas-station-*' --no-pager
 
-# All should show "Up" status
-# If sdr-service is restarting, check logs:
+# All should show "active (running)"
+# If the SDR service is restarting, check logs:
+sudo journalctl -u eas-station-sdr -n 100 --no-pager
 ```
 
 ### Step 5: Verify Database Configuration
 
 ```bash
+sudo -u postgres psql -d alerts <<'EOF'
 \x on
 SELECT 
   id,
@@ -472,6 +482,7 @@ EOF
 
 ```bash
 # Monitor Redis pub/sub channel
+redis-cli
 
 # In Redis CLI:
 SUBSCRIBE sdr:samples:*
@@ -489,6 +500,7 @@ SUBSCRIBE sdr:samples:*
 
 ```bash
 # Check audio service is processing
+sudo journalctl -u eas-station-audio -f | grep -E "demodulator|audio chunk"
 
 # Expected:
 # Creating NFM demodulator: 2400000Hz IQ → 44100Hz audio
@@ -532,15 +544,19 @@ echo ""
   echo ""
   
   echo "### SDR DEVICE ENUMERATION ###"
+  SoapySDRUtil --find
   echo ""
   
-  echo "### CONTAINER STATUS ###"
+  echo "### SERVICE STATUS ###"
+  systemctl list-units 'eas-station-*' --no-pager
   echo ""
   
   echo "### SDR SERVICE LOGS (last 50 lines) ###"
+  journalctl -u eas-station-sdr -n 50 --no-pager
   echo ""
   
   echo "### AUDIO SERVICE LOGS (last 50 lines) ###"
+  journalctl -u eas-station-audio -n 50 --no-pager
   echo ""
   
   echo "### DATABASE: RADIO RECEIVERS ###"
@@ -594,22 +610,28 @@ If you can't run the script, collect this information manually:
 
 2. **SoapySDR Device Detection:**
    ```bash
+   SoapySDRUtil --find
    ```
 
-3. **Container Status:**
+3. **Service Status:**
    ```bash
+   systemctl list-units 'eas-station-*' --no-pager
    ```
 
 4. **Service Logs:**
    ```bash
+   sudo journalctl -u eas-station-sdr -n 200 --no-pager
+   sudo journalctl -u eas-station-audio -n 200 --no-pager
    ```
 
 5. **Database Configuration:**
    ```bash
+   sudo -u postgres psql -d alerts -c "SELECT identifier, driver, frequency_hz, sample_rate, gain, enabled, auto_start FROM radio_receivers;"
    ```
 
 6. **Diagnostic Script Output:**
    ```bash
+   bash scripts/collect_sdr_diagnostics.sh
    ```
 
 ---
@@ -699,8 +721,10 @@ Test SDR at the lowest level:
 
 ```bash
 # For RTL-SDR
+rtl_test -t
 
 # For Airspy
+airspy_info
 ```
 
 ### Stream Performance Test
@@ -709,6 +733,7 @@ Check if system can handle sample rate:
 
 ```bash
 # Capture samples to /dev/null (discard)
+rtl_sdr -f 162550000 -s 2400000 -n 24000000 /dev/null
 
 # Check for overruns in dmesg
 dmesg | grep -i usb | tail -20
@@ -765,10 +790,13 @@ For Redis-based IQ sample streaming:
 
 ```bash
 # Monitor Redis performance
+redis-cli --latency
 
 # Monitor Redis memory usage
+redis-cli info memory | grep used_memory_human
 
 # Monitor Redis pub/sub
+redis-cli pubsub channels 'sdr:*'
 ```
 
 ---
@@ -850,6 +878,7 @@ When asking for help, include:
 
 4. **Service not restarted after config change:**
    ```bash
+   sudo systemctl restart eas-station-sdr eas-station-audio
    ```
 
 5. **Device permissions:**
@@ -862,15 +891,19 @@ When asking for help, include:
 
 ```bash
 # Quick status check
+systemctl list-units 'eas-station-*' --no-pager
 
 # Device detection
 lsusb | grep -E "RTL|Airspy|Realtek"
 
 # Full diagnostics
+bash scripts/collect_sdr_diagnostics.sh
 
 # Check logs
+sudo journalctl -u eas-station-sdr -n 100 --no-pager
 
 # Database check
+sudo -u postgres psql -d alerts -c "SELECT identifier, enabled, auto_start FROM radio_receivers;"
 
 # Test capture
 ```

@@ -31,15 +31,18 @@ Two types exist:
 
 ```
 /k.aaa.cccc.pp.s.####.yymmddThhnnZ-yymmddThhnnZ/
- │ │   │    │  │ │    │              └─ end time
- │ │   │    │  │ │    └─ begin time
- │ │   │    │  │ └─ Event Tracking Number (ETN)
- │ │   │    │  └─ significance
- │ │   │    └─ phenomenon (2 letters)
- │ │   └─ issuing office (4-letter WFO ID)
- │ └─ action (3 letters)
- └─ product class (1 letter)
 ```
+
+| Placeholder | Field |
+|-------------|-------|
+| `k` | Product class (1 letter) |
+| `aaa` | Action (3 letters) |
+| `cccc` | Issuing office (4-letter WFO ID) |
+| `pp` | Phenomenon (2 letters) |
+| `s` | Significance |
+| `####` | Event Tracking Number (ETN) |
+| `yymmddThhnnZ` (first) | Begin time |
+| `yymmddThhnnZ` (second) | End time |
 
 **Real example:** `/O.EXP.KIWX.SV.W.0056.000000T0000Z-260327T0030Z/`
 
@@ -199,13 +202,17 @@ adds river-gauge-specific information.
 
 ```
 /nwsli.s.ic.yymmddThhnnZ.yymmddThhnnZ.yymmddThhnnZ.fr/
-        │ │  │              │              │              └─ flood record status
-        │ │  │              │              └─ flood end
-        │ │  │              └─ flood crest
-        │ │  └─ flood begin
-        │ └─ immediate cause
-        └─ flood severity
 ```
+
+| Placeholder | Field |
+|-------------|-------|
+| `nwsli` | NWS location identifier (river gauge) |
+| `s` | Flood severity |
+| `ic` | Immediate cause |
+| `yymmddThhnnZ` (first) | Flood begin |
+| `yymmddThhnnZ` (second) | Flood crest |
+| `yymmddThhnnZ` (third) | Flood end |
+| `fr` | Flood record status |
 
 EAS Station™ does not currently parse H-VTEC strings (they only appear on river
 flood products and are not used for EAS broadcast decisions), but they may be

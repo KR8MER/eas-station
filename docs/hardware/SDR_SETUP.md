@@ -43,15 +43,18 @@ SoapySDR, RTL-SDR, and Airspy drivers are **pre-installed** in the installation:
    lsusb | grep -i airspy  # For Airspy
    ```
 
-2. **Start the containers**
+2. **Start the services**
    ```bash
+   sudo systemctl start eas-station-sdr eas-station-audio
    ```
 
 3. **Verify SDR detection**
    ```bash
    # Check SoapySDR can see the device
+   SoapySDRUtil --find
 
    # Run diagnostic script
+   python3 scripts/sdr_diagnostics.py
    ```
 
 4. **Configure in Web UI**
@@ -134,9 +137,11 @@ lsusb | grep -i rtl  # Or grep -i airspy
 # Expected output:
 # Bus 001 Device 005: ID 0bda:2838 Realtek Semiconductor Corp. RTL2838 DVB-T
 
-# 2. Verify container can access USB devices
+# 2. Verify the service user can access USB devices
+groups eas-station | grep plugdev
 
-# 3. Test SoapySDR inside container
+# 3. Test SoapySDR detection
+SoapySDRUtil --find
 ```
 
 ### Troubleshooting USB Issues
@@ -161,13 +166,14 @@ lsusb | grep -i rtl  # Or grep -i airspy
    sudo reboot
    ```
 
-2. **Container needs restart**
+2. **Service needs restart**
    ```bash
+   sudo systemctl restart eas-station-sdr
    ```
 
 3. **USB device path changed**
 
-   Using `/dev/bus/usb:/dev/bus/usb` (already configured) handles this automatically.
+   udev re-enumerates USB devices automatically; if the SDR was replugged, restart the SDR service as above.
 
 ---
 
@@ -335,12 +341,14 @@ Example: 162.550 MHz = 162550000 Hz
 2. **Kernel driver conflict (RTL-SDR)**
    - Blacklist DVB-T drivers
 
-3. **Container needs rebuild**
+3. **SoapySDR bindings missing from the virtual environment**
    ```bash
+   bash scripts/fix_soapysdr_venv.sh
    ```
 
-4. **Restart containers after plugging in device**
+4. **Restart services after plugging in device**
    ```bash
+   sudo systemctl restart eas-station-sdr eas-station-audio
    ```
 
 ### "Receiver shows 'No lock' status"
@@ -460,14 +468,14 @@ Analyze captured IQ files with:
 
 If you're still having issues:
 
-1. **Check logs**: `sudo systemd logs app`
+1. **Check logs**: `sudo journalctl -u eas-station-sdr -n 100`
 2. **Run diagnostics**: Web UI or `python scripts/sdr_diagnostics.py`
 3. **GitHub Issues**: https://github.com/KR8MER/eas-station/issues
 
 **When reporting issues, include:**
 - SDR model and driver (RTL-SDR, Airspy, etc.)
 - Output of `lsusb` on host
-- Output of `SoapySDRUtil --find` in container
+- Output of `SoapySDRUtil --find`
 - Diagnostic script output
 - Relevant log excerpts
 

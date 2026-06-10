@@ -58,7 +58,7 @@ The interface uses a sophisticated color system with semantic meaning:
 
 ## 📱 Page Templates & Layouts
 
-### Base Template (`base_new.html`)
+### Base Template (`base.html`)
 - **Semantic HTML5** structure
 - **SEO optimization** with meta tags
 - **Progressive enhancement** support
@@ -80,8 +80,8 @@ The interface uses a sophisticated color system with semantic meaning:
 
 #### Operational Pages
 - **LED Control** (`led_control.html`) - Sign management
-- **Alert Generation** (`manual_eas/`) - Test alert creation
-- **Verification** (`alert_verification.html`) - Compliance checking
+- **Alert Generation** (`/eas/` Broadcast Builder, `/eas/manual/*` endpoints) - Test alert creation
+- **Verification** (`templates/eas/alert_verification.html`, served under `/eas/`) - Compliance checking
 
 #### Information Pages
 - **Help System** (`help.html`) - Comprehensive documentation

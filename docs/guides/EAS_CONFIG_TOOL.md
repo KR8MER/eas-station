@@ -29,7 +29,7 @@ When you launch `eas-config`, the main menu appears:
 
 ```
  EAS Station™ Configuration Tool
- ───────────────────────────────────────────────────────────────────
+ -------------------------------------------------------------------
  Configure your EAS Station™ (similar to raspi-config)
 
  Select an option:

@@ -10,7 +10,7 @@ EAS Station™ supports WS2812B/NeoPixel addressable RGB LED strips for visual a
 |-----------|--------------|
 | LED type | WS2812B (NeoPixel), SK6812, or compatible |
 | Data signal | Single-wire 5V or 3.3V logic |
-| GPIO pin | Configurable (default: BCM 18, PWM0) |
+| GPIO pin | Configurable (default: BCM 18, PWM0 — see PPS conflict note below) |
 | Power | External 5V supply recommended for strips >30 LEDs |
 | Maximum LEDs | Software configurable (tested up to 300) |
 
@@ -25,6 +25,9 @@ EAS Station™ supports WS2812B/NeoPixel addressable RGB LED strips for visual a
 | Data In (DIN) | GPIO BCM 18 (Pin 12) — recommended |
 | Ground | GND (Pin 6 or any GND pin) |
 | +5V | External 5V supply (do NOT use Pi's 5V for strips >10 LEDs) |
+
+!!! warning "Pin conflict with the GPS HAT"
+    The Uputronics GPS/RTC HAT uses **BCM 18 for its PPS signal** (see [GPS HAT Setup](GPS_HAT_SETUP.md)). If your station has the GPS HAT installed, move the NeoPixel data line to another PWM-capable pin (e.g., **BCM 12, PWM0** or **BCM 13, PWM1**) and update the pin in Hardware Settings.
 
 !!! warning "Power requirements"
     Each WS2812B LED draws up to 60mA at full white. A 60-LED strip at full brightness requires ~3.6A at 5V. Always use an external 5V power supply rated for your strip length. Connect the supply's GND to the Raspberry Pi's GND to establish a common ground.

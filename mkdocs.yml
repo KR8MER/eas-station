@@ -190,6 +190,7 @@ nav:
       - Contributing: process/CONTRIBUTING.md
       - Releasing: process/RELEASING.md
       - Certification Reliability Plan: process/certification_reliability_plan.md
+      - FCC Part 11 Compliance Matrix: process/FCC_PART11_COMPLIANCE_MATRIX.md
   - Reference:
       - About: reference/ABOUT.md
       - Changelog: reference/CHANGELOG.md
@@ -201,11 +202,13 @@ nav:
       - VTEC Event Linking: reference/VTEC_EVENT_LINKING.md
       - RBDS Standard: reference/RBDS_STANDARD.md
       - NRSC-4-B SAME Standard: reference/NRSC4B_SAME_STANDARD.md
+      - ECIG CAP-to-EAS Implementation Guide: ECIG-CAP-to-EAS_Implementation_Guide-V1-0.md
       - Protocols:
           - Overview: reference/protocols/README.md
           - SAME: reference/protocols/SAME.md
           - MDC1200: reference/protocols/MDC1200.md
           - Sage Digital ENDEC: reference/protocols/SAGE_ENDEC.md
+          - Alpha (M) Protocol: reference/protocols/ALPHA_M_PROTOCOL.md
   - Maintenance:
       - Disk Space Cleanup: maintenance/DISK_SPACE_CLEANUP.md
   - Policies:

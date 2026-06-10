@@ -2,45 +2,32 @@
 
 ## Quick Start
 
-### Portainer Deployment (Recommended)
+### Installer (Recommended)
 
-The repository includes an empty `.env` file that the setup wizard can write to:
-
-1. **Deploy the stack in Portainer**
-   - Add the Git repository
-   - No pre-configuration needed!
-
-2. **Access the setup wizard**
-   - Navigate to: `http://your-server/setup`
-   - Complete the configuration using the web interface
-
-3. **Restart the stack** in Portainer after saving configuration
-
-**Important:** Configuration persists across container restarts but NOT across redeployments from Git (which resets the container). For permanent configuration:
-
-- **Option 1 (Recommended):** After configuring via the wizard, copy your values into Portainer's "Environment variables" section:
-  - Edit your stack in Portainer
-  - Scroll to "Environment variables"
-  - Add: `SECRET_KEY=your-generated-key`, `POSTGRES_PASSWORD=your-password`, etc.
-
-This approach ensures your configuration persists across Git redeployments.
-
-### systemd (Command Line)
-
-For command-line deployments:
+The interactive installer collects all required configuration up front and writes `/opt/eas-station/.env` for you:
 
 ```bash
 # 1. Clone the repository
 git clone https://github.com/KR8MER/eas-station.git
 cd eas-station
 
-# 3. Access the setup wizard
-# Navigate to: http://localhost/setup
-
-# 4. After configuration, restart
+# 2. Run the interactive installer
+sudo bash install.sh
 ```
 
-The `.env` file is already included in the repository, so no initialization script is needed.
+When the installer finishes, all services are running. Open `https://your-server-ip` and log in with the administrator account you created during installation.
+
+### Setup Wizard (Fine-Tuning)
+
+After installation, the web-based setup wizard at `https://your-server/setup` lets you review and adjust configuration:
+
+1. Navigate to: `https://your-server/setup`
+2. Complete or adjust the configuration using the web interface
+3. After saving, restart the affected services:
+
+```bash
+sudo systemctl restart eas-station-web eas-station-poller
+```
 
 ## Setup Wizard Features
 
@@ -78,13 +65,15 @@ If changes in the setup wizard don't persist after restarting:
    # Should show: -rw-r--r-- (file), not drwxr-xr-x (directory)
    ```
 
-2. Check that the volume mount is working:
+2. Verify the application user can write to it:
    ```bash
-   # Should show a file, not a directory
+   ls -la /opt/eas-station/.env
+   sudo -u eas-station test -w /opt/eas-station/.env && echo writable
    ```
 
-3. After saving configuration, restart the stack:
+3. After saving configuration, restart the services:
    ```bash
+   sudo systemctl restart eas-station-web eas-station-poller
    ```
 
 ## Manual Configuration (Advanced)
@@ -101,7 +90,8 @@ python3 -c "import secrets; print(secrets.token_hex(32))"
 # 3. Edit .env with your values
 nano .env
 
-# 4. Start the stack
+# 4. Restart the services
+sudo systemctl restart eas-station-web eas-station-poller
 ```
 
 ## After Configuration

@@ -16,7 +16,7 @@ The database audit log records:
 
 ### Viewing Audit Logs in the Web Interface
 
-1. Navigate to **Admin → Security → Audit Logs**.
+1. Navigate to **System Logs** and select the **Audit** tab (`/logs?type=audit`), or use the **Audit Log** card on the Admin dashboard.
 2. Use the filter controls to narrow results:
    - **Date range** — filter by start and end date/time
    - **User** — filter by username
@@ -137,7 +137,7 @@ The security log is designed for fail2ban integration to automatically block att
 
 EAS Station™ tracks injection and brute-force attempts in the **Malicious Logins** page:
 
-1. Navigate to **Admin → Security → Malicious Logins**.
+1. Navigate to the **Malicious Logins** card on the Admin dashboard (`/security/malicious-logins`).
 2. The dashboard shows:
    - Total malicious attempts logged
    - Number of unique attacking IPs
@@ -151,7 +151,7 @@ EAS Station™ tracks injection and brute-force attempts in the **Malicious Logi
 
 View and manage automatically and manually created IP filters:
 
-1. Go to **Admin → Security → IP Filters**.
+1. Go to the **IP Filters** section of the Malicious Logins page (`/security/malicious-logins`).
 2. The list shows each filter's IP/CIDR, type (allowlist/blocklist), reason, and expiry.
 3. Actions:
    - **Toggle** — activate or deactivate a filter without deleting it

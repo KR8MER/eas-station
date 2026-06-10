@@ -8,11 +8,11 @@ Welcome to the operator help guide for the NOAA CAP Emergency Alert System (EAS)
 - Operate the stack in isolated development or staging networks disconnected from broadcast transmitter controls.
 - Do not ingest live IPAWS credentials, dispatch feeds, or mission-critical telemetry into this environment.
 - Validate any workflows on certified FCC equipment before using them in real-world alerting scenarios.
-- Review the repository [Terms of Use](../policies/TERMS_OF_USE) and [Privacy Policy](../policies/PRIVACY_POLICY) with your operators prior to onboarding.
+- Review the repository [Terms of Use](../policies/TERMS_OF_USE.md) and [Privacy Policy](../policies/PRIVACY_POLICY.md) with your operators prior to onboarding.
 
 ## Getting Started
-1. **Review the About document:** The [About page](../reference/ABOUT) covers system goals, core services, and the complete software stack.
-3. **Install EAS Station™:** Follow the [Installation Quick Start](../installation/QUICKSTART) and [Installation Details](../installation/INSTALLATION_DETAILS) for a bare-metal deployment on Debian/Ubuntu with PostgreSQL + PostGIS and Redis.
+1. **Review the About document:** The [About page](../reference/ABOUT.md) covers system goals, core services, and the complete software stack.
+3. **Install EAS Station™:** Follow the [Installation Quick Start](../installation/QUICKSTART.md) and [Installation Details](../installation/INSTALLATION_DETAILS.md) for a bare-metal deployment on Debian/Ubuntu with PostgreSQL + PostGIS and Redis.
 4. **Launch the stack:**
 
 ## Routine Operations
@@ -103,13 +103,13 @@ Page sections, top to bottom:
 | Collect SDR diagnostics | `bash scripts/collect_sdr_diagnostics.sh` |
 
 ## Related Documentation
-- **[Changelog](../reference/CHANGELOG)** - Completed features and recent releases
-- **[System Architecture](../architecture/SYSTEM_ARCHITECTURE)** - Understand the technical design
-- **[About EAS Station™](../reference/ABOUT)** - Project mission and scope
+- **[Changelog](../reference/CHANGELOG.md)** - Completed features and recent releases
+- **[System Architecture](../architecture/SYSTEM_ARCHITECTURE.md)** - Understand the technical design
+- **[About EAS Station™](../reference/ABOUT.md)** - Project mission and scope
 
 ## Getting Help
 - **Documentation:** Consult the [README](https://github.com/KR8MER/eas-station/blob/main/README.md) for architecture, deployment, and configuration details.
-- **Change Tracking:** Review the [CHANGELOG](../reference/CHANGELOG) for the latest updates and breaking changes.
+- **Change Tracking:** Review the [CHANGELOG](../reference/CHANGELOG.md) for the latest updates and breaking changes.
 - **Issue Reporting:** Open a GitHub issue with logs, configuration details (without secrets), and replication steps.
 
-For deeper context on the technology stack and governance, return to the [About page](../reference/ABOUT).
+For deeper context on the technology stack and governance, return to the [About page](../reference/ABOUT.md).

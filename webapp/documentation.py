@@ -437,15 +437,15 @@ def register_documentation_routes(app: Flask, logger_instance: Any) -> None:
             abort(404)
 
         # Check if this is a static docs file
-        if doc_path.startswith('static/'):
+        if normalized_path.startswith('static/'):
             static_docs_root = Path(app.root_path) / 'static' / 'docs'
             # Remove 'static/' prefix
-            relative_path = doc_path[7:]  # len('static/') = 7
+            relative_path = normalized_path[7:]  # len('static/') = 7
             file_path = static_docs_root / f'{relative_path}.md'
             root_for_security = static_docs_root
         else:
             # Regular docs file
-            file_path = docs_root / f'{doc_path}.md'
+            file_path = docs_root / f'{normalized_path}.md'
             root_for_security = docs_root
 
         # Check if file exists

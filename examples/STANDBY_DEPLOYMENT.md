@@ -392,6 +392,6 @@ python3 tools/restore_backup.py --backup-dir /path/to/backup
 
 ## Further Reading
 
-- [Backup Strategy Documentation](../docs/runbooks/backup_strategy)
-- [Outage Response Runbook](../docs/runbooks/outage_response)
+- [Database Backups Guide](../docs/guides/DATABASE_BACKUPS.md)
+- [Troubleshooting Guides](../docs/troubleshooting/)
 - [PostgreSQL Replication](https://www.postgresql.org/docs/current/high-availability.html)

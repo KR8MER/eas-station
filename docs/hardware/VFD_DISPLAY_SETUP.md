@@ -78,13 +78,7 @@ sudo eas-config
 
 Select **5. Hardware Integration → VFD Display Settings**.
 
-### Via .env (Manual)
-
-```
-VFD_ENABLED=true
-VFD_PORT=/dev/ttyUSB0
-VFD_BAUDRATE=9600
-```
+> **Note:** VFD settings are stored in the database (`hardware_settings` table) and managed through the web UI. Legacy `VFD_*` environment variables in `.env` are imported once during the initial migration and are **not** read at runtime afterwards.
 
 ---
 

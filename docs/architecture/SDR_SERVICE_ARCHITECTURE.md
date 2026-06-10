@@ -208,7 +208,7 @@ TTL: 30 seconds
 - Either service can be restarted independently
 
 ### Security
-- USB privileges isolated to SDR container only
+- USB privileges isolated to the SDR service only
 - Audio processing runs with minimal privileges
 - Reduced attack surface
 
@@ -228,28 +228,23 @@ TTL: 30 seconds
 
 ```bash
 # Redis Connection
-REDIS_HOST=redis
+REDIS_HOST=localhost
 REDIS_PORT=6379
 REDIS_DB=0
 
 # Database Connection
-POSTGRES_HOST=alerts-db
-POSTGRES_PORT=5432
-POSTGRES_DB=alerts
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=<secure_password>
+DATABASE_URL=postgresql+psycopg2://eas_station:<secure_password>@127.0.0.1:5432/alerts
 
-# SDR Settings
-SDR_ARGS=driver=airspy
-
-# Application Config
-CONFIG_PATH=/app-config/.env
+# Application Config (defaults to /opt/eas-station/.env)
+CONFIG_PATH=/opt/eas-station/.env
 ```
 
 ### systemd Files
 
 | File | Description |
 |------|-------------|
+| `systemd/eas-station-sdr.service` | SDR hardware service unit (runs `sdr_hardware_service.py`) |
+| `systemd/eas-station-audio.service` | Audio/EAS monitoring service unit (runs `eas_monitoring_service.py`) |
 
 ## Troubleshooting
 
@@ -257,14 +252,17 @@ CONFIG_PATH=/app-config/.env
 
 1. Check USB device access:
    ```bash
+   lsusb | grep -E "RTL|Airspy|Realtek"
    ```
 
 2. Check SoapySDR detection:
    ```bash
+   SoapySDRUtil --find
    ```
 
-3. Check container logs:
+3. Check service logs:
    ```bash
+   sudo journalctl -u eas-station-sdr -n 100 --no-pager
    ```
 
 ### Buffer Overflows
@@ -286,14 +284,17 @@ Solutions:
 
 1. Check Redis connectivity:
    ```bash
+   redis-cli ping
    ```
 
 2. Check spectrum key:
    ```bash
+   redis-cli keys 'sdr:spectrum:*'
    ```
 
 3. Verify receiver is locked:
    ```bash
+   python3 scripts/diagnostics/check_sdr_status.py
    ```
 
 ## Monitoring
@@ -304,6 +305,7 @@ The SDR service publishes a heartbeat to Redis:
 
 ```bash
 # Check heartbeat
+redis-cli get sdr:heartbeat
 
 # Expected output:
 {"timestamp": 1701532800.123, "pid": 12345, "receiver_count": 1}
@@ -312,7 +314,8 @@ The SDR service publishes a heartbeat to Redis:
 ### Ring Buffer Statistics
 
 ```bash
-# Check ring buffer health
+# Check ring buffer health (logged periodically by the SDR service)
+sudo journalctl -u eas-station-sdr -n 200 --no-pager | grep -i "ring buffer"
 
 # Expected fields:
 # fill_percentage: 25.5
@@ -321,12 +324,14 @@ The SDR service publishes a heartbeat to Redis:
 # total_samples_written: 1234567890
 ```
 
-### Container Health
+### Service Health
 
 ```bash
-# Check all containers
+# Check all EAS Station services
+systemctl list-units 'eas-station-*' --no-pager
 
 # Check SDR service specifically
+systemctl status eas-station-sdr
 ```
 
 ## Performance Tuning
@@ -466,35 +471,17 @@ def _start_ffmpeg(self) -> bool:
 
 Understanding the buffer chain helps diagnose issues:
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    SDR → Icecast Pipeline                            │
-└─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    A["1. redis_sdr_adapter._audio_chunk_queue<br/>Queue, maxsize=100 chunks (~5 seconds)"]
+    B["2. BroadcastQueue._source_broadcast<br/>maxsize=10000 chunks (~14 minutes)<br/>Uses put_nowait() — drops chunks if full"]
+    C["3. IcecastStreamer._audio_queue<br/>Subscription to BroadcastQueue<br/>Independent queue per Icecast stream"]
+    D["4. IcecastStreamer._feed_loop.buffer<br/>deque, maxlen=600 chunks (~30 seconds)<br/>Local buffer before FFmpeg"]
+    E["5. FFmpeg stdin pipe<br/>OS buffer, ~64KB<br/>BLOCKS if full (problem with -re flag)"]
+    F["6. FFmpeg encoder<br/>Internal buffers"]
+    G["7. Icecast mount<br/>Network streaming"]
 
-1. redis_sdr_adapter._audio_chunk_queue
-   Queue, maxsize=100 chunks (~5 seconds)
-   
-2. BroadcastQueue._source_broadcast  
-   maxsize=10000 chunks (~14 minutes)
-   Uses put_nowait() - drops chunks if full
-   
-3. IcecastStreamer._audio_queue
-   Subscription to BroadcastQueue
-   Independent queue per Icecast stream
-   
-4. IcecastStreamer._feed_loop.buffer
-   deque, maxlen=600 chunks (~30 seconds)
-   Local buffer before FFmpeg
-   
-5. FFmpeg stdin pipe
-   OS buffer, ~64KB
-   BLOCKS if full (problem with -re flag)
-   
-6. FFmpeg encoder
-   Internal buffers
-   
-7. Icecast mount
-   Network streaming
+    A --> B --> C --> D --> E --> F --> G
 ```
 
 ### Troubleshooting Streaming Issues

@@ -63,6 +63,30 @@
         // Re-render diagrams when the user switches site theme.
         window.addEventListener('theme-changed', renderAll);
     })();
+
+    // Add a copy-to-clipboard button to every code block.
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('.doc-content pre').forEach(function (pre) {
+            const code = pre.querySelector('code');
+            if (!code) return;
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'doc-copy-btn';
+            btn.title = 'Copy to clipboard';
+            btn.innerHTML = '<i class="fas fa-copy"></i>';
+            btn.addEventListener('click', function () {
+                navigator.clipboard.writeText(code.innerText).then(function () {
+                    btn.innerHTML = '<i class="fas fa-check"></i>';
+                    btn.classList.add('copied');
+                    setTimeout(function () {
+                        btn.innerHTML = '<i class="fas fa-copy"></i>';
+                        btn.classList.remove('copied');
+                    }, 1500);
+                });
+            });
+            pre.appendChild(btn);
+        });
+    });
 </script>
 
 <style>
@@ -113,6 +137,30 @@
     border-radius: 0.375rem;
     padding: 1rem;
     overflow-x: auto;
+    position: relative;
+}
+
+.doc-content pre .doc-copy-btn {
+    position: absolute;
+    top: 0.4rem;
+    right: 0.4rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.25rem;
+    background-color: var(--surface-color);
+    color: var(--text-muted);
+    padding: 0.15rem 0.45rem;
+    font-size: 0.8rem;
+    opacity: 0;
+    transition: opacity 0.15s ease-in-out;
+    cursor: pointer;
+}
+
+.doc-content pre:hover .doc-copy-btn {
+    opacity: 1;
+}
+
+.doc-content pre .doc-copy-btn.copied {
+    color: var(--success-color, #198754);
 }
 
 .doc-content pre code {

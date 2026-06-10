@@ -33,7 +33,7 @@ When discussing or investigating bugs:
 ## 🧭 Documentation & UX Standards
 
 - **Link Accuracy Matters** – Reference primary sources (e.g., FCC consent decrees via `docs.fcc.gov`) instead of news summaries. Broken or redirected links must be updated immediately.
-- **Theory of Operation Is Canonical** – Whenever you touch ingestion, SAME generation, or verification logic, review and update [`docs/architecture/THEORY_OF_OPERATION.md`](../architecture/THEORY_OF_OPERATION) so diagrams, timelines, and checklists match the code.
+- **Theory of Operation Is Canonical** – Whenever you touch ingestion, SAME generation, or verification logic, review and update [`docs/architecture/THEORY_OF_OPERATION.md`](../architecture/THEORY_OF_OPERATION.md) so diagrams, timelines, and checklists match the code.
 - **Surface Docs In-App** – Front-end templates (`templates/`) should link to the corresponding Markdown resources in `docs/`. Keep `/about`, `/help`, `/terms`, and `/privacy` synchronized with repository guidance.
 - **Documentation Updates Required** – When adding new features or changing workflows, update:
   - `templates/help.html` – User-facing help documentation
@@ -582,9 +582,8 @@ Every time you add a `{% block … %}` to a child template, cross-check the name
 
 | File | Status | Action Required |
 |------|--------|----------------|
-| `templates/base_new.html` | ❌ Not used anywhere | Can be deleted |
-| `templates/components/navbar_old.html` | ❌ Superseded by navbar.html | Keep as reference, do not edit |
-| `components/navbar.html` | ❌ Wrong directory | Should be deleted |
+| `templates/base.html` | ✅ Active base template | Extend this for new pages |
+| `templates/components/navbar.html` | ✅ Active navbar | Add navigation links here |
 | `components/footer.html` | ❌ Was deleted (not included) | Already removed |
 | `components/page_header.html` | ⚠️ Macro component, wrong location | Move to templates/components/ if used |
 
@@ -610,7 +609,7 @@ Every time you add a `{% block … %}` to a child template, cross-check the name
 - ✅ Always extend `base.html`
 - ✅ Use `{% block content %}` for page content
 - ✅ Add navigation link to `templates/components/navbar.html`
-- ❌ Never extend `base_new.html` (orphaned)
+- ❌ Never create alternate base templates — extend `base.html`
 
 #### Quick Verification
 
@@ -629,7 +628,7 @@ Before editing any template file:
 
 ### Overview
 
-EAS Station™ features a comprehensive theme system with 11 built-in themes and support for custom theme import/export.
+EAS Station™ features a comprehensive theme system with 20 built-in themes and support for custom theme import/export.
 
 ### Built-in Themes
 

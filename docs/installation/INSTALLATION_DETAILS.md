@@ -25,7 +25,7 @@ The installer now collects **all configuration during installation** using blue/
 6. **Hardware Integration** - GPIO, LED signs, VFD displays
 
 **Benefits:**
-- ✅ All configuration done upfront - no post-install wizard needed
+- ✅ Core configuration collected upfront — hardware, Icecast, and advanced options can be refined later in the web UI
 - ✅ Input validation with helpful error messages
 - ✅ Default values provided for quick setup
 - ✅ Can cancel and restart anytime
@@ -192,7 +192,7 @@ The installer now collects **all configuration during installation** using blue/
    - Update any setting without reinstalling
 3. **Manual editing** of `/opt/eas-station/.env` for advanced users
 
-**No Post-Install Wizard Required!** All essential configuration is collected during installation.
+**No Post-Install Wizard Required!** All essential boot-time configuration is collected during installation. Hardware integration, Icecast streaming, and advanced features can be fine-tuned afterwards in the web UI (`/admin/hardware`, `/admin/icecast`, `/setup`).
 
 ## Configuration File: Why .env?
 
@@ -358,8 +358,8 @@ sudo chmod 600 /opt/eas-station/.env
 ## Summary
 
 **Installation is:**
-- ✅ **Fully Automated** - No manual steps during installation
-- ✅ **Non-Interactive** - Runs without prompts (except OS warning)
+- ✅ **Guided** - Interactive whiptail TUI collects all required configuration up front
+- ✅ **Automated** - After the prompts, installation runs to completion without manual steps
 - ✅ **Complete** - Installs and configures everything
 - ✅ **Idempotent** - Safe to re-run if it fails
 - ✅ **Fast** - 10-15 minutes on typical hardware
@@ -382,6 +382,8 @@ No command-line configuration, no editing files with nano, no manual service man
 ---
 
 ## Alternative Installation Methods
+
+> **Status: design discussion, not shipped.** The sections below compare possible future installation methods. Today, the interactive `install.sh` bash script is the **only** supported installation method — the repository does not ship Ansible playbooks, Docker Compose files, or a `.deb` package, and `install.sh` does not yet support `--silent`/`--config` flags.
 
 ### Current Method: Bash Shell Script
 

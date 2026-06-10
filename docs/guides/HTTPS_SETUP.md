@@ -71,11 +71,10 @@ Internet (HTTPS) → nginx (ports 80/443) → Flask App (internal port 5000)
 
 ### Option 1: Local Testing (Self-Signed Certificate)
 
-**No configuration needed!** Just deploy:
+**No configuration needed!** The installer configures nginx with a self-signed certificate by default:
 
 ```bash
-
-# Or using embedded database
+sudo bash install.sh
 ```
 
 Access your application at:
@@ -93,7 +92,7 @@ Access your application at:
 
 #### Step 1: Configure Environment Variables
 
-Edit `stack.env` or `.env`:
+Edit `/opt/eas-station/.env`:
 
 ```bash
 # Your domain name (REQUIRED)
@@ -117,11 +116,22 @@ nslookup eas.example.com
 # Should return your server's public IP
 ```
 
-#### Step 3: Deploy
+#### Step 3: Request the Certificate
+
+Use the web UI at **Settings → SSL Certificates** (`/admin/certbot`), or run certbot directly:
+
+```bash
+sudo certbot --nginx -d eas.example.com --email admin@example.com --agree-tos
+```
 
 #### Step 4: Verify Certificate
 
 Check the logs:
+
+```bash
+sudo tail -n 50 /var/log/letsencrypt/letsencrypt.log
+sudo journalctl -u nginx --since "10 minutes ago"
+```
 
 Look for:
 ```
@@ -270,6 +280,7 @@ Let's Encrypt production limits:
 3. **Firewall Rules**
    ```bash
    # Check if port 80 is listening
+   sudo ss -tlnp | grep ':80'
 
    # Test from external host
    curl -I http://your-ip-address
@@ -277,6 +288,8 @@ Let's Encrypt production limits:
 
 4. **Check Logs**
    ```bash
+   sudo tail -n 100 /var/log/letsencrypt/letsencrypt.log
+   sudo journalctl -u nginx -n 100
    ```
 
 **Common causes:**
@@ -312,8 +325,10 @@ Let's Encrypt production limits:
 
 ```bash
 # Test renewal (dry run)
+sudo certbot renew --dry-run
 
 # Force renewal
+sudo certbot renew --force-renewal
 ```
 
 ### Problem: Port 80 Already in Use
@@ -460,6 +475,7 @@ Check certificate expiration:
 
 ```bash
 # View certificate details
+sudo openssl x509 -in /etc/letsencrypt/live/eas.example.com/cert.pem -noout -dates
 
 # Output shows:
 # notBefore=...

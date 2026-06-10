@@ -15,7 +15,7 @@ These ports need to be accessible from outside the host for normal operation:
 | **443** | TCP | HTTPS (nginx) | Web interface (primary access). Uses SSL/TLS encryption. **Auto-configured in bare-metal install.** |
 | **80** | TCP | HTTP (nginx) | Redirects to HTTPS. Also needed for Let's Encrypt certificate renewal. **Auto-configured in bare-metal install.** |
 | **22** | TCP | SSH | Remote server access for management. **Auto-configured in bare-metal install.** |
-| **8001** | TCP | Icecast | Audio streaming server for public stream access (configurable via `ICECAST_PORT`). **Manual configuration required.** |
+| **8000** | TCP | Icecast | Audio streaming server for public stream access. Icecast listens on `ICECAST_PORT` (default **8000**). The default `.env` written by `install.sh` also sets `ICECAST_EXTERNAL_PORT=8001` for advertised stream URLs — unless you run a proxy on 8001, set both values to the same port. **Manual configuration required.** |
 
 
 These ports are used internally between services and should **not** be exposed to the internet:
@@ -31,7 +31,7 @@ These ports are used internally between services and should **not** be exposed t
 | **5105** | TCP | GPIO Subsystem | Relays + alert indicators (health endpoint only). |
 | **5432** | TCP | PostgreSQL | Database (embedded profile or external). |
 | **6379** | TCP | Redis | In-memory cache for real-time updates. |
-| **8000** | TCP | Icecast (internal) | Internal Icecast port (proxied to 8001 externally). |
+| **8000** | TCP | Icecast (listen port) | Icecast listen port — expose directly or front it with a proxy. |
 
 ## Automatic Firewall Configuration (Bare-Metal)
 
@@ -191,15 +191,21 @@ connect() failed (111: Connection refused) while connecting to upstream
 
 This error indicates nginx cannot connect to the Flask backend (port 5000). Common causes:
 
-1. **Flask app not running** - Check if the app container is healthy:
+1. **Flask app not running** - Check if the web service is healthy:
    ```bash
+   systemctl status eas-station-web
+   sudo journalctl -u eas-station-web -n 50 --no-pager
    ```
 
 2. **Database migration errors** - The app may fail to start due to database issues:
    ```bash
+   sudo journalctl -u eas-station-web -n 200 --no-pager | grep -iE "alembic|migration|database"
    ```
 
    ```bash
+   # Verify PostgreSQL is up and the database exists
+   systemctl status postgresql
+   sudo -u postgres psql -d alerts -c 'SELECT 1;'
    ```
 
 ### Symptom: Cannot access web interface externally
@@ -216,10 +222,12 @@ This error indicates nginx cannot connect to the Flask backend (port 5000). Comm
 
 1. **Verify Icecast is running**:
    ```bash
+   systemctl status icecast2
    ```
 
-2. **Check port mapping**:
+2. **Check the listen port**:
    ```bash
+   sudo ss -tlnp | grep 8000
    ```
 
 3. **Test local access**:

@@ -18,8 +18,8 @@ python3 scripts/diagnostics/check_sdr_status.py
 ```
 
 See also:
-- **[SDR Quick Fix Guide](../../docs/troubleshooting/SDR_QUICK_FIX_GUIDE.md)** - Fast solutions for common problems
 - **[SDR Master Troubleshooting Guide](../../docs/troubleshooting/SDR_MASTER_TROUBLESHOOTING_GUIDE.md)** - Complete diagnostic procedures
+- **[SDR Setup Guide](../../docs/hardware/SDR_SETUP.md)** - Initial SDR configuration
 
 ---
 
@@ -36,48 +36,36 @@ python3 scripts/diagnostics/check_sdr_status.py
 
 **Purpose:** Verifies SDR audio pipeline health, displays receiver configuration, and checks if receivers are locked to signals.
 
-**Documentation:** See [SDR Waterfall Troubleshooting Guide](../../docs/guides/SDR_WATERFALL_TROUBLESHOOTING.md)
-
 ---
 
-### `troubleshoot_connection.sh`
+### `check_receiver_config.py`
 
-Comprehensive connection troubleshooting for EAS Station™ web interface.
+Checks radio receiver configuration in the database for common audio output issues.
 
 **Usage:**
 ```bash
-bash scripts/diagnostics/troubleshoot_connection.sh
+python3 scripts/diagnostics/check_receiver_config.py
 ```
 
-**Purpose:** Diagnoses container status, port mappings, network configuration, and firewall issues.
-
-**Documentation:** See [Portainer Deployment Guide](../../docs/deployment/portainer/PORTAINER_QUICK_START.md)
+**Purpose:** Inspects `RadioReceiver` and audio source configuration rows and flags settings that commonly break audio output. Requires `DATABASE_URL` to be set (loaded from `.env`).
 
 ---
 
-### `diagnose_icecast.sh`
+### `diagnose_audio_chain.py`
 
-Icecast streaming server port 8001 diagnostic tool.
-
-**Usage:**
-```bash
-bash scripts/diagnostics/diagnose_icecast.sh
-```
-
-**Purpose:** Checks Icecast container status, port availability, firewall rules, and provides remediation steps for streaming issues.
-
----
-
-### `diagnose_portainer.sh`
-
-Quick diagnostic script for EAS Station™ Portainer deployments.
+End-to-end audio chain diagnostic for SDR sources.
 
 **Usage:**
 ```bash
-bash scripts/diagnostics/diagnose_portainer.sh
+python3 scripts/diagnostics/diagnose_audio_chain.py
 ```
 
-**Purpose:** Validates container status, port mappings, and network configuration for Portainer-based deployments.
+**Purpose:** Checks the complete audio chain:
+1. Radio receivers in the database (LP1, LP2, SP1)
+2. Audio source configs for each receiver
+3. Redis connectivity and published IQ samples
+4. Audio service metrics
+5. EAS monitor status
 
 ---
 
@@ -98,7 +86,7 @@ bash scripts/collect_sdr_diagnostics.sh /path/to/output.txt
 **Purpose:** Collects complete diagnostic information including:
 - Hardware detection (USB devices)
 - SoapySDR device enumeration
-- Container status and logs
+- Service status and logs
 - Database configuration
 - Redis status
 - System resources
@@ -120,7 +108,7 @@ python3 scripts/sdr_diagnostics.py
 python3 scripts/sdr_diagnostics.py --test-capture --driver rtlsdr --frequency 162550000
 ```
 
-**Purpose:** 
+**Purpose:**
 - Checks SoapySDR installation
 - Enumerates connected SDR devices
 - Tests sample capture
@@ -129,24 +117,6 @@ python3 scripts/sdr_diagnostics.py --test-capture --driver rtlsdr --frequency 16
 **Documentation:** Run with `--help` for all options
 
 ---
-
-## Running Diagnostics
-
-All diagnostic scripts can be run from the repository root:
-
-```bash
-# Check SDR status
-python3 scripts/diagnostics/check_sdr_status.py
-
-# Troubleshoot web interface connection
-bash scripts/diagnostics/troubleshoot_connection.sh
-
-# Diagnose Icecast streaming issues
-bash scripts/diagnostics/diagnose_icecast.sh
-
-# Portainer-specific diagnostics
-bash scripts/diagnostics/diagnose_portainer.sh
-```
 
 ## Capturing Output
 
@@ -158,18 +128,11 @@ bash scripts/collect_sdr_diagnostics.sh
 
 # Individual scripts
 python3 scripts/diagnostics/check_sdr_status.py > sdr_diagnostic.txt
-bash scripts/diagnostics/troubleshoot_connection.sh > output.txt 2>&1
-bash scripts/diagnostics/diagnose_icecast.sh > icecast_diagnostic.txt 2>&1
+python3 scripts/diagnostics/diagnose_audio_chain.py > audio_chain.txt 2>&1
 ```
 
 ## Related Documentation
 
-### SDR Troubleshooting
-- **[SDR Quick Fix Guide](../../docs/troubleshooting/SDR_QUICK_FIX_GUIDE.md)** - 5-minute checklist for common SDR problems
 - **[SDR Master Troubleshooting Guide](../../docs/troubleshooting/SDR_MASTER_TROUBLESHOOTING_GUIDE.md)** - Complete step-by-step diagnostic procedures
-- **[SDR Audio Tuning Issues](../../docs/troubleshooting/SDR_AUDIO_TUNING_ISSUES.md)** - Audio-specific troubleshooting
 - **[SDR Setup Guide](../../docs/hardware/SDR_SETUP.md)** - Initial SDR configuration
-
-### General Troubleshooting
-- [Portainer Deployment](../../docs/deployment/portainer/PORTAINER_QUICK_START.md)
 - [All Troubleshooting Guides](../../docs/troubleshooting/)

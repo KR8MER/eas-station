@@ -5,16 +5,18 @@ This guide will help you quickly configure GPIO, OLED, VFD, and LED hardware com
 ## Overview
 
 All hardware configuration can be done through the web interface at:
-**Settings → Environment Variables**
+**Settings → Hardware Settings** (`/admin/hardware`)
 
-After making changes, use the **Restart Now** button that appears to apply your changes instantly.
+Hardware settings are stored in the database — environment variables / `.env` keys are **not** read for GPIO, OLED, VFD, or LED configuration. After making changes, use the **Restart Now** button that appears to apply your changes instantly.
+
+> **Upgrading from an older version?** Hardware configuration moved from `.env` environment variables to database-backed settings managed in the web UI. Legacy `.env` values are imported once during migration and ignored afterwards.
 
 ## GPIO Configuration (Relay/Transmitter Control)
 
 ### Enable GPIO
 
-1. Navigate to **Settings → Environment Variables**
-2. Scroll to **GPIO Control** section
+1. Navigate to **Settings → Hardware Settings** (`/admin/hardware`)
+2. Open the **GPIO** tab
 3. Set **Enable GPIO Control** to `true`
 4. Configure your GPIO pins:
    - **Primary GPIO Pin**: `17` (BCM pin for main transmitter)
@@ -46,8 +48,8 @@ Format: `PIN:NAME:ACTIVE_HIGH` (comma-separated)
 
 ### Enable OLED (Argon Industria SSD1306)
 
-1. Navigate to **Settings → Environment Variables**
-2. Scroll to **OLED Display** section
+1. Navigate to **Settings → Hardware Settings** (`/admin/hardware`)
+2. Open the **OLED Display** tab
 3. Set **Enable OLED Module** to `true`
 4. Configure settings:
    - **I2C Bus**: `1` (for Raspberry Pi 3/4/5)
@@ -74,8 +76,8 @@ Format: `PIN:NAME:ACTIVE_HIGH` (comma-separated)
 
 ### Option 1: Direct Serial Connection
 
-1. Navigate to **Settings → Environment Variables**
-2. Scroll to **VFD Display** section
+1. Navigate to **Settings → Hardware Settings** (`/admin/hardware`)
+2. Open the **VFD Display** tab
 3. Set **Connection** to: `/dev/ttyUSB0` (or your serial port)
 4. Set **Baud Rate** to: `38400` (check your VFD model)
 5. Click **Save Changes**
@@ -89,8 +91,8 @@ Format: `PIN:NAME:ACTIVE_HIGH` (comma-separated)
 - TCP Server mode on port 10001
 
 **Configuration:**
-1. Navigate to **Settings → Environment Variables**
-2. Scroll to **VFD Display** section
+1. Navigate to **Settings → Hardware Settings** (`/admin/hardware`)
+2. Open the **VFD Display** tab
 3. Set **Connection** to: `socket://192.168.8.122:10001`
 4. Set **Baud Rate** to: `38400`
 5. Click **Save Changes**
@@ -109,8 +111,8 @@ See [Waveshare Setup Guide](../hardware/WAVESHARE_RS232_WIFI_SETUP.md) for detai
 
 ### Enable LED Sign (BetaBrite/Alpha)
 
-1. Navigate to **Settings → Environment Variables**
-2. Scroll to **LED Display** section
+1. Navigate to **Settings → Hardware Settings** (`/admin/hardware`)
+2. Open the **LED Sign** tab
 3. Configure connection:
    - **LED Sign IP Address**: `192.168.1.100` (your sign's IP)
    - **LED Sign Port**: `10001`
@@ -304,29 +306,19 @@ fetch('/api/environment/restart-services', {
 
 ### Default Settings
 
-```bash
-# GPIO
-GPIO_ENABLED=false
-EAS_GPIO_PIN=17
+All values below are managed in **Settings → Hardware Settings** and stored in the `hardware_settings` database table:
 
-# OLED
-OLED_ENABLED=false
-OLED_I2C_BUS=1
-OLED_I2C_ADDRESS=0x3C
-SCREENS_AUTO_START=true
-
-# VFD (Serial)
-VFD_PORT=/dev/ttyUSB0
-VFD_BAUDRATE=38400
-
-# VFD (Network)
-VFD_PORT=socket://192.168.8.122:10001
-VFD_BAUDRATE=38400
-
-# LED
-LED_SIGN_IP=192.168.1.100
-LED_SIGN_PORT=10001
-```
+| Setting | Default |
+|---------|---------|
+| GPIO enabled | `false` |
+| Primary GPIO pin | `17` (BCM) |
+| OLED enabled | `false` |
+| OLED I2C bus / address | `1` / `0x3C` |
+| Screen auto-start | `true` |
+| VFD port (serial) | `/dev/ttyUSB0` |
+| VFD port (network) | `socket://192.168.8.122:10001` |
+| VFD baud rate | `38400` |
+| LED sign IP / port | `192.168.1.100` / `10001` |
 
 ### Common I2C Addresses
 

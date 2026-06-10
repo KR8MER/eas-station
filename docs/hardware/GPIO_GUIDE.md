@@ -63,11 +63,16 @@ The transmit relay provides a dry contact closure to key an external transmitter
 
 A relay in the transmit path replaces or augments a PTT switch:
 
-```
-EAS Station™ Relay (Relay 1)
-│
-├── COM  ──── Transmitter PTT Common (GND)
-└── NO   ──── Transmitter PTT Hot (+V or signal line)
+```mermaid
+flowchart LR
+    RELAY["EAS Station™ Relay<br/>(Relay 1)"]
+    COM["COM terminal"]
+    NO["NO terminal"]
+    GND["Transmitter PTT Common (GND)"]
+    HOT["Transmitter PTT Hot (+V or signal line)"]
+
+    RELAY --- COM --- GND
+    RELAY --- NO --- HOT
 ```
 
 **Use NO (Normally Open):** The relay is open when idle and closes to transmit. This is the safe-fail state — if the relay loses power, the transmitter is not keyed.
@@ -297,28 +302,15 @@ The EAS Station™ now includes a dedicated OLED screen that displays real-time 
 
 ### Display Layout
 
-```
-╔══════════════════════════════╗
-║   ◢ GPIO STATUS ◣           ║
-║                              ║
-║ Active Pins: 2               ║
-║                              ║
-║ GPIO17, GPIO27               ║
-║                              ║
-║ Last: GPIO17 15s ago         ║
-║                              ║
-║ Today: 24 activations        ╚══════════════════════════════╝
-```
-
 #### Screen Elements
 
-| Line | Content | Description |
-|------|---------|-------------|
-| 1 | Header | Screen title with decorative borders |
-| 2 | Active Pins | Count of currently active GPIO pins |
-| 3 | Pin List | Comma-separated list of active pins (up to 3 shown) |
-| 4 | Last Activation | Most recent activation with time elapsed |
-| 5 | Daily Count | Total successful activations today |
+| Line | Content | Example | Description |
+|------|---------|---------|-------------|
+| 1 | Header | `GPIO STATUS` | Screen title with decorative borders |
+| 2 | Active Pins | `Active Pins: 2` | Count of currently active GPIO pins |
+| 3 | Pin List | `GPIO17, GPIO27` | Comma-separated list of active pins (up to 3 shown) |
+| 4 | Last Activation | `Last: GPIO17 15s ago` | Most recent activation with time elapsed |
+| 5 | Daily Count | `Today: 24 activations` | Total successful activations today |
 
 ### Configuration
 

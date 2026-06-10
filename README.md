@@ -134,7 +134,7 @@ Day-to-day operations are made survivable by a **whiptail TUI configurator** (`s
 
 ### Web Dashboard & REST API
 
-The UI is a **responsive Bootstrap 5** application with **11 built-in themes** (every page including the Changelog viewer driven by theme CSS custom properties), **live Socket.IO push** for alert / radio / GPS updates, a full alert timeline with search and filter, an **Analytics dashboard** with Chart.js visualizations and one-click client-side PDF export of the full statistics report, an **audio monitoring** view with playback and live receive history, **operator-selectable display units** (coordinate format, altitude, speed, distance) saved per browser, and a **System Health** panel surfacing CPU/memory/disk/temperature.
+The UI is a **responsive Bootstrap 5** application with **20 built-in themes** (every page including the Changelog viewer driven by theme CSS custom properties), **live Socket.IO push** for alert / radio / GPS updates, a full alert timeline with search and filter, an **Analytics dashboard** with Chart.js visualizations and one-click client-side PDF export of the full statistics report, an **audio monitoring** view with playback and live receive history, **operator-selectable display units** (coordinate format, altitude, speed, distance) saved per browser, and a **System Health** panel surfacing CPU/memory/disk/temperature.
 
 Everything in the UI is reachable from a **REST API** namespaced under `/api/`, with `X-API-Key` header authentication and a vendored JavaScript client for browser-side integrations.
 
@@ -306,7 +306,7 @@ Typical power draw at the reference Pi 5 build with SDR + GPS HAT: **~12 W**. Se
 | ⏳ Planned | Time-series performance graphs on the GPS & Time dashboard |
 | ⏳ Planned | Cloud sync, mobile app, multi-site coordination |
 
-See the [Changelog](docs/reference/CHANGELOG.md) and the feature roadmap in `docs/roadmap/` for details.
+See the [Changelog](docs/reference/CHANGELOG.md) for details.
 
 ---
 
@@ -542,5 +542,6 @@ NOAA/NWS · FEMA/IPAWS · PostGIS Team · U.S. Census Bureau (TIGER/Line) · Put
 
 <div align="center">
   <strong>Made with ☕ and 📻 for Amateur Radio Emergency Communications</strong><br>
+  <strong>Contact:</strong> <a href="mailto:Timothy.Kramer@easstation.com">Timothy.Kramer@easstation.com</a> · (419) 890-1890<br>
   <strong>73 de KR8MER</strong> 📡
 </div>

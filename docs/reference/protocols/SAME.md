@@ -111,15 +111,18 @@ carriage return (`0x0D`).
 
 ```
 ZCZC-ORG-EEE-PSSCCC+TTTT-JJJHHMM-LLLLLLLL-<CR>
-│    │   │   │      │    │       │
-│    │   │   │      │    │       └─ Originator station callsign (8 chars, NUL-padded)
-│    │   │   │      │    └─ Issue time: ordinal day-of-year (3 digits) + UTC HHMM (4 digits)
-│    │   │   │      └─ Validity (purge time) HHMM, e.g. "0030" = 30 minutes
-│    │   │   └─ One or more `PSSCCC` location codes (county FIPS), `+`-joined
-│    │   └─ Event code (3 chars), e.g. "RWT", "EAS", "TOR", "SVR"
-│    └─ Originator code (3 chars), e.g. "WXR" (NWS), "EAS" (broadcaster), "CIV" (civil), "PEP" (national)
-└─ Mandatory literal start-of-frame "ZCZC-"
 ```
+
+| Field | Meaning |
+|-------|---------|
+| `ZCZC-` | Mandatory literal start-of-frame |
+| `ORG` | Originator code (3 chars), e.g. "WXR" (NWS), "EAS" (broadcaster), "CIV" (civil), "PEP" (national) |
+| `EEE` | Event code (3 chars), e.g. "RWT", "EAS", "TOR", "SVR" |
+| `PSSCCC` | One or more location codes (county FIPS), `+`-joined |
+| `TTTT` | Validity (purge time) HHMM, e.g. "0030" = 30 minutes |
+| `JJJHHMM` | Issue time: ordinal day-of-year (3 digits) + UTC HHMM (4 digits) |
+| `LLLLLLLL` | Originator station callsign (8 chars, NUL-padded) |
+| `<CR>` | Terminating ASCII carriage return (`0x0D`) |
 
 Each character is encoded as:
 
