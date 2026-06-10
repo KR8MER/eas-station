@@ -188,6 +188,7 @@ nav:
   - Development:
       - Developer Guidelines: development/AGENTS.md
       - Contributing: process/CONTRIBUTING.md
+      - Releasing: process/RELEASING.md
       - Certification Reliability Plan: process/certification_reliability_plan.md
   - Reference:
       - About: reference/ABOUT.md
