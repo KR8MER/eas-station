@@ -712,6 +712,80 @@ def resample_to(signal: np.ndarray, from_rate: int, to_rate: int) -> np.ndarray:
         return np.interp(new_indices, old_indices, signal).astype(signal.dtype)
 
 
+class StreamingResampler:
+    """Sample-continuous rational resampler (polyphase FIR).
+
+    :func:`scipy.signal.resample_poly` is stateless: applied per chunk it
+    zero-feeds the filter at both edges and restarts the output grid on an
+    integer sample boundary, so chunked streams pick up a fractional-sample
+    time jump at every chunk boundary (an audible tick a few times per
+    second) plus cumulative timing drift.  This class keeps the filter
+    history *and* the output-grid phase across calls, making chunked output
+    bit-identical to resampling one continuous stream.
+
+    The anti-alias filter follows the same design rule as
+    ``resample_poly``'s default (Kaiser beta=5.0, half-length
+    10*max(up, down), cutoff at the lower of the two Nyquists).
+    """
+
+    def __init__(self, from_rate: int, to_rate: int):
+        from scipy import signal as scipy_signal
+
+        self.from_rate = int(from_rate)
+        self.to_rate = int(to_rate)
+        g = math.gcd(self.from_rate, self.to_rate)
+        self.up = self.to_rate // g
+        self.down = self.from_rate // g
+
+        max_rate = max(self.up, self.down)
+        half_len = 10 * max_rate
+        h = scipy_signal.firwin(
+            2 * half_len + 1, 1.0 / max_rate, window=("kaiser", 5.0)
+        )
+        h = (h * self.up).astype(np.float64)
+        # Polyphase decomposition: branch p holds h[p], h[p+up], h[p+2*up]…
+        taps_per_branch = -(-len(h) // self.up)
+        h = np.concatenate([h, np.zeros(taps_per_branch * self.up - len(h))])
+        # _hpoly[p, k] = h[p + k*up]
+        self._hpoly = h.reshape(taps_per_branch, self.up).T.copy()
+        self._taps = taps_per_branch
+        # Last (taps-1) input samples, zero "history" before the stream
+        # starts (matches a causal filter ringing up from silence).
+        self._hist = np.zeros(self._taps - 1, dtype=np.float64)
+        self._n_in = 0   # total input samples consumed
+        self._m_out = 0  # total output samples emitted
+
+    def process(self, samples: np.ndarray) -> np.ndarray:
+        """Resample the next chunk of the stream."""
+        if self.up == self.down:
+            return samples
+        n_new = len(samples)
+        if n_new == 0:
+            return samples
+        xext = np.concatenate([self._hist, np.asarray(samples, dtype=np.float64)])
+
+        # Output m sits at upsampled-domain position m*down and needs
+        # inputs up to n_max = floor(m*down / up); emit every m whose
+        # inputs have fully arrived.
+        m_end = -(-((self._n_in + n_new) * self.up) // self.down)
+        ms = np.arange(self._m_out, m_end, dtype=np.int64)
+        if ms.size:
+            pos = ms * self.down
+            phases = pos % self.up
+            # Index of n_max within xext (xext[0] is input n_in - (taps-1)).
+            nloc = pos // self.up - self._n_in + (self._taps - 1)
+            idx = nloc[:, None] - np.arange(self._taps)[None, :]
+            out = np.einsum("mk,mk->m", xext[idx], self._hpoly[phases])
+        else:
+            out = np.zeros(0, dtype=np.float64)
+
+        if self._taps > 1:
+            self._hist = xext[-(self._taps - 1):]
+        self._n_in += n_new
+        self._m_out = m_end
+        return out.astype(samples.dtype, copy=False)
+
+
 @dataclass
 class DemodulatorConfig:
     """Configuration for audio demodulator."""
@@ -3261,19 +3335,14 @@ class FMDemodulator:
             self._decim_filter = self._design_fir_lowpass(decim_cutoff, config.sample_rate, taps=decim_taps)
             logger.debug("Decimation filter: %d taps, cutoff %.1f kHz", decim_taps, decim_cutoff / 1000)
 
-        # Calculate FM audio gain based on modulation type and sample rate
-        # The discriminator output is: phase_diff / π, which gives values in [-1, 1]
-        # For FM, the actual audio values are much smaller because:
+        # Calculate FM audio gain based on modulation type and sample rate.
+        # The discriminator output is the raw phase difference in radians:
         #   phase_diff_per_sample = 2π × deviation / sample_rate
-        # We need to scale up by: sample_rate / (2 × deviation) to get full-scale audio
+        # so scaling by sample_rate / (2π × deviation) maps full deviation
+        # to ±1.0.  (An earlier comment here claimed the discriminator
+        # divides by π — it doesn't; fm_discriminator returns np.angle().)
         deviation_hz = self.FM_DEVIATION_HZ.get(self.config.modulation_type, self.DEFAULT_DEVIATION_HZ)
-        # The discriminator already divides by π, so we scale by:
-        # sample_rate / (2 × deviation) = the factor to convert frequency deviation to amplitude
-        self._audio_gain = config.sample_rate / (2.0 * deviation_hz)
-
-        # Clamp gain to reasonable range to prevent extreme amplification
-        # Reduced max gain from 50 to 25 to prevent clipping on strong signals
-        self._audio_gain = max(1.0, min(25.0, self._audio_gain))
+        self._audio_gain = config.sample_rate / (2.0 * np.pi * deviation_hz)
 
         # De-emphasis filter state
         self._deemph_alpha = 0.0
@@ -3281,6 +3350,19 @@ class FMDemodulator:
             tau = config.deemphasis_us * 1e-6
             self._deemph_alpha = 1.0 - np.exp(-1.0 / (config.audio_sample_rate * tau))
         self._deemph_state = np.zeros(1, dtype=np.float32)
+
+        # Decimation phase carried across chunks by the mono audio path so
+        # the every-Nth-sample stride stays continuous when a chunk length
+        # isn't a multiple of the decimation factor.
+        self._mono_decim_phase = 0
+        # Overlap-add tail of the mono path's anti-alias FIR, carried
+        # across chunks so the filter is seamless at chunk boundaries
+        # (a per-chunk mode="same" convolution would put a ~2 ms zero-fed
+        # transient at every boundary — an audible tick a few times/sec).
+        self._mono_lpf_tail: Optional[np.ndarray] = None
+        # Sample-continuous resamplers for the final intermediate→audio
+        # rate conversion, keyed per channel ("mono"/"left"/"right").
+        self._audio_resamplers: Dict[str, StreamingResampler] = {}
 
         # Stereo decoder state
         # Use intermediate rate for stereo processing (more efficient filters)
@@ -3675,47 +3757,63 @@ class FMDemodulator:
                 right = stereo_audio[:, 1]
                 intermediate_rate = self.config.sample_rate
 
-            # Scale to audio levels
-            deviation_hz = self.FM_DEVIATION_HZ.get(self.config.modulation_type, self.DEFAULT_DEVIATION_HZ)
-            scale_factor = self.config.sample_rate / (2.0 * deviation_hz * decim)
-            left = left * scale_factor
-            right = right * scale_factor
+            # Scale to audio levels: full deviation → ±1.0.  The box
+            # decimation above has unity DC gain, so the factor must not
+            # depend on decim (the old /decim under-drove the audio).
+            left = left * self._audio_gain
+            right = right * self._audio_gain
 
             # Resample to exact target rate
             if intermediate_rate != target_rate:
-                left = self._resample(left, intermediate_rate, target_rate)
-                right = self._resample(right, intermediate_rate, target_rate)
+                left = self._stream_resample(left, intermediate_rate, target_rate, "left")
+                right = self._stream_resample(right, intermediate_rate, target_rate, "right")
 
             audio = np.column_stack((left, right))
         else:
-            # Mono audio path
+            # Mono audio path.  Bandlimit the raw multiplex with the same
+            # proper 16 kHz FIR the stereo decoder uses for L+R before any
+            # decimation.  The old box-average decimation (fast_decimate)
+            # had only ~10-20 dB of stopband, so the 19 kHz pilot, the
+            # 38 kHz L-R subcarrier, and the 57 kHz RBDS carrier all
+            # folded straight into the audible band.
+            audio = self._mono_audio_lowpass(multiplex)
             if decim > 1:
-                # First decimate to get close to target rate (fast, low quality)
-                audio = fast_decimate(multiplex, decim)
-                # Calculate actual intermediate rate after decimation
+                # Every-Nth-sample stride is alias-safe now that the FIR
+                # above removed everything past the post-decimation
+                # Nyquist.  Carry the stride phase across chunks so no
+                # samples are dropped at chunk boundaries (fast_decimate
+                # silently discarded len % decim samples per chunk,
+                # causing a small periodic time skip).
+                audio = audio[self._mono_decim_phase::decim]
+                self._mono_decim_phase = (self._mono_decim_phase - len(multiplex)) % decim
                 intermediate_rate = self.config.sample_rate // decim
                 logger.debug(
-                    f"FM demod: IQ {self.config.sample_rate}Hz → decim {decim}x → "
+                    f"FM demod: IQ {self.config.sample_rate}Hz → LPF+decim {decim}x → "
                     f"{intermediate_rate}Hz → resample → {target_rate}Hz"
                 )
             else:
-                audio = multiplex
                 intermediate_rate = self.config.sample_rate
                 logger.debug("FM demod: No decimation needed, %sHz → %sHz", intermediate_rate, target_rate)
 
-            # Scale to audio levels BEFORE resampling (at intermediate rate)
-            # For 75 kHz deviation: phase_diff_per_sample = 2π × 75000 / sample_rate
-            # We scale by sample_rate / (2 × deviation × decimation_factor) to normalize
-            deviation_hz = self.FM_DEVIATION_HZ.get(self.config.modulation_type, self.DEFAULT_DEVIATION_HZ)
-            audio = audio * (self.config.sample_rate / (2.0 * deviation_hz * decim))
+            # Scale to audio levels BEFORE resampling: discriminator output
+            # is 2π × f_dev / sample_rate rad/sample, so _audio_gain
+            # (sample_rate / (2π × deviation)) maps full deviation to ±1.0.
+            audio = audio * self._audio_gain
 
             # Now resample from intermediate_rate to exact target_rate
             # This ensures audio is at the EXACT sample rate expected by downstream consumers
             if intermediate_rate != target_rate:
-                audio = self._resample(audio, intermediate_rate, target_rate)
+                audio = self._stream_resample(audio, intermediate_rate, target_rate, "mono")
                 logger.debug(
                     f"Resampled {len(audio)} samples from {intermediate_rate}Hz to {target_rate}Hz"
                 )
+
+        # De-emphasis — undo the transmitter's pre-emphasis (75 µs NA,
+        # 50 µs EU).  Must run at the final audio rate because
+        # _deemph_alpha was derived from audio_sample_rate in __init__.
+        # Without this the treble sits up to ~17 dB hot and sounds like
+        # clipping distortion even though no limiter is engaging.
+        audio = self._apply_deemphasis(audio)
 
         # Clamp to prevent overflow
         audio = np.clip(audio, -1.5, 1.5)
@@ -3756,32 +3854,79 @@ class FMDemodulator:
         """Thin shim around the module-level :func:`resample_to`."""
         return resample_to(signal, from_rate, to_rate)
 
-    def _apply_deemphasis(self, audio: np.ndarray) -> np.ndarray:
-        """Apply de-emphasis filter (single-pole IIR lowpass)."""
-        if audio.ndim == 1:
-            output = np.zeros_like(audio)
-            if self._deemph_state.shape[0] != 1:
-                self._deemph_state = np.zeros(1, dtype=np.float32)
-            for i in range(len(audio)):
-                self._deemph_state[0] = (
-                    self._deemph_state[0]
-                    + self._deemph_alpha * (audio[i] - self._deemph_state[0])
-                )
-                output[i] = self._deemph_state[0]
-            return output
+    def _stream_resample(
+        self, audio: np.ndarray, from_rate: int, to_rate: int, key: str
+    ) -> np.ndarray:
+        """Resample via a persistent per-channel :class:`StreamingResampler`."""
+        resampler = self._audio_resamplers.get(key)
+        if (
+            resampler is None
+            or resampler.from_rate != from_rate
+            or resampler.to_rate != to_rate
+        ):
+            resampler = StreamingResampler(from_rate, to_rate)
+            self._audio_resamplers[key] = resampler
+        return resampler.process(audio)
 
-        channels = audio.shape[1]
+    def _mono_audio_lowpass(self, multiplex: np.ndarray) -> np.ndarray:
+        """Anti-alias FIR for the mono audio path, seamless across chunks.
+
+        Streaming overlap-add: convolve the chunk in "full" mode (FFT
+        based, so the 1k-tap filter stays cheap even at MHz rates), add
+        the tail carried over from the previous chunk, emit the first
+        len(chunk) samples, and keep the new tail for the next call.
+        This is bit-identical to filtering one continuous stream, unlike
+        a per-chunk mode="same" convolution which feeds zeros at every
+        chunk edge.  The causal filter delays audio by taps//2 samples
+        (~2 ms at 256 kHz) which is irrelevant for broadcast monitoring.
+        """
+        full = oaconvolve(multiplex, self._lpr_filter)
+        tail = self._mono_lpf_tail
+        if tail is not None and tail.size:
+            if tail.size > full.size:
+                # Chunk shorter than the filter tail — extend so no
+                # carried samples are lost.
+                full = np.concatenate(
+                    [full, np.zeros(tail.size - full.size, dtype=full.dtype)]
+                )
+            full[: tail.size] += tail
+        n = len(multiplex)
+        self._mono_lpf_tail = full[n:].copy()
+        return full[:n]
+
+    def _apply_deemphasis(self, audio: np.ndarray) -> np.ndarray:
+        """Apply de-emphasis filter (single-pole IIR lowpass).
+
+        Vectorized via scipy.signal.lfilter; the filter delay line is kept
+        in ``self._deemph_state`` so the response is continuous across
+        chunk boundaries.  y[n] = y[n-1] + alpha * (x[n] - y[n-1]).
+        """
+        if self._deemph_alpha <= 0.0 or audio.size == 0:
+            return audio
+
+        from scipy import signal as scipy_signal
+
+        b = [self._deemph_alpha]
+        a = [1.0, self._deemph_alpha - 1.0]
+
+        channels = 1 if audio.ndim == 1 else audio.shape[1]
         if self._deemph_state.shape[0] != channels:
+            # Channel count changed mid-stream (stereo pilot lock acquired
+            # or lost) — restart the delay line from silence.
             self._deemph_state = np.zeros(channels, dtype=np.float32)
 
-        output = np.zeros_like(audio)
-        for ch in range(channels):
-            state = self._deemph_state[ch]
-            for i in range(audio.shape[0]):
-                state = state + self._deemph_alpha * (audio[i, ch] - state)
-                output[i, ch] = state
-            self._deemph_state[ch] = state
-        return output
+        if audio.ndim == 1:
+            output, zf = scipy_signal.lfilter(
+                b, a, audio, zi=self._deemph_state.astype(np.float64)
+            )
+            self._deemph_state = zf.astype(np.float32)
+        else:
+            output, zf = scipy_signal.lfilter(
+                b, a, audio, axis=0,
+                zi=self._deemph_state[np.newaxis, :].astype(np.float64),
+            )
+            self._deemph_state = zf[0].astype(np.float32)
+        return output.astype(audio.dtype, copy=False)
 
     @staticmethod
     def _design_fir_lowpass(cutoff: float, fs: int, taps: int = 129) -> np.ndarray:
