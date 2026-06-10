@@ -515,6 +515,28 @@
 {% block scripts %}
 {{ super() }}
 <script>
+// Surface uncaught page-script errors on the page itself: this admin page
+// is fully client-rendered (fleet table, counters, modals), and on mobile
+// browsers there is no dev console — a silent script failure is
+// indistinguishable from "no receivers configured".
+window.addEventListener('error', (event) => {
+    const banner = document.getElementById('radioStatus');
+    if (!banner) return;
+    banner.classList.remove('d-none', 'alert-info', 'alert-warning');
+    banner.classList.add('alert', 'alert-danger');
+    banner.textContent = `Page script error: ${event.message || 'unknown error'}`;
+});
+
+// IMPORTANT: base.html loads the Bootstrap bundle with `defer`, so the
+// `bootstrap` global does not exist yet while this inline script is being
+// parsed.  Everything below must wait for DOMContentLoaded — deferred
+// scripts are guaranteed to have executed by then.  Running eagerly threw
+// `ReferenceError: bootstrap is not defined` at the
+// Modal.getOrCreateInstance call below, which killed this entire script
+// and left the page inert: empty receiver fleet, zeroed counters, and
+// dead Add/Edit/Discover buttons even though the server-side database
+// had receivers to show.
+function initRadioReceiversPage() {
 // Bootstrap recommends modals be direct children of <body> to avoid CSS
 // stacking-context conflicts with positioned flex containers (.page-shell).
 // Move them before Bootstrap initialises the instances below.
@@ -809,6 +831,23 @@
             const sampleRate = formatSampleRate(receiver.sample_rate);
             const isMonitorOpen = openMonitorIds.has(String(receiver.id));
             const monitorButtonClass = isMonitorOpen ? 'btn btn-primary' : 'btn btn-outline-primary';
+
+            if (receiver.orphan) {
+                // Live in the SDR service but missing from this database:
+                // there is no row to edit/delete, so render read-only.
+                row.innerHTML = `
+                    <td data-label="Name" class="fw-semibold">${displayName}
+                        <span class="badge bg-warning text-dark ms-1">not in database</span></td>
+                    <td data-label="Identifier"><code>${identifier}</code></td>
+                    <td data-label="Driver">${driver}</td>
+                    <td data-label="Frequency (MHz)" class="text-end">${frequency}</td>
+                    <td data-label="Sample Rate" class="text-end">${sampleRate}</td>
+                    <td data-label="Status">${renderStatusBadge(receiver.latest_status)}</td>
+                    <td class="text-end text-muted small">read-only</td>
+                `;
+                tableBody.appendChild(row);
+                return;
+            }
 
             row.innerHTML = `
                 <td data-label="Name" class="fw-semibold">${displayName}</td>
@@ -2115,10 +2154,10 @@
         
         // Merge database config with live status from RadioManager
         const liveReceivers = diagnostics.radio_manager?.receivers || {};
-        
-        return dbReceivers.map(dbReceiver => {
+
+        const merged = dbReceivers.map(dbReceiver => {
             const liveStatus = liveReceivers[dbReceiver.identifier];
-            
+
             if (liveStatus) {
                 // Merge live status with database config
                 return {
@@ -2133,10 +2172,52 @@
                     }
                 };
             }
-            
+
             // No live status, return database config with offline status
             return dbReceiver;
         });
+
+        // Receivers the SDR service reports as loaded/running but that are
+        // missing from this webapp's database.  This should never happen —
+        // both read the same radio_receivers table — so when it does it
+        // almost always means the webapp and sdr-service are pointed at
+        // DIFFERENT databases (e.g. one fell back to a fresh/empty DB after
+        // a redeploy).  Render them as read-only rows so the operator can
+        // at least SEE the running hardware instead of an empty fleet, and
+        // say what's wrong out loud.
+        const dbIdentifiers = new Set(dbReceivers.map(r => r.identifier));
+        const orphans = Object.entries(liveReceivers)
+            .filter(([identifier]) => !dbIdentifiers.has(identifier));
+        for (const [identifier, live] of orphans) {
+            merged.push({
+                id: null,
+                identifier,
+                display_name: identifier,
+                driver: live.config?.driver || '—',
+                frequency_hz: live.config?.frequency_hz,
+                sample_rate: live.config?.sample_rate,
+                enabled: true,
+                orphan: true,
+                latest_status: {
+                    reported_at: live.reported_at,
+                    locked: live.locked || false,
+                    signal_strength: live.signal_strength,
+                    last_error: live.last_error,
+                    capture_mode: null,
+                    capture_path: null,
+                },
+            });
+        }
+        if (orphans.length > 0) {
+            setStatus(
+                `The SDR service is running ${orphans.length} receiver(s) that do not exist in this ` +
+                'database (shown below as read-only). The webapp and sdr-service are likely connected ' +
+                'to different databases — check the DATABASE_URL of both services.',
+                'warning'
+            );
+        }
+
+        return merged;
     }
 
     async function loadReceivers(endpoint = CRUD_ENDPOINT, useDiagnostics = false) {
@@ -2882,5 +2963,14 @@
         openModal();
     };
 })();
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initRadioReceiversPage);
+} else {
+    // Script evaluated after parsing finished (e.g. injected late):
+    // deferred bundles have already run, safe to initialise now.
+    initRadioReceiversPage();
+}
 </script>
 {% endblock %}
