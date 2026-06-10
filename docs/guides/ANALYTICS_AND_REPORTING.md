@@ -90,6 +90,8 @@ GET /api/analytics/metrics
 
 **Example:**
 
+> **Note:** API-key authentication (`X-API-Key`) is **planned but not yet implemented** — see [API Key Management](API_KEY_MANAGEMENT.md). Until it ships, these endpoints require an authenticated browser session (log in first and reuse the session cookie).
+
 ```bash
 curl -H "X-API-Key: <key>" \
   "https://your-eas-station.example.com/api/analytics/metrics?category=alert_volume&period=daily&days=30"

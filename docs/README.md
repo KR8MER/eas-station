@@ -24,6 +24,7 @@ Welcome to the documentation for EAS Station™ - an Emergency Alert System plat
 | [Setup Instructions](guides/SETUP_INSTRUCTIONS.md) | First-time configuration |
 | [HTTPS Setup](guides/HTTPS_SETUP.md) | Secure access configuration |
 | [Pre/Post-Alert Signaling](guides/ALERT_SIGNALS.md) | Configure pre/post-broadcast signals (bell, beep, three-tone, QC-II, DTMF, MDC1200) |
+| [Local Authority EAS Access](guides/LOCAL_AUTHORITIES.md) | Delegate restricted EAS origination to local authorities |
 
 ### For Administrators
 
@@ -32,6 +33,8 @@ Welcome to the documentation for EAS Station™ - an Emergency Alert System plat
 | [Installation Guide](installation/QUICKSTART.md) | Bare metal deployment |
 | [SDR Setup](hardware/SDR_SETUP.md) | Radio receiver configuration |
 | [Firewall Requirements](troubleshooting/FIREWALL_REQUIREMENTS.md) | Network port configuration |
+| [Application Settings](guides/APPLICATION_SETTINGS.md) | Logging, storage paths, branding, password policy |
+| [Health Monitoring Endpoints](guides/HEALTH_MONITORING.md) | REST health checks for external monitoring |
 
 ### For Developers
 
@@ -98,6 +101,7 @@ EAS Station™ integrates multiple alert sources (NOAA Weather, IPAWS Federal) a
 
 - [SDR not detecting](hardware/SDR_SETUP.md#troubleshooting)
 - [Audio problems](audio/AUDIO_MONITORING.md#troubleshooting)
+- [Audio/SDR sample-rate fix tool](troubleshooting/AUDIO_SDR_FIX_TOOL.md)
 - [Common errors](guides/HELP.md#troubleshooting)
 
 ---

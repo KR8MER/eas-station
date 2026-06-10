@@ -126,7 +126,7 @@ The platform was designed under the assumption that an EAS station is not a pure
 
 ### Security, Notifications & Operations
 
-The web tier is built for organizations that have to share operator credentials safely: **role-based access control** (admin / operator / viewer), **TOTP multi-factor authentication** with QR-code enrollment, **scoped API keys** for automation, **Redis-backed rate limiting** on login and webhook endpoints, **CSRF protection** on every state-changing endpoint, and **nginx HTTPS** with optional automatic Let's Encrypt provisioning. **Tailscale integration** offers a one-tab path to private-network access for distributed teams.
+The web tier is built for organizations that have to share operator credentials safely: **role-based access control** (admin / operator / viewer), **TOTP multi-factor authentication** with QR-code enrollment, **scoped API keys** for automation *(planned — see [docs/guides/API_KEY_MANAGEMENT](docs/guides/API_KEY_MANAGEMENT.md))*, **Redis-backed rate limiting** on login and webhook endpoints, **CSRF protection** on every state-changing endpoint, and **nginx HTTPS** with optional automatic Let's Encrypt provisioning. **Tailscale integration** offers a one-tab path to private-network access for distributed teams.
 
 Outbound notifications cover **email** (SMTP, with an optional bundled local Postfix relay), **SMS** (Twilio), and **SNMP v2c traps** for integration with existing NMS platforms.
 
@@ -136,7 +136,7 @@ Day-to-day operations are made survivable by a **whiptail TUI configurator** (`s
 
 The UI is a **responsive Bootstrap 5** application with **20 built-in themes** (every page including the Changelog viewer driven by theme CSS custom properties), **live Socket.IO push** for alert / radio / GPS updates, a full alert timeline with search and filter, an **Analytics dashboard** with Chart.js visualizations and one-click client-side PDF export of the full statistics report, an **audio monitoring** view with playback and live receive history, **operator-selectable display units** (coordinate format, altitude, speed, distance) saved per browser, and a **System Health** panel surfacing CPU/memory/disk/temperature.
 
-Everything in the UI is reachable from a **REST API** namespaced under `/api/`, with `X-API-Key` header authentication and a vendored JavaScript client for browser-side integrations.
+Everything in the UI is reachable from a **REST API** namespaced under `/api/`, authenticated by the same login session as the UI (scoped `X-API-Key` authentication is planned), with a vendored JavaScript client for browser-side integrations.
 
 ---
 
@@ -296,7 +296,8 @@ Typical power draw at the reference Pi 5 build with SDR + GPS HAT: **~12 W**. Se
 | ✅ Done | MDC1200 / Quick-Call II / DTMF pre/post-alert signaling for LMR forwarding |
 | ✅ Done | Stratum 1 GPS-disciplined time source + dedicated GPS & Time Dashboard |
 | ✅ Done | Tamper-evident Ed25519-signed audit ledger with chain verification |
-| ✅ Done | RBAC, TOTP MFA, scoped API keys, rate limiting, CSRF, HTTPS |
+| ✅ Done | RBAC, TOTP MFA, rate limiting, CSRF, HTTPS |
+| ⏳ Planned | Scoped API keys for external automation |
 | ✅ Done | Automated RWT/RMT scheduling and EAS Compliance dashboard |
 | ✅ Done | LED / OLED / VFD / NeoPixel / GPIO / Zigbee hardware integration |
 | ✅ Done | Settings Hub, web diagnostics, one-button upgrade, journalctl viewer |

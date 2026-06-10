@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 2080 325"
+     role="img"
+     aria-label="EAS Station">
+  <title>EAS Station wordmark</title>
+  <desc>EAS Station — open-source emergency alerting infrastructure</desc>
+
+  <style>
+    .logo-wordmark-text {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                   "Helvetica Neue", Arial, "Liberation Sans", sans-serif;
+      font-weight: 900;
+      letter-spacing: 0;
+    }
+    .logo-text-primary { fill: #ffffff; }
+    .logo-text-brand   { fill: #ED1C24; }
+    .logo-tm {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                   "Helvetica Neue", Arial, "Liberation Sans", sans-serif;
+      /* Slightly larger so the mark stays readable when the wordmark
+         is rendered as a 74 px tall header asset in the share-card. */
+      font-size: 60px;
+      font-weight: 700;
+      letter-spacing: 0;
+      fill: #ffffff;
+    }
+    .logo-tagline {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                   "Helvetica Neue", Arial, "Liberation Sans", sans-serif;
+      font-weight: 700;
+      /* font-size 40 (down from 44) keeps "INFRASTRUCTURE" inside the
+         viewBox across font-metric variations: Liberation Sans Bold
+         renders ~10% wider than DejaVu Sans Bold, and at 44 px the
+         trailing "E" overflowed the 2080-unit width on Linux
+         rasterisers, leaving "INFRASTRUCTUR" in the rendered PNG. */
+      font-size: 40px;
+      letter-spacing: 2.5px;
+      fill: rgba(255, 255, 255, 0.92);
+    }
+    .logo-bar-neutral { fill: #e2e8f0; }
+    .logo-bar-accent  { fill: #ED1C24; }
+    .logo-divider {
+      stroke: rgba(255, 255, 255, 0.45);
+      stroke-width: 3;
+      stroke-linecap: round;
+    }
+  </style>
+
+  <defs>
+    <rect id="eas-bar-seg" width="32" height="14" rx="3" />
+  </defs>
+
+  <!-- Equalizer bars (left of wordmark) -->
+  <g aria-hidden="true">
+    <!-- Bar 0: 2 segs, neutral -->
+    <g class="logo-bar logo-bar-neutral" transform="translate(40,164)">
+      <use href="#eas-bar-seg" y="0"/>
+      <use href="#eas-bar-seg" y="18"/>
+    </g>
+    <!-- Bar 1: 4 segs, neutral -->
+    <g class="logo-bar logo-bar-neutral" transform="translate(88,146)">
+      <use href="#eas-bar-seg" y="0"/>
+      <use href="#eas-bar-seg" y="18"/>
+      <use href="#eas-bar-seg" y="36"/>
+      <use href="#eas-bar-seg" y="54"/>
+    </g>
+    <!-- Bar 2: 6 segs, neutral -->
+    <g class="logo-bar logo-bar-neutral" transform="translate(136,128)">
+      <use href="#eas-bar-seg" y="0"/>
+      <use href="#eas-bar-seg" y="18"/>
+      <use href="#eas-bar-seg" y="36"/>
+      <use href="#eas-bar-seg" y="54"/>
+      <use href="#eas-bar-seg" y="72"/>
+      <use href="#eas-bar-seg" y="90"/>
+    </g>
+    <!-- Bar 3: 8 segs, accent -->
+    <g class="logo-bar logo-bar-accent" transform="translate(184,110)">
+      <use href="#eas-bar-seg" y="0"/>
+      <use href="#eas-bar-seg" y="18"/>
+      <use href="#eas-bar-seg" y="36"/>
+      <use href="#eas-bar-seg" y="54"/>
+      <use href="#eas-bar-seg" y="72"/>
+      <use href="#eas-bar-seg" y="90"/>
+      <use href="#eas-bar-seg" y="108"/>
+      <use href="#eas-bar-seg" y="126"/>
+    </g>
+    <!-- Bar 4: 11 segs, accent (peak) -->
+    <g class="logo-bar logo-bar-accent" transform="translate(232,83)">
+      <use href="#eas-bar-seg" y="0"/>
+      <use href="#eas-bar-seg" y="18"/>
+      <use href="#eas-bar-seg" y="36"/>
+      <use href="#eas-bar-seg" y="54"/>
+      <use href="#eas-bar-seg" y="72"/>
+      <use href="#eas-bar-seg" y="90"/>
+      <use href="#eas-bar-seg" y="108"/>
+      <use href="#eas-bar-seg" y="126"/>
+      <use href="#eas-bar-seg" y="144"/>
+      <use href="#eas-bar-seg" y="162"/>
+      <use href="#eas-bar-seg" y="180"/>
+    </g>
+    <!-- Bar 5: 11 segs, accent (peak) -->
+    <g class="logo-bar logo-bar-accent" transform="translate(280,83)">
+      <use href="#eas-bar-seg" y="0"/>
+      <use href="#eas-bar-seg" y="18"/>
+      <use href="#eas-bar-seg" y="36"/>
+      <use href="#eas-bar-seg" y="54"/>
+      <use href="#eas-bar-seg" y="72"/>
+      <use href="#eas-bar-seg" y="90"/>
+      <use href="#eas-bar-seg" y="108"/>
+      <use href="#eas-bar-seg" y="126"/>
+      <use href="#eas-bar-seg" y="144"/>
+      <use href="#eas-bar-seg" y="162"/>
+      <use href="#eas-bar-seg" y="180"/>
+    </g>
+    <!-- Bar 6: 9 segs, accent -->
+    <g class="logo-bar logo-bar-accent" transform="translate(328,101)">
+      <use href="#eas-bar-seg" y="0"/>
+      <use href="#eas-bar-seg" y="18"/>
+      <use href="#eas-bar-seg" y="36"/>
+      <use href="#eas-bar-seg" y="54"/>
+      <use href="#eas-bar-seg" y="72"/>
+      <use href="#eas-bar-seg" y="90"/>
+      <use href="#eas-bar-seg" y="108"/>
+      <use href="#eas-bar-seg" y="126"/>
+      <use href="#eas-bar-seg" y="144"/>
+    </g>
+    <!-- Bar 7: 6 segs, neutral -->
+    <g class="logo-bar logo-bar-neutral" transform="translate(376,128)">
+      <use href="#eas-bar-seg" y="0"/>
+      <use href="#eas-bar-seg" y="18"/>
+      <use href="#eas-bar-seg" y="36"/>
+      <use href="#eas-bar-seg" y="54"/>
+      <use href="#eas-bar-seg" y="72"/>
+      <use href="#eas-bar-seg" y="90"/>
+    </g>
+    <!-- Bar 8: 4 segs, neutral -->
+    <g class="logo-bar logo-bar-neutral" transform="translate(424,146)">
+      <use href="#eas-bar-seg" y="0"/>
+      <use href="#eas-bar-seg" y="18"/>
+      <use href="#eas-bar-seg" y="36"/>
+      <use href="#eas-bar-seg" y="54"/>
+    </g>
+    <!-- Bar 9: 2 segs, neutral -->
+    <g class="logo-bar logo-bar-neutral" transform="translate(472,164)">
+      <use href="#eas-bar-seg" y="0"/>
+      <use href="#eas-bar-seg" y="18"/>
+    </g>
+  </g>
+
+  <!-- Vertical divider between EQ and wordmark -->
+  <line class="logo-divider logo-underline" x1="552" y1="70" x2="552" y2="290" />
+
+  <!-- Wordmark.  Type sized to fit comfortably in DejaVu Sans metrics
+       (used by cairosvg when rasterising the PNG companion) while still
+       reading proportionally in browsers using their Apple/Microsoft
+       system fonts. -->
+  <g>
+    <text class="logo-wordmark-text"
+          x="600" y="232"
+          font-size="180">
+      <tspan class="logo-text-primary">EAS</tspan><tspan class="logo-text-brand"> STATION</tspan>
+    </text>
+    <!-- TM mark positioned as a proper superscript: baseline sits just
+         above the cap-top of "STATION" (caps top ≈ y=100, baseline ≈
+         y=92) so the glyph reads as a trademark mark instead of
+         floating into the cap line as it used to at y=118. -->
+    <text class="logo-tm" x="1820" y="100">&#8482;</text>
+    <text class="logo-tagline" x="602" y="305">OPEN-SOURCE EMERGENCY ALERTING INFRASTRUCTURE</text>
+  </g>
+</svg>

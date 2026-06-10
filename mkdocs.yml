@@ -12,8 +12,8 @@ docs_dir: docs
 theme:
   name: material
   language: en
-  logo: static/img/eas-system-wordmark.svg
-  favicon: static/img/eas-system-wordmark.svg
+  logo: assets/img/eas-system-wordmark.svg
+  favicon: assets/img/eas-system-wordmark.svg
   palette:
     # Light mode
     - media: "(prefers-color-scheme: light)"
@@ -133,6 +133,7 @@ nav:
       - One-Button Upgrade: guides/one_button_upgrade.md
       - IPAWS Feed Integration: guides/ipaws_feed_integration.md
       - Manual EAS Events & Broadcast Builder: guides/MANUAL_EAS_EVENTS.md
+      - Local Authority EAS Access: guides/LOCAL_AUTHORITIES.md
       - eas-config Tool: guides/EAS_CONFIG_TOOL.md
       - Pre/Post-Alert Signaling: guides/ALERT_SIGNALS.md
       - TTS Normalization: guides/TTS_NORMALIZATION.md
@@ -143,6 +144,8 @@ nav:
       - Database Backups: guides/DATABASE_BACKUPS.md
       - Analytics and Reporting: guides/ANALYTICS_AND_REPORTING.md
       - Audit Log Review: guides/AUDIT_LOG_REVIEW.md
+      - Application Settings: guides/APPLICATION_SETTINGS.md
+      - Health Monitoring Endpoints: guides/HEALTH_MONITORING.md
       - Icecast Streaming Setup: guides/ICECAST_STREAMING_SETUP.md
       - HTTPS Setup: guides/HTTPS_SETUP.md
       - SSL Web UI Guide: guides/SSL_WEB_UI_GUIDE.md
@@ -164,6 +167,7 @@ nav:
       - Hardware Setup Helper: hardware/HWSETUP_HELPER.md
   - Troubleshooting:
       - SDR Master Troubleshooting: troubleshooting/SDR_MASTER_TROUBLESHOOTING_GUIDE.md
+      - Audio/SDR Configuration Fix Tool: troubleshooting/AUDIO_SDR_FIX_TOOL.md
       - TTS Troubleshooting: troubleshooting/TTS_TROUBLESHOOTING.md
       - 502/504 Gateway Errors: troubleshooting/TROUBLESHOOTING_504_TIMEOUT.md
       - Firewall Requirements: troubleshooting/FIREWALL_REQUIREMENTS.md

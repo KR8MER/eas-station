@@ -176,6 +176,8 @@ The log includes:
 
 Pins are addressed by **BCM number**. Activate and then deactivate to pulse:
 
+> **Note:** API-key authentication (`X-API-Key`) is **planned but not yet implemented** — see [API Key Management](../guides/API_KEY_MANAGEMENT.md). Until it ships, these endpoints require an authenticated browser session (log in first and reuse the session cookie).
+
 ```bash
 # Activate BCM 26 (e.g. the transmit relay)
 curl -X POST -H "X-API-Key: <key>" \

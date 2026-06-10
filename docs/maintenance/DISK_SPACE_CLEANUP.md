@@ -136,7 +136,41 @@ For pruning very old data, prefer the in-app **Settings → Backups → Retentio
 
 ---
 
-## 7. Optional: Postfix mail spool
+## 7. Cleaning Up Duplicate Alerts
+
+If the poller has ingested the same CAP alert more than once (typically after feed hiccups or re-imports), duplicate rows inflate the `alerts` table and its boundary-intersection records. The bundled utility `poller/duplicate_cleanup_utility.py` finds alerts that share the same CAP **identifier** and removes the extras, always **keeping the most recently created copy** of each.
+
+Run it interactively from the install directory using the application's virtualenv (it needs the app's database configuration):
+
+```bash
+cd /opt/eas-station
+sudo -u eas-station venv/bin/python poller/duplicate_cleanup_utility.py
+```
+
+The utility walks through these steps:
+
+1. **Duplicate scan** — groups alerts by identifier and lists every identifier with more than one row, including event type, creation timestamps, and the database ID of each copy. It also exercises the poller's own duplicate detection as a cross-check.
+2. **Pattern analysis** — summarizes which event types are duplicated most and the time gaps between duplicate inserts (useful for diagnosing *why* duplicates appeared).
+3. **Interactive menu** — choose:
+   - **1 — Dry run**: prints exactly which alert IDs would be kept and which would be removed. No changes are made.
+   - **2 — Actually clean up (destructive)**: prompts you to type `DELETE DUPLICATES` to confirm, then deletes the older copies and commits.
+   - **3 — Exit** without changes.
+
+What it deletes and keeps:
+
+| | Behaviour |
+|---|---|
+| **Kept** | The newest row (latest `created_at`) for each duplicate identifier |
+| **Deleted** | All older rows with the same identifier |
+| **Side effect** | Boundary-intersection records attached to a deleted alert are deleted with it (the tool warns per alert before removal) |
+
+> ⚠️ Always run the dry run first and review the output. Deletion is permanent and removes the associated intersection records — there is no undo short of restoring a database backup.
+
+If the database is clean, the utility reports "No duplicates found" and exits without prompting.
+
+---
+
+## 8. Optional: Postfix mail spool
 
 If `eas-station-postal.service` is enabled (see [Local Mail Server guide](../guides/local_mail_server.md)), the deferred mail queue lives under `/var/spool/postfix/`. Check and flush it occasionally:
 
@@ -150,7 +184,7 @@ sudo postqueue -f
 
 ---
 
-## 8. Preventing future growth
+## 9. Preventing future growth
 
 1. **Cap the journal** — set `SystemMaxUse=` in `/etc/systemd/journald.conf` (see §2).
 2. **Keep audio archiving off** — only set `EAS_SAVE_AUDIO_FILES=true` while debugging.
@@ -159,7 +193,7 @@ sudo postqueue -f
 
 ---
 
-## 9. Where else to look if the disk is still full
+## 10. Where else to look if the disk is still full
 
 ```bash
 # Find every file > 100 MB on the root volume
