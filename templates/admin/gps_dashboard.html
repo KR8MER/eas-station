@@ -1953,8 +1953,10 @@
                 </div>
                 <div class="chart-meta">
                     <span><span class="label">σ</span> <span id="ts-jitter-stddev" class="value">—</span></span>
-                    <span><span class="label">peak</span> <span id="ts-jitter-peak" class="value">—</span></span>
                     <span><span class="label">median</span> <span id="ts-jitter-median" class="value">—</span></span>
+                    <span><span class="label">p95</span> <span id="ts-jitter-p95" class="value">—</span></span>
+                    <span><span class="label">p99</span> <span id="ts-jitter-p99" class="value">—</span></span>
+                    <span><span class="label">peak</span> <span id="ts-jitter-peak" class="value">—</span></span>
                     <span><span class="label">samples</span> <span id="ts-jitter-n" class="value">0</span></span>
                 </div>
                 <div class="gps-chart-canvas-wrap">
@@ -1965,22 +1967,27 @@
         </div>
 
         <!-- ============================================================
-             ALLAN DEVIATION — overlapping σ_y(τ) at τ = 1, 10, 100 s.
-             Plotted on a log-log axis (the standard frequency-stability
-             chart).  Empty until the manager has at least 3 pulses.
+             ALLAN DEVIATION — overlapping σ_y(τ) at τ = 1, 10, 100,
+             1000 s.  Plotted on a log-log axis (the standard frequency-
+             stability chart) with the white-PM measurement floor
+             (√3·σ_x/τ) overlaid so the operator can see when the curve
+             is timestamping-noise limited rather than oscillator noise.
+             Empty until the manager has at least 3 pulses.
              ============================================================ -->
         <div class="col-12 col-xl-6">
             <div class="gps-card h-100 gps-chart-card">
                 <div class="gps-card-head">
                     <h3><i class="fas fa-wave-square me-1"></i> Allan Deviation <span class="gps-help-anchor" data-gps-help="allan-deviation"></span></h3>
                     <div class="badge-area">
-                        <span class="text-muted small">overlapping σ_y(τ), log-log</span>
+                        <span class="text-muted small">overlapping σ_y(τ), log-log · dashed = noise floor</span>
                     </div>
                 </div>
                 <div class="chart-meta">
                     <span><span class="label">τ=1 s</span> <span id="ts-adev-1" class="value">—</span></span>
                     <span><span class="label">τ=10 s</span> <span id="ts-adev-10" class="value">—</span></span>
                     <span><span class="label">τ=100 s</span> <span id="ts-adev-100" class="value">—</span></span>
+                    <span><span class="label">τ=1000 s</span> <span id="ts-adev-1000" class="value">—</span></span>
+                    <span><span class="label">regime</span> <span id="ts-adev-regime" class="value">—</span></span>
                     <span><span class="label">samples</span> <span id="ts-adev-n" class="value">0</span></span>
                 </div>
                 <div class="gps-chart-canvas-wrap">
@@ -3699,20 +3706,47 @@
         setTileSeverity(uEl, uSev);
         if (uEl) uEl.querySelector('.metric-val').textContent = (pct !== null) ? pct + '%' : '—';
 
-        // Stability (Allan dev at τ=10s).  Severity ladder mirrors the
-        // 5-bucket healthy-range table in the help popover
-        // ('stability-tau10'): excellent/good/acceptable all collapse
-        // to ok, watch → warn, bad → fault.  The previous thresholds
-        // started warning at 1e-9 and faulting at 1e-7, which was a
-        // decade tighter than the documented ranges and painted
-        // perfectly normal watch-zone readings as faults.
+        // Stability (Allan dev at τ=10s) — noise-floor compensated.
+        //
+        // σ_y(τ=10 s) computed from PPS timestamps is bounded below by
+        // the white-PM measurement floor √3·σ_x/τ (σ_x = jitter σ/√2).
+        // On a Pi with kernel PPS that floor sits in the low 1e-7s, so
+        // a fixed 1e-7 warn threshold graded the *timestamping chain*
+        // (already covered by the Peak Jitter tile) and flagged clocks
+        // whose chrony skew said 1e-8 — see the τ⁻¹ slope on the Allan
+        // chart whenever this happens.  We therefore only warn when
+        // σ_y(10 s) pokes meaningfully above the floor: 3× the floor
+        // for warn, 10× for fault, never tighter than the documented
+        // absolute ladder (1e-7 / 1e-6) from the help popover.
         var sEl = document.getElementById('qm-stability');
+        var adevFloor10 = null;
+        if (adev && Array.isArray(adev.tau_s) && Array.isArray(adev.floor_sigma_y)) {
+            for (var fi = 0; fi < adev.tau_s.length; fi++) {
+                if (adev.tau_s[fi] === 10) { adevFloor10 = adev.floor_sigma_y[fi]; break; }
+            }
+        }
+        if (adevFloor10 === null && jitter && typeof jitter.stddev_ns === 'number') {
+            // Older backend payloads — derive the same floor client-side.
+            adevFloor10 = Math.sqrt(3) * ((jitter.stddev_ns / Math.SQRT2) / 1e9) / 10;
+        }
+        var sOkMax   = Math.max(1e-7, adevFloor10 !== null ? 3 * adevFloor10 : 0);
+        var sWarnMax = Math.max(1e-6, adevFloor10 !== null ? 10 * adevFloor10 : 0);
         var sSev = (adev10 === null) ? 'unknown'
-                 : (adev10 <= 1e-7) ? 'ok'
-                 : (adev10 <= 1e-6) ? 'warn'
+                 : (adev10 <= sOkMax) ? 'ok'
+                 : (adev10 <= sWarnMax) ? 'warn'
                  : 'fault';
         setTileSeverity(sEl, sSev);
-        if (sEl) sEl.querySelector('.metric-val').textContent = (adev10 !== null) ? fmtAdev(adev10) : '—';
+        if (sEl) {
+            sEl.querySelector('.metric-val').textContent = (adev10 !== null) ? fmtAdev(adev10) : '—';
+            // Flag floor-limited readings so the operator knows the
+            // number reflects measurement noise, not the oscillator.
+            var sSub = sEl.querySelector('.metric-sub');
+            if (sSub) {
+                sSub.textContent = (sSev === 'ok' && adev10 !== null && adev10 > 1e-7)
+                    ? 'σ_y(τ=10s) · noise-floor limited'
+                    : 'σ_y(τ=10s)';
+            }
+        }
 
         // Composite grade — letter encodes how many metrics are off-spec.
         //   A = all ok · B = 1 warn · C = ≥2 warns · D = 1 fault · F = ≥2 faults
@@ -4188,8 +4222,10 @@
         setText('gps-dash-visible-count', sats.length);
         setText('gps-dash-total-count', sats.length);
 
-        // Signal-integrity bar = average SNR scaled to 50 dBHz.
-        var validSnrs = sats.filter(function (s) { return typeof s.snr === 'number'; }).map(function (s) { return s.snr; });
+        // Signal-integrity bar = average SNR scaled to 50 dBHz.  Only
+        // tracked satellites (SNR > 0) count — visible-but-untracked
+        // PRNs report 0 dBHz and would drag a healthy install into red.
+        var validSnrs = sats.filter(function (s) { return typeof s.snr === 'number' && s.snr > 0; }).map(function (s) { return s.snr; });
         var avg = validSnrs.length ? validSnrs.reduce(function (a, b) { return a + b; }, 0) / validSnrs.length : null;
         var pct = avg === null ? 0 : Math.max(2, Math.min(100, Math.round((avg / 50) * 100)));
         var bar = document.getElementById('gps-dash-snr-bar');
@@ -4832,6 +4868,8 @@
             setText('ts-jitter-stddev', '—');
             setText('ts-jitter-peak', '—');
             setText('ts-jitter-median', '—');
+            setText('ts-jitter-p95', '—');
+            setText('ts-jitter-p99', '—');
             setText('ts-jitter-n', 0);
             var jc = document.getElementById('ts-jitter-canvas');
             if (jc) jc._hoverHitTest = null;
@@ -4840,6 +4878,8 @@
         setText('ts-jitter-stddev', fmtNs(jitter.stddev_ns));
         setText('ts-jitter-peak', fmtNs(jitter.peak_ns));
         setText('ts-jitter-median', fmtNs(jitter.median_ns));
+        setText('ts-jitter-p95', typeof jitter.p95_ns === 'number' ? fmtNs(jitter.p95_ns) : '—');
+        setText('ts-jitter-p99', typeof jitter.p99_ns === 'number' ? fmtNs(jitter.p99_ns) : '—');
         setText('ts-jitter-n', jitter.sample_count);
 
         var canvas = document.getElementById('ts-jitter-canvas');
@@ -4972,9 +5012,33 @@
         });
     }
 
+    // ── Noise-regime classifier from the log-log slope of the last
+    //    two σ_y(τ) points.  ADEV slopes map onto power-law noise types
+    //    (white/flicker PM ≈ τ⁻¹, white FM ≈ τ⁻½, flicker FM ≈ flat,
+    //    random-walk FM ≈ τ⁺½).  "white PM (floor)" is the operator
+    //    cue that the curve is measurement-noise limited and the real
+    //    oscillator stability is hiding somewhere below it.
+    function adevNoiseRegime(tauArr, sigArr) {
+        var pts = [];
+        for (var i = 0; i < tauArr.length; i++) {
+            var s = sigArr[i];
+            if (isFinite(s) && s > 0) pts.push([tauArr[i], s]);
+        }
+        if (pts.length < 2) return null;
+        var a = pts[pts.length - 2], b = pts[pts.length - 1];
+        var slope = (Math.log10(b[1]) - Math.log10(a[1])) / (Math.log10(b[0]) - Math.log10(a[0]));
+        var label;
+        if (slope <= -0.75)      label = 'white PM (floor)';
+        else if (slope <= -0.25) label = 'white FM';
+        else if (slope < 0.25)   label = 'flicker FM';
+        else                     label = 'random walk';
+        return { slope: slope, label: label };
+    }
+
     // ── Allan deviation log-log plot.  Renders the (τ, σ_y) tuples the
-    //    backend computed at τ = 1, 10, 100 s.  Empty until the manager
-    //    has at least 3 PPS pulses.
+    //    backend computed at τ = 1, 10, 100, 1000 s plus the white-PM
+    //    measurement floor √3·σ_x/τ as a dashed reference line.  Empty
+    //    until the manager has at least 3 PPS pulses.
     function renderAllanDeviation(adev) {
         var emptyEl = document.getElementById('ts-adev-empty');
         if (!adev || !adev.tau_s || !adev.tau_s.length) {
@@ -4982,6 +5046,8 @@
             setText('ts-adev-1', '—');
             setText('ts-adev-10', '—');
             setText('ts-adev-100', '—');
+            setText('ts-adev-1000', '—');
+            setText('ts-adev-regime', '—');
             setText('ts-adev-n', adev && adev.sample_count ? adev.sample_count : 0);
             var ac = document.getElementById('ts-adev-canvas');
             if (ac) ac._hoverHitTest = null;
@@ -4993,9 +5059,12 @@
         for (var i = 0; i < adev.tau_s.length; i++) {
             bytTau[adev.tau_s[i]] = adev.sigma_y[i];
         }
-        setText('ts-adev-1',   fmtAdev(bytTau[1]   != null ? bytTau[1]   : null));
-        setText('ts-adev-10',  fmtAdev(bytTau[10]  != null ? bytTau[10]  : null));
-        setText('ts-adev-100', fmtAdev(bytTau[100] != null ? bytTau[100] : null));
+        setText('ts-adev-1',    fmtAdev(bytTau[1]    != null ? bytTau[1]    : null));
+        setText('ts-adev-10',   fmtAdev(bytTau[10]   != null ? bytTau[10]   : null));
+        setText('ts-adev-100',  fmtAdev(bytTau[100]  != null ? bytTau[100]  : null));
+        setText('ts-adev-1000', fmtAdev(bytTau[1000] != null ? bytTau[1000] : null));
+        var regime = adevNoiseRegime(adev.tau_s, adev.sigma_y);
+        setText('ts-adev-regime', regime ? regime.label : '—');
 
         var canvas = document.getElementById('ts-adev-canvas');
         if (!canvas) return;
@@ -5009,17 +5078,33 @@
         var plotW = W - pad.l - pad.r;
         var plotH = H - pad.t - pad.b;
 
-        // X axis: log10(τ) over [0, 2] — i.e. 1 s to 100 s.  Y axis:
-        // log10(σ_y) auto-fit with at least 2 decades of range so a
-        // single-point plot still has somewhere to sit.
+        // X axis: log10(τ), spanning whatever τ range the backend
+        // delivered (1–100 s early in a session, out to 1000 s once the
+        // PPS ring holds ≥2001 pulses).  Y axis: log10(σ_y) auto-fit
+        // with at least 2 decades of range so a single-point plot still
+        // has somewhere to sit.
         var logTauMin = 0;
         var logTauMax = 2;
+        for (var ti2 = 0; ti2 < adev.tau_s.length; ti2++) {
+            var lt = Math.log10(adev.tau_s[ti2]);
+            if (isFinite(lt) && lt > logTauMax) logTauMax = Math.ceil(lt);
+        }
+        var sigmaX = (typeof adev.sigma_x_wpm_s === 'number' && adev.sigma_x_wpm_s > 0)
+            ? adev.sigma_x_wpm_s : null;
+        function floorAt(tau) { return sigmaX !== null ? Math.sqrt(3) * sigmaX / tau : null; }
         var sigmaMin = Infinity, sigmaMax = -Infinity;
         for (var j = 0; j < adev.sigma_y.length; j++) {
             var s = adev.sigma_y[j];
             if (!isFinite(s) || s <= 0) continue;
             if (s < sigmaMin) sigmaMin = s;
             if (s > sigmaMax) sigmaMax = s;
+        }
+        // Keep the noise-floor reference line inside the auto-fit range.
+        if (sigmaX !== null) {
+            var fLo = floorAt(Math.pow(10, logTauMax));
+            var fHi = floorAt(Math.pow(10, logTauMin));
+            if (fLo > 0 && fLo < sigmaMin) sigmaMin = fLo;
+            if (fHi > 0 && fHi > sigmaMax) sigmaMax = fHi;
         }
         if (!isFinite(sigmaMin) || !isFinite(sigmaMax)) return;
         var logSigMin = Math.floor(Math.log10(sigmaMin) - 0.5);
@@ -5060,6 +5145,25 @@
             ctx.moveTo(xx, pad.t); ctx.lineTo(xx, pad.t + plotH);
             ctx.stroke();
             ctx.fillText(Math.pow(10, lx) + ' s', xx, pad.t + plotH + 4);
+        }
+
+        // White-PM measurement floor — a τ⁻¹ straight line in log-log
+        // space.  σ_y readings sitting on this line are timestamping
+        // noise, not the oscillator; the gap between trace and floor is
+        // the only part that says anything about the clock.
+        if (sigmaX !== null) {
+            ctx.strokeStyle = 'rgba(210,153,34,0.75)';
+            ctx.lineWidth = 1.2;
+            ctx.setLineDash([5, 4]);
+            ctx.beginPath();
+            ctx.moveTo(xOf(Math.pow(10, logTauMin)), yOf(floorAt(Math.pow(10, logTauMin))));
+            ctx.lineTo(xOf(Math.pow(10, logTauMax)), yOf(floorAt(Math.pow(10, logTauMax))));
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.fillStyle = 'rgba(210,153,34,0.9)';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'bottom';
+            ctx.fillText('noise floor', pad.l + 6, yOf(floorAt(Math.pow(10, logTauMin))) - 2);
         }
 
         // Trace.
@@ -5113,6 +5217,13 @@
                          +   '<span class="sw" style="background:#bc8cff"></span>'
                          +   '<span>σ_y = ' + escapeHtml(fmtAdev(sigma)) + '</span>'
                          + '</div>';
+                var fv = floorAt(tauS);
+                if (fv !== null && fv > 0) {
+                    html += '<div class="row">'
+                          +   '<span class="sw" style="background:rgba(210,153,34,0.9)"></span>'
+                          +   '<span>floor = ' + escapeHtml(fmtAdev(fv)) + '</span>'
+                          + '</div>';
+                }
                 return { snapX: snapX, html: html };
             }
             var frac = (mx - pad.l) / plotW;
@@ -6092,7 +6203,7 @@
         'signal-integrity': {
             title: 'Signal Integrity',
             acronyms: 'snr gnss',
-            means: 'A 0–100 % bar derived from the average SNR (Signal-to-Noise Ratio) of every satellite currently in view, scaled to 50 dBHz.',
+            means: 'A 0–100 % bar derived from the average SNR (Signal-to-Noise Ratio) of every satellite the receiver is actually tracking (SNR > 0), scaled to 50 dBHz. Visible-but-untracked PRNs report 0 dBHz and are excluded so a long multi-GNSS almanac tail can\'t drag a healthy install into the red.',
             matters: 'Tells you at a glance whether the antenna is hearing the sky well. A weak average usually means an obstruction, bad cable, or LNA problem.',
             ranges: [
                 { level: 'excellent',  range: '≥ 80 % (avg SNR ≥ 40 dBHz)' },
@@ -6260,13 +6371,13 @@
             title: 'Stability (σ_y at τ=10 s)',
             acronyms: 'allan ppm',
             means: 'Short-term Allan deviation at a 10-second averaging interval. A dimensionless ratio describing how much the clock\'s frequency wanders over 10-second windows. Lower is better.',
-            matters: 'Average offset can look great while the clock wobbles wildly between samples. Allan deviation is the standard way to spot that. The τ=10 s slice catches PPS-line jitter and scheduler noise without being dominated by long-term oscillator drift.',
+            matters: 'Average offset can look great while the clock wobbles wildly between samples. Allan deviation is the standard way to spot that. Caveat: σ_y measured from PPS timestamps cannot go below the white-PM measurement floor √3·σ_x/τ set by the timestamping jitter itself — readings hugging that floor (the dashed line on the Allan chart, a τ⁻¹ slope) describe the measurement chain, not the oscillator. The grade therefore only degrades when σ_y(10 s) rises meaningfully above the floor: warn above 3× the floor, fault above 10× (never tighter than the absolute ladder below). Floor-limited readings are graded green and tagged "noise-floor limited".',
             ranges: [
                 { level: 'excellent',  range: '< 1 × 10⁻⁹' },
                 { level: 'good',       range: '1 × 10⁻⁹ – 1 × 10⁻⁸' },
-                { level: 'acceptable', range: '1 × 10⁻⁸ – 1 × 10⁻⁷' },
-                { level: 'watch',      range: '1 × 10⁻⁷ – 1 × 10⁻⁶' },
-                { level: 'bad',        range: '> 1 × 10⁻⁶' }
+                { level: 'acceptable', range: '1 × 10⁻⁸ – 1 × 10⁻⁷ (or ≤ 3× noise floor)' },
+                { level: 'watch',      range: '> max(1 × 10⁻⁷, 3× floor)' },
+                { level: 'bad',        range: '> max(1 × 10⁻⁶, 10× floor)' }
             ],
             causes: [
                 'Disciplining loop has not yet converged after a restart',
@@ -6991,8 +7102,8 @@
         'pps-jitter': {
             title: 'PPS Jitter Histogram',
             acronyms: 'pps ns',
-            means: 'Distribution of the inter-pulse interval relative to the nominal 1 s. The tighter and more centred the histogram, the cleaner the PPS source.',
-            matters: 'Even a perfect average offset hides ugly cycle-to-cycle jitter. This chart exposes it.',
+            means: 'Distribution of the inter-pulse interval relative to the nominal 1 s. The tighter and more centred the histogram, the cleaner the PPS source. The p95/p99 readouts are percentiles of |Δ| — when the median sits at a few ns but σ reads in µs, the distribution is heavy-tailed and a handful of scheduler-latency outliers are defining σ and peak; the percentiles tell you how rare those outliers actually are.',
+            matters: 'Even a perfect average offset hides ugly cycle-to-cycle jitter. This chart exposes it. The σ here also sets the white-PM noise floor on the Allan Deviation chart (σ_x ≈ σ/√2).',
             ranges: [
                 { level: 'excellent',  range: 'σ < 100 ns' },
                 { level: 'good',       range: 'σ < 1 µs' },
@@ -7008,12 +7119,13 @@
         },
         'allan-deviation': {
             title: 'Allan Deviation',
-            means: 'Standard frequency-stability chart — σ_y(τ) plotted on log-log axes at τ = 1, 10, 100 s. The lower the curve sits, the more stable the oscillator and disciplining loop.',
-            matters: 'The gold-standard way to judge a time source. Different τ values illuminate different physical noise types.',
+            means: 'Standard frequency-stability chart — σ_y(τ) plotted on log-log axes at τ = 1, 10, 100, 1000 s. The lower the curve sits, the more stable the oscillator and disciplining loop. The dashed line is the white-PM measurement floor (√3·σ_x/τ) implied by the PPS timestamping jitter: the trace cannot meaningfully sit below it, and a trace hugging it (slope ≈ τ⁻¹, regime "white PM (floor)") means the measurement is noise-limited and the real oscillator is better than the numbers shown.',
+            matters: 'The gold-standard way to judge a time source. Different τ values illuminate different physical noise types — read the "regime" label: white PM is timestamping noise, white/flicker FM is the oscillator and loop, random walk at long τ is usually temperature.',
             ranges: [
-                { level: 'excellent',  range: 'σ_y(1) < 1e-9' },
-                { level: 'good',       range: 'σ_y(1) 1e-9 – 1e-8' },
-                { level: 'watch',      range: 'σ_y(1) > 1e-7 or rising τ-curve' }
+                { level: 'excellent',  range: 'curve at/below the noise floor (τ⁻¹ slope)' },
+                { level: 'good',       range: 'σ_y(100) < 1e-8 above the floor' },
+                { level: 'watch',      range: 'σ_y(τ) > 3× floor or flattening early' },
+                { level: 'bad',        range: 'rising τ-curve (random walk dominating)' }
             ],
             causes: [
                 'Loop not yet converged (need ≥ 30 min of pulses)',
@@ -7356,10 +7468,23 @@
         }
         _setHealthCell('clock-accuracy', caLev, caDet);
 
-        // Signal Quality — avg SNR + sat count.
+        // Signal Quality — avg SNR + sat count.  Average only the
+        // satellites actually contributing (used-in-fix, SNR > 0):
+        // multi-GNSS receivers report a long tail of visible-but-
+        // untracked PRNs at 0 dBHz, and averaging those in halved the
+        // figure and pushed healthy installs into "bad".  Fall back to
+        // any tracked (SNR > 0) satellite while a fix is still forming.
         var sats = gps.satellites_in_view || [];
         var active = gps.active_satellite_prns || [];
-        var snrs = sats.filter(function (s) { return typeof s.snr === 'number'; }).map(function (s) { return s.snr; });
+        var activeSet = {};
+        active.forEach(function (p) { activeSet[p] = true; });
+        var usedSnrs = sats.filter(function (s) {
+            return typeof s.snr === 'number' && s.snr > 0 && activeSet[s.prn];
+        }).map(function (s) { return s.snr; });
+        var trackedSnrs = sats.filter(function (s) {
+            return typeof s.snr === 'number' && s.snr > 0;
+        }).map(function (s) { return s.snr; });
+        var snrs = usedSnrs.length ? usedSnrs : trackedSnrs;
         var avgSnr = snrs.length ? snrs.reduce(function (a, b) { return a + b; }, 0) / snrs.length : null;
         var sqLev = 'unknown', sqDet = 'awaiting satellite data';
         if (avgSnr !== null) {
@@ -7370,7 +7495,8 @@
                 { min: 10, level: 'watch' },
                 { min: -Infinity, level: 'bad' }
             ]).level;
-            sqDet = 'Avg ' + avgSnr.toFixed(1) + ' dBHz · ' + active.length + ' used / ' + sats.length + ' visible';
+            sqDet = 'Avg (' + (usedSnrs.length ? 'used' : 'tracked') + ') ' + avgSnr.toFixed(1) + ' dBHz · '
+                  + active.length + ' used / ' + sats.length + ' visible';
         }
         // Used-sat floor downgrades the verdict.
         var usedLev = rateAtLeast(active.length, [

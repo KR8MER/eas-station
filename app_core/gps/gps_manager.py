@@ -320,6 +320,7 @@ class GPSManager:
         self._cached_allan: Dict[str, Any] = {}
         self._cached_sat_history: List[Dict[str, Any]] = []
         self._cached_pps_interval_count: int = 0
+        self._cached_cpu_temp: Optional[float] = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -633,6 +634,10 @@ class GPSManager:
                 sat_history = [dict(v) for v in self._sat_history.values()]
             self._cached_jitter = self._compute_jitter_summary(interval_samples)
             self._cached_allan = self._compute_allan_deviation(interval_samples)
+            # Host SoC temperature — sampled on the same throttle so the
+            # dashboard can correlate oscillator frequency against the
+            # board's thermal state (TCXO drift is mostly thermal).
+            self._cached_cpu_temp = self._read_cpu_temp_c()
             # Sort once at cache time so per-call output is a direct read
             # of the cached list — no per-call sort, no per-call copy.
             sat_history.sort(key=lambda e: (e.get("constellation") or "", e.get("prn") or 0))
@@ -670,6 +675,7 @@ class GPSManager:
         # special-casing the cold-start window.
         data["pps_jitter"] = self._cached_jitter
         data["allan_deviation"] = self._cached_allan
+        data["cpu_temp_c"] = getattr(self, "_cached_cpu_temp", None)
 
         # Fix age — drives the "GPS Fix Age" tile.  When we have an active
         # fix this tracks NMEA freshness; when we don't, it's the time
@@ -742,6 +748,14 @@ class GPSManager:
         peak = max(abs(d) for d in deltas_ns)
         sorted_deltas = sorted(deltas_ns)
         median = sorted_deltas[n // 2]
+
+        # Robust tail percentiles of |Δ| (nearest-rank).  σ and peak are
+        # both dominated by a handful of scheduler-latency outliers on a
+        # heavily-loaded host; p95/p99 tell the operator how bad the tail
+        # actually is without a single rogue pulse defining the headline.
+        sorted_abs = sorted(abs(d) for d in deltas_ns)
+        p95 = sorted_abs[min(n - 1, max(0, math.ceil(0.95 * n) - 1))]
+        p99 = sorted_abs[min(n - 1, max(0, math.ceil(0.99 * n) - 1))]
 
         # Pick a bucket width so the bulk of the data spans most of the
         # 14 inner buckets.  Target the larger of:
@@ -822,6 +836,8 @@ class GPSManager:
             "stddev_ns": round(stddev, 1),
             "peak_ns": int(peak),
             "median_ns": int(median),
+            "p95_ns": int(p95),
+            "p99_ns": int(p99),
         }
 
     @staticmethod
@@ -840,9 +856,28 @@ class GPSManager:
         ``{tau_s: σ_y}`` dict; entries are omitted when the buffer is
         too short to estimate ADEV at that τ (e.g. τ=1000 s needs at
         least 2001 PPS samples in the ring).
+
+        Alongside σ_y the result carries the white-phase-modulation
+        measurement floor so consumers can tell "the oscillator is
+        wandering" apart from "the PPS timestamping chain is noisy":
+
+        * ``sigma_x_wpm_s`` — the per-pulse phase-noise estimate σ_x.
+          The interval deltas are first differences of phase, so for
+          white timestamping noise σ_x = σ_Δ / √2.
+        * ``floor_sigma_y`` — √3·σ_x/τ per returned τ (parallel array).
+          When σ_y(τ) hugs this curve the reading is measurement-noise
+          limited and says nothing about the disciplined clock itself;
+          the dashboard's stability grade uses it to avoid flagging
+          perfectly healthy clocks on hosts with µs-level PPS jitter.
         """
         if not intervals_ns or len(intervals_ns) < 4:
-            return {"tau_s": [], "sigma_y": [], "sample_count": len(intervals_ns or [])}
+            return {
+                "tau_s": [],
+                "sigma_y": [],
+                "floor_sigma_y": [],
+                "sigma_x_wpm_s": None,
+                "sample_count": len(intervals_ns or []),
+            }
 
         nominal_ns = 1_000_000_000
         # Phase samples in seconds (cumulative timing error vs. ideal).
@@ -853,8 +888,16 @@ class GPSManager:
             phase.append(running)
 
         n = len(phase)
+
+        # White-PM measurement floor from the interval-delta spread.
+        deltas_s = [(v - nominal_ns) / 1e9 for v in intervals_ns]
+        mean_d = sum(deltas_s) / n
+        var_d = sum((d - mean_d) * (d - mean_d) for d in deltas_s) / n
+        sigma_x = math.sqrt(var_d) / math.sqrt(2.0)
+
         results_tau: List[int] = []
         results_sigma: List[float] = []
+        results_floor: List[float] = []
 
         for tau_s in (1, 10, 100, 1000):
             m = tau_s  # τ₀ = 1 s
@@ -875,12 +918,48 @@ class GPSManager:
                 continue
             results_tau.append(tau_s)
             results_sigma.append(math.sqrt(sigma_sq))
+            results_floor.append(math.sqrt(3.0) * sigma_x / tau)
 
         return {
             "tau_s": results_tau,
             "sigma_y": results_sigma,
+            "floor_sigma_y": results_floor,
+            "sigma_x_wpm_s": sigma_x,
             "sample_count": n,
         }
+
+    @staticmethod
+    def _read_cpu_temp_c() -> Optional[float]:
+        """Best-effort host SoC temperature in °C from sysfs.
+
+        Prefers a thermal zone whose type mentions the CPU/SoC (covers
+        the Pi's ``cpu-thermal`` and x86's ``x86_pkg_temp``), falling
+        back to the first zone present.  Returns ``None`` on hosts
+        without a thermal zone (containers, some VMs) or on implausible
+        readings so a broken sensor can't poison the trend archive.
+        """
+        try:
+            from pathlib import Path
+            zones = sorted(Path("/sys/class/thermal").glob("thermal_zone*"))
+            chosen = None
+            for zone in zones:
+                try:
+                    ztype = (zone / "type").read_text().strip().lower()
+                except OSError:
+                    continue
+                if "cpu" in ztype or "soc" in ztype or "pkg" in ztype:
+                    chosen = zone
+                    break
+            if chosen is None and zones:
+                chosen = zones[0]
+            if chosen is None:
+                return None
+            val = float((chosen / "temp").read_text().strip()) / 1000.0
+            if -40.0 <= val <= 150.0:
+                return round(val, 1)
+        except Exception:
+            pass
+        return None
 
     # ------------------------------------------------------------------
     # Per-PRN tracking history
