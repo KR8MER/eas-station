@@ -515,6 +515,28 @@
 {% block scripts %}
 {{ super() }}
 <script>
+// Surface uncaught page-script errors on the page itself: this admin page
+// is fully client-rendered (fleet table, counters, modals), and on mobile
+// browsers there is no dev console — a silent script failure is
+// indistinguishable from "no receivers configured".
+window.addEventListener('error', (event) => {
+    const banner = document.getElementById('radioStatus');
+    if (!banner) return;
+    banner.classList.remove('d-none', 'alert-info', 'alert-warning');
+    banner.classList.add('alert', 'alert-danger');
+    banner.textContent = `Page script error: ${event.message || 'unknown error'}`;
+});
+
+// IMPORTANT: base.html loads the Bootstrap bundle with `defer`, so the
+// `bootstrap` global does not exist yet while this inline script is being
+// parsed.  Everything below must wait for DOMContentLoaded — deferred
+// scripts are guaranteed to have executed by then.  Running eagerly threw
+// `ReferenceError: bootstrap is not defined` at the
+// Modal.getOrCreateInstance call below, which killed this entire script
+// and left the page inert: empty receiver fleet, zeroed counters, and
+// dead Add/Edit/Discover buttons even though the server-side database
+// had receivers to show.
+function initRadioReceiversPage() {
 // Bootstrap recommends modals be direct children of <body> to avoid CSS
 // stacking-context conflicts with positioned flex containers (.page-shell).
 // Move them before Bootstrap initialises the instances below.
@@ -2941,5 +2963,14 @@
         openModal();
     };
 })();
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initRadioReceiversPage);
+} else {
+    // Script evaluated after parsing finished (e.g. injected late):
+    // deferred bundles have already run, safe to initialise now.
+    initRadioReceiversPage();
+}
 </script>
 {% endblock %}
