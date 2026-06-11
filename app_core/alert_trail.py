@@ -100,6 +100,13 @@ def _forwarding_event(cap_alert) -> Optional[Dict[str, Any]]:
                 "catch-up sweep."
             ),
         }
+    elif cap_alert.eas_forwarding_reason.startswith("Never evaluated"):
+        # Terminal stamp written by CAPPoller.retry_unevaluated_forwards():
+        # the pipeline faulted at ingest and the alert expired before the
+        # sweep could retry — a broadcast was missed.
+        summary = "Missed broadcast — never evaluated before expiry"
+        level = "ERROR"
+        details = {"reason": cap_alert.eas_forwarding_reason}
     else:
         summary = "Forwarding suppressed"
         level = "WARNING"

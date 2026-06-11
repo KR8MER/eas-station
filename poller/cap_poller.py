@@ -2895,6 +2895,16 @@ class CAPPoller:
     # actually airs.
     FORWARD_RETRY_WINDOW_MINUTES = 60
 
+    # Terminal reason stamped on alerts that expired while never evaluated.
+    # The "Never evaluated" prefix is matched by the alert trail
+    # (app_core/alert_trail.py::_forwarding_event) and the health endpoint
+    # (webapp/routes_monitoring.py) to render/count a missed broadcast —
+    # keep all three in sync.
+    MISSED_FORWARDING_REASON = (
+        "Never evaluated — ingest pipeline fault; alert expired before the "
+        "catch-up sweep could retry"
+    )
+
     def retry_unevaluated_forwards(self) -> int:
         """Re-run the auto-forward decision for alerts that never received one.
 
@@ -2910,6 +2920,53 @@ class CAPPoller:
         """
         now = utc_now()
         cutoff = now - timedelta(minutes=self.FORWARD_RETRY_WINDOW_MINUTES)
+
+        # Terminal accounting first: the pipeline died AND the alert expired
+        # before any retry could happen — the broadcast window is gone.  Stamp
+        # a terminal reason (one-shot: the NULL reason is what marks a row as
+        # pending) and raise a system-log ERROR so the miss is investigated
+        # rather than discovered on a trail page later.  The
+        # created_at < expires filter excludes alerts that were *already*
+        # expired when ingested (historical imports), for which skipping the
+        # forwarding decision is correct behaviour, not a fault.
+        try:
+            missed = (
+                self.db_session.query(CAPAlert)
+                .filter(CAPAlert.eas_forwarded.is_(False))
+                .filter(CAPAlert.eas_forwarding_reason.is_(None))
+                .filter(CAPAlert.expires.isnot(None))
+                .filter(CAPAlert.expires <= now)
+                .filter(CAPAlert.expires > now - timedelta(hours=24))
+                .filter(CAPAlert.created_at < CAPAlert.expires)
+                .all()
+            )
+        except Exception as exc:
+            self.logger.warning("Missed-forwarding query failed: %s", exc)
+            try:
+                self.db_session.rollback()
+            except Exception:
+                pass
+            missed = []
+        if missed:
+            try:
+                for alert in missed:
+                    alert.eas_forwarding_reason = self.MISSED_FORWARDING_REASON[:255]
+                    self.db_session.add(alert)
+                self.db_session.commit()
+            except Exception as exc:
+                self.logger.error("Failed to stamp missed-forwarding alerts: %s", exc)
+                try:
+                    self.db_session.rollback()
+                except Exception:
+                    pass
+            self.log_system_event(
+                'ERROR',
+                f"MISSED BROADCAST: {len(missed)} alert(s) expired without "
+                f"ever being evaluated for forwarding — the ingest pipeline "
+                f"faulted and the catch-up sweep did not run in time",
+                {'identifiers': [a.identifier for a in missed]},
+            )
+
         try:
             pending = (
                 self.db_session.query(CAPAlert)

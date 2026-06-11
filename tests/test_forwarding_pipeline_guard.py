@@ -78,12 +78,16 @@ class _FakeQuery:
 
 
 class _FakeSweepSession(_FakeSession):
-    def __init__(self, pending):
+    """The sweep issues two queries per invocation: missed (expired,
+    never-evaluated) first, then pending (unexpired, never-evaluated)."""
+
+    def __init__(self, pending, missed=None):
         super().__init__()
-        self._pending = pending
+        self._results = [list(missed or []), list(pending)]
 
     def query(self, model):
-        return _FakeQuery(self._pending)
+        items = self._results.pop(0) if self._results else []
+        return _FakeQuery(items)
 
 
 def _aware(offset_minutes: int) -> datetime:
@@ -245,6 +249,47 @@ def test_retry_unevaluated_forwards_reevaluates_pending_alert(monkeypatch):
     assert pending.identifier in details["identifiers"]
 
 
+def test_missed_broadcast_is_stamped_and_alarmed(monkeypatch):
+    """An alert that expired while never evaluated must get a terminal
+    'Never evaluated' reason and a system-log ERROR — and must NOT be
+    pushed to the air chain (its window is gone)."""
+    missed = SimpleNamespace(
+        identifier="CAPNET-MISSED-0001",
+        raw_json={},
+        eas_forwarded=False,
+        eas_forwarding_reason=None,
+        created_at=_aware(-120),
+        expires=_aware(-60),
+    )
+
+    poller = object.__new__(CAPPoller)
+    poller.logger = logging.getLogger("test_forwarding_pipeline_guard")
+    poller.db_session = _FakeSweepSession(pending=[], missed=[missed])
+    poller.eas_config = {"enabled": True}
+    poller.location_settings = {}
+
+    system_events = []
+    poller.log_system_event = lambda level, message, details=None: system_events.append(
+        (level, message, details)
+    )
+
+    def _must_not_run(**kwargs):
+        raise AssertionError("expired alert must not be forwarded")
+
+    monkeypatch.setattr(cp, "auto_forward_cap_alert", _must_not_run)
+
+    evaluated = poller.retry_unevaluated_forwards()
+
+    assert evaluated == 0
+    assert missed.eas_forwarding_reason.startswith("Never evaluated")
+    assert poller.db_session.commits == 1
+    assert len(system_events) == 1
+    level, message, details = system_events[0]
+    assert level == "ERROR"
+    assert "MISSED BROADCAST" in message
+    assert missed.identifier in details["identifiers"]
+
+
 def test_retry_unevaluated_forwards_noop_when_nothing_pending(monkeypatch):
     poller = object.__new__(CAPPoller)
     poller.logger = logging.getLogger("test_forwarding_pipeline_guard")
@@ -326,6 +371,21 @@ def test_trail_event_deliberate_suppression():
     assert event["summary"] == "Forwarding suppressed"
     assert event["level"] == "WARNING"
     assert event["details"]["reason"].startswith("Alert scope")
+
+
+def test_trail_event_missed_broadcast_stamp():
+    """The terminal 'Never evaluated' stamp from the catch-up sweep renders
+    as a missed broadcast at ERROR level."""
+    pytest.importorskip("flask")
+    from app_core.alert_trail import _forwarding_event
+
+    event = _forwarding_event(_trail_alert(
+        False,
+        "Never evaluated — ingest pipeline fault; alert expired before the "
+        "catch-up sweep could retry",
+    ))
+    assert event["summary"] == "Missed broadcast — never evaluated before expiry"
+    assert event["level"] == "ERROR"
 
 
 def test_trail_event_never_evaluated_is_distinct():
