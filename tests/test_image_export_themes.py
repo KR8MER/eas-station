@@ -86,6 +86,80 @@ def test_unknown_event_falls_back_to_severity():
     assert theme["accent"] == image_export._SEVERITY["extreme"]
 
 
+# ── Alert tier (watch / warning / advisory) colour coding ──────────────────
+@pytest.mark.parametrize("event,expected_tier", [
+    ("TORNADO WARNING",              "warning"),
+    ("Severe Thunderstorm Watch",    "watch"),
+    ("HEAT ADVISORY",                "advisory"),
+    ("Special Weather Statement",    "statement"),
+    ("TORNADO EMERGENCY",            "emergency"),
+    ("Flood Warning",                "warning"),
+])
+def test_resolve_tier_maps_event_ladder(event, expected_tier):
+    tier = image_export._resolve_tier(event)
+    assert tier is not None, event
+    word, style = tier
+    assert word == expected_tier
+    fill = style["fill"]
+    assert len(fill) == 3 and all(0 <= c <= 255 for c in fill)
+
+
+@pytest.mark.parametrize("event", [
+    "AMBER ALERT",
+    "911 Telephone Outage",
+    "",
+    None,
+])
+def test_resolve_tier_none_for_untiered_events(event):
+    assert image_export._resolve_tier(event) is None
+
+
+def test_resolve_tier_matches_whole_words_only():
+    # "watchman" / "warnings" style substrings must not match the ladder.
+    assert image_export._resolve_tier("NIGHT WATCHMAN ALERT") is None
+
+
+def test_urgency_heat_warning_hotter_than_advisory():
+    """The same hazard family must render hotter for a warning than for
+    its watch / advisory siblings, and severity caps the heat too."""
+    hot  = image_export._urgency_heat("warning", "Extreme")
+    mid  = image_export._urgency_heat("watch", "Severe")
+    cool = image_export._urgency_heat("advisory", "Moderate")
+    assert hot == 1.0
+    assert hot > mid > cool
+    # Severity alone can pull a warning's heat down.
+    assert image_export._urgency_heat("warning", "Minor") < hot
+
+
+def test_apply_urgency_cools_gradient_but_keeps_accent():
+    theme = image_export._resolve_theme("HEAT ADVISORY", "moderate")
+    heat = image_export._urgency_heat("advisory", "moderate")
+    cooled = image_export._apply_urgency_to_theme(theme, heat)
+    # Gradient stops dim toward grey; accent (section headers, polygon
+    # stroke) keeps full hazard-family identity.
+    assert sum(cooled["bottom"]) < sum(theme["bottom"])
+    assert cooled["accent"] == theme["accent"]
+    assert cooled["particle_intensity"] < theme["particle_intensity"]
+    # Full heat is a no-op (same object back).
+    assert image_export._apply_urgency_to_theme(theme, 1.0) is theme
+
+
+def test_generate_alert_image_renders_tier_badge_for_each_tier():
+    """Each tier word should round-trip through the full renderer."""
+    for event in ("Tornado Warning", "Severe Thunderstorm Watch",
+                  "Heat Advisory", "Special Weather Statement",
+                  "Tornado Emergency"):
+        alert = _FakeAlert()
+        alert.id = 6600 + abs(hash(event)) % 1000
+        alert.event = event
+        alert.severity = "Severe"
+        png = image_export.generate_alert_image(
+            alert, {}, None, {"county_name": "Test County, OH"},
+        )
+        img = Image.open(io.BytesIO(png))
+        assert img.size == (1200, 630), event
+
+
 # ── Storm-motion suppression ───────────────────────────────────────────────
 @pytest.mark.parametrize("event,supports", [
     ("TORNADO WARNING",            True),
@@ -438,6 +512,46 @@ def test_generate_alert_image_aspect_ratio(ratio, expected_size):
     # Outer corners should still be transparent across every layout.
     assert img.getpixel((0, 0))[3] == 0
     assert img.getpixel((expected_size[0] - 1, expected_size[1] - 1))[3] == 0
+
+
+def test_generate_alert_image_scale_2x_doubles_canvas():
+    """``scale=2`` should Lanczos-upscale the composed card to twice the
+    layout dimensions (the Facebook-upload path) while keeping the
+    rounded-corner transparency intact."""
+    alert = _FakeAlert()
+    alert.id = 88001
+    alert.event = "Severe Thunderstorm Warning"
+    alert.severity = "Severe"
+    png = image_export.generate_alert_image(
+        alert, {}, None, {"county_name": "Test County, OH"},
+        scale=2,
+    )
+    img = Image.open(io.BytesIO(png))
+    assert img.size == (2400, 1260)
+    assert img.mode == "RGBA"
+    assert img.getpixel((0, 0))[3] == 0
+    assert img.getpixel((2399, 1259))[3] == 0
+    # A pixel well inside the header must be opaque.
+    assert img.getpixel((1200, 90))[3] == 255
+
+
+@pytest.mark.parametrize("bad_scale,expected_size", [
+    (0,      (1200, 630)),   # zero → clamps to native
+    (-3,     (1200, 630)),   # negative → clamps to native
+    (99,     (3600, 1890)),  # above the cap → clamps to 3×
+    ("oops", (1200, 630)),   # unparseable → native
+    (None,   (1200, 630)),   # missing → native
+])
+def test_generate_alert_image_scale_is_clamped(bad_scale, expected_size):
+    alert = _FakeAlert()
+    alert.id = 88002
+    alert.event = "Frost Advisory"
+    png = image_export.generate_alert_image(
+        alert, {}, None, {"county_name": "Test County, OH"},
+        scale=bad_scale,
+    )
+    img = Image.open(io.BytesIO(png))
+    assert img.size == expected_size
 
 
 def test_generate_alert_image_unknown_ratio_falls_back_to_landscape():
