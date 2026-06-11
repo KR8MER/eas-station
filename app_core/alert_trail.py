@@ -73,6 +73,47 @@ def _event(
     }
 
 
+def _forwarding_event(cap_alert) -> Optional[Dict[str, Any]]:
+    """Build the timeline event describing the alert's forwarding outcome.
+
+    ``eas_forwarding_reason`` is written by every exit path of
+    ``auto_forward_cap_alert`` (at minimum an empty string), so a NULL reason
+    with ``eas_forwarded=False`` means no forwarding decision was ever
+    recorded — the ingest pipeline was interrupted (or is still running).
+    That state is rendered distinctly from a deliberate suppression so an
+    operator can tell "the system chose not to air this" apart from "the
+    system never got to choose".
+    """
+    if cap_alert.eas_forwarded:
+        summary = "Forwarded to air chain"
+        level = "INFO"
+        details: Dict[str, Any] = {"reason": cap_alert.eas_forwarding_reason}
+    elif cap_alert.eas_forwarding_reason is None:
+        summary = "Forwarding decision never recorded"
+        level = "ERROR"
+        details = {
+            "reason": None,
+            "note": (
+                "The alert was saved but the ingest pipeline did not reach "
+                "the auto-forward step (interrupted, or still in progress). "
+                "Unexpired alerts are retried by the poller's forwarding "
+                "catch-up sweep."
+            ),
+        }
+    else:
+        summary = "Forwarding suppressed"
+        level = "WARNING"
+        details = {"reason": cap_alert.eas_forwarding_reason}
+    return _event(
+        timestamp=cap_alert.updated_at or cap_alert.created_at,
+        category="forward",
+        source="auto_forward",
+        summary=summary,
+        details=details,
+        level=level,
+    )
+
+
 def collect_alert_trail(identifier: str) -> Dict[str, Any]:
     """Aggregate every row associated with *identifier* into a trail payload.
 
@@ -217,18 +258,9 @@ def collect_alert_trail(identifier: str) -> Dict[str, Any]:
                 details={"cap_alert_id": cap_alert.id},
             ))
         if cap_alert.eas_forwarded is not None:
-            events.append(_event(
-                timestamp=cap_alert.updated_at or cap_alert.created_at,
-                category="forward",
-                source="auto_forward",
-                summary=(
-                    "Forwarded to air chain"
-                    if cap_alert.eas_forwarded
-                    else "Forwarding suppressed"
-                ),
-                details={"reason": cap_alert.eas_forwarding_reason},
-                level="INFO" if cap_alert.eas_forwarded else "WARNING",
-            ))
+            forwarding_event = _forwarding_event(cap_alert)
+            if forwarding_event is not None:
+                events.append(forwarding_event)
 
     for src in received:
         events.append(_event(
