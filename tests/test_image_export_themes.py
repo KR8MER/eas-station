@@ -795,7 +795,7 @@ def test_render_map_draws_counties_and_scale_bar(monkeypatch):
     monkeypatch.setattr(image_export, "_fetch_tile", lambda tx, ty, z: None)
 
     # Stub a 3×3 grid of square "counties" around the alert polygon.
-    def _fake_counties(min_lon, min_lat, max_lon, max_lat):
+    def _fake_counties(min_lon, min_lat, max_lon, max_lat, db_session=None):
         xs = [-84.4, -84.0, -83.6, -83.2]
         ys = [39.8, 40.2, 40.6, 41.0]
         out = []
@@ -822,3 +822,91 @@ def test_render_map_draws_counties_and_scale_bar(monkeypatch):
     img = image_export._render_map(geom, "severe", map_w=582, map_h=490)
     assert img.size == (582, 490)
     assert img.mode == "RGB"
+
+
+# ── Coverage map via a caller-supplied DB session ───────────────────────────
+# Notification emails are sent from the CAP poller / audio monitoring
+# services — standalone processes with no Flask application context, where
+# the renderer's default Flask-SQLAlchemy session is unusable.  The caller's
+# own session must be honoured for both the geometry fetch and the
+# county-outline lookup, otherwise the email card silently degrades to the
+# "Map not available" placeholder.
+
+class _StubQuery:
+    def __init__(self, result):
+        self._result = result
+
+    def filter(self, *args, **kwargs):
+        return self
+
+    def scalar(self):
+        return self._result
+
+
+class _StubSession:
+    """Minimal SQLAlchemy-session stand-in for the geometry fetch."""
+
+    def __init__(self, geom_json):
+        self._geom_json = geom_json
+        self.query_calls = 0
+
+    def query(self, *args, **kwargs):
+        self.query_calls += 1
+        return _StubQuery(self._geom_json)
+
+    def execute(self, *args, **kwargs):
+        # County-outline lookup — no table in this stub; the renderer must
+        # degrade to a polygon-only map, not crash.
+        raise RuntimeError("no county boundary table in stub session")
+
+
+def test_generate_alert_image_uses_provided_db_session(monkeypatch):
+    """A caller-supplied ``db_session`` must drive the geometry fetch and be
+    forwarded to the map renderer (the no-Flask-context email path)."""
+    import json as _json
+    import types
+
+    # ``generate_alert_image`` imports CAPAlert only to build the query
+    # expression; stub the module so the test stays free of the full app.
+    fake_models = types.ModuleType("app_core.models")
+
+    class _FakeCAPAlert:
+        id = 0
+        geom = None
+
+    fake_models.CAPAlert = _FakeCAPAlert
+    monkeypatch.setitem(sys.modules, "app_core.models", fake_models)
+
+    # Force the offline tile path so the test never hits the network.
+    monkeypatch.setattr(image_export, "_fetch_tile", lambda tx, ty, z: None)
+
+    geom = {
+        "type": "Polygon",
+        "coordinates": [[[-82.6, 40.4], [-82.3, 40.4], [-82.3, 40.7],
+                         [-82.6, 40.7], [-82.6, 40.4]]],
+    }
+    session = _StubSession(_json.dumps(geom))
+
+    rendered = {}
+    real_render_map = image_export._render_map
+
+    def _spy_render_map(g, severity, *args, **kwargs):
+        rendered["geom"] = g
+        rendered["db_session"] = kwargs.get("db_session")
+        return real_render_map(g, severity, *args, **kwargs)
+
+    monkeypatch.setattr(image_export, "_render_map", _spy_render_map)
+
+    alert = _FakeAlert()
+    alert.id = 42
+    png = image_export.generate_alert_image(
+        alert, {}, None, {"county_name": "Test County, OH"},
+        db_session=session,
+    )
+
+    assert png.startswith(b"\x89PNG")
+    assert session.query_calls == 1, \
+        "geometry was not fetched through the provided session"
+    assert rendered.get("geom") == geom, "map was not rendered from the fetched geometry"
+    assert rendered.get("db_session") is session, \
+        "session was not forwarded to the county-outline lookup"
