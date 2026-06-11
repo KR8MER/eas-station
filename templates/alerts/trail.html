@@ -84,6 +84,9 @@
                 {% if alert.eas_forwarding_reason %}
                 <dt class="col-sm-3">Forwarding reason</dt>
                 <dd class="col-sm-9">{{ alert.eas_forwarding_reason }}</dd>
+                {% elif not alert.eas_forwarded %}
+                <dt class="col-sm-3">Forwarding reason</dt>
+                <dd class="col-sm-9 text-danger">Never recorded — see the forwarding event below</dd>
                 {% endif %}
             </dl>
         </div>

@@ -1681,9 +1681,15 @@
                     {% endif %}
 
                     <!-- Forwarding Status Card -->
-                    {% if alert.eas_forwarded or alert.eas_forwarding_reason %}
+                    {# A decision must exist for every alert that was unexpired at
+                       ingest. NULL reason + not forwarded on such an alert means the
+                       pipeline faulted before the decision — show that loudly instead
+                       of hiding the card. #}
+                    {% set forwarding_no_decision = (not alert.eas_forwarded) and (not alert.eas_forwarding_reason) and alert.expires and alert.created_at and alert.created_at < alert.expires %}
+                    {% set forwarding_missed = alert.eas_forwarding_reason and alert.eas_forwarding_reason.startswith('Never evaluated') %}
+                    {% if alert.eas_forwarded or alert.eas_forwarding_reason or forwarding_no_decision %}
                     <div class="card mt-4">
-                        <div class="card-header {% if alert.eas_forwarded %}bg-success text-white{% else %}bg-secondary text-white{% endif %}">
+                        <div class="card-header {% if alert.eas_forwarded %}bg-success text-white{% elif forwarding_missed or forwarding_no_decision %}bg-danger text-white{% else %}bg-secondary text-white{% endif %}">
                             <h5 class="mb-0">
                                 <i class="fas fa-broadcast-tower"></i> EAS Forwarding Status
                             </h5>
@@ -1693,6 +1699,14 @@
                                 {% if alert.eas_forwarded %}
                                 <span class="badge bg-success fs-6 me-2">
                                     <i class="fas fa-check-circle"></i> Forwarded to Air Chain
+                                </span>
+                                {% elif forwarding_missed %}
+                                <span class="badge bg-danger fs-6 me-2">
+                                    <i class="fas fa-exclamation-triangle"></i> Missed Broadcast
+                                </span>
+                                {% elif forwarding_no_decision %}
+                                <span class="badge bg-danger fs-6 me-2">
+                                    <i class="fas fa-exclamation-triangle"></i> No Decision Recorded
                                 </span>
                                 {% else %}
                                 <span class="badge bg-secondary fs-6 me-2">
@@ -1704,6 +1718,16 @@
                             <div class="detail-item mb-2">
                                 <span class="detail-label"><i class="fas fa-info-circle"></i> Reason</span>
                                 <span>{{ alert.eas_forwarding_reason }}</span>
+                            </div>
+                            {% elif forwarding_no_decision %}
+                            <div class="detail-item mb-2">
+                                <span class="detail-label"><i class="fas fa-info-circle"></i> Reason</span>
+                                <span class="text-danger">
+                                    None recorded — the ingest pipeline did not reach the
+                                    auto-forward step. If the alert is still unexpired, the
+                                    poller's catch-up sweep will retry it within a minute;
+                                    see the alert trail and system log.
+                                </span>
                             </div>
                             {% endif %}
                             {% if eas_audio_web_url %}
