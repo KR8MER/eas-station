@@ -49,6 +49,7 @@ Usage::
 
 import io
 import json
+import logging
 import math
 import os
 import random
@@ -57,6 +58,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import requests as _http
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, PngImagePlugin
+
+logger = logging.getLogger(__name__)
 
 # ─── Canonical brand logo ──────────────────────────────────────────────────
 # Single source of truth for the EAS Station brand logo raster used inside
@@ -1779,6 +1782,7 @@ def _draw_storm_track(canvas: Image.Image, storm: Dict,
 
 def _fetch_county_outlines(
     min_lon: float, min_lat: float, max_lon: float, max_lat: float,
+    db_session: Any = None,
 ) -> List[Dict[str, Any]]:
     """Return simplified GeoJSON geometries for the US counties that
     intersect the given lon/lat bounding box.
@@ -1788,13 +1792,20 @@ def _fetch_county_outlines(
     it falls in) — mirroring the county boundaries on official NWS warning
     graphics.
 
+    *db_session* lets callers running outside a Flask application context
+    (the CAP poller / monitoring services) supply their own SQLAlchemy
+    session; when omitted, the Flask-SQLAlchemy request session is used.
+
     Returns an empty list when the boundary table is unavailable, empty, or
     there is no application / database context (e.g. unit tests, an offline
     render), so the map renderer degrades gracefully to a polygon-only view.
     """
     try:
-        from app_core.extensions import db
         from sqlalchemy import text as _text
+
+        if db_session is None:
+            from app_core.extensions import db
+            db_session = db.session
     except Exception:
         return []
 
@@ -1806,7 +1817,7 @@ def _fetch_county_outlines(
     tol = max(max_lon - min_lon, max_lat - min_lat, 0.01) * 0.0015
 
     try:
-        rows = db.session.execute(
+        rows = db_session.execute(
             _text(
                 """
                 SELECT name,
@@ -1923,11 +1934,14 @@ def _draw_scale_bar(img: Image.Image, fonts: Dict, *,
 def _render_map(geom: Dict, severity: str,
                 storm_motion: Optional[Dict] = None,
                 theme: Optional[_Theme] = None,
-                *, map_w: int = MAP_W, map_h: int = MAP_H) -> Image.Image:
+                *, map_w: int = MAP_W, map_h: int = MAP_H,
+                db_session: Any = None) -> Image.Image:
     """Return a *map_w*×*map_h* RGB map image with the alert polygon overlaid.
 
     *theme* drives the polygon stroke / storm-motion accent colours; if
     omitted we fall back to the severity palette (legacy behaviour).
+    *db_session* is forwarded to the county-outline lookup so callers
+    without a Flask application context still get county borders.
 
     On top of the OSM tiles the map renders muted county reference
     outlines, the alert polygon (plus optional storm-motion overlay), and
@@ -2013,7 +2027,8 @@ def _render_map(geom: Dict, severity: str,
     # labels, which historically collided and cluttered the share image when
     # several boundaries overlapped.  Fetched from the local PostGIS table;
     # if it's unavailable the map simply falls back to a polygon-only view.
-    counties = _fetch_county_outlines(min_lon, min_lat, max_lon, max_lat)
+    counties = _fetch_county_outlines(min_lon, min_lat, max_lon, max_lat,
+                                      db_session=db_session)
     if counties:
         county_w = max(1, int(round(1.4 * stroke_scale)))
         county_layer = Image.new('RGBA', canvas.size, (0, 0, 0, 0))
@@ -2170,6 +2185,7 @@ def generate_alert_image(
     location_settings: Optional[Dict[str, Any]],
     aspect_ratio: str = 'landscape',
     image_format: str = 'png',
+    db_session: Any = None,
 ) -> bytes:
     """Generate a share-card image for *alert* in the requested aspect ratio.
 
@@ -2186,6 +2202,11 @@ def generate_alert_image(
         image_format:      ``png`` (default, universal) or ``webp`` (lossy,
             ~30% smaller at equivalent quality, supported by every major
             social platform).  Unknown values fall back to ``png``.
+        db_session:        Optional SQLAlchemy session used to fetch the
+            alert polygon and county outlines.  Required when rendering
+            outside a Flask application context (the CAP poller and audio
+            monitoring services that send notification emails); inside a
+            request the Flask-SQLAlchemy session is used by default.
 
     Returns:
         Raw image bytes in the requested container.
@@ -2362,13 +2383,18 @@ def generate_alert_image(
         storm_motion = None
     map_img: Optional[Image.Image] = None
     try:
-        from app_core.extensions import db
         from app_core.models import CAPAlert as _CA
         from sqlalchemy import func as _func
         alert_id = getattr(alert, 'id', None)
         if alert_id is not None:
+            session = db_session
+            if session is None:
+                # Web-request path — fall back to the Flask-SQLAlchemy
+                # session (requires an active application context).
+                from app_core.extensions import db
+                session = db.session
             geom_json = (
-                db.session.query(_func.ST_AsGeoJSON(_CA.geom))
+                session.query(_func.ST_AsGeoJSON(_CA.geom))
                 .filter(_CA.id == alert_id)
                 .scalar()
             )
@@ -2376,9 +2402,16 @@ def generate_alert_image(
                 map_img = _render_map(json.loads(geom_json), severity,
                                       storm_motion=storm_motion,
                                       theme=theme,
-                                      map_w=map_w, map_h=map_h)
-    except Exception:
-        pass
+                                      map_w=map_w, map_h=map_h,
+                                      db_session=session)
+    except Exception as exc:
+        # The card is still rendered with a "Map not available" slot, but
+        # leave a trace — a context/session error here is why an email or
+        # share card silently loses its coverage map.
+        logger.warning(
+            "Alert %s: could not fetch geometry for coverage map: %s",
+            getattr(alert, 'id', None), exc,
+        )
 
     if map_img is None:
         map_img = Image.new('RGB', (map_w, map_h), (34, 42, 60))

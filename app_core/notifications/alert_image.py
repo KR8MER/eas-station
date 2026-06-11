@@ -26,9 +26,11 @@ event-themed header, the coverage map with the affected polygon drawn on
 top, and the headline / affected areas / description pulled from the CAP
 alert.
 
-The renderer self-fetches the PostGIS geometry and reads every text field
-straight off the ``CAPAlert`` row, so no request context or web-only
-enrichment helpers are needed here. Any failure (Pillow unavailable, no
+The caller's ``db_session`` is threaded through to the renderer for the
+PostGIS geometry / county-outline queries, because notification emails are
+sent from the CAP poller and audio monitoring services — standalone
+processes with no Flask application context where the renderer's default
+Flask-SQLAlchemy session would fail. Any failure (Pillow unavailable, no
 geometry, offline tile fetch, …) degrades to ``None`` and the email is
 simply sent without the image.
 """
@@ -86,6 +88,7 @@ def build_alert_image(
             location_settings,
             aspect_ratio="landscape",
             image_format="png",
+            db_session=db_session,
         )
 
     except Exception as exc:  # pragma: no cover - defensive
