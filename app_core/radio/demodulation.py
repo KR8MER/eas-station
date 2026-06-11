@@ -960,6 +960,20 @@ class RBDSDecoderStats:
     # Keys are e.g. "0A", "2A", "11A" — bare "A"/"B" suffixes match what
     # the RDS specs use everywhere so the UI doesn't have to translate.
     group_type_counts: Dict[str, int] = field(default_factory=dict)
+    # Field-level churn counters from the two-sighting confirmation gate.
+    # pi/pty/ta count *accepted* value changes after the field first
+    # resolved — on a station that stays tuned these should sit at 0
+    # (a mid-lock PI change means either an actual station change or a
+    # repeated glitch that beat the voting gate).  glitches_rejected
+    # counts single-sighting candidates that were contradicted by the
+    # next observation before they could confirm — i.e. false reads the
+    # gate stopped from reaching the UI.  Unlike the block counters
+    # these are cumulative since tune/reset, not per-lock, because the
+    # decoder's field state also survives a sync drop.
+    pi_change_count: int = 0
+    pty_change_count: int = 0
+    ta_toggle_count: int = 0
+    glitches_rejected: int = 0
 
     @property
     def raw_block_error_rate(self) -> Optional[float]:
@@ -1606,12 +1620,17 @@ class RBDSWorker:
                 chunks_dropped=self._chunks_dropped,
                 group_type_counts={},
             )
-        # Group histogram lives on the RBDSDecoder; pull a copy here so
-        # the snapshot is internally consistent.
+        # Group histogram and field-churn counters live on the
+        # RBDSDecoder; pull copies here so the snapshot is internally
+        # consistent.
         if self._rbds_decoder is not None:
             snap.group_type_counts = dict(
                 getattr(self._rbds_decoder, '_group_type_counts', {}) or {}
             )
+            snap.pi_change_count = getattr(self._rbds_decoder, 'pi_change_count', 0)
+            snap.pty_change_count = getattr(self._rbds_decoder, 'pty_change_count', 0)
+            snap.ta_toggle_count = getattr(self._rbds_decoder, 'ta_toggle_count', 0)
+            snap.glitches_rejected = getattr(self._rbds_decoder, 'glitches_rejected', 0)
         return snap
 
     def reset(self) -> None:
@@ -4119,6 +4138,12 @@ def pi_to_call_sign(pi: int) -> Optional[str]:
     return None
 
 
+# Sentinel for "no pending candidate" in the two-sighting confirmation
+# gate.  Cannot use None because None/False/0 are all legitimate pending
+# field values (e.g. a TA=False candidate).
+_CONFIRM_UNSET = object()
+
+
 class RBDSDecoder:
     """
     RBDS/RDS decoder for FM radio.
@@ -4256,6 +4281,92 @@ class RBDSDecoder:
         # look like a valid cycle).
         self._ps_candidate = None  # type: Optional[str]
         self._ps_candidate_count = 0
+        # Two-sighting confirmation gate for single-shot fields (PI, PTY,
+        # TP, TA, MS, DI bits, fast-switching flags, ODA registrations).
+        # A new value must be observed in two consecutive groups before
+        # it replaces the accepted state, so one corrupted block that
+        # slips past the CRC — or gets "repaired" into the wrong codeword
+        # by burst FEC — can never flip a published field on its own.
+        # These fields repeat continuously on-air (PI/PTY/TP arrive in
+        # every group, TA/MS in every Group 0), so the added latency is
+        # one group spacing (~90 ms to ~1 s).  Keys are attribute names
+        # plus a few synthetic slot keys, so the dict stays bounded.
+        self._confirm_pending: Dict[str, object] = {}
+        # AF frequencies staged on first sighting; promoted to _af_buffer
+        # on the second.  A corrupted Block C that decodes to a plausible
+        # AF code would otherwise pollute the published AF list until the
+        # next retune.  Insertion-ordered dict so noise can be evicted
+        # oldest-first when the staging area fills.
+        self._af_pending: Dict[float, bool] = {}
+        # EON networks staged on first sighting of a new cross-referenced
+        # PI (Group 14 Block C is a prime garbage-injection vector).
+        # Dict rather than a single slot because stations interleave EON
+        # groups across several real networks.
+        self._eon_pending: Dict[int, bool] = {}
+        # Field-churn counters surfaced through RBDSDecoderStats.  See
+        # the dataclass comment for semantics.
+        self.pi_change_count = 0
+        self.pty_change_count = 0
+        self.ta_toggle_count = 0
+        self.glitches_rejected = 0
+
+    def _confirm_value(self, key: str, current: object, new_value: object) -> bool:
+        """Two-consecutive-sighting voting gate.
+
+        Returns True when ``new_value`` differs from ``current`` AND has
+        now been observed twice in a row, i.e. the caller should accept
+        it.  A single observation only stages the value; if the next
+        observation for the same key disagrees with the staged candidate
+        the candidate is discarded (and counted in glitches_rejected),
+        so an isolated false read can never be published.
+        """
+        if new_value == current:
+            # Observation agrees with accepted state; any contrary
+            # staged candidate was a one-off false read.
+            if self._confirm_pending.pop(key, _CONFIRM_UNSET) is not _CONFIRM_UNSET:
+                self.glitches_rejected += 1
+            return False
+        pending = self._confirm_pending.get(key, _CONFIRM_UNSET)
+        if pending is not _CONFIRM_UNSET and pending == new_value:
+            del self._confirm_pending[key]
+            return True
+        if pending is not _CONFIRM_UNSET:
+            # Staged candidate contradicted by a different new value
+            # before it could confirm.
+            self.glitches_rejected += 1
+        self._confirm_pending[key] = new_value
+        return False
+
+    def _confirmed_set(self, attr: str, new_value: object) -> bool:
+        """Apply ``new_value`` to ``self.<attr>`` through the voting gate.
+
+        Returns True only when the attribute actually changed (second
+        consecutive sighting of a differing value).
+        """
+        if self._confirm_value(attr, getattr(self, attr), new_value):
+            setattr(self, attr, new_value)
+            return True
+        return False
+
+    def _stage_eon_pi(self, eon_pi: int) -> bool:
+        """Second-sighting gate for new EON network entries.
+
+        Group 14 Block C carries the cross-referenced PI directly, so a
+        corrupted-but-CRC-passing block injects a phantom network into
+        the EON table that persists until retune.  A new PI must be seen
+        in two Group 14 broadcasts before an entry is created.  Returns
+        True when the caller may create the entry now.
+        """
+        if eon_pi in self._eon_pending:
+            del self._eon_pending[eon_pi]
+            # Hard cap on tracked networks: EON addresses "other networks
+            # of the same broadcaster" — real deployments carry a handful,
+            # the protocol practically tops out well below this.
+            return len(self._eon_map) < 32
+        if len(self._eon_pending) >= 16:
+            self._eon_pending.pop(next(iter(self._eon_pending)))
+        self._eon_pending[eon_pi] = True
+        return False
 
     def process_group(self, group_data: Tuple[int, int, int, int]) -> Optional[bool]:
         """
@@ -4284,25 +4395,28 @@ class RBDSDecoder:
         self._group_type_counts[gt_key] = self._group_type_counts.get(gt_key, 0) + 1
 
         pi_code = f"{a:04X}"
-        if self.pi_code != pi_code:
-            self.pi_code = pi_code
+        prev_pi = self.pi_code
+        if self._confirmed_set('pi_code', pi_code):
             new_call = pi_to_call_sign(a)
             if new_call != self.call_sign:
                 self.call_sign = new_call
+            if prev_pi is not None:
+                self.pi_change_count += 1
             changed = True
 
         pty = (b >> 5) & 0x1F
-        if self.pty != pty:
-            self.pty = pty
+        prev_pty = self.pty
+        if self._confirmed_set('pty', pty):
             # A PTY change invalidates any previously-decoded PTYN for the
             # old program type.
             self.pty_name = None
             self._pty_name_buf = [' '] * 8
+            if prev_pty is not None:
+                self.pty_change_count += 1
             changed = True
 
         tp = bool((b >> 10) & 0x1)
-        if self.tp != tp:
-            self.tp = tp
+        if self._confirmed_set('tp', tp):
             changed = True
 
         # Bits 4-0 of Block B are group-type-dependent. TA (bit 4) and MS
@@ -4312,13 +4426,14 @@ class RBDSDecoder:
         # would corrupt the flags each time a non-Group-0 group arrived.
         if group_type == 0:
             ta = bool((b >> 4) & 0x1)
-            if self.ta != ta:
-                self.ta = ta
+            prev_ta = self.ta
+            if self._confirmed_set('ta', ta):
+                if prev_ta is not None:
+                    self.ta_toggle_count += 1
                 changed = True
 
             ms = bool((b >> 3) & 0x1)
-            if self.ms != ms:
-                self.ms = ms
+            if self._confirmed_set('ms', ms):
                 changed = True
 
             di_bit = bool((b >> 2) & 0x1)
@@ -4369,7 +4484,11 @@ class RBDSDecoder:
                             changed = True
                 if new_freqs:
                     prev_len = len(self._af_buffer)
-                    for f in new_freqs:
+                    # Dedupe within the group (dict preserves order) so a
+                    # Method-B marker pair (af1 == af2) still needs a
+                    # second *group* to confirm, not just a second byte
+                    # from the same possibly-corrupt block.
+                    for f in dict.fromkeys(new_freqs):
                         # RBDS spec caps an AF list at 25 entries (Method A
                         # codes 224..249 encode counts 0..25).  Without a
                         # cap, a bad-CRC-but-presumed-valid block stream on
@@ -4380,7 +4499,24 @@ class RBDSDecoder:
                             break
                         if f in self._af_buffer:
                             continue
-                        self._af_buffer.append(f)
+                        # Second-sighting requirement: an AF only joins the
+                        # published list once it has appeared in two
+                        # separate groups.  AF lists cycle continuously on
+                        # Group 0A, so real entries confirm within a few
+                        # seconds; a corrupted-but-CRC-passing block that
+                        # decodes to a plausible AF code stays staged and
+                        # is eventually evicted instead of polluting the
+                        # list until the next retune.
+                        if f in self._af_pending:
+                            del self._af_pending[f]
+                            self._af_buffer.append(f)
+                        else:
+                            if len(self._af_pending) >= 32:
+                                # Evict the oldest staged candidate —
+                                # anything real will be re-staged by the
+                                # station's ongoing AF cycle.
+                                self._af_pending.pop(next(iter(self._af_pending)))
+                            self._af_pending[f] = True
                     if len(self._af_buffer) != prev_len:
                         changed = True
 
@@ -4446,9 +4582,16 @@ class RBDSDecoder:
             aid = c
             if aid != 0:
                 key = (oda_group_type, oda_version)
-                if key not in self._oda_app_map or self._oda_app_map[key] != aid:
+                # ODA registrations go through the two-sighting gate too:
+                # 3A groups repeat each assignment continuously, and a
+                # corrupted Block C here would otherwise register a
+                # garbage AID that then accumulates payload state forever.
+                confirm_key = f"oda_slot_{oda_group_type}_{oda_version}"
+                if self._confirm_value(confirm_key, self._oda_app_map.get(key), aid):
                     self._oda_app_map[key] = aid
-                    if aid not in self.oda_apps:
+                    # Cap mirrors the 32 possible (group_type, version)
+                    # slots; re-registrations beyond that are noise.
+                    if aid not in self.oda_apps and len(self.oda_apps) < 32:
                         self.oda_apps.append(aid)
                     changed = True
         elif group_type == 4 and not version_b:
@@ -4574,75 +4717,79 @@ class RBDSDecoder:
             variant = b & 0xF
             eon_tp = bool((b >> 4) & 0x1)
             eon_pi = c
-            if eon_pi not in self._eon_map:
+            if eon_pi not in self._eon_map and self._stage_eon_pi(eon_pi):
                 self._eon_map[eon_pi] = {
                     'pi': f"{eon_pi:04X}", 'tp': eon_tp, 'ps': ' ' * 8, 'af': []
                 }
-            eon = self._eon_map[eon_pi]
-            eon['tp'] = eon_tp
-            if variant <= 3:
-                ps_chars = [(d >> 8) & 0xFF, d & 0xFF]
-                ps_list = list(eon['ps'])
-                for i, code in enumerate(ps_chars):
-                    idx = variant * 2 + i
-                    if idx < 8:
-                        ps_list[idx] = chr(code) if 32 <= code < 127 else ' '
-                eon['ps'] = ''.join(ps_list)
-            elif variant == 4:
-                # Block D in EON variant 4 carries TWO 8-bit AF codes:
-                # high byte = mapped frequency for the cross-referenced
-                # programme, low byte = matched frequency for the tuned
-                # programme.  Earlier code dropped the low byte, halving
-                # EON AF coverage; capture both as direct codes 1..204.
-                for shift in (8, 0):
-                    af_code = (d >> shift) & 0xFF
-                    if 1 <= af_code <= 204:
-                        af_mhz = round(87.6 + 0.1 * af_code, 1)
-                        # Cap per-EON AF list at the RBDS spec maximum of
-                        # 25 entries.  Same memory-leak rationale as the
-                        # main station ``_af_buffer`` above: corrupt-but-
-                        # CRC-passing blocks on a noisy signal otherwise
-                        # grow this list unboundedly.
-                        if af_mhz not in eon['af'] and len(eon['af']) < 25:
-                            eon['af'].append(af_mhz)
-            elif variant == 12:
-                eon['linkage'] = d
-            elif variant == 13:
-                eon['pty'] = (d >> 11) & 0x1F
-                eon['ta'] = bool((d >> 0) & 0x1)
-            elif variant == 14:
-                eon['pin_day'] = (d >> 11) & 0x1F
-                eon['pin_hour'] = (d >> 6) & 0x1F
-                eon['pin_minute'] = d & 0x3F
-            changed = True
+            # eon is None while a new PI is still staged (or the table is
+            # at cap) — skip the variant payload for a network we haven't
+            # admitted yet, but still fall through to the ODA dispatch
+            # below in case the station registered an ODA on this slot.
+            eon = self._eon_map.get(eon_pi)
+            if eon is not None:
+                eon['tp'] = eon_tp
+                if variant <= 3:
+                    ps_chars = [(d >> 8) & 0xFF, d & 0xFF]
+                    ps_list = list(eon['ps'])
+                    for i, code in enumerate(ps_chars):
+                        idx = variant * 2 + i
+                        if idx < 8:
+                            ps_list[idx] = chr(code) if 32 <= code < 127 else ' '
+                    eon['ps'] = ''.join(ps_list)
+                elif variant == 4:
+                    # Block D in EON variant 4 carries TWO 8-bit AF codes:
+                    # high byte = mapped frequency for the cross-referenced
+                    # programme, low byte = matched frequency for the tuned
+                    # programme.  Earlier code dropped the low byte, halving
+                    # EON AF coverage; capture both as direct codes 1..204.
+                    for shift in (8, 0):
+                        af_code = (d >> shift) & 0xFF
+                        if 1 <= af_code <= 204:
+                            af_mhz = round(87.6 + 0.1 * af_code, 1)
+                            # Cap per-EON AF list at the RBDS spec maximum of
+                            # 25 entries.  Same memory-leak rationale as the
+                            # main station ``_af_buffer`` above: corrupt-but-
+                            # CRC-passing blocks on a noisy signal otherwise
+                            # grow this list unboundedly.
+                            if af_mhz not in eon['af'] and len(eon['af']) < 25:
+                                eon['af'].append(af_mhz)
+                elif variant == 12:
+                    eon['linkage'] = d
+                elif variant == 13:
+                    eon['pty'] = (d >> 11) & 0x1F
+                    eon['ta'] = bool((d >> 0) & 0x1)
+                elif variant == 14:
+                    eon['pin_day'] = (d >> 11) & 0x1F
+                    eon['pin_hour'] = (d >> 6) & 0x1F
+                    eon['pin_minute'] = d & 0x3F
+                changed = True
         elif group_type == 14 and version_b:
             eon_tp = bool((b >> 4) & 0x1)
             eon_ta = bool((b >> 3) & 0x1)
             eon_pi = c
-            if eon_pi not in self._eon_map:
+            if eon_pi not in self._eon_map and self._stage_eon_pi(eon_pi):
                 self._eon_map[eon_pi] = {
                     'pi': f"{eon_pi:04X}", 'tp': eon_tp, 'ta': eon_ta,
                     'ps': ' ' * 8, 'af': []
                 }
-            self._eon_map[eon_pi]['tp'] = eon_tp
-            self._eon_map[eon_pi]['ta'] = eon_ta
-            changed = True
+            if eon_pi in self._eon_map:
+                self._eon_map[eon_pi]['tp'] = eon_tp
+                self._eon_map[eon_pi]['ta'] = eon_ta
+                changed = True
         elif group_type == 15 and version_b:
             fast_ta = bool((b >> 4) & 0x1)
             fast_ms = bool((b >> 3) & 0x1)
             fast_di = bool((b >> 2) & 0x1)
             address = b & 0x3
-            changed_flags = False
-            if self.fast_tp != tp:
-                self.fast_tp = tp
-                changed_flags = True
-            if self.fast_ta != fast_ta:
-                self.fast_ta = fast_ta
-                changed_flags = True
-            if self.fast_ms != fast_ms:
-                self.fast_ms = fast_ms
-                changed_flags = True
-            if changed_flags:
+            # Same two-sighting gate as the main flags.  15B exists for
+            # fast switching, but stations that use it send it in bursts,
+            # so confirmation still lands within one burst while a lone
+            # corrupted 15B can no longer flap the fast flags.
+            if self._confirmed_set('fast_tp', tp):
+                changed = True
+            if self._confirmed_set('fast_ta', fast_ta):
+                changed = True
+            if self._confirmed_set('fast_ms', fast_ms):
                 changed = True
             if self._update_di(address, fast_di):
                 changed = True
@@ -4662,11 +4809,14 @@ class RBDSDecoder:
             if oda_aid == RT_PLUS_AID:
                 if self._handle_rt_plus(b, c, d):
                     changed = True
-            else:
+            elif oda_aid in self._oda_payloads or len(self._oda_payloads) < 32:
                 # Capture the lower 5 bits of B (the payload nibble — the
                 # rest of B is group-type / TP / PTY which we already
                 # decoded) plus all of C and D.  Bump count and stamp
                 # last-seen so the UI can show traffic activity per AID.
+                # Capped at 32 AIDs (the number of registrable slots) so
+                # this dict can't grow without bound across spurious
+                # re-registrations on a long-running noisy receiver.
                 entry = self._oda_payloads.setdefault(oda_aid, {
                     'aid': oda_aid,
                     'aid_hex': f"0x{oda_aid:04X}",
@@ -5106,10 +5256,10 @@ class RBDSDecoder:
         }.get(address)
         if attr is None:
             return False
-        if getattr(self, attr) != di_bit:
-            setattr(self, attr, di_bit)
-            return True
-        return False
+        # Routed through the two-sighting gate: each DI bit repeats once
+        # per PS cycle (~1 s), so confirmation costs one extra cycle and
+        # stops a single corrupt Group 0 from flapping e.g. stereo/mono.
+        return self._confirmed_set(attr, di_bit)
 
     def _update_clock_time(
         self,

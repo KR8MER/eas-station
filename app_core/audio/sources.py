@@ -521,6 +521,15 @@ class SDRSourceAdapter(AudioSourceAdapter):
                                 dict(decoder_stats.group_type_counts)
                                 if decoder_stats.group_type_counts else None
                             )
+                            # Field-churn / false-read telemetry from the
+                            # two-sighting confirmation gate.  Non-zero
+                            # pi/pty churn on a locked, stationary tune is
+                            # a red flag; glitches_rejected shows how many
+                            # single-sighting false reads the gate stopped.
+                            metadata['rbds_pi_change_count'] = decoder_stats.pi_change_count
+                            metadata['rbds_pty_change_count'] = decoder_stats.pty_change_count
+                            metadata['rbds_ta_toggle_count'] = decoder_stats.ta_toggle_count
+                            metadata['rbds_glitches_rejected'] = decoder_stats.glitches_rejected
 
                         # RBDS data (if available)
                         rbds_data = demod_status.rbds_data
