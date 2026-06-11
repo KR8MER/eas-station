@@ -135,6 +135,8 @@ def register(app: Flask, logger) -> None:
         - Icecast streaming service
         - Disk space
         - Configuration files
+        - Alert forwarding pipeline (no alert may miss its forwarding decision)
+        - CAP poller liveness
         """
         dependencies: Dict[str, Any] = {}
         overall_status = "healthy"
@@ -261,7 +263,123 @@ def register(app: Flask, logger) -> None:
             "message": ", ".join(config_status),
         }
 
-        # 6. Backup Directory
+        # 6. Alert Forwarding Pipeline — a saved alert must always carry a
+        # forwarding decision.  eas_forwarding_reason is written by every
+        # exit path of auto_forward_cap_alert, so a NULL reason means the
+        # ingest pipeline died before the decision; "Never evaluated…" is
+        # the terminal stamp the poller's catch-up sweep writes when such an
+        # alert expired before it could be retried (a missed broadcast).
+        try:
+            from datetime import timedelta
+            from sqlalchemy import and_, or_
+            from app_core.models import CAPAlert
+
+            now = utc_now()
+            pending_count = (
+                CAPAlert.query
+                .filter(CAPAlert.eas_forwarded.is_(False))
+                .filter(CAPAlert.eas_forwarding_reason.is_(None))
+                .filter(CAPAlert.expires.isnot(None))
+                .filter(CAPAlert.expires > now)
+                .filter(CAPAlert.created_at <= now - timedelta(minutes=3))
+                .count()
+            )
+            missed_count = (
+                CAPAlert.query
+                .filter(CAPAlert.eas_forwarded.is_(False))
+                .filter(CAPAlert.expires.isnot(None))
+                .filter(CAPAlert.expires > now - timedelta(hours=24))
+                .filter(or_(
+                    CAPAlert.eas_forwarding_reason.ilike("Never evaluated%"),
+                    and_(
+                        CAPAlert.eas_forwarding_reason.is_(None),
+                        CAPAlert.expires <= now,
+                        CAPAlert.created_at < CAPAlert.expires,
+                    ),
+                ))
+                .count()
+            )
+            if missed_count:
+                dependencies["alert_forwarding"] = {
+                    "status": "unhealthy",
+                    "message": (
+                        f"{missed_count} alert(s) in the last 24h expired without a "
+                        f"forwarding decision — broadcast(s) missed; check the system "
+                        f"log and poller journal"
+                    ),
+                    "missed_24h": missed_count,
+                    "pending": pending_count,
+                }
+                overall_status = "unhealthy"
+            elif pending_count:
+                dependencies["alert_forwarding"] = {
+                    "status": "degraded",
+                    "message": (
+                        f"{pending_count} unexpired alert(s) awaiting a forwarding "
+                        f"decision for >3 min — catch-up sweep should retry on the "
+                        f"next poll cycle"
+                    ),
+                    "missed_24h": 0,
+                    "pending": pending_count,
+                }
+                overall_status = "degraded" if overall_status == "healthy" else overall_status
+            else:
+                dependencies["alert_forwarding"] = {
+                    "status": "healthy",
+                    "message": "Every saved alert has a forwarding decision",
+                    "missed_24h": 0,
+                    "pending": 0,
+                }
+        except Exception as exc:
+            dependencies["alert_forwarding"] = {
+                "status": "unknown",
+                "message": f"Cannot check forwarding pipeline: {exc}",
+            }
+
+        # 7. CAP Poller Liveness — if the poller stops cycling, nothing is
+        # ingested and nothing can air; surface that here instead of relying
+        # on operators to notice an empty alerts page.
+        try:
+            from datetime import timedelta, timezone as _tz
+            from app_core.models import PollHistory
+
+            last_poll = (
+                PollHistory.query.order_by(PollHistory.timestamp.desc()).first()
+            )
+            now = utc_now()
+            last_ts = last_poll.timestamp if last_poll else None
+            if last_ts is not None and last_ts.tzinfo is None:
+                last_ts = last_ts.replace(tzinfo=_tz.utc)
+            if last_ts is None:
+                dependencies["cap_poller"] = {
+                    "status": "degraded",
+                    "message": "No poll history recorded yet",
+                }
+                overall_status = "degraded" if overall_status == "healthy" else overall_status
+            elif now - last_ts > timedelta(minutes=10):
+                age_min = int((now - last_ts).total_seconds() // 60)
+                dependencies["cap_poller"] = {
+                    "status": "unhealthy",
+                    "message": (
+                        f"Last poll cycle completed {age_min} min ago — poller "
+                        f"appears stalled; no alerts are being ingested"
+                    ),
+                    "last_poll": last_ts.isoformat(),
+                }
+                overall_status = "unhealthy"
+            else:
+                dependencies["cap_poller"] = {
+                    "status": "healthy",
+                    "message": f"Last poll cycle {last_ts.isoformat()}",
+                    "last_poll": last_ts.isoformat(),
+                }
+        except Exception as exc:
+            dependencies["cap_poller"] = {
+                "status": "unknown",
+                "message": f"Cannot check poller liveness: {exc}",
+            }
+
+        # 8. Backup Directory
         backup_dir = Path("backups")
         if backup_dir.exists():
             try:

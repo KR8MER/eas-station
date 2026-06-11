@@ -2612,7 +2612,13 @@ class CAPPoller:
         geom_changed = self._has_geometry_changed(old_geom, existing.geom)
 
         if geom_changed or self._needs_intersection_calculation(existing):
-            self.process_intersections(existing)
+            try:
+                self.process_intersections(existing)
+            except Exception as exc:
+                self.logger.error(
+                    "Intersection recalculation failed for %s (non-fatal): %s",
+                    existing.identifier, exc,
+                )
         
         # Publish LED update event via Redis
         if not self.is_alert_expired(existing):
@@ -2713,9 +2719,12 @@ class CAPPoller:
                     new_alert.identifier, exc,
                 )
 
-        if new_alert.geom or self._try_build_geometry_from_same_codes(new_alert):
-            self.process_intersections(new_alert)
-        
+        # Build geometry before the forwarding decision: the notification
+        # email's coverage map renders from new_alert.geom at send time, and
+        # _try_build_geometry_from_same_codes is internally guarded (returns
+        # False on any failure) so it cannot block the air chain.
+        has_geometry = bool(new_alert.geom) or self._try_build_geometry_from_same_codes(new_alert)
+
         # Publish new alert event to Redis for other services
         if not self.is_alert_expired(new_alert):
             # Publish to Redis for real-time UI updates and LED service
@@ -2784,6 +2793,23 @@ class CAPPoller:
                 self.logger.error(
                     "Auto-forward failed for %s: %s",
                     new_alert.identifier, exc, exc_info=True,
+                )
+
+        # Boundary intersections are analytics for the map/statistics pages.
+        # They run AFTER the forwarding decision and behind a guard because
+        # process_intersections() re-raises on database errors; when it sat
+        # ahead of auto_forward_cap_alert, a single PostGIS failure on a
+        # statewide alert aborted the save and the alert never received a
+        # forwarding decision (Ohio RMT CAPNET-1-14329-20260610034200,
+        # 2026-06-10).
+        if has_geometry:
+            try:
+                self.process_intersections(new_alert)
+            except Exception as exc:
+                self.logger.error(
+                    "Intersection calculation failed for %s (non-fatal; alert "
+                    "is saved and the forwarding decision was already made): %s",
+                    new_alert.identifier, exc,
                 )
 
         self.logger.info(f"Saved new alert: {new_alert.identifier} - {new_alert.event}")
@@ -2861,6 +2887,175 @@ class CAPPoller:
                 return True
 
         return False
+
+    # Catch-up window for retry_unevaluated_forwards().  Alerts whose insert
+    # pipeline died between the database save and the forwarding decision are
+    # retried for up to this long after ingest; auto_forward_cap_alert's own
+    # gates (expiry, status, allowlist, dedup) still decide whether anything
+    # actually airs.
+    FORWARD_RETRY_WINDOW_MINUTES = 60
+
+    # Terminal reason stamped on alerts that expired while never evaluated.
+    # The "Never evaluated" prefix is matched by the alert trail
+    # (app_core/alert_trail.py::_forwarding_event) and the health endpoint
+    # (webapp/routes_monitoring.py) to render/count a missed broadcast —
+    # keep all three in sync.
+    MISSED_FORWARDING_REASON = (
+        "Never evaluated — ingest pipeline fault; alert expired before the "
+        "catch-up sweep could retry"
+    )
+
+    def retry_unevaluated_forwards(self) -> int:
+        """Re-run the auto-forward decision for alerts that never received one.
+
+        ``eas_forwarding_reason`` is written by every exit path of
+        ``auto_forward_cap_alert`` (at minimum an empty string), so a NULL
+        reason combined with ``eas_forwarded=False`` means the insert pipeline
+        was interrupted between the database save and the forwarding decision
+        (PostGIS failure, OOM kill, service restart).  Forwarding normally
+        happens only on first insert, so without this sweep such an alert
+        silently misses its only chance to air.
+
+        Returns the number of alerts re-evaluated.
+        """
+        now = utc_now()
+        cutoff = now - timedelta(minutes=self.FORWARD_RETRY_WINDOW_MINUTES)
+
+        # Terminal accounting first: the pipeline died AND the alert expired
+        # before any retry could happen — the broadcast window is gone.  Stamp
+        # a terminal reason (one-shot: the NULL reason is what marks a row as
+        # pending) and raise a system-log ERROR so the miss is investigated
+        # rather than discovered on a trail page later.  The
+        # created_at < expires filter excludes alerts that were *already*
+        # expired when ingested (historical imports), for which skipping the
+        # forwarding decision is correct behaviour, not a fault.
+        try:
+            missed = (
+                self.db_session.query(CAPAlert)
+                .filter(CAPAlert.eas_forwarded.is_(False))
+                .filter(CAPAlert.eas_forwarding_reason.is_(None))
+                .filter(CAPAlert.expires.isnot(None))
+                .filter(CAPAlert.expires <= now)
+                .filter(CAPAlert.expires > now - timedelta(hours=24))
+                .filter(CAPAlert.created_at < CAPAlert.expires)
+                .all()
+            )
+        except Exception as exc:
+            self.logger.warning("Missed-forwarding query failed: %s", exc)
+            try:
+                self.db_session.rollback()
+            except Exception:
+                pass
+            missed = []
+        if missed:
+            try:
+                for alert in missed:
+                    alert.eas_forwarding_reason = self.MISSED_FORWARDING_REASON[:255]
+                    self.db_session.add(alert)
+                self.db_session.commit()
+            except Exception as exc:
+                self.logger.error("Failed to stamp missed-forwarding alerts: %s", exc)
+                try:
+                    self.db_session.rollback()
+                except Exception:
+                    pass
+            self.log_system_event(
+                'ERROR',
+                f"MISSED BROADCAST: {len(missed)} alert(s) expired without "
+                f"ever being evaluated for forwarding — the ingest pipeline "
+                f"faulted and the catch-up sweep did not run in time",
+                {'identifiers': [a.identifier for a in missed]},
+            )
+
+        try:
+            pending = (
+                self.db_session.query(CAPAlert)
+                .filter(CAPAlert.eas_forwarded.is_(False))
+                .filter(CAPAlert.eas_forwarding_reason.is_(None))
+                .filter(CAPAlert.created_at >= cutoff)
+                .filter(CAPAlert.expires.isnot(None))
+                .filter(CAPAlert.expires > now)
+                .all()
+            )
+        except Exception as exc:
+            self.logger.warning("Forwarding catch-up query failed: %s", exc)
+            try:
+                self.db_session.rollback()
+            except Exception:
+                pass
+            return 0
+
+        if not pending:
+            return 0
+
+        # A never-evaluated alert means the ingest pipeline faulted (PostGIS
+        # error, OOM kill, service restart) — the rescue below restores the
+        # broadcast, but the fault itself must be loud so an operator
+        # investigates the cause instead of discovering it on a trail page
+        # weeks later.
+        self.log_system_event(
+            'ERROR',
+            f"Forwarding catch-up: {len(pending)} alert(s) were saved but "
+            f"never evaluated for forwarding — ingest pipeline was "
+            f"interrupted; re-running the auto-forward decision now",
+            {'identifiers': [a.identifier for a in pending]},
+        )
+
+        # Same config refresh the insert path does, so allowlist/enabled
+        # changes made since the last cycle are honoured.
+        try:
+            self.eas_config = load_eas_config(db_session=self.db_session)
+        except Exception as exc:
+            self.logger.warning(
+                "Failed to refresh EAS config for forwarding catch-up; "
+                "using cached config: %s", exc,
+            )
+
+        evaluated = 0
+        for alert in pending:
+            self.logger.warning(
+                "Alert %s was saved but never evaluated for forwarding "
+                "(pipeline interrupted at ingest) — re-running the "
+                "auto-forward decision",
+                alert.identifier,
+            )
+            alert_data = {
+                'identifier': alert.identifier,
+                'raw_json': alert.raw_json if isinstance(alert.raw_json, dict) else {},
+            }
+            try:
+                forward_result = auto_forward_cap_alert(
+                    cap_alert=alert,
+                    alert_data=alert_data,
+                    db_session=self.db_session,
+                    eas_message_cls=EASMessage,
+                    eas_config=self.eas_config,
+                    location_settings=self.location_settings,
+                    logger_instance=self.logger,
+                )
+                evaluated += 1
+                if forward_result.get('forwarded'):
+                    self.logger.info(
+                        "Catch-up forwarded %s to air chain: %s",
+                        alert.identifier,
+                        forward_result.get('same_header', ''),
+                    )
+                else:
+                    self.logger.info(
+                        "Catch-up evaluated %s without broadcast: %s",
+                        alert.identifier,
+                        forward_result.get('reason', 'unknown'),
+                    )
+            except Exception as exc:
+                self.logger.error(
+                    "Forwarding catch-up failed for %s: %s",
+                    alert.identifier, exc, exc_info=True,
+                )
+                try:
+                    self.db_session.rollback()
+                except Exception:
+                    pass
+        return evaluated
 
     # ---------- Maintenance ----------
     def fix_existing_geometry(self) -> Dict:
@@ -3507,6 +3702,13 @@ class CAPPoller:
                     })
 
             self.cleanup_old_poll_history()
+
+            # Catch-up: re-run the forwarding decision for any recent,
+            # unexpired alert whose insert pipeline died before recording one.
+            try:
+                self.retry_unevaluated_forwards()
+            except Exception as exc:
+                self.logger.error(f"Forwarding catch-up sweep failed: {exc}")
 
             # Ensure every polled source type has an entry (even if 0 alerts came back)
             for src_type, src_endpoints in self.last_endpoints_by_type.items():

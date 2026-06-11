@@ -300,9 +300,21 @@ tr.alert-superseded:hover {
                                             <span class="badge bg-success" title="Auto-forwarded to air chain">
                                                 <i class="fas fa-broadcast-tower"></i> Forwarded
                                             </span>
+                                            {% elif alert.eas_forwarding_reason and alert.eas_forwarding_reason.startswith('Never evaluated') %}
+                                            <span class="badge bg-danger" title="{{ alert.eas_forwarding_reason }}">
+                                                <i class="fas fa-exclamation-triangle"></i> Missed
+                                            </span>
                                             {% elif alert.eas_forwarding_reason %}
                                             <span class="badge bg-secondary" title="{{ alert.eas_forwarding_reason }}">
                                                 <i class="fas fa-forward"></i> Skipped
+                                            </span>
+                                            {% elif alert.expires and alert.created_at and alert.created_at < alert.expires %}
+                                            {# Not forwarded and no reason recorded: the ingest pipeline
+                                               never reached the forwarding decision. Alerts already
+                                               expired at ingest are excluded — skipping those is by
+                                               design and carries no reason. #}
+                                            <span class="badge bg-danger" title="No forwarding decision recorded — the ingest pipeline did not reach the auto-forward step. See the alert trail.">
+                                                <i class="fas fa-exclamation-triangle"></i> No decision
                                             </span>
                                             {% endif %}
                                             {% if is_superseded %}
