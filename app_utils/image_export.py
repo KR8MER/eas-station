@@ -562,6 +562,92 @@ def _theme_supports_storm_motion(theme: _Theme) -> bool:
     return theme.get('particles') in ('bolts', 'wind', 'rain')
 
 
+# ─── Alert tier (emergency / warning / watch / advisory) colour coding ──────
+# CAP event names carry the NWS action ladder in their last word —
+# "… Warning" means take action now, "… Watch" means be prepared,
+# "… Advisory" means be aware.  The event *theme* above colours the card
+# by hazard family (heat, winter, flood, …), so two alerts that demand
+# very different responses (Severe Thunderstorm WATCH vs WARNING) would
+# otherwise look identical.  The tier badge restores that distinction
+# with the conventional escalation palette: red → orange → amber.
+_TIER_STYLES: List[Tuple[str, Dict[str, Any]]] = [
+    # Order matters: "Tornado Emergency" must not fall through to a
+    # generic match, and specific words are tested before generic ones.
+    ('emergency', {'fill': (136,  14,  79), 'text': WHITE}),  # deep magenta
+    ('warning',   {'fill': (220,  53,  69), 'text': WHITE}),  # act now
+    ('watch',     {'fill': (253, 126,  20), 'text': WHITE}),  # be prepared
+    ('advisory',  {'fill': (255, 193,   7), 'text': (45, 36, 3)}),  # be aware
+    ('statement', {'fill': (108, 117, 125), 'text': WHITE}),  # informational
+]
+
+
+def _resolve_tier(event_name: str) -> Optional[Tuple[str, Dict[str, Any]]]:
+    """Return ``(tier_word, style)`` for *event_name*, or ``None``.
+
+    Matches whole words only so e.g. "Special Weather Statement" maps to
+    ``statement`` while events without a tier word (AMBER Alert, 911
+    Telephone Outage) simply show no badge.
+    """
+    name = (event_name or '').lower()
+    for key, style in _TIER_STYLES:
+        if re.search(rf'\b{key}\b', name):
+            return key, style
+    return None
+
+
+# ─── Urgency "heat" for the header gradient ─────────────────────────────────
+# The hazard-family themes are tuned for their most dangerous product, so
+# a Heat ADVISORY header glowed exactly as red-hot as an Excessive Heat
+# WARNING and the two cards were indistinguishable at a glance.  Heat maps
+# the tier / severity ladders onto a 0–1 factor; below 1.0 the gradient is
+# progressively desaturated and dimmed (hue stays event-coded, intensity
+# codes urgency) and the particle layer calms down with it.
+_TIER_HEAT: Dict[str, float] = {
+    'emergency': 1.0,
+    'warning':   1.0,
+    'watch':     0.7,
+    'advisory':  0.5,
+    'statement': 0.35,
+}
+_SEVERITY_HEAT: Dict[str, float] = {
+    'extreme':  1.0,
+    'severe':   0.9,
+    'moderate': 0.65,
+    'minor':    0.5,
+    'unknown':  0.8,
+}
+
+
+def _urgency_heat(tier_word: Optional[str], severity: str) -> float:
+    """Combined 0–1 heat — the calmer of the tier and severity ladders."""
+    t = _TIER_HEAT.get(tier_word or '', 0.85)
+    s = _SEVERITY_HEAT.get((severity or '').lower(), 0.8)
+    return min(t, s)
+
+
+def _soften(c: Tuple[int, int, int], heat: float) -> Tuple[int, int, int]:
+    """Desaturate + dim *c* as *heat* drops below 1.0."""
+    r, g, b = c
+    luma = 0.299 * r + 0.587 * g + 0.114 * b
+    desat = (1.0 - heat) * 0.65   # heat 0 → 65% toward grey
+    dim   = 1.0 - (1.0 - heat) * 0.30   # heat 0 → 30% darker
+    return tuple(max(0, min(255, int((v + (luma - v) * desat) * dim)))
+                 for v in (r, g, b))  # type: ignore[return-value]
+
+
+def _apply_urgency_to_theme(theme: _Theme, heat: float) -> _Theme:
+    """Return a copy of *theme* with the gradient cooled to *heat*."""
+    if heat >= 0.999:
+        return theme
+    out = dict(theme)
+    out['top']    = _soften(tuple(theme['top']), heat)
+    out['bottom'] = _soften(tuple(theme['bottom']), heat)
+    out['particle_intensity'] = (
+        float(theme.get('particle_intensity', 1.0)) * (0.55 + 0.45 * heat)
+    )
+    return out
+
+
 # ─── Font loading ────────────────────────────────────────────────────────────
 # Cached at module level so repeated calls (e.g. _render_map → labels → main
 # generator) share one font set instead of paying truetype open cost each time.
@@ -609,7 +695,9 @@ def _load_fonts() -> Dict[str, ImageFont.FreeTypeFont]:
         'head':   _load_font(_FONT_BOLD_PATHS, 18),
         'bold':   _load_font(_FONT_BOLD_PATHS, 15),
         'normal': _load_font(_FONT_REG_PATHS,  14),
-        'small':  _load_font(_FONT_REG_PATHS,  12),
+        # Body copy — 13 px is the floor for comfortable reading once
+        # social platforms re-encode + downscale the card in the feed.
+        'small':  _load_font(_FONT_REG_PATHS,  13),
         'tiny':   _load_font(_FONT_REG_PATHS,  11),
         'label':  _load_font(_FONT_BOLD_PATHS, 11),
         'threat': _load_font(_FONT_BOLD_PATHS, 15),
@@ -670,8 +758,14 @@ def _draw_pill(draw: ImageDraw.ImageDraw,
                x: int, y: int,
                *,
                text_color: Tuple[int, int, int] = (255, 255, 255),
-               pad_x: int = 9, pad_y: int = 3) -> int:
+               pad_x: int = 9, pad_y: int = 3,
+               outline: Optional[Tuple[int, int, int]] = None,
+               outline_w: int = 0) -> int:
     """Draw a rounded-rectangle pill at (x, y) with *text* inside.
+
+    *outline* draws a casing ring around the pill — used by the header
+    badges so a colour-filled pill still pops when it lands on a
+    same-coloured part of the event gradient.
 
     Returns the x-coordinate of the pill's right edge so the caller can
     chain multiple pills horizontally without re-measuring.
@@ -682,7 +776,9 @@ def _draw_pill(draw: ImageDraw.ImageDraw,
     pill_h = text_h + pad_y * 2
     radius = max(2, pill_h // 2)
     draw.rounded_rectangle((x, y, x + pill_w, y + pill_h),
-                           radius=radius, fill=fill)
+                           radius=radius, fill=fill,
+                           outline=outline,
+                           width=outline_w if outline is not None else 0)
     # Pillow's ``getbbox`` excludes the top-side bearing of TrueType
     # fonts, so subtract the bbox top to get the baseline-aligned y.
     bbox_top = font.getbbox(text)[1]
@@ -2186,6 +2282,7 @@ def generate_alert_image(
     aspect_ratio: str = 'landscape',
     image_format: str = 'png',
     db_session: Any = None,
+    scale: float = 1.0,
 ) -> bytes:
     """Generate a share-card image for *alert* in the requested aspect ratio.
 
@@ -2207,6 +2304,13 @@ def generate_alert_image(
             outside a Flask application context (the CAP poller and audio
             monitoring services that send notification emails); inside a
             request the Flask-SQLAlchemy session is used by default.
+        scale:             Output upscale factor (1.0–3.0, default 1.0).
+            Social platforms re-encode every upload to JPEG and display
+            it downscaled in the feed; a 2× upload (e.g. 2400×1260 for
+            landscape) makes the compression artefacts proportionally
+            smaller on screen, which is the difference between a grainy
+            and a clean card on Facebook.  The card is composed at the
+            native canvas size and Lanczos-upscaled just before encode.
 
     Returns:
         Raw image bytes in the requested container.
@@ -2224,6 +2328,17 @@ def generate_alert_image(
     # downstream draw helpers don't need signature changes.
     theme   = _resolve_theme(event_name, severity)
     alr_clr = tuple(theme['accent'])  # type: ignore[assignment]
+    # Watch / warning / advisory ladder — drives the tier badge and the
+    # rule under the header so the required response level is colour-coded
+    # independently of the hazard-family theme.
+    tier = _resolve_tier(event_name)
+
+    # Cool the header gradient for lower-urgency products: a Heat
+    # ADVISORY no longer glows as red-hot as an Excessive Heat WARNING.
+    # The accent colour (section headers, polygon stroke) keeps its full
+    # hazard-family identity; only the gradient + particles calm down.
+    theme = _apply_urgency_to_theme(
+        theme, _urgency_heat(tier[0] if tier else None, severity))
 
     # Stable per-alert seed so each alert's bolt/snow/etc pattern is
     # reproducible across re-renders.
@@ -2249,8 +2364,12 @@ def generate_alert_image(
     img.paste(base.convert('RGB'))
     draw = ImageDraw.Draw(img)
 
-    draw.rectangle((0, layout.header_h - 2, layout.width, layout.header_h),
-                   fill=_darken(alr_clr, 0.45))
+    # Rule under the header — tier-coloured when the event carries a
+    # watch/warning/advisory word so the escalation level reads even at
+    # thumbnail size; falls back to the darkened theme accent otherwise.
+    rule_clr = tier[1]['fill'] if tier is not None else _darken(alr_clr, 0.45)
+    draw.rectangle((0, layout.header_h - 3, layout.width, layout.header_h),
+                   fill=rule_clr)
 
     # Pre-compute the wordmark width so we know how much room the title
     # has on the left.  The logo's natural aspect ratio + the capped
@@ -2292,29 +2411,49 @@ def generate_alert_image(
     # holds for ~all production alerts and just adds noise).
     sub_y = title_y + title_h + 8
     pill_x = 18
+    # Header badges use the larger bold face — the 11 px label font made
+    # the tier/severity colours read as indistinguishable specks once the
+    # feed downscaled the card.
+    pill_font = fonts['bold']
 
-    # Severity pill — white fill with severity-coloured text so it
-    # contrasts strongly against the event-themed gradient header.  The
-    # previous severity-coloured fill blended into same-coloured
-    # gradients (e.g. orange SEVERE pill on the orange severe-storm
-    # gradient).  A small coloured top-and-bottom bracket carries the
-    # severity colour without losing the white-pill pop.
+    # Tier badge first — WARNING / WATCH / ADVISORY in the conventional
+    # escalation colour (red / orange / amber).  This is the one signal
+    # that tells a reader whether to act or just stay aware, so it leads
+    # the metadata row.  The white casing keeps the fill readable when it
+    # lands on a same-coloured stretch of the event gradient.
+    if tier is not None:
+        tier_word, tier_style = tier
+        pill_x = _draw_pill(draw, pill_font, tier_word.upper(),
+                            tier_style['fill'], pill_x, sub_y,
+                            text_color=tier_style['text'],
+                            outline=WHITE, outline_w=2)
+        pill_x += 8
+
+    # Severity pill — solid severity-colour fill (white-cased like the
+    # tier badge).  The severity ladder deliberately shares hues with the
+    # tier ladder (red / orange / amber / blue), so the common pairings
+    # reinforce one urgency colour per card: a Tornado Warning (Extreme)
+    # reads all-red, a Heat Advisory (Moderate) reads all-amber.  The
+    # words distinguish the two systems; the colour codes the level.
     severity_val = (getattr(alert, 'severity', '') or '').strip()
     if severity_val:
         sev_color = _SEVERITY.get(
             severity_val.lower(),
             _SEVERITY.get('unknown', (108, 117, 125)),
         )
-        pill_x = _draw_pill(draw, fonts['label'], severity_val.upper(),
-                            (245, 248, 252), pill_x, sub_y,
-                            text_color=sev_color)
+        # Amber needs dark text for contrast; every other fill takes white.
+        sev_text = (45, 36, 3) if severity_val.lower() == 'moderate' else WHITE
+        pill_x = _draw_pill(draw, pill_font, severity_val.upper(),
+                            sev_color, pill_x, sub_y,
+                            text_color=sev_text,
+                            outline=WHITE, outline_w=2)
         pill_x += 8
 
     # Status pill (non-Actual only) — keep neutral so it doesn't compete
-    # with the severity pill for attention.
+    # with the tier/severity pills for attention.
     status_val = (getattr(alert, 'status', '') or '').strip()
     if status_val and status_val.lower() != 'actual':
-        pill_x = _draw_pill(draw, fonts['label'], status_val.upper(),
+        pill_x = _draw_pill(draw, pill_font, status_val.upper(),
                             (245, 248, 252), pill_x, sub_y,
                             text_color=(73, 80, 96))
         pill_x += 8
@@ -2328,7 +2467,7 @@ def generate_alert_image(
         extra_text = '  ·  '.join(extras)
         # Optically centre the small text against the pill height so the
         # baseline lines up cleanly instead of riding above the pill.
-        pill_h = _th(fonts['label'], 'Mg') + 6  # mirrors _draw_pill padding
+        pill_h = _th(pill_font, 'Mg') + 6  # mirrors _draw_pill padding
         extra_y = sub_y + (pill_h - _th(fonts['small'], extra_text)) // 2 - 1
         draw.text((pill_x, extra_y), extra_text, font=fonts['small'],
                   fill=(*WHITE, 200))  # type: ignore[arg-type]
@@ -2485,13 +2624,33 @@ def generate_alert_image(
     draw.text((layout.width - _tw(fonts['small'], credit) - 12, cy_pos),
               credit, font=fonts['small'], fill=_TEXT_MUT)
 
+    # ── Optional supersampled output ──────────────────────────────────────────
+    # Upscale the composed card before rounding/encoding so the upload
+    # carries more pixels than the platform displays — Facebook's JPEG
+    # re-encode then lands on an image that gets downscaled on screen,
+    # shrinking its artefacts below visibility.  Lanczos keeps text edges
+    # smooth without ringing.
+    try:
+        out_scale = float(scale or 1.0)
+    except (TypeError, ValueError):
+        out_scale = 1.0
+    out_scale = max(1.0, min(out_scale, 3.0))
+    corner_r = layout.corner_r
+    if out_scale > 1.0:
+        img = img.resize(
+            (int(round(layout.width * out_scale)),
+             int(round(layout.height * out_scale))),
+            Image.LANCZOS,
+        )
+        corner_r = int(round(corner_r * out_scale))
+
     # ── Round outer corners and serialise ────────────────────────────────────
     # Soft rounded corners across the whole share card — matches modern
     # feed cards and stops the image looking like a screenshot.  PNG keeps
     # the corner pixels fully transparent so renderers that respect alpha
     # show a true rounded shape; renderers that flatten get the matte
     # they composite against (usually white on social feeds).
-    img_rounded = _round_image_corners(img, layout.corner_r, bg=None)
+    img_rounded = _round_image_corners(img, corner_r, bg=None)
 
     fmt = (image_format or 'png').strip().lower()
     buf = io.BytesIO()
@@ -2740,33 +2899,41 @@ def _draw_areas(draw: ImageDraw.ImageDraw, fonts: Dict, alr_clr: Tuple,
 
     iy = _section_header(draw, fonts, alr_clr, ix, iy, iw, 'AFFECTED AREAS')
 
-    # Split on semicolons, clean up, display up to ~3 rows
+    # Split on semicolons, clean up, pack segments onto as few rows as
+    # possible.
     segments = [s.strip() for s in area_desc.split(';') if s.strip()]
     font = fonts['small']
     row_h = 21
+    pad_v = 3
+    max_w = iw - 16
 
-    # Try to fit all segments on as few rows as possible
+    lines: List[str] = []
     current_line = ''
     for seg in segments:
         candidate = f'{current_line}; {seg}' if current_line else seg
-        if _tw(font, candidate) <= iw - 14:
+        if _tw(font, candidate) <= max_w:
             current_line = candidate
         else:
-            if current_line and iy + row_h <= bot:
-                _card_row(draw, ix, iy, iw, row_h)
-                draw.text((ix + 7, iy + (row_h - _th(font, current_line)) // 2),
-                          current_line, font=font, fill=_TEXT)
-                iy += row_h + 1
+            if current_line:
+                lines.append(current_line)
             current_line = seg
+    if current_line:
+        lines.append(_truncate(font, current_line, max_w))
 
-    if current_line and iy + row_h <= bot:
-        _card_row(draw, ix, iy, iw, row_h)
-        line = _truncate(font, current_line, iw - 14)
-        draw.text((ix + 7, iy + (row_h - _th(font, line)) // 2),
-                  line, font=font, fill=_TEXT)
-        iy += row_h + 1
+    # Single continuous card block — see _draw_nws_headline for why the
+    # per-row stripes were dropped.
+    n_fit = min(len(lines), max(0, (bot - iy - pad_v * 2) // row_h))
+    if n_fit <= 0:
+        return iy
+    block_h = n_fit * row_h + pad_v * 2
+    draw.rectangle((ix, iy, ix + iw, iy + block_h), fill=_CARD)
+    ty = iy + pad_v
+    for ltext in lines[:n_fit]:
+        draw.text((ix + 8, ty + (row_h - _th(font, ltext)) // 2),
+                  ltext, font=font, fill=_TEXT)
+        ty += row_h
 
-    return iy + 4
+    return iy + block_h + 6
 
 
 def _draw_compass_section(draw: ImageDraw.ImageDraw, fonts: Dict, alr_clr: Tuple,
@@ -2914,9 +3081,9 @@ def _draw_nws_headline(draw: ImageDraw.ImageDraw, fonts: Dict, alr_clr: Tuple,
 
     iy = _section_header(draw, fonts, alr_clr, ix, iy, iw, 'HEADLINE')
 
-    # Word-wrap (leave 10 px for the quote bar on the left)
+    # Word-wrap (leave room for the quote bar + insets on the left)
     font  = fonts['small']
-    max_w = iw - 18
+    max_w = iw - 20
     words = text.split()
     lines: List[str] = []
     line  = ''
@@ -2931,18 +3098,29 @@ def _draw_nws_headline(draw: ImageDraw.ImageDraw, fonts: Dict, alr_clr: Tuple,
     if line:
         lines.append(line)
 
-    row_h = 19
-    for ltext in lines:
-        if iy + row_h > bot:
-            break
-        _card_row(draw, ix, iy, iw, row_h)
-        # Coloured quote bar on the left edge
-        draw.rectangle((ix, iy, ix + 3, iy + row_h), fill=alr_clr)
-        draw.text((ix + 10, iy + (row_h - _th(font, ltext)) // 2),
-                  ltext, font=font, fill=_TEXT)
-        iy += row_h + 1
+    # One continuous card block instead of per-row stripes — the old
+    # 1-px gaps between rows turned into shimmering scan-lines after
+    # social platforms re-encoded the upload as JPEG.
+    row_h = 20
+    pad_v = 4
+    n_fit = min(len(lines), max(0, (bot - iy - pad_v * 2) // row_h))
+    if n_fit <= 0:
+        return iy
+    if n_fit < len(lines):
+        lines[n_fit - 1] = _truncate(
+            font, lines[n_fit - 1] + ' ' + lines[n_fit], max_w)
 
-    return iy + 4
+    block_h = n_fit * row_h + pad_v * 2
+    draw.rectangle((ix, iy, ix + iw, iy + block_h), fill=_CARD)
+    # Coloured quote bar on the left edge
+    draw.rectangle((ix, iy, ix + 3, iy + block_h), fill=alr_clr)
+    ty = iy + pad_v
+    for ltext in lines[:n_fit]:
+        draw.text((ix + 12, ty + (row_h - _th(font, ltext)) // 2),
+                  ltext, font=font, fill=_TEXT)
+        ty += row_h
+
+    return iy + block_h + 6
 
 
 def _wrap_text(font: ImageFont.FreeTypeFont, text: str,
@@ -2993,29 +3171,32 @@ def _draw_description(draw: ImageDraw.ImageDraw, fonts: Dict, alr_clr: Tuple,
     desc = _humanize_caps_text(desc)
 
     font = fonts['small']
-    row_h = 18
+    row_h = 20
+    pad_v = 4
     # Reserve the 22px section header + at least one row before committing.
-    if iy + 22 + row_h > bot:
+    if iy + 22 + row_h + pad_v * 2 > bot:
         return iy
 
     iy = _section_header(draw, fonts, alr_clr, ix, iy, iw, 'DESCRIPTION')
 
-    max_w = iw - 14
+    max_w = iw - 16
     # Fill all remaining vertical space rather than capping at an arbitrary
     # line count — long descriptions previously ended mid-sentence because
     # the cap was 6 lines regardless of how much room was left.
-    avail_lines = max(1, (bot - iy) // (row_h + 1))
+    avail_lines = max(1, (bot - iy - pad_v * 2) // row_h)
     lines = _wrap_text(font, desc, max_w, max_lines=avail_lines)
 
+    # Single continuous card block — see _draw_nws_headline for why the
+    # old per-row stripes (1-px gaps) were dropped.
+    block_h = len(lines) * row_h + pad_v * 2
+    draw.rectangle((ix, iy, ix + iw, iy + block_h), fill=_CARD)
+    ty = iy + pad_v
     for ltext in lines:
-        if iy + row_h > bot:
-            break
-        _card_row(draw, ix, iy, iw, row_h)
-        draw.text((ix + 7, iy + (row_h - _th(font, ltext)) // 2),
+        draw.text((ix + 8, ty + (row_h - _th(font, ltext)) // 2),
                   ltext, font=font, fill=_TEXT)
-        iy += row_h + 1
+        ty += row_h
 
-    return iy + 4
+    return iy + block_h + 6
 
 
 _INSTR_ACCENT = (255, 193, 7)  # warning-yellow accent bar
@@ -3049,8 +3230,9 @@ def _draw_instruction(draw: ImageDraw.ImageDraw, fonts: Dict, alr_clr: Tuple,
     instr = _humanize_caps_text(instr)
 
     font = fonts['small']
-    row_h = 18
-    if iy + 22 + row_h > bot:
+    row_h = 20
+    pad_v = 4
+    if iy + 22 + row_h + pad_v * 2 > bot:
         return iy
 
     # Warning-coloured section header so the action band reads as
@@ -3064,22 +3246,23 @@ def _draw_instruction(draw: ImageDraw.ImageDraw, fonts: Dict, alr_clr: Tuple,
     )
 
     accent_w = 4  # was 3 — thicker bar reads better at thumbnail size
-    max_w = iw - 12 - accent_w
+    max_w = iw - 16 - accent_w
     # Fill remaining vertical space instead of capping at 4 lines.
-    avail_lines = max(1, (bot - iy) // (row_h + 1))
+    avail_lines = max(1, (bot - iy - pad_v * 2) // row_h)
     lines = _wrap_text(font, instr, max_w, max_lines=avail_lines)
 
+    # Single continuous card block with a full-height amber bar — see
+    # _draw_nws_headline for why the per-row stripes were dropped.
+    block_h = len(lines) * row_h + pad_v * 2
+    draw.rectangle((ix, iy, ix + iw, iy + block_h), fill=_CARD)
+    draw.rectangle((ix, iy, ix + accent_w, iy + block_h), fill=_INSTR_ACCENT)
+    ty = iy + pad_v
     for ltext in lines:
-        if iy + row_h > bot:
-            break
-        _card_row(draw, ix, iy, iw, row_h)
-        # Warning-yellow accent bar on the left edge.
-        draw.rectangle((ix, iy, ix + accent_w, iy + row_h), fill=_INSTR_ACCENT)
-        draw.text((ix + accent_w + 7, iy + (row_h - _th(font, ltext)) // 2),
+        draw.text((ix + accent_w + 8, ty + (row_h - _th(font, ltext)) // 2),
                   ltext, font=font, fill=_TEXT)
-        iy += row_h + 1
+        ty += row_h
 
-    return iy + 4
+    return iy + block_h + 6
 
 
 __all__ = ['generate_alert_image']

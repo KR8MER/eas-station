@@ -1154,7 +1154,7 @@ _SOCIAL_IMAGE_FORMATS = {'png', 'webp'}
 def alert_detail_image(alert_id):
     """Generate a social-share image for an alert.
 
-    Accepts two optional query arguments:
+    Accepts three optional query arguments:
 
     * ``ratio`` — one of ``landscape`` (1200×630, FB/X/LinkedIn
       open-graph cards), ``square`` (1080×1080 — Instagram, Mastodon),
@@ -1163,9 +1163,13 @@ def alert_detail_image(alert_id):
     * ``format`` — ``png`` (default, universal) or ``webp`` (~30%
       smaller at equivalent quality; supported by every major social
       platform).
+    * ``scale`` — output upscale factor, 1–3 (default ``2``).  Social
+      platforms re-encode uploads to JPEG and display them downscaled;
+      a 2× upload keeps that compression from reading as grain in the
+      feed.  Pass ``scale=1`` for the native canvas size.
 
-    Unknown values quietly fall back to ``landscape`` / ``png``.  The
-    file name and Content-Type are set from the chosen format so the
+    Unknown values quietly fall back to ``landscape`` / ``png`` / ``2``.
+    The file name and Content-Type are set from the chosen format so the
     browser saves the file with the right extension.
     """
     try:
@@ -1182,6 +1186,12 @@ def alert_detail_image(alert_id):
         if fmt not in _SOCIAL_IMAGE_FORMATS:
             fmt = 'png'
 
+        try:
+            scale = float(request.args.get('scale', 2))
+        except (TypeError, ValueError):
+            scale = 2.0
+        scale = max(1.0, min(scale, 3.0))
+
         intersections = db.session.query(Intersection, Boundary).join(
             Boundary, Intersection.boundary_id == Boundary.id
         ).filter(Intersection.cap_alert_id == alert_id).all()
@@ -1196,7 +1206,7 @@ def alert_detail_image(alert_id):
 
         image_bytes = generate_alert_image(
             alert, coverage_data, ipaws_data, location_settings,
-            aspect_ratio=ratio, image_format=fmt,
+            aspect_ratio=ratio, image_format=fmt, scale=scale,
         )
 
         mimetype = 'image/webp' if fmt == 'webp' else 'image/png'
