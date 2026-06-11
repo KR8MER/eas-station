@@ -219,6 +219,10 @@ def test_retry_unevaluated_forwards_reevaluates_pending_alert(monkeypatch):
     )
 
     calls = []
+    system_events = []
+    poller.log_system_event = lambda level, message, details=None: system_events.append(
+        (level, message, details)
+    )
 
     def _fake_auto_forward(**kwargs):
         calls.append(kwargs)
@@ -233,6 +237,12 @@ def test_retry_unevaluated_forwards_reevaluates_pending_alert(monkeypatch):
     assert calls[0]["cap_alert"] is pending
     assert calls[0]["alert_data"]["raw_json"] == pending.raw_json
     assert calls[0]["alert_data"]["identifier"] == pending.identifier
+    # The pipeline fault itself must be surfaced as a system-log ERROR,
+    # not just silently repaired.
+    assert len(system_events) == 1
+    level, message, details = system_events[0]
+    assert level == "ERROR"
+    assert pending.identifier in details["identifiers"]
 
 
 def test_retry_unevaluated_forwards_noop_when_nothing_pending(monkeypatch):

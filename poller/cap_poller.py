@@ -2931,6 +2931,19 @@ class CAPPoller:
         if not pending:
             return 0
 
+        # A never-evaluated alert means the ingest pipeline faulted (PostGIS
+        # error, OOM kill, service restart) — the rescue below restores the
+        # broadcast, but the fault itself must be loud so an operator
+        # investigates the cause instead of discovering it on a trail page
+        # weeks later.
+        self.log_system_event(
+            'ERROR',
+            f"Forwarding catch-up: {len(pending)} alert(s) were saved but "
+            f"never evaluated for forwarding — ingest pipeline was "
+            f"interrupted; re-running the auto-forward decision now",
+            {'identifiers': [a.identifier for a in pending]},
+        )
+
         # Same config refresh the insert path does, so allowlist/enabled
         # changes made since the last cycle are honoured.
         try:
