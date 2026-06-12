@@ -209,6 +209,47 @@ class GPSManager:
             self._serial_watchdog_s = 30.0
         self._watchdog_restarts: int = 0
 
+        # gpsd watchdogs. Two distinct failure modes, two stages:
+        #
+        # 1. Data silence — gpsd's socket stays open but no JSON events
+        #    arrive. With a WATCH active gpsd emits TPV/SKY at ~1 Hz even
+        #    without a fix, so a long silence means gpsd (or its device
+        #    link) is wedged. Remedy: drop and reconnect the socket.
+        # 2. Stuck acquiring — events keep flowing but TPV never reaches
+        #    mode 2/3. gpsd is known to wedge in this state after serial
+        #    or USB hiccups, and historically only a reboot cleared it.
+        #    Remedy: restart the gpsd daemon itself (sudoers rule in
+        #    config/sudoers-eas-station), rate-limited by a cooldown so a
+        #    genuinely poor sky view can't cause a restart loop.
+        #
+        # Both default on; 0 disables either stage independently.
+        raw_gpsd_watchdog = config.get("gpsd_watchdog_s")
+        if raw_gpsd_watchdog is None:
+            raw_gpsd_watchdog = os.environ.get("GPS_GPSD_WATCHDOG_S", 60)
+        try:
+            self._gpsd_watchdog_s: float = max(0.0, float(raw_gpsd_watchdog))
+        except (TypeError, ValueError):
+            self._gpsd_watchdog_s = 60.0
+
+        raw_stuck = config.get("gpsd_stuck_acquiring_s")
+        if raw_stuck is None:
+            raw_stuck = os.environ.get("GPS_GPSD_STUCK_ACQUIRING_S", 900)
+        try:
+            self._gpsd_stuck_acquiring_s: float = max(0.0, float(raw_stuck))
+        except (TypeError, ValueError):
+            self._gpsd_stuck_acquiring_s = 900.0
+
+        # Minimum spacing between gpsd daemon restarts (stage 2). Keeps a
+        # station with an unplugged antenna from bouncing gpsd (and the
+        # chrony refclock fed by it) more than twice an hour.
+        self._gpsd_restart_cooldown_s: float = 1800.0
+
+        self._gpsd_watchdog_reconnects: int = 0
+        self._gpsd_daemon_restarts: int = 0
+        self._gpsd_last_event_monotonic: Optional[float] = None
+        self._gpsd_last_fix_monotonic: Optional[float] = None
+        self._gpsd_last_daemon_restart_monotonic: Optional[float] = None
+
         # Most-recently parsed fix data (protected by _lock)
         self._lock = threading.Lock()
         self._fix: Dict[str, Any] = self._empty_fix()
@@ -1223,6 +1264,12 @@ class GPSManager:
             # Times the serial watchdog reopened a silent port (serial
             # source only; cumulative since manager start).
             "watchdog_restarts": 0,
+            # gpsd-mode watchdog counters (cumulative since manager start):
+            # socket reconnects forced by event silence, and gpsd daemon
+            # restarts triggered by the stuck-acquiring detector.
+            "gpsd_watchdog_reconnects": 0,
+            "gpsd_daemon_restarts": 0,
+            "gpsd_last_daemon_restart_at": None,
             # Raw NMEA sentences (populated separately, not stored in _fix)
             "recent_sentences": [],
             # UBX-MON-HW telemetry (Phase 2).  All None until the first
@@ -2117,6 +2164,11 @@ class GPSManager:
         self._publish_current_fix(force=True)
 
         buf = b""
+        now = time.monotonic()
+        self._gpsd_last_event_monotonic = now
+        # Anchor the stuck-acquiring timer at loop start so a fresh
+        # connection gets the full window before remediation can fire.
+        self._gpsd_last_fix_monotonic = now
         while self._running:
             sock = self._gpsd_sock
             if sock is None:
@@ -2128,12 +2180,17 @@ class GPSManager:
                     continue
                 self._gpsd_sock = sock
                 backoff = 1.0
+                self._gpsd_last_event_monotonic = time.monotonic()
+            if self._gpsd_watchdog_check():
+                # Watchdog dropped the socket; reconnect on the next pass.
+                continue
             try:
                 chunk = sock.recv(8192)
             except socket.timeout:
                 # Steady-state read timeout. gpsd sends events at ~1 Hz
                 # when there's a fix and stays quiet otherwise. A 15s
-                # silence isn't fatal — we just loop.
+                # silence isn't fatal — we just loop (the watchdog above
+                # decides when silence has gone on long enough).
                 continue
             except (OSError, ConnectionResetError) as exc:
                 if not self._running:
@@ -2153,6 +2210,7 @@ class GPSManager:
                 backoff = min(backoff * 2, 30.0)
                 continue
             buf += chunk
+            self._gpsd_last_event_monotonic = time.monotonic()
             # Defensive cap: gpsd events are bounded (a few KiB at most),
             # so anything past 1 MiB without a newline indicates the
             # other end is misbehaving (or we're being fed garbage). Drop
@@ -2187,6 +2245,121 @@ class GPSManager:
             self._fix["status"] = "stopped"
             self._fix["running"] = False
         self._publish_current_fix(force=True)
+
+    def _gpsd_watchdog_check(self) -> bool:
+        """Run both gpsd watchdog stages. Returns True if the socket was
+        dropped (caller should skip recv and reconnect).
+
+        Called once per reader-loop iteration, so at least every 15s (the
+        socket read timeout). Reader thread only.
+        """
+        now = time.monotonic()
+
+        # Stage 1: event silence — gpsd should emit TPV/SKY at ~1 Hz with
+        # a WATCH active, fix or no fix. Prolonged silence on an open
+        # socket means gpsd is wedged; force a reconnect.
+        last_event = self._gpsd_last_event_monotonic
+        if (
+            self._gpsd_watchdog_s > 0
+            and last_event is not None
+            and now - last_event >= self._gpsd_watchdog_s
+        ):
+            self._gpsd_watchdog_reconnects += 1
+            self._logger.warning(
+                "GPS watchdog: no gpsd events for %.0fs — reconnecting "
+                "(reconnect #%d)",
+                self._gpsd_watchdog_s,
+                self._gpsd_watchdog_reconnects,
+            )
+            with self._lock:
+                self._fix["gpsd_watchdog_reconnects"] = self._gpsd_watchdog_reconnects
+            self._close_gpsd_socket()
+            self._gpsd_last_event_monotonic = now
+            return True
+
+        # Stage 2: stuck acquiring — events are flowing but no 2D/3D fix
+        # has arrived for a long time. gpsd can wedge in this state after
+        # serial/USB hiccups; restarting the daemon clears it. The anchor
+        # includes the last daemon restart so each attempt gets a full
+        # window, and the cooldown bounds the worst case (bad antenna) to
+        # one restart per cooldown period.
+        if self._gpsd_stuck_acquiring_s > 0:
+            anchor = self._gpsd_last_fix_monotonic or now
+            last_restart = self._gpsd_last_daemon_restart_monotonic
+            if last_restart is not None:
+                anchor = max(anchor, last_restart)
+            cooldown_ok = (
+                last_restart is None
+                or now - last_restart >= self._gpsd_restart_cooldown_s
+            )
+            if now - anchor >= self._gpsd_stuck_acquiring_s and cooldown_ok:
+                self._logger.warning(
+                    "GPS watchdog: gpsd has reported no 2D/3D fix for %.0fs "
+                    "— restarting the gpsd daemon",
+                    self._gpsd_stuck_acquiring_s,
+                )
+                self._gpsd_last_daemon_restart_monotonic = now
+                self._restart_gpsd_daemon()
+                # gpsd restart drops our connection; reconnect cleanly.
+                self._close_gpsd_socket()
+                self._gpsd_last_event_monotonic = time.monotonic()
+                return True
+
+        return False
+
+    def _restart_gpsd_daemon(self) -> bool:
+        """Restart the gpsd system service (stuck-acquiring remediation).
+
+        Tries ``sudo -n systemctl restart <unit>`` first (the rule ships
+        in config/sudoers-eas-station), then plain ``systemctl`` for
+        root-run deployments. Returns True if any restart succeeded.
+        """
+        self._gpsd_daemon_restarts += 1
+        with self._lock:
+            self._fix["gpsd_daemon_restarts"] = self._gpsd_daemon_restarts
+            self._fix["gpsd_last_daemon_restart_at"] = datetime.now(
+                timezone.utc
+            ).isoformat()
+
+        any_ok = False
+        for unit in ("gpsd.service", "gpsd.socket"):
+            unit_ok = False
+            for cmd in (
+                ["sudo", "-n", "/usr/bin/systemctl", "restart", unit],
+                ["systemctl", "restart", unit],
+            ):
+                try:
+                    result = subprocess.run(
+                        cmd, capture_output=True, text=True, timeout=30
+                    )
+                except (OSError, subprocess.TimeoutExpired) as exc:
+                    self._logger.debug(
+                        "GPS watchdog: %s failed to launch: %s", cmd, exc
+                    )
+                    continue
+                if result.returncode == 0:
+                    unit_ok = True
+                    break
+                self._logger.debug(
+                    "GPS watchdog: %s exited %d: %s",
+                    cmd,
+                    result.returncode,
+                    (result.stderr or "").strip()[:200],
+                )
+            any_ok = any_ok or unit_ok
+
+        if any_ok:
+            self._logger.info(
+                "GPS watchdog: gpsd daemon restarted (restart #%d)",
+                self._gpsd_daemon_restarts,
+            )
+        else:
+            self._logger.error(
+                "GPS watchdog: could not restart gpsd — ensure the gpsd "
+                "entries from config/sudoers-eas-station are installed in "
+                "/etc/sudoers.d/eas-station (re-run install.sh to update)"
+            )
+        return any_ok
 
     def _record_recent_sentence(self, line: str) -> None:
         """Append a raw line to the rolling buffer the UI shows. Threadsafe."""
@@ -2237,6 +2410,9 @@ class GPSManager:
         quality, has_fix = self._GPSD_MODE_TO_QUALITY.get(
             mode if isinstance(mode, int) else 0, ("no_fix", False),
         )
+        if mode in (2, 3):
+            # Feed the stuck-acquiring watchdog (reader thread only).
+            self._gpsd_last_fix_monotonic = time.monotonic()
         # gpsd `speed` is metres-per-second; the existing UI expects knots.
         speed_mps = obj.get("speed")
         speed_knots = (

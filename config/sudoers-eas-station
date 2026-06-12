@@ -113,6 +113,13 @@ eas-station ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart eas-station.target
 # Audio service management (required to reload Icecast credentials after password change)
 eas-station ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart eas-station-audio
 
+# gpsd recovery (used by the GPS service's stuck-acquiring watchdog)
+# gpsd can wedge after serial/USB hiccups — connected and chatty but never
+# delivering a fix — and only a daemon restart clears it. The GPS manager
+# detects that state and bounces gpsd through these entries.
+eas-station ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart gpsd.service
+eas-station ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart gpsd.socket
+
 # Postfix local mail server management (required for mail server web UI)
 # These commands are used by webapp/admin/mail_server.py to install, configure,
 # and manage the local Postfix SMTP relay for outbound alert email delivery.

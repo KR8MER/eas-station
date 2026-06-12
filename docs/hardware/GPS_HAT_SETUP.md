@@ -108,6 +108,29 @@ Hardware service log line on startup should read:
 
 If it reads `source=serial` instead, gpsd wasn't reachable when the manager started — either gpsd isn't running (`systemctl status gpsd.service`), the port is wrong, or `gpsd.socket` is masking the always-running daemon. The diagnostic panel calls these out as separate actions you can fix in one click.
 
+### Built-in watchdogs (automatic recovery)
+
+The GPS reader guards against the common ways a receiver or gpsd wedges,
+so a stuck station recovers without a reboot:
+
+- **Serial silence** (`source=serial`): no NMEA bytes for 30 s
+  (`GPS_SERIAL_WATCHDOG_S`, `0` disables) closes and reopens the port,
+  retrying every 5 s — an unplugged receiver recovers on replug.
+- **gpsd event silence** (`source=gpsd`): a healthy gpsd emits TPV/SKY at
+  ~1 Hz even without a fix, so 60 s of silence (`GPS_GPSD_WATCHDOG_S`)
+  forces a socket reconnect.
+- **gpsd stuck acquiring**: if gpsd keeps reporting but never reaches a
+  2D/3D fix for 15 minutes (`GPS_GPSD_STUCK_ACQUIRING_S`), the watchdog
+  restarts the gpsd daemon itself (via the sudoers entries installed by
+  `install.sh`), at most once per 30 minutes so a poor sky view can't
+  cause a restart loop.
+
+Watchdog activity is logged and counted in the GPS status
+(`watchdog_restarts`, `gpsd_watchdog_reconnects`, `gpsd_daemon_restarts`).
+If the daemon restart logs a sudo failure, re-run `install.sh` (or copy
+`config/sudoers-eas-station` to `/etc/sudoers.d/eas-station`) to pick up
+the gpsd entries.
+
 ---
 
 ## What the GPS HAT Setup Status panel actually does
