@@ -143,6 +143,21 @@ ENV_CATEGORIES = {
                 'default': 'false',
                 'description': 'Enable Flask debug mode (should be false in production)',
             },
+            {
+                'key': 'AUDIT_SIGNING_KEY_PATH',
+                'label': 'Audit Signing Key Path',
+                'type': 'text',
+                'default': '/opt/eas-station/secrets/audit_signing.key',
+                'description': (
+                    'Path to the Ed25519 private key (PEM) that signs tamper-evident '
+                    'audit-log entries. Generated automatically by install.sh. Deliberately '
+                    'a file path, not a stored secret: keeping the key outside the database '
+                    'is what makes the audit chain tamper-evident against database-level '
+                    'edits. Never rotate casually — rows signed by the old key become '
+                    'unverifiable. See docs/security/AUDIT_LOG_INTEGRITY.md.'
+                ),
+                'placeholder': '/opt/eas-station/secrets/audit_signing.key',
+            },
         ],
     },
     'database': {

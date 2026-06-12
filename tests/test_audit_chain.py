@@ -220,6 +220,85 @@ def test_ephemeral_key_bootstrap(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# /security/audit-logs/verify endpoint
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def verify_client(app_context, monkeypatch):
+    """Test client with the security blueprint mounted and RBAC stubbed.
+
+    ``require_permission`` resolves ``has_permission`` from the roles module
+    at request time, so patching it there is enough to authorize the call
+    without standing up the full user/role tables.
+    """
+    import app_core.auth.roles as roles_mod
+    from webapp.routes_security import security_bp
+
+    monkeypatch.setattr(roles_mod, "has_permission", lambda _name: True)
+    app_context.register_blueprint(security_bp)
+    return app_context.test_client()
+
+
+def test_verify_endpoint_reports_intact_chain(verify_client):
+    for _ in range(3):
+        _make_row()
+
+    resp = verify_client.get("/security/audit-logs/verify")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["ok"] is True
+    assert data["checked"] == 3
+    assert data["unsigned"] == 0
+    assert data["first_bad_id"] is None
+    assert data["total_rows"] == 3
+    assert data["verified_at"]
+
+    # The verification run itself was appended to the chain...
+    newest = (
+        db.session.query(AuditLog).order_by(AuditLog.id.desc()).first()
+    )
+    assert newest.action == AuditAction.AUDIT_CHAIN_VERIFIED.value
+    assert newest.success is True
+    assert newest.details["checked"] == 3
+    # ...and the chain (now including that row) still verifies.
+    assert AuditLogger.verify_chain()["ok"] is True
+
+
+def test_verify_endpoint_reports_tampering(verify_client):
+    r1 = _make_row(details={"original": True})
+    _make_row()
+
+    r1.details = {"tampered": True}
+    db.session.commit()
+
+    resp = verify_client.get("/security/audit-logs/verify")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["ok"] is False
+    assert data["first_bad_id"] == r1.id
+    assert "entry_hash mismatch" in data["reason"]
+
+    # The failed verification is recorded with success=False.
+    newest = (
+        db.session.query(AuditLog).order_by(AuditLog.id.desc()).first()
+    )
+    assert newest.action == AuditAction.AUDIT_CHAIN_VERIFIED.value
+    assert newest.success is False
+
+
+def test_verify_endpoint_honors_limit(verify_client):
+    for _ in range(5):
+        _make_row()
+
+    resp = verify_client.get("/security/audit-logs/verify?limit=2")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["ok"] is True
+    assert data["checked"] == 2
+    assert data["total_rows"] == 5
+
+
+# ---------------------------------------------------------------------------
 # Canonical JSON determinism
 # ---------------------------------------------------------------------------
 

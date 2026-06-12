@@ -1666,12 +1666,39 @@ ZIGBEE_BAUDRATE=$ZIGBEE_BAUDRATE
 # Text-to-Speech Settings (Configure via web interface)
 EAS_TTS_PROVIDER=pyttsx3
 
+# Tamper-evident audit log signing key (Ed25519, generated during install)
+# See docs/security/AUDIT_LOG_INTEGRITY.md — keep this file OUT of the database
+# and out of backups that share storage with the database.
+AUDIT_SIGNING_KEY_PATH=$INSTALL_DIR/secrets/audit_signing.key
+
 # Administrator Account (configured during install)
 # Login at https://$DOMAIN_NAME/ with username: $ADMIN_USERNAME
 EOF
 chown "$SERVICE_USER:$SERVICE_GROUP" "$CONFIG_FILE"
 chmod 600 "$CONFIG_FILE"
 echo_success "Configuration created with auto-generated SECRET_KEY"
+
+# Generate the Ed25519 signing key for the tamper-evident audit-log chain.
+# Idempotent: an existing key is never overwritten (rotating it would orphan
+# the signatures on rows signed by the old key).
+echo_progress "Provisioning audit-log signing key..."
+AUDIT_KEY_DIR="$INSTALL_DIR/secrets"
+AUDIT_KEY_FILE="$AUDIT_KEY_DIR/audit_signing.key"
+if [ -f "$AUDIT_KEY_FILE" ]; then
+    echo_info "Audit signing key already exists - keeping it (rotation would break chain verification)"
+else
+    mkdir -p "$AUDIT_KEY_DIR"
+    if openssl genpkey -algorithm ed25519 -out "$AUDIT_KEY_FILE" 2>/dev/null; then
+        echo_success "Audit signing key generated at $AUDIT_KEY_FILE"
+    else
+        echo_warning "Could not generate audit signing key - audit rows will be signed with an ephemeral key until one is provisioned (see docs/security/AUDIT_LOG_INTEGRITY.md)"
+    fi
+fi
+if [ -d "$AUDIT_KEY_DIR" ]; then
+    chown -R "$SERVICE_USER:$SERVICE_GROUP" "$AUDIT_KEY_DIR"
+    chmod 700 "$AUDIT_KEY_DIR"
+    [ -f "$AUDIT_KEY_FILE" ] && chmod 600 "$AUDIT_KEY_FILE"
+fi
 
 echo_step "Install Systemd Services"
 

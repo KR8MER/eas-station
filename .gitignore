@@ -70,3 +70,8 @@ tests/bug_reproductions/
 /FIX_*.md
 /FIXES_*.md
 
+
+# Tamper-evident audit-log signing key (Ed25519 private key) - NEVER commit.
+# install.sh/update.sh generate this under the install dir, which is a git
+# checkout in production. See docs/security/AUDIT_LOG_INTEGRITY.md.
+secrets/

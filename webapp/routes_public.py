@@ -2149,7 +2149,13 @@ def register(app: Flask, logger) -> None:
                         'ip_address': log.ip_address,
                         'user_agent': log.user_agent,
                         'details': log.details,
+                        # Tamper-evidence chain fields (see
+                        # docs/security/AUDIT_LOG_INTEGRITY.md).  Surfacing
+                        # all three lets an operator cross-check a single
+                        # row against an exported copy or the verify API.
+                        'prev_hash': log.prev_hash,
                         'entry_hash': log.entry_hash,
+                        'signature': log.signature,
                     },
                 }
                 for log in logs_result

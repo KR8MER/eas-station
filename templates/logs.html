@@ -439,6 +439,43 @@
                 {% endif %}
                 {% endif %}
 
+                {# ── Tamper-evidence chain verification (audit tab only) ── #}
+                {% if log_type == 'audit' %}
+                <div class="card mb-3" id="chainIntegrityCard">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                            <div>
+                                <h6 class="card-title mb-1">
+                                    <i class="fas fa-link"></i> Chain Integrity
+                                </h6>
+                                <p class="text-muted small mb-0">
+                                    Every audit row is hash-chained to its predecessor and signed
+                                    with the station's Ed25519 key. Verification recomputes every
+                                    hash and signature to prove the log has not been edited,
+                                    deleted from, or reordered.
+                                    <a href="https://github.com/KR8MER/eas-station/blob/main/docs/security/AUDIT_LOG_INTEGRITY.md"
+                                       target="_blank" rel="noopener">How it works</a>
+                                </p>
+                            </div>
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <select class="form-select form-select-sm w-auto" id="verifyScope"
+                                        aria-label="Verification scope">
+                                    <option value="" selected>Entire chain</option>
+                                    <option value="100">Newest 100 rows</option>
+                                    <option value="1000">Newest 1,000 rows</option>
+                                    <option value="10000">Newest 10,000 rows</option>
+                                </select>
+                                <button type="button" class="btn btn-primary btn-sm" id="verifyChainBtn"
+                                        onclick="verifyAuditChain()">
+                                    <i class="fas fa-shield-halved"></i> Verify Chain Integrity
+                                </button>
+                            </div>
+                        </div>
+                        <div id="chainVerifyResult" class="mt-3" hidden></div>
+                    </div>
+                </div>
+                {% endif %}
+
                 <!-- Log Type Description -->
                 <div class="alert alert-info mb-3">
                     {% if log_type == 'all' %}
@@ -479,6 +516,8 @@
                         <strong><i class="fas fa-info-circle"></i> Manual EAS Activations:</strong> Manually triggered EAS activations with event details and audio components.
                     {% elif log_type == 'services' %}
                         <strong><i class="fas fa-info-circle"></i> Service Logs (systemd):</strong> System service logs from journalctl showing EAS Station™ service activities, errors, and status messages.
+                    {% elif log_type == 'audit' %}
+                        <strong><i class="fas fa-info-circle"></i> Audit Log:</strong> Tamper-evident record of security events and alert lifecycle — logins, MFA, configuration changes, alerts received, EAS broadcasts, and manual activations. Each row carries a SHA-256 hash chained to its predecessor plus an Ed25519 signature; expand a row's details to see its <code>entry_hash</code>, <code>prev_hash</code>, and <code>signature</code>, and use <strong>Verify Chain Integrity</strong> above to prove the log hasn't been modified.
                     {% endif %}
                 </div>
 
@@ -1115,6 +1154,96 @@
             document.getElementById('filterForm').submit();
         }
     });
+
+    // ── Audit chain integrity verification (audit tab only) ──────────────
+    async function verifyAuditChain() {
+        const btn = document.getElementById('verifyChainBtn');
+        const resultBox = document.getElementById('chainVerifyResult');
+        const scope = document.getElementById('verifyScope').value;
+        const originalHTML = btn.innerHTML;
+
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Verifying…';
+        resultBox.hidden = false;
+        resultBox.innerHTML = '<div class="text-muted small"><i class="fas fa-circle-notch fa-spin"></i> Walking the chain — recomputing hashes and checking signatures…</div>';
+
+        try {
+            const url = '/security/audit-logs/verify' + (scope ? `?limit=${scope}` : '');
+            const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
+            if (!resp.ok) {
+                throw new Error(`Server returned ${resp.status}`);
+            }
+            const r = await resp.json();
+
+            const scopeLabel = scope ? `newest ${Number(scope).toLocaleString()} rows` : 'entire chain';
+            let html = '';
+
+            if (r.ok) {
+                html += `
+                    <div class="alert alert-success mb-2">
+                        <i class="fas fa-shield-halved"></i>
+                        <strong>Chain intact.</strong>
+                        Verified ${r.checked.toLocaleString()} signed row${r.checked === 1 ? '' : 's'}
+                        (${scopeLabel}, ${Number(r.total_rows).toLocaleString()} total rows) —
+                        every hash link and Ed25519 signature checks out. The audit log has not
+                        been edited, deleted from, or reordered.
+                    </div>`;
+            } else {
+                html += `
+                    <div class="alert alert-danger mb-2">
+                        <i class="fas fa-triangle-exclamation"></i>
+                        <strong>TAMPERING DETECTED.</strong>
+                        Verification failed${r.first_bad_id != null ? ` at row id <code>${r.first_bad_id}</code>` : ''}
+                        after ${r.checked.toLocaleString()} good row${r.checked === 1 ? '' : 's'}.
+                        <div class="mt-1 text-break-anywhere"><code>${escapeHtml(r.reason || 'no reason provided')}</code></div>
+                        <div class="mt-1 small">Rows before the failure point are verified; the failed row and everything after it can no longer be trusted. Preserve the database and any exported copies for investigation.</div>
+                    </div>`;
+            }
+
+            if (r.unsigned > 0) {
+                html += `
+                    <div class="alert alert-warning mb-2">
+                        <i class="fas fa-circle-info"></i>
+                        ${r.unsigned.toLocaleString()} row${r.unsigned === 1 ? ' is' : 's are'} unsigned —
+                        recorded before tamper-evidence was enabled (v2.75.0) or while the signing
+                        key was unavailable. These rows are listed but cannot be cryptographically verified.
+                    </div>`;
+            }
+
+            if (r.ephemeral_key) {
+                html += `
+                    <div class="alert alert-warning mb-2">
+                        <i class="fas fa-key"></i>
+                        <strong>Ephemeral signing key in use.</strong>
+                        No persistent key was found at <code>AUDIT_SIGNING_KEY_PATH</code>, so this
+                        process generated a temporary in-memory key. Signatures will not survive a
+                        service restart and provide no real tamper evidence. Provision a persistent
+                        key — see <a href="https://github.com/KR8MER/eas-station/blob/main/docs/security/AUDIT_LOG_INTEGRITY.md" target="_blank" rel="noopener">Audit Log Integrity</a>.
+                    </div>`;
+            }
+
+            html += `<div class="text-muted small"><i class="fas fa-clock"></i> Verified at ${escapeHtml(r.verified_at || '')} — this verification run was itself recorded in the chain as <code>audit.chain.verified</code>.</div>`;
+            resultBox.innerHTML = html;
+            showToast(r.ok ? 'Audit chain verified — no tampering detected' : 'Audit chain verification FAILED', r.ok ? 'success' : 'danger');
+        } catch (err) {
+            console.error('Chain verification error:', err);
+            resultBox.innerHTML = `
+                <div class="alert alert-danger mb-0">
+                    <i class="fas fa-triangle-exclamation"></i>
+                    Could not run verification: ${escapeHtml(err.message)}
+                </div>`;
+            showToast('Audit chain verification request failed', 'danger');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = originalHTML;
+        }
+    }
+
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = String(str);
+        return div.innerHTML;
+    }
 
     // Highlight search terms
     const searchQuery = "{{ search_query or '' }}";

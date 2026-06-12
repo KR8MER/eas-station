@@ -366,6 +366,36 @@
                             </div>
                         </div>
 
+                        <!-- Audit Log & Tamper-Evidence Verification -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="auditChainHeading">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#auditChainCollapse">
+                                    <i class="fas fa-link me-2"></i>Verifying the Audit Log (Tamper Evidence)
+                                </button>
+                            </h2>
+                            <div id="auditChainCollapse" class="accordion-collapse collapse" data-bs-parent="#operationsAccordion">
+                                <div class="accordion-body">
+                                    <p>Every audit log entry — logins, configuration changes, alerts received, EAS broadcasts, manual activations — is hash-chained to the entry before it and signed with the station's Ed25519 key. Any edit, deletion, or insertion (even directly against the database) is cryptographically detectable.</p>
+                                    <ul>
+                                        <li>Navigate to <strong>System Logs → Audit</strong> tab (<code>/logs?type=audit</code>).</li>
+                                        <li>In the <strong>Chain Integrity</strong> card, choose a scope (entire chain, or the newest N rows on very large logs) and click <strong>Verify Chain Integrity</strong>.</li>
+                                        <li>A <span class="text-success fw-semibold">green result</span> proves the log has not been modified; a <span class="text-danger fw-semibold">red result</span> reports the first bad row and why it failed.</li>
+                                        <li>Expand any entry's details to see its <code>entry_hash</code>, <code>prev_hash</code>, and <code>signature</code>.</li>
+                                        <li>Each verification run is itself recorded in the chain as <code>audit.chain.verified</code> — your receipt that the check happened.</li>
+                                    </ul>
+                                    <div class="alert alert-warning">
+                                        <i class="fas fa-key me-2"></i>
+                                        <strong>Ephemeral key warning:</strong> if verification warns that an ephemeral signing key is in use, the station has no persistent key and signatures will not survive a restart. The installer normally provisions one at <code>/opt/eas-station/secrets/audit_signing.key</code>; the path is configurable under <strong>Settings → Environment → Core Settings</strong>.
+                                    </div>
+                                    <div class="alert alert-light">
+                                        <i class="fas fa-book me-2"></i>
+                                        Full design, threat model, and key management:
+                                        <a href="https://github.com/KR8MER/eas-station/blob/main/docs/security/AUDIT_LOG_INTEGRITY.md" target="_blank" rel="noopener">Audit Log Integrity documentation</a>.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Managing Boundaries and Alerts -->
                         <div class="accordion-item">
                             <h2 class="accordion-header" id="boundariesHeading">

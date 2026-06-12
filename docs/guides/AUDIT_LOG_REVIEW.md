@@ -2,6 +2,8 @@
 
 EAS Station™ maintains two audit trails: a structured **database audit log** that captures user actions and security events, and a **security log file** in fail2ban-compatible format that captures authentication events.
 
+The database audit log is **tamper-evident**: every entry is hash-chained to its predecessor and signed with the station's Ed25519 key, so edits, deletions, and insertions are cryptographically detectable. See [Audit Log Integrity](../security/AUDIT_LOG_INTEGRITY.md) for the full design, threat model, and key management.
+
 ---
 
 ## Database Audit Log
@@ -13,6 +15,7 @@ The database audit log records:
 - IP filter additions, changes, and deletions
 - Permission denial events
 - Configuration changes
+- Alert lifecycle events — every CAP alert received, EAS message generated, and manual activation is captured automatically
 
 ### Viewing Audit Logs in the Web Interface
 
@@ -45,6 +48,48 @@ The database audit log records:
 | `USER_DELETED` | Admin account deleted |
 | `API_KEY_CREATED` | New API key generated |
 | `API_KEY_DELETED` | API key removed |
+| `alert.received` | CAP alert ingested from a polling source (automatic) |
+| `eas.broadcast` | EAS message generated for broadcast (automatic) |
+| `eas.manual_activation` | Operator-initiated manual EAS activation (automatic) |
+| `audit.chain.verified` | An operator ran tamper-evidence verification |
+
+---
+
+## Verifying the Log Hasn't Been Tampered With
+
+Every database audit entry carries three cryptographic fields — `prev_hash`,
+`entry_hash`, and `signature` — that chain it to the entry before it and sign
+it with the station's Ed25519 key.
+
+**To verify via the web UI:**
+
+1. Navigate to **System Logs → Audit** tab (`/logs?type=audit`).
+2. In the **Chain Integrity** card at the top, choose a scope (entire chain,
+   or newest N rows for very large logs).
+3. Click **Verify Chain Integrity**.
+4. A green banner means every hash link and signature checked out — the log
+   has not been edited, deleted from, or reordered. A red banner reports the
+   first bad row id and the exact reason.
+
+**To verify via the API:**
+
+```bash
+curl -b cookies.txt "https://your-eas-station.example.com/security/audit-logs/verify"
+```
+
+Each verification run is itself recorded in the chain as an
+`audit.chain.verified` entry, giving you a receipt of when the log was last
+checked and what the verdict was.
+
+!!! warning "Ephemeral key warning"
+    If the verification result warns about an **ephemeral signing key**, the
+    station has no persistent Ed25519 key and signatures will not survive a
+    service restart. Provision one — see
+    [Audit Log Integrity → Key Management](../security/AUDIT_LOG_INTEGRITY.md#key-management).
+
+For the full design, threat model (including what tampering is and isn't
+detectable), and key management procedures, see
+[Audit Log Integrity](../security/AUDIT_LOG_INTEGRITY.md).
 
 ---
 

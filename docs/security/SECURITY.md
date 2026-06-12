@@ -322,6 +322,13 @@ All security-sensitive operations are logged to the `audit_logs` table with:
 - Success/failure status
 - Additional details (JSON)
 
+The audit log is **tamper-evident**: every row is SHA-256 hash-chained to its
+predecessor and signed with a station-specific Ed25519 key, so database-level
+edits, deletions, and insertions are cryptographically detectable. Verify it
+at any time via **System Logs → Audit → Verify Chain Integrity** or
+`GET /security/audit-logs/verify`. Full design, threat model, and key
+management: [Audit Log Integrity](AUDIT_LOG_INTEGRITY.md).
+
 ### Audit Actions Tracked
 
 **Authentication:**
@@ -346,9 +353,11 @@ All security-sensitive operations are logged to the `audit_logs` table with:
 
 **Operations:**
 - `eas.broadcast` / `eas.manual_activation` / `eas.cancellation`
+- `alert.received` (recorded automatically on CAP alert ingest)
 - `config.updated`
 - `gpio.activated` / `gpio.deactivated`
 - `alert.deleted` / `log.exported` / `log.deleted`
+- `audit.chain.verified` (tamper-evidence verification run)
 
 **Security Events:**
 - `security.permission_denied`
