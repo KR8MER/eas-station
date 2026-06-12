@@ -8,6 +8,12 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.84.1] - 2026-06-12 - Fix systemd DeviceAllow blocking USB serial devices beyond ttyUSB0
+
+### Fixed
+- **The GPIO service could not open a USB tower light on any port other than `/dev/ttyUSB0`** — `eas-station-gpio.service` whitelisted exactly `DeviceAllow=/dev/ttyUSB0`, so a light enumerating at `/dev/ttyUSB1` (normal when another USB-serial adapter is plugged in) failed with `[Errno 1] Operation not permitted`. DeviceAllow has no path wildcards, so the unit now allows the `char-ttyUSB` / `char-ttyACM` device groups (the pattern `eas-station-web.service` already documents). The same latent bug is fixed in `eas-station-displays.service` (VFD/LED serial) and `eas-station-zigbee.service` (coordinator), and the groups were added to `eas-station-gps.service` for USB GPS receivers. Existing installs need the updated unit files installed (`update.sh` does this; or copy from `systemd/` and `systemctl daemon-reload`).
+- **Tower light could miss the initial standby frame.** CH340-based lights can drop bytes written immediately after the serial port opens (the adapter resets on open), so the controller now waits 1 s after opening before sending the first state frame.
+
 ## [2.84.0] - 2026-06-12 - ANDONT 7-color stack light support and configurable tower-light state colors
 
 ### Added

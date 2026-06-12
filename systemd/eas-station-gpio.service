@@ -51,8 +51,12 @@ ReadWritePaths=/opt/eas-station /var/log/eas-station -/dev/gpiochip0 -/dev/gpioc
 # GPIO chips for relay control + NeoPixel data line
 DeviceAllow=/dev/gpiochip0 rw
 DeviceAllow=/dev/gpiochip1 rw
-# USB tower light (CH34x serial)
-DeviceAllow=/dev/ttyUSB0 rw
+# USB tower light — CH34x/CP210x adapters enumerate as /dev/ttyUSB<n>
+# with no stable number, and a fixed /dev/ttyUSB0 entry EPERMs the open
+# when the light lands on ttyUSB1. Path wildcards are NOT supported by
+# DeviceAllow — use device group names (same pattern as web.service).
+DeviceAllow=char-ttyUSB rw
+DeviceAllow=char-ttyACM rw
 
 # Resource limits
 LimitNOFILE=65536

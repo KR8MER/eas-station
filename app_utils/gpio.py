@@ -2645,6 +2645,10 @@ class TowerLightController:
                     self.config.baudrate,
                     timeout=1,
                 )
+                # CH340-based lights can drop bytes written immediately
+                # after the port opens (the adapter resets on open), so
+                # let it settle before the first state frame goes out.
+                time.sleep(1.0)
                 self._available = True
                 if self.logger:
                     self.logger.info(

@@ -56,9 +56,12 @@ ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths=/opt/eas-station /var/log/eas-station /var/lib/eas-station
 
-# USB serial coordinator device access
-DeviceAllow=/dev/ttyUSB0 rw
-DeviceAllow=/dev/ttyACM0 rw
+# USB serial coordinator device access. Coordinators enumerate as
+# /dev/ttyUSB<n>//dev/ttyACM<n> with no stable number; DeviceAllow has
+# no path wildcards, so allow the char groups (same pattern as
+# web.service). ttyAMA0 covers HAT-style coordinators on the Pi UART.
+DeviceAllow=char-ttyUSB rw
+DeviceAllow=char-ttyACM rw
 DeviceAllow=/dev/ttyAMA0 rw
 
 # Resource limits

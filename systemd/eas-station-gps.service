@@ -62,6 +62,10 @@ ReadWritePaths=/opt/eas-station /var/log/eas-station -/dev/gpiochip0 -/dev/gpioc
 DeviceAllow=/dev/ttyAMA0 rw
 DeviceAllow=/dev/ttyAMA10 rw
 DeviceAllow=/dev/ttyS0 rw
+# USB GPS receivers enumerate as /dev/ttyUSB<n>//dev/ttyACM<n>; allow
+# the char groups since DeviceAllow has no path wildcards.
+DeviceAllow=char-ttyUSB rw
+DeviceAllow=char-ttyACM rw
 # PPS GPIO pin
 DeviceAllow=/dev/gpiochip0 rw
 DeviceAllow=/dev/gpiochip1 rw
