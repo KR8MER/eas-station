@@ -1289,28 +1289,40 @@ def build_eom_header(config: Dict[str, object]) -> str:
     return "NNNN"
 
 
-def _load_pronunciation_rules() -> List[tuple]:
+def _load_pronunciation_rules(db_session=None) -> List[tuple]:
     """Load user-defined pronunciation rules from the database.
 
     Returns a list of (original_text, replacement_text, match_case) tuples
     for all enabled rules, ordered so longer patterns are applied first
     (prevents shorter prefixes from masking longer tokens).
 
+    Args:
+        db_session: Optional raw SQLAlchemy session.  The CAP poller and the
+            OTA monitor generate broadcast audio outside any Flask application
+            context, where the Flask-SQLAlchemy ``Model.query`` proxy raises.
+            Callers in those processes must pass their own session or the
+            dictionary is silently skipped (same pattern as ``load_eas_config``).
+
     Falls back gracefully to an empty list when the database is unavailable
     or the table does not yet exist (e.g. before the first migration run).
     """
     try:
-        from flask import has_app_context
-        if not has_app_context():
-            return []
         from app_core.models import TTSPronunciationRule
-        from app_core.extensions import db
+        from sqlalchemy import func as _sa_func
+
+        if db_session is not None:
+            query = db_session.query(TTSPronunciationRule)
+        else:
+            from flask import has_app_context
+            if not has_app_context():
+                return []
+            query = TTSPronunciationRule.query
         rules = (
-            TTSPronunciationRule.query
+            query
             .filter_by(enabled=True)
             .order_by(
                 # Longer originals first so "Bellefontaine" is matched before "Bell"
-                db.func.length(TTSPronunciationRule.original_text).desc()
+                _sa_func.length(TTSPronunciationRule.original_text).desc()
             )
             .all()
         )
@@ -1319,9 +1331,13 @@ def _load_pronunciation_rules() -> List[tuple]:
         return []
 
 
-def _normalize_text_for_tts(text: str) -> str:
+def _normalize_text_for_tts(text: str, db_session=None) -> str:
     """Expand common emergency-management acronyms and apply user pronunciation
     rules so TTS engines read the text correctly.
+
+    ``db_session`` is an optional raw SQLAlchemy session forwarded to
+    ``_load_pronunciation_rules`` so the database dictionary (layer 4) also
+    works outside a Flask application context (CAP poller, OTA monitor).
 
     Five layers of replacement are applied in order:
 
@@ -1584,7 +1600,7 @@ def _normalize_text_for_tts(text: str) -> str:
         result = re.sub(r'\b' + re.escape(token) + r'\b', expansion, result)
 
     # ── Layer 4: database pronunciation dictionary ────────────────────────
-    for original, replacement, match_case in _load_pronunciation_rules():
+    for original, replacement, match_case in _load_pronunciation_rules(db_session):
         flags = 0 if match_case else re.IGNORECASE
         try:
             result = re.sub(
@@ -1657,7 +1673,11 @@ def _strip_awips_identifier(description: str, parameters: Dict[str, object]) -> 
     return description
 
 
-def _compose_message_text(alert: object, payload: Optional[Dict[str, object]] = None) -> str:
+def _compose_message_text(
+    alert: object,
+    payload: Optional[Dict[str, object]] = None,
+    db_session=None,
+) -> str:
     """Build the TTS narration text from the alert body.
 
     Structure (in order of preference):
@@ -1816,7 +1836,7 @@ def _compose_message_text(alert: object, payload: Optional[Dict[str, object]] = 
     if len(full_text) > 4096:
         full_text = full_text[:4093] + '...'
 
-    return _normalize_text_for_tts(full_text)
+    return _normalize_text_for_tts(full_text, db_session=db_session)
 
 
 def manual_default_same_codes() -> List[str]:
@@ -2637,9 +2657,13 @@ def _resample_audio(samples: List[int], source_rate: int, target_rate: int) -> L
 
 
 class EASAudioGenerator:
-    def __init__(self, config: Dict[str, object], logger) -> None:
+    def __init__(self, config: Dict[str, object], logger, db_session=None) -> None:
         self.config = config
         self.logger = logger
+        # Raw SQLAlchemy session for callers outside a Flask app context
+        # (CAP poller / OTA monitor) so the TTS pronunciation dictionary
+        # can still be read from the database.
+        self.db_session = db_session
         self.sample_rate = int(config.get('sample_rate', 16000))
         self.output_dir = str(config.get('output_dir'))
         _ensure_directory(self.output_dir)
@@ -2765,7 +2789,7 @@ class EASAudioGenerator:
             samples.extend(post_tone_silence)
             segment_samples['buffer'].extend(post_tone_silence)
 
-        message_text = _compose_message_text(alert, payload)
+        message_text = _compose_message_text(alert, payload, db_session=self.db_session)
         if message_text:
             preview = message_text.replace('\n', ' ')
             self.logger.debug('Alert narration preview: %s', preview[:240])
@@ -3154,7 +3178,7 @@ class EASAudioGenerator:
 
             attention_samples = _generate_tone(tone_freqs, tone_seconds, self.sample_rate, amplitude)
 
-        message_text = _compose_message_text(alert)
+        message_text = _compose_message_text(alert, db_session=self.db_session)
         tts_samples: List[int] = []
         tts_warning: Optional[str] = None
         provider = self.tts_engine.provider
@@ -3394,7 +3418,7 @@ class EASBroadcaster:
         self.logger = logger
         self.location_settings = location_settings or {}
         self.enabled = bool(config.get('enabled'))
-        self.audio_generator = EASAudioGenerator(config, logger)
+        self.audio_generator = EASAudioGenerator(config, logger, db_session=db_session)
         self.gpio_controller: Optional[GPIOController] = None
         self.gpio_pin_configs: List[GPIOPinConfig] = []
         self.gpio_behavior_manager: Optional[GPIOBehaviorManager] = None

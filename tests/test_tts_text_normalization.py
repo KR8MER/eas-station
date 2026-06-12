@@ -776,5 +776,55 @@ class TestEdgeCases(unittest.TestCase):
         self.assertIn('required monthly test', result)
 
 
+# ---------------------------------------------------------------------------
+# Database pronunciation dictionary (layer 4) outside a Flask app context
+# ---------------------------------------------------------------------------
+
+class TestPronunciationDictionaryRawSession(unittest.TestCase):
+    """The CAP poller and OTA monitor generate broadcast audio without a Flask
+    app context.  Layer 4 must load rules through the raw SQLAlchemy session
+    those processes pass in, instead of silently skipping the dictionary
+    (regression: rules applied in the web preview but never on-air).
+    """
+
+    @staticmethod
+    def _fake_session(rules):
+        session = MagicMock()
+        (session.query.return_value
+         .filter_by.return_value
+         .order_by.return_value
+         .all.return_value) = rules
+        return session
+
+    def test_rules_applied_from_raw_session(self):
+        from app_utils.eas import _normalize_text_for_tts
+        rule = MagicMock(
+            original_text='Findlay', replacement_text='Find-lee', match_case=False
+        )
+        session = self._fake_session([rule])
+        result = _normalize_text_for_tts('FINDLAY OH', db_session=session)
+        self.assertIn('find-lee', result)
+        self.assertNotIn('findlay', result)
+
+    def test_session_forwarded_to_loader(self):
+        import app_utils.eas as eas_mod
+        sentinel = object()
+        with patch.object(
+            eas_mod, '_load_pronunciation_rules', return_value=[]
+        ) as loader:
+            eas_mod._normalize_text_for_tts('TEST TEXT', db_session=sentinel)
+        loader.assert_called_once_with(sentinel)
+
+    def test_loader_queries_provided_session(self):
+        from app_utils.eas import _load_pronunciation_rules
+        rule = MagicMock(
+            original_text='Kalida', replacement_text='Ka-lye-da', match_case=False
+        )
+        session = self._fake_session([rule])
+        rules = _load_pronunciation_rules(session)
+        self.assertEqual(rules, [('Kalida', 'Ka-lye-da', False)])
+        session.query.return_value.filter_by.assert_called_once_with(enabled=True)
+
+
 if __name__ == '__main__':
     unittest.main()
