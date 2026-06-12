@@ -2210,3 +2210,41 @@ def test_eon_phantom_pi_not_admitted_on_single_sighting():
     assert data.eon_list is not None
     assert len(data.eon_list) == 1
     assert data.eon_list[0]['pi'] == "1111"
+
+
+def test_oda_reregistration_evicts_superseded_aid():
+    """When a slot re-registers to a new AID, the old AID must leave
+    oda_apps and _oda_payloads (unless another slot still carries it),
+    otherwise slot churn fills the cap with stale entries."""
+    decoder = RBDSDecoder()
+    b3 = _pack_block_b(group_type=3, version_b=False, tp=False, pty=0, low_bits=0x16)  # slot 11A
+
+    # Register AID 0xC563 on 11A (two sightings) and give it payload state.
+    decoder.process_group((0x5862, b3, 0xC563, 0x0000))
+    decoder.process_group((0x5862, b3, 0xC563, 0x0000))
+    assert 0xC563 in decoder.oda_apps
+    b11 = _pack_block_b(group_type=11, version_b=False, tp=False, pty=0, low_bits=0x00)
+    decoder.process_group((0x5862, b11, 0x1234, 0x5678))
+    assert 0xC563 in decoder._oda_payloads
+
+    # Re-register the same slot to RT+ (two sightings).
+    decoder.process_group((0x5862, b3, 0xCD46, 0x0000))
+    decoder.process_group((0x5862, b3, 0xCD46, 0x0000))
+
+    assert 0xCD46 in decoder.oda_apps
+    assert 0xC563 not in decoder.oda_apps
+    assert 0xC563 not in decoder._oda_payloads
+
+
+def test_group_15b_populates_fast_di_bits():
+    """15B DI bits land in the dedicated fast_di_bits nibble (and, per
+    EN 50067, also update the main DI fields) after two sightings."""
+    decoder = RBDSDecoder()
+    # address 3 (stereo position), DI bit = 1 → low bits = (1 << 2) | 3
+    b = _pack_block_b(group_type=15, version_b=True, tp=False, pty=0, low_bits=(1 << 2) | 3)
+    decoder.process_group((0x5862, b, 0x0000, 0x2020))
+    assert decoder.get_current_data().fast_di_bits is None
+    decoder.process_group((0x5862, b, 0x0000, 0x2020))
+    data = decoder.get_current_data()
+    assert data.fast_di_bits == (1 << 3)
+    assert data.di_stereo is True

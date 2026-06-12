@@ -275,6 +275,9 @@
     <script defer src="{{ url_for('static', filename='js/core/health.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/core/utils.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/core/units.js') }}?v={{ static_asset_version }}"></script>
+    <!-- Command palette (Ctrl/Cmd+K) + breadcrumb trail, both derived from
+         the rendered navbar so they respect permission-based visibility -->
+    <script defer src="{{ url_for('static', filename='js/core/nav-enhance.js') }}?v={{ static_asset_version }}"></script>
     <script defer src="{{ url_for('static', filename='js/loading-error-utils.js') }}"></script>
     <script defer src="{{ url_for('static', filename='js/accessibility-utils.js') }}"></script>
     <!-- Tab-title alert-count badge + new-alert toasts (depends on websocket + showToast above) -->

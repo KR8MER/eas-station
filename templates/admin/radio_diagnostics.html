@@ -377,6 +377,55 @@ sudo systemctl restart eas-station</code></pre>
     </div>
 </div>
 
+<!-- RBDS History modal — lives outside the auto-refreshed containers so the
+     chart and scroll position survive the periodic re-render of the RBDS
+     decoder cards. Opened from the per-source "History" button. -->
+<div class="modal fade" id="rbdsHistoryModal" tabindex="-1" aria-labelledby="rbdsHistoryModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="rbdsHistoryModalLabel">
+                    <i class="fas fa-clock-rotate-left me-2" aria-hidden="true"></i>RBDS History
+                </h5>
+                <select id="rbdsHistoryRange" class="form-select form-select-sm w-auto ms-3" aria-label="History time range">
+                    <option value="60" selected>Last hour</option>
+                    <option value="360">Last 6 hours</option>
+                    <option value="1440">Last 24 hours</option>
+                </select>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="rbdsHistoryStatus" class="text-center text-muted py-3">
+                    <i class="fas fa-spinner fa-spin me-2" aria-hidden="true"></i>Loading history…
+                </div>
+                <div id="rbdsHistoryContent" style="display:none;">
+                    <h6 class="text-muted">Block Error Rate</h6>
+                    <div style="position:relative;height:220px;">
+                        <canvas id="rbdsHistoryChart" aria-label="Raw and net block error rate over time" role="img"></canvas>
+                    </div>
+                    <h6 class="text-muted mt-4">Field Changes
+                        <span class="small fw-normal">(PS, RadioText, TA, PI, PTY, lock transitions)</span>
+                    </h6>
+                    <div class="table-responsive" style="max-height:280px;overflow-y:auto;">
+                        <table class="table table-sm table-hover align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Time</th>
+                                    <th scope="col">Field</th>
+                                    <th scope="col">From</th>
+                                    <th scope="col">To</th>
+                                </tr>
+                            </thead>
+                            <tbody id="rbdsHistoryEvents"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='vendor/chartjs/chart-v3.min.js') }}"></script>
 <script>
 (() => {
     let autoRefreshHandle = null;
@@ -790,6 +839,11 @@ sudo systemctl restart eas-station</code></pre>
                         <header class="d-flex align-items-center gap-2 mb-2">
                             <h5 class="mb-0">${escape(displayName)}</h5>
                             ${ident ? `<code class="text-muted small">${escape(ident)}</code>` : ''}
+                            <button type="button" class="btn btn-sm btn-outline-info ms-auto"
+                                    data-rbds-history-source="${escape(s.name)}"
+                                    data-rbds-history-label="${escape(displayName)}">
+                                <i class="fas fa-clock-rotate-left me-1" aria-hidden="true"></i>History
+                            </button>
                         </header>
                         ${stationCard}
                         ${healthCard}
@@ -812,6 +866,149 @@ sudo systemctl restart eas-station</code></pre>
                 </div>
             `;
         }
+    }
+
+    // ---- RBDS history modal ----------------------------------------------
+    // BLER trend + field-change log served by
+    // /api/audio/sources/<name>/rbds/history. The modal lives outside the
+    // auto-refreshed container so the chart survives card re-renders; the
+    // History buttons inside the cards are wired via event delegation for
+    // the same reason.
+    let rbdsHistorySource = null;
+    let rbdsHistoryChart = null;
+
+    function escapeHistText(s) {
+        return (window.RBDSViz && window.RBDSViz.escapeHtml)
+            ? window.RBDSViz.escapeHtml(s)
+            : String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    async function loadRbdsHistory() {
+        const statusEl = document.getElementById('rbdsHistoryStatus');
+        const contentEl = document.getElementById('rbdsHistoryContent');
+        const eventsEl = document.getElementById('rbdsHistoryEvents');
+        const rangeEl = document.getElementById('rbdsHistoryRange');
+        if (!rbdsHistorySource || !statusEl || !contentEl) return;
+
+        statusEl.style.display = '';
+        statusEl.innerHTML = '<i class="fas fa-spinner fa-spin me-2" aria-hidden="true"></i>Loading history…';
+        contentEl.style.display = 'none';
+
+        try {
+            const minutes = rangeEl ? rangeEl.value : 60;
+            const resp = await fetch(
+                `/api/audio/sources/${encodeURIComponent(rbdsHistorySource)}/rbds/history?minutes=${minutes}`,
+                { cache: 'no-store' }
+            );
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+            const data = await resp.json();
+            const points = Array.isArray(data.points) ? data.points : [];
+            const events = Array.isArray(data.events) ? data.events : [];
+
+            if (!points.length && !events.length) {
+                statusEl.innerHTML = '<i class="fas fa-circle-info me-2" aria-hidden="true"></i>'
+                    + 'No stored RBDS snapshots in this window yet.';
+                return;
+            }
+
+            const labels = points.map(p => {
+                const d = p.t ? new Date(p.t) : null;
+                return d ? d.toLocaleTimeString() : '—';
+            });
+            const pct = v => (v === null || v === undefined) ? null : Number(v) * 100;
+
+            if (rbdsHistoryChart) {
+                rbdsHistoryChart.destroy();
+                rbdsHistoryChart = null;
+            }
+            const canvas = document.getElementById('rbdsHistoryChart');
+            if (canvas && window.Chart) {
+                rbdsHistoryChart = new Chart(canvas.getContext('2d'), {
+                    type: 'line',
+                    data: {
+                        labels,
+                        datasets: [
+                            {
+                                label: 'Raw BLER %',
+                                data: points.map(p => pct(p.raw_bler)),
+                                borderColor: '#f0ad4e',
+                                backgroundColor: 'rgba(240,173,78,.15)',
+                                pointRadius: 0,
+                                borderWidth: 1.5,
+                                tension: .25,
+                                spanGaps: true,
+                            },
+                            {
+                                label: 'Net BLER % (after FEC)',
+                                data: points.map(p => pct(p.net_bler)),
+                                borderColor: '#d9534f',
+                                backgroundColor: 'rgba(217,83,79,.15)',
+                                pointRadius: 0,
+                                borderWidth: 1.5,
+                                tension: .25,
+                                spanGaps: true,
+                            },
+                        ],
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: false,
+                        interaction: { mode: 'index', intersect: false },
+                        scales: {
+                            y: { beginAtZero: true, ticks: { callback: v => v + '%' } },
+                            x: { ticks: { maxTicksLimit: 10, autoSkip: true } },
+                        },
+                        plugins: { legend: { labels: { boxWidth: 18 } } },
+                    },
+                });
+            }
+
+            if (eventsEl) {
+                // Newest first — that's what an operator scrolls back for.
+                eventsEl.innerHTML = events.slice().reverse().map(ev => {
+                    const t = ev.t ? new Date(ev.t).toLocaleTimeString() : '—';
+                    const fmt = v => (typeof v === 'boolean') ? (v ? 'On' : 'Off') : String(v ?? '—');
+                    return `
+                        <tr>
+                            <td class="font-monospace small">${escapeHistText(t)}</td>
+                            <td>${escapeHistText(ev.field)}</td>
+                            <td class="small text-muted">${escapeHistText(fmt(ev.from))}</td>
+                            <td class="small">${escapeHistText(fmt(ev.to))}</td>
+                        </tr>
+                    `;
+                }).join('') || '<tr><td colspan="4" class="text-muted text-center">No field changes in this window.</td></tr>';
+            }
+
+            statusEl.style.display = 'none';
+            contentEl.style.display = '';
+        } catch (error) {
+            console.error('Failed to load RBDS history:', error);
+            statusEl.innerHTML = `<i class="fas fa-exclamation-triangle me-2" aria-hidden="true"></i>`
+                + `Couldn't load history: ${escapeHistText(error.message)}`;
+        }
+    }
+
+    document.addEventListener('click', (ev) => {
+        const btn = ev.target.closest('[data-rbds-history-source]');
+        if (!btn) return;
+        rbdsHistorySource = btn.getAttribute('data-rbds-history-source');
+        const label = btn.getAttribute('data-rbds-history-label') || rbdsHistorySource;
+        const titleEl = document.getElementById('rbdsHistoryModalLabel');
+        if (titleEl) {
+            titleEl.innerHTML = '<i class="fas fa-clock-rotate-left me-2" aria-hidden="true"></i>'
+                + `RBDS History — ${escapeHistText(label)}`;
+        }
+        const modalEl = document.getElementById('rbdsHistoryModal');
+        if (modalEl && window.bootstrap) {
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        }
+        loadRbdsHistory();
+    });
+
+    const rbdsHistoryRangeEl = document.getElementById('rbdsHistoryRange');
+    if (rbdsHistoryRangeEl) {
+        rbdsHistoryRangeEl.addEventListener('change', loadRbdsHistory);
     }
 
     async function loadDiagnostics() {

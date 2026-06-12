@@ -4587,10 +4587,23 @@ class RBDSDecoder:
                 # corrupted Block C here would otherwise register a
                 # garbage AID that then accumulates payload state forever.
                 confirm_key = f"oda_slot_{oda_group_type}_{oda_version}"
-                if self._confirm_value(confirm_key, self._oda_app_map.get(key), aid):
+                old_aid = self._oda_app_map.get(key)
+                if self._confirm_value(confirm_key, old_aid, aid):
                     self._oda_app_map[key] = aid
-                    # Cap mirrors the 32 possible (group_type, version)
-                    # slots; re-registrations beyond that are noise.
+                    # Evict the superseded AID (unless another slot still
+                    # carries it) so oda_apps/_oda_payloads track only
+                    # currently-registered applications.  Without this,
+                    # slot churn fills the cap with stale AIDs and a
+                    # *current* AID can no longer be listed or have its
+                    # payload traffic tracked.
+                    if (old_aid is not None and old_aid != aid
+                            and old_aid not in self._oda_app_map.values()):
+                        if old_aid in self.oda_apps:
+                            self.oda_apps.remove(old_aid)
+                        self._oda_payloads.pop(old_aid, None)
+                    # With eviction above, oda_apps is bounded by the 32
+                    # possible (group_type, version) slots; the explicit
+                    # cap stays as belt-and-suspenders.
                     if aid not in self.oda_apps and len(self.oda_apps) < 32:
                         self.oda_apps.append(aid)
                     changed = True
@@ -4791,6 +4804,24 @@ class RBDSDecoder:
                 changed = True
             if self._confirmed_set('fast_ms', fast_ms):
                 changed = True
+            # Accumulate the dedicated fast_di_bits nibble (bit per PS
+            # segment address) through the same gate, so the UI's 15B
+            # panel reflects what arrived on the fast channel.
+            current_fast_di = (
+                None if self.fast_di_bits is None
+                else bool((self.fast_di_bits >> address) & 0x1)
+            )
+            if self._confirm_value(f'fast_di_{address}', current_fast_di, fast_di):
+                bits = self.fast_di_bits or 0
+                if fast_di:
+                    bits |= (1 << address)
+                else:
+                    bits &= ~(1 << address)
+                self.fast_di_bits = bits
+                changed = True
+            # 15B carries the same decoder-identification bits as Group 0
+            # (EN 50067 §3.1.5.2), so they legitimately update the main DI
+            # fields too — also behind the confirmation gate.
             if self._update_di(address, fast_di):
                 changed = True
             if self._update_ps_name(address, d):
@@ -5023,7 +5054,7 @@ class RBDSDecoder:
             fast_tp=self.fast_tp,
             fast_ta=self.fast_ta,
             fast_ms=self.fast_ms,
-            fast_di_bits=None,
+            fast_di_bits=self.fast_di_bits,
             rt_plus_item_running=self._rt_plus_item_running,
             rt_plus_item_toggle=self._rt_plus_item_toggle,
             rt_plus_tags=(
