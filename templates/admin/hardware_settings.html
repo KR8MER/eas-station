@@ -925,7 +925,11 @@
                                     <div class="col-12 col-md-8">
                                         <label for="tower_light_serial_port" class="form-label">Serial Port</label>
                                         <input type="text" class="form-control font-monospace" id="tower_light_serial_port" name="tower_light_serial_port" value="{{ settings.tower_light_serial_port }}" placeholder="/dev/ttyUSB0">
-                                        <small class="form-text text-muted">Common: /dev/ttyUSB0, /dev/ttyUSB1, /dev/ttyACM0</small>
+                                        <small class="form-text text-muted">
+                                            The Adafruit #5125 uses a CH34x chip and enumerates as /dev/ttyUSB&lt;n&gt; (default /dev/ttyUSB0).
+                                            With multiple USB-serial devices the number can change between boots — prefer the stable
+                                            <span class="text-break-anywhere">/dev/serial/by-id/usb-1a86_USB_Serial-…</span> path instead.
+                                        </small>
                                     </div>
                                     <div class="col-12 col-md-4">
                                         <label for="tower_light_baudrate" class="form-label">Baud Rate</label>
