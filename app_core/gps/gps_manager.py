@@ -192,6 +192,23 @@ class GPSManager:
         self._ser = None  # serial.Serial instance
         self._gpsd_sock = None  # socket.socket when source=="gpsd"
 
+        # Serial NMEA watchdog. A healthy receiver emits sentences at
+        # ~1 Hz, so a long stretch with zero bytes means the receiver or
+        # USB-serial adapter is wedged even though the port still reports
+        # "open" — read(1) just times out forever and nothing upstream
+        # notices. After this many seconds of silence the reader closes
+        # and reopens the port to reset the adapter. 0 disables the
+        # watchdog. gpsd mode is unaffected: it has its own socket
+        # reconnect-with-backoff logic.
+        raw_watchdog = config.get("serial_watchdog_s")
+        if raw_watchdog is None:
+            raw_watchdog = os.environ.get("GPS_SERIAL_WATCHDOG_S", 30)
+        try:
+            self._serial_watchdog_s: float = max(0.0, float(raw_watchdog))
+        except (TypeError, ValueError):
+            self._serial_watchdog_s = 30.0
+        self._watchdog_restarts: int = 0
+
         # Most-recently parsed fix data (protected by _lock)
         self._lock = threading.Lock()
         self._fix: Dict[str, Any] = self._empty_fix()
@@ -1203,6 +1220,9 @@ class GPSManager:
             # emitting GSA" type problems.
             "sentence_counts": {},
             "sentence_errors": 0,
+            # Times the serial watchdog reopened a silent port (serial
+            # source only; cumulative since manager start).
+            "watchdog_restarts": 0,
             # Raw NMEA sentences (populated separately, not stored in _fix)
             "recent_sentences": [],
             # UBX-MON-HW telemetry (Phase 2).  All None until the first
@@ -1236,6 +1256,55 @@ class GPSManager:
             # render an empty state instead of "undefined".
             "satellite_history": [],
         }
+
+    def _watchdog_reopen_serial(self) -> None:
+        """Close and reopen the serial port after prolonged NMEA silence.
+
+        Called from the reader thread when no bytes have arrived for
+        ``self._serial_watchdog_s`` seconds. Retries the reopen every
+        5 s until it succeeds or the manager is stopped, so an unplugged
+        receiver recovers automatically when it is plugged back in (the
+        device node may disappear and reappear in between).
+        """
+        self._watchdog_restarts += 1
+        self._logger.warning(
+            "GPS watchdog: no serial data for %.0fs — reopening %s (restart #%d)",
+            self._serial_watchdog_s,
+            self._serial_port,
+            self._watchdog_restarts,
+        )
+        with self._lock:
+            self._fix["watchdog_restarts"] = self._watchdog_restarts
+            self._fix["status"] = "watchdog_reopen"
+
+        try:
+            if self._ser:
+                self._ser.close()
+        except Exception:
+            pass
+
+        import serial  # pyserial — already imported once by _start_serial_only
+
+        while self._running:
+            try:
+                self._ser = serial.Serial(
+                    self._serial_port,
+                    baudrate=self._baudrate,
+                    timeout=2,
+                )
+                self._logger.info(
+                    "GPS watchdog: serial port %s reopened", self._serial_port
+                )
+                with self._lock:
+                    self._fix["status"] = "reading"
+                return
+            except Exception as exc:
+                self._logger.warning(
+                    "GPS watchdog: reopen of %s failed (%s); retrying in 5s",
+                    self._serial_port,
+                    exc,
+                )
+                time.sleep(5)
 
     def _reader_loop(self) -> None:
         """Main reader loop — demuxes NMEA + UBX from the serial stream.
@@ -1277,6 +1346,7 @@ class GPSManager:
         # the service.  16 KiB is ~17 s of 9600-baud traffic — anything
         # larger means we're not draining and we're better off dropping.
         MAX_BUF = 16 * 1024
+        last_data_monotonic = time.monotonic()
 
         while self._running:
             try:
@@ -1316,6 +1386,14 @@ class GPSManager:
 
                 if chunk:
                     consecutive_errors = 0
+                    last_data_monotonic = time.monotonic()
+                elif (
+                    self._serial_watchdog_s > 0
+                    and time.monotonic() - last_data_monotonic
+                    >= self._serial_watchdog_s
+                ):
+                    self._watchdog_reopen_serial()
+                    last_data_monotonic = time.monotonic()
 
             except Exception as exc:
                 consecutive_errors += 1
