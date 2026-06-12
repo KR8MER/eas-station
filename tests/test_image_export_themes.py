@@ -1024,3 +1024,126 @@ def test_generate_alert_image_uses_provided_db_session(monkeypatch):
     assert rendered.get("geom") == geom, "map was not rendered from the fetched geometry"
     assert rendered.get("db_session") is session, \
         "session was not forwarded to the county-outline lookup"
+
+
+# ── SAME-code county-union fallback ──────────────────────────────────────────
+# When ``cap_alerts.geom`` is NULL (county-coded products, or a failed
+# geometry write at ingest) the renderer must fall back to the union of the
+# affected counties from the alert's SAME geocodes instead of silently
+# stamping "Map not available" on the emailed card.
+
+_UNION_GEOM = {
+    "type": "MultiPolygon",
+    "coordinates": [[[[-83.9, 41.3], [-83.0, 41.3], [-83.0, 41.8],
+                      [-83.9, 41.8], [-83.9, 41.3]]]],
+}
+
+
+class _StubUnionSession(_StubSession):
+    """Stub session whose geometry column is NULL but whose county-boundary
+    table resolves a SAME-code union query."""
+
+    def __init__(self):
+        super().__init__(None)  # ST_AsGeoJSON(cap_alerts.geom) → NULL
+        self.union_params = None
+
+    def execute(self, statement, params=None):
+        sql = str(statement)
+        if "ST_Union" in sql:
+            self.union_params = params
+
+            class _Result:
+                @staticmethod
+                def scalar():
+                    import json as _json
+                    return _json.dumps(_UNION_GEOM)
+
+            return _Result()
+        # County-outline lookup inside _render_map — degrade gracefully.
+        raise RuntimeError("no county outline table in stub session")
+
+    def rollback(self):
+        pass
+
+
+def test_alert_same_codes_extraction():
+    alert = _FakeAlert()
+    alert.raw_json = {
+        "properties": {
+            "geocode": {"SAME": ["039095", "039123", "039000", "bogus", 39173]}
+        }
+    }
+    assert image_export._alert_same_codes(alert) == ["039095", "039123", "039000"]
+
+    alert.raw_json = None
+    assert image_export._alert_same_codes(alert) == []
+
+    alert.raw_json = {"properties": {}}
+    assert image_export._alert_same_codes(alert) == []
+
+
+def test_fetch_same_union_geom_splits_county_and_statewide_codes():
+    session = _StubUnionSession()
+    geom = image_export._fetch_same_union_geom(
+        session, ["039095", "039123", "026000"]
+    )
+    assert geom == _UNION_GEOM
+    assert session.union_params == {
+        "geoids": ["39095", "39123"],
+        "state_fps": ["26"],
+    }
+
+
+def test_fetch_same_union_geom_degrades_without_table():
+    class _BrokenSession:
+        def execute(self, *a, **k):
+            raise RuntimeError("relation us_county_boundaries does not exist")
+
+        def rollback(self):
+            pass
+
+    assert image_export._fetch_same_union_geom(_BrokenSession(), ["039095"]) is None
+    assert image_export._fetch_same_union_geom(None, ["039095"]) is None
+    assert image_export._fetch_same_union_geom(_StubUnionSession(), []) is None
+
+
+def test_generate_alert_image_falls_back_to_same_county_union(monkeypatch):
+    """NULL stored geometry + SAME geocodes → the map renders from the
+    county-boundary union instead of the 'Map not available' placeholder."""
+    import types
+
+    fake_models = types.ModuleType("app_core.models")
+
+    class _FakeCAPAlert:
+        id = 0
+        geom = None
+
+    fake_models.CAPAlert = _FakeCAPAlert
+    monkeypatch.setitem(sys.modules, "app_core.models", fake_models)
+    monkeypatch.setattr(image_export, "_fetch_tile", lambda tx, ty, z: None)
+
+    session = _StubUnionSession()
+
+    rendered = {}
+    real_render_map = image_export._render_map
+
+    def _spy_render_map(g, severity, *args, **kwargs):
+        rendered["geom"] = g
+        return real_render_map(g, severity, *args, **kwargs)
+
+    monkeypatch.setattr(image_export, "_render_map", _spy_render_map)
+
+    alert = _FakeAlert()
+    alert.id = 43
+    alert.raw_json = {
+        "properties": {"geocode": {"SAME": ["039095", "039123"]}}
+    }
+    png = image_export.generate_alert_image(
+        alert, {}, None, {"county_name": "Test County, OH"},
+        db_session=session,
+    )
+
+    assert png.startswith(b"\x89PNG")
+    assert rendered.get("geom") == _UNION_GEOM, \
+        "map was not rendered from the SAME county-union fallback geometry"
+    assert session.union_params["geoids"] == ["39095", "39123"]

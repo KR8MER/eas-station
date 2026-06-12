@@ -1947,6 +1947,95 @@ def _fetch_county_outlines(
     return out
 
 
+def _alert_same_codes(alert: Any) -> List[str]:
+    """Return the 6-digit SAME geocodes carried in *alert*'s raw CAP JSON.
+
+    These identify the affected counties for products that are county-coded
+    rather than polygon-drawn (most watches/advisories, and any alert whose
+    polygon failed to parse at ingest).
+    """
+    raw = getattr(alert, 'raw_json', None)
+    if not isinstance(raw, dict):
+        return []
+    geocode = (raw.get('properties') or {}).get('geocode') or {}
+    codes = geocode.get('SAME') or []
+    if isinstance(codes, str):
+        codes = [codes]
+    return [
+        c for c in codes
+        if isinstance(c, str) and len(c) == 6 and c.isdigit()
+    ]
+
+
+def _fetch_same_union_geom(
+    db_session: Any, same_codes: List[str],
+) -> Optional[Dict[str, Any]]:
+    """Return the GeoJSON union of the county boundaries for *same_codes*.
+
+    Fallback geometry for the coverage map when ``cap_alerts.geom`` is NULL:
+    the union of the affected counties is exactly the shape official NWS
+    county-based warning graphics show.  SAME codes are ``0SSCCC`` — the
+    leading zero is dropped to obtain the 5-digit Census GEOID; ``0SS000``
+    means the whole state.  Returns ``None`` when the boundary table is
+    unavailable or nothing matches, so the caller degrades to the
+    "Map not available" placeholder as before.
+    """
+    if db_session is None or not same_codes:
+        return None
+
+    geoids: set = set()
+    state_fps: set = set()
+    for code in same_codes:
+        if code.endswith('000'):
+            state_fps.add(code[1:3])
+        else:
+            geoids.add(code[1:])
+    if not geoids and not state_fps:
+        return None
+
+    conditions: List[str] = []
+    params: Dict[str, Any] = {}
+    if geoids:
+        conditions.append("geoid = ANY(:geoids)")
+        params["geoids"] = sorted(geoids)
+    if state_fps:
+        conditions.append("statefp = ANY(:state_fps)")
+        params["state_fps"] = sorted(state_fps)
+
+    try:
+        from sqlalchemy import text as _text
+
+        gj = db_session.execute(
+            _text(
+                "SELECT ST_AsGeoJSON("
+                "  ST_SimplifyPreserveTopology("
+                "    ST_Multi(ST_Union(geom)), 0.002), 5)"
+                " FROM us_county_boundaries"
+                f" WHERE ({' OR '.join(conditions)}) AND geom IS NOT NULL"
+            ),
+            params,
+        ).scalar()
+    except Exception as exc:
+        logger.debug("County-union fallback geometry unavailable: %s", exc)
+        # A failed SELECT poisons a PostgreSQL transaction; roll back so the
+        # caller's session stays usable for the rest of the email pipeline.
+        try:
+            db_session.rollback()
+        except Exception:
+            pass
+        return None
+
+    if not gj:
+        return None
+    try:
+        geom = json.loads(gj)
+    except (TypeError, ValueError):
+        return None
+    if isinstance(geom, dict) and geom.get('coordinates'):
+        return geom
+    return None
+
+
 # Nice round distances (miles) for the map scale bar, smallest → largest.
 _SCALE_BAR_MILES = [
     0.1, 0.2, 0.25, 0.5, 1, 2, 3, 5, 10, 15, 20, 25, 50, 75,
@@ -2054,6 +2143,11 @@ def _render_map(geom: Dict, severity: str,
 
     bbox = _geojson_bbox(geom)
     if bbox is None:
+        logger.warning(
+            "Coverage map: geometry has no usable bounding box (type=%s); "
+            "rendering 'Map not available' placeholder",
+            geom.get('type'),
+        )
         return fallback
 
     min_lon, min_lat, max_lon, max_lat = bbox
@@ -2071,6 +2165,11 @@ def _render_map(geom: Dict, severity: str,
 
     n_tiles = (tx_max - tx_min + 1) * (ty_max - ty_min + 1)
     if n_tiles > 30:
+        logger.warning(
+            "Coverage map: bbox needs %d tiles at z%d (limit 30); "
+            "rendering 'Map not available' placeholder",
+            n_tiles, z,
+        )
         return fallback
 
     canvas_w = (tx_max - tx_min + 1) * TILE_SIZE
@@ -2537,8 +2636,32 @@ def generate_alert_image(
                 .filter(_CA.id == alert_id)
                 .scalar()
             )
-            if geom_json:
-                map_img = _render_map(json.loads(geom_json), severity,
+            geom_obj: Optional[Dict[str, Any]] = (
+                json.loads(geom_json) if geom_json else None
+            )
+            if geom_obj is None:
+                # Stored geometry is NULL — a county-coded product, or the
+                # poller's geometry write failed.  Fall back to the union of
+                # the affected counties from the alert's SAME geocodes (the
+                # shape official NWS county-based graphics show) so the card
+                # still carries a coverage map.
+                same_codes = _alert_same_codes(alert)
+                geom_obj = _fetch_same_union_geom(session, same_codes)
+                if geom_obj is not None:
+                    logger.info(
+                        "Alert %s has no stored geometry; coverage map built "
+                        "from %d SAME county code(s)",
+                        alert_id, len(same_codes),
+                    )
+                else:
+                    logger.warning(
+                        "Alert %s has no stored geometry and no county-union "
+                        "fallback (%d SAME code(s)); card will show "
+                        "'Map not available'",
+                        alert_id, len(same_codes),
+                    )
+            if geom_obj is not None:
+                map_img = _render_map(geom_obj, severity,
                                       storm_motion=storm_motion,
                                       theme=theme,
                                       map_w=map_w, map_h=map_h,

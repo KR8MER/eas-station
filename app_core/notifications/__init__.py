@@ -91,13 +91,26 @@ def send_alert_notifications(
 
         # Inline coverage-map image (HTML emails only).
         map_image: Optional[bytes] = None
-        if settings.email_enabled and email_html and email_include_map and cap_alert_id:
-            try:
-                from app_core.notifications.alert_image import build_alert_image
+        if settings.email_enabled and email_html and email_include_map:
+            if cap_alert_id:
+                try:
+                    from app_core.notifications.alert_image import build_alert_image
 
-                map_image = build_alert_image(db_session, cap_alert_id, log)
-            except Exception as exc:
-                log.warning("Could not build alert coverage image: %s", exc)
+                    map_image = build_alert_image(db_session, cap_alert_id, log)
+                except Exception as exc:
+                    log.warning("Could not build alert coverage image: %s", exc)
+                if map_image is None:
+                    log.warning(
+                        "Alert image could not be built for CAP alert %s; "
+                        "email will be sent without the inline card",
+                        cap_alert_id,
+                    )
+            elif record_id:
+                log.info(
+                    "EAS message %s has no linked CAP alert (OTA broadcast); "
+                    "email will not include a coverage map",
+                    record_id,
+                )
 
         # Public "listen / download" link for the broadcast audio.
         audio_url: Optional[str] = None
