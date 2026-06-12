@@ -916,7 +916,7 @@ In addition to GPIO relays, two self-contained visual indicators follow the aler
 A USB-serial stack light driven over `/dev/ttyUSB*` (9600 baud by default). Two device protocols are supported, selected under **Admin → Hardware Settings → Tower Light → Device Protocol**:
 
 * **Adafruit #5125** — CH34x tri-color light with three independently switchable segments (red / yellow / green) plus a buzzer, controlled by single-byte commands. State colors are limited to red/yellow/green; anything else falls back to that state's default.
-* **ANDONT 7-color USB** — shows **one color at a time** from off / green / blue / red / cyan / yellow / magenta / white. Every state change is a complete `FF <color> <buzzer> <flash> AA` frame (e.g. `FF 02 01 01 AA` = green, buzzer on, steady).
+* **ANDONT 7-color USB** — shows **one color at a time** from off / green / blue / red / cyan / yellow / magenta / white. Every state change is a complete `FF <color> <buzzer> <flash> AA` frame (e.g. `FF 02 01 01 AA` = green, buzzer off, steady). Note: the buzzer byte is **0x02 = on, 0x01 = off** on real hardware — the vendor's published table has it backwards.
 
 Both follow the same three-state machine, with each state's color configurable (defaults shown):
 

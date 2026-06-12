@@ -931,7 +931,9 @@ def test_load_tower_light_config_enabled(monkeypatch):
 
 
 def _andont_frame(color_code: int, buzzer_on: bool, flash: bool) -> list[int]:
-    return [0xFF, color_code, 0x01 if buzzer_on else 0x02, 0x02 if flash else 0x01, 0xAA]
+    # Buzzer byte: 0x02 = on, 0x01 = off. The vendor table claims the
+    # opposite, but this is what real hardware does.
+    return [0xFF, color_code, 0x02 if buzzer_on else 0x01, 0x02 if flash else 0x01, 0xAA]
 
 
 def test_andont_standby_sends_green_frame():

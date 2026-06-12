@@ -8,6 +8,11 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.84.2] - 2026-06-12 - Fix inverted ANDONT buzzer byte
+
+### Fixed
+- **ANDONT stack light buzzer byte was inverted.** The vendor's published control table lists buzzer `0x01 = on / 0x02 = off`, but real hardware behaves the opposite way (confirmed on an actual ANDONT light): `0x02` sounds the buzzer and `0x01` silences it. With the table values, the buzzer sounded continuously in every silent state and stayed silent during alerts with "Enable buzzer on alert" set. Constants, tests, and the GPIO guide now match observed hardware behavior.
+
 ## [2.84.1] - 2026-06-12 - Fix systemd DeviceAllow blocking USB serial devices beyond ttyUSB0
 
 ### Fixed

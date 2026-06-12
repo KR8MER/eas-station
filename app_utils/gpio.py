@@ -2550,8 +2550,11 @@ _ANDONT_COLOR_CODES = {
     "white":   0x08,
 }
 
-_ANDONT_BUZZER_ON  = 0x01
-_ANDONT_BUZZER_OFF = 0x02
+# The vendor's published table lists 0x01=on / 0x02=off, but real
+# hardware behaves the opposite way (confirmed on an actual ANDONT
+# light): 0x02 sounds the buzzer, 0x01 silences it.
+_ANDONT_BUZZER_ON  = 0x02
+_ANDONT_BUZZER_OFF = 0x01
 
 _ANDONT_FLASH_NONE = 0x01  # steady on
 _ANDONT_FLASH_FAST = 0x02  # ~0.85 s per cycle
