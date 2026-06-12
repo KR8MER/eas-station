@@ -2594,12 +2594,25 @@ class TowerLightConfig:
     protocol: str = "adafruit"         # 'adafruit' or 'andont'
     # Alert response configuration
     alert_buzzer: bool = False         # Sound buzzer on active alert
+    buzzer_disabled: bool = False      # Master kill switch — never sound the buzzer
     incoming_uses_yellow: bool = True  # Indicate the incoming (pre-alert) state
     blink_on_alert: bool = True        # Use hardware blink/flash mode during alerts
     # State -> colour mapping
     standby_color: str = "green"       # System ready
     incoming_color: str = "yellow"     # Alert received, playout not started
     alert_color: str = "red"           # Active alert
+    test_color: str = "cyan"           # Test broadcasts (RWT/RMT/NPT/DMO)
+    fault_enabled: bool = True         # Indicate Redis / alert-pipeline loss
+    fault_color: str = "magenta"       # System fault
+    # Severity-based alert colours (replace alert_color when enabled)
+    severity_colors_enabled: bool = False
+    warning_color: str = "red"         # WRN product class
+    watch_color: str = "yellow"        # WCH product class
+    advisory_color: str = "white"      # ADV / everything else
+    # Quiet hours: standby light off on a schedule (alerts still show)
+    quiet_enabled: bool = False
+    quiet_start: str = "22:00"         # HH:MM local time
+    quiet_end: str = "07:00"
 
 
 class TowerLightController:
@@ -2728,11 +2741,34 @@ class TowerLightController:
                 self.logger.warning("Tower light write failed: %s", exc)
             return False
 
-    def _state_color(self, configured: Any, default: str) -> str:
-        """Clamp a configured state colour to what the protocol supports."""
-        valid = _ANDONT_COLOR_CODES if self._is_andont() else _TOWER_SEGMENT_CMDS
-        candidate = str(configured or "").strip().lower()
-        return candidate if candidate in valid else default
+    def show_state(self, color: str, flash: bool = False, buzzer: bool = False,
+                   fallback: str = "off") -> None:
+        """Drive the light to an arbitrary colour/flash/buzzer state.
+
+        ``color`` may be ``"off"``. Colours the active protocol cannot
+        render fall back to *fallback*, then to off. The buzzer master
+        kill switch (:attr:`TowerLightConfig.buzzer_disabled`) is
+        enforced here so no caller can bypass it.
+        """
+        if self.config.buzzer_disabled:
+            buzzer = False
+        color = str(color or "").strip().lower()
+        fallback = str(fallback or "").strip().lower()
+        with self._lock:
+            if self._is_andont():
+                valid = color if color in _ANDONT_COLOR_CODES else (
+                    fallback if fallback in _ANDONT_COLOR_CODES else "off")
+                self._send_andont(valid, buzzer_on=buzzer, flash=flash)
+                return
+            valid = color if color in _TOWER_SEGMENT_CMDS else (
+                fallback if fallback in _TOWER_SEGMENT_CMDS else None)
+            self._send(_TOWER_CMD_BUZ_ON if buzzer else _TOWER_CMD_BUZ_OFF)
+            for name, (_on, off_cmd, _blink) in _TOWER_SEGMENT_CMDS.items():
+                if name != valid:
+                    self._send(off_cmd)
+            if valid is not None:
+                on_cmd, _off, blink_cmd = _TOWER_SEGMENT_CMDS[valid]
+                self._send(blink_cmd if flash else on_cmd)
 
     # ------------------------------------------------------------------
     # Segment control (Adafruit protocol primitives)
@@ -2779,30 +2815,12 @@ class TowerLightController:
 
     def all_off(self) -> None:
         """Turn all segments and the buzzer off."""
-        with self._lock:
-            if self._is_andont():
-                self._send_andont("off", buzzer_on=False, flash=False)
-                return
-            for cmd in (
-                _TOWER_CMD_RED_OFF,
-                _TOWER_CMD_YEL_OFF,
-                _TOWER_CMD_GRN_OFF,
-                _TOWER_CMD_BUZ_OFF,
-            ):
-                self._send(cmd)
+        self.show_state("off", flash=False, buzzer=False)
 
     def set_standby(self) -> None:
         """Show 'system ready': the configured standby colour (default green)."""
-        color = self._state_color(self.config.standby_color, "green")
-        with self._lock:
-            if self._is_andont():
-                self._send_andont(color, buzzer_on=False, flash=False)
-                return
-            self._send(_TOWER_CMD_BUZ_OFF)
-            for name, (_on, off_cmd, _blink) in _TOWER_SEGMENT_CMDS.items():
-                if name != color:
-                    self._send(off_cmd)
-            self._send(_TOWER_SEGMENT_CMDS[color][0])
+        self.show_state(self.config.standby_color, flash=False, buzzer=False,
+                        fallback="green")
 
     # ------------------------------------------------------------------
     # Alert integration
@@ -2817,45 +2835,25 @@ class TowerLightController:
         if not self.config.incoming_uses_yellow:
             return
 
-        color = self._state_color(self.config.incoming_color, "yellow")
-        state = "blink" if self.config.blink_on_alert else "on"
-        with self._lock:
-            if self._is_andont():
-                self._send_andont(color, buzzer_on=False, flash=self.config.blink_on_alert)
-            else:
-                on_cmd, _off, blink_cmd = _TOWER_SEGMENT_CMDS[color]
-                for name, (_on, off_cmd, _blink) in _TOWER_SEGMENT_CMDS.items():
-                    if name != color:
-                        self._send(off_cmd)
-                self._send(blink_cmd if self.config.blink_on_alert else on_cmd)
-
+        self.show_state(self.config.incoming_color, flash=self.config.blink_on_alert,
+                        buzzer=False, fallback="yellow")
         if self.logger:
-            self.logger.info("Tower light: incoming alert (%s %s)", color, state)
+            self.logger.info(
+                "Tower light: incoming alert (%s %s)",
+                self.config.incoming_color,
+                "blink" if self.config.blink_on_alert else "on",
+            )
 
     def start_alert(self) -> None:
         """Signal an active alert: configured colour on/blink, optional buzzer."""
-        color = self._state_color(self.config.alert_color, "red")
-        state = "blink" if self.config.blink_on_alert else "on"
-        with self._lock:
-            if self._is_andont():
-                self._send_andont(
-                    color,
-                    buzzer_on=self.config.alert_buzzer,
-                    flash=self.config.blink_on_alert,
-                )
-            else:
-                on_cmd, _off, blink_cmd = _TOWER_SEGMENT_CMDS[color]
-                for name, (_on, off_cmd, _blink) in _TOWER_SEGMENT_CMDS.items():
-                    if name != color:
-                        self._send(off_cmd)
-                self._send(blink_cmd if self.config.blink_on_alert else on_cmd)
-                if self.config.alert_buzzer:
-                    self._send(_TOWER_CMD_BUZ_ON)
-
+        self.show_state(self.config.alert_color, flash=self.config.blink_on_alert,
+                        buzzer=self.config.alert_buzzer, fallback="red")
         if self.logger:
             self.logger.info(
                 "Tower light: alert active (%s %s, buzzer=%s)",
-                color, state, self.config.alert_buzzer,
+                self.config.alert_color,
+                "blink" if self.config.blink_on_alert else "on",
+                self.config.alert_buzzer and not self.config.buzzer_disabled,
             )
 
     def end_alert(self) -> None:
@@ -2880,10 +2878,16 @@ class TowerLightController:
             "baudrate": self.config.baudrate,
             "protocol": self.config.protocol,
             "alert_buzzer": self.config.alert_buzzer,
+            "buzzer_disabled": self.config.buzzer_disabled,
             "blink_on_alert": self.config.blink_on_alert,
             "standby_color": self.config.standby_color,
             "incoming_color": self.config.incoming_color,
             "alert_color": self.config.alert_color,
+            "test_color": self.config.test_color,
+            "fault_enabled": self.config.fault_enabled,
+            "fault_color": self.config.fault_color,
+            "severity_colors_enabled": self.config.severity_colors_enabled,
+            "quiet_enabled": self.config.quiet_enabled,
         }
 
 
@@ -2915,16 +2919,37 @@ def load_tower_light_config_from_db(logger=None) -> Optional[TowerLightConfig]:
         value = str(settings.get(key, default) or default).strip().lower()
         return value if value in TOWER_LIGHT_COLORS else default
 
+    def _hhmm(key: str, default: str) -> str:
+        value = str(settings.get(key, default) or default).strip()
+        parts = value.split(":")
+        try:
+            if len(parts) == 2 and 0 <= int(parts[0]) <= 23 and 0 <= int(parts[1]) <= 59:
+                return value
+        except ValueError:
+            pass
+        return default
+
     return TowerLightConfig(
         serial_port=str(settings.get("serial_port", "/dev/ttyUSB0")),
         baudrate=int(settings.get("baudrate", 9600)),
         protocol=protocol,
         alert_buzzer=bool(settings.get("alert_buzzer", False)),
+        buzzer_disabled=bool(settings.get("buzzer_disabled", False)),
         incoming_uses_yellow=bool(settings.get("incoming_uses_yellow", True)),
         blink_on_alert=bool(settings.get("blink_on_alert", True)),
         standby_color=_color("standby_color", "green"),
         incoming_color=_color("incoming_color", "yellow"),
         alert_color=_color("alert_color", "red"),
+        test_color=_color("test_color", "cyan"),
+        fault_enabled=bool(settings.get("fault_enabled", True)),
+        fault_color=_color("fault_color", "magenta"),
+        severity_colors_enabled=bool(settings.get("severity_colors_enabled", False)),
+        warning_color=_color("warning_color", "red"),
+        watch_color=_color("watch_color", "yellow"),
+        advisory_color=_color("advisory_color", "white"),
+        quiet_enabled=bool(settings.get("quiet_enabled", False)),
+        quiet_start=_hhmm("quiet_start", "22:00"),
+        quiet_end=_hhmm("quiet_end", "07:00"),
     )
 
 

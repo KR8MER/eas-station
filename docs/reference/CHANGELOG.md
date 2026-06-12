@@ -8,6 +8,16 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.85.0] - 2026-06-12 - Tower-light state engine: fault/test states, severity colors, quiet hours, buzzer kill switch
+
+### Added
+- **Master buzzer kill switch.** A new "Disable buzzer entirely" option on Admin → Hardware Settings → Tower Light guarantees the stack-light buzzer never sounds in any state — enforced inside the controller so no other setting or code path can override it.
+- **Test-broadcast state.** Active broadcasts whose SAME event code is a test (RWT/RMT/NPT/DMO) now show their own configurable color (default cyan) instead of the alert color, and never sound the buzzer — a weekly test no longer looks like a live warning. The event code was already in the Redis broadcast state.
+- **System-fault state.** When the GPIO service loses Redis / the alert pipeline (meaning the station may be deaf), the tower light flashes a configurable fault color (default magenta) instead of sitting on a stale state; it returns to standby automatically on recovery. Detection uses a direct Redis ping each refresh, since the state readers deliberately swallow connection errors. Can be disabled.
+- **Severity-based alert colors.** An optional mode colors real active alerts by product class from the event-code registry — warnings (default red), watches (default yellow), advisories/statements (default white) — instead of the single Active Alert color.
+- **Quiet hours.** An optional schedule (HH:MM local, may span midnight) darkens the *standby* light. Incoming and active alerts always override quiet hours — the indicator can never sleep through an alert.
+- The tower light now runs on a resolved-state engine in `services/gpio/alert_indicators.py` (priority: fault > test/alert > incoming > quiet > standby) with a pure, unit-tested resolver; hardware is written only when the resolved state changes. New columns via migration `20260612_tower_light_states`; state table documented in the [GPIO guide](../hardware/GPIO_GUIDE.md); 14 new tests across `tests/test_gpio_alert_indicators.py` and `tests/test_gpio_controller.py`.
+
 ## [2.84.2] - 2026-06-12 - Fix inverted ANDONT buzzer byte
 
 ### Fixed

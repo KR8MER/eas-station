@@ -491,6 +491,8 @@ def update_hardware():
             'led_enabled', 'vfd_enabled', 'zigbee_enabled',
             'tower_light_enabled', 'tower_light_alert_buzzer',
             'tower_light_incoming_uses_yellow', 'tower_light_blink_on_alert',
+            'tower_light_buzzer_disabled', 'tower_light_fault_enabled',
+            'tower_light_severity_colors', 'tower_light_quiet_enabled',
             'neopixel_enabled', 'neopixel_flash_on_alert',
             'gps_enabled', 'gps_use_for_location', 'gps_use_for_time',
         ]
@@ -566,10 +568,32 @@ def update_hardware():
             ('tower_light_standby_color', 'green'),
             ('tower_light_incoming_color', 'yellow'),
             ('tower_light_alert_color', 'red'),
+            ('tower_light_test_color', 'cyan'),
+            ('tower_light_fault_color', 'magenta'),
+            ('tower_light_warning_color', 'red'),
+            ('tower_light_watch_color', 'yellow'),
+            ('tower_light_advisory_color', 'white'),
         ):
             if color_field in data and data[color_field] is not None:
                 value = str(data[color_field]).strip().lower()
                 data[color_field] = value if value in _tower_colors else fallback
+
+        # Quiet-hours times must be HH:MM; fall back to the defaults rather
+        # than storing a value the indicator scheduler cannot parse.
+        for time_field, fallback in (
+            ('tower_light_quiet_start', '22:00'),
+            ('tower_light_quiet_end', '07:00'),
+        ):
+            if time_field in data and data[time_field] is not None:
+                value = str(data[time_field]).strip()
+                parts = value.split(':')
+                try:
+                    valid = (len(parts) == 2
+                             and 0 <= int(parts[0]) <= 23
+                             and 0 <= int(parts[1]) <= 59)
+                except ValueError:
+                    valid = False
+                data[time_field] = value if valid else fallback
 
         # gps_source is a string enum — clamp to known values so a stale
         # form post or a JSON client cannot store nonsense that the GPS
