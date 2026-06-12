@@ -161,6 +161,21 @@ class HardwareSettings(db.Model):
     tower_light_standby_color = db.Column(db.String(20), nullable=False, default='green')
     tower_light_incoming_color = db.Column(db.String(20), nullable=False, default='yellow')
     tower_light_alert_color = db.Column(db.String(20), nullable=False, default='red')
+    # Master kill switch — the buzzer never sounds in any state when set
+    tower_light_buzzer_disabled = db.Column(db.Boolean, nullable=False, default=False)
+    # Extra states: test broadcasts (RWT/RMT/NPT/DMO) and system fault
+    tower_light_test_color = db.Column(db.String(20), nullable=False, default='cyan')
+    tower_light_fault_enabled = db.Column(db.Boolean, nullable=False, default=True)
+    tower_light_fault_color = db.Column(db.String(20), nullable=False, default='magenta')
+    # Severity-based alert colours (replace the single alert colour when enabled)
+    tower_light_severity_colors = db.Column(db.Boolean, nullable=False, default=False)
+    tower_light_warning_color = db.Column(db.String(20), nullable=False, default='red')
+    tower_light_watch_color = db.Column(db.String(20), nullable=False, default='yellow')
+    tower_light_advisory_color = db.Column(db.String(20), nullable=False, default='white')
+    # Quiet hours: standby light off on a schedule (alerts still show)
+    tower_light_quiet_enabled = db.Column(db.Boolean, nullable=False, default=False)
+    tower_light_quiet_start = db.Column(db.String(5), nullable=False, default='22:00')
+    tower_light_quiet_end = db.Column(db.String(5), nullable=False, default='07:00')
 
     # ========================================================================
     # NeoPixel / WS2812B Addressable LED Strip Settings
@@ -286,6 +301,17 @@ class HardwareSettings(db.Model):
             "tower_light_standby_color": self.tower_light_standby_color,
             "tower_light_incoming_color": self.tower_light_incoming_color,
             "tower_light_alert_color": self.tower_light_alert_color,
+            "tower_light_buzzer_disabled": self.tower_light_buzzer_disabled,
+            "tower_light_test_color": self.tower_light_test_color,
+            "tower_light_fault_enabled": self.tower_light_fault_enabled,
+            "tower_light_fault_color": self.tower_light_fault_color,
+            "tower_light_severity_colors": self.tower_light_severity_colors,
+            "tower_light_warning_color": self.tower_light_warning_color,
+            "tower_light_watch_color": self.tower_light_watch_color,
+            "tower_light_advisory_color": self.tower_light_advisory_color,
+            "tower_light_quiet_enabled": self.tower_light_quiet_enabled,
+            "tower_light_quiet_start": self.tower_light_quiet_start,
+            "tower_light_quiet_end": self.tower_light_quiet_end,
             # NeoPixel
             "neopixel_enabled": self.neopixel_enabled,
             "neopixel_gpio_pin": self.neopixel_gpio_pin,

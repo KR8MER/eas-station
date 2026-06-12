@@ -983,9 +983,87 @@
                                         </select>
                                     </div>
                                 </div>
+                                <div class="row g-3 mt-1">
+                                    <div class="col-12 col-md-4">
+                                        <label for="tower_light_test_color" class="form-label">Test Broadcast (RWT/RMT/NPT)</label>
+                                        <select class="form-select tower-color-select" id="tower_light_test_color" name="tower_light_test_color">
+                                            {% for value, label in tower_color_options %}
+                                            <option value="{{ value }}" {% if (settings.tower_light_test_color or 'cyan') == value %}selected{% endif %}>{{ label }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        <small class="form-text text-muted">Weekly/monthly tests never sound the buzzer.</small>
+                                    </div>
+                                    <div class="col-12 col-md-4">
+                                        <label for="tower_light_fault_color" class="form-label">System Fault</label>
+                                        <select class="form-select tower-color-select" id="tower_light_fault_color" name="tower_light_fault_color">
+                                            {% for value, label in tower_color_options %}
+                                            <option value="{{ value }}" {% if (settings.tower_light_fault_color or 'magenta') == value %}selected{% endif %}>{{ label }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        <div class="form-check mt-1">
+                                            <input class="form-check-input" type="checkbox" id="tower_light_fault_enabled" name="tower_light_fault_enabled" value="true" {% if settings.tower_light_fault_enabled %}checked{% endif %}>
+                                            <label class="form-check-label small" for="tower_light_fault_enabled">Flash when the alert pipeline is unreachable</label>
+                                        </div>
+                                    </div>
+                                </div>
                                 <small class="form-text text-muted">
                                     The Adafruit #5125 only has red, yellow, and green segments — other colors fall back to that
-                                    state's default (green / yellow / red). The ANDONT light supports all seven colors.
+                                    state's default. The ANDONT light supports all seven colors.
+                                </small>
+                            </div>
+
+                            <div class="hw-section">
+                                <div class="hw-section-title"><i class="fas fa-layer-group"></i>Severity Colors</div>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input" type="checkbox" id="tower_light_severity_colors" name="tower_light_severity_colors" value="true" {% if settings.tower_light_severity_colors %}checked{% endif %}>
+                                    <label class="form-check-label" for="tower_light_severity_colors">Color active alerts by severity instead of the single Active Alert color</label>
+                                </div>
+                                <div class="row g-3">
+                                    <div class="col-12 col-md-4">
+                                        <label for="tower_light_warning_color" class="form-label">Warnings</label>
+                                        <select class="form-select tower-color-select tower-severity-select" id="tower_light_warning_color" name="tower_light_warning_color">
+                                            {% for value, label in tower_color_options %}
+                                            <option value="{{ value }}" {% if (settings.tower_light_warning_color or 'red') == value %}selected{% endif %}>{{ label }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <div class="col-12 col-md-4">
+                                        <label for="tower_light_watch_color" class="form-label">Watches</label>
+                                        <select class="form-select tower-color-select tower-severity-select" id="tower_light_watch_color" name="tower_light_watch_color">
+                                            {% for value, label in tower_color_options %}
+                                            <option value="{{ value }}" {% if (settings.tower_light_watch_color or 'yellow') == value %}selected{% endif %}>{{ label }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <div class="col-12 col-md-4">
+                                        <label for="tower_light_advisory_color" class="form-label">Advisories / Statements</label>
+                                        <select class="form-select tower-color-select tower-severity-select" id="tower_light_advisory_color" name="tower_light_advisory_color">
+                                            {% for value, label in tower_color_options %}
+                                            <option value="{{ value }}" {% if (settings.tower_light_advisory_color or 'white') == value %}selected{% endif %}>{{ label }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="hw-section">
+                                <div class="hw-section-title"><i class="fas fa-moon"></i>Quiet Hours</div>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input" type="checkbox" id="tower_light_quiet_enabled" name="tower_light_quiet_enabled" value="true" {% if settings.tower_light_quiet_enabled %}checked{% endif %}>
+                                    <label class="form-check-label" for="tower_light_quiet_enabled">Turn the standby light off on a schedule</label>
+                                </div>
+                                <div class="row g-3">
+                                    <div class="col-6 col-md-3">
+                                        <label for="tower_light_quiet_start" class="form-label">From</label>
+                                        <input type="time" class="form-control tower-quiet-input" id="tower_light_quiet_start" name="tower_light_quiet_start" value="{{ settings.tower_light_quiet_start or '22:00' }}">
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <label for="tower_light_quiet_end" class="form-label">Until</label>
+                                        <input type="time" class="form-control tower-quiet-input" id="tower_light_quiet_end" name="tower_light_quiet_end" value="{{ settings.tower_light_quiet_end or '07:00' }}">
+                                    </div>
+                                </div>
+                                <small class="form-text text-muted">
+                                    Local station time; the window may span midnight. Incoming and active alerts always light up regardless of quiet hours.
                                 </small>
                             </div>
 
@@ -994,6 +1072,10 @@
                                 <div class="form-check mb-2">
                                     <input class="form-check-input" type="checkbox" id="tower_light_alert_buzzer" name="tower_light_alert_buzzer" value="true" {% if settings.tower_light_alert_buzzer %}checked{% endif %}>
                                     <label class="form-check-label" for="tower_light_alert_buzzer">Enable buzzer on alert</label>
+                                </div>
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input" type="checkbox" id="tower_light_buzzer_disabled" name="tower_light_buzzer_disabled" value="true" {% if settings.tower_light_buzzer_disabled %}checked{% endif %}>
+                                    <label class="form-check-label" for="tower_light_buzzer_disabled">Disable buzzer entirely (master kill switch — overrides every other setting)</label>
                                 </div>
                                 <div class="form-check mb-2">
                                     <input class="form-check-input" type="checkbox" id="tower_light_incoming_uses_yellow" name="tower_light_incoming_uses_yellow" value="true" {% if settings.tower_light_incoming_uses_yellow %}checked{% endif %}>

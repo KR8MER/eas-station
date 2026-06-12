@@ -1086,6 +1086,23 @@ document.addEventListener('DOMContentLoaded', function() {
 
     protoSel.addEventListener('change', updateTowerColorOptions);
     updateTowerColorOptions();
+
+    // Gray out dependent fields while their parent toggle is off. Note:
+    // disabled inputs are skipped on submit, which leaves the stored
+    // value untouched — exactly what we want for a disabled feature.
+    function bindEnableToggle(checkboxId, selector) {
+        var checkbox = document.getElementById(checkboxId);
+        if (!checkbox) return;
+        function apply() {
+            document.querySelectorAll(selector).forEach(function(el) {
+                el.disabled = !checkbox.checked;
+            });
+        }
+        checkbox.addEventListener('change', apply);
+        apply();
+    }
+    bindEnableToggle('tower_light_severity_colors', '.tower-severity-select');
+    bindEnableToggle('tower_light_quiet_enabled', '.tower-quiet-input');
 });
 
 // Zigbee auto-detect

@@ -931,7 +931,9 @@ def test_load_tower_light_config_enabled(monkeypatch):
 
 
 def _andont_frame(color_code: int, buzzer_on: bool, flash: bool) -> list[int]:
-    return [0xFF, color_code, 0x01 if buzzer_on else 0x02, 0x02 if flash else 0x01, 0xAA]
+    # Buzzer byte: 0x02 = on, 0x01 = off. The vendor table claims the
+    # opposite, but this is what real hardware does.
+    return [0xFF, color_code, 0x02 if buzzer_on else 0x01, 0x02 if flash else 0x01, 0xAA]
 
 
 def test_andont_standby_sends_green_frame():
@@ -1061,3 +1063,44 @@ def test_load_tower_light_config_andont_colors(monkeypatch):
     result = load_tower_light_config_from_db()
     assert result.protocol == "adafruit"
     assert result.alert_color == "red"
+
+
+def test_buzzer_master_kill_switch_overrides_alert_buzzer():
+    """buzzer_disabled must silence the buzzer in every state on both protocols."""
+    # ANDONT: alert with buzzer requested -> frame still carries buzzer-off (0x01)
+    ctrl, ser = _make_tower_ctrl(
+        TowerLightConfig(
+            serial_port="/dev/null", protocol="andont",
+            alert_buzzer=True, buzzer_disabled=True, blink_on_alert=False,
+        )
+    )
+    ser.written.clear()
+    ctrl.start_alert()
+    assert ser.written == _andont_frame(0x04, buzzer_on=False, flash=False)
+
+    # Adafruit: BUZ_ON must never be sent
+    ctrl, ser = _make_tower_ctrl(
+        TowerLightConfig(
+            serial_port="/dev/null", alert_buzzer=True, buzzer_disabled=True,
+        )
+    )
+    ser.written.clear()
+    ctrl.start_alert()
+    assert _TOWER_CMD_BUZ_ON not in ser.written
+
+
+def test_show_state_clamps_to_fallback_on_adafruit():
+    """show_state falls back when the protocol can't render the colour."""
+    from app_utils.gpio import _TOWER_CMD_YEL_ON
+
+    ctrl, ser = _make_tower_ctrl(TowerLightConfig(serial_port="/dev/null"))
+    ser.written.clear()
+    ctrl.show_state("cyan", flash=False, buzzer=False, fallback="yellow")
+    assert _TOWER_CMD_YEL_ON in ser.written
+
+    # 'off' (or unknown fallback) turns all segments off
+    ser.written.clear()
+    ctrl.show_state("off")
+    from app_utils.gpio import _TOWER_CMD_GRN_OFF
+    for cmd in (_TOWER_CMD_RED_OFF, _TOWER_CMD_YEL_OFF, _TOWER_CMD_GRN_OFF):
+        assert cmd in ser.written

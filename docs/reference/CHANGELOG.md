@@ -8,6 +8,27 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.85.0] - 2026-06-12 - Tower-light state engine: fault/test states, severity colors, quiet hours, buzzer kill switch
+
+### Added
+- **Master buzzer kill switch.** A new "Disable buzzer entirely" option on Admin → Hardware Settings → Tower Light guarantees the stack-light buzzer never sounds in any state — enforced inside the controller so no other setting or code path can override it.
+- **Test-broadcast state.** Active broadcasts whose SAME event code is a test (RWT/RMT/NPT/DMO) now show their own configurable color (default cyan) instead of the alert color, and never sound the buzzer — a weekly test no longer looks like a live warning. The event code was already in the Redis broadcast state.
+- **System-fault state.** When the GPIO service loses Redis / the alert pipeline (meaning the station may be deaf), the tower light flashes a configurable fault color (default magenta) instead of sitting on a stale state; it returns to standby automatically on recovery. Detection uses a direct Redis ping each refresh, since the state readers deliberately swallow connection errors. Can be disabled.
+- **Severity-based alert colors.** An optional mode colors real active alerts by product class from the event-code registry — warnings (default red), watches (default yellow), advisories/statements (default white) — instead of the single Active Alert color.
+- **Quiet hours.** An optional schedule (HH:MM local, may span midnight) darkens the *standby* light. Incoming and active alerts always override quiet hours — the indicator can never sleep through an alert.
+- The tower light now runs on a resolved-state engine in `services/gpio/alert_indicators.py` (priority: fault > test/alert > incoming > quiet > standby) with a pure, unit-tested resolver; hardware is written only when the resolved state changes. New columns via migration `20260612_tower_light_states`; state table documented in the [GPIO guide](../hardware/GPIO_GUIDE.md); 14 new tests across `tests/test_gpio_alert_indicators.py` and `tests/test_gpio_controller.py`.
+
+## [2.84.2] - 2026-06-12 - Fix inverted ANDONT buzzer byte
+
+### Fixed
+- **ANDONT stack light buzzer byte was inverted.** The vendor's published control table lists buzzer `0x01 = on / 0x02 = off`, but real hardware behaves the opposite way (confirmed on an actual ANDONT light): `0x02` sounds the buzzer and `0x01` silences it. With the table values, the buzzer sounded continuously in every silent state and stayed silent during alerts with "Enable buzzer on alert" set. Constants, tests, and the GPIO guide now match observed hardware behavior.
+
+## [2.84.1] - 2026-06-12 - Fix systemd DeviceAllow blocking USB serial devices beyond ttyUSB0
+
+### Fixed
+- **The GPIO service could not open a USB tower light on any port other than `/dev/ttyUSB0`** — `eas-station-gpio.service` whitelisted exactly `DeviceAllow=/dev/ttyUSB0`, so a light enumerating at `/dev/ttyUSB1` (normal when another USB-serial adapter is plugged in) failed with `[Errno 1] Operation not permitted`. DeviceAllow has no path wildcards, so the unit now allows the `char-ttyUSB` / `char-ttyACM` device groups (the pattern `eas-station-web.service` already documents). The same latent bug is fixed in `eas-station-displays.service` (VFD/LED serial) and `eas-station-zigbee.service` (coordinator), and the groups were added to `eas-station-gps.service` for USB GPS receivers. Existing installs need the updated unit files installed (`update.sh` does this; or copy from `systemd/` and `systemctl daemon-reload`).
+- **Tower light could miss the initial standby frame.** CH340-based lights can drop bytes written immediately after the serial port opens (the adapter resets on open), so the controller now waits 1 s after opening before sending the first state frame.
+
 ## [2.84.0] - 2026-06-12 - ANDONT 7-color stack light support and configurable tower-light state colors
 
 ### Added

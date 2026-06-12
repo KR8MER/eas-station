@@ -916,17 +916,28 @@ In addition to GPIO relays, two self-contained visual indicators follow the aler
 A USB-serial stack light driven over `/dev/ttyUSB*` (9600 baud by default). Two device protocols are supported, selected under **Admin → Hardware Settings → Tower Light → Device Protocol**:
 
 * **Adafruit #5125** — CH34x tri-color light with three independently switchable segments (red / yellow / green) plus a buzzer, controlled by single-byte commands. State colors are limited to red/yellow/green; anything else falls back to that state's default.
-* **ANDONT 7-color USB** — shows **one color at a time** from off / green / blue / red / cyan / yellow / magenta / white. Every state change is a complete `FF <color> <buzzer> <flash> AA` frame (e.g. `FF 02 01 01 AA` = green, buzzer on, steady).
+* **ANDONT 7-color USB** — shows **one color at a time** from off / green / blue / red / cyan / yellow / magenta / white. Every state change is a complete `FF <color> <buzzer> <flash> AA` frame (e.g. `FF 02 01 01 AA` = green, buzzer off, steady). Note: the buzzer byte is **0x02 = on, 0x01 = off** on real hardware — the vendor's published table has it backwards.
 
-Both follow the same three-state machine, with each state's color configurable (defaults shown):
+Both follow the same state machine, with each state's color configurable (defaults shown). Priority from highest to lowest:
 
-```
-idle (standby color: green) → incoming alert (incoming color: yellow) → active broadcast (alert color: red) → idle
-```
+| State | When | Default color | Buzzer |
+|---|---|---|---|
+| **System fault** | Redis / the alert pipeline is unreachable (the station may be deaf) | magenta, flashing | never |
+| **Test broadcast** | Active broadcast with a test event code (RWT/RMT/NPT/DMO) | cyan | never |
+| **Active alert** | Active broadcast (real alert) | red — or per-severity colors (see below) | `alert_buzzer` |
+| **Incoming (pre-alert)** | Alert received, playout not started | yellow, flashing | never |
+| **Quiet hours** | Standby during the configured schedule | off | never |
+| **Standby** | System ready | green, steady | never |
 
 For example, set Active Alert to **blue** on an ANDONT light for green-when-ready / blue-when-alerting operation.
 
-Options: `alert_buzzer` (sound buzzer during active alert), `incoming_uses_yellow` (show the incoming pre-alert state), `blink_on_alert` (hardware blink/flash mode vs. solid), plus the three state colors.
+**Severity colors** (optional): when "Color active alerts by severity" is enabled, real alerts use per-class colors instead of the single Active Alert color — warnings (`WRN` product class, default red), watches (`WCH`, default yellow), advisories/statements (`ADV`, default white). Classification comes from the SAME event-code registry.
+
+**Quiet hours** (optional): darkens the *standby* light between two local times (the window may span midnight). Incoming and active alerts always light up regardless of the schedule — the dark light never suppresses an alert indication.
+
+**Buzzer controls**: `alert_buzzer` sounds the buzzer during real active alerts only; the **master kill switch** (`buzzer_disabled`) guarantees the buzzer never sounds in any state, overriding everything else.
+
+Other options: `incoming_uses_yellow` (show the incoming pre-alert state), `blink_on_alert` (hardware blink/flash mode vs. solid), `fault_enabled` (indicate pipeline loss), plus the per-state colors.
 
 ### NeoPixel / WS2812B strip
 

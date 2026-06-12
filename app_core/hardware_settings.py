@@ -223,6 +223,17 @@ def get_tower_light_settings() -> Dict[str, Any]:
         'standby_color': getattr(settings, 'tower_light_standby_color', 'green') or 'green',
         'incoming_color': getattr(settings, 'tower_light_incoming_color', 'yellow') or 'yellow',
         'alert_color': getattr(settings, 'tower_light_alert_color', 'red') or 'red',
+        'buzzer_disabled': bool(getattr(settings, 'tower_light_buzzer_disabled', False)),
+        'test_color': getattr(settings, 'tower_light_test_color', 'cyan') or 'cyan',
+        'fault_enabled': bool(getattr(settings, 'tower_light_fault_enabled', True)),
+        'fault_color': getattr(settings, 'tower_light_fault_color', 'magenta') or 'magenta',
+        'severity_colors_enabled': bool(getattr(settings, 'tower_light_severity_colors', False)),
+        'warning_color': getattr(settings, 'tower_light_warning_color', 'red') or 'red',
+        'watch_color': getattr(settings, 'tower_light_watch_color', 'yellow') or 'yellow',
+        'advisory_color': getattr(settings, 'tower_light_advisory_color', 'white') or 'white',
+        'quiet_enabled': bool(getattr(settings, 'tower_light_quiet_enabled', False)),
+        'quiet_start': getattr(settings, 'tower_light_quiet_start', '22:00') or '22:00',
+        'quiet_end': getattr(settings, 'tower_light_quiet_end', '07:00') or '07:00',
     }
 
 

@@ -60,11 +60,14 @@ ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths=/opt/eas-station /var/log/eas-station -/dev/i2c-1 -/dev/spidev0.0
 
-# Display device access (OLED on I2C, VFD/LED on USB serial)
+# Display device access (OLED on I2C, VFD/LED on USB serial).
+# USB-serial adapters enumerate as /dev/ttyUSB<n>//dev/ttyACM<n> with no
+# stable number; DeviceAllow has no path wildcards, so allow the char
+# groups (same pattern as web.service).
 DeviceAllow=/dev/i2c-1 rw
 DeviceAllow=/dev/spidev0.0 rw
-DeviceAllow=/dev/ttyUSB0 rw
-DeviceAllow=/dev/ttyACM0 rw
+DeviceAllow=char-ttyUSB rw
+DeviceAllow=char-ttyACM rw
 
 # Resource limits
 LimitNOFILE=65536
