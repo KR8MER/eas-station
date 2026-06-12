@@ -50,11 +50,10 @@ This directory contains two active EAS monitoring implementations, each designed
 
 ## Archived Implementations
 
-### `eas_monitor_simple.py` (Archived)
-**Location:** `legacy/audio/eas_monitor_simple.py` (260 lines)
-**Status:** Not used in production
+### `eas_monitor_simple.py` (Removed)
+**Status:** Removed from the tree along with the rest of the Docker-era `legacy/` directory; available in git history if ever needed.
 
-**Reason for archival:** This simplified implementation with "no watchdogs, no restarts, no complexity" was an experimental version that was never integrated into the production codebase. Archived for reference.
+**Reason for removal:** This simplified implementation with "no watchdogs, no restarts, no complexity" was an experimental version that was never integrated into the production codebase.
 
 ---
 

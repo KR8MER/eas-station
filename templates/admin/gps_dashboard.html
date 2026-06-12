@@ -652,6 +652,22 @@
         color: var(--text-muted); font-size: 0.78rem; font-style: italic;
         pointer-events: none;
     }
+
+    /* Historical Trends (bottom-of-page Chart.js section).  Taller than
+       the sparkline cards because these are full long-window charts with
+       axes and legends; Chart.js owns the canvas size (responsive +
+       maintainAspectRatio:false), so the wrap only fixes the height. */
+    .gps-hist-canvas-wrap {
+        position: relative;
+        height: 230px;
+        border: 1px solid var(--border-color, rgba(127,127,127,.18));
+        border-radius: 6px;
+        background: var(--bg-tertiary, rgba(127,127,127,.05));
+        padding: 6px 8px;
+    }
+    @media (max-width: 720px) {
+        .gps-hist-canvas-wrap { height: 190px; }
+    }
     /* Crosshair + tooltip overlay for sparkline charts.  Lives inside
        .gps-chart-canvas-wrap so it scales with the canvas; hidden
        unless the user is hovering. */
@@ -2352,6 +2368,96 @@
             </div>
         </div>
     </details>
+
+    <!-- ============================================================
+         HISTORICAL TRENDS — long-window Chart.js line charts driven by
+         the same tiered trend archive as the engineering sparklines
+         (/admin/api/gps-dashboard/trends?window=...), but with its own
+         window selector (default 24 h) and a slow 60 s auto-refresh so
+         it never interferes with the 1 Hz status poll.  Rendering lives
+         in static/js/gps_trends_charts.js.
+         ============================================================ -->
+    <div class="gps-section-head ts-window-section" id="gps-hist-section">
+        <h2>Historical Trends</h2>
+        <span class="rule"></span>
+        <label class="ts-window-control" for="gps-hist-window-select">
+            <span class="ts-window-control-label">
+                <i class="fas fa-chart-line" aria-hidden="true"></i>
+                Window
+            </span>
+            <select id="gps-hist-window-select" class="form-select form-select-sm ts-window-select">
+                <option value="1h">1 hour</option>
+                <option value="6h">6 hours</option>
+                <option value="24h" selected>24 hours</option>
+                <option value="7d">7 days</option>
+                <option value="30d">30 days</option>
+                <option value="90d">90 days</option>
+            </select>
+            <span id="gps-hist-window-resolution" class="ts-window-resolution">resolution: 1 min</span>
+        </label>
+    </div>
+
+    <div class="row g-3 mt-0" id="gps-hist-charts">
+        <div class="col-12 col-xl-6">
+            <div class="gps-card h-100 gps-chart-card">
+                <div class="gps-card-head">
+                    <h3><i class="fas fa-gauge-high me-1"></i> Clock Discipline</h3>
+                    <div class="badge-area">
+                        <span class="text-muted small">chrony frequency &amp; last offset</span>
+                    </div>
+                </div>
+                <div class="gps-hist-canvas-wrap">
+                    <canvas id="gps-hist-clock-canvas" aria-label="Clock discipline history: chrony frequency and last offset"></canvas>
+                    <div id="gps-hist-clock-empty" class="gps-chart-empty">Loading history…</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-xl-6">
+            <div class="gps-card h-100 gps-chart-card">
+                <div class="gps-card-head">
+                    <h3><i class="fas fa-wave-square me-1"></i> PPS Jitter &amp; Stability</h3>
+                    <div class="badge-area">
+                        <span class="text-muted small">PPS 1σ jitter · Allan deviation τ=10 s / 100 s</span>
+                    </div>
+                </div>
+                <div class="gps-hist-canvas-wrap">
+                    <canvas id="gps-hist-jitter-canvas" aria-label="PPS jitter and Allan deviation history"></canvas>
+                    <div id="gps-hist-jitter-empty" class="gps-chart-empty">Loading history…</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-xl-6">
+            <div class="gps-card h-100 gps-chart-card">
+                <div class="gps-card-head">
+                    <h3><i class="fas fa-satellite me-1"></i> Satellites</h3>
+                    <div class="badge-area">
+                        <span class="text-muted small">used / visible counts · average SNR</span>
+                    </div>
+                </div>
+                <div class="gps-hist-canvas-wrap">
+                    <canvas id="gps-hist-sats-canvas" aria-label="Satellite count and average SNR history"></canvas>
+                    <div id="gps-hist-sats-empty" class="gps-chart-empty">Loading history…</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-xl-6">
+            <div class="gps-card h-100 gps-chart-card">
+                <div class="gps-card-head">
+                    <h3><i class="fas fa-temperature-half me-1"></i> Environment</h3>
+                    <div class="badge-area">
+                        <span class="text-muted small">CPU temperature · holdover (when non-zero)</span>
+                    </div>
+                </div>
+                <div class="gps-hist-canvas-wrap">
+                    <canvas id="gps-hist-env-canvas" aria-label="CPU temperature and holdover history"></canvas>
+                    <div id="gps-hist-env-empty" class="gps-chart-empty">Loading history…</div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}
 
@@ -2361,6 +2467,11 @@
      colours used across the three GPS panels (this dashboard, the
      hardware-settings GPS card, and the system-health GPS card). -->
 <script src="{{ url_for('static', filename='js/gps_constellation_palette.js') }}"></script>
+<!-- Chart.js v3 + date-fns adapter (vendored) — used only by the
+     Historical Trends section at the bottom of the page; the existing
+     sparklines remain hand-rolled canvas and don't depend on these. -->
+<script src="{{ url_for('static', filename='vendor/chartjs/chart-v3.min.js') }}"></script>
+<script src="{{ url_for('static', filename='vendor/chartjs/chartjs-adapter-date-fns.bundle.min.js') }}"></script>
 <script>
 (function () {
     'use strict';
@@ -8420,4 +8531,7 @@
 })();
 
 </script>
+<!-- Historical Trends charts — self-contained module; reads the same
+     tiered archive endpoint with its own selector + 60 s refresh. -->
+<script src="{{ url_for('static', filename='js/gps_trends_charts.js') }}"></script>
 {% endblock %}

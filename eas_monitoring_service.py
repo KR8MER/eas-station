@@ -251,28 +251,6 @@ def _ensure_raw_audio_column(app) -> None:
         )
 
 
-def initialize_radio_receivers(app):
-    """DEPRECATED: Do not use in separated architecture.
-    
-    In separated architecture, sdr-service.py handles all SDR hardware access.
-    This function is kept for backward compatibility but should NOT be called
-    from audio-service.py as it conflicts with sdr-service.
-    
-    If you need SDR functionality in audio-service, ensure:
-    1. sdr-service.py is running and publishing to Redis
-    2. AudioSourceConfigDB entries exist with managed_by='radio'
-    3. RedisSDRSourceAdapter will automatically subscribe to sdr:samples:{receiver_id}
-    
-    The sync_radio_receiver_audio_sources() function handles step 2 automatically.
-    """
-    logger.warning(
-        "initialize_radio_receivers() called but DEPRECATED in separated architecture. "
-        "SDR hardware should be managed by sdr-service.py container. "
-        "Use sync_radio_receiver_audio_sources() + RedisSDRSourceAdapter instead."
-    )
-    return  # Do nothing - prevents conflict with sdr-service
-
-
 def sync_radio_receiver_audio_sources(app):
     """Ensure audio sources exist for all enabled radio receivers with audio_output=True.
     

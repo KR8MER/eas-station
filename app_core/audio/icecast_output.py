@@ -197,19 +197,11 @@ class IcecastStreamer:
 
         # Subscribe to source's broadcast queue for non-destructive audio access
         # Each Icecast stream gets its own independent subscription
-        if hasattr(self.audio_source, 'get_broadcast_queue'):
-            source_broadcast = self.audio_source.get_broadcast_queue()
-            self._audio_queue = source_broadcast.subscribe(self._subscriber_id)
-            logger.info(
-                f"Icecast streamer '{self._subscriber_id}' subscribed to source broadcast queue"
-            )
-        else:
-            # Fallback for legacy sources without broadcast queue
-            logger.warning(
-                f"Audio source for mount {self.config.mount} does not support broadcast queue, "
-                "falling back to direct access (may cause audio contention)"
-            )
-            self._audio_queue = None
+        source_broadcast = self.audio_source.get_broadcast_queue()
+        self._audio_queue = source_broadcast.subscribe(self._subscriber_id)
+        logger.info(
+            f"Icecast streamer '{self._subscriber_id}' subscribed to source broadcast queue"
+        )
 
         # Start FFmpeg encoder
         logger.info(f"Initializing FFmpeg encoder for mount {self.config.mount}...")
@@ -236,7 +228,7 @@ class IcecastStreamer:
         self._stop_event.set()
 
         # Unsubscribe from broadcast queue
-        if hasattr(self.audio_source, 'get_broadcast_queue') and self._audio_queue is not None:
+        if self._audio_queue is not None:
             try:
                 source_broadcast = self.audio_source.get_broadcast_queue()
                 source_broadcast.unsubscribe(self._subscriber_id)
@@ -465,23 +457,15 @@ class IcecastStreamer:
             return False
 
     def _get_audio_from_subscription(self, timeout: float = 1.0):
-        """
-        Get audio chunk from broadcast subscription queue.
-        
-        Uses the subscription queue if available (preferred), otherwise
-        falls back to direct source access for legacy compatibility.
-        """
+        """Get audio chunk from the broadcast subscription queue (non-destructive)."""
         import queue as queue_module
-        
-        if self._audio_queue is not None:
-            # Use broadcast subscription (non-destructive)
-            try:
-                return self._audio_queue.get(timeout=timeout)
-            except queue_module.Empty:
-                return None
-        else:
-            # Fallback to direct source access (legacy, may cause contention)
-            return self.audio_source.get_audio_chunk(timeout=timeout)
+
+        if self._audio_queue is None:
+            return None
+        try:
+            return self._audio_queue.get(timeout=timeout)
+        except queue_module.Empty:
+            return None
 
     def _prebuffer_audio(self, target_chunks=150, timeout_seconds=30.0):
         """

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 52" role="img" aria-label="Ko-fi">
+  <!-- Ko-fi cup mark: cup with handle, red heart, saucer -->
+  <g fill="none" stroke="#29abe0" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M6 6 h38 v20 a10 10 0 0 1 -10 10 H16 A10 10 0 0 1 6 26 Z" fill="#ffffff"/>
+    <path d="M44 10 h4 a8 8 0 0 1 0 16 h-4"/>
+  </g>
+  <path fill="#ff5e5b" d="M25 30 C20 25.8 15.5 22.6 15.5 18.6 C15.5 15.6 17.7 13.5 20.3 13.5 C22.2 13.5 24 14.8 25 16.8 C26 14.8 27.8 13.5 29.7 13.5 C32.3 13.5 34.5 15.6 34.5 18.6 C34.5 22.6 30 25.8 25 30 Z"/>
+  <rect x="10" y="44" width="36" height="4" rx="2" fill="#29abe0"/>
+</svg>

@@ -1274,7 +1274,6 @@ rsync -a --exclude='Dockerfile*' \
     --exclude='__pycache__' \
     --exclude='*.pyc' \
     --exclude='bugs/' \
-    --exclude='legacy/' \
     --exclude='bare-metal/' \
     --exclude='tests/bug_reproductions/' \
     "$REPO_ROOT/" "$INSTALL_DIR/" > /dev/null 2>&1

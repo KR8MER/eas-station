@@ -2,7 +2,7 @@
 
 This document provides coding standards and guidelines for AI agents (including Claude, GitHub Copilot, Cursor, and other AI assistants) when working on the NOAA CAP Emergency Alert System codebase.
 
-> **📍 LOCATION NOTE**: This file is the single canonical source of truth, maintained at `docs/development/AGENTS.md`. `.github/agents/AGENTS.md` is a **symbolic link** pointing to this file, so both paths always refer to the same content. Edit only `docs/development/AGENTS.md` — the change is immediately visible to all agent platforms with no copy step required.
+> **📍 LOCATION NOTE**: This file is the single canonical source of truth, maintained at `docs/development/AGENTS.md`. `.github/agents/AGENTS.md` and the repository-root `CLAUDE.md` (auto-loaded by Claude Code at session start) are **symbolic links** pointing to this file, so all paths always refer to the same content. Edit only `docs/development/AGENTS.md` — the change is immediately visible to all agent platforms with no copy step required.
 
 ---
 
@@ -16,7 +16,7 @@ This document provides coding standards and guidelines for AI agents (including 
 6. **Focused Changes**: Keep fixes targeted to the specific issue
 7. **Document Changes**: Update relevant documentation when adding features
 8. **Check Bug Screenshots**: When discussing bugs, always check the `/bugs` directory first for screenshots
-9. **Follow Versioning**: Bug fixes increment by 0.0.+1, feature upgrades increment by 0.+1.0
+9. **Follow Versioning — REQUIRED on every change, do not skip**: Bug fixes increment by 0.0.+1, feature upgrades increment by 0.+1.0. Before finishing any branch you MUST: (a) update the root `VERSION` file; (b) move your notes from `## [Unreleased]` in `docs/reference/CHANGELOG.md` into a new `## [X.Y.Z] - YYYY-MM-DD - Short title` heading (leave a `- Nothing yet.` placeholder under `[Unreleased]`); (c) update the Version badge in `README.md`; (d) run `python -m pytest tests/test_release_metadata.py -q` — it enforces (a)+(b). Merging a `VERSION` change to `main` triggers the automated release workflow (see `docs/process/RELEASING.md`).
 10. **File Naming Convention**: When superseding files, rename the old one with `_old` suffix, NEVER use `_new` suffix for replacement files
 11. **Repository Organization**: Every file must live in an appropriate directory unless necessary to be in the root (e.g., `requirements.txt`, `README.md`, `LICENSE`, etc.). Documentation, summaries, and development artifacts belong in the `docs/` directory structure.
 
