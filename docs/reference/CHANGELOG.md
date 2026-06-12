@@ -8,6 +8,12 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.84.0] - 2026-06-12 - ANDONT 7-color stack light support and configurable tower-light state colors
+
+### Added
+- **ANDONT 7-color USB stack light support.** The tower-light driver previously spoke only the Adafruit #5125 protocol (three independently switchable red/yellow/green segments, single-byte commands). A new **Device Protocol** selector on Admin → Hardware Settings → Tower Light adds the ANDONT 7-color USB stack light, which works fundamentally differently: it shows **one color at a time** (off / green / blue / red / cyan / yellow / magenta / white) and every state change is a complete `FF <lighting-mode> <buzzer-mode> <flash-frequency> AA` frame per the vendor's control instructions (e.g. `FF 02 01 01 AA` = green + buzzer, steady). Buzzer and blink options map onto the frame's buzzer and flash-frequency bytes.
+- **Configurable state → color mapping for the tower light.** Three new dropdowns — System Ready (standby), Incoming (pre-alert), and Active Alert — choose the color for each lifecycle state (defaults preserve the previous behavior: green / yellow / red). On an ANDONT light all seven colors are selectable, enabling e.g. green-for-ready / **blue-for-active-alerts**; on the Adafruit #5125 the UI grays out colors beyond its three physical segments and the backend clamps unsupported values to that state's default. New `tower_light_protocol`, `tower_light_standby_color`, `tower_light_incoming_color`, and `tower_light_alert_color` columns (migration `20260612_tower_light_protocol_colors`); the tower-light section of the [GPIO guide](../hardware/GPIO_GUIDE.md) documents both protocols. New protocol/color coverage in `tests/test_gpio_controller.py` (frame layout, color clamping, config loading).
+
 ## [2.83.1] - 2026-06-12 - Fix "already attached to session" error on Hardware Settings save
 
 ### Fixed

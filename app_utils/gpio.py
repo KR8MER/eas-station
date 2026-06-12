@@ -2530,21 +2530,73 @@ _TOWER_CMD_BUZ_OFF    = 0x28
 _TOWER_CMD_BUZ_BLINK  = 0x48
 
 
+# ---------------------------------------------------------------------------
+# ANDONT 7-colour USB stack light protocol
+#
+# Frame: 0xFF <lighting mode> <buzzer mode> <flash frequency> 0xAA
+# e.g. FF 02 01 01 AA -> green light with buzzer, steady-on, not flashing
+# ---------------------------------------------------------------------------
+_ANDONT_FRAME_START = 0xFF
+_ANDONT_FRAME_END   = 0xAA
+
+_ANDONT_COLOR_CODES = {
+    "off":     0x01,
+    "green":   0x02,
+    "blue":    0x03,
+    "red":     0x04,
+    "cyan":    0x05,
+    "yellow":  0x06,
+    "magenta": 0x07,
+    "white":   0x08,
+}
+
+_ANDONT_BUZZER_ON  = 0x01
+_ANDONT_BUZZER_OFF = 0x02
+
+_ANDONT_FLASH_NONE = 0x01  # steady on
+_ANDONT_FLASH_FAST = 0x02  # ~0.85 s per cycle
+
+TOWER_LIGHT_PROTOCOLS = ("adafruit", "andont")
+
+# Colours selectable per state. The Adafruit #5125 only has red/yellow/green
+# segments; unsupported colours fall back to that protocol's default.
+TOWER_LIGHT_COLORS = ("red", "yellow", "green", "blue", "cyan", "magenta", "white")
+
+# Adafruit per-segment (on, off, blink) command bytes.
+_TOWER_SEGMENT_CMDS = {
+    "red":    (_TOWER_CMD_RED_ON, _TOWER_CMD_RED_OFF, _TOWER_CMD_RED_BLINK),
+    "yellow": (_TOWER_CMD_YEL_ON, _TOWER_CMD_YEL_OFF, _TOWER_CMD_YEL_BLINK),
+    "green":  (_TOWER_CMD_GRN_ON, _TOWER_CMD_GRN_OFF, _TOWER_CMD_GRN_BLINK),
+}
+
+
 @dataclass
 class TowerLightConfig:
-    """Configuration for an Adafruit USB Tri-Color Tower Light (product #5125).
+    """Configuration for a USB serial stack light.
 
-    The device communicates via a CH34x USB-to-serial adapter at 9600 baud.
-    It exposes three independent LED segments (red, yellow, green) plus a
-    buzzer, each controllable with single-byte serial commands.
+    Two wire protocols are supported, selected by :attr:`protocol`:
+
+    * ``"adafruit"`` — Adafruit USB Tri-Color Tower Light (#5125) and
+      compatible CH34x lights. Three independent segments (red, yellow,
+      green) plus a buzzer, single-byte commands. Only red / yellow /
+      green are valid state colours; anything else falls back to the
+      state default.
+    * ``"andont"`` — ANDONT 7-colour USB stack light. One colour at a
+      time from off / green / blue / red / cyan / yellow / magenta /
+      white, driven by ``FF <color> <buzzer> <flash> AA`` frames.
     """
 
     serial_port: str = "/dev/ttyUSB0"  # Serial port path (e.g. /dev/ttyUSB0)
-    baudrate: int = 9600               # Fixed at 9600 for this device
+    baudrate: int = 9600               # Fixed at 9600 for these devices
+    protocol: str = "adafruit"         # 'adafruit' or 'andont'
     # Alert response configuration
     alert_buzzer: bool = False         # Sound buzzer on active alert
-    incoming_uses_yellow: bool = True  # Yellow blinks when alert first arrives
-    blink_on_alert: bool = True        # Use hardware blink mode during active alert
+    incoming_uses_yellow: bool = True  # Indicate the incoming (pre-alert) state
+    blink_on_alert: bool = True        # Use hardware blink/flash mode during alerts
+    # State -> colour mapping
+    standby_color: str = "green"       # System ready
+    incoming_color: str = "yellow"     # Alert received, playout not started
+    alert_color: str = "red"           # Active alert
 
 
 class TowerLightController:
@@ -2642,8 +2694,41 @@ class TowerLightController:
                 self.logger.warning("Tower light write failed: %s", exc)
             return False
 
+    def _is_andont(self) -> bool:
+        return (self.config.protocol or "adafruit").strip().lower() == "andont"
+
+    def _send_andont(self, color: str, buzzer_on: bool = False, flash: bool = False) -> bool:
+        """Write one complete ANDONT state frame.
+
+        The ANDONT light has no per-segment commands — every write is a
+        full ``FF <color> <buzzer> <flash> AA`` frame that replaces the
+        previous state (one colour at a time).
+        """
+        if self._serial is None:
+            return False
+        frame = bytes([
+            _ANDONT_FRAME_START,
+            _ANDONT_COLOR_CODES.get(color, _ANDONT_COLOR_CODES["off"]),
+            _ANDONT_BUZZER_ON if buzzer_on else _ANDONT_BUZZER_OFF,
+            _ANDONT_FLASH_FAST if flash else _ANDONT_FLASH_NONE,
+            _ANDONT_FRAME_END,
+        ])
+        try:
+            self._serial.write(frame)
+            return True
+        except Exception as exc:  # pragma: no cover - device-dependent
+            if self.logger:
+                self.logger.warning("Tower light write failed: %s", exc)
+            return False
+
+    def _state_color(self, configured: Any, default: str) -> str:
+        """Clamp a configured state colour to what the protocol supports."""
+        valid = _ANDONT_COLOR_CODES if self._is_andont() else _TOWER_SEGMENT_CMDS
+        candidate = str(configured or "").strip().lower()
+        return candidate if candidate in valid else default
+
     # ------------------------------------------------------------------
-    # Segment control
+    # Segment control (Adafruit protocol primitives)
 
     def red(self, state: str = "on") -> None:
         """Control the red segment.  *state* is ``'on'``, ``'off'``, or ``'blink'``."""
@@ -2688,6 +2773,9 @@ class TowerLightController:
     def all_off(self) -> None:
         """Turn all segments and the buzzer off."""
         with self._lock:
+            if self._is_andont():
+                self._send_andont("off", buzzer_on=False, flash=False)
+                return
             for cmd in (
                 _TOWER_CMD_RED_OFF,
                 _TOWER_CMD_YEL_OFF,
@@ -2697,11 +2785,17 @@ class TowerLightController:
                 self._send(cmd)
 
     def set_standby(self) -> None:
-        """Show 'system ready' state: green on, red/yellow/buzzer off."""
+        """Show 'system ready': the configured standby colour (default green)."""
+        color = self._state_color(self.config.standby_color, "green")
         with self._lock:
-            for cmd in (_TOWER_CMD_RED_OFF, _TOWER_CMD_YEL_OFF, _TOWER_CMD_BUZ_OFF):
-                self._send(cmd)
-            self._send(_TOWER_CMD_GRN_ON)
+            if self._is_andont():
+                self._send_andont(color, buzzer_on=False, flash=False)
+                return
+            self._send(_TOWER_CMD_BUZ_OFF)
+            for name, (_on, off_cmd, _blink) in _TOWER_SEGMENT_CMDS.items():
+                if name != color:
+                    self._send(off_cmd)
+            self._send(_TOWER_SEGMENT_CMDS[color][0])
 
     # ------------------------------------------------------------------
     # Alert integration
@@ -2709,44 +2803,52 @@ class TowerLightController:
     def start_incoming_alert(self) -> None:
         """Signal that an alert has been received but playout has not started.
 
-        Shows yellow (blink or solid) to indicate an incoming alert decision.
-        Does nothing when :attr:`TowerLightConfig.incoming_uses_yellow` is
-        ``False``.
+        Shows the configured incoming colour (default yellow), blinking
+        when :attr:`TowerLightConfig.blink_on_alert` is set. Does nothing
+        when :attr:`TowerLightConfig.incoming_uses_yellow` is ``False``.
         """
         if not self.config.incoming_uses_yellow:
             return
 
+        color = self._state_color(self.config.incoming_color, "yellow")
+        state = "blink" if self.config.blink_on_alert else "on"
         with self._lock:
-            yellow_state = "blink" if self.config.blink_on_alert else "on"
-            for cmd in (_TOWER_CMD_GRN_OFF, _TOWER_CMD_RED_OFF):
-                self._send(cmd)
-            cmd = (
-                _TOWER_CMD_YEL_BLINK if self.config.blink_on_alert
-                else _TOWER_CMD_YEL_ON
-            )
-            self._send(cmd)
+            if self._is_andont():
+                self._send_andont(color, buzzer_on=False, flash=self.config.blink_on_alert)
+            else:
+                on_cmd, _off, blink_cmd = _TOWER_SEGMENT_CMDS[color]
+                for name, (_on, off_cmd, _blink) in _TOWER_SEGMENT_CMDS.items():
+                    if name != color:
+                        self._send(off_cmd)
+                self._send(blink_cmd if self.config.blink_on_alert else on_cmd)
 
         if self.logger:
-            self.logger.info("Tower light: incoming alert (yellow %s)", yellow_state)
+            self.logger.info("Tower light: incoming alert (%s %s)", color, state)
 
     def start_alert(self) -> None:
-        """Signal an active alert: red on/blink, optional buzzer, others off."""
+        """Signal an active alert: configured colour on/blink, optional buzzer."""
+        color = self._state_color(self.config.alert_color, "red")
+        state = "blink" if self.config.blink_on_alert else "on"
         with self._lock:
-            for cmd in (_TOWER_CMD_GRN_OFF, _TOWER_CMD_YEL_OFF):
-                self._send(cmd)
-            red_cmd = (
-                _TOWER_CMD_RED_BLINK if self.config.blink_on_alert
-                else _TOWER_CMD_RED_ON
-            )
-            self._send(red_cmd)
-            if self.config.alert_buzzer:
-                self._send(_TOWER_CMD_BUZ_ON)
+            if self._is_andont():
+                self._send_andont(
+                    color,
+                    buzzer_on=self.config.alert_buzzer,
+                    flash=self.config.blink_on_alert,
+                )
+            else:
+                on_cmd, _off, blink_cmd = _TOWER_SEGMENT_CMDS[color]
+                for name, (_on, off_cmd, _blink) in _TOWER_SEGMENT_CMDS.items():
+                    if name != color:
+                        self._send(off_cmd)
+                self._send(blink_cmd if self.config.blink_on_alert else on_cmd)
+                if self.config.alert_buzzer:
+                    self._send(_TOWER_CMD_BUZ_ON)
 
         if self.logger:
-            red_state = "blink" if self.config.blink_on_alert else "on"
             self.logger.info(
-                "Tower light: alert active (red %s, buzzer=%s)",
-                red_state, self.config.alert_buzzer,
+                "Tower light: alert active (%s %s, buzzer=%s)",
+                color, state, self.config.alert_buzzer,
             )
 
     def end_alert(self) -> None:
@@ -2769,8 +2871,12 @@ class TowerLightController:
             "available": self._available,
             "serial_port": self.config.serial_port,
             "baudrate": self.config.baudrate,
+            "protocol": self.config.protocol,
             "alert_buzzer": self.config.alert_buzzer,
             "blink_on_alert": self.config.blink_on_alert,
+            "standby_color": self.config.standby_color,
+            "incoming_color": self.config.incoming_color,
+            "alert_color": self.config.alert_color,
         }
 
 
@@ -2794,12 +2900,24 @@ def load_tower_light_config_from_db(logger=None) -> Optional[TowerLightConfig]:
     if not settings.get("enabled", False):
         return None
 
+    protocol = str(settings.get("protocol", "adafruit") or "adafruit").strip().lower()
+    if protocol not in TOWER_LIGHT_PROTOCOLS:
+        protocol = "adafruit"
+
+    def _color(key: str, default: str) -> str:
+        value = str(settings.get(key, default) or default).strip().lower()
+        return value if value in TOWER_LIGHT_COLORS else default
+
     return TowerLightConfig(
         serial_port=str(settings.get("serial_port", "/dev/ttyUSB0")),
         baudrate=int(settings.get("baudrate", 9600)),
+        protocol=protocol,
         alert_buzzer=bool(settings.get("alert_buzzer", False)),
         incoming_uses_yellow=bool(settings.get("incoming_uses_yellow", True)),
         blink_on_alert=bool(settings.get("blink_on_alert", True)),
+        standby_color=_color("standby_color", "green"),
+        incoming_color=_color("incoming_color", "yellow"),
+        alert_color=_color("alert_color", "red"),
     )
 
 

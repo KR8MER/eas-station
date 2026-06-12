@@ -145,14 +145,22 @@ class HardwareSettings(db.Model):
     gpio_behavior_matrix = db.Column(JSONB, nullable=False, default=dict)
 
     # ========================================================================
-    # USB Tower Light Settings (Adafruit #5125 / CH34x serial stack light)
+    # USB Tower Light Settings (Adafruit #5125 / ANDONT 7-colour stack light)
     # ========================================================================
     tower_light_enabled = db.Column(db.Boolean, nullable=False, default=False)
     tower_light_serial_port = db.Column(db.String(100), nullable=False, default='/dev/ttyUSB0')
     tower_light_baudrate = db.Column(db.Integer, nullable=False, default=9600)
+    # 'adafruit' = #5125 three-segment single-byte protocol;
+    # 'andont' = 7-colour FF..AA framed protocol (one colour at a time)
+    tower_light_protocol = db.Column(db.String(20), nullable=False, default='adafruit')
     tower_light_alert_buzzer = db.Column(db.Boolean, nullable=False, default=False)
     tower_light_incoming_uses_yellow = db.Column(db.Boolean, nullable=False, default=True)
     tower_light_blink_on_alert = db.Column(db.Boolean, nullable=False, default=True)
+    # State -> colour mapping. Adafruit supports red/yellow/green only;
+    # ANDONT adds blue/cyan/magenta/white.
+    tower_light_standby_color = db.Column(db.String(20), nullable=False, default='green')
+    tower_light_incoming_color = db.Column(db.String(20), nullable=False, default='yellow')
+    tower_light_alert_color = db.Column(db.String(20), nullable=False, default='red')
 
     # ========================================================================
     # NeoPixel / WS2812B Addressable LED Strip Settings
@@ -271,9 +279,13 @@ class HardwareSettings(db.Model):
             "tower_light_enabled": self.tower_light_enabled,
             "tower_light_serial_port": self.tower_light_serial_port,
             "tower_light_baudrate": self.tower_light_baudrate,
+            "tower_light_protocol": self.tower_light_protocol,
             "tower_light_alert_buzzer": self.tower_light_alert_buzzer,
             "tower_light_incoming_uses_yellow": self.tower_light_incoming_uses_yellow,
             "tower_light_blink_on_alert": self.tower_light_blink_on_alert,
+            "tower_light_standby_color": self.tower_light_standby_color,
+            "tower_light_incoming_color": self.tower_light_incoming_color,
+            "tower_light_alert_color": self.tower_light_alert_color,
             # NeoPixel
             "neopixel_enabled": self.neopixel_enabled,
             "neopixel_gpio_pin": self.neopixel_gpio_pin,

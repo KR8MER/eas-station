@@ -911,15 +911,22 @@ There are two ways a pin can flash, and they no longer fight each other:
 
 In addition to GPIO relays, two self-contained visual indicators follow the alert lifecycle. Both are configured under **Admin → Hardware Settings** and run inside the same `eas-station-gpio` subprocess, but are **independent of the relay/behavior matrix** — they have their own state machines.
 
-### USB Tower Light (Adafruit #5125)
+### USB Tower Light (Adafruit #5125 / ANDONT 7-color)
 
-A CH34x USB-serial tri-color stack light (red / yellow / green + buzzer), driven over `/dev/ttyUSB*` at 9600 baud. It follows a three-state machine:
+A USB-serial stack light driven over `/dev/ttyUSB*` (9600 baud by default). Two device protocols are supported, selected under **Admin → Hardware Settings → Tower Light → Device Protocol**:
+
+* **Adafruit #5125** — CH34x tri-color light with three independently switchable segments (red / yellow / green) plus a buzzer, controlled by single-byte commands. State colors are limited to red/yellow/green; anything else falls back to that state's default.
+* **ANDONT 7-color USB** — shows **one color at a time** from off / green / blue / red / cyan / yellow / magenta / white. Every state change is a complete `FF <color> <buzzer> <flash> AA` frame (e.g. `FF 02 01 01 AA` = green, buzzer on, steady).
+
+Both follow the same three-state machine, with each state's color configurable (defaults shown):
 
 ```
-idle (green) → incoming alert (yellow) → active broadcast (red) → idle (green)
+idle (standby color: green) → incoming alert (incoming color: yellow) → active broadcast (alert color: red) → idle
 ```
 
-Options: `alert_buzzer` (sound buzzer during active alert), `incoming_uses_yellow` (show yellow on incoming alerts), `blink_on_alert` (use hardware blink mode vs. solid).
+For example, set Active Alert to **blue** on an ANDONT light for green-when-ready / blue-when-alerting operation.
+
+Options: `alert_buzzer` (sound buzzer during active alert), `incoming_uses_yellow` (show the incoming pre-alert state), `blink_on_alert` (hardware blink/flash mode vs. solid), plus the three state colors.
 
 ### NeoPixel / WS2812B strip
 
