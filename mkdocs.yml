@@ -189,6 +189,7 @@ nav:
       - SDR Frequency Validation: frontend/SDR_FREQUENCY_VALIDATION.md
   - Security:
       - Security Guide: security/SECURITY.md
+      - Audit Log Integrity: security/AUDIT_LOG_INTEGRITY.md
   - Development:
       - Developer Guidelines: development/AGENTS.md
       - Contributing: process/CONTRIBUTING.md

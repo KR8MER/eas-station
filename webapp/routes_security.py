@@ -433,6 +433,56 @@ def list_audit_logs():
     })
 
 
+@security_bp.route('/audit-logs/verify', methods=['GET'])
+@require_permission('logs.view')
+def verify_audit_chain():
+    """Verify the tamper-evident audit-log chain.
+
+    Walks the hash chain (``prev_hash`` linkage), recomputes every signed
+    row's canonical-content SHA-256, and checks each Ed25519 signature
+    against the configured public key.  See
+    ``docs/security/AUDIT_LOG_INTEGRITY.md`` for the full design.
+
+    Query parameters:
+        limit: optional int — only verify the newest N rows (the
+               predecessor linkage at the truncation point is still
+               checked against the prior signed row).  Omit to scan the
+               entire table.
+
+    The verification run is itself recorded as an ``audit.chain.verified``
+    entry, so the chain carries evidence of when it was last checked.
+    """
+    limit = request.args.get('limit', type=int)
+
+    try:
+        result = AuditLogger.verify_chain(limit=limit)
+    except Exception as e:
+        current_app.logger.error(f"Audit chain verification failed: {str(e)}")
+        return jsonify({'error': 'Audit chain verification failed'}), 500
+
+    total_rows = db.session.query(db.func.count(AuditLog.id)).scalar() or 0
+
+    # Record the verification run in the chain itself.  Note this row is
+    # written AFTER the scan, so it is not part of the result just returned.
+    AuditLogger.log(
+        action=AuditAction.AUDIT_CHAIN_VERIFIED,
+        success=bool(result.get('ok')),
+        resource_type='audit_chain',
+        details={
+            'checked': result.get('checked'),
+            'unsigned': result.get('unsigned'),
+            'ephemeral_key': result.get('ephemeral_key'),
+            'first_bad_id': result.get('first_bad_id'),
+            'reason': result.get('reason'),
+            'limit': limit,
+        },
+    )
+
+    result['total_rows'] = total_rows
+    result['verified_at'] = utc_now().isoformat()
+    return jsonify(result)
+
+
 @security_bp.route('/malicious-login-attempts', methods=['GET'])
 @require_permission('logs.view')
 def list_malicious_login_attempts():

@@ -544,6 +544,39 @@ else
     echo_info "Not a git repository - skipping version metadata"
 fi
 
+# Provision the Ed25519 audit-log signing key for installs that predate the
+# tamper-evident chain (v2.75.0) or that have been running on an ephemeral
+# in-memory key. Idempotent: an existing key is never overwritten — rotating
+# it would orphan the signatures on rows signed by the old key.
+echo_progress "Ensuring audit-log signing key exists..."
+AUDIT_KEY_DIR="$INSTALL_DIR/secrets"
+AUDIT_KEY_FILE="$AUDIT_KEY_DIR/audit_signing.key"
+if [ -f "$AUDIT_KEY_FILE" ]; then
+    echo_info "Audit signing key already present - keeping it"
+else
+    mkdir -p "$AUDIT_KEY_DIR"
+    if openssl genpkey -algorithm ed25519 -out "$AUDIT_KEY_FILE" 2>/dev/null; then
+        echo_success "Audit signing key generated at $AUDIT_KEY_FILE"
+    else
+        echo_warning "Could not generate audit signing key - audit rows will use an ephemeral key (see docs/security/AUDIT_LOG_INTEGRITY.md)"
+    fi
+fi
+if [ -d "$AUDIT_KEY_DIR" ]; then
+    chown -R "$SERVICE_USER:$SERVICE_USER" "$AUDIT_KEY_DIR"
+    chmod 700 "$AUDIT_KEY_DIR"
+    [ -f "$AUDIT_KEY_FILE" ] && chmod 600 "$AUDIT_KEY_FILE"
+fi
+# Make sure the .env points at the key (older installs won't have the var).
+if [ -f "$INSTALL_DIR/.env" ] && ! grep -q '^AUDIT_SIGNING_KEY_PATH=' "$INSTALL_DIR/.env"; then
+    {
+        echo ""
+        echo "# Tamper-evident audit log signing key (Ed25519) - added by update.sh"
+        echo "AUDIT_SIGNING_KEY_PATH=$AUDIT_KEY_FILE"
+    } >> "$INSTALL_DIR/.env"
+    chown "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR/.env"
+    echo_success "AUDIT_SIGNING_KEY_PATH added to .env"
+fi
+
 # Update system dependencies (after code pull so new deps are included)
 echo_step "Updating System Dependencies"
 echo_progress "Updating package lists..."

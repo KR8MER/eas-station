@@ -102,6 +102,10 @@ class AuditAction(Enum):
     ALERT_DELETED = 'alert.deleted'
     LOG_EXPORTED = 'log.exported'
     LOG_DELETED = 'log.deleted'
+    # An operator ran the tamper-evidence verifier (AuditLogger.verify_chain).
+    # Recording the verification itself means the chain carries evidence of
+    # *when* it was last checked and what the verdict was.
+    AUDIT_CHAIN_VERIFIED = 'audit.chain.verified'
 
     # Security events
     PERMISSION_DENIED = 'security.permission_denied'
