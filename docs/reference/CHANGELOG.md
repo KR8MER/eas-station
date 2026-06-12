@@ -8,6 +8,14 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.83.1] - 2026-06-12 - Fix "already attached to session" error on Hardware Settings save
+
+### Fixed
+- **Hardware Settings save (and therefore "Save & Restart") failed with `Object '<HardwareSettings …>' is already attached to session 'N' (this is 'M')`.** The module-level cache in `app_core/hardware_settings.py` stored a live `HardwareSettings` ORM instance and only checked `detached` before reusing it. Under gunicorn/gevent each request runs with its own scoped SQLAlchemy session, so the cached instance could still be *persistent* in a previous request's session when the next request came in; handing it out and re-`add()`ing it to the current session raised `InvalidRequestError`, which blocked saving and — because the Save & Restart button only restarts services after a successful save — also made it impossible to restart hardware services from the web UI. The cache now verifies the instance is attached to the *current* session (`insp.persistent and insp.session is db.session()`) and re-queries otherwise, and `update_hardware_settings()` no longer re-adds an already-persistent instance. Regression coverage in `tests/test_hardware_settings_cache.py` reproduces the two-session scenario with a holder thread.
+
+### Changed
+- **Tower Light serial-port help text** on Admin → Hardware Settings now explains that the Adafruit #5125 enumerates via its CH34x chip as `/dev/ttyUSB<n>` and recommends the stable `/dev/serial/by-id/usb-1a86_USB_Serial-…` path when multiple USB-serial devices are attached (enumeration order can change between boots).
+
 ## [2.83.0] - 2026-06-12 - Audit chain verification UI, signing-key provisioning, and integrity documentation
 
 ### Added

@@ -42,20 +42,23 @@ def get_hardware_settings() -> HardwareSettings:
     global _settings_cache, _cache_dirty
     from sqlalchemy import inspect
 
-    # Check if cached object is still valid (attached to session)
+    # Check if cached object is still valid. The instance is only safe to
+    # reuse while it is attached to the *current* scoped session — under
+    # gunicorn/gevent each request gets its own session, and handing out an
+    # instance owned by another request's session makes any subsequent
+    # db.session.add()/flush raise "Object is already attached to session".
     if _settings_cache is not None and not _cache_dirty:
         try:
-            # Check if instance is detached from session
             insp = inspect(_settings_cache)
-            if not insp.detached:
+            if insp.persistent and insp.session is db.session():
                 return _settings_cache
         except Exception:
             pass
-        # Cache is stale/detached, need to re-query
+        # Cache belongs to another (or no) session, need to re-query
         _cache_dirty = True
 
-    # Query database
-    settings = HardwareSettings.query.get(1)
+    # Query database (attaches a fresh instance to the current session)
+    settings = db.session.get(HardwareSettings, 1)
 
     if settings is None:
         # Create default settings if none exist
@@ -66,7 +69,7 @@ def get_hardware_settings() -> HardwareSettings:
         except Exception:
             db.session.rollback()
             # Try to get again in case another process created it
-            settings = HardwareSettings.query.get(1)
+            settings = db.session.get(HardwareSettings, 1)
             if settings is None:
                 raise
 
@@ -88,6 +91,8 @@ def update_hardware_settings(updates: Dict[str, Any]) -> HardwareSettings:
     """
     global _settings_cache, _cache_dirty
 
+    # get_hardware_settings() guarantees the instance is attached to the
+    # current session, so no add()/merge() is needed before committing.
     settings = get_hardware_settings()
 
     # Update fields
@@ -96,7 +101,6 @@ def update_hardware_settings(updates: Dict[str, Any]) -> HardwareSettings:
             setattr(settings, key, value)
 
     # Commit changes
-    db.session.add(settings)
     db.session.commit()
 
     # Mark cache as dirty to force reload
