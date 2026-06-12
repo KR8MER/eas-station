@@ -302,7 +302,7 @@
         <div class="hero-section">
             <h1>📊 EAS Station Repository Statistics</h1>
             <p class="timestamp">
-                <i class="far fa-clock"></i> Last Updated: 2026-06-11 16:10:56 UTC
+                <i class="far fa-clock"></i> Last Updated: 2026-06-12 00:38:01 UTC
             </p>
         </div>
         
@@ -310,7 +310,7 @@
         <div class="quick-stats">
             <div class="quick-stat-item">
                 <div class="icon">📁</div>
-                <div class="value">3,149</div>
+                <div class="value">3,150</div>
                 <div class="label">Total Files</div>
             </div>
             <div class="quick-stat-item">
@@ -320,17 +320,17 @@
             </div>
             <div class="quick-stat-item">
                 <div class="icon">📝</div>
-                <div class="value">733,904</div>
+                <div class="value">733,919</div>
                 <div class="label">Total Lines</div>
             </div>
             <div class="quick-stat-item">
                 <div class="icon">💻</div>
-                <div class="value">545,206</div>
+                <div class="value">545,219</div>
                 <div class="label">Code Lines</div>
             </div>
             <div class="quick-stat-item">
                 <div class="icon">💬</div>
-                <div class="value">125,561</div>
+                <div class="value">125,562</div>
                 <div class="label">Comments</div>
             </div>
             <div class="quick-stat-item">
@@ -414,9 +414,9 @@
                         </tr>
                         <tr>
                             <td><strong><svg viewBox="0 0 24 24" width="20" height="20" fill="#CB171E" style="vertical-align: middle; margin-right: 6px;"><path d="M4.06 0c-.75 0-1.46.34-1.93.93L.11 3.48c-.22.27-.13.67.2.84l1.04.54c.32.17.72.1.94-.17l1.21-1.52 1.22 1.52c.22.27.62.34.94.17l1.04-.54c.33-.17.42-.57.2-.84L4.99.93C4.52.34 3.81 0 4.06 0zm15.88 0c.75 0 1.46.34 1.93.93l2.02 2.55c.22.27.13.67-.2.84l-1.04.54c-.32.17-.72.1-.94-.17l-1.21-1.52-1.22 1.52c-.22.27-.62.34-.94.17l-1.04-.54c-.33-.17-.42-.57-.2-.84L19.01.93C19.48.34 20.19 0 19.94 0zM12 4.19l-3.99 11.62h2.14L11.05 13h1.9l.9 2.81h2.14L12 4.19zm0 3.67l.64 2.02h-1.28l.64-2.02zM4.66 13L3 17.81l-1.66-4.81H-.04L2.29 20h1.42L6.04 13H4.66zm13.68 0L16.68 20h1.42L20.43 13h-1.38l-1.66 4.81L15.72 13h-1.38z"/></svg>YAML</strong></td>
-                            <td class="text-end">98,014</td>
-                            <td class="text-end">97,916</td>
-                            <td class="text-end">39</td>
+                            <td class="text-end">98,029</td>
+                            <td class="text-end">97,929</td>
+                            <td class="text-end">40</td>
                             <td class="text-end">100%</td>
                             <td>
                                 <div class="progress-track">
@@ -617,7 +617,7 @@
             data: {
                 labels: ['💻 Code', '💬 Comments', '⬜ Whitespace'],
                 datasets: [{
-                    data: [545206, 125561, 63137],
+                    data: [545219, 125562, 63138],
                     backgroundColor: [
                         'rgba(102, 126, 234, 0.8)',
                         'rgba(118, 75, 162, 0.8)',
@@ -650,7 +650,7 @@
                             label: function(context) {
                                 let label = context.label || '';
                                 let value = context.parsed || 0;
-                                let total = 733904;
+                                let total = 733919;
                                 let percentage = ((value / total) * 100).toFixed(1);
                                 return label + ': ' + value.toLocaleString() + ' lines (' + percentage + '%)';
                             }
@@ -668,7 +668,7 @@
                 labels: ["SVG", "Python", "Other", "HTML", "Markdown", "JavaScript", "Shell", "CSS", "Other Types"],
                 datasets: [{
                     label: 'Number of Files',
-                    data: [2067, 572, 134, 114, 109, 59, 42, 25, 27],
+                    data: [2067, 572, 134, 114, 109, 59, 42, 25, 28],
                     backgroundColor: 'rgba(102, 126, 234, 0.8)',
                     borderColor: 'rgba(102, 126, 234, 1)',
                     borderWidth: 2,
@@ -727,7 +727,7 @@
                 labels: ["Python", "JSON", "YAML", "HTML", "Markdown", "JavaScript", "CSS", "SVG"],
                 datasets: [{
                     label: 'Lines of Code',
-                    data: [72987, 208171, 97916, 77594, 35368, 20726, 13877, 8347],
+                    data: [72987, 208171, 97929, 77594, 35368, 20726, 13877, 8347],
                     backgroundColor: 'rgba(118, 75, 162, 0.8)',
                     borderColor: 'rgba(118, 75, 162, 1)',
                     borderWidth: 2,
@@ -784,7 +784,7 @@
         new Chart(routesByModuleCtx, {
             type: 'bar',
             data: {
-                labels: ["routes_led", "routes_settings_radio", "routes_screens", "routes_public", "routes_audio_archive", "routes_analytics", "routes_vfd", "routes_setup", "routes_monitoring", "routes_backups", "routes_stream_profiles", "eas/workflow", "routes/system_controls", "documentation", "routes/alert_verification"],
+                labels: ["routes_led", "routes_settings_radio", "routes_screens", "routes_public", "routes_audio_archive", "routes_vfd", "routes_analytics", "routes_monitoring", "routes_setup", "routes_backups", "routes_stream_profiles", "eas/workflow", "routes/system_controls", "documentation", "routes/alert_verification"],
                 datasets: [{
                     label: 'Number of Routes',
                     data: [25, 21, 17, 16, 14, 12, 12, 11, 11, 11, 9, 9, 8, 7, 7],
