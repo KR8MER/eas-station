@@ -225,6 +225,41 @@ def update_application_settings():
         return jsonify({'success': False, 'error': 'Database error saving application settings'}), 500
 
 
+@application_settings_bp.route('/retention', methods=['GET', 'PUT'])
+@require_auth
+@require_permission('system.configure')
+def retention_settings():
+    """Get or update automated data-retention policies (JSON API).
+
+    Day values of 0 mean "keep forever" for that artifact class.  The
+    received-alert setting only strips the raw audio blob — alert rows are
+    compliance history and are never deleted.
+    """
+    from app_core.retention import get_retention_settings, update_retention_settings
+
+    try:
+        if request.method == 'GET':
+            settings = get_retention_settings()
+            return jsonify({'success': True, 'settings': settings.to_dict()})
+
+        payload = request.get_json(silent=True) or {}
+        try:
+            updated = update_retention_settings(payload)
+        except ValueError as exc:
+            return jsonify({'success': False, 'error': str(exc)}), 400
+
+        logger.info("Retention settings updated: %s", updated)
+        return jsonify({
+            'success': True,
+            'message': 'Retention settings updated. Changes apply on the next sweep (within 6 hours).',
+            'settings': updated,
+        })
+    except SQLAlchemyError as e:
+        logger.error(f"Database error processing retention settings: {str(e)}")
+        db.session.rollback()
+        return jsonify({'success': False, 'error': 'Database error saving retention settings'}), 500
+
+
 @application_settings_bp.route('/status', methods=['GET'])
 @require_auth
 @require_permission('system.view_config')

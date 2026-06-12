@@ -813,6 +813,17 @@ if not skip_background_services:
     except Exception as _backup_sched_err:
         logger.warning('Auto-backup scheduler could not be started: %s', _backup_sched_err)
 
+# Start data-retention scheduler (prunes IQ captures, temp debug audio,
+# and fast-growing audio/metadata tables per the retention_settings policy).
+if not skip_background_services:
+    try:
+        from app_core.retention import start_scheduler as start_retention_scheduler
+        if not app.config.get('SETUP_MODE'):
+            start_retention_scheduler(app)
+            logger.info('Data-retention scheduler started')
+    except Exception as _retention_sched_err:
+        logger.warning('Data-retention scheduler could not be started: %s', _retention_sched_err)
+
 # Start system-health metrics sampler so the dashboard's Performance Trends
 # chart and sparklines have history even when the page has not been open.
 if not skip_background_services:

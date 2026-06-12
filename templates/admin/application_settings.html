@@ -235,6 +235,87 @@
                     </button>
                 </div>
             </form>
+
+            <!-- Data Retention -->
+            <form id="retentionSettingsForm">
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-broom"></i> Data Retention</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" type="checkbox" id="retention_enabled">
+                            <label class="form-check-label" for="retention_enabled">
+                                Enable automated retention sweeps
+                            </label>
+                            <div class="form-text">
+                                A background task prunes old data every 6 hours.
+                                Set any value to <strong>0</strong> to keep that data forever.
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="iq_capture_max_age_days" class="form-label">IQ Captures</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="iq_capture_max_age_days" min="0" max="3650">
+                                    <span class="input-group-text">days</span>
+                                </div>
+                                <div class="form-text">Raw <code>.npy</code> SDR capture files.</div>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="temp_audio_max_age_days" class="form-label">Temp Debug Audio</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="temp_audio_max_age_days" min="0" max="3650">
+                                    <span class="input-group-text">days</span>
+                                </div>
+                                <div class="form-text">Files in <code>/tmp/eas-audio</code>.</div>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="stream_metadata_max_age_days" class="form-label">Now-Playing History</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="stream_metadata_max_age_days" min="0" max="3650">
+                                    <span class="input-group-text">days</span>
+                                </div>
+                                <div class="form-text">ICY stream metadata log rows.</div>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="audio_alert_max_age_days" class="form-label">Audio Health Alerts</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="audio_alert_max_age_days" min="0" max="3650">
+                                    <span class="input-group-text">days</span>
+                                </div>
+                                <div class="form-text">Source health event rows.</div>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="audio_metrics_max_age_days" class="form-label">Audio Level Metrics</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="audio_metrics_max_age_days" min="0" max="3650">
+                                    <span class="input-group-text">days</span>
+                                </div>
+                                <div class="form-text">Per-batch audio level metric rows.</div>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="received_alert_audio_max_age_days" class="form-label">Received Alert Audio</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="received_alert_audio_max_age_days" min="0" max="3650">
+                                    <span class="input-group-text">days</span>
+                                </div>
+                                <div class="form-text">
+                                    Strips the stored audio recording only &mdash;
+                                    received alert records are never deleted.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-grid gap-2 d-md-flex justify-content-md-end mb-3">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Save Retention Settings
+                    </button>
+                </div>
+            </form>
         </div>
 
         <!-- Sidebar -->
@@ -338,6 +419,78 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (error) {
             console.error('Error saving settings:', error);
             showToast('Error saving settings', 'danger');
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalBtnText;
+        }
+    });
+
+    // ---- Data Retention (separate JSON GET/PUT API) ----
+    const retentionForm = document.getElementById('retentionSettingsForm');
+    const retentionFields = [
+        'iq_capture_max_age_days',
+        'temp_audio_max_age_days',
+        'stream_metadata_max_age_days',
+        'audio_alert_max_age_days',
+        'audio_metrics_max_age_days',
+        'received_alert_audio_max_age_days'
+    ];
+
+    function applyRetentionSettings(s) {
+        document.getElementById('retention_enabled').checked = !!s.enabled;
+        retentionFields.forEach(function(name) {
+            document.getElementById(name).value = s[name];
+        });
+    }
+
+    fetch('/admin/application/retention', {
+        headers: { 'Accept': 'application/json' }
+    })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                applyRetentionSettings(data.settings);
+            } else {
+                showToast(data.error || 'Failed to load retention settings', 'danger');
+            }
+        })
+        .catch(function(err) {
+            console.error('Error loading retention settings:', err);
+            showToast('Error loading retention settings', 'danger');
+        });
+
+    retentionForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        const payload = { enabled: document.getElementById('retention_enabled').checked };
+        retentionFields.forEach(function(name) {
+            payload[name] = parseInt(document.getElementById(name).value, 10) || 0;
+        });
+
+        const submitBtn = retentionForm.querySelector('button[type="submit"]');
+        const originalBtnText = submitBtn.innerHTML;
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+
+        try {
+            const response = await fetch('/admin/application/retention', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-Token': window.CSRF_TOKEN
+                },
+                body: JSON.stringify(payload)
+            });
+            const data = await response.json();
+            if (data.success) {
+                showToast(data.message || 'Retention settings saved', 'success');
+                applyRetentionSettings(data.settings);
+            } else {
+                showToast(data.error || 'Failed to save retention settings', 'danger');
+            }
+        } catch (error) {
+            console.error('Error saving retention settings:', error);
+            showToast('Error saving retention settings', 'danger');
         } finally {
             submitBtn.disabled = false;
             submitBtn.innerHTML = originalBtnText;

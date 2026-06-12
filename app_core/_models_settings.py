@@ -976,6 +976,66 @@ class ApplicationSettings(db.Model):
         }
 
 
+class RetentionSettings(db.Model):
+    """Automated data-retention policy configuration stored in database.
+
+    Controls how long on-disk artifacts (IQ captures, temp audio) and
+    fast-growing database tables (stream metadata, audio alerts/metrics,
+    received-alert audio blobs) are kept before the background
+    :class:`app_core.retention.RetentionScheduler` prunes them.
+
+    All settings are stored in a single row (id=1).
+    Convention: ``0`` for any age field means "disabled / keep forever".
+    """
+    __tablename__ = "retention_settings"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # Master switch for the retention sweeper
+    enabled = db.Column(db.Boolean, nullable=False, default=True)
+
+    # Days to keep raw IQ capture files (*.npy in RADIO_CAPTURE_DIR)
+    iq_capture_max_age_days = db.Column(db.Integer, nullable=False, default=14)
+
+    # Days to keep debug audio in /tmp/eas-audio (EAS_SAVE_AUDIO_FILES output)
+    temp_audio_max_age_days = db.Column(db.Integer, nullable=False, default=7)
+
+    # Days to keep ICY now-playing history rows (stream_metadata_log)
+    stream_metadata_max_age_days = db.Column(db.Integer, nullable=False, default=90)
+
+    # Days to keep audio source health events (audio_alerts)
+    audio_alert_max_age_days = db.Column(db.Integer, nullable=False, default=90)
+
+    # Days to keep per-batch audio level metrics (audio_source_metrics)
+    audio_metrics_max_age_days = db.Column(db.Integer, nullable=False, default=30)
+
+    # Days to keep raw_audio_data BYTEA blobs on received_eas_alerts.
+    # Only the blob is stripped — the alert rows themselves are NEVER
+    # deleted because they are compliance history.
+    received_alert_audio_max_age_days = db.Column(db.Integer, nullable=False, default=30)
+
+    # Metadata
+    updated_at = db.Column(
+        db.DateTime(timezone=True),
+        default=utc_now,
+        onupdate=utc_now,
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert model to dictionary."""
+        return {
+            "id": self.id,
+            "enabled": self.enabled,
+            "iq_capture_max_age_days": self.iq_capture_max_age_days,
+            "temp_audio_max_age_days": self.temp_audio_max_age_days,
+            "stream_metadata_max_age_days": self.stream_metadata_max_age_days,
+            "audio_alert_max_age_days": self.audio_alert_max_age_days,
+            "audio_metrics_max_age_days": self.audio_metrics_max_age_days,
+            "received_alert_audio_max_age_days": self.received_alert_audio_max_age_days,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
 class TailscaleSettings(db.Model):
     """Tailscale VPN configuration stored in database.
 

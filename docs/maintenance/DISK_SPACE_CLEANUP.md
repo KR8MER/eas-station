@@ -4,6 +4,8 @@ This guide covers reclaiming disk space on a bare-metal EAS Station™ install. 
 
 > ⚠️ Read each section before you run the commands. Several of them remove data and have no undo.
 
+> ℹ️ **Automated retention:** much of this is now handled automatically. A background sweep (every 6 hours) prunes raw IQ captures (`*.npy` in `RADIO_CAPTURE_DIR`, default 14 days), `/tmp/eas-audio` debug recordings (default 7 days), the ICY now-playing history, audio health alert/metric tables, and strips stored audio blobs from old received EAS alerts (the alert records themselves are kept forever for compliance). Configure or disable these policies under **Admin → Application Settings → Data Retention** (`/admin/application/retention`); a value of `0` keeps that data forever. The manual commands below remain useful for one-off cleanups.
+
 ---
 
 ## 1. See where the space is going
