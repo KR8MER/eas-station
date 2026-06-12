@@ -1321,9 +1321,12 @@ def test_group_0a_decodes_ta_ms_and_ps():
 
     # segment 0, TA=1, MS=1, DI=0 → low 5 bits = 0b11000 = 0x18
     b = _pack_block_b(group_type=0, version_b=False, tp=True, pty=5, low_bits=0x18)
+    # Single-shot fields (PI/PTY/TP/TA/MS) go through the two-sighting
+    # confirmation gate, so the same group must be observed twice before
+    # the values are published.
+    decoder.process_group((pi, b, 0x0000, (ord("E") << 8) | ord("A")))
     decoder.process_group((pi, b, 0x0000, (ord("E") << 8) | ord("A")))
 
-    # The flags read from any Group 0 land immediately.
     data = decoder.get_current_data()
     assert data.pi_code == "4FB5"
     assert data.pty == 5
@@ -1348,9 +1351,11 @@ def test_group_2_does_not_clobber_ta_ms():
     decoder = RBDSDecoder()
     pi = 0x4FB5
 
-    # First seed the decoder with a Group 0A carrying TA=0, MS=0
+    # First seed the decoder with a Group 0A carrying TA=0, MS=0 (twice,
+    # to satisfy the two-sighting confirmation gate)
     b0 = _pack_block_b(group_type=0, version_b=False, tp=False, pty=0, low_bits=0b00000)
     decoder.process_group((pi, b0, 0x0000, 0x2020))  # "  " PS chars
+    decoder.process_group((pi, b0, 0x0000, 0x2020))
     assert decoder.ta is False
     assert decoder.ms is False
 
@@ -1445,6 +1450,9 @@ def test_pi_to_call_sign_out_of_range():
 def test_decoder_populates_call_sign_from_pi():
     decoder = RBDSDecoder()
     b = _pack_block_b(group_type=0, version_b=False, tp=False, pty=0, low_bits=0)
+    # PI needs two consecutive sightings before it (and the derived call
+    # sign) are published.
+    decoder.process_group((0x5862, b, 0x0000, 0x2020))
     decoder.process_group((0x5862, b, 0x0000, 0x2020))
     assert decoder.get_current_data().call_sign == "WBKS"
 
@@ -1495,11 +1503,13 @@ def test_decoder_pty_name_from_group_10a():
 def test_decoder_di_bits_from_group_0():
     decoder = RBDSDecoder()
 
-    # Address 3 -> stereo bit (d0). DI bit = 1 on segment 3.
-    for addr, di in [(0, True), (1, False), (2, False), (3, True)]:
-        low = (di << 2) | addr  # bit 2 = DI, bits 1..0 = address
-        b = _pack_block_b(group_type=0, version_b=False, tp=False, pty=0, low_bits=low)
-        decoder.process_group((0x5862, b, 0x0000, 0x2020))
+    # Address 3 -> stereo bit (d0). DI bit = 1 on segment 3.  Each DI bit
+    # goes through the two-sighting gate, so run two full PS cycles.
+    for _cycle in range(2):
+        for addr, di in [(0, True), (1, False), (2, False), (3, True)]:
+            low = (di << 2) | addr  # bit 2 = DI, bits 1..0 = address
+            b = _pack_block_b(group_type=0, version_b=False, tp=False, pty=0, low_bits=low)
+            decoder.process_group((0x5862, b, 0x0000, 0x2020))
 
     data = decoder.get_current_data()
     assert data.di_dynamic_pty is True    # address 0
@@ -1683,6 +1693,8 @@ def test_group_0a_decodes_af_list():
     # AF codes: 1 = 87.7 MHz, 2 = 87.8 MHz
     af_c = (1 << 8) | 2
     b = _pack_block_b(group_type=0, version_b=False, tp=False, pty=0, low_bits=0)
+    # An AF only joins the published list on its second sighting.
+    decoder.process_group((0x5862, b, af_c, 0x2020))
     decoder.process_group((0x5862, b, af_c, 0x2020))
     data = decoder.get_current_data()
     assert data.af_list is not None
@@ -1701,11 +1713,13 @@ def test_group_0a_af_list_capped_at_spec_maximum():
     """
     decoder = RBDSDecoder()
     b = _pack_block_b(group_type=0, version_b=False, tp=False, pty=0, low_bits=0)
-    # Push 60 unique AF codes (1..120, two per group). Without the cap this
-    # would leave 60 entries in af_list; with the cap it stops at 25.
+    # Push 60 unique AF codes (1..120, two per group), each group sent
+    # twice so the codes clear the second-sighting gate. Without the cap
+    # this would leave 60 entries in af_list; with the cap it stops at 25.
     for code1 in range(1, 121, 2):
         code2 = code1 + 1
         af_c = (code1 << 8) | code2
+        decoder.process_group((0x5862, b, af_c, 0x2020))
         decoder.process_group((0x5862, b, af_c, 0x2020))
     data = decoder.get_current_data()
     assert data.af_list is not None
@@ -1760,8 +1774,10 @@ def test_group_1a_decodes_linkage():
 def test_group_3a_registers_oda_app():
     """Group 3A, AID=0x4BD7 (RDS-TMC) → oda_apps contains 0x4BD7."""
     decoder = RBDSDecoder()
-    # Block B: group_type=3, version_b=False, ODA group type bits in low 5
+    # Block B: group_type=3, version_b=False, ODA group type bits in low 5.
+    # Registrations clear the two-sighting gate on the second 3A group.
     b = _pack_block_b(group_type=3, version_b=False, tp=False, pty=0, low_bits=0x10)
+    decoder.process_group((0x5862, b, 0x4BD7, 0x0000))
     decoder.process_group((0x5862, b, 0x4BD7, 0x0000))
     data = decoder.get_current_data()
     assert data.oda_apps is not None
@@ -1804,11 +1820,15 @@ def test_group_14a_decodes_eon_ps():
     decoder = RBDSDecoder()
     eon_pi = 0x1234
     ps = "WXYZ-FM "
-    for variant in range(4):
-        low_bits = variant  # bits 3-0 = variant; bit 4 = eon_tp
-        b = _pack_block_b(group_type=14, version_b=False, tp=False, pty=0, low_bits=low_bits)
-        c1, c2 = ps[variant * 2], ps[variant * 2 + 1]
-        decoder.process_group((0x5862, b, eon_pi, (ord(c1) << 8) | ord(c2)))
+    # Two passes: the first sighting of a new EON PI only stages it, so
+    # variant 0 of pass one is consumed by the admission gate and its PS
+    # chars land on pass two.
+    for _cycle in range(2):
+        for variant in range(4):
+            low_bits = variant  # bits 3-0 = variant; bit 4 = eon_tp
+            b = _pack_block_b(group_type=14, version_b=False, tp=False, pty=0, low_bits=low_bits)
+            c1, c2 = ps[variant * 2], ps[variant * 2 + 1]
+            decoder.process_group((0x5862, b, eon_pi, (ord(c1) << 8) | ord(c2)))
     data = decoder.get_current_data()
     assert data.eon_list is not None
     assert len(data.eon_list) == 1
@@ -1822,6 +1842,8 @@ def test_group_14b_updates_eon_ta():
     # Block B bit 3 = eon_ta=1
     low_bits = (1 << 3)
     b = _pack_block_b(group_type=14, version_b=True, tp=False, pty=0, low_bits=low_bits)
+    # A new EON PI is admitted on its second sighting.
+    decoder.process_group((0x5862, b, eon_pi, 0x0000))
     decoder.process_group((0x5862, b, eon_pi, 0x0000))
     data = decoder.get_current_data()
     assert data.eon_list is not None
@@ -1832,8 +1854,10 @@ def test_group_14b_updates_eon_ta():
 def test_group_15b_updates_fast_tp():
     """Group 15B with TP=1, TA=0 → fast_tp=True, fast_ta=False."""
     decoder = RBDSDecoder()
-    # version_b=True, tp=True (bit 10 of B), bit 4 of low_bits = TA=0
+    # version_b=True, tp=True (bit 10 of B), bit 4 of low_bits = TA=0.
+    # Fast flags clear the two-sighting gate on the second 15B group.
     b = _pack_block_b(group_type=15, version_b=True, tp=True, pty=0, low_bits=0x00)
+    decoder.process_group((0x5862, b, 0x0000, 0x2020))
     decoder.process_group((0x5862, b, 0x0000, 0x2020))
     data = decoder.get_current_data()
     assert data.fast_tp is True
@@ -2042,3 +2066,185 @@ def test_burst_fec_no_false_positives_on_non_contiguous_errors():
     )
 
     worker.stop()
+
+
+# ---------------------------------------------------------------------------
+# Two-sighting confirmation gate (false-read hardening)
+#
+# Single-shot fields (PI, PTY, TP, TA, MS, DI bits, fast flags, ODA
+# registrations, AF entries, EON networks) must be observed in two
+# consecutive groups before they are published, so one corrupted block
+# that slips past the CRC — or is "repaired" into the wrong codeword by
+# burst FEC — can never flip a published value on its own.
+# ---------------------------------------------------------------------------
+
+
+def test_confirmation_gate_holds_fields_until_second_sighting():
+    decoder = RBDSDecoder()
+    b = _pack_block_b(group_type=0, version_b=False, tp=True, pty=5, low_bits=0x18)
+
+    decoder.process_group((0x4FB5, b, 0x0000, 0x2020))
+    data = decoder.get_current_data()
+    assert data.pi_code is None
+    assert data.pty is None
+    assert data.tp is None
+    assert data.ta is None
+    assert data.ms is None
+
+    decoder.process_group((0x4FB5, b, 0x0000, 0x2020))
+    data = decoder.get_current_data()
+    assert data.pi_code == "4FB5"
+    assert data.pty == 5
+    assert data.tp is True
+    assert data.ta is True
+    assert data.ms is True
+
+
+def test_single_corrupt_group_cannot_flip_ta():
+    """A lone TA=1 sighting must not toggle the published TA flag."""
+    decoder = RBDSDecoder()
+    b_off = _pack_block_b(group_type=0, version_b=False, tp=False, pty=5, low_bits=0x00)
+    decoder.process_group((0x4FB5, b_off, 0x0000, 0x2020))
+    decoder.process_group((0x4FB5, b_off, 0x0000, 0x2020))
+    assert decoder.ta is False
+
+    # One corrupted-but-CRC-passing group flips bit 4 → TA=1 candidate.
+    b_on = _pack_block_b(group_type=0, version_b=False, tp=False, pty=5, low_bits=0x10)
+    decoder.process_group((0x4FB5, b_on, 0x0000, 0x2020))
+    assert decoder.ta is False, "single sighting must only stage, not publish"
+
+    # The next clean group contradicts the staged candidate: it is
+    # discarded and counted as a rejected noise read.
+    decoder.process_group((0x4FB5, b_off, 0x0000, 0x2020))
+    assert decoder.ta is False
+    assert decoder.glitches_rejected >= 1
+    assert decoder.ta_toggle_count == 0
+
+    # A real TA change (two consecutive sightings) still goes through
+    # and is counted as churn.
+    decoder.process_group((0x4FB5, b_on, 0x0000, 0x2020))
+    decoder.process_group((0x4FB5, b_on, 0x0000, 0x2020))
+    assert decoder.ta is True
+    assert decoder.ta_toggle_count == 1
+
+
+def test_single_corrupt_pi_rejected_and_real_change_counted():
+    decoder = RBDSDecoder()
+    b = _pack_block_b(group_type=0, version_b=False, tp=False, pty=0, low_bits=0)
+    decoder.process_group((0x5862, b, 0x0000, 0x2020))
+    decoder.process_group((0x5862, b, 0x0000, 0x2020))
+    assert decoder.pi_code == "5862"
+    assert decoder.call_sign == "WBKS"
+    # Initial resolution is not churn.
+    assert decoder.pi_change_count == 0
+
+    # One corrupted PI block A — stays staged, published PI unchanged.
+    decoder.process_group((0xFFFF, b, 0x0000, 0x2020))
+    assert decoder.pi_code == "5862"
+    decoder.process_group((0x5862, b, 0x0000, 0x2020))
+    assert decoder.pi_code == "5862"
+    assert decoder.glitches_rejected >= 1
+
+    # A genuine retune to another station confirms after two sightings
+    # and increments the churn counter.
+    decoder.process_group((0x54A8, b, 0x0000, 0x2020))
+    decoder.process_group((0x54A8, b, 0x0000, 0x2020))
+    assert decoder.pi_code == "54A8"
+    assert decoder.call_sign == "WAAA"
+    assert decoder.pi_change_count == 1
+
+
+def test_af_entry_requires_second_sighting():
+    decoder = RBDSDecoder()
+    b = _pack_block_b(group_type=0, version_b=False, tp=False, pty=0, low_bits=0)
+    af_c = (1 << 8) | 2  # 87.7 / 87.8 MHz
+    decoder.process_group((0x5862, b, af_c, 0x2020))
+    assert decoder.get_current_data().af_list is None, (
+        "AF codes from a single group must stay staged"
+    )
+    decoder.process_group((0x5862, b, af_c, 0x2020))
+    data = decoder.get_current_data()
+    assert 87.7 in data.af_list
+    assert 87.8 in data.af_list
+
+
+def test_af_method_b_marker_pair_needs_two_groups():
+    """A Method-B marker pair (af1 == af2) is two copies of the same code
+    in ONE block — it must not self-confirm within a single group."""
+    decoder = RBDSDecoder()
+    b = _pack_block_b(group_type=0, version_b=False, tp=False, pty=0, low_bits=0)
+    af_c = (10 << 8) | 10  # code 10 = 88.6 MHz
+    decoder.process_group((0x5862, b, af_c, 0x2020))
+    assert decoder.get_current_data().af_list is None
+    decoder.process_group((0x5862, b, af_c, 0x2020))
+    assert 88.6 in decoder.get_current_data().af_list
+
+
+def test_oda_registration_requires_two_sightings():
+    decoder = RBDSDecoder()
+    b = _pack_block_b(group_type=3, version_b=False, tp=False, pty=0, low_bits=0x10)
+    decoder.process_group((0x5862, b, 0x4BD7, 0x0000))
+    assert decoder.get_current_data().oda_apps is None
+    decoder.process_group((0x5862, b, 0x4BD7, 0x0000))
+    assert 0x4BD7 in decoder.get_current_data().oda_apps
+
+
+def test_eon_phantom_pi_not_admitted_on_single_sighting():
+    """Group 14 Block C carries the cross-referenced PI directly, so a
+    corrupted block would inject a phantom network. New PIs must be seen
+    twice before an EON entry is created."""
+    decoder = RBDSDecoder()
+    b = _pack_block_b(group_type=14, version_b=True, tp=False, pty=0, low_bits=0)
+
+    decoder.process_group((0x5862, b, 0x1111, 0x0000))
+    assert decoder.get_current_data().eon_list is None
+
+    # A different (garbage) PI next — neither has two sightings yet.
+    decoder.process_group((0x5862, b, 0x2222, 0x0000))
+    assert decoder.get_current_data().eon_list is None
+
+    # Second sighting of the first PI admits it; the garbage one never
+    # repeats and never becomes an entry.
+    decoder.process_group((0x5862, b, 0x1111, 0x0000))
+    data = decoder.get_current_data()
+    assert data.eon_list is not None
+    assert len(data.eon_list) == 1
+    assert data.eon_list[0]['pi'] == "1111"
+
+
+def test_oda_reregistration_evicts_superseded_aid():
+    """When a slot re-registers to a new AID, the old AID must leave
+    oda_apps and _oda_payloads (unless another slot still carries it),
+    otherwise slot churn fills the cap with stale entries."""
+    decoder = RBDSDecoder()
+    b3 = _pack_block_b(group_type=3, version_b=False, tp=False, pty=0, low_bits=0x16)  # slot 11A
+
+    # Register AID 0xC563 on 11A (two sightings) and give it payload state.
+    decoder.process_group((0x5862, b3, 0xC563, 0x0000))
+    decoder.process_group((0x5862, b3, 0xC563, 0x0000))
+    assert 0xC563 in decoder.oda_apps
+    b11 = _pack_block_b(group_type=11, version_b=False, tp=False, pty=0, low_bits=0x00)
+    decoder.process_group((0x5862, b11, 0x1234, 0x5678))
+    assert 0xC563 in decoder._oda_payloads
+
+    # Re-register the same slot to RT+ (two sightings).
+    decoder.process_group((0x5862, b3, 0xCD46, 0x0000))
+    decoder.process_group((0x5862, b3, 0xCD46, 0x0000))
+
+    assert 0xCD46 in decoder.oda_apps
+    assert 0xC563 not in decoder.oda_apps
+    assert 0xC563 not in decoder._oda_payloads
+
+
+def test_group_15b_populates_fast_di_bits():
+    """15B DI bits land in the dedicated fast_di_bits nibble (and, per
+    EN 50067, also update the main DI fields) after two sightings."""
+    decoder = RBDSDecoder()
+    # address 3 (stereo position), DI bit = 1 → low bits = (1 << 2) | 3
+    b = _pack_block_b(group_type=15, version_b=True, tp=False, pty=0, low_bits=(1 << 2) | 3)
+    decoder.process_group((0x5862, b, 0x0000, 0x2020))
+    assert decoder.get_current_data().fast_di_bits is None
+    decoder.process_group((0x5862, b, 0x0000, 0x2020))
+    data = decoder.get_current_data()
+    assert data.fast_di_bits == (1 << 3)
+    assert data.di_stereo is True

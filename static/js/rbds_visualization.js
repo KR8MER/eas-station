@@ -1016,6 +1016,17 @@
                 : '—';
             const drops = isPresent(metadata.rbds_sync_lost_count) ? metadata.rbds_sync_lost_count : '—';
             const dropped = isPresent(metadata.rbds_chunks_dropped) ? metadata.rbds_chunks_dropped : '—';
+            // Field-churn telemetry from the decoder's two-sighting
+            // confirmation gate.  PI/PTY changing while tuned to one
+            // station is suspicious, so those get a warning tint.
+            const piChurn = isPresent(metadata.rbds_pi_change_count) ? Number(metadata.rbds_pi_change_count) : null;
+            const ptyChurn = isPresent(metadata.rbds_pty_change_count) ? Number(metadata.rbds_pty_change_count) : null;
+            const taToggles = isPresent(metadata.rbds_ta_toggle_count) ? metadata.rbds_ta_toggle_count : '—';
+            const glitches = isPresent(metadata.rbds_glitches_rejected) ? metadata.rbds_glitches_rejected : '—';
+            const churnText = (piChurn === null && ptyChurn === null)
+                ? '—'
+                : `${piChurn === null ? '—' : piChurn} / ${ptyChurn === null ? '—' : ptyChurn}`;
+            const churnWarn = (piChurn > 0 || ptyChurn > 0) ? 'text-warning' : '';
 
             syncBlock = (
                 `<div class="rbds-health__section" aria-label="Decoder synchronisation health">` +
@@ -1034,6 +1045,9 @@
                 `<div><dt>Synced for</dt><dd class="font-monospace">${escapeHtml(syncedFor)}</dd></div>` +
                 `<div><dt>Sync drops</dt><dd class="font-monospace">${escapeHtml(drops)}</dd></div>` +
                 `<div><dt>Queue chunks dropped</dt><dd class="font-monospace ${Number(dropped) > 0 ? 'text-warning' : ''}">${escapeHtml(dropped)}</dd></div>` +
+                `<div><dt title="Confirmed PI / PTY changes since tune — should stay 0 on a stationary tune">PI / PTY changes</dt><dd class="font-monospace ${churnWarn}">${escapeHtml(churnText)}</dd></div>` +
+                `<div><dt title="Confirmed Traffic Announcement on/off transitions">TA toggles</dt><dd class="font-monospace">${escapeHtml(taToggles)}</dd></div>` +
+                `<div><dt title="Single-sighting field values contradicted before confirmation — false reads the voting gate stopped">Noise reads rejected</dt><dd class="font-monospace">${escapeHtml(glitches)}</dd></div>` +
                 `</dl>` +
                 `</div>`
             );

@@ -481,6 +481,12 @@ class RedisSDRSourceAdapter(AudioSourceAdapter):
                         dict(decoder_stats.group_type_counts)
                         if decoder_stats.group_type_counts else None
                     )
+                    # Field-churn / false-read telemetry from the two-sighting
+                    # confirmation gate (see RBDSDecoderStats).
+                    self.metrics.metadata['rbds_pi_change_count'] = decoder_stats.pi_change_count
+                    self.metrics.metadata['rbds_pty_change_count'] = decoder_stats.pty_change_count
+                    self.metrics.metadata['rbds_ta_toggle_count'] = decoder_stats.ta_toggle_count
+                    self.metrics.metadata['rbds_glitches_rejected'] = decoder_stats.glitches_rejected
 
                 # RF RSSI (mean IQ magnitude).  Linear value; the UI converts to
                 # dBFS for the signal meter.  Without this the RSSI indicator is
