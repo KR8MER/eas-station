@@ -914,9 +914,19 @@
                                     <input class="form-check-input" type="checkbox" id="tower_light_enabled" name="tower_light_enabled" value="true" {% if settings.tower_light_enabled %}checked{% endif %}>
                                     <label class="form-check-label" for="tower_light_enabled">Enable USB Tower Light</label>
                                 </div>
-                                <p class="text-muted small mb-0">
-                                    Supports Adafruit USB Tri-Color Tower Light (#5125) and compatible USB serial tower lights.
-                                </p>
+                                <div class="row g-3 mb-2">
+                                    <div class="col-12 col-md-8">
+                                        <label for="tower_light_protocol" class="form-label">Device Protocol</label>
+                                        <select class="form-select" id="tower_light_protocol" name="tower_light_protocol">
+                                            <option value="adafruit" {% if settings.tower_light_protocol != 'andont' %}selected{% endif %}>Adafruit #5125 — 3 segments (red/yellow/green)</option>
+                                            <option value="andont" {% if settings.tower_light_protocol == 'andont' %}selected{% endif %}>ANDONT 7-color USB — one color at a time</option>
+                                        </select>
+                                        <small class="form-text text-muted">
+                                            The Adafruit light switches three fixed segments with single-byte commands.
+                                            The ANDONT light shows one of seven colors at a time via FF…AA command frames.
+                                        </small>
+                                    </div>
+                                </div>
                             </div>
 
                             <div class="hw-section">
@@ -945,6 +955,41 @@
                             </div>
 
                             <div class="hw-section">
+                                <div class="hw-section-title"><i class="fas fa-palette"></i>Indicator Colors</div>
+                                {% set tower_color_options = [('red','Red'),('yellow','Yellow'),('green','Green'),('blue','Blue'),('cyan','Cyan'),('magenta','Magenta'),('white','White')] %}
+                                <div class="row g-3">
+                                    <div class="col-12 col-md-4">
+                                        <label for="tower_light_standby_color" class="form-label">System Ready (standby)</label>
+                                        <select class="form-select tower-color-select" id="tower_light_standby_color" name="tower_light_standby_color">
+                                            {% for value, label in tower_color_options %}
+                                            <option value="{{ value }}" {% if (settings.tower_light_standby_color or 'green') == value %}selected{% endif %}>{{ label }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <div class="col-12 col-md-4">
+                                        <label for="tower_light_incoming_color" class="form-label">Incoming (pre-alert)</label>
+                                        <select class="form-select tower-color-select" id="tower_light_incoming_color" name="tower_light_incoming_color">
+                                            {% for value, label in tower_color_options %}
+                                            <option value="{{ value }}" {% if (settings.tower_light_incoming_color or 'yellow') == value %}selected{% endif %}>{{ label }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <div class="col-12 col-md-4">
+                                        <label for="tower_light_alert_color" class="form-label">Active Alert</label>
+                                        <select class="form-select tower-color-select" id="tower_light_alert_color" name="tower_light_alert_color">
+                                            {% for value, label in tower_color_options %}
+                                            <option value="{{ value }}" {% if (settings.tower_light_alert_color or 'red') == value %}selected{% endif %}>{{ label }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                </div>
+                                <small class="form-text text-muted">
+                                    The Adafruit #5125 only has red, yellow, and green segments — other colors fall back to that
+                                    state's default (green / yellow / red). The ANDONT light supports all seven colors.
+                                </small>
+                            </div>
+
+                            <div class="hw-section">
                                 <div class="hw-section-title"><i class="fas fa-bell"></i>Alert Behavior</div>
                                 <div class="form-check mb-2">
                                     <input class="form-check-input" type="checkbox" id="tower_light_alert_buzzer" name="tower_light_alert_buzzer" value="true" {% if settings.tower_light_alert_buzzer %}checked{% endif %}>
@@ -952,11 +997,11 @@
                                 </div>
                                 <div class="form-check mb-2">
                                     <input class="form-check-input" type="checkbox" id="tower_light_incoming_uses_yellow" name="tower_light_incoming_uses_yellow" value="true" {% if settings.tower_light_incoming_uses_yellow %}checked{% endif %}>
-                                    <label class="form-check-label" for="tower_light_incoming_uses_yellow">Use yellow for incoming (pre-alert) state</label>
+                                    <label class="form-check-label" for="tower_light_incoming_uses_yellow">Show the incoming (pre-alert) state</label>
                                 </div>
                                 <div class="form-check">
                                     <input class="form-check-input" type="checkbox" id="tower_light_blink_on_alert" name="tower_light_blink_on_alert" value="true" {% if settings.tower_light_blink_on_alert %}checked{% endif %}>
-                                    <label class="form-check-label" for="tower_light_blink_on_alert">Blink red during active alert</label>
+                                    <label class="form-check-label" for="tower_light_blink_on_alert">Blink/flash during incoming and active alerts</label>
                                 </div>
                             </div>
                         </div>

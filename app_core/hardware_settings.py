@@ -216,9 +216,13 @@ def get_tower_light_settings() -> Dict[str, Any]:
         'enabled': settings.tower_light_enabled,
         'serial_port': settings.tower_light_serial_port,
         'baudrate': settings.tower_light_baudrate,
+        'protocol': getattr(settings, 'tower_light_protocol', 'adafruit') or 'adafruit',
         'alert_buzzer': settings.tower_light_alert_buzzer,
         'incoming_uses_yellow': settings.tower_light_incoming_uses_yellow,
         'blink_on_alert': settings.tower_light_blink_on_alert,
+        'standby_color': getattr(settings, 'tower_light_standby_color', 'green') or 'green',
+        'incoming_color': getattr(settings, 'tower_light_incoming_color', 'yellow') or 'yellow',
+        'alert_color': getattr(settings, 'tower_light_alert_color', 'red') or 'red',
     }
 
 

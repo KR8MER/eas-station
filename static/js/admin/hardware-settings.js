@@ -1068,6 +1068,26 @@ function saveAndRestart(btn) {
     });
 }
 
+// Tower light: the Adafruit #5125 protocol only drives red/yellow/green
+// segments, so gray out the extended ANDONT colors when it is selected.
+document.addEventListener('DOMContentLoaded', function() {
+    var protoSel = document.getElementById('tower_light_protocol');
+    if (!protoSel) return;
+    var adafruitColors = ['red', 'yellow', 'green'];
+
+    function updateTowerColorOptions() {
+        var isAdafruit = protoSel.value !== 'andont';
+        document.querySelectorAll('.tower-color-select').forEach(function(sel) {
+            Array.prototype.forEach.call(sel.options, function(opt) {
+                opt.disabled = isAdafruit && adafruitColors.indexOf(opt.value) === -1;
+            });
+        });
+    }
+
+    protoSel.addEventListener('change', updateTowerColorOptions);
+    updateTowerColorOptions();
+});
+
 // Zigbee auto-detect
 document.addEventListener('DOMContentLoaded', function() {
     var detectBtn = document.getElementById('zigbee_detect_btn');

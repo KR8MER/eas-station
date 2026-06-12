@@ -923,3 +923,141 @@ def test_load_tower_light_config_enabled(monkeypatch):
     assert result.baudrate == 9600
     assert result.alert_buzzer is True
     assert result.blink_on_alert is False
+
+
+# ---------------------------------------------------------------------------
+# ANDONT 7-colour USB stack light protocol
+# ---------------------------------------------------------------------------
+
+
+def _andont_frame(color_code: int, buzzer_on: bool, flash: bool) -> list[int]:
+    return [0xFF, color_code, 0x01 if buzzer_on else 0x02, 0x02 if flash else 0x01, 0xAA]
+
+
+def test_andont_standby_sends_green_frame():
+    """set_standby on the ANDONT protocol writes one FF..AA frame (green)."""
+    ctrl, ser = _make_tower_ctrl(
+        TowerLightConfig(serial_port="/dev/null", protocol="andont")
+    )
+    ser.written.clear()
+
+    ctrl.set_standby()
+
+    assert ser.written == _andont_frame(0x02, buzzer_on=False, flash=False)
+
+
+def test_andont_alert_blue_with_buzzer_and_flash():
+    """Active alert renders the configured colour (blue) with buzzer + flash."""
+    ctrl, ser = _make_tower_ctrl(
+        TowerLightConfig(
+            serial_port="/dev/null",
+            protocol="andont",
+            alert_color="blue",
+            alert_buzzer=True,
+            blink_on_alert=True,
+        )
+    )
+    ser.written.clear()
+
+    ctrl.start_alert()
+
+    assert ser.written == _andont_frame(0x03, buzzer_on=True, flash=True)
+
+
+def test_andont_incoming_uses_configured_color():
+    """Incoming state renders the configured colour without the buzzer."""
+    ctrl, ser = _make_tower_ctrl(
+        TowerLightConfig(
+            serial_port="/dev/null",
+            protocol="andont",
+            incoming_color="cyan",
+            blink_on_alert=False,
+        )
+    )
+    ser.written.clear()
+
+    ctrl.start_incoming_alert()
+
+    assert ser.written == _andont_frame(0x05, buzzer_on=False, flash=False)
+
+
+def test_andont_all_off_sends_off_frame():
+    """all_off on the ANDONT protocol writes the 'light off' frame."""
+    ctrl, ser = _make_tower_ctrl(
+        TowerLightConfig(serial_port="/dev/null", protocol="andont")
+    )
+    ser.written.clear()
+
+    ctrl.all_off()
+
+    assert ser.written == _andont_frame(0x01, buzzer_on=False, flash=False)
+
+
+def test_adafruit_clamps_unsupported_alert_color():
+    """Blue is not a #5125 segment; the alert state must fall back to red."""
+    ctrl, ser = _make_tower_ctrl(
+        TowerLightConfig(
+            serial_port="/dev/null",
+            protocol="adafruit",
+            alert_color="blue",
+            blink_on_alert=True,
+            alert_buzzer=False,
+        )
+    )
+    ser.written.clear()
+
+    ctrl.start_alert()
+
+    assert _TOWER_CMD_RED_BLINK in ser.written
+
+
+def test_adafruit_custom_standby_segment():
+    """A red/yellow/green standby choice is honoured on the Adafruit protocol."""
+    from app_utils.gpio import _TOWER_CMD_YEL_ON, _TOWER_CMD_GRN_OFF
+
+    ctrl, ser = _make_tower_ctrl(
+        TowerLightConfig(serial_port="/dev/null", standby_color="yellow")
+    )
+    ser.written.clear()
+
+    ctrl.set_standby()
+
+    assert _TOWER_CMD_YEL_ON in ser.written
+    assert _TOWER_CMD_GRN_OFF in ser.written
+    assert _TOWER_CMD_RED_OFF in ser.written
+
+
+def test_load_tower_light_config_andont_colors(monkeypatch):
+    """Protocol and state colours load from settings with invalid values clamped."""
+    monkeypatch.setattr(gpio, "_GPIO_SETTINGS_AVAILABLE", True)
+
+    fake_settings = {
+        "enabled": True,
+        "serial_port": "/dev/ttyUSB0",
+        "baudrate": 9600,
+        "protocol": "andont",
+        "alert_buzzer": False,
+        "incoming_uses_yellow": True,
+        "blink_on_alert": True,
+        "standby_color": "green",
+        "incoming_color": "yellow",
+        "alert_color": "BLUE",          # case-insensitive
+    }
+
+    import types
+    fake_module = types.ModuleType("app_core.hardware_settings")
+    fake_module.get_tower_light_settings = lambda: fake_settings
+    monkeypatch.setitem(
+        __import__("sys").modules, "app_core.hardware_settings", fake_module
+    )
+
+    result = load_tower_light_config_from_db()
+    assert result is not None
+    assert result.protocol == "andont"
+    assert result.alert_color == "blue"
+
+    fake_settings["protocol"] = "nonsense"
+    fake_settings["alert_color"] = "ultraviolet"
+    result = load_tower_light_config_from_db()
+    assert result.protocol == "adafruit"
+    assert result.alert_color == "red"

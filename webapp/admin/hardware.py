@@ -553,6 +553,24 @@ def update_hardware():
                     except ValueError:
                         pass
 
+        # Tower light protocol / state colours are string enums — clamp to
+        # the values the controller understands so a stale form post cannot
+        # store a colour the wire protocol cannot render.
+        if 'tower_light_protocol' in data and data['tower_light_protocol'] is not None:
+            proto = str(data['tower_light_protocol']).strip().lower()
+            if proto not in ('adafruit', 'andont'):
+                proto = 'adafruit'
+            data['tower_light_protocol'] = proto
+        _tower_colors = ('red', 'yellow', 'green', 'blue', 'cyan', 'magenta', 'white')
+        for color_field, fallback in (
+            ('tower_light_standby_color', 'green'),
+            ('tower_light_incoming_color', 'yellow'),
+            ('tower_light_alert_color', 'red'),
+        ):
+            if color_field in data and data[color_field] is not None:
+                value = str(data[color_field]).strip().lower()
+                data[color_field] = value if value in _tower_colors else fallback
+
         # gps_source is a string enum — clamp to known values so a stale
         # form post or a JSON client cannot store nonsense that the GPS
         # Manager would then refuse to act on.
