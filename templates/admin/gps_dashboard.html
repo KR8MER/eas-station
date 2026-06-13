@@ -1648,7 +1648,7 @@
                 <dl class="gps-skyview-info">
                     <dt data-gps-help="position">Position</dt>   <dd id="g-pos">—</dd>
                     <dt data-gps-help="altitude">Altitude</dt>   <dd id="g-alt">—</dd>
-                    <dt data-gps-help="dop">DOP(H/V/P)</dt> <dd id="g-dop">—</dd>
+                    <dt data-gps-help="dop">DOP(H/V/P/T)</dt> <dd id="g-dop">—</dd>
                     <dt data-gps-help="hardware">Hardware</dt>   <dd id="g-hw">—</dd>
                 </dl>
             </div>
@@ -1923,6 +1923,7 @@
                     <span><span class="swatch" style="background:#58a6ff;"></span><span class="label">H</span> <span id="ts-hdop-now" class="value">—</span></span>
                     <span><span class="swatch" style="background:#f85149;"></span><span class="label">V</span> <span id="ts-vdop-now" class="value">—</span></span>
                     <span><span class="swatch" style="background:#bc8cff;"></span><span class="label">P</span> <span id="ts-pdop-now" class="value">—</span></span>
+                    <span><span class="swatch" style="background:#39c5cf;"></span><span class="label">T</span> <span id="ts-tdop-now" class="value">—</span></span>
                     <span><span class="label">samples</span> <span id="ts-dop-n" class="value">0</span></span>
                 </div>
                 <div class="gps-chart-canvas-wrap">
@@ -4256,10 +4257,11 @@
         // Hero overlay uses the slash form (H / V / P) to match the
         // reference image.
         var heroDop = '—';
-        if (gps && (gps.hdop != null || gps.vdop != null || gps.pdop != null)) {
+        if (gps && (gps.hdop != null || gps.vdop != null || gps.pdop != null || gps.tdop != null)) {
             heroDop = (gps.hdop != null ? gps.hdop : '—') + ' / '
                     + (gps.vdop != null ? gps.vdop : '—') + ' / '
-                    + (gps.pdop != null ? gps.pdop : '—');
+                    + (gps.pdop != null ? gps.pdop : '—') + ' / '
+                    + (gps.tdop != null ? gps.tdop : '—');
         }
         setText('g-dop', heroDop);
 
@@ -4600,6 +4602,7 @@
             ringPush(ts.hdop,  sampleTs, pickNum(s2.hdop));
             ringPush(ts.vdop,  sampleTs, pickNum(s2.vdop));
             ringPush(ts.pdop,  sampleTs, pickNum(s2.pdop));
+            ringPush(ts.tdop,  sampleTs, pickNum(s2.tdop));
             ringPush(ts.snr,   sampleTs, pickNum(s2.avg_snr));
             ringPush(ts.hold,  sampleTs, pickNum(s2.holdover_s));
             ringPush(ts.noise, sampleTs, pickNum(s2.noise_level));
@@ -4977,6 +4980,7 @@
         hdop:  makeRing(),  // gps hdop                      (unitless)
         vdop:  makeRing(),  // gps vdop                      (unitless)
         pdop:  makeRing(),  // gps pdop                      (unitless)
+        tdop:  makeRing(),  // gps tdop (gpsd mode only)     (unitless)
         snr:   makeRing(),  // average SNR across in-view    (dBHz)
         hold:  makeRing(),  // gps holdover_s                (seconds)
         noise: makeRing(),  // UBX-MON-HW noise_level        (raw 16-bit)
@@ -5030,6 +5034,7 @@
         ringPush(ts.hdop,  now, typeof g.hdop === 'number' ? g.hdop : null);
         ringPush(ts.vdop,  now, typeof g.vdop === 'number' ? g.vdop : null);
         ringPush(ts.pdop,  now, typeof g.pdop === 'number' ? g.pdop : null);
+        ringPush(ts.tdop,  now, typeof g.tdop === 'number' ? g.tdop : null);
 
         // Stability-trend slices from the live ADEV payload.
         var adevLive = g.allan_deviation || null;
@@ -5138,15 +5143,17 @@
         ], { emptyEl: 'ts-freq-empty', includeZero: true, formatter: fmtPpmTight });
 
         // DOP history — H/V/P (unitless).  Lower is better.
-        var hd = ringStats(ts.hdop), vd = ringStats(ts.vdop), pd = ringStats(ts.pdop);
+        var hd = ringStats(ts.hdop), vd = ringStats(ts.vdop), pd = ringStats(ts.pdop), td = ringStats(ts.tdop);
         setText('ts-hdop-now', fmtUnitlessTight(hd.last));
         setText('ts-vdop-now', fmtUnitlessTight(vd.last));
         setText('ts-pdop-now', fmtUnitlessTight(pd.last));
-        setText('ts-dop-n', Math.max(hd.count, vd.count, pd.count));
+        setText('ts-tdop-now', fmtUnitlessTight(td.last));
+        setText('ts-dop-n', Math.max(hd.count, vd.count, pd.count, td.count));
         drawSparkline('ts-dop-canvas', [
             { buffer: ts.hdop, color: '#58a6ff', label: 'hdop' },
             { buffer: ts.vdop, color: '#f85149', label: 'vdop' },
-            { buffer: ts.pdop, color: '#bc8cff', label: 'pdop' }
+            { buffer: ts.pdop, color: '#bc8cff', label: 'pdop' },
+            { buffer: ts.tdop, color: '#39c5cf', label: 'tdop' }
         ], { emptyEl: 'ts-dop-empty', includeZero: true, formatter: fmtUnitlessTight });
 
         // SNR history — average dBHz across satellites in view.
@@ -6908,6 +6915,7 @@
         'hdop':  'Horizontal Dilution of Precision',
         'vdop':  'Vertical Dilution of Precision',
         'pdop':  'Position (3-D) Dilution of Precision',
+        'tdop':  'Time Dilution of Precision',
         'snr':   'Signal-to-Noise Ratio',
         'pvt':   'Position, Velocity, Time',
         'ntp':   'Network Time Protocol',
@@ -7223,10 +7231,10 @@
             ]
         },
         'dop': {
-            title: 'DOP (H / V / P)',
-            acronyms: 'dop hdop vdop pdop',
-            means: 'Dilution Of Precision — a unit-less number describing how well the visible satellites are spread across the sky. H = horizontal, V = vertical, P = combined position.',
-            matters: 'Even with strong signals, if the satellites are bunched together the fix is geometrically weak. Lower is better.',
+            title: 'DOP (H / V / P / T)',
+            acronyms: 'dop hdop vdop pdop tdop',
+            means: 'Dilution Of Precision — a unit-less number describing how well the visible satellites are spread across the sky. H = horizontal, V = vertical, P = combined position, T = time. TDOP is the term that bounds timing accuracy and only appears in gpsd mode (NMEA GSA omits it).',
+            matters: 'Even with strong signals, if the satellites are bunched together the fix is geometrically weak. Lower is better. TDOP is the DOP to watch when the receiver is disciplining the clock for PPS / chrony.',
             ranges: [
                 { level: 'excellent',  range: '< 2' },
                 { level: 'good',       range: '2 – 5' },
@@ -7881,9 +7889,9 @@
         },
         'dop-history': {
             title: 'DOP History',
-            acronyms: 'dop hdop vdop pdop',
-            means: 'Time-series of horizontal / vertical / position Dilution of Precision. Lower is better — measures satellite geometry, not signal strength.',
-            matters: 'Catches geometry-induced fix wobble even when SNR is fine.',
+            acronyms: 'dop hdop vdop pdop tdop',
+            means: 'Time-series of horizontal / vertical / position / time Dilution of Precision. Lower is better — measures satellite geometry, not signal strength. TDOP (time) only plots in gpsd mode.',
+            matters: 'Catches geometry-induced fix wobble even when SNR is fine. A rising TDOP warns that clock/PPS accuracy is degrading before the position fix looks bad.',
             ranges: [
                 { level: 'excellent',  range: '< 2' },
                 { level: 'good',       range: '2 – 5' },

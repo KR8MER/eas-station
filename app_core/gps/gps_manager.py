@@ -88,7 +88,16 @@ REDIS_TTL = 15
 # No TTL: it is overwritten on every 3D fix and is meaningless to expire.
 REDIS_LAST_3D_KEY = "gps:last_3d_fix_at"
 
-# NMEA fix quality codes
+# NMEA fix quality codes.
+#
+# Gotcha on u-blox timing receivers (e.g. NEO-M8T): leaving SBAS enabled
+# makes gpsd misreport a genuine TIME/survey-in fix as a DGPS fix (code 2)
+# rather than a PPS fix (code 3).  If a fixed-location station that should
+# be reporting "pps_fix" persistently shows "dgps_fix", disable SBAS on the
+# receiver (GPS+Galileo+GLONASS, SBAS off) — see the upstream u-blox
+# configuration notes.  We map the code at face value here; the diagnostic
+# is documented so the dashboard's fix-quality readout isn't mistaken for a
+# fault.
 _FIX_QUALITY = {
     0: "no_fix",
     1: "gps_fix",
@@ -1241,6 +1250,12 @@ class GPSManager:
             "fix_mode": None,
             "pdop": None,
             "vdop": None,
+            # TDOP (Time Dilution of Precision).  Only populated in gpsd
+            # mode — the NMEA GSA sentence carries P/H/V DOP but not TDOP,
+            # so it stays None on direct-NMEA receivers.  It is the DOP term
+            # that bounds *timing* accuracy, which is what matters for the
+            # PPS/chrony discipline an EAS station relies on.
+            "tdop": None,
             # PPS pulse tracking
             "pps_last_pulse_at": None,
             "pps_pulse_count": 0,
@@ -2505,7 +2520,11 @@ class GPSManager:
             self._fix["satellites_in_view"] = in_view
             self._fix["active_satellite_prns"] = used_prns
             self._fix["satellites"] = len(used_prns)
-            for src, dst in (("hdop", "hdop"), ("vdop", "vdop"), ("pdop", "pdop")):
+            # gpsd's SKY object carries tdop alongside hdop/vdop/pdop; the
+            # direct-NMEA path can't (GSA omits it), so this is the only
+            # place tdop becomes available.
+            for src, dst in (("hdop", "hdop"), ("vdop", "vdop"),
+                             ("pdop", "pdop"), ("tdop", "tdop")):
                 v = obj.get(src)
                 if isinstance(v, (int, float)):
                     self._fix[dst] = float(v)

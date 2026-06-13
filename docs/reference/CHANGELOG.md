@@ -8,6 +8,34 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.88.0] - 2026-06-13 - GPS TDOP (timing geometry)
+
+Surfaces TDOP — the Dilution of Precision term that bounds *timing*
+accuracy — across the GPS & Time dashboard, since that is the DOP that
+matters most for the PPS / chrony discipline an EAS station relies on.
+Idea borrowed from the ChroGPS Dash stratum-1 project, which plots all
+four DOP terms together.
+
+### Added
+- **TDOP capture** in `app_core/gps/gps_manager.py` — the gpsd `SKY` handler
+  now reads `tdop` alongside `hdop`/`vdop`/`pdop` and publishes it on the
+  GPS status dict. (NMEA GSA omits TDOP, so it stays `None` on direct-NMEA
+  receivers and only populates in gpsd mode — surfaced honestly.)
+- **TDOP trend sampling** in `services/gps/trends.py` — added to the per-sample
+  row and the rollup averaging field list so the tiered archive keeps TDOP
+  history alongside the other DOP terms.
+- **TDOP on the dashboard** (`templates/admin/gps_dashboard.html`) — the hero
+  readout is now `DOP(H/V/P/T)`, the DOP History sparkline gains a fourth
+  (cyan) TDOP series with its own min/now/max badge, and the DOP help cards
+  explain why TDOP is the term to watch for clock accuracy.
+
+### Changed
+- **Fix-quality gotcha documented** — added a note on the `_FIX_QUALITY` map
+  in `app_core/gps/gps_manager.py` that u-blox timing receivers (e.g.
+  NEO-M8T) with SBAS enabled can make gpsd misreport a genuine TIME/PPS fix
+  as a DGPS fix, so the dashboard's fix-quality readout isn't mistaken for a
+  fault. (Insight from the ChroGPS Dash `configure_m8t.py` configuration.)
+
 ## [2.87.0] - 2026-06-13 - Animated header & navbar polish
 
 Built on the previous header refresh with a round of motion and "ops-console"
