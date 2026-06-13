@@ -8,6 +8,28 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.85.2] - 2026-06-13 - Fix broken "Resend" button and add labels to audio-archive action buttons
+
+The **Resend** button on the Audio Archive (`/audio`), audio detail, and alert
+detail pages never worked: it POSTed to `/admin/eas_messages/<id>/resend`, which
+does not exist (404), so clicking it only ever showed "Failed to resend". The
+real endpoint lives on the `eas` blueprint at `/eas/messages/<id>/resend`. The
+icon-only action buttons on those pages were also hard to interpret at a glance.
+
+### Fixed
+- **Resend button POSTed to a non-existent URL.** All three templates
+  (`templates/audio_history.html`, `templates/audio_detail.html`,
+  `templates/alert_detail.html`) now call the correct
+  `/eas/messages/<id>/resend` endpoint, so re-broadcasting a stored EAS message
+  works from the UI.
+
+### Changed
+- **Action buttons are now labelled.** The previously icon-only buttons in the
+  Audio Archive and alert-detail broadcast tables now show text labels
+  (Play, Summary, Details, EOM Burst, "Resend on Air") with clearer tooltips,
+  stacked vertically so each action is self-explanatory. The detail-page Resend
+  button is relabelled "Resend on Air".
+
 ## [2.85.1] - 2026-06-13 - Fix air chain / overlay / tower light held hostage after a broadcast
 
 The air chain, the on-air overlay popup, and the tower light could all stay
