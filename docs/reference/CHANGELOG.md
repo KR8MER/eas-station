@@ -12,26 +12,27 @@ tracks releases under the 2.x series.
 
 The navbar status "stack light" was a four-lens widget (red / amber / green /
 **blue**) that lit several lenses at once — a layout the physical hardware can
-never show. The real indicator is an Adafruit #5125 USB Tri-Color Tower Light
-(Red top / Amber middle / Green bottom) driven by
-`services/gpio/alert_indicators.py`, which resolves to **one** state at a time.
+never show. The real indicator is an **ANDONT 7-color USB stack light**: a
+single lamp that shows **one colour at a time**, driven by
+`services/gpio/alert_indicators.py`, which resolves to one state at a time.
 The header widget now mirrors that hardware exactly, and the navbar/header got
 a round of visual polish.
 
 ### Changed
-- **Navbar stack light now matches the physical Adafruit #5125 tower.** Replaced
+- **Navbar stack light now matches the physical ANDONT 7-color light.** Replaced
   the 4-lens (incl. blue) housing — which lit red/amber/green/blue
-  simultaneously — with a realistic three-segment tri-color tower (black domed
-  cap, stacked Red/Amber/Green lenses, weighted base). The client-side
-  controller in `templates/components/navbar.html` now mirrors
+  simultaneously — with a realistic single-lamp tower (black domed cap, one
+  translucent lamp, weighted base) that glows one colour at a time from the
+  ANDONT palette (off/green/blue/red/cyan/yellow/magenta/white). The
+  client-side controller in `templates/components/navbar.html` mirrors
   `resolve_tower_state()`'s single-resolved-state priority
-  (`fault > on-air/alert > test > incoming/degraded > standby`): only the one
-  matching lens lights, instead of several at once. Routine tests
-  (`RWT/RMT/NPT/DMO`) render as a flashing **green** lens (the hardware's test
-  fallback colour) rather than red, and a buzzer cue badge pulses when the
-  resolved state would sound the hardware buzzer. The retired blue "active
-  alert" lens is folded into the amber **incoming** state, matching the
-  hardware's amber incoming colour.
+  (`fault > on-air/alert > test > incoming/degraded > standby`) and the GPIO
+  guide's default state→colour table: **fault = magenta (flashing)**,
+  **test (RWT/RMT/NPT/DMO) = cyan (flashing)**, **active alert = red (flashing
+  + buzzer)**, **incoming/degraded = yellow**, **standby = green (steady)**. A
+  buzzer cue badge pulses only during a real active alert, matching the
+  hardware (`alert_buzzer`). The retired blue "active alert" lens is folded
+  into the yellow incoming state.
 
 ### Added
 - **Header / navbar visual polish.** Brand wordmark gains a soft drop shadow
