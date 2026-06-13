@@ -8,6 +8,39 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.86.0] - 2026-06-13 - Hardware-faithful navbar stack light + header polish
+
+The navbar status "stack light" was a four-lens widget (red / amber / green /
+**blue**) that lit several lenses at once — a layout the physical hardware can
+never show. The real indicator is an Adafruit #5125 USB Tri-Color Tower Light
+(Red top / Amber middle / Green bottom) driven by
+`services/gpio/alert_indicators.py`, which resolves to **one** state at a time.
+The header widget now mirrors that hardware exactly, and the navbar/header got
+a round of visual polish.
+
+### Changed
+- **Navbar stack light now matches the physical Adafruit #5125 tower.** Replaced
+  the 4-lens (incl. blue) housing — which lit red/amber/green/blue
+  simultaneously — with a realistic three-segment tri-color tower (black domed
+  cap, stacked Red/Amber/Green lenses, weighted base). The client-side
+  controller in `templates/components/navbar.html` now mirrors
+  `resolve_tower_state()`'s single-resolved-state priority
+  (`fault > on-air/alert > test > incoming/degraded > standby`): only the one
+  matching lens lights, instead of several at once. Routine tests
+  (`RWT/RMT/NPT/DMO`) render as a flashing **green** lens (the hardware's test
+  fallback colour) rather than red, and a buzzer cue badge pulses when the
+  resolved state would sound the hardware buzzer. The retired blue "active
+  alert" lens is folded into the amber **incoming** state, matching the
+  hardware's amber incoming colour.
+
+### Added
+- **Header / navbar visual polish.** Brand wordmark gains a soft drop shadow
+  with a hover glow, the live status indicators (system health + WebSocket) are
+  grouped into a cohesive cluster with a hover lift, the navbar gains a crisp
+  glass top-highlight, and dropdown menus get softer/deeper shadows, rounded
+  items with a subtle hover slide, and tightened section headers. All scoped to
+  the navbar and theme-agnostic (white/rgba over the themed gradient).
+
 ## [2.85.5] - 2026-06-13 - Resend on Air now actually emits audio out the air-chain
 
 The 2.85.4 fix made "Resend on Air" key the GPIO relay and show the countdown
