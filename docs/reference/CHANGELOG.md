@@ -8,6 +8,41 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.85.4] - 2026-06-13 - Stop the "Resend on Air" button from hanging the whole site
+
+Resending a stored warning from the Audio Archive (`/audio`), audio detail, or
+alert detail pages worked, but it locked up the entire web UI for several
+minutes — every other page timed out until the broadcast finished — and the GPIO
+relay was held for the wrong length of time (observed 303 s and 31 s for a
+79.7 s alert) instead of the actual composite-audio duration.
+
+### Fixed
+- **Resending an alert froze the web UI for minutes.** The resend endpoint
+  (`/eas/messages/<id>/resend`) ran GPIO activation, audio playout, and the
+  full-length air-chain hold *inline* in the gunicorn **gevent** worker.
+  Driving GPIO there instantiates the `lgpio` backend, whose native
+  notification thread stalls the gevent hub for the whole alert (see
+  `app_utils/gpio.py`), so all in-flight requests on that worker blocked and
+  gunicorn's 300 s `--timeout` then killed the worker mid-broadcast. The
+  playout is now delegated to a detached helper process
+  (`scripts/resend_eas_broadcast.py`), matching how every other broadcast in
+  the system already runs outside the web workers; the request returns `202`
+  immediately and the web UI stays responsive. The live countdown overlay is
+  unaffected because it is driven by the Redis broadcast-state marker the
+  helper sets and clears.
+- **GPIO relay duration did not match the alert length.** Because the worker
+  was frozen, the relay lingered until the 300 s GPIO watchdog (or the
+  gunicorn timeout) fired rather than dropping at end-of-message. The helper
+  now anchors the hold window to the GPIO activation and releases the relay
+  (force, ignoring per-pin min-hold) exactly when the composite-audio duration
+  has elapsed, so the relay duration matches the broadcast length.
+
+### Added
+- **Guard against stacking broadcasts.** The resend endpoint now returns `409`
+  if a broadcast is already on the air, so a double-click — or a forwarded
+  alert already in flight — cannot key the same relays from two processes at
+  once. The three resend buttons surface the server's status message via toast.
+
 ## [2.85.3] - 2026-06-13 - Stop requiring a reboot for GPS to re-lock after update.sh
 
 ### Fixed

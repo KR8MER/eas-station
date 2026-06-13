@@ -184,193 +184,71 @@ def register_message_routes(bp, logger) -> None:
         and activates GPIO relays, exactly as if the alert were being sent for
         the first time.  The original EASMessage record is not modified; a new
         SystemLog entry is written instead.
+
+        The actual playout (GPIO activation, audio playback, and the hold for
+        the full composite duration) is delegated to a detached helper process
+        (``scripts/resend_eas_broadcast.py``) so this request returns at once.
+        Doing the work inline would key GPIO from inside a gunicorn *gevent*
+        worker: instantiating the ``lgpio`` backend there stalls the gevent
+        hub for the whole alert (see ``app_utils/gpio.py``), which made the
+        entire site unresponsive for minutes and let gunicorn's 300 s
+        ``--timeout`` kill the worker mid-broadcast.  Every other broadcast in
+        the system already runs in a non-gevent service process; the resend
+        now does too.  Browsers still get the live countdown overlay because
+        it is driven by the Redis broadcast-state marker the helper sets and
+        clears (see ``set_broadcast_active``).
         """
         import os
         import subprocess
-        import tempfile
-        import time
+        import sys
 
-        from app_utils.eas import set_broadcast_active, clear_broadcast_active, _wav_duration_seconds
-        from app_utils.gpio import (
-            GPIOController,
-            GPIOActivationType,
-            GPIOBehaviorManager,
-            load_gpio_behavior_matrix_from_db,
-            load_gpio_pin_configs_from_db,
-        )
+        from app_utils.eas import get_broadcast_state
 
         message = EASMessage.query.get_or_404(message_id)
 
         if not message.audio_data:
             return jsonify({'error': 'No audio data stored for this message — cannot resend.'}), 422
 
-        audio_player_cmd_raw = current_app.config.get('AUDIO_PLAYER_CMD')
-        if isinstance(audio_player_cmd_raw, str):
-            audio_player_cmd = audio_player_cmd_raw.split() if audio_player_cmd_raw.strip() else None
-        elif isinstance(audio_player_cmd_raw, list):
-            audio_player_cmd = audio_player_cmd_raw or None
-        else:
-            audio_player_cmd = None
-
         metadata = message.metadata_payload or {}
         event_code = metadata.get('event_code') or ''
-        # Prefer the actual WAV length so we hold GPIO for the right window
-        # even when the audio player exits early (no audio device, etc.).
-        actual_audio_duration = _wav_duration_seconds(message.audio_data) if message.audio_data else 0.0
-        metadata_duration = metadata.get('playback_duration_seconds') or metadata.get('duration_seconds') or 0.0
-        playback_duration = actual_audio_duration or float(metadata_duration) or 60.0
 
-        from app_utils.event_codes import EVENT_CODE_REGISTRY as _ECR
-        _ei = _ECR.get(event_code, {})
-        _elabel = (_ei.get('name', event_code) if isinstance(_ei, dict) else event_code) or 'EAS Alert'
+        # Refuse to stack a second broadcast on top of one already on the air.
+        # The air-chain overlay tells operators not to do this, but guard the
+        # endpoint too so a double-click — or a forwarded alert already in
+        # flight — cannot key the same relays from two processes at once.
+        if get_broadcast_state().get('active'):
+            return jsonify({
+                'error': 'A broadcast is already on the air. Wait for it to finish before resending.',
+            }), 409
 
-        gpio_controller = None
-        gpio_behavior_manager = None
-        activated_any = False
-        manager_handled = False
-        tmp_file = None
-        audio_played = False
-
-        try:
-            # Hardware settings (GPIO pins + behavior matrix) live in the
-            # database and are loaded via the same helpers the live broadcast
-            # path uses, so a resend keys exactly the same relays as a fresh
-            # alert.  Reserved-pin filtering honours the OLED setting.
-            try:
-                from app_core.hardware_settings import get_gpio_settings, get_oled_settings
-                gpio_enabled = get_gpio_settings().get('enabled', False)
-                oled_enabled = get_oled_settings().get('enabled', False)
-            except Exception:
-                gpio_enabled = False
-                oled_enabled = False
-
-            gpio_logger = logger.getChild('gpio')
-            gpio_configs = (
-                load_gpio_pin_configs_from_db(gpio_logger, oled_enabled=oled_enabled)
-                if gpio_enabled
-                else []
-            )
-            if gpio_configs:
-                try:
-                    controller = GPIOController(db_session=db.session, logger=gpio_logger)
-                    for cfg in gpio_configs:
-                        controller.add_pin(cfg)
-                    gpio_controller = controller
-                    behavior_matrix = load_gpio_behavior_matrix_from_db(
-                        gpio_logger, oled_enabled=oled_enabled
-                    )
-                    gpio_behavior_manager = GPIOBehaviorManager(
-                        controller=controller,
-                        pin_configs=gpio_configs,
-                        behavior_matrix=behavior_matrix,
-                        logger=gpio_logger.getChild('behavior'),
-                    )
-                    controller.behavior_manager = gpio_behavior_manager
-                except Exception as exc:
-                    logger.warning('Resend GPIO init failed: %s', exc)
-
-            tmp_file = tempfile.NamedTemporaryFile(suffix='.wav', prefix='eas_resend_', delete=False)
-            tmp_file.write(message.audio_data)
-            tmp_file.flush()
-            tmp_path = tmp_file.name
-            tmp_file.close()
-
-            # Activate GPIO
-            if gpio_controller:
-                try:
-                    reason = f'Resend of EASMessage #{message_id} ({event_code or "unknown"})'
-                    if gpio_behavior_manager:
-                        gpio_behavior_manager.trigger_incoming_alert(
-                            alert_id=str(message_id), event_code=event_code,
-                        )
-                        manager_handled = gpio_behavior_manager.start_alert(
-                            alert_id=str(message_id), event_code=event_code, reason=reason,
-                        )
-                        activated_any = manager_handled
-                    if not activated_any:
-                        results = gpio_controller.activate_all(
-                            activation_type=GPIOActivationType.AUTOMATIC,
-                            operator=getattr(g.current_user, 'username', None),
-                            alert_id=str(message_id),
-                            reason=reason,
-                        )
-                        activated_any = any(results.values())
-                except Exception as exc:
-                    logger.warning('Resend GPIO activation failed: %s', exc)
-
-            set_broadcast_active(
-                event_code=event_code,
-                label=_elabel,
-                duration_seconds=playback_duration,
-                source='resend',
-            )
-
-            audio_played = False
-            # Hold the airchain for the full composite duration regardless of
-            # whether the player actually blocks (e.g. no audio device on this
-            # host) — otherwise GPIO drops as soon as the player exits.
-            playout_start = time.monotonic()
-            if audio_player_cmd:
-                try:
-                    command = list(audio_player_cmd) + [tmp_path]
-                    subprocess.run(command, check=False, timeout=float(playback_duration) + 30)
-                    audio_played = True
-                except subprocess.TimeoutExpired:
-                    logger.warning('Resend audio playback timed out for message %s', message_id)
-                except Exception as exc:
-                    logger.warning('Resend audio playback failed: %s', exc)
-
-            remaining_playout = float(playback_duration) - (time.monotonic() - playout_start)
-            if remaining_playout > 0:
-                time.sleep(remaining_playout)
-
-        finally:
-            if gpio_controller and activated_any:
-                try:
-                    if manager_handled and gpio_behavior_manager:
-                        gpio_behavior_manager.end_alert(
-                            alert_id=str(message_id), event_code=event_code,
-                        )
-                    else:
-                        # force=True: resend playout is finished, drop the air
-                        # chain immediately rather than waiting out each pin's
-                        # min-hold (hold_seconds) with the relay still keyed.
-                        gpio_controller.deactivate_all(force=True)
-                except Exception as exc:
-                    logger.warning('Resend GPIO release failed: %s', exc)
-            clear_broadcast_active()
-            if tmp_file is not None:
-                try:
-                    os.unlink(tmp_file.name)
-                except OSError:
-                    pass
+        username = getattr(g.current_user, 'username', None)
+        script_path = os.path.join(current_app.root_path, 'scripts', 'resend_eas_broadcast.py')
+        command = [sys.executable, script_path, '--message-id', str(message_id)]
+        if username:
+            command += ['--operator', username]
 
         try:
-            db.session.add(
-                SystemLog(
-                    level='INFO',
-                    message='EAS message resent',
-                    module='eas',
-                    details={
-                        'message_id': message_id,
-                        'event_code': event_code,
-                        'gpio_activated': activated_any,
-                        'audio_played': audio_played if audio_player_cmd else None,
-                        'resent_by': getattr(g.current_user, 'username', None),
-                    },
-                )
+            # start_new_session detaches the child so it survives this worker
+            # and is never reaped/killed when the request greenlet ends.
+            subprocess.Popen(  # noqa: S603 - fixed argv, no shell
+                command,
+                cwd=current_app.root_path,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
             )
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
+        except Exception as exc:
+            logger.error('Failed to launch resend worker for message %s: %s', message_id, exc)
+            return jsonify({'error': 'Unable to start re-transmission.'}), 500
+
+        logger.info('Re-transmission started for EASMessage #%s by %s', message_id, username or 'system')
 
         return jsonify({
-            'message': f'EAS message #{message_id} resent.',
+            'message': f'EAS message #{message_id} re-transmission started.',
             'id': message_id,
             'event_code': event_code,
-            'gpio_activated': activated_any,
-            'audio_played': audio_played if audio_player_cmd else False,
-        })
+            'status': 'started',
+        }), 202
 
 
 def _static_text_url(filename: Optional[str]) -> Optional[str]:
