@@ -8,6 +8,41 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.85.5] - 2026-06-13 - Resend on Air now actually emits audio out the air-chain
+
+The 2.85.4 fix made "Resend on Air" key the GPIO relay and show the countdown
+overlay from a detached worker, but it never re-injected the stored audio into
+the live Icecast stream — so listeners heard silence unless an
+`AUDIO_PLAYER_CMD` local player happened to be configured (it is unset on every
+deployment). A live alert, by contrast, pushes its composite audio into the
+broadcast queues via `eas_stream_injector.inject_eas_audio`. A resend now does
+the same, so a re-transmitted warning sounds exactly like a fresh one.
+
+### Fixed
+- **Resending an alert produced no audio on the Icecast air-chain.** The resend
+  helper (`scripts/resend_eas_broadcast.py`) runs in a detached subprocess with
+  no `AudioIngestController`, so it cannot reach the audio-service's in-memory
+  `BroadcastQueue` objects directly. It now dispatches a new `inject_eas_audio`
+  command over the existing Redis audio-command channel; the audio-service
+  process — which owns the controller and the running `IcecastStreamer` threads
+  — loads the stored WAV for that message id from the database and injects it
+  via `eas_stream_injector.inject_eas_audio`, mirroring the live-alert path
+  (`EASBroadcaster.handle_alert`). The message id (not the raw audio) crosses
+  Redis because every service runs with `PrivateTmp=true`, so a shared
+  temp-file path would not be visible across processes. Injection failures
+  (Redis down, no running sources) are non-fatal: GPIO is still keyed and the
+  air-chain is still held for the full composite duration. The resend's
+  `SystemLog` entry now records `audio_injected` alongside `gpio_activated` and
+  `audio_played`.
+
+### Added
+- **`inject_eas_audio` Redis command** (`app_core/audio/redis_commands.py`):
+  `AudioCommandPublisher.inject_eas_audio(message_id)` and the matching
+  `AudioCommandSubscriber` handler, which loads the message audio inside an app
+  context and reports whether any source queue received it. The subscriber now
+  accepts the Flask `app` (passed from `eas_monitoring_service.py`) for database
+  access. Regression coverage added in `tests/test_eas_resend_injection.py`.
+
 ## [2.85.4] - 2026-06-13 - Stop the "Resend on Air" button from hanging the whole site
 
 Resending a stored warning from the Audio Archive (`/audio`), audio detail, or

@@ -1242,7 +1242,7 @@ def main():
 
             command_subscriber = AudioCommandSubscriber(
                 audio_controller, auto_streaming, eas_monitor,
-                archiver_registry=_archivers,
+                archiver_registry=_archivers, app=app,
             )
 
             # Start subscriber in background thread
