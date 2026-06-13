@@ -8,6 +8,22 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.89.0] - 2026-06-13 - Feature the Ko-fi link prominently
+
+### Changed
+- **Ko-fi support link is now featured prominently instead of being buried
+  on the About page.**
+  - **Footer** (`templates/base.html`): added a styled "Support on Ko-fi"
+    button to the footer brand column on every page, beneath the copyright
+    line. New `.footer-kofi-btn` styles in `static/css/styles.css` use the
+    Ko-fi brand color (`#29abe0`), the vendored `static/img/kofi.svg` cup
+    mark (no external asset fetch), and theme-aware shadow variables.
+  - **README**: added a Ko-fi badge to the badge block at the top and a
+    dedicated "❤️ Support the Project" section linking to
+    [ko-fi.com/easstation](https://ko-fi.com/easstation) and the
+    repository Sponsor button.
+  - The existing "Support the Project" card on the About page is unchanged.
+
 ## [2.88.1] - 2026-06-13 - Font-independent footer app icon
 
 ### Fixed

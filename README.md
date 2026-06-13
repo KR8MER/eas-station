@@ -2,7 +2,8 @@
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue?style=flat-square&logo=gnu&logoColor=white)](https://www.gnu.org/licenses/agpl-3.0)
 [![Commercial License](https://img.shields.io/badge/License-Commercial-green?style=flat-square)](LICENSE-COMMERCIAL)
-[![Version](https://img.shields.io/badge/Version-2.88.1-blueviolet?style=flat-square)](docs/reference/CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-2.89.0-blueviolet?style=flat-square)](docs/reference/CHANGELOG.md)
+[![Support on Ko-fi](https://img.shields.io/badge/Support%20on-Ko--fi-29abe0?style=flat-square&logo=ko-fi&logoColor=white)](https://ko-fi.com/easstation)
 [![Raspberry Pi](https://img.shields.io/badge/Raspberry%20Pi-Compatible-C51A4A?style=flat-square&logo=raspberrypi&logoColor=white)](https://www.raspberrypi.com/)
 [![Python](https://img.shields.io/badge/Python-3.13-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/Flask-3.1.2-000000?style=flat-square&logo=flask&logoColor=white)](https://flask.palletsprojects.com/)
@@ -348,6 +349,16 @@ python app.py
 ```
 
 See the [Contributing Guide](docs/process/CONTRIBUTING.md) and the [Code Standards](docs/development/AGENTS.md). When bumping any dependency in `requirements.txt`, also update the matching badge above and the live footer partial at `templates/partials/tech_stack_badges.html` — the drift guard `tests/test_tech_stack_badges.py` will fail CI otherwise.
+
+---
+
+## ❤️ Support the Project
+
+EAS Station™ is free and open source, built and maintained in the open. If the platform is useful to you — in the lab, the shack, or the classroom — a one-time or monthly donation keeps development going.
+
+[![Support EAS Station on Ko-fi](https://img.shields.io/badge/Support%20EAS%20Station%20on-Ko--fi-29abe0?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/easstation)
+
+👉 **[ko-fi.com/easstation](https://ko-fi.com/easstation)** — or use the **Sponsor** button at the top of the repository.
 
 ---
 

@@ -2431,6 +2431,36 @@ footer a:hover {
     margin-top: 1rem;
 }
 
+/* Footer Ko-fi support button */
+.footer-kofi-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+    padding: 0.5rem 1.1rem;
+    background-color: #29abe0;
+    color: #fff !important;
+    font-weight: 700;
+    font-size: 0.9rem;
+    border-radius: 2rem;
+    text-decoration: none;
+    box-shadow: 0 2px 6px var(--shadow-color);
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.footer-kofi-btn:hover,
+.footer-kofi-btn:focus {
+    background-color: #1f93c4;
+    color: #fff !important;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px var(--shadow-color);
+}
+
+.footer-kofi-btn img {
+    height: 1.3em;
+    width: auto;
+}
+
 /* Footer columns */
 .footer-column {
     text-align: left;
