@@ -779,10 +779,13 @@
                     </div>
                 </div>
                 <p class="mb-3">EAS Station is built and maintained as open-source software. If the platform is useful to you &mdash; in the lab, the shack, or the classroom &mdash; you can support continued development with a one-time or monthly donation on Ko-fi.</p>
-                <a href="https://ko-fi.com/easstation" target="_blank" rel="noopener" class="btn fw-bold d-inline-flex align-items-center gap-2" style="background-color: #29abe0; color: #fff; border-radius: 2rem; padding: 0.5rem 1.25rem;">
-                    <img src="{{ url_for('static', filename='img/kofi.svg') }}" alt="" style="height: 1.4em;">
-                    Support EAS Station on Ko-fi
-                </a>
+                <div class="d-flex flex-wrap align-items-center gap-3">
+                    <a href="https://ko-fi.com/easstation" target="_blank" rel="noopener" class="btn fw-bold d-inline-flex align-items-center gap-2" style="background-color: #29abe0; color: #fff; border-radius: 2rem; padding: 0.5rem 1.25rem;">
+                        <img src="{{ url_for('static', filename='img/kofi.svg') }}" alt="" style="height: 1.4em; filter: brightness(0) invert(1);">
+                        Support EAS Station on Ko-fi
+                    </a>
+                    <a href="{{ url_for('support_page') }}">More ways to help &rarr;</a>
+                </div>
             </section>
 
             <!-- Resources -->

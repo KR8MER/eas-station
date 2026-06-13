@@ -2459,6 +2459,10 @@ footer a:hover {
 .footer-kofi-btn img {
     height: 1.3em;
     width: auto;
+    /* Render the cup as a clean white monochrome mark so it stays visible
+       on the Ko-fi blue button background (matches Ko-fi's own button style;
+       the source kofi.svg uses the same blue for its strokes/saucer). */
+    filter: brightness(0) invert(1);
 }
 
 /* Footer columns */

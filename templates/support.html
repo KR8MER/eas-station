@@ -1,0 +1,109 @@
+{% extends 'base.html' %}
+{% block title %}Support the Project | EAS Station™{% endblock %}
+{% block extra_css %}
+{# Reuses the shared "EAS / about-*" visual system in static/css/styles.css.
+   Only the Ko-fi specific accents are defined inline here. #}
+<style>
+    .support-cta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        align-items: center;
+        margin-top: 1.25rem;
+    }
+    .support-kofi-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.6rem;
+        padding: 0.75rem 1.6rem;
+        background-color: #29abe0;
+        color: #fff !important;
+        font-weight: 700;
+        font-size: 1.05rem;
+        border-radius: 2rem;
+        text-decoration: none;
+        box-shadow: 0 3px 10px var(--shadow-color);
+        transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+    }
+    .support-kofi-btn:hover,
+    .support-kofi-btn:focus {
+        background-color: #1f93c4;
+        color: #fff !important;
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px var(--shadow-color);
+    }
+    /* White monochrome cup so the mark stays visible on the Ko-fi blue
+       button (matches Ko-fi's own button style). */
+    .support-kofi-btn img { height: 1.5em; width: auto; filter: brightness(0) invert(1); }
+    .support-funds {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        display: grid;
+        gap: 0.75rem;
+    }
+    .support-funds li {
+        display: flex;
+        gap: 0.75rem;
+        align-items: flex-start;
+    }
+    .support-funds .fa-fw { color: var(--primary-color); margin-top: 0.2rem; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="about-page container py-4">
+    <div class="row justify-content-center">
+        <div class="col-12 col-lg-10 col-xl-9">
+            <!-- Hero -->
+            <section class="about-hero">
+                <div class="about-hero-inner">
+                    {% with logo_classes='about-hero-logo', logo_style='' %}
+                        {% include 'partials/logo_wordmark.html' %}
+                    {% endwith %}
+                    <h1 class="about-hero-title">Support EAS Station™</h1>
+                    <p class="about-hero-lead">EAS Station™ is free and open-source software, built and maintained in the open. If it&rsquo;s useful to you &mdash; in the lab, the shack, or the classroom &mdash; a one-time or monthly contribution keeps development moving.</p>
+                    <div class="support-cta">
+                        <a href="https://ko-fi.com/easstation" target="_blank" rel="noopener"
+                           class="support-kofi-btn" aria-label="Support EAS Station on Ko-fi">
+                            <img src="{{ url_for('static', filename='img/kofi.svg') }}" alt="">
+                            Support on Ko-fi
+                        </a>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Where it goes -->
+            <section class="about-card">
+                <div class="about-section-head">
+                    <span class="about-section-icon ico-primary"><i class="fas fa-hand-holding-heart"></i></span>
+                    <div>
+                        <h2 class="about-section-title">Where Your Support Goes</h2>
+                        <p class="about-section-sub">Donations fund the parts of the project that aren&rsquo;t free.</p>
+                    </div>
+                </div>
+                <ul class="support-funds">
+                    <li><i class="fas fa-microchip fa-fw"></i><span><strong>Hardware for testing.</strong> Raspberry Pi boards, SDR receivers, GPIO and display peripherals used to validate releases on real bare metal.</span></li>
+                    <li><i class="fas fa-code fa-fw"></i><span><strong>Development time.</strong> New features, bug fixes, security updates, and keeping dependencies current.</span></li>
+                    <li><i class="fas fa-book fa-fw"></i><span><strong>Documentation &amp; support.</strong> Guides, the theory-of-operation material, and answering questions from operators and researchers.</span></li>
+                </ul>
+            </section>
+
+            <!-- Other ways to help -->
+            <section class="about-card">
+                <div class="about-section-head">
+                    <span class="about-section-icon ico-primary"><i class="fas fa-people-group"></i></span>
+                    <div>
+                        <h2 class="about-section-title">Other Ways to Help</h2>
+                        <p class="about-section-sub">Not everything costs money &mdash; these help just as much.</p>
+                    </div>
+                </div>
+                <ul class="support-funds">
+                    <li><i class="fab fa-github fa-fw"></i><span><strong>Star the repository.</strong> Visibility on <a href="https://github.com/KR8MER/eas-station" target="_blank" rel="noopener">GitHub</a> helps the project reach more people.</span></li>
+                    <li><i class="fas fa-bug fa-fw"></i><span><strong>Report bugs &amp; ideas.</strong> Open an <a href="https://github.com/KR8MER/eas-station/issues" target="_blank" rel="noopener">issue</a> when something breaks or could be better.</span></li>
+                    <li><i class="fas fa-code-branch fa-fw"></i><span><strong>Contribute code or docs.</strong> See the <a href="https://github.com/KR8MER/eas-station/blob/main/docs/process/CONTRIBUTING.md" target="_blank" rel="noopener">Contributing Guide</a> to get started.</span></li>
+                </ul>
+            </section>
+        </div>
+    </div>
+</div>
+{% endblock %}
