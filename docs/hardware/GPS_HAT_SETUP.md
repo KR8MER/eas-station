@@ -131,6 +131,15 @@ If the daemon restart logs a sudo failure, re-run `install.sh` (or copy
 `config/sudoers-eas-station` to `/etc/sudoers.d/eas-station`) to pick up
 the gpsd entries.
 
+**Running `update.sh` no longer requires a reboot for GPS.** Earlier
+releases restarted the EAS GPS client during an update but left gpsd
+running, so gpsd would often wedge in the "acquiring" state and only a
+reboot brought the fix back. `update.sh` now restarts gpsd (and the chrony
+refclock that consumes it) as part of the update — mirroring what a reboot
+does — and the GPS unit waits for gpsd to come up before reconnecting, so
+the receiver re-locks on its own within a minute or two. This step is a
+no-op on installs that don't have gpsd.
+
 ---
 
 ## What the GPS HAT Setup Status panel actually does
