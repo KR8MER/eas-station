@@ -116,6 +116,7 @@ def _run(message_id: int, operator: str | None) -> int:
         manager_handled = False
         tmp_file = None
         audio_played = False
+        audio_injected = False
 
         try:
             # GPIO pins + behavior matrix live in the database and are loaded
@@ -192,6 +193,35 @@ def _run(message_id: int, operator: str | None) -> int:
                 source='resend',
             )
 
+            # Re-inject the stored composite audio into the live Icecast
+            # air-chain so stream listeners hear the resend exactly as they
+            # hear a fresh alert (the live path does this via
+            # EASBroadcaster.handle_alert → inject_eas_audio).  The broadcast
+            # queues and IcecastStreamer threads live in the audio-service
+            # process; this detached resend process cannot reach those in-memory
+            # objects directly, so it asks the audio-service to do the injection
+            # over the Redis command channel.  Failure here is non-fatal: GPIO
+            # is still keyed and the air-chain is still held for the full
+            # duration below.
+            try:
+                from app_core.audio.redis_commands import get_audio_command_publisher
+                publisher = get_audio_command_publisher()
+                # Short timeout: a healthy audio-service queues the audio and
+                # confirms in well under a second.  Keeping it short means an
+                # absent/unresponsive audio-service does not inflate the
+                # GPIO hold (which is anchored before this call).
+                inject_resp = publisher.inject_eas_audio(message_id, timeout=10.0)
+                audio_injected = bool(inject_resp.get('success'))
+                if audio_injected:
+                    logger.info('Resend audio injected into air-chain for message %s', message_id)
+                else:
+                    logger.info(
+                        'Resend air-chain injection reported no audio for message %s: %s',
+                        message_id, inject_resp.get('message'),
+                    )
+            except Exception as exc:
+                logger.warning('Resend air-chain injection failed (non-fatal): %s', exc)
+
             if audio_player_cmd:
                 try:
                     command = list(audio_player_cmd) + [tmp_path]
@@ -241,6 +271,7 @@ def _run(message_id: int, operator: str | None) -> int:
                         'event_code': event_code,
                         'gpio_activated': activated_any,
                         'audio_played': audio_played if audio_player_cmd else None,
+                        'audio_injected': audio_injected,
                         'playback_duration_seconds': round(float(playback_duration), 2),
                         'resent_by': operator,
                     },
@@ -251,8 +282,8 @@ def _run(message_id: int, operator: str | None) -> int:
             db.session.rollback()
 
         logger.info(
-            'Resend complete for EASMessage #%s (event=%s, gpio=%s, held=%.1fs)',
-            message_id, event_code or 'unknown', activated_any, playback_duration,
+            'Resend complete for EASMessage #%s (event=%s, gpio=%s, injected=%s, held=%.1fs)',
+            message_id, event_code or 'unknown', activated_any, audio_injected, playback_duration,
         )
         return 0
 

@@ -36,6 +36,8 @@ Commands:
     - streaming_stop: Stop auto-streaming service
     - eas_monitor_start: Start EAS monitor
     - eas_monitor_stop: Stop EAS monitor
+    - inject_test_signal: Inject a synthetic SAME RWT test signal
+    - inject_eas_audio: Re-inject a stored EAS WAV into the live air-chain (resend)
 """
 
 import json
@@ -223,6 +225,37 @@ class AudioCommandPublisher:
             timeout=timeout,
         )
 
+    def inject_eas_audio(self, message_id: int, timeout: float = 20.0) -> Dict[str, Any]:
+        """Re-inject a stored EAS message's audio into the live Icecast air-chain.
+
+        Mirrors the live-alert path (``EASBroadcaster.handle_alert`` →
+        ``eas_stream_injector.inject_eas_audio``) for a *resend*.  A resend runs
+        in a detached subprocess that has no ``AudioIngestController`` and so
+        cannot reach the audio-service's in-memory ``BroadcastQueue`` objects
+        directly.  This command asks the audio-service process — which owns the
+        controller and the running ``IcecastStreamer`` threads — to load the
+        stored WAV for *message_id* from the database and inject it, so Icecast
+        listeners hear the resent alert just like a fresh broadcast.
+
+        The message id (not the raw audio) is sent over Redis: the audio-service
+        already has database access, and every service runs with
+        ``PrivateTmp=true`` so a shared temp-file path would not be visible
+        across processes.
+
+        Args:
+            message_id: Primary key of the ``EASMessage`` to re-inject.
+            timeout: How long to wait for the audio-service to confirm injection.
+
+        Returns:
+            Response dict with 'success', 'message', and optional 'data'.
+        """
+        return self._publish_command(
+            'inject_eas_audio',
+            {'message_id': message_id},
+            wait_for_response=True,
+            timeout=timeout,
+        )
+
     def start_archiver(self, source_name: str, archive_config: Dict[str, Any]) -> Dict[str, Any]:
         """Start archiver for *source_name* in audio-service.
 
@@ -250,7 +283,7 @@ class AudioCommandSubscriber:
     """
 
     def __init__(self, audio_controller, auto_streaming_service=None, eas_monitor=None,
-                 archiver_registry: Optional[Dict[str, Any]] = None):
+                 archiver_registry: Optional[Dict[str, Any]] = None, app=None):
         """
         Initialize Redis subscriber with retry logic.
 
@@ -260,10 +293,13 @@ class AudioCommandSubscriber:
             eas_monitor: Optional ContinuousEASMonitor for EAS monitoring control
             archiver_registry: Optional dict mapping source_name -> AudioArchiver for
                                handling archiver_start / archiver_stop commands.
+            app: Optional Flask app providing database access (used by the
+                 ``inject_eas_audio`` command to load a stored EASMessage's WAV).
         """
         self.audio_controller = audio_controller
         self.auto_streaming_service = auto_streaming_service
         self.eas_monitor = eas_monitor
+        self.app = app
         self.archiver_registry: Dict[str, Any] = archiver_registry if archiver_registry is not None else {}
         try:
             self.redis_client = get_redis_client(max_retries=5)
@@ -326,6 +362,31 @@ class AudioCommandSubscriber:
 
         except Exception as e:
             logger.error(f"Error handling command: {e}", exc_info=True)
+
+    def _load_eas_message_audio(self, message_id: Any) -> Optional[bytes]:
+        """Load the stored composite WAV for an EASMessage from the database.
+
+        Runs inside an app context so the audio-service process — which only
+        holds a minimal Flask app for database access — can read the audio that
+        the web process originally generated and persisted.  Returns ``None`` if
+        no app is available, the message is missing, or it has no stored audio.
+        """
+        if self.app is None:
+            logger.warning(
+                'inject_eas_audio: no Flask app available to load EASMessage #%s', message_id
+            )
+            return None
+        try:
+            with self.app.app_context():
+                from app_core.models import EASMessage
+                message = EASMessage.query.get(int(message_id))
+                if message is None:
+                    logger.warning('inject_eas_audio: EASMessage #%s not found', message_id)
+                    return None
+                return message.audio_data or None
+        except Exception as exc:
+            logger.error('inject_eas_audio: failed to load EASMessage #%s: %s', message_id, exc)
+            return None
 
     def _execute_command(self, command: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -637,6 +698,36 @@ class AudioCommandSubscriber:
                     'success': True,
                     'message': f"EAS test signal injected into source '{used_source}'",
                     'data': {'source_name': used_source},
+                }
+
+            elif command == 'inject_eas_audio':
+                message_id = params.get('message_id')
+                if not message_id:
+                    return {'success': False, 'message': 'message_id is required'}
+
+                wav_bytes = self._load_eas_message_audio(message_id)
+                if not wav_bytes:
+                    return {
+                        'success': False,
+                        'message': f'EASMessage #{message_id} has no stored audio',
+                        'data': {'injected': False},
+                    }
+
+                from app_core.audio.eas_stream_injector import inject_eas_audio as _inject_eas_audio
+                injected = _inject_eas_audio(wav_bytes)
+                if injected:
+                    return {
+                        'success': True,
+                        'message': 'EAS audio injected into air-chain',
+                        'data': {'injected': True},
+                    }
+                # No running source queues (or no controller) — non-fatal: the
+                # resend still keys GPIO and holds the air-chain.  Report it so
+                # the caller can log that no Icecast listeners received audio.
+                return {
+                    'success': False,
+                    'message': 'No active source queues to inject into',
+                    'data': {'injected': False},
                 }
 
             else:
