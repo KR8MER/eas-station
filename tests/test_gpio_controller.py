@@ -465,6 +465,59 @@ def test_behavior_manager_hold_lifecycle(monkeypatch):
     assert controller.deactivations
 
 
+def test_end_alert_force_releases_held_pins():
+    """end_alert() must force-release holds so the min-hold can't keep them on.
+
+    Regression: a held air-chain pin with a large ``hold_seconds`` (anti-chatter
+    value) used to release without ``force``, so deactivate() slept out the
+    remaining min-hold with the relay still asserted — holding the transmitter
+    keyed and the on-air overlay up for minutes after end-of-message.
+    """
+
+    controller = _FakeController()
+    configs = [GPIOPinConfig(pin=26, name="TX Key", hold_seconds=300.0)]
+    manager = GPIOBehaviorManager(
+        controller=controller,
+        pin_configs=configs,
+        behavior_matrix={26: {GPIOBehavior.TRANSMITTER_PTT}},
+    )
+
+    assert manager.start_alert(alert_id="a", event_code="RWT") is True
+    manager.end_alert(alert_id="a", event_code="RWT")
+
+    assert (26, True) in controller.deactivations, (
+        "end_alert must force-release held pins (force=True)"
+    )
+
+
+def test_end_alert_release_ignores_long_min_hold(monkeypatch):
+    """A real controller must drop the air chain at end-of-message, not after hold_seconds."""
+
+    import time
+
+    controller = _null_controller(monkeypatch)
+    # A 5-minute min-hold mimics an operator who set hold_seconds too high.
+    controller.add_pin(GPIOPinConfig(pin=26, name="TX Key", hold_seconds=300.0))
+    manager = GPIOBehaviorManager(
+        controller=controller,
+        pin_configs=[GPIOPinConfig(pin=26, name="TX Key", hold_seconds=300.0)],
+        behavior_matrix={26: {GPIOBehavior.TRANSMITTER_PTT}},
+    )
+
+    assert manager.start_alert(alert_id="a", event_code="RWT") is True
+    assert controller.get_state(26) == GPIOState.ACTIVE
+
+    start = time.monotonic()
+    manager.end_alert(alert_id="a", event_code="RWT")
+    elapsed = time.monotonic() - start
+
+    assert controller.get_state(26) == GPIOState.INACTIVE
+    assert elapsed < 5.0, (
+        f"end_alert blocked {elapsed:.1f}s waiting out the min-hold; "
+        "the air chain should release immediately at end-of-message"
+    )
+
+
 def test_behavior_manager_pulse_only(monkeypatch):
     """Pulse-only behaviors should prevent fallback activation."""
 

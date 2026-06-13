@@ -2069,7 +2069,15 @@ class GPIOBehaviorManager:
             self._hold_map.pop(pin, None)
 
         try:
-            self.controller.deactivate(pin)
+            # force=True: the broadcast has genuinely ended, so the relay must
+            # drop now.  Without it, deactivate() honours the pin's min-hold
+            # (hold_seconds) by sleeping the remaining time while the relay is
+            # still asserted — which, on a pin whose hold_seconds exceeds the
+            # playout (e.g. a long anti-chatter value), keeps the transmitter
+            # keyed and the on-air overlay up long after the audio finished.
+            # The min-hold is anti-chatter for rapid toggles, not a reason to
+            # hold the air chain past end-of-message.
+            self.controller.deactivate(pin, force=True)
         except Exception as exc:  # pragma: no cover - hardware specific
             if self.logger:
                 self.logger.warning(

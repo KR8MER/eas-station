@@ -292,7 +292,10 @@ def _drive_rwt_airchain(
                         alert_id=alert_id, event_code=event_code,
                     )
                 else:
-                    gpio_controller.deactivate_all()
+                    # force=True: RWT playout is finished, drop the air chain
+                    # immediately rather than waiting out each pin's min-hold
+                    # (hold_seconds) with the relay still keyed.
+                    gpio_controller.deactivate_all(force=True)
             except Exception as exc:
                 log.warning("GPIO release failed for RWT %s: %s",
                             alert_id, exc)

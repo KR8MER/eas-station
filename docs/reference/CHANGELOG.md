@@ -8,6 +8,11 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.85.1] - 2026-06-13 - Fix air chain held hostage after a broadcast (min-hold blocked release)
+
+### Fixed
+- **The air chain stayed keyed for the full `hold_seconds` (e.g. ~300s) after an alert finished, instead of dropping at end-of-message.** A short RWT (composite audio ~14s) held the transmitter for ~300s and the on-air overlay/stack light stayed stuck. Root cause: the broadcast-completion release paths called `GPIOController.deactivate()` *without* `force=True`, so the controller honoured each pin's anti-chatter min-hold by `time.sleep(hold_seconds - elapsed)` **while the relay was still asserted and while holding the controller lock** — keying the transmitter and freezing all GPIO state reads (status API, tower-light refresh, watchdog) until the min-hold elapsed, then logging an activation duration of ~`hold_seconds`. The min-hold is anti-chatter for rapid toggles, not a broadcast timer. End-of-broadcast releases now force-release: `GPIOBehaviorManager._release_hold()` and the `deactivate_all()` fallbacks in the manual send (`webapp/eas/workflow.py`), automated RWT (`app_core/rwt_scheduler.py`), and resend (`webapp/eas/messages.py`) paths all pass `force=True`, so the air chain drops the instant playout ends regardless of `hold_seconds`. This fixes both automated RWTs and the Broadcast Builder manual send. New regression tests in `tests/test_gpio_controller.py`; `hold_seconds` guidance clarified in the [GPIO guide](../hardware/GPIO_GUIDE.md).
+
 ## [2.85.0] - 2026-06-12 - Tower-light state engine: fault/test states, severity colors, quiet hours, buzzer kill switch
 
 ### Added

@@ -144,7 +144,7 @@ GPIO is configured entirely through the web UI and stored in the database. There
 |-------|------|---------|-------------|
 | `name` | string | `GPIO Pin N` | Friendly label shown in the UI and logs |
 | `active_high` | bool | `true` | `true` = relay closes on HIGH; set `false` for active-low HATs |
-| `hold_seconds` | float | `5.0` | Minimum time the pin stays active before it can be released (anti-chatter) |
+| `hold_seconds` | float | `5.0` | Minimum time the pin stays active before it can be released (anti-chatter). Keep this small — it is **not** a broadcast-hold timer. The air chain is keyed for the full playout by the send worker, then force-released at end-of-message, so `hold_seconds` never extends a broadcast. (A large value only matters for very short manual toggles.) |
 | `watchdog_seconds` | float | `300.0` | Hard ceiling; the pin is force-released if it stays active longer (stuck-relay protection) |
 | `flash_enabled` | bool | `false` | Flash this pin when activated directly (manual/test). During alerts, assign the **Flash Beacon** behavior instead |
 | `flash_interval_ms` | int | `500` | Flash period, clamped to 50–5000 ms |
