@@ -1407,7 +1407,12 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
                     workflow_logger.info(
                         'Playing manual EAS audio: %s', ' '.join(command),
                     )
-                    subprocess.run(command, check=False, timeout=max_activation_seconds + 10)
+                    # Bound the player to this broadcast's own length, not the
+                    # global max.  A hung player (busy/blocked audio device,
+                    # stalled network sink) must never keep this worker — and
+                    # therefore the asserted air chain and the on-air overlay —
+                    # blocked past the broadcast itself.
+                    subprocess.run(command, check=False, timeout=float(playback_duration) + 30)
                     send_result['audio_played'] = True
                 except subprocess.TimeoutExpired:
                     workflow_logger.warning(

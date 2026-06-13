@@ -72,6 +72,14 @@ def _get_oled_enabled_status():
 
 _BROADCAST_STATE_KEY = 'eas:broadcast_active'
 _INCOMING_STATE_KEY = 'eas:incoming_alert'
+# Seconds the on-air overlay / tower light may linger past the broadcast's own
+# end-of-message (start_ts + duration_seconds) before the state is reported
+# inactive.  This decouples the indicators from the send worker: the worker
+# normally calls clear_broadcast_active() the moment playout finishes, but if
+# that thread is delayed, blocked, or dies before its finally runs, the marker
+# would otherwise sit at active=True until its TTL.  A short grace lets the
+# "END OF MESSAGE" confirmation show briefly, then the indicators self-clear.
+_BROADCAST_STATE_GRACE_SECONDS = 5.0
 # Pub/sub channel the GPIO subsystem subscribes to so tower-light / NeoPixel
 # transitions fire the instant broadcast or incoming-alert state changes,
 # instead of waiting for the next 1-second poll.  The payload is just a wake-up
@@ -189,7 +197,16 @@ def clear_broadcast_active() -> None:
 
 
 def get_broadcast_state() -> dict:
-    """Return current broadcast state dict, or ``{'active': False}`` if idle."""
+    """Return current broadcast state dict, or ``{'active': False}`` if idle.
+
+    The stored marker is reported inactive once the broadcast's own
+    ``start_ts + duration_seconds`` has elapsed (plus
+    :data:`_BROADCAST_STATE_GRACE_SECONDS`), even if the marker key still
+    exists.  The send worker clears the marker the instant playout finishes,
+    but the indicators (air-chain overlay, tower light) must not stay lit past
+    end-of-message if that clear is ever delayed — so the elapsed broadcast is
+    treated as over here, at the single point every consumer reads through.
+    """
     try:
         from app_core.redis_client import get_redis_client
         client = get_redis_client()
@@ -198,7 +215,21 @@ def get_broadcast_state() -> dict:
         raw = client.get(_BROADCAST_STATE_KEY)
         if raw is None:
             return {'active': False}
-        return json.loads(raw)
+        state = json.loads(raw)
+        if state.get('active'):
+            start_ts = state.get('start_ts')
+            duration = state.get('duration_seconds')
+            if start_ts is not None and duration is not None:
+                ends_at = float(start_ts) + float(duration) + _BROADCAST_STATE_GRACE_SECONDS
+                if time.time() >= ends_at:
+                    # Broadcast is over; lazily drop the marker so repeated
+                    # reads / WebSocket pushes don't keep re-broadcasting it.
+                    try:
+                        client.delete(_BROADCAST_STATE_KEY)
+                    except Exception:
+                        pass
+                    return {'active': False}
+        return state
     except Exception:
         return {'active': False}
 
