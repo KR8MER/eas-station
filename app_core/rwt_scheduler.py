@@ -263,8 +263,13 @@ def _drive_rwt_airchain(
                 tmp_file.close()
                 command = list(audio_player_cmd) + [tmp_file.name]
                 log.info("Playing automated RWT audio: %s", ' '.join(command))
+                # Bound the player to this broadcast's own length, not the
+                # global max.  A hung player (busy/blocked audio device,
+                # stalled network sink) must never keep this worker — and
+                # therefore the asserted air chain and the on-air overlay —
+                # blocked past the broadcast itself.
                 subprocess.run(
-                    command, check=False, timeout=max_activation_seconds + 10,
+                    command, check=False, timeout=float(playback_duration) + 30,
                 )
             except subprocess.TimeoutExpired:
                 log.warning("Audio playback timed out for RWT %s", alert_id)
