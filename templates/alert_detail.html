@@ -2042,7 +2042,7 @@ async function resendEASMessage(messageId, btn) {
         });
         var result = await resp.json();
         if (resp.ok) {
-            showToast('EAS message #' + messageId + ' resent successfully', 'success');
+            showToast(result.message || ('EAS message #' + messageId + ' re-transmission started'), 'success');
         } else {
             showToast(result.error || 'Failed to resend', 'error');
         }

@@ -464,7 +464,7 @@ async function resendAudioMessage() {
         const result = await response.json();
 
         if (response.ok) {
-            showToast(`EAS message #${messageId} resent successfully`, 'success');
+            showToast(result.message || `EAS message #${messageId} re-transmission started`, 'success');
         } else {
             showToast(result.error || 'Failed to resend EAS message', 'error');
         }
