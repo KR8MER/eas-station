@@ -8,6 +8,21 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.88.1] - 2026-06-13 - Font-independent footer app icon
+
+### Fixed
+- **Footer app logo now renders reliably on every browser/OS**
+  (`static/img/eas-app-icon.svg`). The "EAS" / "STATION" / "™" wordmark
+  previously relied on `Arial Black` / `Montserrat` / `Impact` being
+  installed; when they were absent the browser silently substituted a
+  generic font, so the footer mark looked inconsistent across machines.
+  The wordmark is now embedded as vector `<path>` outlines (sourced from
+  the open-licensed Archivo Black), sized and positioned to match the
+  canonical brand icon, with the ™ tucked tight against the top-right of
+  the "S". No font file is shipped — only the outlines — so the icon is
+  fully self-contained. The equalizer bars were already pure vector and
+  are unchanged.
+
 ## [2.88.0] - 2026-06-13 - GPS TDOP (timing geometry)
 
 Surfaces TDOP — the Dilution of Precision term that bounds *timing*
