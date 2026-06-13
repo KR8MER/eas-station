@@ -8,6 +8,12 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.85.3] - 2026-06-13 - Stop requiring a reboot for GPS to re-lock after update.sh
+
+### Fixed
+- **Running `update.sh` left the GPS receiver stuck in "ACQUIRING" until a manual reboot.** The update flow restarted the EAS GPS client (`eas-station-gps.service`) but never restarted gpsd itself, whereas a reboot restarts everything. Disturbing the serial link by stopping/starting the EAS GPS service around an update is exactly the condition that wedges gpsd in the "stuck acquiring" state — historically cleared only by a reboot. The in-process watchdog does restart gpsd, but only after 15 minutes without a fix, far longer than anyone waits before rebooting. `update.sh` now refreshes the timing stack as part of the update: it stops the EAS GPS service to free the serial port, restarts `gpsd.socket` + `gpsd.service`, restarts chrony so its refclock re-locks, then lets the `eas-station.target` restart reconnect the GPS manager to the freshly-restarted gpsd. The step is guarded so it is a no-op on installs without gpsd.
+- **`eas-station-gps.service` could lose the gpsd-vs-serial race at boot.** Added `gpsd.service`/`gpsd.socket` to the unit's `After=` (ordering only — no `Wants`/`Requires`, so gpsd is never force-started on installs that don't use it). When gpsd is part of the same systemd transaction, the GPS manager now waits for it and connects via `source=gpsd` instead of falling back to grabbing the serial port directly (`source=serial`), which starves gpsd. Existing installs pick this up via `update.sh` (it copies the unit files and runs `systemctl daemon-reload`).
+
 ## [2.85.2] - 2026-06-13 - Fix broken "Resend" button and add labels to audio-archive action buttons
 
 The **Resend** button on the Audio Archive (`/audio`), audio detail, and alert

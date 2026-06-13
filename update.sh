@@ -1225,6 +1225,53 @@ chmod 750 "$STATE_DIR"
 echo_success "State directory ready: $STATE_DIR"
 
 echo_progress "Starting all EAS Station services with updated code..."
+
+# ---------------------------------------------------------------------------
+# Refresh the GPS / timing daemons before bringing EAS services back up.
+#
+# Symptom this fixes: after every update.sh run the GPS receiver dropped back
+# to "ACQUIRING" and only a full reboot restored the fix. The asymmetry was
+# that update.sh restarted the EAS GPS client (eas-station-gps.service) but
+# never restarted gpsd itself — whereas a reboot restarts everything. gpsd is
+# known to wedge in a "stuck acquiring" state when the serial link is
+# disturbed (which is exactly what the EAS GPS service stopping/starting
+# around an update does), and historically only a reboot cleared it. The
+# in-process watchdog does restart gpsd, but not until 15 min without a fix —
+# far longer than anyone waits before rebooting.
+#
+# Restarting gpsd (and the chrony refclock that consumes it) here reproduces
+# the one thing the reboot did that the update did not, so the receiver comes
+# back on its own. We stop the EAS GPS client first so the serial port is free
+# for gpsd to reopen (in serial / auto-fallback mode the client owns the
+# port), then let the eas-station.target restart below reconnect it to the
+# freshly-restarted, healthy gpsd. No-op on installs without gpsd.
+# ---------------------------------------------------------------------------
+if systemctl list-unit-files 2>/dev/null | grep -q '^gpsd\.'; then
+    echo_step "Refreshing GPS/Timing Daemons"
+    echo_progress "Releasing the serial port from the EAS GPS service..."
+    systemctl stop eas-station-gps.service 2>/dev/null || true
+
+    echo_progress "Restarting gpsd (clears a wedged 'acquiring' state)..."
+    # Restart the socket first, then the daemon, mirroring the watchdog's
+    # remediation order. Either may be absent depending on how gpsd was set
+    # up, so failures are non-fatal.
+    systemctl restart gpsd.socket 2>/dev/null || true
+    systemctl restart gpsd.service 2>/dev/null || true
+
+    if systemctl list-unit-files 2>/dev/null | grep -q '^chrony'; then
+        echo_progress "Restarting chrony so the GPS refclock re-locks..."
+        # Debian/Raspberry Pi OS name the unit chrony.service; some images
+        # use chronyd.service. Try both; ignore whichever is absent.
+        systemctl restart chrony.service 2>/dev/null \
+            || systemctl restart chronyd.service 2>/dev/null || true
+    fi
+
+    # Give gpsd a moment to reopen the receiver and start emitting before the
+    # EAS services reconnect to it during the target restart below.
+    sleep 3
+    echo_success "GPS/timing daemons refreshed (no reboot required)"
+fi
+
 # Reset any services that are in systemd 'failed' state before restarting.
 # A service that exceeded its start-limit burst enters 'failed' and will NOT
 # be restarted by 'systemctl restart eas-station.target' unless reset first.

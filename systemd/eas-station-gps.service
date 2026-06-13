@@ -2,7 +2,13 @@
 Description=EAS Station GPS Subsystem (GPS manager + trends, port 5103)
 Documentation=https://github.com/KR8MER/eas-station
 PartOf=eas-station-hardware.target eas-station.target
-After=network.target redis.service
+# Ordering only (no Wants/Requires): when gpsd is also being started in the
+# same systemd transaction — at boot, or when update.sh restarts the timing
+# stack — wait for it so the GPS manager finds gpsd already listening and
+# connects to it (source=gpsd) instead of losing the race and falling back to
+# grabbing the serial port directly (source=serial), which then starves gpsd.
+# Harmless on installs without gpsd: an absent unit in After= is ignored.
+After=network.target redis.service gpsd.service gpsd.socket
 Requires=redis.service
 
 [Service]
