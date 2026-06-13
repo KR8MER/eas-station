@@ -8,6 +8,36 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.87.0] - 2026-06-13 - Animated header & navbar polish
+
+Built on the previous header refresh with a round of motion and "ops-console"
+touches across the navbar. Everything is theme-aware and every ambient
+animation is gated behind `prefers-reduced-motion`.
+
+### Added
+- **Breathing "aurora" sheen** behind the navbar — a slow-drifting translucent
+  white gradient layered over the themed background (`soft-light` blend), so the
+  header subtly comes alive without changing any theme colours.
+- **Live header clock** in the brand cluster (US/Eastern), a NOC-style time +
+  date readout driven by the existing 1-second tick in
+  `static/js/core/utils.js`. Hidden on narrow viewports to keep the navbar on a
+  single row.
+- **Active-page indicator** — the current top-level nav item now lights up
+  (existing `.nav-link.active` pill plus a new sliding underline). Longest-prefix
+  matching lights up a parent menu for deep pages and sets `aria-current="page"`.
+- **Scroll-aware navbar** — wired up the previously-unused `.navbar.scrolled`
+  style so the header shrinks and deepens its shadow once the page scrolls.
+- **"On Air" navbar glow** — when a broadcast is live the whole header gains a
+  pulsing red top edge + soft glow, mirroring the stack light's on-air state.
+- **Brand wordmark shimmer** — a one-time diagonal light sweep across the logo
+  on first paint, repeated on hover.
+
+### Changed
+- **Frosted-glass navbar on light themes** — light-theme navbar gradients are
+  now ~90% opaque (82% when scrolled) so the heavy `backdrop-filter` blur the
+  navbar already declares actually frosts the content scrolling beneath it,
+  while keeping nav text fully legible.
+
 ## [2.86.0] - 2026-06-13 - Hardware-faithful navbar stack light + header polish
 
 The navbar status "stack light" was a four-lens widget (red / amber / green /

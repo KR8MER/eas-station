@@ -28,7 +28,11 @@
 {%- set show_tools_data = is_authenticated and (can_export_alerts or can_manage_config) -%}
 {%- set show_tools_analytics = is_authenticated and (can_manage_analytics or can_view_logs or can_view_alerts or can_manage_config) -%}
 
-<nav class="navbar navbar-expand-lg sticky-top shadow-sm">
+<nav class="navbar navbar-expand-lg sticky-top shadow-sm" id="mainNavbar">
+    <!-- Breathing "aurora" sheen — a slow-drifting translucent gradient layered
+         behind the navbar content. Theme-agnostic (white alpha only) so it reads
+         correctly over every theme's gradient. Disabled under reduced-motion. -->
+    <span class="navbar-aurora" aria-hidden="true"></span>
     <div class="container-fluid">
         <!-- Brand -->
         <div class="navbar-brand-group">
@@ -57,6 +61,17 @@
                  title="Real-time updates active">
                 <span class="ws-indicator__dot" id="ws-indicator-dot"></span>
                 <span class="ws-indicator__text" id="ws-indicator-text">Live</span>
+            </div>
+
+            <!-- Live header clock — NOC/ops-console style. Populated by the shared
+                 1-second tick in static/js/core/utils.js (updateCurrentTime). -->
+            <div class="navbar-clock" id="navbar-clock" role="status" aria-live="off"
+                 title="Station time (US/Eastern)">
+                <i class="fas fa-clock navbar-clock__icon" aria-hidden="true"></i>
+                <span class="navbar-clock__body">
+                    <span class="navbar-clock__time" id="navbar-clock-time">--:--:--</span>
+                    <span class="navbar-clock__date" id="navbar-clock-date">—</span>
+                </span>
             </div>
 
             <!-- Stack-Light Status Widget — mirrors the physical ANDONT 7-color
@@ -728,7 +743,239 @@
     opacity: 0.6;
     padding: 0.45rem 0.75rem 0.2rem;
 }
+
+/* ── Breathing "aurora" sheen (#1) ───────────────────────────────────────
+   A slow-drifting translucent radial gradient behind the navbar content.
+   Pure white alpha so it layers cleanly over every theme. Keep navbar
+   content above it. */
+/* Note: the navbar is position:sticky (a positioned element), so the aurora
+   anchors to it without needing position:relative — and we must NOT add
+   overflow:hidden here or it would clip the Bootstrap dropdown menus. */
+.navbar > .container-fluid { position: relative; z-index: 1; }
+.navbar-aurora {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+    border-radius: inherit;
+    background:
+        radial-gradient(40% 120% at 15% 50%, rgba(255, 255, 255, 0.16), transparent 60%),
+        radial-gradient(35% 120% at 60% 30%, rgba(255, 255, 255, 0.10), transparent 60%),
+        radial-gradient(45% 120% at 90% 70%, rgba(255, 255, 255, 0.14), transparent 60%);
+    background-size: 200% 200%;
+    opacity: 0.9;
+    animation: navbarAurora 16s ease-in-out infinite;
+    mix-blend-mode: soft-light;
+}
+@keyframes navbarAurora {
+    0%   { background-position:   0% 50%, 100% 20%,  50% 80%; }
+    50%  { background-position: 100% 50%,   0% 80%, 100% 20%; }
+    100% { background-position:   0% 50%, 100% 20%,  50% 80%; }
+}
+
+/* ── Live header clock (#4) ──────────────────────────────────────────────── */
+.navbar-clock {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 2px 10px;
+    border-radius: var(--radius-pill, 999px);
+    color: rgba(255, 255, 255, 0.9);
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    white-space: nowrap;
+    flex-shrink: 0;
+    cursor: default;
+    transition: transform 0.25s var(--ease-ios, ease), box-shadow 0.25s ease;
+}
+.navbar-clock:hover {
+    transform: translateY(-1px);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 4px 12px rgba(0, 0, 0, 0.18);
+}
+.navbar-clock__icon { font-size: 0.72rem; opacity: 0.75; }
+.navbar-clock__body { display: inline-flex; flex-direction: column; line-height: 1.05; }
+.navbar-clock__time {
+    font-size: 0.8rem;
+    font-weight: var(--font-weight-semibold, 600);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+}
+.navbar-clock__date {
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    opacity: 0.65;
+}
+/* Light themes: dark text for legibility on the lighter gradient */
+[data-theme="cosmo"] .navbar-clock,
+[data-theme="spring"] .navbar-clock,
+[data-theme="red"] .navbar-clock,
+[data-theme="green"] .navbar-clock,
+[data-theme="blue"] .navbar-clock,
+[data-theme="purple"] .navbar-clock,
+[data-theme="pink"] .navbar-clock,
+[data-theme="orange"] .navbar-clock,
+[data-theme="yellow"] .navbar-clock,
+[data-theme="sunset"] .navbar-clock,
+[data-theme="tide"] .navbar-clock {
+    color: var(--text-color);
+    background: rgba(0, 0, 0, 0.05);
+    border-color: rgba(0, 0, 0, 0.1);
+}
+/* Keep the navbar single-row on smaller widths */
+@media (max-width: 1199.98px) {
+    .navbar-clock__date { display: none; }
+}
+@media (max-width: 991.98px) {
+    .navbar-clock { display: none; }
+}
+
+/* ── Active-page indicator (#2) ──────────────────────────────────────────
+   The .nav-link.active pill already exists in styles.css; add an animated
+   underline that slides/expands in under the current top-level item. */
+.navbar .primary-nav .nav-link::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    right: 50%;
+    bottom: 4px;
+    height: 2px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.9);
+    opacity: 0;
+    transition: left 0.28s var(--ease-ios, ease),
+                right 0.28s var(--ease-ios, ease),
+                opacity 0.28s ease;
+}
+.navbar .primary-nav .nav-link.active::after {
+    left: 18%;
+    right: 18%;
+    opacity: 0.85;
+}
+
+/* ── "On Air" navbar state (#5) ──────────────────────────────────────────
+   Mirrors the stack-light red state: a pulsing red top edge + soft glow so
+   the whole header signals a live broadcast. Toggled by the stack-light
+   controller below (.navbar-on-air on #mainNavbar). */
+.navbar.navbar-on-air {
+    box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.15),
+        0 0 22px rgba(255, 45, 45, 0.45),
+        0 1px 0 rgba(255, 255, 255, 0.15) inset;
+    animation: navbarOnAir 1.4s ease-in-out infinite;
+}
+.navbar.navbar-on-air::before {
+    height: 3px;
+    background: linear-gradient(90deg,
+        transparent,
+        rgba(255, 60, 60, 0.9) 25%,
+        rgba(255, 90, 90, 1) 50%,
+        rgba(255, 60, 60, 0.9) 75%,
+        transparent) !important;
+}
+@keyframes navbarOnAir {
+    0%, 100% { box-shadow: 0 8px 32px rgba(0,0,0,0.15), 0 0 18px rgba(255,45,45,0.35), 0 1px 0 rgba(255,255,255,0.15) inset; }
+    50%      { box-shadow: 0 8px 32px rgba(0,0,0,0.15), 0 0 30px rgba(255,45,45,0.6),  0 1px 0 rgba(255,255,255,0.15) inset; }
+}
+
+/* ── Logo shimmer on load (#6) ───────────────────────────────────────────
+   One-time diagonal light sweep across the brand wordmark on first paint. */
+.navbar-brand::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -60%;
+    width: 45%;
+    height: 100%;
+    background: linear-gradient(115deg,
+        transparent,
+        rgba(255, 255, 255, 0.55),
+        transparent);
+    transform: skewX(-18deg);
+    pointer-events: none;
+    opacity: 0;
+    animation: brandShimmer 1.5s var(--ease-ios, ease) 0.45s 1;
+}
+@keyframes brandShimmer {
+    0%   { left: -60%; opacity: 0; }
+    12%  { opacity: 1; }
+    100% { left: 130%; opacity: 0; }
+}
+.navbar-brand:hover::after {
+    animation: brandShimmer 1.1s var(--ease-ios, ease) 1;
+}
+
+/* Respect users who prefer reduced motion — drop the ambient animations */
+@media (prefers-reduced-motion: reduce) {
+    .navbar-aurora,
+    .navbar.navbar-on-air,
+    .navbar-brand::after { animation: none; }
+    .navbar-aurora { opacity: 0.5; }
+    .navbar-brand::after { display: none; }
+}
 </style>
+
+<!-- Header polish behaviour: scroll-aware shrink (#3) + active-page marker (#2) -->
+<script>
+(function () {
+    'use strict';
+
+    // ── Scroll-aware navbar (#3) ──────────────────────────────────────────
+    // Toggle the existing `.scrolled` style (defined in styles.css) once the
+    // page is scrolled, shrinking the navbar and deepening its shadow.
+    var nav = document.getElementById('mainNavbar');
+    if (nav) {
+        var onScroll = function () {
+            nav.classList.toggle('scrolled', window.scrollY > 10);
+        };
+        window.addEventListener('scroll', onScroll, { passive: true });
+        onScroll();
+    }
+
+    // ── Active-page indicator (#2) ────────────────────────────────────────
+    // Mark the top-level nav item that best matches the current path (either
+    // its own href or one of its dropdown items). Longest-prefix wins so a
+    // deep page lights up its parent menu rather than the "/" Dashboard link.
+    document.addEventListener('DOMContentLoaded', function () {
+        var path = window.location.pathname.replace(/\/+$/, '') || '/';
+        var topLinks = document.querySelectorAll(
+            '.navbar .primary-nav > .nav-item > .nav-link');
+        var best = null, bestLen = -1;
+
+        topLinks.forEach(function (link) {
+            var item = link.closest('.nav-item');
+            var hrefs = [];
+            var own = link.getAttribute('href');
+            if (own && own !== '#') hrefs.push(own);
+            item.querySelectorAll('.dropdown-item[href]').forEach(function (a) {
+                var h = a.getAttribute('href');
+                if (h && h !== '#') hrefs.push(h);
+            });
+
+            hrefs.forEach(function (href) {
+                var p;
+                try {
+                    p = new URL(href, window.location.origin)
+                        .pathname.replace(/\/+$/, '') || '/';
+                } catch (e) { return; }
+                var match = (p === '/')
+                    ? (path === '/')
+                    : (path === p || path.indexOf(p + '/') === 0);
+                if (match && p.length > bestLen) { best = link; bestLen = p.length; }
+            });
+        });
+
+        if (best) {
+            best.classList.add('active');
+            best.setAttribute('aria-current', 'page');
+        }
+    });
+})();
+</script>
 
 <!-- System Health Update Script -->
 <script>
@@ -894,6 +1141,11 @@ document.addEventListener('DOMContentLoaded', function() {
         tower.dataset.slColor = state.color;
         tower.title = 'Station status light · ' + state.label;
         tower.setAttribute('aria-label', 'Station status light: ' + state.label);
+
+        // ── "On Air" navbar glow (#5) — pulse the whole header red whenever a
+        // broadcast is live, mirroring the stack light's on-air state. ──
+        var navEl = document.getElementById('mainNavbar');
+        if (navEl) navEl.classList.toggle('navbar-on-air', !!_broadcastActive);
     }
 
     function _applyBroadcastState(data) {

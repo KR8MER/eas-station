@@ -1895,12 +1895,31 @@ small,
 [data-theme="sunset"] .navbar,
 [data-theme="tide"] .navbar {
     color: var(--text-color);
-    /* Override transparent background with solid gradient for visibility */
+    /* Frosted glass (#8): keep the themed gradient but leave a little
+       translucency so the heavy backdrop-filter blur actually frosts the
+       content scrolling beneath it. ~90% keeps nav text fully legible. */
     background: linear-gradient(135deg,
-        var(--primary-color),
-        var(--secondary-color)) !important;
+        color-mix(in srgb, var(--primary-color) 90%, transparent),
+        color-mix(in srgb, var(--secondary-color) 90%, transparent)) !important;
     /* Light border for definition */
     border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+/* When scrolled, lean further into the frosted-glass look on light themes */
+[data-theme="cosmo"] .navbar.scrolled,
+[data-theme="spring"] .navbar.scrolled,
+[data-theme="red"] .navbar.scrolled,
+[data-theme="green"] .navbar.scrolled,
+[data-theme="blue"] .navbar.scrolled,
+[data-theme="purple"] .navbar.scrolled,
+[data-theme="pink"] .navbar.scrolled,
+[data-theme="orange"] .navbar.scrolled,
+[data-theme="yellow"] .navbar.scrolled,
+[data-theme="sunset"] .navbar.scrolled,
+[data-theme="tide"] .navbar.scrolled {
+    background: linear-gradient(135deg,
+        color-mix(in srgb, var(--primary-color) 82%, transparent),
+        color-mix(in srgb, var(--secondary-color) 82%, transparent)) !important;
 }
 
 [data-theme="cosmo"] .navbar .navbar-brand,
