@@ -59,19 +59,27 @@
                 <span class="ws-indicator__text" id="ws-indicator-text">Live</span>
             </div>
 
-            <!-- Stack Light Status Widget
-                 Red   = On-air / broadcast active (flashing)
-                 Amber = System degraded / warning
-                 Green = Healthy & monitoring active
-                 Blue  = Active unexpired alert in system -->
-            <div class="sl-tower" id="slTower" aria-label="Station status light" role="status">
-                <div class="sl-housing">
-                    <div class="sl-lens sl-lens--red"   id="slRed"   title="On-air"></div>
-                    <div class="sl-lens sl-lens--amber" id="slAmber" title="Warning"></div>
-                    <div class="sl-lens sl-lens--green" id="slGreen" title="Healthy"></div>
-                    <div class="sl-lens sl-lens--blue"  id="slBlue"  title="Active alert"></div>
+            <!-- Stack-Light Status Widget — mirrors the physical ANDONT 7-color
+                 USB stack light driven by services/gpio/alert_indicators.py.
+                 Like the real hardware it is a SINGLE lamp showing ONE colour
+                 at a time, resolved by priority
+                 (fault > on-air/alert > test > incoming > standby):
+                   Magenta = System fault (pipeline/Redis unreachable), flashing
+                   Red     = On-air / live alert, flashing (+ buzzer)
+                   Cyan    = On-air routine test (RWT/RMT/NPT/DMO), flashing
+                   Yellow  = Incoming alert / system degraded
+                   Green   = Standby — healthy & monitoring (steady)
+                 A buzzer cue pulses when the resolved state sounds the buzzer. -->
+            <div class="sl-tower sl-c-off" id="slTower" data-sl-color="off"
+                 aria-label="Station status light" role="status" tabindex="0">
+                <span class="sl-cap" aria-hidden="true"></span>
+                <div class="sl-lamp" id="slLamp" aria-hidden="true">
+                    <span class="sl-lamp-glow"></span>
                 </div>
-                <div class="sl-base"></div>
+                <span class="sl-foot" aria-hidden="true"></span>
+                <span class="sl-buzzer" id="slBuzzer" aria-hidden="true" title="Buzzer active">
+                    <i class="fas fa-volume-high"></i>
+                </span>
             </div>
         </div>
 
@@ -500,124 +508,225 @@
 </nav>
 
 <style>
-/* ── Stack-light tower ─────────────────────────────────────── */
+/* ── Stack-light tower — visual twin of the ANDONT 7-color USB stack ──
+   light: a SINGLE translucent lamp capped by a black dome and seated on
+   a weighted base, glowing one colour at a time
+   (off / green / blue / red / cyan / yellow / magenta / white). */
 .sl-tower {
+    --sl-lamp-w: 19px;
+    --sl-lamp-h: 30px;
+    --sl-color: transparent;        /* lit colour, set per state below     */
+    --sl-glow:  rgba(0,0,0,0);       /* halo colour, set per state below     */
+    position: relative;
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 0;
-    margin-left: 0.5rem;
+    margin-left: 0.6rem;
+    padding-left: 0.6rem;
     user-select: none;
     flex-shrink: 0;
+    cursor: default;
+    border-left: 1px solid rgba(255, 255, 255, 0.16);
+    outline: none;
+}
+.sl-tower:focus-visible {
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.45);
+    border-radius: 6px;
 }
 
-.sl-housing {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 3px;
-    background: linear-gradient(160deg, #2a2a2e 0%, #18181c 60%, #111114 100%);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 6px 6px 4px 4px;
-    padding: 5px 4px;
-    box-shadow:
-        inset 0 1px 0 rgba(255,255,255,0.07),
-        0 2px 6px rgba(0,0,0,0.5);
+/* Domed black cap */
+.sl-cap {
+    width: calc(var(--sl-lamp-w) + 2px);
+    height: 7px;
+    border-radius: 8px 8px 3px 3px / 10px 10px 3px 3px;
+    background: linear-gradient(155deg, #3a3a40 0%, #1d1d22 55%, #101013 100%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.14), 0 1px 2px rgba(0,0,0,0.5);
+    z-index: 2;
+}
+
+/* Single cylindrical lamp — dark tinted glass when off */
+.sl-lamp {
+    width: var(--sl-lamp-w);
+    height: var(--sl-lamp-h);
+    border-radius: 4px;
     position: relative;
+    overflow: hidden;
+    border: 1px solid rgba(0,0,0,0.5);
+    background:
+        linear-gradient(180deg, rgba(255,255,255,0.06), rgba(0,0,0,0.15)),
+        var(--sl-color, rgba(20,20,24,0.85));
+    box-shadow:
+        0 0 8px 1px var(--sl-glow),
+        0 0 18px 5px var(--sl-glow),
+        inset 0 1px 0 rgba(255,255,255,0.35),
+        inset 0 -4px 8px rgba(0,0,0,0.35);
+    transition: background 0.3s ease, box-shadow 0.3s ease;
 }
 
-/* Reflective strip on housing */
-.sl-housing::before {
+/* Inner radial glow that intensifies when lit */
+.sl-lamp-glow {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at 50% 38%,
+        rgba(255,255,255,0.55) 0%, transparent 55%);
+    opacity: 0.25;
+    pointer-events: none;
+}
+.sl-tower:not(.sl-c-off) .sl-lamp-glow { opacity: 0.6; }
+
+/* Vertical specular sheen down the lamp */
+.sl-lamp::before {
     content: '';
     position: absolute;
-    top: 4px; left: 5px;
-    width: 3px; bottom: 4px;
-    border-radius: 2px;
-    background: linear-gradient(to bottom,
-        rgba(255,255,255,0.12) 0%,
-        rgba(255,255,255,0.04) 50%,
-        transparent 100%);
+    top: 2px; left: 22%;
+    width: 18%; height: calc(100% - 4px);
+    border-radius: 3px;
+    background: linear-gradient(90deg,
+        transparent, rgba(255,255,255,0.6), transparent);
+    opacity: 0.4;
     pointer-events: none;
 }
 
-.sl-base {
-    width: 18px;
-    height: 5px;
-    background: linear-gradient(to bottom, #2c2c30, #1a1a1e);
-    border-radius: 0 0 3px 3px;
-    border: 1px solid rgba(255,255,255,0.06);
-    border-top: none;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+/* Weighted base / foot */
+.sl-foot {
+    width: calc(var(--sl-lamp-w) + 4px);
+    height: 6px;
+    border-radius: 2px 2px 4px 4px;
+    background: linear-gradient(180deg, #2c2c32 0%, #161619 100%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 2px 4px rgba(0,0,0,0.45);
 }
 
-.sl-lens {
-    width: 14px;
-    height: 14px;
-    border-radius: 50%;
-    position: relative;
-    transition: box-shadow 0.25s ease, background 0.25s ease;
-    /* Inactive state — dark tinted glass look */
-    background: radial-gradient(circle at 35% 30%, rgba(255,255,255,0.12), transparent 60%),
-                rgba(0,0,0,0.55);
-    border: 1px solid rgba(0,0,0,0.4);
-}
+/* ── ANDONT colour palette — one colour at a time ─────────────────── */
+.sl-c-off    { --sl-color: rgba(22,22,26,0.85);                        --sl-glow: rgba(0,0,0,0); }
+.sl-c-green  { --sl-color: linear-gradient(180deg,#7bffa0,#1fbf3e 60%,#0d9a2c);   --sl-glow: rgba(34,210,68,0.55); }
+.sl-c-blue   { --sl-color: linear-gradient(180deg,#8ec5ff,#2f86ff 60%,#0a57cc);   --sl-glow: rgba(48,134,255,0.55); }
+.sl-c-red    { --sl-color: linear-gradient(180deg,#ff7b7b,#ff2424 60%,#c40000);   --sl-glow: rgba(255,45,45,0.6); }
+.sl-c-cyan   { --sl-color: linear-gradient(180deg,#9ffcff,#22e0e8 60%,#0c9aa3);   --sl-glow: rgba(40,220,232,0.55); }
+.sl-c-yellow { --sl-color: linear-gradient(180deg,#ffe98a,#ffce1f 60%,#caa000);   --sl-glow: rgba(255,206,31,0.55); }
+.sl-c-magenta{ --sl-color: linear-gradient(180deg,#ff9bf2,#ff35d6 60%,#c00fa0);   --sl-glow: rgba(255,53,214,0.6); }
+.sl-c-white  { --sl-color: linear-gradient(180deg,#ffffff,#eef2ff 60%,#c7cfe6);   --sl-glow: rgba(235,240,255,0.6); }
 
-/* Specular highlight on each lens */
-.sl-lens::before {
-    content: '';
-    position: absolute;
-    top: 2px; left: 3px;
-    width: 5px; height: 3px;
-    border-radius: 50%;
-    background: rgba(255,255,255,0.35);
-    pointer-events: none;
-}
-
-/* ── Active states ──────────────────────────────────────────── */
-.sl-lens--red.sl-on {
-    background: radial-gradient(circle at 35% 30%, #ff9999, #ff2222 55%, #aa0000 100%);
-    box-shadow:
-        0 0 6px 2px rgba(255, 40, 40, 0.8),
-        0 0 14px 4px rgba(255, 0, 0, 0.45),
-        inset 0 1px 0 rgba(255,255,255,0.25);
-    border-color: rgba(255,80,80,0.5);
-}
-
-.sl-lens--amber.sl-on {
-    background: radial-gradient(circle at 35% 30%, #ffe599, #ffb300 55%, #b37700 100%);
-    box-shadow:
-        0 0 6px 2px rgba(255, 180, 0, 0.85),
-        0 0 14px 4px rgba(255, 140, 0, 0.45),
-        inset 0 1px 0 rgba(255,255,255,0.3);
-    border-color: rgba(255,180,0,0.5);
-}
-
-.sl-lens--green.sl-on {
-    background: radial-gradient(circle at 35% 30%, #aaffaa, #22cc44 55%, #0a7a22 100%);
-    box-shadow:
-        0 0 6px 2px rgba(30, 210, 70, 0.8),
-        0 0 14px 4px rgba(0, 180, 50, 0.45),
-        inset 0 1px 0 rgba(255,255,255,0.25);
-    border-color: rgba(60,220,80,0.5);
-}
-
-.sl-lens--blue.sl-on {
-    background: radial-gradient(circle at 35% 30%, #aaddff, #2299ff 55%, #0055cc 100%);
-    box-shadow:
-        0 0 6px 2px rgba(30, 140, 255, 0.8),
-        0 0 14px 4px rgba(0, 100, 255, 0.45),
-        inset 0 1px 0 rgba(255,255,255,0.25);
-    border-color: rgba(60,160,255,0.5);
-}
-
-/* Flash animation for active broadcast (red) */
+/* Flashing lamp (fault / alert / incoming / test) */
 @keyframes sl-flash {
-    0%, 49% { opacity: 1; }
-    50%, 100% { opacity: 0.15; }
+    0%, 49%   { filter: brightness(1.12); }
+    50%, 100% { filter: brightness(0.4) saturate(0.6); }
+}
+.sl-tower.sl-flash .sl-lamp { animation: sl-flash 0.6s step-end infinite; }
+
+/* Buzzer cue — small speaker badge that pulses when the buzzer would sound */
+.sl-buzzer {
+    position: absolute;
+    top: -4px;
+    right: -9px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 13px;
+    height: 13px;
+    font-size: 8px;
+    line-height: 1;
+    color: #fff;
+    background: #ff2d2d;
+    border-radius: 50%;
+    box-shadow: 0 0 6px rgba(255, 45, 45, 0.85);
+}
+.sl-tower.sl-buzzer-on .sl-buzzer {
+    display: inline-flex;
+    animation: sl-buzz 0.5s ease-in-out infinite;
+}
+@keyframes sl-buzz {
+    0%, 100% { transform: scale(1);    opacity: 1; }
+    50%      { transform: scale(1.25); opacity: 0.55; }
 }
 
-.sl-lens--red.sl-flash {
-    animation: sl-flash 0.6s step-end infinite;
+@media (prefers-reduced-motion: reduce) {
+    .sl-tower.sl-flash .sl-lamp,
+    .sl-tower.sl-buzzer-on .sl-buzzer { animation: none; }
+}
+
+/* ── Header polish ─────────────────────────────────────────────────────
+   Scoped refinements layered over the themed navbar gradient. Uses
+   white/rgba so it reads correctly on every theme's colour. */
+
+/* Brand wordmark — soft drop shadow + lively hover glow */
+.navbar-brand .logo-wordmark,
+.navbar-brand .brand-logo {
+    filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.28));
+    transition: filter 0.35s var(--ease-ios, ease), transform 0.35s var(--ease-ios, ease);
+}
+.navbar-brand:hover .logo-wordmark,
+.navbar-brand:hover .brand-logo {
+    filter: drop-shadow(0 3px 12px rgba(255, 255, 255, 0.45));
+}
+
+/* Group the live status indicators into one cohesive cluster */
+.navbar-brand-group .health-indicator,
+.navbar-brand-group .ws-indicator {
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    transition: transform 0.25s var(--ease-ios, ease), box-shadow 0.25s ease;
+}
+.navbar-brand-group .health-indicator:hover,
+.navbar-brand-group .ws-indicator:hover {
+    transform: translateY(-1px);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2),
+                0 4px 12px rgba(0, 0, 0, 0.18);
+}
+
+/* Crisper top highlight along the navbar for a glassier feel */
+.navbar::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg,
+        transparent,
+        rgba(255, 255, 255, 0.35) 25%,
+        rgba(255, 255, 255, 0.5) 50%,
+        rgba(255, 255, 255, 0.35) 75%,
+        transparent);
+    pointer-events: none;
+    z-index: 1;
+}
+
+/* Dropdown menus — softer, deeper, more modern */
+.navbar .dropdown-menu {
+    border: 1px solid var(--border-color, rgba(0, 0, 0, 0.08));
+    border-radius: var(--radius-lg, 14px);
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.22),
+                0 2px 8px rgba(0, 0, 0, 0.1);
+    padding: 0.4rem;
+    margin-top: 0.5rem !important;
+    animation: sl-menu-in 0.18s var(--ease-ios, ease);
+}
+@keyframes sl-menu-in {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.navbar .dropdown-menu .dropdown-item {
+    border-radius: var(--radius-md, 10px);
+    padding: 0.5rem 0.75rem;
+    transition: background 0.18s ease, transform 0.18s ease, color 0.18s ease;
+}
+.navbar .dropdown-menu .dropdown-item:hover,
+.navbar .dropdown-menu .dropdown-item:focus {
+    transform: translateX(3px);
+}
+.navbar .dropdown-menu .dropdown-item i {
+    width: 1.25rem;
+    text-align: center;
+    margin-right: 0.4rem;
+    opacity: 0.85;
+}
+.navbar .dropdown-header {
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: 0.66rem;
+    font-weight: var(--font-weight-bold, 700);
+    opacity: 0.6;
+    padding: 0.45rem 0.75rem 0.2rem;
 }
 </style>
 
@@ -713,52 +822,83 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // ── Stack-light controller ────────────────────────────────────────────────────
+// Mirrors services/gpio/alert_indicators.py:resolve_tower_state — the physical
+// ANDONT 7-color USB stack light is a single lamp showing ONE colour at a time,
+// chosen by priority: fault > on-air/alert > test > incoming/degraded > standby.
+// Default state colours match the GPIO guide's tower-light state table:
+//   fault=magenta, test=cyan, alert=red, incoming=yellow, standby=green.
 (function () {
     'use strict';
 
+    // SAME event codes that are routine tests, not live alerts (TEST_EVENT_CODES).
+    var TEST_EVENT_CODES = { RWT: 1, RMT: 1, NPT: 1, DMO: 1 };
+
+    // All ANDONT colour classes — used to clear before applying the resolved one.
+    var COLOR_CLASSES = ['sl-c-off', 'sl-c-green', 'sl-c-blue', 'sl-c-red',
+                         'sl-c-cyan', 'sl-c-yellow', 'sl-c-magenta', 'sl-c-white'];
+
     var _healthStatus    = 'unknown';  // 'healthy' | 'degraded' | 'critical' | 'unknown'
     var _broadcastActive = false;
+    var _eventCode       = '';
     var _activeAlerts    = 0;          // count of unexpired alerts in system
 
-    function _setLight(id, on, flash) {
-        var el = document.getElementById(id);
-        if (!el) return;
-        el.classList.toggle('sl-on',    !!on);
-        el.classList.toggle('sl-flash', !!flash);
+    // Resolve the single active state → {color, flash, buzzer, label}.
+    function _resolve() {
+        var critical = _healthStatus === 'critical';
+        var degraded = _healthStatus === 'degraded';
+        var healthy  = _healthStatus === 'healthy';
+
+        // 1. Fault — pipeline/Redis unreachable (magenta, flashing, no buzzer)
+        if (critical && !_broadcastActive) {
+            return { color: 'magenta', flash: true, buzzer: false, label: 'System fault' };
+        }
+        // 2. On-air broadcast / live alert
+        if (_broadcastActive) {
+            var code = (_eventCode || '').toUpperCase();
+            if (TEST_EVENT_CODES[code]) {
+                // Routine test — cyan, flashing, never buzzer.
+                return { color: 'cyan', flash: true, buzzer: false,
+                         label: 'On-air — routine test (' + code + ')' };
+            }
+            // Real active alert — red, flashing, buzzer.
+            return { color: 'red', flash: true, buzzer: true,
+                     label: 'On-air — broadcasting' + (code ? ' (' + code + ')' : '') };
+        }
+        // 3. Incoming alert in system → yellow, flashing
+        if (_activeAlerts > 0) {
+            return { color: 'yellow', flash: true, buzzer: false,
+                     label: _activeAlerts + ' active alert' + (_activeAlerts !== 1 ? 's' : '') };
+        }
+        // Degraded health → steady yellow (soft warning)
+        if (degraded) {
+            return { color: 'yellow', flash: false, buzzer: false, label: 'System degraded' };
+        }
+        // 4. Standby — healthy & monitoring → green, steady
+        if (healthy) {
+            return { color: 'green', flash: false, buzzer: false, label: 'Standby — healthy' };
+        }
+        return { color: 'off', flash: false, buzzer: false, label: 'Status unknown' };
     }
 
     function _render() {
-        var broadcasting  = _broadcastActive;
-        var healthy       = _healthStatus === 'healthy';
-        var degraded      = _healthStatus === 'degraded' || _healthStatus === 'critical';
-        var hasActiveAlert = _activeAlerts > 0;
-
-        // Red: on when broadcasting, flashing for emphasis
-        _setLight('slRed',   broadcasting, broadcasting);
-
-        // Amber: on when health is degraded/critical
-        _setLight('slAmber', degraded, false);
-
-        // Green: on when healthy (regardless of broadcast — station is alive)
-        _setLight('slGreen', healthy, false);
-
-        // Blue: on when there is at least one active unexpired alert in the system
-        _setLight('slBlue', hasActiveAlert, false);
-
-        // Update tower tooltip
+        var state = _resolve();
         var tower = document.getElementById('slTower');
-        if (tower) {
-            var tip = [];
-            if (broadcasting)   tip.push('ON-AIR');
-            if (hasActiveAlert) tip.push(_activeAlerts + ' active alert' + (_activeAlerts !== 1 ? 's' : ''));
-            if (degraded)       tip.push('System warning');
-            if (healthy)        tip.push('Healthy');
-            tower.title = tip.length ? tip.join(' · ') : 'Status unknown';
+        if (!tower) return;
+
+        for (var i = 0; i < COLOR_CLASSES.length; i++) {
+            tower.classList.remove(COLOR_CLASSES[i]);
         }
+        tower.classList.add('sl-c-' + state.color);
+        tower.classList.toggle('sl-flash', !!state.flash && state.color !== 'off');
+        tower.classList.toggle('sl-buzzer-on', !!state.buzzer);
+        tower.dataset.slColor = state.color;
+        tower.title = 'Station status light · ' + state.label;
+        tower.setAttribute('aria-label', 'Station status light: ' + state.label);
     }
 
     function _applyBroadcastState(data) {
         _broadcastActive = !!(data && data.active);
+        _eventCode = (data && (data.event_code || data.label)) || '';
         if (data && typeof data.active_alert_count === 'number') {
             _activeAlerts = data.active_alert_count;
         }
