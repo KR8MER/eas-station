@@ -8,6 +8,30 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.90.0] - 2026-06-13 - Dedicated Support page
+
+### Added
+- **A dedicated `/support` page** (`templates/support.html`,
+  `support_page` route in `webapp/routes_public.py`) that consolidates the
+  project's funding messaging into one themeable, self-contained page:
+  a Ko-fi call-to-action, a "Where Your Support Goes" breakdown, and an
+  "Other Ways to Help" section (star, file issues, contribute). No external
+  scripts are loaded — it reuses the vendored `static/img/kofi.svg`.
+- **Navigation entry points** so the page isn't buried: a "Support the
+  Project" item in the navbar Help dropdown
+  (`templates/components/navbar.html`), a card on the Site Navigation page
+  (`templates/site_navigation.html`), and a "More ways to help" link from
+  the existing About card (`templates/about.html`).
+
+### Changed
+- **Footer support button now links to the new `/support` hub** instead of
+  jumping straight to Ko-fi, and is relabeled "Support the Project"
+  (`templates/base.html`).
+- **Ko-fi cup icon renders as a clean white monochrome mark on the blue
+  buttons** (footer, support page, About card) via a CSS filter, matching
+  Ko-fi's own button style — the source `kofi.svg` uses the same blue for
+  its strokes/saucer, so it previously blended into the button background.
+
 ## [2.89.0] - 2026-06-13 - Feature the Ko-fi link prominently
 
 ### Changed

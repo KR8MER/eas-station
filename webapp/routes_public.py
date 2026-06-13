@@ -848,6 +848,19 @@ def register(app: Flask, logger) -> None:
                 "<h1>Help</h1><p>Refer to docs/guides/HELP.md in the repository for the full operations guide.</p>"
             )
 
+    @app.route("/support")
+    def support_page():
+        """Dedicated page inviting users to support the project on Ko-fi."""
+        try:
+            return render_template("support.html")
+        except Exception as exc:  # pragma: no cover - fallback content
+            route_logger.error("Error rendering support page: %s", exc)
+            return (
+                "<h1>Support EAS Station</h1>"
+                "<p>EAS Station is free and open source. You can support development "
+                "at <a href='https://ko-fi.com/easstation'>ko-fi.com/easstation</a>.</p>"
+            )
+
     @app.route("/navigation")
     def site_navigation():
         """Quick access page showing all features organized by category."""
