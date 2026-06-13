@@ -17,6 +17,27 @@
         if (timeElement) {
             timeElement.textContent = timeString;
         }
+
+        // Compact live header clock (navbar) — split time/date readouts.
+        const navClockTime = document.getElementById('navbar-clock-time');
+        if (navClockTime) {
+            navClockTime.textContent = now.toLocaleString('en-US', {
+                timeZone: 'America/New_York',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+            });
+        }
+        const navClockDate = document.getElementById('navbar-clock-date');
+        if (navClockDate) {
+            navClockDate.textContent = now.toLocaleString('en-US', {
+                timeZone: 'America/New_York',
+                month: 'short',
+                day: 'numeric',
+                timeZoneName: 'short'
+            });
+        }
     }
 
     function exportToExcel(data, baseFilename = 'export') {
