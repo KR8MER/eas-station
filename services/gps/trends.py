@@ -227,6 +227,9 @@ def collect_gps_status(gps_manager) -> Dict[str, Any]:
         "hdop":            _num(status.get("hdop")),
         "vdop":            _num(status.get("vdop")),
         "pdop":            _num(status.get("pdop")),
+        # TDOP is only present in gpsd mode (NMEA GSA omits it); _num
+        # passes the None through cleanly on direct-NMEA receivers.
+        "tdop":            _num(status.get("tdop")),
         "avg_snr":         avg_snr,
         "fix_age_s":       _num(status.get("fix_age_s")),
         "holdover_s":      _num(holdover_s),
@@ -281,7 +284,7 @@ def aggregate_samples(
     NUM_FIELDS = (
         "last_offset_s", "rms_offset_s", "frequency_ppm", "residual_freq_ppm",
         "skew_ppm", "root_dispersion_s",
-        "hdop", "vdop", "pdop", "avg_snr", "fix_age_s", "holdover_s",
+        "hdop", "vdop", "pdop", "tdop", "avg_snr", "fix_age_s", "holdover_s",
         "pps_jitter_ns", "noise_level", "agc_count",
         "sats_used", "sats_visible", "adev_10s", "adev_100s",
         "cpu_temp_c", "lat", "lon",
