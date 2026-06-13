@@ -332,7 +332,10 @@ def register_message_routes(bp, logger) -> None:
                             alert_id=str(message_id), event_code=event_code,
                         )
                     else:
-                        gpio_controller.deactivate_all()
+                        # force=True: resend playout is finished, drop the air
+                        # chain immediately rather than waiting out each pin's
+                        # min-hold (hold_seconds) with the relay still keyed.
+                        gpio_controller.deactivate_all(force=True)
                 except Exception as exc:
                     logger.warning('Resend GPIO release failed: %s', exc)
             clear_broadcast_active()

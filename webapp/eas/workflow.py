@@ -1441,7 +1441,10 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
                             event_code=event_code,
                         )
                     else:
-                        gpio_controller.deactivate_all()
+                        # force=True: playout is finished, drop the air chain
+                        # immediately instead of waiting out each pin's
+                        # min-hold (hold_seconds) with the relay still keyed.
+                        gpio_controller.deactivate_all(force=True)
                 except Exception as exc:
                     workflow_logger.warning('GPIO release failed: %s', exc)
             clear_broadcast_active()
