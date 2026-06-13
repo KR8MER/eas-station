@@ -302,7 +302,7 @@
         <div class="hero-section">
             <h1>📊 EAS Station Repository Statistics</h1>
             <p class="timestamp">
-                <i class="far fa-clock"></i> Last Updated: 2026-06-13 18:26:40 UTC
+                <i class="far fa-clock"></i> Last Updated: 2026-06-13 18:42:59 UTC
             </p>
         </div>
         
@@ -320,17 +320,17 @@
             </div>
             <div class="quick-stat-item">
                 <div class="icon">📝</div>
-                <div class="value">739,100</div>
+                <div class="value">739,070</div>
                 <div class="label">Total Lines</div>
             </div>
             <div class="quick-stat-item">
                 <div class="icon">💻</div>
-                <div class="value">548,972</div>
+                <div class="value">548,957</div>
                 <div class="label">Code Lines</div>
             </div>
             <div class="quick-stat-item">
                 <div class="icon">💬</div>
-                <div class="value">126,195</div>
+                <div class="value">126,188</div>
                 <div class="label">Comments</div>
             </div>
             <div class="quick-stat-item">
@@ -474,9 +474,9 @@
                         </tr>
                         <tr>
                             <td><strong><svg viewBox="0 0 24 24" width="20" height="20" fill="#FFB13B" style="vertical-align: middle; margin-right: 6px;"><path d="M7.466 0L0 7.466v9.068L7.466 24h9.068L24 16.534V7.466L16.534 0H7.466zm4.386 2.867c.888 0 1.61.722 1.61 1.61 0 .889-.722 1.61-1.61 1.61-.889 0-1.61-.721-1.61-1.61 0-.888.721-1.61 1.61-1.61zm-2.867 7.2c1.066 0 1.932.867 1.932 1.933s-.866 1.933-1.932 1.933c-1.067 0-1.933-.867-1.933-1.933s.866-1.933 1.933-1.933zm6.4 0c1.066 0 1.932.867 1.932 1.933s-.866 1.933-1.932 1.933c-1.067 0-1.933-.867-1.933-1.933s.866-1.933 1.933-1.933zm-3.2 6.4c1.333 0 2.416 1.083 2.416 2.417s-1.083 2.416-2.416 2.416-2.417-1.082-2.417-2.416S10.852 16.467 12.185 16.467z"/></svg>SVG</strong></td>
-                            <td class="text-end">11,066</td>
-                            <td class="text-end">8,355</td>
-                            <td class="text-end">2,381</td>
+                            <td class="text-end">11,036</td>
+                            <td class="text-end">8,340</td>
+                            <td class="text-end">2,374</td>
                             <td class="text-end">76%</td>
                             <td>
                                 <div class="progress-track">
@@ -617,7 +617,7 @@
             data: {
                 labels: ['💻 Code', '💬 Comments', '⬜ Whitespace'],
                 datasets: [{
-                    data: [548972, 126195, 63933],
+                    data: [548957, 126188, 63925],
                     backgroundColor: [
                         'rgba(102, 126, 234, 0.8)',
                         'rgba(118, 75, 162, 0.8)',
@@ -650,7 +650,7 @@
                             label: function(context) {
                                 let label = context.label || '';
                                 let value = context.parsed || 0;
-                                let total = 739100;
+                                let total = 739070;
                                 let percentage = ((value / total) * 100).toFixed(1);
                                 return label + ': ' + value.toLocaleString() + ' lines (' + percentage + '%)';
                             }
@@ -727,7 +727,7 @@
                 labels: ["Python", "JSON", "YAML", "HTML", "Markdown", "JavaScript", "CSS", "SVG"],
                 datasets: [{
                     label: 'Lines of Code',
-                    data: [74849, 208171, 97930, 78690, 37244, 21481, 13880, 8355],
+                    data: [74849, 208171, 97930, 78690, 37244, 21481, 13880, 8340],
                     backgroundColor: 'rgba(118, 75, 162, 0.8)',
                     borderColor: 'rgba(118, 75, 162, 1)',
                     borderWidth: 2,
