@@ -267,24 +267,24 @@
                                     </td>
                                     <td class="text-center">
                                         {# No data-label on actions cell so it spans full width on mobile #}
-                                        <div class="btn-group btn-group-sm" role="group">
+                                        <div class="btn-group-vertical btn-group-sm d-inline-flex" role="group" aria-label="Audio record actions">
                                             {% if message.text_url %}
-                                            <a class="btn btn-outline-info" href="{{ message.text_url }}" target="_blank" rel="noopener" title="Download summary">
-                                                <i class="fas fa-file-alt"></i>
+                                            <a class="btn btn-outline-info" href="{{ message.text_url }}" target="_blank" rel="noopener" title="Download the text summary of this broadcast">
+                                                <i class="fas fa-file-alt me-1"></i>Summary
                                             </a>
                                             {% endif %}
-                                            <a class="btn btn-outline-secondary" href="{{ message.detail_url }}" title="View details">
-                                                <i class="fas fa-headphones"></i>
+                                            <a class="btn btn-outline-secondary" href="{{ message.detail_url }}" title="View full details and audio for this broadcast">
+                                                <i class="fas fa-headphones me-1"></i>Details
                                             </a>
                                             {% if message.eom_url %}
-                                            <a class="btn btn-outline-warning" href="{{ message.eom_url }}" target="_blank" rel="noopener" title="EOM Burst">
-                                                <i class="fas fa-broadcast-tower"></i>
+                                            <a class="btn btn-outline-warning" href="{{ message.eom_url }}" target="_blank" rel="noopener" title="Download the End-of-Message (EOM) burst audio">
+                                                <i class="fas fa-broadcast-tower me-1"></i>EOM Burst
                                             </a>
                                             {% endif %}
                                             {% if current_user and message.source == 'automated' %}
-                                            <button type="button" class="btn btn-warning" title="Resend this broadcast"
+                                            <button type="button" class="btn btn-warning" title="Re-broadcast this alert now — activates GPIO relays and plays the audio on air"
                                                     onclick="resendEASMessage({{ message.id }}, this)">
-                                                <i class="fas fa-redo"></i>
+                                                <i class="fas fa-redo me-1"></i>Resend on Air
                                             </button>
                                             {% endif %}
                                         </div>
@@ -392,9 +392,9 @@ async function resendEASMessage(messageId, btn) {
     }
     var icon = btn.querySelector('i');
     btn.disabled = true;
-    if (icon) { icon.className = 'fas fa-spinner fa-spin'; }
+    if (icon) { icon.className = 'fas fa-spinner fa-spin me-1'; }
     try {
-        var resp = await fetch('/admin/eas_messages/' + messageId + '/resend', {
+        var resp = await fetch('/eas/messages/' + messageId + '/resend', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
         });
@@ -408,7 +408,7 @@ async function resendEASMessage(messageId, btn) {
         showToast('Failed to resend EAS message', 'error');
     } finally {
         btn.disabled = false;
-        if (icon) { icon.className = 'fas fa-redo'; }
+        if (icon) { icon.className = 'fas fa-redo me-1'; }
     }
 }
 

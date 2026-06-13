@@ -34,8 +34,9 @@
                 </a>
                 {% if current_user %}
                 {% if message.audio_data %}
-                <button type="button" class="btn btn-outline-light" onclick="resendAudioMessage()" id="resendBtn">
-                    <i class="fas fa-redo me-1"></i>Resend
+                <button type="button" class="btn btn-outline-light" onclick="resendAudioMessage()" id="resendBtn"
+                        title="Re-broadcast this alert now — activates GPIO relays and plays the audio on air">
+                    <i class="fas fa-redo me-1"></i>Resend on Air
                 </button>
                 {% endif %}
                 <button type="button" class="btn btn-outline-light" onclick="deleteAudioMessage()">
@@ -455,7 +456,7 @@ async function resendAudioMessage() {
     }
 
     try {
-        const response = await fetch(`/admin/eas_messages/${messageId}/resend`, {
+        const response = await fetch(`/eas/messages/${messageId}/resend`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
         });
@@ -473,7 +474,7 @@ async function resendAudioMessage() {
     } finally {
         if (btn) {
             btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-redo me-1"></i>Resend';
+            btn.innerHTML = '<i class="fas fa-redo me-1"></i>Resend on Air';
         }
     }
 }
