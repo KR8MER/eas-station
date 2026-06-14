@@ -61,6 +61,27 @@ tracks releases under the 2.x series.
     (`templates/index.html`) corrected to `--text-color`.
   - **`network.html`** security/interface badges used `var(--bg-secondary)`
     with no fallback (transparent on every theme); now use `--surface-color`.
+- **Full codebase sweep for the same undefined-variable class of bug.** Audited
+  every `var(--…)` reference against the variables the theme palettes actually
+  define and fixed all remaining no-fallback or wrong-mode-fallback usages:
+  - **`screen-editor.css`** referenced an entire `--color-*` token set
+    (`--color-info`, `--color-info-dark`, `--color-info-light`,
+    `--color-warning`, `--color-neutral-200`, `--color-text-inverse`) that was
+    never defined, so the editor's info buttons, warning badges, focus rings and
+    neutral surfaces lost their colour. These tokens are now defined (with a
+    dark-mode override for the neutral surface).
+  - **Hover states** that fell back to a fixed light `#f8f9fa`
+    (`county_boundaries.html`, `zones.html`, `icecast.html`, `system_logs.html`,
+    `system_health.html`) turned table/list rows near-white on dark themes,
+    making light text unreadable on hover. Replaced with theme-aware
+    `color-mix(... var(--primary-color) …)` tints.
+  - **`rgba(var(--primary-rgb)/--primary-color-rgb, …)`** tints
+    (`alert_feeds.html`, `settings_hub.html`, `nav-tabs` hover in
+    `styles.css`) always rendered a fixed indigo/blue regardless of theme;
+    converted to `color-mix` against `--primary-color`.
+  - Other typo'd variables corrected to their real names
+    (`--muted-text`→`--text-muted`, `--primary-hover`→`--primary-dark`,
+    `--input-bg`/`--surface-raised`→`--surface-color`/`--bg-card`).
 
 ## [2.91.1] - 2026-06-14 - Alert Purge: batched deletes + Admin panel relocation
 

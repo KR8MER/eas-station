@@ -71,7 +71,7 @@
     .form-group textarea:focus {
         outline: none;
         border-color: var(--primary-color);
-        box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.1);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color) 10%, transparent);
     }
 
     .form-help {
@@ -95,13 +95,13 @@
     .environment-option:hover,
     .feed-option:hover {
         border-color: var(--primary-color);
-        background: rgba(var(--primary-rgb), 0.05);
+        background: color-mix(in srgb, var(--primary-color) 5%, transparent);
     }
 
     .environment-option.selected,
     .feed-option.selected {
         border-color: var(--primary-color);
-        background: rgba(var(--primary-rgb), 0.1);
+        background: color-mix(in srgb, var(--primary-color) 10%, transparent);
     }
 
     .option-label {
@@ -186,7 +186,7 @@
     }
 
     .btn-primary:hover {
-        background: var(--primary-hover);
+        background: var(--primary-dark);
         transform: translateY(-1px);
         box-shadow: 0 4px 12px var(--shadow-color);
     }
