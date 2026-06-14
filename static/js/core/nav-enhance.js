@@ -70,16 +70,22 @@
             .eas-breadcrumbs {
                 padding: .35rem 1rem;
                 font-size: .82rem;
-                border-bottom: 1px solid var(--bs-border-color, rgba(128,128,128,.25));
-                background: var(--bs-tertiary-bg, transparent);
+                /* Use the app's own theme tokens, NOT Bootstrap's --bs-* vars.
+                   The custom data-theme palettes (lightning, midnight, …) do not
+                   sync Bootstrap's --bs-tertiary-bg / --bs-border-color, so those
+                   resolved to Bootstrap's LIGHT defaults — a near-white bar with
+                   light theme text on top = invisible breadcrumbs on dark themes. */
+                border-bottom: 1px solid var(--border-color, rgba(128,128,128,.25));
+                background: var(--surface-color, var(--bs-tertiary-bg, transparent));
+                color: var(--text-secondary, inherit);
                 display: flex;
                 align-items: center;
                 gap: .35rem;
                 flex-wrap: wrap;
             }
-            .eas-breadcrumbs a { text-decoration: none; }
+            .eas-breadcrumbs a { text-decoration: none; color: var(--primary-color, inherit); }
             .eas-breadcrumbs .eas-crumb-sep { opacity: .45; }
-            .eas-breadcrumbs .eas-crumb-current { font-weight: 600; }
+            .eas-breadcrumbs .eas-crumb-current { font-weight: 600; color: var(--text-color, inherit); }
             .eas-palette-backdrop {
                 position: fixed; inset: 0; z-index: 10500;
                 background: rgba(0,0,0,.45);
@@ -88,9 +94,9 @@
             }
             .eas-palette {
                 width: min(620px, 92vw);
-                background: var(--bs-body-bg, #fff);
-                color: var(--bs-body-color, #111);
-                border: 1px solid var(--bs-border-color, rgba(128,128,128,.35));
+                background: var(--surface-color, var(--bs-body-bg, #fff));
+                color: var(--text-color, var(--bs-body-color, #111));
+                border: 1px solid var(--border-color, var(--bs-border-color, rgba(128,128,128,.35)));
                 border-radius: 10px;
                 box-shadow: 0 18px 50px rgba(0,0,0,.35);
                 overflow: hidden;
@@ -101,7 +107,7 @@
                 background: transparent; color: inherit;
                 font-size: 1.05rem;
                 padding: .85rem 1rem;
-                border-bottom: 1px solid var(--bs-border-color, rgba(128,128,128,.25));
+                border-bottom: 1px solid var(--border-color, var(--bs-border-color, rgba(128,128,128,.25)));
             }
             .eas-palette ul {
                 list-style: none; margin: 0; padding: .35rem;
@@ -120,20 +126,20 @@
             .eas-palette li.active .eas-palette-trail { color: rgba(255,255,255,.75); }
             .eas-palette-trail {
                 font-size: .75rem;
-                color: var(--bs-secondary-color, #888);
+                color: var(--text-muted, var(--bs-secondary-color, #888));
                 margin-left: auto;
                 white-space: nowrap;
             }
             .eas-palette-empty {
                 padding: 1rem; text-align: center;
-                color: var(--bs-secondary-color, #888);
+                color: var(--text-muted, var(--bs-secondary-color, #888));
                 font-size: .9rem;
             }
             .eas-palette-hint {
                 padding: .35rem .9rem;
                 font-size: .72rem;
-                color: var(--bs-secondary-color, #888);
-                border-top: 1px solid var(--bs-border-color, rgba(128,128,128,.25));
+                color: var(--text-muted, var(--bs-secondary-color, #888));
+                border-top: 1px solid var(--border-color, var(--bs-border-color, rgba(128,128,128,.25)));
                 display: flex; gap: 1rem;
             }
             .eas-palette-hint kbd {

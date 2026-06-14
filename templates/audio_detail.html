@@ -252,7 +252,7 @@
                 </div>
                 <div class="card-body">
                     {% if message.same_header %}
-                    <code class="d-block p-2 rounded mb-3 small" style="word-break:break-all;background:var(--bs-secondary-bg)">{{ message.same_header }}</code>
+                    <code class="d-block p-2 rounded mb-3 small" style="word-break:break-all;background:var(--surface-color, var(--bs-secondary-bg))">{{ message.same_header }}</code>
                     {% endif %}
                     <dl class="row mb-0">
                         <dt class="col-sm-4">Event</dt>
@@ -340,7 +340,7 @@
                 </div>
                 <div class="collapse" id="rawMetadata">
                     <div class="card-body">
-                        <pre class="p-3 rounded small mb-0" style="background:var(--bs-secondary-bg);overflow-x:auto">{{ metadata | tojson(indent=2) }}</pre>
+                        <pre class="p-3 rounded small mb-0" style="background:var(--surface-color, var(--bs-secondary-bg));overflow-x:auto">{{ metadata | tojson(indent=2) }}</pre>
                     </div>
                 </div>
             </div>
