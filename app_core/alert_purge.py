@@ -79,6 +79,16 @@ VALID_DECISION_FILTERS = (
 
 _MAX_AGE_DAYS = 3650
 
+# Rows are deleted / stripped in batches so a single statement never has to
+# touch thousands of multi-megabyte WAV blobs at once.  The web connection runs
+# with a 30s ``statement_timeout`` (see ``app.py`` connect_args), and a single
+# DELETE/UPDATE over a large, audio-heavy result set routinely blew past that
+# ceiling — Postgres aborted the statement and rolled the whole purge back, so
+# the operation "silently" did nothing.  Committing per batch keeps every
+# statement well under the timeout and makes progress durable even if the
+# request is later interrupted.
+PURGE_BATCH_SIZE = 200
+
 
 # ---------------------------------------------------------------------------
 # Criteria helpers
@@ -290,57 +300,81 @@ def execute_purge(
     delete_messages = bool(criteria.get("delete_generated_messages")) and scope == SCOPE_FULL
     filters = build_filters(criteria, now=now)
 
-    # Measure before mutating so the summary reflects what was reclaimed.
-    audio_bytes = (
-        db.session.query(
-            func.coalesce(func.sum(func.length(ReceivedEASAlert.raw_audio_data)), 0)
-        )
-        .filter(*filters)
-        .scalar()
-        or 0
-    )
-
     summary: Dict[str, Any] = {
         "scope": scope,
         "trigger": trigger,
         "actor": actor,
         "rows_deleted": 0,
         "audio_stripped": 0,
-        "audio_bytes_freed": int(audio_bytes),
-        "audio_bytes_freed_human": human_bytes(int(audio_bytes)),
+        "audio_bytes_freed": 0,
+        "audio_bytes_freed_human": human_bytes(0),
         "messages_deleted": 0,
+        "batches": 0,
         "criteria": _summarize_criteria(criteria),
     }
 
     try:
         if scope == SCOPE_AUDIO:
-            stripped = (
-                db.session.query(ReceivedEASAlert)
-                .filter(*filters, ReceivedEASAlert.raw_audio_data.isnot(None))
-                .update({ReceivedEASAlert.raw_audio_data: None}, synchronize_session=False)
-            )
-            summary["audio_stripped"] = int(stripped or 0)
-        else:
-            message_ids: List[int] = []
-            if delete_messages:
-                message_ids = [
+            # Only rows that still carry a blob need touching; nulling them
+            # drops them out of the filter so the loop terminates naturally.
+            audio_filters = list(filters) + [ReceivedEASAlert.raw_audio_data.isnot(None)]
+            while True:
+                batch_ids = [
                     row[0]
-                    for row in db.session.query(ReceivedEASAlert.generated_message_id)
-                    .filter(*filters, ReceivedEASAlert.generated_message_id.isnot(None))
-                    .distinct()
+                    for row in db.session.query(ReceivedEASAlert.id)
+                    .filter(*audio_filters)
+                    .limit(PURGE_BATCH_SIZE)
                 ]
-
-            deleted = (
-                db.session.query(ReceivedEASAlert)
-                .filter(*filters)
-                .delete(synchronize_session=False)
-            )
-            summary["rows_deleted"] = int(deleted or 0)
+                if not batch_ids:
+                    break
+                summary["audio_bytes_freed"] += _sum_audio_bytes(batch_ids, ReceivedEASAlert)
+                stripped = (
+                    db.session.query(ReceivedEASAlert)
+                    .filter(ReceivedEASAlert.id.in_(batch_ids))
+                    .update({ReceivedEASAlert.raw_audio_data: None}, synchronize_session=False)
+                )
+                db.session.commit()
+                summary["audio_stripped"] += int(stripped or 0)
+                summary["batches"] += 1
+        else:
+            message_ids: set = set()
+            while True:
+                batch_ids = [
+                    row[0]
+                    for row in db.session.query(ReceivedEASAlert.id)
+                    .filter(*filters)
+                    .limit(PURGE_BATCH_SIZE)
+                ]
+                if not batch_ids:
+                    break
+                summary["audio_bytes_freed"] += _sum_audio_bytes(batch_ids, ReceivedEASAlert)
+                if delete_messages:
+                    message_ids.update(
+                        row[0]
+                        for row in db.session.query(ReceivedEASAlert.generated_message_id)
+                        .filter(
+                            ReceivedEASAlert.id.in_(batch_ids),
+                            ReceivedEASAlert.generated_message_id.isnot(None),
+                        )
+                        .distinct()
+                    )
+                deleted = (
+                    db.session.query(ReceivedEASAlert)
+                    .filter(ReceivedEASAlert.id.in_(batch_ids))
+                    .delete(synchronize_session=False)
+                )
+                db.session.commit()
+                summary["rows_deleted"] += int(deleted or 0)
+                summary["batches"] += 1
 
             if message_ids:
+                # Rows are already gone, so the orphan check is accurate.
                 summary["messages_deleted"] = _delete_orphaned_messages(
-                    message_ids, EASMessage, ReceivedEASAlert
+                    list(message_ids), EASMessage, ReceivedEASAlert
                 )
+                db.session.commit()
+
+        summary["audio_bytes_freed_human"] = human_bytes(summary["audio_bytes_freed"])
 
         db.session.add(
             SystemLog(
@@ -372,6 +406,26 @@ def execute_purge(
         summary["audio_bytes_freed"],
     )
     return summary
+
+
+def _sum_audio_bytes(ids: List[int], ReceivedEASAlert) -> int:
+    """Total stored-audio bytes for a batch of received-alert *ids*.
+
+    Summed per batch (rather than once across the whole result set) so the
+    underlying ``length()`` detoast never has to read more than a single
+    batch of WAV blobs inside one statement_timeout window.
+    """
+    if not ids:
+        return 0
+    total = (
+        db.session.query(
+            func.coalesce(func.sum(func.length(ReceivedEASAlert.raw_audio_data)), 0)
+        )
+        .filter(ReceivedEASAlert.id.in_(ids))
+        .scalar()
+        or 0
+    )
+    return int(total)
 
 
 def _delete_orphaned_messages(message_ids, EASMessage, ReceivedEASAlert) -> int:
@@ -615,6 +669,7 @@ def stop_scheduler() -> None:
 
 __all__ = [
     "AutoPurgeScheduler",
+    "PURGE_BATCH_SIZE",
     "SCOPE_AUDIO",
     "SCOPE_FULL",
     "VALID_DECISION_FILTERS",
