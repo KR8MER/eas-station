@@ -257,6 +257,67 @@ class TestExecutePurge:
         # Nothing was deleted.
         assert db.session.query(ReceivedEASAlert).count() == 5
 
+    def test_large_purge_runs_in_multiple_batches(self, app, monkeypatch):
+        """A purge larger than one batch deletes every matching row.
+
+        Guards the batching that keeps each statement under the database
+        statement_timeout: with a small batch size, far more rows than a
+        single batch must still be fully removed and accounted for.
+        """
+        now = utc_now()
+        old = now - timedelta(days=90)
+        monkeypatch.setattr(alert_purge, "PURGE_BATCH_SIZE", 10)
+
+        total = 25
+        db.session.add_all([
+            ReceivedEASAlert(
+                received_at=old, source_name="NOISE", alert_source="EAS-STREAM",
+                event_code="RWT", forwarding_decision="ignored",
+                raw_audio_data=b"Z" * 8,
+            )
+            for _ in range(total)
+        ])
+        db.session.commit()
+
+        crit = alert_purge.normalize_criteria({"older_than_days": "30", "scope": "full"})
+        summary = alert_purge.execute_purge(crit, actor="tester", now=now)
+
+        assert summary["rows_deleted"] == total
+        assert summary["batches"] == 3  # 10 + 10 + 5
+        assert summary["audio_bytes_freed"] == total * 8
+        assert db.session.query(ReceivedEASAlert).count() == 0
+
+    def test_large_audio_strip_runs_in_multiple_batches(self, app, monkeypatch):
+        """Audio-only batching strips every blob without looping forever."""
+        now = utc_now()
+        old = now - timedelta(days=90)
+        monkeypatch.setattr(alert_purge, "PURGE_BATCH_SIZE", 10)
+
+        total = 22
+        db.session.add_all([
+            ReceivedEASAlert(
+                received_at=old, source_name="NOISE", alert_source="EAS-STREAM",
+                event_code="RWT", forwarding_decision="ignored",
+                raw_audio_data=b"Z" * 8,
+            )
+            for _ in range(total)
+        ])
+        db.session.commit()
+
+        crit = alert_purge.normalize_criteria({"older_than_days": "30", "scope": "audio"})
+        summary = alert_purge.execute_purge(crit, actor="tester", now=now)
+
+        assert summary["audio_stripped"] == total
+        assert summary["rows_deleted"] == 0
+        assert summary["audio_bytes_freed"] == total * 8
+        assert db.session.query(ReceivedEASAlert).count() == total
+        remaining_audio = (
+            db.session.query(ReceivedEASAlert)
+            .filter(ReceivedEASAlert.raw_audio_data.isnot(None))
+            .count()
+        )
+        assert remaining_audio == 0
+
 
 # ---------------------------------------------------------------------------
 # Auto-purge settings + run

@@ -8,6 +8,37 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.91.1] - 2026-06-14 - Alert Purge: batched deletes + Admin panel relocation
+
+### Fixed
+- **Large purges no longer silently fail.** A purge covering thousands of
+  audio-heavy received alerts (e.g. ~2,600 rows / 5.6 GB) was executed as a
+  single `DELETE`/`SUM` statement, which routinely exceeded the 30-second
+  PostgreSQL `statement_timeout` configured for the web connection
+  (`app.py`). Postgres aborted the statement and rolled the whole transaction
+  back, so nothing was deleted and the UI appeared to do nothing.
+  `app_core/alert_purge.execute_purge()` now deletes / strips audio in batches
+  of `PURGE_BATCH_SIZE` (200) rows and commits each batch, so every statement
+  stays well under the timeout and progress is durable even if the request is
+  later interrupted. Byte accounting is summed per batch via the new
+  `_sum_audio_bytes()` helper. The manual-purge summary now also reports the
+  `batches` count.
+
+### Changed
+- **Alert Purge moved from the Settings navbar dropdown to the Admin panel.**
+  To declutter the navbar, the link now lives on **Admin → Operations** as an
+  "Alert Purge" card (`templates/admin.html`) instead of
+  **Settings → Data Continuity** (`templates/components/navbar.html`). The
+  page URL (`/admin/alert-purge/`) is unchanged.
+- The Alert Purge page surfaces request failures clearly instead of swallowing
+  them: gateway timeouts / non-JSON responses (HTTP 502/504) now show an
+  actionable toast explaining the purge runs in batches and can be re-run or
+  narrowed (`templates/admin/alert_purge.html`).
+
+### Added
+- Regression tests in `tests/test_alert_purge.py` covering multi-batch full
+  purges and multi-batch audio-only strips.
+
 ## [2.91.0] - 2026-06-14 - Received-alert purge system
 
 ### Added

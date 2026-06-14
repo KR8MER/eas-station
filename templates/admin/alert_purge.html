@@ -285,12 +285,37 @@
 document.addEventListener('DOMContentLoaded', function () {
     const csrf = window.CSRF_TOKEN;
 
-    function postForm(url, formData) {
-        return fetch(url, {
+    async function postForm(url, formData) {
+        const resp = await fetch(url, {
             method: 'POST',
             body: formData,
             headers: { 'X-CSRF-Token': csrf },
-        }).then(r => r.json());
+        });
+        // A proxy/gateway timeout (502/504) or worker restart returns an HTML
+        // error page, not JSON — so never let r.json() throw and swallow the
+        // real reason. Surface a clear, actionable message instead.
+        let data = null;
+        try {
+            data = await resp.json();
+        } catch (_) {
+            data = null;
+        }
+        if (!resp.ok) {
+            if (data && data.error) {
+                throw new Error(data.error);
+            }
+            let msg = 'Request failed (HTTP ' + resp.status + ')';
+            if (resp.status === 502 || resp.status === 504) {
+                msg += ' — the request ran too long and timed out. The purge now '
+                     + 'runs in batches, so re-run it to continue, or narrow the '
+                     + 'criteria (add an age, source, or decision filter).';
+            }
+            throw new Error(msg);
+        }
+        if (!data) {
+            throw new Error('Server returned an unexpected (non-JSON) response.');
+        }
+        return data;
     }
 
     function refreshStats(stats) {
@@ -328,7 +353,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 showToast(data.error || 'Preview failed', 'danger');
             }
         } catch (e) {
-            showToast('Preview request failed', 'danger');
+            showToast(e.message || 'Preview request failed', 'danger');
         } finally {
             btn.disabled = false;
         }
@@ -355,7 +380,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 showToast(data.error || 'Purge failed', 'danger');
             }
         } catch (e) {
-            showToast('Purge request failed', 'danger');
+            showToast(e.message || 'Purge request failed', 'danger');
         } finally {
             btn.disabled = false;
             btn.innerHTML = original;
@@ -375,7 +400,7 @@ document.addEventListener('DOMContentLoaded', function () {
             showToast(data.success ? data.message : (data.error || 'Save failed'),
                       data.success ? 'success' : 'danger');
         } catch (e2) {
-            showToast('Save request failed', 'danger');
+            showToast(e2.message || 'Save request failed', 'danger');
         } finally {
             btn.disabled = false;
             btn.innerHTML = original;
@@ -397,7 +422,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 showToast(data.error || 'Auto-purge failed', 'danger');
             }
         } catch (e) {
-            showToast('Auto-purge request failed', 'danger');
+            showToast(e.message || 'Auto-purge request failed', 'danger');
         } finally {
             btn.disabled = false;
             btn.innerHTML = original;
