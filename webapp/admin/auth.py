@@ -31,9 +31,10 @@ from flask import current_app, flash, g, redirect, render_template, request, ses
 from sqlalchemy import func
 
 from app_core.extensions import db
-from app_core.models import AdminSession, AdminUser, SystemLog
+from app_core.models import AdminUser, SystemLog
 from app_utils import utc_now
 from app_core.auth.mfa import MFASession, verify_user_mfa
+from app_core.auth.session_tracking import start_session, end_session
 from app_core.auth.audit import AuditLogger, AuditAction
 from app_core.auth.input_validation import InputValidator
 from app_core.auth.rate_limiter import get_rate_limiter
@@ -68,31 +69,13 @@ def _check_password_expiry(user: 'AdminUser') -> tuple:
 
 
 def _create_admin_session(user_id: int) -> None:
-    """Record a new administrator login session in the database."""
-    try:
-        db.session.add(AdminSession(
-            user_id=user_id,
-            ip_address=request.remote_addr,
-            user_agent=request.headers.get('User-Agent', '')[:512],
-        ))
-    except Exception as exc:  # pragma: no cover - non-critical
-        current_app.logger.warning("Could not create AdminSession record: %s", exc)
+    """Record a new administrator login session and link it to the cookie."""
+    start_session(user_id)
 
 
 def _end_admin_session(user_id: int, reason: str = 'logout') -> None:
-    """Mark the most recent active session for this user as ended."""
-    try:
-        session_row = (
-            AdminSession.query
-            .filter_by(user_id=user_id, ended_at=None)
-            .order_by(AdminSession.created_at.desc())
-            .first()
-        )
-        if session_row:
-            session_row.ended_at = utc_now()
-            session_row.ended_reason = reason
-    except Exception as exc:  # pragma: no cover - non-critical
-        current_app.logger.warning("Could not end AdminSession record: %s", exc)
+    """Mark this login's administrator session as ended."""
+    end_session(user_id, reason=reason)
 
 
 # Create Blueprint for auth routes

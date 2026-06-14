@@ -1047,6 +1047,13 @@ def before_request():
                 user = AdminUser.query.get(user_id)
                 if user and user.is_active:
                     g.current_user = user
+                    # Refresh the AdminSession heartbeat so the Active Sessions
+                    # monitor reflects real activity and stale rows get reaped.
+                    try:
+                        from app_core.auth.session_tracking import record_heartbeat
+                        record_heartbeat(user.id)
+                    except Exception:
+                        db.session.rollback()
                 else:
                     session.pop('user_id', None)
             except Exception:
