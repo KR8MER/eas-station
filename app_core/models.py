@@ -85,6 +85,7 @@ from ._models_polling import PollDebugRecord, PollHistory, PollerSettings
 from ._models_settings import (
     AlertFilterSettings,
     ApplicationSettings,
+    AutoPurgeSettings,
     CertbotSettings,
     EASDecoderMonitorSettings,
     EASSettings,
@@ -142,6 +143,7 @@ __all__ = [
     "AudioHealthStatus",
     "AudioSourceConfigDB",
     "AudioSourceMetrics",
+    "AutoPurgeSettings",
     "AdminUser",
     "Boundary",
     "CAPAlert",
