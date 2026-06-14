@@ -335,6 +335,11 @@ def api_admin_sessions():
     Query params:
         active_only (bool, default true): if 'false', return last 100 sessions regardless of state.
     """
+    # Reap idle sessions first so the list always reflects reality, even if no
+    # user has triggered the inline heartbeat sweep recently.
+    from app_core.auth.session_tracking import expire_stale_sessions
+    expire_stale_sessions()
+
     active_only = request.args.get('active_only', 'true').lower() != 'false'
     if active_only:
         sessions = (
@@ -374,6 +379,46 @@ def api_terminate_admin_session(session_id: int):
     ))
     db.session.commit()
     return jsonify({'message': 'Session terminated.', 'session': sess.to_dict()})
+
+
+@dashboard_bp.route('/api/admin/sessions/terminate-bulk', methods=['POST'])
+def api_terminate_admin_sessions_bulk():
+    """Force-end many active sessions at once.
+
+    JSON body ``{"scope": "others"|"all"}`` (default ``others``):
+    * ``others`` - terminate every active session except the caller's own,
+      so the admin clearing the backlog is not signed out.
+    * ``all``    - terminate every active session, including the caller's.
+    """
+    data = request.get_json(silent=True) or {}
+    scope = str(data.get('scope', 'others')).lower()
+    if scope not in {'others', 'all'}:
+        return jsonify({'error': "scope must be 'others' or 'all'."}), 400
+
+    from app_core.auth.session_tracking import SESSION_ROW_KEY
+    from flask import session as flask_session
+
+    query = AdminSession.query.filter(AdminSession.ended_at.is_(None))
+    current_session_id = flask_session.get(SESSION_ROW_KEY)
+    if scope == 'others' and current_session_id is not None:
+        query = query.filter(AdminSession.id != current_session_id)
+
+    count = query.update(
+        {AdminSession.ended_at: func.now(), AdminSession.ended_reason: 'admin_terminated'},
+        synchronize_session=False,
+    )
+    db.session.add(SystemLog(
+        level='WARNING',
+        message='Administrator sessions terminated in bulk',
+        module='auth',
+        details={
+            'scope': scope,
+            'count': count,
+            'terminated_by': g.current_user.username if g.current_user else None,
+        },
+    ))
+    db.session.commit()
+    return jsonify({'message': f'Terminated {count} session(s).', 'count': count})
 
 
 @dashboard_bp.route('/admin/sessions')
