@@ -462,6 +462,11 @@ _PUBLIC_PAGE_PATHS = frozenset({
     '/help/version',
     '/health',
     '/health/dependencies',
+    # Public information pages — documentation, help and sponsorship should be
+    # readable without signing in (see _PUBLIC_PAGE_PREFIXES for the /docs tree).
+    '/docs',
+    '/support',
+    '/repo-stats',
     # Auth endpoints
     '/login',
     '/logout',
@@ -469,9 +474,13 @@ _PUBLIC_PAGE_PATHS = frozenset({
 })
 
 # Path prefixes that are always public (e.g. static assets, setup wizard).
+# The documentation viewer (/docs/...) is intentionally public: it serves the
+# Markdown docs, Theory of Operation, guides and search — none of which should
+# live behind authentication.
 _PUBLIC_PAGE_PREFIXES = (
     '/static/',
     '/setup',
+    '/docs/',
 )
 # CSRF constants are now imported from app_core.flask.csrf
 app.config['CSRF_SESSION_KEY'] = CSRF_SESSION_KEY
