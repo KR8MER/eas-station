@@ -886,7 +886,16 @@
 [data-theme="lightning"] .bg-secondary,
 [data-theme="lightning"] .text-bg-secondary,
 [data-theme="lightning"] .badge.bg-secondary,
-[data-theme="lightning"] .card-header.bg-secondary {
+[data-theme="lightning"] .card-header.bg-secondary,
+/* Card-header children: the global `.card-header.bg-* *` rule forces every
+   descendant (title <h4>, icons, badges) to white, which is invisible on the
+   bright yellow→cyan gradient these headers use in this theme.  The base rules
+   above only re-ink the header element itself, so the children stay white.
+   Re-ink the descendants too (success/danger/warning already do this further
+   down). */
+[data-theme="lightning"] .card-header.bg-primary *,
+[data-theme="lightning"] .card-header.bg-info *,
+[data-theme="lightning"] .card-header.bg-secondary * {
     color: #0d1b2a !important;
     text-shadow: none;
 }

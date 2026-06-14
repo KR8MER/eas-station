@@ -8,6 +8,38 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.92.0] - 2026-06-14 - Navbar cleanup + Lightning theme readability
+
+### Changed
+- **Navbar Settings dropdown slimmed down.** The single "Settings" menu had
+  grown to seven sections (Configuration, Personalization, Observability, Logs
+  & Reports, Analytics, Testing, Data Continuity) and duplicated links found
+  elsewhere. It now contains only genuine configuration — **System Settings**
+  (the `/settings` hub) and **Display Units** personalization
+  (`templates/components/navbar.html`).
+- **New top-level "Tools" menu.** Observability (System Diagnostics, Health
+  Dashboard, IPAWS Poller Debug), Analytics (Analytics Dashboard, Active
+  Sessions, Operations Report), Testing & Validation (Audio Tests, Alert
+  Verification) and Data Continuity (JSON/CAP/CSV export, County Boundaries)
+  moved out of Settings into their own "Tools" dropdown. No features were
+  removed — every link remains reachable.
+- **New top-level "Logs" menu.** Per request, logging is now its own category
+  instead of living under Settings: All Logs, Audit Log, Compliance Log and
+  FCC Reports.
+
+### Fixed
+- **Removed duplicate "Display Units" entry** that appeared in both the Settings
+  and Help dropdowns; it now lives only under Settings → Personalization.
+- **Removed duplicate "Backup Manager" entry** from the navbar; backups remain
+  accessible via Settings → System Settings → System (`/admin/backups`).
+- **Lightning theme readability:** card-header titles/icons rendered white on
+  the bright yellow→cyan gradient used by `.card-header.bg-primary`,
+  `.bg-info` and `.bg-secondary` (e.g. the "EAS Continuous Monitor" header on
+  the Audio Monitoring page). The global `.card-header.bg-* *` rule forced
+  every descendant to white while the theme only re-inked the header element
+  itself. The lightning override now re-inks the descendants too
+  (`static/css/styles.css`).
+
 ## [2.91.1] - 2026-06-14 - Alert Purge: batched deletes + Admin panel relocation
 
 ### Fixed

@@ -17,16 +17,22 @@
 {%- set show_broadcast_inputs = can_manage_receivers -%}
 {%- set show_broadcast_dropdown = show_broadcast_workflow or show_broadcast_outputs or show_broadcast_inputs -%}
 
+{# Settings now holds ONLY real configuration + personalization. Everything
+   else that used to bloat this dropdown moved to the Tools and Logs menus. #}
 {%- set show_settings_configuration = can_view_system_config or can_manage_config -%}
-{%- set show_settings_hardware = can_view_gpio -%}
-{%- set show_settings_security = can_manage_users or can_view_users -%}
-{%- set show_settings_dropdown = show_settings_configuration or show_settings_hardware or show_settings_security or show_hardware_nav -%}
-{%- set show_hardware_nav = show_broadcast_inputs or can_manage_config or can_view_gpio -%}
+{%- set show_settings_dropdown = show_settings_configuration or is_authenticated -%}
 
 {%- set show_alerts_radio_section = is_authenticated and (can_view_alerts or can_manage_receivers or can_view_logs) -%}
+
+{# Tools dropdown — observability, analytics, testing and data-continuity. #}
+{%- set show_tools_observability = is_authenticated -%}
+{%- set show_tools_analytics = is_authenticated and (can_manage_analytics or can_view_logs or can_view_alerts or can_manage_config) -%}
 {%- set show_tools_testing = is_authenticated and (can_manage_receivers or can_view_alerts) -%}
 {%- set show_tools_data = is_authenticated and (can_export_alerts or can_manage_config) -%}
-{%- set show_tools_analytics = is_authenticated and (can_manage_analytics or can_view_logs or can_view_alerts or can_manage_config) -%}
+{%- set show_tools_dropdown = show_tools_observability or show_tools_analytics or show_tools_testing or show_tools_data -%}
+
+{# Logs is its own top-level category (was buried under Settings). #}
+{%- set show_logs_dropdown = is_authenticated and can_view_logs -%}
 
 <nav class="navbar navbar-expand-lg sticky-top shadow-sm" id="mainNavbar">
     <!-- Breathing "aurora" sheen — a slow-drifting translucent gradient layered
@@ -254,37 +260,20 @@
                     </li>
                     {% endif %}
 
-                    <!-- Settings & Tools -->
-                    {% if show_settings_dropdown or is_authenticated %}
+                    <!-- Tools -->
+                    {% if show_tools_dropdown %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle"
                            href="#"
-                           id="settingsDropdown"
+                           id="toolsDropdown"
                            role="button"
                            data-bs-toggle="dropdown"
                            aria-expanded="false">
-                            <i class="fas fa-cog"></i>
-                            <span>Settings</span>
+                            <i class="fas fa-toolbox"></i>
+                            <span>Tools</span>
                         </a>
-                        <ul class="dropdown-menu dropdown-menu-scrollable" aria-labelledby="settingsDropdown">
-                            {% if show_settings_dropdown %}
-                            <li><h6 class="dropdown-header">Configuration</h6></li>
-                            <li>
-                                <a class="dropdown-item" href="/settings">
-                                    <i class="fas fa-sliders"></i> System Settings
-                                </a>
-                            </li>
-                            <li><hr class="dropdown-divider"></li>
-                            {% endif %}
-
-                            <li><h6 class="dropdown-header">Personalization</h6></li>
-                            <li>
-                                <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#globalUnitsModal">
-                                    <i class="fas fa-ruler"></i> Display Units
-                                </button>
-                            </li>
-                            <li><hr class="dropdown-divider"></li>
-
+                        <ul class="dropdown-menu dropdown-menu-scrollable" aria-labelledby="toolsDropdown">
+                            {% if show_tools_observability %}
                             <li><h6 class="dropdown-header">Observability</h6></li>
                             <li>
                                 <a class="dropdown-item" href="/diagnostics">
@@ -299,29 +288,6 @@
                             <li>
                                 <a class="dropdown-item" href="/debug/ipaws">
                                     <i class="fas fa-satellite-dish"></i> IPAWS Poller Debug
-                                </a>
-                            </li>
-                            {% if is_authenticated and can_view_logs %}
-                            <li><hr class="dropdown-divider"></li>
-                            <li><h6 class="dropdown-header">Logs &amp; Reports</h6></li>
-                            <li>
-                                <a class="dropdown-item" href="/logs?type=all">
-                                    <i class="fas fa-file-alt"></i> All Logs
-                                </a>
-                            </li>
-                            <li>
-                                <a class="dropdown-item" href="/logs?type=audit">
-                                    <i class="fas fa-shield-halved"></i> Audit Log
-                                </a>
-                            </li>
-                            <li>
-                                <a class="dropdown-item" href="/logs?type=compliance">
-                                    <i class="fas fa-clipboard-check"></i> Compliance Log
-                                </a>
-                            </li>
-                            <li>
-                                <a class="dropdown-item" href="/logs?type=report_received">
-                                    <i class="fas fa-file-contract"></i> FCC Reports
                                 </a>
                             </li>
                             {% endif %}
@@ -366,7 +332,6 @@
                                     <i class="fas fa-shield-check"></i> Alert Verification
                                 </a>
                             </li>
-                            {# FCC Compliance moved to the unified Logs & Reports hub above #}
                             {% endif %}
                             {% endif %}
 
@@ -392,18 +357,84 @@
                             {% endif %}
                             {% if can_manage_config %}
                             <li>
-                                <a class="dropdown-item" href="/admin/backups">
-                                    <i class="fas fa-database"></i> Backup Manager
-                                </a>
-                            </li>
-                            <li>
                                 <a class="dropdown-item" href="/admin/county_boundaries">
                                     <i class="fas fa-map"></i> County Boundaries
                                 </a>
                             </li>
-                            {# Alert Purge now lives on the Admin panel → Operations tab #}
+                            {# Backups live on Settings → System; Alert Purge on Admin → Operations. #}
                             {% endif %}
                             {% endif %}
+                        </ul>
+                    </li>
+                    {% endif %}
+
+                    <!-- Logs -->
+                    {% if show_logs_dropdown %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle"
+                           href="#"
+                           id="logsDropdown"
+                           role="button"
+                           data-bs-toggle="dropdown"
+                           aria-expanded="false">
+                            <i class="fas fa-file-lines"></i>
+                            <span>Logs</span>
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="logsDropdown">
+                            <li><h6 class="dropdown-header">Logs &amp; Reports</h6></li>
+                            <li>
+                                <a class="dropdown-item" href="/logs?type=all">
+                                    <i class="fas fa-file-alt"></i> All Logs
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="/logs?type=audit">
+                                    <i class="fas fa-shield-halved"></i> Audit Log
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="/logs?type=compliance">
+                                    <i class="fas fa-clipboard-check"></i> Compliance Log
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="/logs?type=report_received">
+                                    <i class="fas fa-file-contract"></i> FCC Reports
+                                </a>
+                            </li>
+                        </ul>
+                    </li>
+                    {% endif %}
+
+                    <!-- Settings -->
+                    {% if show_settings_dropdown %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle"
+                           href="#"
+                           id="settingsDropdown"
+                           role="button"
+                           data-bs-toggle="dropdown"
+                           aria-expanded="false">
+                            <i class="fas fa-cog"></i>
+                            <span>Settings</span>
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="settingsDropdown">
+                            {% if show_settings_configuration %}
+                            <li><h6 class="dropdown-header">Configuration</h6></li>
+                            <li>
+                                <a class="dropdown-item" href="/settings">
+                                    <i class="fas fa-sliders"></i> System Settings
+                                </a>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            {% endif %}
+
+                            <li><h6 class="dropdown-header">Personalization</h6></li>
+                            <li>
+                                <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#globalUnitsModal">
+                                    <i class="fas fa-ruler"></i> Display Units
+                                </button>
+                            </li>
                         </ul>
                     </li>
                     {% endif %}
@@ -424,11 +455,6 @@
                                 <a class="dropdown-item" href="{{ url_for('site_navigation') }}">
                                     <i class="fas fa-sitemap"></i> Site Navigation
                                 </a>
-                            </li>
-                            <li>
-                                <button type="button" class="dropdown-item" data-bs-toggle="modal" data-bs-target="#globalUnitsModal">
-                                    <i class="fas fa-ruler"></i> Display Units
-                                </button>
                             </li>
                             <li><hr class="dropdown-divider"></li>
                             <li>
