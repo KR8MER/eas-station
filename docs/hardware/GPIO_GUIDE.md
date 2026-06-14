@@ -925,13 +925,15 @@ Both follow the same state machine, with each state's color configurable (defaul
 | **System fault** | Redis / the alert pipeline is unreachable (the station may be deaf) | magenta, flashing | never |
 | **Test broadcast** | Active broadcast with a test event code (RWT/RMT/NPT/DMO) | cyan | never |
 | **Active alert** | Active broadcast (real alert) | red — or per-severity colors (see below) | `alert_buzzer` |
-| **Incoming (pre-alert)** | Alert received, playout not started | yellow, flashing | never |
+| **Incoming / alert active** | Alert received before playout, **or** an unexpired alert remains after its broadcast finished | yellow, flashing | never |
 | **Quiet hours** | Standby during the configured schedule | off | never |
 | **Standby** | System ready | green, steady | never |
 
 For example, set Active Alert to **blue** on an ANDONT light for green-when-ready / blue-when-alerting operation.
 
 **Severity colors** (optional): when "Color active alerts by severity" is enabled, real alerts use per-class colors instead of the single Active Alert color — warnings (`WRN` product class, default red), watches (`WCH`, default yellow), advisories/statements (`ADV`, default white). Classification comes from the SAME event-code registry.
+
+**Alert active after playout**: the light holds the yellow/flashing incoming indication for as long as at least one unexpired alert remains in the system, even after its audio playout finishes and the transient broadcast marker clears. It only returns to green standby once the last alert expires — matching the website stack-light widget in the navbar. (Requires `incoming_uses_yellow`; with it disabled the light returns straight to standby.)
 
 **Quiet hours** (optional): darkens the *standby* light between two local times (the window may span midnight). Incoming and active alerts always light up regardless of the schedule — the dark light never suppresses an alert indication.
 
@@ -945,7 +947,7 @@ An addressable LED strip on a PWM-capable pin (BCM 18 recommended). Shows a dim 
 
 ### Event-driven (no polling lag)
 
-The indicators react to two Redis keys, `eas:broadcast_active` and `eas:incoming_alert`, written by the broadcast pipeline. The GPIO subprocess updates the lights two ways at once:
+The indicators react to two Redis keys, `eas:broadcast_active` and `eas:incoming_alert`, written by the broadcast pipeline, plus a count of unexpired alerts read from the database (so the light stays lit after a broadcast ends while an alert is still active). The GPIO subprocess updates the lights two ways at once:
 
 1. **Pub/sub listener** — the pipeline publishes a nudge on the `eas:indicator_events` channel whenever state changes, and a listener thread refreshes the indicators immediately (sub-second).
 2. **1-second safety-net poll** — re-reads the keys every second in case a notification is ever missed (e.g. a Redis reconnect).

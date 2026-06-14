@@ -27,14 +27,20 @@ pipeline, the Redis health probe, and the wall clock (quiet hours), and
 only writes to the hardware when the desired state differs from the
 last applied one. Priority order:
 
-    fault > active broadcast (test / severity / plain) > incoming
-          > quiet hours > standby
+    fault > active broadcast (test / severity / plain)
+          > incoming / active alert present > quiet hours > standby
+
+"Active alert present" mirrors the website stack light
+(``templates/components/navbar.html``): once audio playout finishes the
+transient broadcast marker clears, but the light must stay lit (yellow,
+flashing) while there is still at least one unexpired alert in the
+system, instead of dropping straight back to green standby.
 """
 
 import logging
 import threading
 from datetime import datetime
-from typing import NamedTuple, Optional, Tuple
+from typing import Callable, NamedTuple, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -98,12 +104,19 @@ def resolve_tower_state(
     incoming_active: bool,
     redis_ok: bool,
     now: Optional[datetime] = None,
+    active_alert_count: int = 0,
 ) -> TowerState:
     """Pure resolver — decide what the tower light should show right now.
 
     *config* is a :class:`app_utils.gpio.TowerLightConfig` (duck-typed).
     Active and incoming alerts always override quiet hours: a dark
     standby light must never suppress an alert indication.
+
+    *active_alert_count* is the number of unexpired alerts currently in the
+    system.  When it is positive but no broadcast is on air, the light holds
+    the incoming (yellow, flashing) indication instead of returning to green
+    standby — matching the website stack light, which stays lit while alerts
+    are active rather than dropping to green the moment audio playout ends.
     """
     if not redis_ok and getattr(config, "fault_enabled", True):
         return TowerState("fault", config.fault_color, "red", True, False)
@@ -130,9 +143,16 @@ def resolve_tower_state(
             )
         return TowerState("alert", config.alert_color, "red", flash, config.alert_buzzer)
 
-    if incoming_active and config.incoming_uses_yellow:
+    # An alert has either just been received (the short-lived "incoming"
+    # marker) or there is still at least one unexpired alert in the system
+    # after its broadcast finished.  Both render the same yellow/flashing
+    # indication; only the state name differs so the transition is logged
+    # accurately.  This is the fix for the light dropping to green standby
+    # while an alert is still active.
+    if (incoming_active or active_alert_count > 0) and config.incoming_uses_yellow:
+        name = "incoming" if incoming_active else "active"
         return TowerState(
-            "incoming", config.incoming_color, "yellow", config.blink_on_alert, False
+            name, config.incoming_color, "yellow", config.blink_on_alert, False
         )
 
     if getattr(config, "quiet_enabled", False) and in_quiet_hours(
@@ -163,6 +183,7 @@ def update_alert_indicators(
     tower_light_controller=None,
     neopixel_controller=None,
     tower_state_was: Optional[TowerState] = None,
+    active_alert_count_fn: Optional[Callable[[], int]] = None,
 ) -> Tuple[bool, bool, Optional[TowerState]]:
     """Resolve and apply the indicator state for this refresh.
 
@@ -170,6 +191,12 @@ def update_alert_indicators(
     colour while a broadcast is active, standby otherwise). The tower
     light is driven by :func:`resolve_tower_state`; hardware is only
     written when the resolved state changes.
+
+    *active_alert_count_fn*, when supplied, returns the number of unexpired
+    alerts in the system.  It lets the tower light stay lit while an alert is
+    active after its broadcast has finished (see :func:`resolve_tower_state`).
+    Any failure is swallowed and treated as zero so a database hiccup can never
+    crash the indicator loop.
 
     Returns ``(broadcast_active, incoming_active, tower_state)`` so the
     caller can carry state across iterations.
@@ -188,6 +215,14 @@ def update_alert_indicators(
         broadcast_active = broadcast_was_active
         incoming_active = incoming_was_active
         redis_ok = False
+
+    active_alert_count = 0
+    if active_alert_count_fn is not None:
+        try:
+            active_alert_count = int(active_alert_count_fn())
+        except Exception as exc:
+            logger.debug("active alert count lookup failed: %s", exc)
+            active_alert_count = 0
 
     # NeoPixel: original two-state edge behaviour.
     if neopixel_controller:
@@ -208,7 +243,11 @@ def update_alert_indicators(
         tower_light_controller, "is_available", False
     ):
         desired = resolve_tower_state(
-            tower_light_controller.config, broadcast_state, incoming_active, redis_ok
+            tower_light_controller.config,
+            broadcast_state,
+            incoming_active,
+            redis_ok,
+            active_alert_count=active_alert_count,
         )
         if desired != tower_state_was:
             try:
@@ -251,9 +290,15 @@ class AlertIndicatorMonitor:
     serialise cleanly and a single state change can never be applied twice.
     """
 
-    def __init__(self, tower_light_controller=None, neopixel_controller=None) -> None:
+    def __init__(
+        self,
+        tower_light_controller=None,
+        neopixel_controller=None,
+        active_alert_count_fn: Optional[Callable[[], int]] = None,
+    ) -> None:
         self.tower_light_controller = tower_light_controller
         self.neopixel_controller = neopixel_controller
+        self.active_alert_count_fn = active_alert_count_fn
         self._broadcast_was_active = False
         self._incoming_was_active = False
         self._tower_state: Optional[TowerState] = None
@@ -276,5 +321,6 @@ class AlertIndicatorMonitor:
                 tower_light_controller=self.tower_light_controller,
                 neopixel_controller=self.neopixel_controller,
                 tower_state_was=self._tower_state,
+                active_alert_count_fn=self.active_alert_count_fn,
             )
             return self._broadcast_was_active, self._incoming_was_active

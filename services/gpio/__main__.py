@@ -144,6 +144,32 @@ def _run_api_server(app: Flask) -> None:
         log.error(f"[{SUBSYSTEM}] API server crashed: {e}", exc_info=True)
 
 
+def _make_active_alert_counter(flask_app):
+    """Return a callable counting unexpired alerts in its own app context.
+
+    Mirrors ``/api/broadcast/state`` (webapp/routes_monitoring.py) so the
+    physical tower light and the website stack light agree on what "an alert is
+    active" means.  Runs inside ``flask_app.app_context()`` because the
+    indicator refresh loop and pub/sub listener run outside the bootstrap
+    context.  Any failure returns 0 so a database hiccup never crashes the
+    indicator loop or blacks out the light.
+    """
+
+    def _count() -> int:
+        try:
+            from datetime import datetime, timezone
+            from app_core.models import CAPAlert
+
+            with flask_app.app_context():
+                now_utc = datetime.now(timezone.utc)
+                return int(CAPAlert.query.filter(CAPAlert.expires > now_utc).count())
+        except Exception as exc:  # pragma: no cover - defensive
+            logging.getLogger(__name__).debug("active alert count failed: %s", exc)
+            return 0
+
+    return _count
+
+
 def _run_indicator_listener(monitor: "AlertIndicatorMonitor") -> None:
     """Subscribe to indicator events and refresh the moment state changes.
 
@@ -240,6 +266,7 @@ def main() -> None:
         indicator_monitor = AlertIndicatorMonitor(
             tower_light_controller=_tower_light_controller,
             neopixel_controller=_neopixel_controller,
+            active_alert_count_fn=_make_active_alert_counter(flask_app),
         )
         if _tower_light_controller or _neopixel_controller:
             listener_thread = threading.Thread(

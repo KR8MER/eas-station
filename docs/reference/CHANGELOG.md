@@ -8,6 +8,25 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.92.1] - 2026-06-14 - Stack light stays lit while an alert is active
+
+### Fixed
+- **USB tower / stack light dropped to green standby while an alert was still
+  active.** The physical light is driven by the resolved-state machine in
+  `services/gpio/alert_indicators.py`, which only knew about the *transient*
+  broadcast-playout marker and the short-lived "incoming" marker. Once audio
+  playout finished (and its Redis marker cleared) the light returned to green
+  even though an unexpired alert remained in the system — diverging from the
+  website stack-light widget (`templates/components/navbar.html`), which stays
+  yellow/flashing whenever `active_alert_count > 0`. `resolve_tower_state()`
+  now accepts an `active_alert_count` and holds the incoming (yellow, flashing)
+  indication while any unexpired alert is present, then returns to green once
+  the last alert expires — matching the website. The GPIO subprocess
+  (`services/gpio/__main__.py`) supplies the count via the same query
+  `/api/broadcast/state` uses (`CAPAlert.expires > now`), run in its own Flask
+  app context and failing safe to zero so a database hiccup never blacks out
+  the light.
+
 ## [2.92.0] - 2026-06-14 - Navbar cleanup + Lightning theme readability
 
 ### Changed
