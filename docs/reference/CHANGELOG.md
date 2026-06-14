@@ -8,6 +8,20 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.93.1] - 2026-06-14 - Public docs, help & sponsorship pages
+
+### Fixed
+- **Documentation, help and sponsorship pages no longer require sign-in.** The
+  deny-by-default `before_request` allowlist in `app.py` did not include the
+  documentation viewer, so the entire `/docs` tree — the Markdown guides, the
+  Theory of Operation and the docs search — plus the `/support` sponsorship
+  page and `/repo-stats` redirected anonymous visitors to the login screen.
+  These are public information pages and are now reachable without
+  authentication. `/docs` and `/docs/<path>` (covering Theory of Operation and
+  search), `/support`, and `/repo-stats` were added to `_PUBLIC_PAGE_PATHS` /
+  `_PUBLIC_PAGE_PREFIXES`; admin, settings and API routes remain protected
+  (`app.py`, `tests/test_public_pages_authz.py`).
+
 ## [2.93.0] - 2026-06-14 - Active session expiry & cleanup
 
 ### Fixed
