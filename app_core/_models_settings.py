@@ -1074,6 +1074,73 @@ class RetentionSettings(db.Model):
         }
 
 
+class AutoPurgeSettings(db.Model):
+    """Automatic received-alert purge configuration stored in database.
+
+    Drives the scheduled purge of rows in ``received_eas_alerts`` (the
+    "Received Alerts" history captured from OTA / streaming monitors).  The
+    raw WAV audio attached to those rows is the main storage cost, so the
+    purge can either strip just the audio blob (``scope='audio'``) or remove
+    the entire record (``scope='full'``).
+
+    Unlike :class:`RetentionSettings` (which only ever strips audio and keeps
+    the compliance row), this feature can delete whole records, so it ships
+    disabled by default and defaults to only touching alerts that were NOT
+    forwarded.  All settings live in a single row (id=1).
+    """
+    __tablename__ = "auto_purge_settings"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # Master switch for the scheduled auto-purge
+    enabled = db.Column(db.Boolean, nullable=False, default=False)
+
+    # Purge received alerts older than this many days. 0 = disabled.
+    max_age_days = db.Column(db.Integer, nullable=False, default=30)
+
+    # What to remove: 'audio' (strip raw_audio_data, keep the record) or
+    # 'full' (delete the entire received_eas_alerts row).
+    scope = db.Column(db.String(16), nullable=False, default="full")
+
+    # Which alerts to act on by forwarding decision:
+    # 'any', 'not_forwarded', 'forwarded', 'ignored', 'error'.
+    decision_filter = db.Column(db.String(20), nullable=False, default="not_forwarded")
+
+    # Optional source restriction (matches source_name or alert_source).
+    # Blank/NULL means all sources.
+    source_filter = db.Column(db.String(100), nullable=True)
+
+    # When scope='full', also delete the generated EAS broadcast message
+    # (and its on-disk audio files) that this alert produced, if any.
+    delete_generated_messages = db.Column(db.Boolean, nullable=False, default=False)
+
+    # Bookkeeping for the last automatic run
+    last_run_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    last_run_summary = db.Column(JSONB, nullable=True)
+
+    # Metadata
+    updated_at = db.Column(
+        db.DateTime(timezone=True),
+        default=utc_now,
+        onupdate=utc_now,
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert model to dictionary."""
+        return {
+            "id": self.id,
+            "enabled": self.enabled,
+            "max_age_days": self.max_age_days,
+            "scope": self.scope,
+            "decision_filter": self.decision_filter,
+            "source_filter": self.source_filter or "",
+            "delete_generated_messages": self.delete_generated_messages,
+            "last_run_at": self.last_run_at.isoformat() if self.last_run_at else None,
+            "last_run_summary": self.last_run_summary,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
 class TailscaleSettings(db.Model):
     """Tailscale VPN configuration stored in database.
 

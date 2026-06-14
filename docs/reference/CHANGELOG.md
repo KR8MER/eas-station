@@ -8,6 +8,38 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.91.0] - 2026-06-14 - Received-alert purge system
+
+### Added
+- **A single Alert Purge admin page** (`/admin/alert-purge/`,
+  `webapp/admin/alert_purge.py`, `templates/admin/alert_purge.html`) to remove
+  received alerts and their captured audio from one place. Reachable from
+  **Admin → Settings → Alert Purge** in the navbar and from a new **Purge**
+  button on the Received Alerts page (`templates/audio_received.html`).
+  - **Filter by** age (older than N days), source, forwarding decision
+    (e.g. everything *not forwarded*), and/or SAME event code.
+  - **Scope selector:** *Audio only* strips the stored `raw_audio_data` WAV but
+    keeps the row for the FCC compliance log; *Entire alert* deletes the row and
+    can also delete the generated EAS broadcast message and its on-disk audio
+    files so no instance of the audio remains.
+  - **Preview** shows the matching record count and reclaimable audio size before
+    anything is deleted, and a storage-overview header summarizes current usage.
+- **Automatic purge** (`AutoPurgeSettings` model, `AutoPurgeScheduler`) that runs
+  the same rules in the background shortly after startup and roughly every six
+  hours, configurable on the same page and disabled by default. Wired into
+  `app.py` alongside the existing retention scheduler.
+- **Purge service** `app_core/alert_purge.py` with preview/stats/execute
+  primitives shared by the manual action and the scheduler, plus
+  `tests/test_alert_purge.py` covering criteria validation, previews, both
+  scopes, generated-message cleanup, the empty-criteria guard, and auto-purge.
+- **Migration** `20260614_add_auto_purge_settings.py` adds the
+  `auto_purge_settings` table.
+
+### Notes
+- Purging alerts never purges **logs** — every purge writes a `SystemLog` audit
+  entry recording exactly what was removed. This is distinct from the existing
+  retention sweep, which only ever strips audio and keeps the compliance row.
+
 ## [2.90.0] - 2026-06-13 - Dedicated Support page
 
 ### Added

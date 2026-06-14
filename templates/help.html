@@ -448,6 +448,35 @@
 
                                     <hr class="my-3">
 
+                                    <h6><i class="fas fa-trash-alt me-2"></i>Purging Received Alerts &amp; Audio</h6>
+                                    <p>
+                                        Busy monitoring sources can record thousands of received alerts, and the raw
+                                        WAV audio captured with each one is the largest storage cost. The
+                                        <strong>Alert Purge</strong> page
+                                        (<a href="/admin/alert-purge/"><code>Admin → Settings → Alert Purge</code></a>,
+                                        also reachable from the <strong>Purge</strong> button on the Received Alerts page)
+                                        is the single place to clean this up.
+                                    </p>
+                                    <ul>
+                                        <li><strong>Filter what to remove</strong> by age (older than N days), source,
+                                            forwarding decision (e.g. everything <em>not forwarded</em>), and/or SAME event code.</li>
+                                        <li><strong>Choose the scope:</strong> <em>Audio only</em> strips the stored WAV but
+                                            keeps the record for the FCC compliance log; <em>Entire alert</em> deletes the
+                                            record, and can also delete the generated broadcast message and its on-disk audio
+                                            so no instance of the audio remains.</li>
+                                        <li><strong>Preview first</strong> to see how many records and how much audio a purge
+                                            would affect before running it.</li>
+                                        <li><strong>Automatic Purge</strong> can run the same rules in the background
+                                            (shortly after startup, then roughly every 6 hours).</li>
+                                    </ul>
+                                    <div class="alert alert-info mt-2">
+                                        <i class="fas fa-shield-halved"></i>
+                                        Purging alerts never touches system, audit, or compliance <strong>logs</strong> —
+                                        every purge writes an audit entry recording what was removed.
+                                    </div>
+
+                                    <hr class="my-3">
+
                                     <h6><i class="fas fa-map-marked-alt me-2"></i>US County Boundaries (IPAWS SAME Coverage)</h6>
                                     <p>
                                         The <strong>County Boundaries</strong> page

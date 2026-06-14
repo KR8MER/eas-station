@@ -824,6 +824,17 @@ if not skip_background_services:
     except Exception as _retention_sched_err:
         logger.warning('Data-retention scheduler could not be started: %s', _retention_sched_err)
 
+# Start auto-purge scheduler (deletes / strips audio from old received alerts
+# per the auto_purge_settings policy, on top of the audio-only retention sweep).
+if not skip_background_services:
+    try:
+        from app_core.alert_purge import start_scheduler as start_auto_purge_scheduler
+        if not app.config.get('SETUP_MODE'):
+            start_auto_purge_scheduler(app)
+            logger.info('Auto-purge scheduler started')
+    except Exception as _auto_purge_sched_err:
+        logger.warning('Auto-purge scheduler could not be started: %s', _auto_purge_sched_err)
+
 # Start system-health metrics sampler so the dashboard's Performance Trends
 # chart and sparklines have history even when the page has not been open.
 if not skip_background_services:

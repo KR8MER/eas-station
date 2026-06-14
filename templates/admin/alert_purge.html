@@ -1,0 +1,408 @@
+{% extends "base.html" %}
+
+{% block title %}Alert Purge - EAS Station™{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+<style>
+    .purge-stat {
+        background-color: var(--surface-color);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md, 0.5rem);
+        padding: 1rem;
+        height: 100%;
+    }
+    .purge-stat .stat-value {
+        font-size: 1.6rem;
+        font-weight: 700;
+        color: var(--text-color);
+    }
+    .purge-stat .stat-label {
+        color: var(--text-secondary);
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="admin-page-header">
+    <div class="container">
+        <h1><i class="fas fa-trash-alt"></i> Alert Purge</h1>
+        <p class="mb-0">Remove received alerts and their captured audio &mdash; manually or on a schedule</p>
+    </div>
+</div>
+
+<div class="container-fluid">
+    <!-- Storage overview -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-lg-3">
+            <div class="purge-stat">
+                <div class="stat-value" id="statTotal">{{ stats.total }}</div>
+                <div class="stat-label">Received Alerts</div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="purge-stat">
+                <div class="stat-value" id="statWithAudio">{{ stats.with_audio }}</div>
+                <div class="stat-label">With Stored Audio</div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="purge-stat">
+                <div class="stat-value" id="statAudioBytes">{{ stats.audio_bytes_human }}</div>
+                <div class="stat-label">Audio Storage Used</div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="purge-stat">
+                <div class="stat-value">
+                    <span class="text-success">{{ stats.forwarded }}</span> /
+                    <span class="text-secondary">{{ stats.ignored }}</span> /
+                    <span class="text-danger">{{ stats.error }}</span>
+                </div>
+                <div class="stat-label">Forwarded / Ignored / Error</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Manual purge -->
+        <div class="col-lg-7">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-broom"></i> Manual Purge</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-secondary">
+                        Choose which received alerts to remove. Use <strong>Preview</strong> first
+                        to see how many records and how much audio will be affected. This does
+                        <strong>not</strong> touch system, audit, or compliance logs.
+                    </p>
+                    <form id="purgeForm">
+                        <div class="mb-3">
+                            <label for="older_than_days" class="form-label">
+                                <i class="fas fa-calendar-day"></i> Older Than (days)
+                            </label>
+                            <input type="number" class="form-control" id="older_than_days"
+                                   name="older_than_days" min="0" max="3650" placeholder="e.g. 30">
+                            <div class="form-text">Only purge alerts received more than this many days ago. Leave blank for no age limit.</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="source" class="form-label">
+                                <i class="fas fa-satellite-dish"></i> Source
+                            </label>
+                            <select class="form-select" id="source" name="source">
+                                <option value="">All sources</option>
+                                {% for s in sources %}
+                                <option value="{{ s }}">{{ s }}</option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">Restrict to a single monitoring source.</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="decision" class="form-label">
+                                <i class="fas fa-code-branch"></i> Forwarding Decision
+                            </label>
+                            <select class="form-select" id="decision" name="decision">
+                                <option value="any">Any decision</option>
+                                <option value="not_forwarded">Not forwarded (ignored + error)</option>
+                                <option value="ignored">Ignored only</option>
+                                <option value="error">Error only</option>
+                                <option value="forwarded">Forwarded only</option>
+                            </select>
+                            <div class="form-text">"Not forwarded" targets the noise that never triggered a broadcast.</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="event_code" class="form-label">
+                                <i class="fas fa-bolt"></i> Event Code <span class="text-secondary">(optional)</span>
+                            </label>
+                            <input type="text" class="form-control" id="event_code" name="event_code"
+                                   maxlength="8" placeholder="e.g. RWT, SVR">
+                            <div class="form-text">Restrict to a single SAME event code.</div>
+                        </div>
+
+                        <hr>
+
+                        <div class="mb-3">
+                            <label for="scope" class="form-label">
+                                <i class="fas fa-eraser"></i> What to Remove
+                            </label>
+                            <select class="form-select" id="scope" name="scope">
+                                <option value="full" selected>Entire alert (record + audio)</option>
+                                <option value="audio">Audio only (keep record for compliance)</option>
+                            </select>
+                            <div class="form-text">
+                                "Audio only" reclaims the storage but keeps the row so the FCC
+                                compliance log still shows the reception.
+                            </div>
+                        </div>
+
+                        <div class="mb-3" id="deleteMessagesWrap">
+                            <label for="delete_generated_messages" class="form-label">
+                                <i class="fas fa-bullhorn"></i> Also Delete Generated Broadcast
+                            </label>
+                            <select class="form-select" id="delete_generated_messages" name="delete_generated_messages">
+                                <option value="false" selected>No &mdash; keep generated EAS messages</option>
+                                <option value="true">Yes &mdash; delete generated EAS message + its audio files</option>
+                            </select>
+                            <div class="form-text">
+                                For forwarded alerts, also remove the re-broadcast message and its
+                                on-disk audio so no instance of the audio remains.
+                            </div>
+                        </div>
+
+                        <div class="alert alert-warning" role="alert">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            Full purges permanently delete records. Compliance history for forwarded
+                            alerts is lost when those rows are removed &mdash; prefer "Audio only" if you
+                            must retain the FCC log.
+                        </div>
+
+                        <div id="purgePreview" class="alert alert-info d-none" role="alert"></div>
+
+                        <div class="d-flex gap-2 justify-content-end">
+                            <button type="button" class="btn btn-outline-primary" id="previewBtn">
+                                <i class="fas fa-search"></i> Preview
+                            </button>
+                            <button type="button" class="btn btn-danger" id="purgeBtn">
+                                <i class="fas fa-trash-alt"></i> Purge Now
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Auto purge -->
+        <div class="col-lg-5">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-robot"></i> Automatic Purge</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-secondary">
+                        When enabled, the system automatically purges matching alerts in the
+                        background (shortly after startup, then about every 6 hours).
+                    </p>
+                    <form id="autoForm">
+                        <div class="mb-3">
+                            <label for="auto_enabled" class="form-label">
+                                <i class="fas fa-power-off"></i> Auto-Purge
+                            </label>
+                            <select class="form-select" id="auto_enabled" name="enabled">
+                                <option value="true" {% if auto.enabled %}selected{% endif %}>Enabled</option>
+                                <option value="false" {% if not auto.enabled %}selected{% endif %}>Disabled</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="auto_max_age_days" class="form-label">
+                                <i class="fas fa-calendar-day"></i> Purge Older Than (days)
+                            </label>
+                            <input type="number" class="form-control" id="auto_max_age_days"
+                                   name="max_age_days" min="0" max="3650"
+                                   value="{{ auto.max_age_days }}">
+                            <div class="form-text">0 = keep forever (auto-purge does nothing).</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="auto_scope" class="form-label">
+                                <i class="fas fa-eraser"></i> What to Remove
+                            </label>
+                            <select class="form-select" id="auto_scope" name="scope">
+                                <option value="full" {% if auto.scope == 'full' %}selected{% endif %}>Entire alert (record + audio)</option>
+                                <option value="audio" {% if auto.scope == 'audio' %}selected{% endif %}>Audio only (keep record)</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="auto_decision_filter" class="form-label">
+                                <i class="fas fa-code-branch"></i> Decision Filter
+                            </label>
+                            <select class="form-select" id="auto_decision_filter" name="decision_filter">
+                                <option value="not_forwarded" {% if auto.decision_filter == 'not_forwarded' %}selected{% endif %}>Not forwarded (recommended)</option>
+                                <option value="ignored" {% if auto.decision_filter == 'ignored' %}selected{% endif %}>Ignored only</option>
+                                <option value="error" {% if auto.decision_filter == 'error' %}selected{% endif %}>Error only</option>
+                                <option value="any" {% if auto.decision_filter == 'any' %}selected{% endif %}>Any decision</option>
+                                <option value="forwarded" {% if auto.decision_filter == 'forwarded' %}selected{% endif %}>Forwarded only</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="auto_source_filter" class="form-label">
+                                <i class="fas fa-satellite-dish"></i> Source
+                            </label>
+                            <select class="form-select" id="auto_source_filter" name="source_filter">
+                                <option value="">All sources</option>
+                                {% for s in sources %}
+                                <option value="{{ s }}" {% if auto.source_filter == s %}selected{% endif %}>{{ s }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="auto_delete_messages" class="form-label">
+                                <i class="fas fa-bullhorn"></i> Also Delete Generated Broadcast
+                            </label>
+                            <select class="form-select" id="auto_delete_messages" name="delete_generated_messages">
+                                <option value="false" {% if not auto.delete_generated_messages %}selected{% endif %}>No</option>
+                                <option value="true" {% if auto.delete_generated_messages %}selected{% endif %}>Yes</option>
+                            </select>
+                        </div>
+
+                        <div class="d-flex gap-2 justify-content-end">
+                            <button type="button" class="btn btn-outline-secondary" id="runAutoBtn">
+                                <i class="fas fa-play"></i> Run Now
+                            </button>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Save
+                            </button>
+                        </div>
+                    </form>
+
+                    <hr>
+                    <div class="small text-secondary">
+                        <div><strong>Last run:</strong>
+                            <span id="autoLastRun">
+                                {{ auto.last_run_at|replace('T', ' ')|truncate(19, true, '') if auto.last_run_at else 'Never' }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const csrf = window.CSRF_TOKEN;
+
+    function postForm(url, formData) {
+        return fetch(url, {
+            method: 'POST',
+            body: formData,
+            headers: { 'X-CSRF-Token': csrf },
+        }).then(r => r.json());
+    }
+
+    function refreshStats(stats) {
+        if (!stats) return;
+        document.getElementById('statTotal').textContent = stats.total;
+        document.getElementById('statWithAudio').textContent = stats.with_audio;
+        document.getElementById('statAudioBytes').textContent = stats.audio_bytes_human;
+    }
+
+    // ----- Manual purge -----
+    const purgeForm = document.getElementById('purgeForm');
+    const previewBox = document.getElementById('purgePreview');
+    const scopeSel = document.getElementById('scope');
+    const deleteWrap = document.getElementById('deleteMessagesWrap');
+
+    function syncScope() {
+        deleteWrap.style.display = (scopeSel.value === 'full') ? '' : 'none';
+    }
+    scopeSel.addEventListener('change', syncScope);
+    syncScope();
+
+    document.getElementById('previewBtn').addEventListener('click', async function () {
+        const btn = this;
+        btn.disabled = true;
+        try {
+            const data = await postForm('/admin/alert-purge/preview', new FormData(purgeForm));
+            if (data.success) {
+                const p = data.preview;
+                previewBox.className = 'alert alert-info';
+                previewBox.innerHTML = '<i class="fas fa-info-circle"></i> This would affect <strong>'
+                    + p.matching_count + '</strong> record(s), including <strong>'
+                    + p.audio_count + '</strong> with audio (<strong>'
+                    + p.audio_bytes_human + '</strong>).';
+            } else {
+                showToast(data.error || 'Preview failed', 'danger');
+            }
+        } catch (e) {
+            showToast('Preview request failed', 'danger');
+        } finally {
+            btn.disabled = false;
+        }
+    });
+
+    document.getElementById('purgeBtn').addEventListener('click', async function () {
+        const scope = scopeSel.value;
+        const verb = (scope === 'full') ? 'permanently delete matching records' : 'strip stored audio from matching records';
+        if (!confirm('Are you sure? This will ' + verb + '. This cannot be undone.')) {
+            return;
+        }
+        const btn = this;
+        const original = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Purging...';
+        try {
+            const data = await postForm('/admin/alert-purge/execute', new FormData(purgeForm));
+            if (data.success) {
+                showToast(data.message, 'success');
+                refreshStats(data.stats);
+                previewBox.className = 'alert alert-success';
+                previewBox.innerHTML = '<i class="fas fa-check-circle"></i> ' + data.message;
+            } else {
+                showToast(data.error || 'Purge failed', 'danger');
+            }
+        } catch (e) {
+            showToast('Purge request failed', 'danger');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = original;
+        }
+    });
+
+    // ----- Auto purge -----
+    const autoForm = document.getElementById('autoForm');
+    autoForm.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        const btn = autoForm.querySelector('button[type="submit"]');
+        const original = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+        try {
+            const data = await postForm('/admin/alert-purge/auto', new FormData(autoForm));
+            showToast(data.success ? data.message : (data.error || 'Save failed'),
+                      data.success ? 'success' : 'danger');
+        } catch (e2) {
+            showToast('Save request failed', 'danger');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = original;
+        }
+    });
+
+    document.getElementById('runAutoBtn').addEventListener('click', async function () {
+        if (!confirm('Run the auto-purge now using the saved configuration?')) return;
+        const btn = this;
+        const original = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Running...';
+        try {
+            const data = await postForm('/admin/alert-purge/auto/run', new FormData());
+            if (data.success) {
+                showToast(data.message, data.skipped ? 'info' : 'success');
+                refreshStats(data.stats);
+            } else {
+                showToast(data.error || 'Auto-purge failed', 'danger');
+            }
+        } catch (e) {
+            showToast('Auto-purge request failed', 'danger');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = original;
+        }
+    });
+});
+</script>
+{% endblock %}
