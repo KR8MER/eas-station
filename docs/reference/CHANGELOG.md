@@ -39,6 +39,15 @@ tracks releases under the 2.x series.
   every descendant to white while the theme only re-inked the header element
   itself. The lightning override now re-inks the descendants too
   (`static/css/styles.css`).
+- **Lightning theme — GPS/Time dashboard header contrast.** The header banner,
+  status cards and inline `<code>` on the GPS & Time dashboard
+  (`templates/admin/gps_dashboard.html`) are painted with the project's
+  undefined `--bg-secondary` / `--bg-tertiary` variables, which fall back to a
+  near-invisible `rgba(127,127,127,.04)` tint. On the lightning theme's deep
+  navy background that surface vanished, so the header section read as
+  low-contrast text floating on the page. The lightning theme now gives those
+  surfaces a defined `--surface-color` background, a visible border, and
+  high-contrast title/node text (`static/css/styles.css`).
 
 ## [2.91.1] - 2026-06-14 - Alert Purge: batched deletes + Admin panel relocation
 
