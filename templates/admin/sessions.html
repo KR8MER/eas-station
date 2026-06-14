@@ -19,6 +19,9 @@
         <button class="btn btn-outline-secondary btn-sm" id="toggleHistory">
             <i class="fas fa-history"></i> Show History
         </button>
+        <button class="btn btn-outline-danger btn-sm" id="terminateOthers" onclick="terminateAllOthers()">
+            <i class="fas fa-user-slash"></i> Terminate All Others
+        </button>
         <button class="btn btn-outline-primary btn-sm" onclick="loadSessions()">
             <i class="fas fa-sync-alt"></i> Refresh
         </button>
@@ -59,12 +62,13 @@
                             <th>IP Address</th>
                             <th>User Agent</th>
                             <th>Started</th>
+                            <th class="d-none d-md-table-cell">Last Active</th>
                             <th>Status</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody id="sessionsBody">
-                        <tr><td colspan="6" class="text-center py-3 text-muted">Loading…</td></tr>
+                        <tr><td colspan="7" class="text-center py-3 text-muted">Loading…</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -106,16 +110,17 @@ function renderSessions(sessions) {
     document.getElementById('uniqueUsers').textContent = users.size;
 
     if (!sessions.length) {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-3 text-muted">No sessions found</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center py-3 text-muted">No sessions found</td></tr>';
         return;
     }
 
     tbody.innerHTML = sessions.map(s => {
         const started = s.created_at ? new Date(s.created_at).toLocaleString() : '—';
+        const lastSeen = s.last_seen_at ? new Date(s.last_seen_at).toLocaleString() : '—';
         const ua = s.user_agent ? s.user_agent.substring(0, 60) + (s.user_agent.length > 60 ? '…' : '') : '—';
         const statusBadge = s.is_active
             ? '<span class="badge bg-success">Active</span>'
-            : `<span class="badge bg-secondary">${s.ended_reason || 'ended'}</span>`;
+            : `<span class="badge bg-secondary">${escHtml(s.ended_reason || 'ended')}</span>`;
         const actions = s.is_active
             ? `<button class="btn btn-outline-danger btn-sm" onclick="terminateSession(${s.id})">
                  <i class="fas fa-times"></i> Terminate
@@ -126,6 +131,7 @@ function renderSessions(sessions) {
             <td data-label="IP Address"><code>${escHtml(s.ip_address || '—')}</code></td>
             <td data-label="User Agent"><small class="text-muted" title="${escHtml(s.user_agent || '')}">${escHtml(ua)}</small></td>
             <td data-label="Started"><small>${started}</small></td>
+            <td data-label="Last Active" class="d-none d-md-table-cell"><small>${lastSeen}</small></td>
             <td data-label="Status">${statusBadge}</td>
             <td>${actions}</td>
         </tr>`;
@@ -148,6 +154,29 @@ async function terminateSession(sessionId) {
         }
     } catch (e) {
         showToast('Error terminating session', 'danger');
+    }
+}
+
+async function terminateAllOthers() {
+    if (!confirm('Terminate ALL other active sessions? Your current session stays signed in.')) return;
+    try {
+        const resp = await fetch('/api/admin/sessions/terminate-bulk', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': window.CSRF_TOKEN,
+            },
+            body: JSON.stringify({ scope: 'others' }),
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+            showToast(data.message || 'Sessions terminated', 'success');
+            loadSessions();
+        } else {
+            showToast(data.error || 'Failed to terminate sessions', 'danger');
+        }
+    } catch (e) {
+        showToast('Error terminating sessions', 'danger');
     }
 }
 

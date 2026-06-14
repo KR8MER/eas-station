@@ -8,24 +8,32 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
-## [2.92.1] - 2026-06-14 - Stack light stays lit while an alert is active
+## [2.93.0] - 2026-06-14 - Active session expiry & cleanup
 
 ### Fixed
-- **USB tower / stack light dropped to green standby while an alert was still
-  active.** The physical light is driven by the resolved-state machine in
-  `services/gpio/alert_indicators.py`, which only knew about the *transient*
-  broadcast-playout marker and the short-lived "incoming" marker. Once audio
-  playout finished (and its Redis marker cleared) the light returned to green
-  even though an unexpired alert remained in the system — diverging from the
-  website stack-light widget (`templates/components/navbar.html`), which stays
-  yellow/flashing whenever `active_alert_count > 0`. `resolve_tower_state()`
-  now accepts an `active_alert_count` and holds the incoming (yellow, flashing)
-  indication while any unexpired alert is present, then returns to green once
-  the last alert expires — matching the website. The GPIO subprocess
-  (`services/gpio/__main__.py`) supplies the count via the same query
-  `/api/broadcast/state` uses (`CAPAlert.expires > now`), run in its own Flask
-  app context and failing safe to zero so a database hiccup never blacks out
-  the light.
+- **Active Sessions no longer accumulate forever.** An `admin_sessions` row was
+  created on every login but only ever closed on an explicit logout or a manual
+  "Terminate" click. Because users almost always just close the tab (or let the
+  cookie expire), every login left an orphaned row showing as "Active" — the
+  monitor reported 100 "active" sessions for a single admin going back weeks.
+  Sessions now expire automatically once idle past the cookie lifetime
+  (`SESSION_LIFETIME_HOURS`, default 12h) and are marked with
+  `ended_reason='expired'` (`app_core/auth/session_tracking.py`).
+
+### Added
+- **Session heartbeat tracking.** The global `before_request` hook now refreshes
+  `last_seen_at` for the active administrator's session (throttled to one write
+  per 60s) and runs an inline sweep that closes idle rows, so stale sessions are
+  reaped even when nobody opens the monitoring page (`app.py`,
+  `app_core/auth/session_tracking.py`).
+- **Lazy expiry on view.** `GET /api/admin/sessions` now sweeps stale rows
+  before returning, so opening or refreshing **Tools → Active Sessions** always
+  shows an accurate count (`webapp/admin/dashboard.py`).
+- **Bulk "Terminate All Others" control.** A new button on the Active Sessions
+  page plus `POST /api/admin/sessions/terminate-bulk` (`scope` = `others`/`all`)
+  lets an admin clear the backlog in one click without signing themselves out.
+  The page also now shows a **Last Active** column
+  (`templates/admin/sessions.html`).
 
 ## [2.92.0] - 2026-06-14 - Navbar cleanup + Lightning theme readability
 
