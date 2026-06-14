@@ -237,6 +237,105 @@ def test_resolver_incoming_disabled_falls_through_to_standby():
     assert state.name == "standby"
 
 
+def test_resolver_active_alert_holds_yellow_after_broadcast():
+    """An unexpired alert keeps the light lit (yellow) after playout ends.
+
+    Regression for the light dropping to green standby while an alert is
+    still active — it must match the website stack light.
+    """
+    cfg = TowerLightConfig()
+    state = resolve_tower_state(
+        cfg, {"active": False}, False, True, active_alert_count=2
+    )
+    assert (state.name, state.color, state.flash) == ("active", "yellow", True)
+
+
+def test_resolver_active_alert_respects_incoming_disabled():
+    """When incoming yellow is disabled, active alerts still fall to standby."""
+    cfg = TowerLightConfig(incoming_uses_yellow=False)
+    state = resolve_tower_state(
+        cfg, {"active": False}, False, True, active_alert_count=3
+    )
+    assert state.name == "standby"
+
+
+def test_resolver_active_broadcast_beats_active_alert_count():
+    """A live broadcast still wins over a non-zero active alert count."""
+    cfg = TowerLightConfig()
+    state = resolve_tower_state(
+        cfg, {"active": True, "event_code": "TOR"}, False, True, active_alert_count=5
+    )
+    assert (state.name, state.color) == ("alert", "red")
+
+
+def test_resolver_active_alert_overrides_quiet_hours():
+    cfg = TowerLightConfig(quiet_enabled=True, quiet_start="22:00", quiet_end="07:00")
+    night = datetime(2026, 6, 12, 23, 30)
+    state = resolve_tower_state(
+        cfg, {"active": False}, False, True, now=night, active_alert_count=1
+    )
+    assert (state.name, state.color) == ("active", "yellow")
+
+
+def test_monitor_holds_yellow_after_broadcast_with_active_alert(monkeypatch):
+    """Full lifecycle: broadcast ends but an alert is still active → yellow, not green."""
+    tower = _FakeTower()
+    neo = _FakeNeo()
+    monitor = AlertIndicatorMonitor(
+        tower_light_controller=tower,
+        neopixel_controller=neo,
+        active_alert_count_fn=lambda: 1,
+    )
+
+    # active broadcast → red + NeoPixel alert
+    _patch_state(monkeypatch, broadcast=True, incoming=False, event_code="TOR")
+    monitor.refresh()
+    assert tower.states[-1] == ("red", True, False)
+    assert neo.events == ["start_alert"]
+
+    # broadcast ends but the alert is still active → stay yellow (NOT green).
+    # NeoPixel still returns to standby (its two-state edge behaviour is unchanged).
+    _patch_state(monkeypatch, broadcast=False, incoming=False)
+    monitor.refresh()
+    assert tower.states[-1] == ("yellow", True, False)
+    assert neo.events[-1] == "end_alert"
+
+
+def test_monitor_returns_green_once_alert_expires(monkeypatch):
+    """When the active alert count drops to zero the light returns to green."""
+    tower = _FakeTower()
+    counts = [1]
+    monitor = AlertIndicatorMonitor(
+        tower_light_controller=tower,
+        active_alert_count_fn=lambda: counts[0],
+    )
+
+    _patch_state(monkeypatch, broadcast=False, incoming=False)
+    monitor.refresh()
+    assert tower.states[-1] == ("yellow", True, False)
+
+    counts[0] = 0
+    monitor.refresh()
+    assert tower.states[-1] == ("green", False, False)
+
+
+def test_monitor_active_alert_count_failure_is_non_fatal(monkeypatch):
+    """A raising count function is swallowed (treated as zero), not crashing the loop."""
+    tower = _FakeTower()
+
+    def boom():
+        raise RuntimeError("db down")
+
+    monitor = AlertIndicatorMonitor(
+        tower_light_controller=tower,
+        active_alert_count_fn=boom,
+    )
+
+    _patch_state(monkeypatch, broadcast=False, incoming=False)
+    monitor.refresh()
+    assert tower.states[-1] == ("green", False, False)
+
+
 # ---------------------------------------------------------------------------
 # in_quiet_hours
 # ---------------------------------------------------------------------------
