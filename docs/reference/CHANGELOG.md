@@ -82,6 +82,24 @@ tracks releases under the 2.x series.
   - Other typo'd variables corrected to their real names
     (`--muted-text`→`--text-muted`, `--primary-hover`→`--primary-dark`,
     `--input-bg`/`--surface-raised`→`--surface-color`/`--bg-card`).
+- **Bootstrap `--bs-*` variables made theme-aware (invisible breadcrumb fix).**
+  The app never sets `data-bs-theme`, so any `var(--bs-…)` reference in our own
+  code fell back to Bootstrap's **light** defaults on the custom dark themes
+  (lightning, midnight, …). Most visibly, the JS-injected breadcrumb trail
+  (`.eas-breadcrumbs` in `static/js/core/nav-enhance.js`) drew a near-white bar
+  from `--bs-tertiary-bg` while its text inherited the theme's light colour —
+  rendering the whole "Dashboard › Help › …" trail invisible. Reworked all of
+  our `--bs-*` colour/background references to use the app's own theme tokens
+  first, with the `--bs-*` value kept only as a fallback:
+  - Breadcrumb trail + command palette (`nav-enhance.js`) now use
+    `--surface-color` / `--text-color` / `--border-color` / `--text-muted`
+    (the palette's active row stays Bootstrap-blue with white text on purpose).
+  - SDR audio-monitor panels (`templates/admin/radio.html`) and the SAME-header
+    / raw-metadata code blocks (`templates/audio_detail.html`) used
+    `--bs-body-bg` / `--bs-body-secondary-bg` / `--bs-secondary-bg` (light) and
+    now use `--surface-color` / `--bg-card`.
+  - Muted helper text on `templates/gpio_pin_map.html` and
+    `templates/components/confidence_scale.html` now uses `--text-muted`.
 
 ## [2.91.1] - 2026-06-14 - Alert Purge: batched deletes + Admin panel relocation
 
