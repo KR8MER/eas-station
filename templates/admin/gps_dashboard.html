@@ -23,7 +23,19 @@
        Scoped under .gps-dash so styles can't leak into other pages.
        Uses theme tokens (--bg-secondary, --text-color, etc.) so it
        renders cleanly on every theme. */
-    .gps-dash { font-size: 0.92rem; }
+    .gps-dash {
+        font-size: 0.92rem;
+        /* --bg-secondary / --bg-tertiary are NOT defined by any theme palette,
+           so every surface below would otherwise fall back to a flat
+           rgba(127,127,127,.04) tint that vanishes on dark themes (lightning,
+           midnight, obsidian…) and reads as bare text on the page background.
+           Alias the section-surface variable to the theme's real, defined
+           --surface-color (scoped to this dashboard only, so screen-editor and
+           other pages that use their own --bg-secondary are unaffected).
+           --bg-tertiary is intentionally left as the translucent fallback —
+           it is used for subtle hover/inset tints that adapt to any theme. */
+        --bg-secondary: var(--surface-color);
+    }
     .gps-dash code { background: var(--bg-tertiary, rgba(127,127,127,.12)); padding: 1px 5px; border-radius: 3px; }
 
     /* Header banner — node id + GPS lock + refresh-rate selector */

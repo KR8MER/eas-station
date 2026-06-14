@@ -39,6 +39,49 @@ tracks releases under the 2.x series.
   every descendant to white while the theme only re-inked the header element
   itself. The lightning override now re-inks the descendants too
   (`static/css/styles.css`).
+- **Undefined CSS surface variables caused contrast bugs across every theme.**
+  Several pages referenced theme variables that no palette actually defines,
+  so they silently fell back to flat values that broke contrast on some themes:
+  - **GPS & Time dashboard** (`templates/admin/gps_dashboard.html`) painted its
+    header banner and section cards with the undefined `--bg-secondary`, which
+    fell back to a near-invisible `rgba(127,127,127,.04)` tint that vanished on
+    dark themes (lightning, midnight, obsidian…), leaving the header reading as
+    bare text on the page. `--bg-secondary` is now aliased to the theme's
+    defined `--surface-color`, scoped to the dashboard so other pages are
+    unaffected.
+  - **Display Units popover** (`.eas-units-popover`, `static/css/styles.css`)
+    fell back to a fixed dark-navy background on **all** themes, producing
+    dark-text-on-dark on the light themes (Cosmo and friends). Now uses
+    `--surface-color`.
+  - **`--card-bg` typo** — certbot, tailscale, icecast, screens and
+    alert-detail pages used `var(--card-bg)` (which no theme defines) instead
+    of `--bg-card`, so those surfaces rendered transparent on every theme.
+    Corrected to `--bg-card`.
+  - **`--text-primary` typo** on the dashboard highlight chip
+    (`templates/index.html`) corrected to `--text-color`.
+  - **`network.html`** security/interface badges used `var(--bg-secondary)`
+    with no fallback (transparent on every theme); now use `--surface-color`.
+- **Full codebase sweep for the same undefined-variable class of bug.** Audited
+  every `var(--…)` reference against the variables the theme palettes actually
+  define and fixed all remaining no-fallback or wrong-mode-fallback usages:
+  - **`screen-editor.css`** referenced an entire `--color-*` token set
+    (`--color-info`, `--color-info-dark`, `--color-info-light`,
+    `--color-warning`, `--color-neutral-200`, `--color-text-inverse`) that was
+    never defined, so the editor's info buttons, warning badges, focus rings and
+    neutral surfaces lost their colour. These tokens are now defined (with a
+    dark-mode override for the neutral surface).
+  - **Hover states** that fell back to a fixed light `#f8f9fa`
+    (`county_boundaries.html`, `zones.html`, `icecast.html`, `system_logs.html`,
+    `system_health.html`) turned table/list rows near-white on dark themes,
+    making light text unreadable on hover. Replaced with theme-aware
+    `color-mix(... var(--primary-color) …)` tints.
+  - **`rgba(var(--primary-rgb)/--primary-color-rgb, …)`** tints
+    (`alert_feeds.html`, `settings_hub.html`, `nav-tabs` hover in
+    `styles.css`) always rendered a fixed indigo/blue regardless of theme;
+    converted to `color-mix` against `--primary-color`.
+  - Other typo'd variables corrected to their real names
+    (`--muted-text`→`--text-muted`, `--primary-hover`→`--primary-dark`,
+    `--input-bg`/`--surface-raised`→`--surface-color`/`--bg-card`).
 
 ## [2.91.1] - 2026-06-14 - Alert Purge: batched deletes + Admin panel relocation
 

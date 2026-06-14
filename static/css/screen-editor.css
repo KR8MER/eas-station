@@ -1,5 +1,19 @@
 /* Screen Editor Styles */
 
+/* Design tokens for the editor's own colour system.  These were referenced
+   throughout the file (var(--color-info) etc.) but never defined and used no
+   fallbacks, so every rule that depended on them was invalid — info buttons,
+   warning badges, focus rings and neutral surfaces silently lost their colour.
+   Define them here (light values) with a dark-mode override below. */
+:root {
+    --color-info: #0d6efd;
+    --color-info-dark: #0b5ed7;
+    --color-info-light: rgba(13, 110, 253, 0.25);
+    --color-text-inverse: #ffffff;
+    --color-warning: #ffc107;
+    --color-neutral-200: #e9ecef;
+}
+
 .screen-editor-container {
     height: calc(100vh - 60px);
     display: flex;
@@ -626,6 +640,7 @@
         --text-primary: #ffffff;
         --text-secondary: #a0a0a0;
         --border-color: #404040;
+        --color-neutral-200: #3a3a3a;
     }
 
     .canvas-container {

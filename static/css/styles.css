@@ -2046,7 +2046,9 @@ small,
 .nav-tabs .nav-link:focus {
     color: var(--primary-color);
     border-color: var(--border-color);
-    background-color: rgba(var(--primary-color-rgb, 59, 130, 246), 0.05);
+    /* --primary-color-rgb is undefined, so the rgba() form always tinted blue
+       regardless of theme. color-mix tracks the active theme's primary. */
+    background-color: color-mix(in srgb, var(--primary-color) 5%, transparent);
 }
 
 .nav-tabs .nav-link.active {
@@ -8557,7 +8559,11 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
     min-width: 220px;
     padding: 10px 12px;
     border-radius: 10px;
-    background: var(--bg-secondary, rgba(20, 24, 36, 0.96));
+    /* Use the theme's defined surface colour.  --bg-secondary is undefined in
+       every palette, so this previously fell back to a fixed dark-navy on ALL
+       themes — dark popover + light-theme dark text = unreadable on Cosmo and
+       the other light themes. --surface-color tracks the active theme. */
+    background: var(--surface-color, rgba(20, 24, 36, 0.96));
     border: 1px solid var(--border-color, rgba(127, 127, 127, 0.3));
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
     backdrop-filter: blur(8px);
