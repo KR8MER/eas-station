@@ -1403,31 +1403,6 @@
     opacity: 1;
 }
 
-/* Lightning Theme - GPS / Time dashboard surfaces.
-   templates/admin/gps_dashboard.html paints its header banner, status cards
-   and inline <code> with the project's *undefined* --bg-secondary /
-   --bg-tertiary variables, so they fall back to a near-invisible
-   rgba(127,127,127,.04) tint.  On this theme's deep-navy (#060d1f) page that
-   tint disappears, leaving the header section reading as low-contrast text
-   floating on the background with no containment.  Give those surfaces a
-   real, defined colour plus a visible border so each section is clearly
-   delineated and legible, and pin the title/node text to high-contrast ink. */
-[data-theme="lightning"] .gps-dash-header,
-[data-theme="lightning"] .gps-card {
-    background: var(--surface-color);
-    border-color: var(--border-color);
-}
-[data-theme="lightning"] .gps-dash code {
-    background: var(--bg-card);
-    color: var(--text-color);
-}
-[data-theme="lightning"] .gps-dash-header .title {
-    color: #ffffff;
-}
-[data-theme="lightning"] .gps-dash-header .node {
-    color: var(--text-secondary);
-}
-
 /* Lightning Theme - Atmospheric storm overlay readability.
    The default flash layer peaks at opacity 1 with a bright white core
    and cyan halo, washing out everything behind it.  Cap peak opacity
@@ -8582,7 +8557,11 @@ a:not(.btn):not(.nav-link):not(.dropdown-item):hover {
     min-width: 220px;
     padding: 10px 12px;
     border-radius: 10px;
-    background: var(--bg-secondary, rgba(20, 24, 36, 0.96));
+    /* Use the theme's defined surface colour.  --bg-secondary is undefined in
+       every palette, so this previously fell back to a fixed dark-navy on ALL
+       themes — dark popover + light-theme dark text = unreadable on Cosmo and
+       the other light themes. --surface-color tracks the active theme. */
+    background: var(--surface-color, rgba(20, 24, 36, 0.96));
     border: 1px solid var(--border-color, rgba(127, 127, 127, 0.3));
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
     backdrop-filter: blur(8px);

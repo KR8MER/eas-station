@@ -39,15 +39,28 @@ tracks releases under the 2.x series.
   every descendant to white while the theme only re-inked the header element
   itself. The lightning override now re-inks the descendants too
   (`static/css/styles.css`).
-- **Lightning theme — GPS/Time dashboard header contrast.** The header banner,
-  status cards and inline `<code>` on the GPS & Time dashboard
-  (`templates/admin/gps_dashboard.html`) are painted with the project's
-  undefined `--bg-secondary` / `--bg-tertiary` variables, which fall back to a
-  near-invisible `rgba(127,127,127,.04)` tint. On the lightning theme's deep
-  navy background that surface vanished, so the header section read as
-  low-contrast text floating on the page. The lightning theme now gives those
-  surfaces a defined `--surface-color` background, a visible border, and
-  high-contrast title/node text (`static/css/styles.css`).
+- **Undefined CSS surface variables caused contrast bugs across every theme.**
+  Several pages referenced theme variables that no palette actually defines,
+  so they silently fell back to flat values that broke contrast on some themes:
+  - **GPS & Time dashboard** (`templates/admin/gps_dashboard.html`) painted its
+    header banner and section cards with the undefined `--bg-secondary`, which
+    fell back to a near-invisible `rgba(127,127,127,.04)` tint that vanished on
+    dark themes (lightning, midnight, obsidian…), leaving the header reading as
+    bare text on the page. `--bg-secondary` is now aliased to the theme's
+    defined `--surface-color`, scoped to the dashboard so other pages are
+    unaffected.
+  - **Display Units popover** (`.eas-units-popover`, `static/css/styles.css`)
+    fell back to a fixed dark-navy background on **all** themes, producing
+    dark-text-on-dark on the light themes (Cosmo and friends). Now uses
+    `--surface-color`.
+  - **`--card-bg` typo** — certbot, tailscale, icecast, screens and
+    alert-detail pages used `var(--card-bg)` (which no theme defines) instead
+    of `--bg-card`, so those surfaces rendered transparent on every theme.
+    Corrected to `--bg-card`.
+  - **`--text-primary` typo** on the dashboard highlight chip
+    (`templates/index.html`) corrected to `--text-color`.
+  - **`network.html`** security/interface badges used `var(--bg-secondary)`
+    with no fallback (transparent on every theme); now use `--surface-color`.
 
 ## [2.91.1] - 2026-06-14 - Alert Purge: batched deletes + Admin panel relocation
 
