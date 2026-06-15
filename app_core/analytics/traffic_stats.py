@@ -169,7 +169,11 @@ def get_top_pages(days: int = 30, limit: int = 15) -> List[Dict[str, Any]]:
 
 
 def get_top_visitors(days: int = 30, limit: int = 15) -> List[Dict[str, Any]]:
-    """Most active source IP addresses."""
+    """Most active source IP addresses (awstats-style "Hosts").
+
+    Each row carries the reverse-DNS hostname and the country/flag (when
+    resolved) so the dashboard can render them alongside the raw IP.
+    """
     start = _window_start(days)
     rows = (
         db.session.query(
@@ -177,6 +181,9 @@ def get_top_visitors(days: int = 30, limit: int = 15) -> List[Dict[str, Any]]:
             func.count(WebRequestLog.id).label("hits"),
             func.max(WebRequestLog.timestamp).label("last_seen"),
             func.max(WebRequestLog.username).label("username"),
+            func.max(WebRequestLog.hostname).label("hostname"),
+            func.max(WebRequestLog.country).label("country"),
+            func.max(WebRequestLog.country_code).label("country_code"),
         )
         .filter(
             WebRequestLog.timestamp >= start,
@@ -193,6 +200,9 @@ def get_top_visitors(days: int = 30, limit: int = 15) -> List[Dict[str, Any]]:
             "hits": int(r.hits),
             "last_seen": r.last_seen.isoformat() if r.last_seen else None,
             "username": r.username,
+            "hostname": r.hostname,
+            "country": r.country,
+            "country_code": r.country_code,
         }
         for r in rows
     ]
@@ -252,7 +262,28 @@ def get_resolution_breakdown(days: int = 30, limit: int = 10) -> List[Dict[str, 
 
 
 def get_country_breakdown(days: int = 30, limit: int = 10) -> List[Dict[str, Any]]:
-    return _simple_breakdown(WebRequestLog.country, days, limit, "country")
+    """Hits grouped by country/network, with an ISO code for the flag.
+
+    Mirrors awstats' "Countries" report. ``country_code`` is a representative
+    ISO 3166-1 alpha-2 code (or ``None`` for local/unresolved labels).
+    """
+    start = _window_start(days)
+    rows = (
+        db.session.query(
+            WebRequestLog.country,
+            func.count(WebRequestLog.id).label("count"),
+            func.max(WebRequestLog.country_code).label("country_code"),
+        )
+        .filter(WebRequestLog.timestamp >= start, WebRequestLog.country.isnot(None))
+        .group_by(WebRequestLog.country)
+        .order_by(func.count(WebRequestLog.id).desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {"country": r.country, "count": int(r.count), "country_code": r.country_code}
+        for r in rows
+    ]
 
 
 def get_language_breakdown(days: int = 30, limit: int = 10) -> List[Dict[str, Any]]:

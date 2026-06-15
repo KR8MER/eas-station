@@ -174,6 +174,7 @@ class TrafficRecorder:
         rows = self._drain()
         if not rows:
             return
+        self._resolve_hostnames(rows)
         try:
             db.session.bulk_insert_mappings(WebRequestLog, rows)
             db.session.commit()
@@ -183,6 +184,34 @@ class TrafficRecorder:
                 db.session.rollback()
             except Exception:
                 pass
+
+    def _resolve_hostnames(self, rows: list) -> None:
+        """Fill in reverse-DNS hostnames for buffered rows (awstats-style).
+
+        Runs in the background flush thread (never on the request path). Each
+        unique IP in the batch is resolved at most once thanks to the cache in
+        ``geo.resolve_hostname``; results are written back onto the row dicts
+        before the bulk insert.
+        """
+        if not self._config.get("resolve_hostnames", False):
+            return
+        try:
+            from app_core.analytics.geo import resolve_hostname
+        except Exception:  # pragma: no cover - defensive
+            return
+        resolved: Dict[str, Optional[str]] = {}
+        for row in rows:
+            if row.get("hostname"):
+                continue
+            ip = row.get("ip_address")
+            if not ip:
+                continue
+            if ip not in resolved:
+                try:
+                    resolved[ip] = resolve_hostname(ip)
+                except Exception:  # pragma: no cover - defensive
+                    resolved[ip] = None
+            row["hostname"] = resolved[ip]
 
     def _maybe_prune(self) -> None:
         now = time.monotonic()

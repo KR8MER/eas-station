@@ -8,6 +8,31 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.96.0] - 2026-06-15 - Traffic analytics: reverse DNS, countries & flags
+
+### Added
+- **Reverse-DNS hostnames (awstats-style "Hosts").** A new opt-in toggle
+  (Traffic Analytics → Settings → "Resolve hostnames (reverse DNS)") makes the
+  background recorder resolve each visitor IP to its PTR/hostname. Lookups run
+  off the request path in the flush thread, are bounded by a short socket
+  timeout, and are cached positively *and* negatively so a given address is
+  looked up at most once. The Top Visitors table now shows the hostname above
+  the raw IP. New `web_request_logs.hostname` column and
+  `traffic_analytics_settings.resolve_hostnames` flag.
+- **Country flags.** When a MaxMind GeoLite2 database is configured, public
+  visitor IPs now resolve to an ISO 3166-1 alpha-2 country code in addition to
+  the country name (new `web_request_logs.country_code` column). The
+  Countries/Networks and Top Visitors tables render the matching flag emoji
+  (via Unicode regional-indicator symbols — no image assets), with a
+  network-wired icon as the fallback for local/unresolved addresses.
+- `app_core/analytics/geo.py` gains `classify_location()` (label + ISO code) and
+  `resolve_hostname()` (cached, timeout-bounded reverse DNS); `classify_ip()` is
+  retained as a thin string-only wrapper.
+
+### Changed
+- `get_top_visitors()` and `get_country_breakdown()` now carry hostname and
+  country-code data so the dashboard can render hosts and flags.
+
 ## [2.95.0] - 2026-06-15 - Traffic analytics dashboard & real client IPs
 
 ### Fixed

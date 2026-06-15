@@ -143,6 +143,8 @@ def register(app: Flask, logger) -> None:
                 settings.log_authenticated_only = _to_bool(payload["log_authenticated_only"])
             if "exclude_bots" in payload:
                 settings.exclude_bots = _to_bool(payload["exclude_bots"])
+            if "resolve_hostnames" in payload:
+                settings.resolve_hostnames = _to_bool(payload["resolve_hostnames"])
             if "retention_days" in payload:
                 try:
                     retention = int(payload["retention_days"])
