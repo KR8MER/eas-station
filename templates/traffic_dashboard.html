@@ -1,0 +1,550 @@
+{% extends "base.html" %}
+
+{% block title %}Traffic Analytics - EAS Station™{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+<style>
+    /* Appliance-style chrome mirroring the System Health & GNSS dashboards so
+       Traffic Analytics reads as part of the same operator UI. */
+    .traffic-dash-root {
+        --font-mono: 'JetBrains Mono', 'Roboto Mono', 'SFMono-Regular', ui-monospace, 'Courier New', monospace;
+    }
+
+    /* App-bar style header (title / pills / live-dot / controls inline). */
+    .traffic-dash-root .traffic-dash-header { padding-top: 14px; padding-bottom: 14px; }
+    .traffic-dash-root .traffic-dash-header .header-flex {
+        display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center;
+    }
+    .traffic-dash-root .traffic-dash-header .title {
+        font-size: 1.0rem; font-weight: 700; letter-spacing: 0.10em;
+        text-transform: uppercase; display: inline-flex; align-items: center;
+        gap: 10px; color: #fff;
+    }
+    .traffic-dash-root .traffic-dash-header .title i { font-size: 1.1rem; }
+    .traffic-dash-root .traffic-dash-header .node {
+        color: rgba(255,255,255,0.78);
+        font-family: var(--font-mono); font-size: 0.82rem;
+    }
+    .traffic-dash-root .traffic-dash-header .spacer { flex: 1 1 auto; }
+    .traffic-dash-root .traffic-dash-header select.form-select-sm { width: auto; }
+
+    .traffic-dash-root .health-pill {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 3px 10px; border-radius: 999px;
+        font-size: 0.74rem; font-weight: 600; letter-spacing: 0.04em;
+        border: 1px solid currentColor; background: rgba(0,0,0,0.22);
+        font-family: var(--font-mono);
+    }
+    .traffic-dash-root .health-pill.ok    { color: #6ee07a; }
+    .traffic-dash-root .health-pill.info  { color: #79c0ff; }
+    .traffic-dash-root .health-pill.muted { color: rgba(255,255,255,0.78); }
+    .traffic-dash-root .health-pill i { font-size: 0.72rem; opacity: 0.85; }
+
+    .traffic-dash-root .health-live-dot {
+        display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+        background: rgba(255,255,255,0.45); flex-shrink: 0;
+    }
+    @keyframes traffic-data-ping {
+        0%   { box-shadow: 0 0 0 0   rgba(63,185,80,0.80); background: #3fb950; }
+        70%  { box-shadow: 0 0 0 8px rgba(63,185,80,0);    background: #3fb950; }
+        100% { box-shadow: 0 0 0 0   rgba(63,185,80,0);    background: rgba(255,255,255,0.45); }
+    }
+    .traffic-dash-root .health-live-dot.ping { animation: traffic-data-ping 0.75s ease forwards; }
+
+    /* At-a-glance status strip. */
+    .traffic-dash-root .health-status-strip {
+        display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
+        gap: 8px; margin: 0 0 18px 0;
+    }
+    .traffic-dash-root .health-status-tile {
+        position: relative; padding: 10px 12px;
+        border: 1px solid var(--border-color, rgba(127,127,127,.22));
+        border-left: 3px solid var(--text-muted, #8b949e);
+        border-radius: 6px; background: var(--surface-color, rgba(127,127,127,.04));
+        display: flex; flex-direction: column; gap: 4px; min-width: 0;
+        animation: traffic-tile-in 0.35s ease both;
+    }
+    @keyframes traffic-tile-in {
+        from { opacity: 0; transform: translateY(6px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+    .traffic-dash-root .health-status-tile .lbl {
+        font-size: 0.66rem; font-weight: 700; letter-spacing: 0.10em;
+        text-transform: uppercase; color: var(--text-muted, #8b949e);
+        display: flex; align-items: center; gap: 5px;
+    }
+    .traffic-dash-root .health-status-tile .lbl i { font-size: 0.74rem; opacity: 0.7; }
+    .traffic-dash-root .health-status-tile .val {
+        font-family: var(--font-mono); font-size: 1.18rem; font-weight: 700;
+        line-height: 1.05; color: var(--text-color);
+        font-variant-numeric: tabular-nums; letter-spacing: 0.02em;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .traffic-dash-root .health-status-tile .sub {
+        font-size: 0.68rem; color: var(--text-muted, #8b949e);
+        font-family: var(--font-mono);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .traffic-dash-root .health-status-tile.sev-ok    { border-left-color: #3fb950; }
+    .traffic-dash-root .health-status-tile.sev-ok    .val { color: #3fb950; }
+    .traffic-dash-root .health-status-tile.sev-info  { border-left-color: #58a6ff; }
+    .traffic-dash-root .health-status-tile.sev-info  .val { color: #58a6ff; }
+    .traffic-dash-root .health-status-tile.sev-warn  { border-left-color: #d29922; background: rgba(210,153,34,0.06); }
+    .traffic-dash-root .health-status-tile.sev-warn  .val { color: #f6c343; }
+    .traffic-dash-root .health-status-tile.sev-fault { border-left-color: #f85149; background: rgba(248,81,73,0.07); }
+    .traffic-dash-root .health-status-tile.sev-fault .val { color: #f85149; }
+    @media (max-width: 1180px) {
+        .traffic-dash-root .health-status-strip { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    }
+    @media (max-width: 720px) {
+        .traffic-dash-root .health-status-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+    }
+
+    /* Section dividers: tiny-caps title + horizontal rule. */
+    .traffic-dash-root .health-section-head {
+        display: flex; align-items: center; gap: 12px; margin: 22px 0 10px 0;
+    }
+    .traffic-dash-root .health-section-head h2 {
+        font-size: 0.78rem; font-weight: 700; letter-spacing: 0.14em;
+        text-transform: uppercase; color: var(--text-muted, #8b949e);
+        margin: 0; white-space: nowrap;
+    }
+    .traffic-dash-root .health-section-head .rule {
+        flex: 1 1 auto; height: 1px;
+        background: linear-gradient(90deg, var(--border-color, rgba(127,127,127,.30)), transparent);
+    }
+
+    /* Card chrome: thin border, dense padding, tiny-caps header. */
+    .traffic-dash-root .card {
+        border: 1px solid var(--border-color, rgba(127,127,127,.25));
+        background: var(--surface-color, rgba(127,127,127,.04));
+        border-radius: 8px; box-shadow: none;
+    }
+    .traffic-dash-root .card > .card-header {
+        background: transparent;
+        border-bottom: 1px solid var(--border-color, rgba(127,127,127,.18));
+        padding: 10px 14px;
+    }
+    .traffic-dash-root .card > .card-header h5,
+    .traffic-dash-root .card > .card-header h6 {
+        margin: 0; font-size: 0.80rem; font-weight: 700; letter-spacing: 0.12em;
+        text-transform: uppercase; color: var(--text-color);
+        display: inline-flex; align-items: center; gap: 8px;
+    }
+    .traffic-dash-root .card > .card-header .section-icon {
+        color: var(--primary-color); font-size: 0.85rem; margin-right: 2px;
+    }
+    .traffic-dash-root .card > .card-body { padding: 14px 16px; }
+
+    .traffic-dash-root .chart-container { position: relative; height: 300px; }
+    .traffic-dash-root .chart-container.small { height: 250px; }
+    .traffic-dash-root .eas-table th {
+        text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.05em;
+        color: var(--text-secondary);
+    }
+    .traffic-dash-root .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="traffic-dash-root">
+<div class="page-header traffic-dash-header" role="region" aria-label="Traffic analytics header">
+    <div class="container-fluid">
+        <div class="header-flex">
+            <span class="title"><i class="fas fa-chart-area"></i> Traffic Analytics</span>
+            <span class="node">Window:&nbsp;<span id="range-label">30 days</span></span>
+            <span class="health-pill ok" id="pill-pageviews" title="Page views in window"><i class="fas fa-eye"></i> <span>—</span> views</span>
+            <span class="health-pill info" id="pill-visitors" title="Unique visitors in window"><i class="fas fa-users"></i> <span>—</span> visitors</span>
+            <span class="health-live-dot" id="traffic-live-dot" title="Last data received"></span>
+            <span class="spacer"></span>
+            <select id="rangeSelect" class="form-select form-select-sm" aria-label="Time range">
+                <option value="1">Last 24 hours</option>
+                <option value="7">Last 7 days</option>
+                <option value="30" selected>Last 30 days</option>
+                <option value="90">Last 90 days</option>
+                <option value="365">Last year</option>
+            </select>
+            <button class="btn btn-sm btn-outline-light" onclick="loadDashboard()"><i class="fas fa-sync-alt me-1"></i>Refresh</button>
+            <button class="btn btn-sm btn-outline-light" data-bs-toggle="modal" data-bs-target="#trafficSettingsModal"><i class="fas fa-cog me-1"></i>Settings</button>
+        </div>
+    </div>
+</div>
+
+<div class="container-fluid mt-3">
+    <div class="alert alert-danger d-none" id="traffic-error" role="alert"></div>
+
+    <!-- At-a-glance status strip -->
+    <section class="health-status-strip" aria-label="Traffic at a glance">
+        <div class="health-status-tile sev-info" id="hs-pageviews">
+            <div class="lbl"><i class="fas fa-eye"></i> Page Views</div>
+            <div class="val">—</div><div class="sub">in window</div>
+        </div>
+        <div class="health-status-tile sev-info" id="hs-visitors">
+            <div class="lbl"><i class="fas fa-users"></i> Visitors</div>
+            <div class="val">—</div><div class="sub">unique IPs</div>
+        </div>
+        <div class="health-status-tile" id="hs-hits">
+            <div class="lbl"><i class="fas fa-server"></i> Total Hits</div>
+            <div class="val">—</div><div class="sub">all requests</div>
+        </div>
+        <div class="health-status-tile" id="hs-last24">
+            <div class="lbl"><i class="fas fa-clock"></i> Last 24h</div>
+            <div class="val">—</div><div class="sub">hits</div>
+        </div>
+        <div class="health-status-tile sev-ok" id="hs-logins">
+            <div class="lbl"><i class="fas fa-sign-in-alt"></i> Logins</div>
+            <div class="val">—</div><div class="sub">successful</div>
+        </div>
+        <div class="health-status-tile" id="hs-sessions">
+            <div class="lbl"><i class="fas fa-user-clock"></i> Sessions</div>
+            <div class="val">—</div><div class="sub">active now</div>
+        </div>
+        <div class="health-status-tile" id="hs-response">
+            <div class="lbl"><i class="fas fa-stopwatch"></i> Avg Resp</div>
+            <div class="val">—</div><div class="sub">server time</div>
+        </div>
+    </section>
+
+    <!-- Traffic over time -->
+    <div class="health-section-head"><h2>Traffic Over Time</h2><span class="rule"></span></div>
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body"><div class="chart-container"><canvas id="trafficChart"></canvas></div></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Breakdown charts -->
+    <div class="health-section-head"><h2>Breakdowns</h2><span class="rule"></span></div>
+    <div class="row g-3">
+        <div class="col-lg-4">
+            <div class="card h-100">
+                <div class="card-header"><h6><i class="fas fa-traffic-light section-icon"></i>Status Codes</h6></div>
+                <div class="card-body"><div class="chart-container small"><canvas id="statusChart"></canvas></div></div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card h-100">
+                <div class="card-header"><h6><i class="fas fa-window-maximize section-icon"></i>Browsers</h6></div>
+                <div class="card-body"><div class="chart-container small"><canvas id="browserChart"></canvas></div></div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card h-100">
+                <div class="card-header"><h6><i class="fas fa-sign-in-alt section-icon"></i>Login Activity</h6></div>
+                <div class="card-body"><div class="chart-container small"><canvas id="loginChart"></canvas></div></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Top pages / visitors -->
+    <div class="health-section-head"><h2>Content &amp; Visitors</h2><span class="rule"></span></div>
+    <div class="row g-3">
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-header"><h6><i class="fas fa-file-alt section-icon"></i>Top Pages</h6></div>
+                <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
+                    <thead><tr><th>Path</th><th class="text-end">Hits</th><th class="text-end d-none d-sm-table-cell">Avg ms</th></tr></thead>
+                    <tbody id="topPages"></tbody></table></div></div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-header"><h6><i class="fas fa-users section-icon"></i>Top Visitors</h6></div>
+                <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
+                    <thead><tr><th>IP Address</th><th class="text-end">Hits</th><th class="d-none d-sm-table-cell">Last Seen</th></tr></thead>
+                    <tbody id="topVisitors"></tbody></table></div></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Visitor environment -->
+    <div class="health-section-head"><h2>Visitor Environment</h2><span class="rule"></span></div>
+    <div class="row g-3">
+        <div class="col-lg-3 col-md-6">
+            <div class="card h-100">
+                <div class="card-header"><h6><i class="fas fa-desktop section-icon"></i>Operating Systems</h6></div>
+                <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
+                    <thead><tr><th>OS</th><th class="text-end">Hits</th></tr></thead><tbody id="osBreakdown"></tbody></table></div></div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6">
+            <div class="card h-100">
+                <div class="card-header"><h6><i class="fas fa-expand section-icon"></i>Screen Resolutions</h6></div>
+                <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
+                    <thead><tr><th>Resolution</th><th class="text-end">Hits</th></tr></thead><tbody id="resBreakdown"></tbody></table></div></div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6">
+            <div class="card h-100">
+                <div class="card-header"><h6><i class="fas fa-map-marker-alt section-icon"></i>Locations / Networks</h6></div>
+                <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
+                    <thead><tr><th>Location</th><th class="text-end">Hits</th></tr></thead><tbody id="countryBreakdown"></tbody></table></div></div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6">
+            <div class="card h-100">
+                <div class="card-header"><h6><i class="fas fa-language section-icon"></i>Languages</h6></div>
+                <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
+                    <thead><tr><th>Language</th><th class="text-end">Hits</th></tr></thead><tbody id="langBreakdown"></tbody></table></div></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mt-0">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header"><h6><i class="fas fa-external-link-alt section-icon"></i>Top Referrers</h6></div>
+                <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
+                    <thead><tr><th>Referrer</th><th class="text-end">Hits</th></tr></thead><tbody id="refBreakdown"></tbody></table></div></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Login security -->
+    <div class="health-section-head"><h2>Login Security</h2><span class="rule"></span></div>
+    <div class="row g-3">
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-header"><h6><i class="fas fa-network-wired section-icon"></i>Top Login Source IPs</h6></div>
+                <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
+                    <thead><tr><th>IP Address</th><th class="text-end">Success</th><th class="text-end">Failed</th></tr></thead>
+                    <tbody id="topLoginIps"></tbody></table></div></div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-header"><h6><i class="fas fa-history section-icon"></i>Recent Logins</h6></div>
+                <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
+                    <thead><tr><th>When</th><th>User</th><th>IP</th><th>Result</th></tr></thead>
+                    <tbody id="recentLogins"></tbody></table></div></div>
+            </div>
+        </div>
+    </div>
+</div>
+</div>
+
+<!-- Settings modal -->
+<div class="modal fade" id="trafficSettingsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-cog me-2"></i>Traffic Collection Settings</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" role="switch" id="setEnabled">
+                    <label class="form-check-label" for="setEnabled">Enable traffic collection</label>
+                </div>
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" role="switch" id="setLogApi">
+                    <label class="form-check-label" for="setLogApi">Record API (XHR/JSON) requests</label>
+                </div>
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" role="switch" id="setAuthOnly">
+                    <label class="form-check-label" for="setAuthOnly">Record authenticated requests only</label>
+                </div>
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" role="switch" id="setExcludeBots">
+                    <label class="form-check-label" for="setExcludeBots">Exclude bots/crawlers</label>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label" for="setRetention">Retention (days)</label>
+                    <input type="number" class="form-control" id="setRetention" min="1" max="3650" step="1">
+                    <div class="form-text">Records older than this are pruned automatically.</div>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label" for="setGeoip">GeoIP database path (optional)</label>
+                    <input type="text" class="form-control" id="setGeoip" placeholder="/opt/eas-station/data/GeoLite2-Country.mmdb">
+                    <div class="form-text">Point at a MaxMind GeoLite2 <code>.mmdb</code> file to resolve public IPs to countries. Leave blank for local-network classification only.</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='vendor/chartjs/chart-v3.min.js') }}"></script>
+<script>
+    let charts = {};
+
+    function cssVar(name, fallback) {
+        const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+        return v || fallback;
+    }
+    function num(n) { return (n || 0).toLocaleString(); }
+    function escapeHtml(s) {
+        if (s === null || s === undefined) return '';
+        return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+    }
+    function setTile(id, value, sub) {
+        const tile = document.getElementById(id);
+        if (!tile) return;
+        tile.querySelector('.val').textContent = value;
+        if (sub !== undefined) tile.querySelector('.sub').textContent = sub;
+    }
+    function destroyChart(key) { if (charts[key]) { charts[key].destroy(); delete charts[key]; } }
+    function pingLiveDot() {
+        const dot = document.getElementById('traffic-live-dot');
+        if (!dot) return;
+        dot.classList.remove('ping'); void dot.offsetWidth; dot.classList.add('ping');
+    }
+
+    async function loadDashboard() {
+        const sel = document.getElementById('rangeSelect');
+        const days = sel.value;
+        document.getElementById('range-label').textContent = sel.options[sel.selectedIndex].text.replace('Last ', '');
+        try {
+            const resp = await fetch(`/api/traffic/dashboard?days=${days}`);
+            const data = await resp.json();
+            const errBox = document.getElementById('traffic-error');
+            if (!data.success) {
+                errBox.textContent = 'Failed to load traffic data: ' + (data.error || 'unknown');
+                errBox.classList.remove('d-none');
+                return;
+            }
+            errBox.classList.add('d-none');
+            renderStrip(data.summary, data.login_summary);
+            renderTrafficChart(data.timeseries);
+            renderStatusChart(data.status_breakdown);
+            renderBrowserChart(data.browser_breakdown);
+            renderLoginChart(data.login_timeseries);
+            renderTable('topPages', data.top_pages, r => `<td class="text-break-anywhere">${escapeHtml(r.path)}</td><td class="text-end mono">${num(r.hits)}</td><td class="text-end d-none d-sm-table-cell mono">${r.avg_response_ms != null ? r.avg_response_ms : '--'}</td>`, 3);
+            renderTable('topVisitors', data.top_visitors, r => { const who = r.username ? ` <span class="badge bg-secondary">${escapeHtml(r.username)}</span>` : ''; return `<td class="text-break-anywhere mono">${escapeHtml(r.ip_address)}${who}</td><td class="text-end mono">${num(r.hits)}</td><td class="d-none d-sm-table-cell">${r.last_seen ? new Date(r.last_seen).toLocaleString() : '--'}</td>`; }, 3);
+            renderTable('osBreakdown', data.os_breakdown, r => `<td>${escapeHtml(r.os || 'Unknown')}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
+            renderTable('resBreakdown', data.resolution_breakdown, r => `<td class="mono">${escapeHtml(r.resolution || 'Unknown')}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
+            renderTable('countryBreakdown', data.country_breakdown, r => `<td>${escapeHtml(r.country || 'Unknown')}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
+            renderTable('langBreakdown', data.language_breakdown, r => `<td class="mono">${escapeHtml(r.language || 'Unknown')}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
+            renderTable('refBreakdown', data.referer_breakdown, r => `<td class="text-break-anywhere">${escapeHtml(r.referer)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
+            renderTable('topLoginIps', data.top_login_ips, r => `<td class="text-break-anywhere mono">${escapeHtml(r.ip_address)}</td><td class="text-end mono">${num(r.success)}</td><td class="text-end mono ${r.failure > 0 ? 'text-danger fw-bold' : ''}">${num(r.failure)}</td>`, 3);
+            renderTable('recentLogins', data.recent_logins, r => { const badge = r.success ? '<span class="badge bg-success">Success</span>' : '<span class="badge bg-danger">Failed</span>'; return `<td>${r.timestamp ? new Date(r.timestamp).toLocaleString() : '--'}</td><td>${escapeHtml(r.username || '--')}</td><td class="text-break-anywhere mono">${escapeHtml(r.ip_address || '--')}</td><td>${badge}</td>`; }, 4);
+            pingLiveDot();
+        } catch (err) {
+            console.error('Error loading traffic dashboard:', err);
+        }
+    }
+
+    function renderStrip(s, l) {
+        setTile('hs-pageviews', num(s.page_views), 'in window');
+        setTile('hs-visitors', num(s.unique_visitors), 'unique IPs');
+        setTile('hs-hits', num(s.total_hits), `${num(s.bot_hits)} bot hits`);
+        setTile('hs-last24', num(s.hits_last_24h), 'hits');
+        setTile('hs-logins', num(l.successful_logins), `${num(l.failed_logins)} failed`);
+        setTile('hs-sessions', num(l.active_sessions), 'active now');
+        setTile('hs-response', s.avg_response_ms != null ? s.avg_response_ms + ' ms' : '--', `${num(s.error_hits)} errors`);
+        // Severity tints
+        const errTile = document.getElementById('hs-response');
+        errTile.classList.toggle('sev-warn', (s.error_hits || 0) > 0);
+        const loginTile = document.getElementById('hs-logins');
+        loginTile.classList.toggle('sev-fault', (l.failed_logins || 0) > 0 && (l.successful_logins || 0) === 0);
+        // Header pills
+        document.querySelector('#pill-pageviews span').textContent = num(s.page_views);
+        document.querySelector('#pill-visitors span').textContent = num(s.unique_visitors);
+    }
+
+    function renderTrafficChart(ts) {
+        destroyChart('traffic');
+        charts.traffic = new Chart(document.getElementById('trafficChart').getContext('2d'), {
+            type: 'line',
+            data: { labels: ts.labels, datasets: [
+                { label: 'Hits', data: ts.hits, borderColor: cssVar('--primary-color', '#4e73df'), backgroundColor: 'transparent', tension: 0.3 },
+                { label: 'Page Views', data: ts.page_views, borderColor: cssVar('--success-color', '#1cc88a'), backgroundColor: 'transparent', tension: 0.3 },
+                { label: 'Unique Visitors', data: ts.visitors, borderColor: cssVar('--info-color', '#36b9cc'), backgroundColor: 'transparent', tension: 0.3 }
+            ]},
+            options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+        });
+    }
+    function renderStatusChart(rows) {
+        destroyChart('status');
+        const palette = { '2xx Success': cssVar('--success-color', '#1cc88a'), '3xx Redirect': cssVar('--info-color', '#36b9cc'), '4xx Client Error': cssVar('--warning-color', '#f6c23e'), '5xx Server Error': cssVar('--danger-color', '#e74a3b'), 'Other': cssVar('--text-muted', '#888') };
+        charts.status = new Chart(document.getElementById('statusChart').getContext('2d'), {
+            type: 'doughnut',
+            data: { labels: rows.map(r => r.family), datasets: [{ data: rows.map(r => r.count), backgroundColor: rows.map(r => palette[r.family] || '#888') }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+        });
+    }
+    function renderBrowserChart(rows) {
+        destroyChart('browser');
+        charts.browser = new Chart(document.getElementById('browserChart').getContext('2d'), {
+            type: 'bar',
+            data: { labels: rows.map(r => r.browser || 'Unknown'), datasets: [{ label: 'Requests', data: rows.map(r => r.count), backgroundColor: cssVar('--primary-color', '#4e73df') }] },
+            options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } }
+        });
+    }
+    function renderLoginChart(ts) {
+        destroyChart('login');
+        charts.login = new Chart(document.getElementById('loginChart').getContext('2d'), {
+            type: 'line',
+            data: { labels: ts.labels, datasets: [
+                { label: 'Successful', data: ts.successful, borderColor: cssVar('--success-color', '#1cc88a'), backgroundColor: 'transparent', tension: 0.3 },
+                { label: 'Failed', data: ts.failed, borderColor: cssVar('--danger-color', '#e74a3b'), backgroundColor: 'transparent', tension: 0.3 }
+            ]},
+            options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+        });
+    }
+
+    function renderTable(id, rows, rowHtml, cols) {
+        const tb = document.getElementById(id);
+        if (!rows || !rows.length) { tb.innerHTML = `<tr><td colspan="${cols}" class="text-center text-muted">No data</td></tr>`; return; }
+        tb.innerHTML = '';
+        rows.forEach(r => tb.insertAdjacentHTML('beforeend', `<tr>${rowHtml(r)}</tr>`));
+    }
+
+    async function loadSettings() {
+        try {
+            const resp = await fetch('/api/traffic/settings');
+            const data = await resp.json();
+            if (data.success) {
+                const s = data.settings;
+                document.getElementById('setEnabled').checked = s.enabled;
+                document.getElementById('setLogApi').checked = s.log_api_requests;
+                document.getElementById('setAuthOnly').checked = s.log_authenticated_only;
+                document.getElementById('setExcludeBots').checked = s.exclude_bots;
+                document.getElementById('setRetention').value = s.retention_days;
+                document.getElementById('setGeoip').value = s.geoip_database_path || '';
+            }
+        } catch (err) { console.error('Error loading settings:', err); }
+    }
+
+    async function saveSettings() {
+        const payload = {
+            enabled: document.getElementById('setEnabled').checked,
+            log_api_requests: document.getElementById('setLogApi').checked,
+            log_authenticated_only: document.getElementById('setAuthOnly').checked,
+            exclude_bots: document.getElementById('setExcludeBots').checked,
+            retention_days: parseInt(document.getElementById('setRetention').value, 10) || 90,
+            geoip_database_path: document.getElementById('setGeoip').value
+        };
+        try {
+            const resp = await fetch('/api/traffic/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const data = await resp.json();
+            if (data.success) {
+                showToast('Traffic settings saved', 'success');
+                const modalEl = document.getElementById('trafficSettingsModal');
+                const modal = bootstrap.Modal.getInstance(modalEl);
+                if (modal) modal.hide();
+            } else {
+                showToast('Failed to save settings: ' + (data.error || 'unknown'), 'danger');
+            }
+        } catch (err) {
+            console.error('Error saving settings:', err);
+            showToast('Error saving settings', 'danger');
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        document.getElementById('rangeSelect').addEventListener('change', loadDashboard);
+        document.getElementById('trafficSettingsModal').addEventListener('show.bs.modal', loadSettings);
+        loadDashboard();
+        setInterval(loadDashboard, 60000);
+    });
+</script>
+{% endblock %}

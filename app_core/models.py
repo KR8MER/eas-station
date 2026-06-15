@@ -121,6 +121,10 @@ from ._models_displays import (
     RWTScheduleConfig,
     ScreenRotation,
 )
+# Web-traffic analytics models live in the analytics package; re-export them
+# here so they register on the shared metadata and stay importable from
+# ``app_core.models`` like every other table.
+from app_core.analytics.web_traffic import TrafficAnalyticsSettings, WebRequestLog
 
 # Wire the alert-correlation-ID auto-populate hook onto log-shaped tables.
 # Every INSERT to one of these tables made while a logging_context alert
@@ -173,7 +177,9 @@ __all__ = [
     "StreamMetadataLog",
     "SystemLog",
     "TailscaleSettings",
+    "TrafficAnalyticsSettings",
     "USCountyBoundary",
     "VFDDisplay",
     "VFDStatus",
+    "WebRequestLog",
 ]

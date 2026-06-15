@@ -1,0 +1,285 @@
+"""
+EAS Station - Emergency Alert System
+Copyright (c) 2025-2026 Timothy Kramer (KR8MER)
+
+This file is part of EAS Station.
+
+EAS Station is dual-licensed software:
+- GNU Affero General Public License v3 (AGPL-3.0) for open-source use
+- Commercial License for proprietary use
+
+You should have received a copy of both licenses with this software.
+For more information, see LICENSE and LICENSE-COMMERCIAL files.
+
+IMPORTANT: This software cannot be rebranded or have attribution removed.
+See NOTICE file for complete terms.
+
+Repository: https://github.com/KR8MER/eas-station
+"""
+
+from __future__ import annotations
+
+"""Web-traffic analytics models and helpers (webalizer/awstats-style).
+
+This module backs the Traffic Analytics dashboard. Every (non-static) HTTP
+request handled by the Flask app is recorded as a :class:`WebRequestLog` row by
+the buffered recorder in ``traffic_recorder.py``. The dashboard then aggregates
+those rows into the familiar web-stats views: hits over time, top pages, top
+visitors, status-code mix, browser/OS breakdown, and referrers.
+
+:class:`TrafficAnalyticsSettings` is a single-row settings table that lets an
+operator enable/disable collection, set the retention window, and tune what is
+recorded entirely from the web UI (no environment variables, no CLI).
+"""
+
+from typing import Any, Dict, Optional
+
+from app_core.extensions import db
+from app_utils import utc_now
+
+# Path prefixes that are never recorded — high-volume, low-information noise that
+# would bloat the table without adding analytical value. Static assets and the
+# Socket.IO transport are pure plumbing; the favicon and health probe fire on a
+# fixed cadence regardless of real visitor activity.
+ALWAYS_EXCLUDED_PREFIXES = (
+    "/static/",
+    "/socket.io/",
+    "/favicon",
+    "/health",
+    "/api/system_status",
+    "/api/system_health",
+    "/api/traffic/",  # don't let the dashboard's own polling skew its numbers
+)
+
+# Lightweight, dependency-free User-Agent classification. Order matters: the
+# first matching needle wins, so more specific tokens are listed before the
+# generic engines they are built on (e.g. Edge before Chrome).
+_BOT_NEEDLES = (
+    "bot", "spider", "crawl", "slurp", "bingpreview", "facebookexternalhit",
+    "monitoring", "uptime", "curl", "wget", "python-requests", "httpx",
+    "go-http-client", "headlesschrome", "semrush", "ahrefs", "pingdom",
+)
+_BROWSER_NEEDLES = (
+    ("Edg", "Edge"),
+    ("OPR", "Opera"),
+    ("Opera", "Opera"),
+    ("SamsungBrowser", "Samsung Internet"),
+    ("Firefox", "Firefox"),
+    ("Chrome", "Chrome"),
+    ("Safari", "Safari"),
+    ("MSIE", "Internet Explorer"),
+    ("Trident", "Internet Explorer"),
+)
+_OS_NEEDLES = (
+    ("Windows NT 10", "Windows 10/11"),
+    ("Windows", "Windows"),
+    ("iPhone", "iOS"),
+    ("iPad", "iPadOS"),
+    ("Android", "Android"),
+    ("Mac OS X", "macOS"),
+    ("Macintosh", "macOS"),
+    ("CrOS", "ChromeOS"),
+    ("Linux", "Linux"),
+)
+
+
+def is_excluded_path(path: str) -> bool:
+    """Return ``True`` when *path* should never be recorded for analytics."""
+    if not path:
+        return True
+    return any(path.startswith(prefix) for prefix in ALWAYS_EXCLUDED_PREFIXES)
+
+
+def classify_user_agent(user_agent: Optional[str]) -> Dict[str, Any]:
+    """Best-effort classification of a User-Agent string.
+
+    Returns a dict with ``browser``, ``os`` and ``is_bot``. Intentionally simple
+    substring matching — adequate for a single-station appliance and avoids a
+    heavyweight UA-parsing dependency.
+    """
+    if not user_agent:
+        return {"browser": None, "os": None, "is_bot": False}
+
+    ua = user_agent
+    ua_lower = ua.lower()
+
+    is_bot = any(needle in ua_lower for needle in _BOT_NEEDLES)
+
+    browser: Optional[str] = None
+    for needle, label in _BROWSER_NEEDLES:
+        if needle in ua:
+            browser = label
+            break
+
+    os_name: Optional[str] = None
+    for needle, label in _OS_NEEDLES:
+        if needle in ua:
+            os_name = label
+            break
+
+    return {"browser": browser, "os": os_name, "is_bot": is_bot}
+
+
+class WebRequestLog(db.Model):
+    """A single recorded HTTP request, for web-traffic analytics.
+
+    Rows are written asynchronously by the buffered recorder so the request path
+    itself never pays for a synchronous database write.
+    """
+
+    __tablename__ = "web_request_logs"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    timestamp = db.Column(
+        db.DateTime(timezone=True), default=utc_now, nullable=False, index=True
+    )
+
+    # Request line
+    method = db.Column(db.String(8), nullable=False)
+    path = db.Column(db.String(512), nullable=False, index=True)
+    status_code = db.Column(db.Integer, nullable=False, index=True)
+    response_time_ms = db.Column(db.Integer, nullable=True)
+    content_length = db.Column(db.Integer, nullable=True)
+
+    # Who / from where
+    ip_address = db.Column(db.String(64), nullable=True, index=True)
+    user_agent = db.Column(db.String(512), nullable=True)
+    referer = db.Column(db.String(512), nullable=True)
+
+    # Authenticated identity (denormalized so deleting a user keeps history)
+    user_id = db.Column(db.Integer, nullable=True, index=True)
+    username = db.Column(db.String(128), nullable=True)
+    is_authenticated = db.Column(db.Boolean, nullable=False, default=False)
+
+    # Derived classification
+    is_api = db.Column(db.Boolean, nullable=False, default=False)
+    is_bot = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    browser = db.Column(db.String(64), nullable=True)
+    os = db.Column(db.String(64), nullable=True)
+
+    # Extended awstats-style attributes
+    # screen_resolution e.g. "1920x1080" — captured client-side via a beacon and
+    # carried on subsequent requests in the session cookie.
+    screen_resolution = db.Column(db.String(20), nullable=True)
+    # country/network label from geo.classify_ip (e.g. "Local Network", a country
+    # name when a GeoIP DB is configured, or "Internet (Public)").
+    country = db.Column(db.String(64), nullable=True)
+    # Preferred language parsed from the Accept-Language header (e.g. "en-US").
+    language = db.Column(db.String(20), nullable=True)
+
+    __table_args__ = (
+        db.Index("idx_web_request_logs_path_time", "path", "timestamp"),
+        db.Index("idx_web_request_logs_ip_time", "ip_address", "timestamp"),
+        db.Index("idx_web_request_logs_bot_time", "is_bot", "timestamp"),
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert the record to a dictionary for API responses."""
+        return {
+            "id": self.id,
+            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+            "method": self.method,
+            "path": self.path,
+            "status_code": self.status_code,
+            "response_time_ms": self.response_time_ms,
+            "content_length": self.content_length,
+            "ip_address": self.ip_address,
+            "user_agent": self.user_agent,
+            "referer": self.referer,
+            "user_id": self.user_id,
+            "username": self.username,
+            "is_authenticated": bool(self.is_authenticated),
+            "is_api": bool(self.is_api),
+            "is_bot": bool(self.is_bot),
+            "browser": self.browser,
+            "os": self.os,
+            "screen_resolution": self.screen_resolution,
+            "country": self.country,
+            "language": self.language,
+        }
+
+
+class TrafficAnalyticsSettings(db.Model):
+    """Single-row configuration for web-traffic collection.
+
+    Managed entirely through the Traffic Analytics dashboard UI. Use
+    :meth:`get_settings` to fetch the live row (creating defaults on first use)
+    and :meth:`as_config` for the lightweight dict the recorder caches.
+    """
+
+    __tablename__ = "traffic_analytics_settings"
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # Master switch for request collection.
+    enabled = db.Column(db.Boolean, nullable=False, default=True)
+
+    # How long recorded rows are kept before the recorder prunes them.
+    retention_days = db.Column(db.Integer, nullable=False, default=90)
+
+    # Whether to record /api/ requests (XHR/JSON traffic) in addition to pages.
+    log_api_requests = db.Column(db.Boolean, nullable=False, default=True)
+
+    # Whether to record only authenticated requests (privacy-conscious mode).
+    log_authenticated_only = db.Column(db.Boolean, nullable=False, default=False)
+
+    # Whether to drop requests classified as bots/crawlers rather than store them.
+    exclude_bots = db.Column(db.Boolean, nullable=False, default=False)
+
+    # Optional path to a MaxMind GeoLite2 .mmdb database. When set (and the
+    # geoip2 package is installed), public visitor IPs resolve to country names
+    # on the dashboard. Leave blank for local-network-only classification.
+    geoip_database_path = db.Column(db.String(512), nullable=True)
+
+    updated_at = db.Column(
+        db.DateTime(timezone=True),
+        default=utc_now,
+        onupdate=utc_now,
+        nullable=False,
+    )
+
+    DEFAULTS: Dict[str, Any] = {
+        "enabled": True,
+        "retention_days": 90,
+        "log_api_requests": True,
+        "log_authenticated_only": False,
+        "exclude_bots": False,
+        "geoip_database_path": None,
+    }
+
+    @classmethod
+    def get_settings(cls) -> "TrafficAnalyticsSettings":
+        """Return the singleton settings row, creating defaults if absent."""
+        row = cls.query.first()
+        if row is None:
+            row = cls(**cls.DEFAULTS)
+            db.session.add(row)
+            db.session.commit()
+        return row
+
+    def as_config(self) -> Dict[str, Any]:
+        """Return the recorder-facing config dict (no DB objects)."""
+        return {
+            "enabled": bool(self.enabled),
+            "retention_days": int(self.retention_days or 90),
+            "log_api_requests": bool(self.log_api_requests),
+            "log_authenticated_only": bool(self.log_authenticated_only),
+            "exclude_bots": bool(self.exclude_bots),
+            "geoip_database_path": self.geoip_database_path or None,
+        }
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert settings to a dictionary for API responses."""
+        data = self.as_config()
+        data["updated_at"] = self.updated_at.isoformat() if self.updated_at else None
+        return data
+
+
+__all__ = [
+    "WebRequestLog",
+    "TrafficAnalyticsSettings",
+    "classify_user_agent",
+    "is_excluded_path",
+    "ALWAYS_EXCLUDED_PREFIXES",
+]

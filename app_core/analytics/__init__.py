@@ -32,6 +32,12 @@ from app_core.analytics.models import (
     SystemMetricSample,
     TrendRecord,
 )
+from app_core.analytics.web_traffic import (
+    TrafficAnalyticsSettings,
+    WebRequestLog,
+    classify_user_agent,
+    is_excluded_path,
+)
 from app_core.analytics.aggregator import MetricsAggregator
 from app_core.analytics.trend_analyzer import TrendAnalyzer
 from app_core.analytics.anomaly_detector import AnomalyDetector
@@ -41,12 +47,22 @@ from app_core.analytics.scheduler import (
     start_scheduler,
     stop_scheduler,
 )
+from app_core.analytics.traffic_recorder import (
+    get_traffic_recorder,
+    record_request,
+    start_traffic_recorder,
+    stop_traffic_recorder,
+)
 
 __all__ = [
     "MetricSnapshot",
     "TrendRecord",
     "AnomalyRecord",
     "SystemMetricSample",
+    "TrafficAnalyticsSettings",
+    "WebRequestLog",
+    "classify_user_agent",
+    "is_excluded_path",
     "MetricsAggregator",
     "TrendAnalyzer",
     "AnomalyDetector",
@@ -54,4 +70,8 @@ __all__ = [
     "get_scheduler",
     "start_scheduler",
     "stop_scheduler",
+    "get_traffic_recorder",
+    "record_request",
+    "start_traffic_recorder",
+    "stop_traffic_recorder",
 ]

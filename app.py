@@ -320,6 +320,19 @@ if _env_icecast_enabled and _env_icecast_enabled.lower() in ('true', '1', 'yes',
 # Create Flask app
 app = Flask(__name__)
 
+# Trust the reverse proxy (nginx) for the real client address.
+#
+# In production nginx terminates the connection and forwards to Gunicorn over
+# 127.0.0.1, setting X-Forwarded-For / X-Forwarded-Proto / X-Forwarded-Host
+# (see config/nginx-eas-station.conf). Without ProxyFix, request.remote_addr is
+# always 127.0.0.1, which is why every login/session previously recorded as
+# "localhost". ProxyFix rewrites remote_addr from the LAST hop in
+# X-Forwarded-For. We trust exactly one hop (our own nginx); trusting more would
+# let a client spoof its IP by sending its own X-Forwarded-For header.
+from werkzeug.middleware.proxy_fix import ProxyFix
+
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
+
 # Serve cache-busted static assets with a 1-year max-age. Templates already
 # append ?v={{ static_asset_version }} to every url_for('static', ...) call
 # (see app_core/flask/url_defaults.py + the @app.url_defaults hook below),
@@ -443,6 +456,9 @@ PUBLIC_API_GET_PATHS = {
     '/api/release-manifest',
     # Hardware diagnostics (used by local monitoring/debugging)
     '/api/smart_diag',
+    # Traffic-analytics client beacon (screen resolution) — harmless, public so
+    # every visitor's resolution is captured for the awstats-style dashboard.
+    '/api/traffic/client',
 }
 
 # Pages that do not require authentication.
@@ -855,6 +871,17 @@ if not skip_background_services:
     except Exception as _sys_sampler_err:
         logger.warning('System metrics sampler could not be started: %s', _sys_sampler_err)
 
+# Start the web-traffic recorder so the Traffic Analytics dashboard captures
+# page views and request metrics (webalizer/awstats-style) for every visitor.
+if not skip_background_services:
+    try:
+        from app_core.analytics.traffic_recorder import start_traffic_recorder
+        if not app.config.get('SETUP_MODE'):
+            start_traffic_recorder(app)
+            logger.info('Web-traffic recorder started')
+    except Exception as _traffic_rec_err:
+        logger.warning('Web-traffic recorder could not be started: %s', _traffic_rec_err)
+
 print(f"[PID {os.getpid()}] app.py module initialization COMPLETE", file=sys.stderr, flush=True)
 
 # =============================================================================
@@ -975,6 +1002,10 @@ def is_expired_filter(expires_dt):
 @app.before_request
 def before_request():
     """Before request hook for logging and setup"""
+    # Start a monotonic timer so after_request can record server response time
+    # for the traffic-analytics dashboard.
+    g._traffic_start = time.perf_counter()
+
     # Refresh dynamic metadata that may change between deployments.
     app.config['SYSTEM_VERSION'] = get_current_version()
     if not _static_version_env:
@@ -1203,7 +1234,98 @@ def after_request(response):
             'max-age=63072000; includeSubDomains',
         )
 
+    _record_traffic(response)
+
     return response
+
+
+def _record_traffic(response) -> None:
+    """Queue this request for the traffic-analytics dashboard (best-effort).
+
+    Runs on the response path but never touches the database directly — the
+    record is appended to an in-memory buffer drained by a background thread, so
+    a logging hiccup can never break a user's request.
+    """
+    try:
+        from app_core.analytics.geo import classify_ip
+        from app_core.analytics.traffic_recorder import get_traffic_recorder
+        from app_core.analytics.web_traffic import classify_user_agent, is_excluded_path
+
+        recorder = get_traffic_recorder()
+        if recorder is None:
+            return
+        config = recorder.config
+        if not config.get('enabled', True):
+            return
+
+        path = request.path or '/'
+        if is_excluded_path(path):
+            return
+
+        is_api = path.startswith('/api/')
+        if is_api and not config.get('log_api_requests', True):
+            return
+
+        user = getattr(g, 'current_user', None)
+        is_authenticated = user is not None
+        if config.get('log_authenticated_only', False) and not is_authenticated:
+            return
+
+        ua_raw = request.headers.get('User-Agent', '') or ''
+        ua = classify_user_agent(ua_raw)
+        if ua['is_bot'] and config.get('exclude_bots', False):
+            return
+
+        start = getattr(g, '_traffic_start', None)
+        response_time_ms = None
+        if start is not None:
+            response_time_ms = int((time.perf_counter() - start) * 1000)
+
+        referer = request.headers.get('Referer')
+        content_length = response.calculate_content_length()
+
+        # request.remote_addr is now the real client IP thanks to ProxyFix.
+        client_ip = request.remote_addr or None
+
+        # Preferred language from Accept-Language (first listed locale).
+        accept_language = request.headers.get('Accept-Language', '') or ''
+        language = None
+        if accept_language:
+            language = accept_language.split(',')[0].split(';')[0].strip()[:20] or None
+
+        # Screen resolution is captured client-side and stashed in the session by
+        # the /api/traffic/client beacon, so it rides along on later requests.
+        screen_resolution = None
+        try:
+            screen_resolution = session.get('client_screen')
+        except Exception:
+            screen_resolution = None
+
+        country = classify_ip(client_ip, config.get('geoip_database_path'))
+
+        recorder.record({
+            'timestamp': utc_now(),
+            'method': request.method,
+            'path': path[:512],
+            'status_code': response.status_code,
+            'response_time_ms': response_time_ms,
+            'content_length': content_length,
+            'ip_address': client_ip,
+            'user_agent': ua_raw[:512] if ua_raw else None,
+            'referer': referer[:512] if referer else None,
+            'user_id': getattr(user, 'id', None) if is_authenticated else None,
+            'username': getattr(user, 'username', None) if is_authenticated else None,
+            'is_authenticated': is_authenticated,
+            'is_api': is_api,
+            'is_bot': ua['is_bot'],
+            'browser': ua['browser'],
+            'os': ua['os'],
+            'screen_resolution': screen_resolution,
+            'country': country,
+            'language': language,
+        })
+    except Exception as exc:  # pragma: no cover - defensive: never break a response
+        logger.debug('Traffic recording skipped: %s', exc)
 
 
 # Flask 3 removed the ``before_first_request`` hook in favour of
