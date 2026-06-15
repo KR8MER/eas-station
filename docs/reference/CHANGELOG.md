@@ -8,6 +8,17 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.93.2] - 2026-06-15 - README screenshot tour
+
+### Added
+- **Screenshot tour in the README.** Added a `## 📸 Screenshot Tour` section
+  with eight dashboard screenshots (operational dashboard, alert timeline,
+  statistics/analytics, EAS compliance, tamper-evident audit ledger, SDR
+  diagnostics, GPS & time / stratum-1, and system health) so visitors can see
+  the web UI before installing. Images live under `docs/screenshots/` and were
+  captured from a running instance with sample alert data
+  (`README.md`, `docs/screenshots/*.jpg`).
+
 ## [2.93.1] - 2026-06-14 - Public docs, help & sponsorship pages
 
 ### Fixed
