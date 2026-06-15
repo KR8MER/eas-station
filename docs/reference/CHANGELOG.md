@@ -8,6 +8,44 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.95.0] - 2026-06-15 - Traffic analytics dashboard & real client IPs
+
+### Fixed
+- **Logins/sessions no longer all show as `localhost`.** The app runs behind
+  nginx, which connects to Gunicorn over `127.0.0.1`, so `request.remote_addr`
+  always read as localhost and every `admin_sessions` row recorded that as the
+  source IP. Wrapped the WSGI app in Werkzeug's `ProxyFix` (trusting exactly one
+  proxy hop) so `request.remote_addr` now reflects the real client address from
+  `X-Forwarded-For`. This corrects Active Sessions, audit logs, and the new
+  traffic dashboard in one place (`app.py`).
+
+### Added
+- **Traffic Analytics dashboard** (`/traffic`, Tools → Analytics → Traffic
+  Analytics) — a webalizer/awstats-style view of web traffic, styled to match
+  the System Health and GNSS appliance dashboards (status strip, tiny-caps
+  section heads, themed cards). Shows hits/page-views/unique-visitors over time,
+  top pages, top visitors, status-code mix, browsers, operating systems, screen
+  resolutions, locations/networks, languages, and referrers — plus a login
+  security section (successful/failed logins over time, top source IPs, recent
+  logins, active sessions).
+- **In-app request logging.** A new `web_request_logs` table records each
+  non-static request via a buffered background recorder (`after_request` only
+  appends to an in-memory buffer; a daemon thread bulk-inserts and prunes past
+  the retention window), so the request path never pays for a synchronous DB
+  write. New modules: `app_core/analytics/web_traffic.py`,
+  `traffic_recorder.py`, `traffic_stats.py`, `geo.py`;
+  routes in `webapp/routes_traffic.py`.
+- **Screen-resolution capture** via a tiny per-session client beacon
+  (`static/js/core/traffic-beacon.js` → `GET /api/traffic/client`), since screen
+  size isn't available in HTTP headers.
+- **Optional GeoIP country resolution.** Public visitor IPs resolve to country
+  names when a MaxMind GeoLite2 `.mmdb` path is configured in the dashboard's
+  settings and the optional `geoip2` package is installed; otherwise addresses
+  are classified as Local Network / Internet (Public) with no network calls.
+- **Web-UI collection settings** (`traffic_analytics_settings` table): enable or
+  disable collection, retention days, whether to log API requests, authenticated
+  -only mode, bot exclusion, and the GeoIP database path — all from the dashboard.
+
 ## [2.94.2] - 2026-06-15 - One-tap Actions run cleanup
 
 ### Added

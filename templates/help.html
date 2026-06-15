@@ -396,6 +396,31 @@
                             </div>
                         </div>
 
+                        <!-- Traffic Analytics -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header" id="trafficAnalyticsHeading">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#trafficAnalyticsCollapse">
+                                    <i class="fas fa-chart-area me-2"></i>Traffic Analytics (Web Stats)
+                                </button>
+                            </h2>
+                            <div id="trafficAnalyticsCollapse" class="accordion-collapse collapse" data-bs-parent="#operationsAccordion">
+                                <div class="accordion-body">
+                                    <p>A webalizer/awstats-style dashboard for the station's web traffic. Navigate to <strong>Tools → Analytics → Traffic Analytics</strong> (<code>/traffic</code>), or use the time-range selector in the header to switch between the last 24 hours and the last year.</p>
+                                    <ul>
+                                        <li><strong>At-a-glance strip &amp; charts:</strong> page views, unique visitors, total hits, successful logins, active sessions, and average response time, plus traffic-over-time, status-code, browser, and login-activity charts.</li>
+                                        <li><strong>Visitor detail tables:</strong> top pages, top visitor IPs, operating systems, screen resolutions, locations/networks, languages, and referrers.</li>
+                                        <li><strong>Login security:</strong> successful vs. failed logins over time, top login source IPs, and the most recent login attempts — so you can spot brute-force activity.</li>
+                                    </ul>
+                                    <p class="mb-1"><strong>Why source IPs now read correctly:</strong> the app sits behind nginx, so it now trusts the proxy's <code>X-Forwarded-For</code> header. Logins and sessions show the real client address instead of <code>localhost</code>.</p>
+                                    <p class="mb-1"><strong>Configure collection</strong> from the dashboard's <strong>Settings</strong> button: enable/disable logging, set the retention window, choose whether to record API requests or authenticated traffic only, exclude bots, and (optionally) point at a MaxMind GeoLite2 <code>.mmdb</code> database to resolve public IPs to countries.</p>
+                                    <div class="alert alert-light mb-0">
+                                        <i class="fas fa-shield-alt me-2"></i>
+                                        Traffic data is stored locally in the station database and pruned automatically past the retention window; nothing is sent to any third party.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Managing Boundaries and Alerts -->
                         <div class="accordion-item">
                             <h2 class="accordion-header" id="boundariesHeading">
