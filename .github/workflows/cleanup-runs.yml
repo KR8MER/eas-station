@@ -1,0 +1,75 @@
+name: Cleanup Old Workflow Runs
+
+# Manually-triggered maintenance tool. Deletes old Actions workflow-run
+# history server-side, keeping only the newest N runs. Run it from the
+# Actions tab → "Cleanup Old Workflow Runs" → "Run workflow" (works fine
+# from the GitHub mobile app / mobile web). Start with dry_run = true to
+# preview, then re-run with dry_run = false to actually delete.
+#
+# This is a housekeeping utility; it is safe to delete this file once the
+# backlog has been cleared.
+
+on:
+  workflow_dispatch:
+    inputs:
+      keep:
+        description: "Number of most-recent runs to keep (across the whole repo)"
+        required: true
+        default: "50"
+      dry_run:
+        description: "Preview only (true) or actually delete (false)"
+        type: choice
+        options:
+          - "true"
+          - "false"
+        default: "true"
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: cleanup-runs
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete old workflow runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KEEP: ${{ inputs.keep }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+
+          echo "Collecting workflow-run IDs (keeping the newest $KEEP)..."
+          # Runs come back newest-first; skip the first $KEEP, delete the rest.
+          mapfile -t ids < <(
+            gh api "repos/${GITHUB_REPOSITORY}/actions/runs" \
+              --paginate -q '.workflow_runs[].id' | tail -n +$((KEEP + 1))
+          )
+
+          total=${#ids[@]}
+          echo "Found $total run(s) eligible for deletion."
+          if [ "$total" -eq 0 ]; then
+            echo "Nothing to do."
+            exit 0
+          fi
+
+          i=0
+          for id in "${ids[@]}"; do
+            i=$((i + 1))
+            if [ "$DRY_RUN" = "true" ]; then
+              echo "[$i/$total] dry-run: would delete run $id"
+            else
+              if gh api -X DELETE "repos/${GITHUB_REPOSITORY}/actions/runs/$id" --silent 2>/dev/null; then
+                echo "[$i/$total] deleted run $id"
+              else
+                echo "[$i/$total] skipped run $id (in progress or already gone)"
+              fi
+            fi
+          done
+
+          echo "Done. Processed $total run(s) (dry_run=$DRY_RUN)."

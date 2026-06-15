@@ -8,6 +8,16 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.94.2] - 2026-06-15 - One-tap Actions run cleanup
+
+### Added
+- **`Cleanup Old Workflow Runs` workflow** (`.github/workflows/cleanup-runs.yml`)
+  — a manually-dispatched maintenance tool that deletes accumulated Actions
+  run history server-side, keeping only the newest N runs (default 50). Supports
+  a `dry_run` preview mode and reports per-run progress in the job log, so the
+  backlog can be cleared from the GitHub mobile app without any local `gh` CLI.
+  Safe to delete the file once the backlog is cleared.
+
 ## [2.94.1] - 2026-06-15 - Actions/CI junk cleanup
 
 ### Changed
