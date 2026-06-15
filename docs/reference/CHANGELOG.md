@@ -8,6 +8,19 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.97.2] - 2026-06-15 - Brand-coloured browser/OS logos
+
+### Changed
+- Traffic Analytics now tints the browser and operating-system logos their
+  official brand colours (Chrome blue, Firefox orange, Android green, Windows
+  blue, etc.; Apple/Linux use neutral tones so they stay legible on dark
+  themes) instead of rendering them as flat grey glyphs. Confirmed the
+  FontAwesome brand webfont (`fa-brands-400`) ships locally so the logos render
+  offline.
+- Added a **Browsers** table (with logos) to the Visitor Environment section so
+  browser logos have a home alongside the existing bar chart; the Recent
+  Requests browser column is brand-coloured too.
+
 ## [2.97.1] - 2026-06-15 - GeoIP database dependency & resilient upload
 
 ### Fixed
