@@ -717,7 +717,11 @@
             const resp = await fetch('/api/traffic/geoip/upload', { method: 'POST', body: fd });
             const data = await resp.json();
             if (data.success) {
-                statusEl.innerHTML = '<span class="text-success">Database installed. Country flags are now active.</span>';
+                if (data.note) {
+                    statusEl.innerHTML = `<span class="text-warning">${escapeHtml(data.note)}</span>`;
+                } else {
+                    statusEl.innerHTML = '<span class="text-success">Database installed. Country flags are now active.</span>';
+                }
                 document.getElementById('setGeoip').value = data.path || '';
                 if (typeof showToast === 'function') showToast('GeoIP database installed', 'success');
             } else {

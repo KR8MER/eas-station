@@ -128,12 +128,13 @@ pysnmp>=6.2.0  # SNMP v2c trap sender for compliance health alerts
 pyshp==3.0.3  # Shapefile reader for converting boundary files to GeoJSON
 pyproj==3.7.1  # CRS reprojection from shapefile .prj to WGS84 (optional, gracefully degrades)
 
-# Optional: country-level geolocation for the Traffic Analytics dashboard.
-# Install AND point Traffic Analytics → Settings → "GeoIP database path" at a
-# MaxMind GeoLite2-Country.mmdb to resolve public visitor IPs to countries.
-# Absent by default: public IPs are simply labelled "Internet (Public)" and the
-# app makes no network calls (see app_core/analytics/geo.py).
-# geoip2>=4.8.0
+# Country-level geolocation for the Traffic Analytics dashboard. Resolves public
+# visitor IPs to countries/flags from an operator-supplied MaxMind GeoLite2
+# database (uploaded from the dashboard's Settings, or pointed at by path).
+# Pulls in the `maxminddb` reader as a dependency. Until a database is supplied,
+# public IPs are simply labelled "Internet (Public)" and no network calls are
+# made (see app_core/analytics/geo.py).
+geoip2>=4.8.0
 
 # Audio processing - audioop replacement for Python 3.13+
 audioop-lts==0.2.2  # Drop-in replacement for audioop (removed in Python 3.13)

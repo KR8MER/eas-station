@@ -8,6 +8,19 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.97.1] - 2026-06-15 - GeoIP database dependency & resilient upload
+
+### Fixed
+- **GeoIP upload failed with "No module named 'maxminddb'".** `geoip2` (which
+  provides the `maxminddb` reader) was an optional, commented-out dependency, so
+  on a default install the upload validation hard-failed and country/flag
+  resolution could never work. `geoip2>=4.8.0` is now a first-class requirement.
+- **Upload no longer hard-fails when the reader is missing.** The upload route
+  validates with the `maxminddb` reader when available and otherwise falls back
+  to the MaxMind DB magic-marker check, so a valid `.mmdb` is accepted and
+  stored even before the package is installed — with a clear note that
+  `pip install -r requirements.txt` + restart is needed for flags to resolve.
+
 ## [2.97.0] - 2026-06-15 - Traffic analytics: GeoIP upload, graphics, errors & exports
 
 ### Added

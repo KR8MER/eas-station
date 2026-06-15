@@ -41,6 +41,17 @@ from app_core.extensions import db
 # a generous ceiling that still rejects obviously-wrong uploads.
 _MAX_GEOIP_BYTES = 128 * 1024 * 1024
 
+# Every MaxMind DB file ends with a metadata section introduced by this marker.
+# We can recognise a valid .mmdb by its presence even when the `maxminddb`
+# reader package isn't installed yet.
+_MMDB_MAGIC = b"\xab\xcd\xefMaxMind.com"
+
+
+def _has_maxmind_magic(data: bytes) -> bool:
+    """Return ``True`` if *data* contains the MaxMind DB metadata marker."""
+    # The marker lives near the end of the file; scan the tail for efficiency.
+    return _MMDB_MAGIC in data[-262144:]
+
 # Bounds so a crafted ?days= can't ask for an unbounded scan.
 _MIN_DAYS = 1
 _MAX_DAYS = 365
@@ -214,17 +225,31 @@ def register(app: Flask, logger) -> None:
                 fh.write(data)
 
             # Validate before committing: a corrupt/non-mmdb file must not become
-            # the active database.
+            # the active database. Prefer the real `maxminddb` reader; if that
+            # package isn't installed yet, fall back to the file's magic marker so
+            # the upload still works (resolution lights up once the package is
+            # present).
+            reader_available = True
+            note = None
             try:
                 import maxminddb
 
                 with maxminddb.open_database(tmp_path):
                     pass
+            except ImportError:
+                reader_available = False
+                if not _has_maxmind_magic(data):
+                    _safe_remove(tmp_path)
+                    return jsonify(
+                        {"success": False, "error": "File is not a MaxMind .mmdb database"}
+                    ), 400
+                note = (
+                    "Database stored, but the 'geoip2' package is not installed "
+                    "yet — run pip install -r requirements.txt and restart for "
+                    "flags to resolve."
+                )
             except Exception as exc:
-                try:
-                    os.remove(tmp_path)
-                except OSError:
-                    pass
+                _safe_remove(tmp_path)
                 return jsonify(
                     {"success": False, "error": f"Not a valid GeoIP database: {exc}"}
                 ), 400
@@ -239,14 +264,27 @@ def register(app: Flask, logger) -> None:
             db.session.commit()
             reset_readers()
 
-            route_logger.info("GeoIP database uploaded to %s", dest_path)
-            return jsonify(
-                {"success": True, "path": dest_path, "settings": settings.to_dict()}
+            route_logger.info(
+                "GeoIP database uploaded to %s (reader_available=%s)",
+                dest_path,
+                reader_available,
             )
+            payload = {"success": True, "path": dest_path, "settings": settings.to_dict()}
+            if note:
+                payload["note"] = note
+            return jsonify(payload)
         except Exception as exc:  # pragma: no cover - defensive
             db.session.rollback()
             route_logger.error("Failed to upload GeoIP database: %s", exc)
             return jsonify({"success": False, "error": str(exc)}), 500
+
+
+def _safe_remove(path: str) -> None:
+    """Delete *path* if present, ignoring errors (cleanup of a rejected upload)."""
+    try:
+        os.remove(path)
+    except OSError:
+        pass
 
 
 def _to_bool(value: Any) -> bool:
