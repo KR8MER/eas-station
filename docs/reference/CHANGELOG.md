@@ -8,6 +8,21 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.94.1] - 2026-06-15 - Actions/CI junk cleanup
+
+### Changed
+- **`Update Repository Statistics` workflow no longer commits to the repo.** It
+  previously ran on *every push* to `main`/`develop` **and** on a daily cron,
+  auto-committing `Update repository statistics [skip ci]` — the single largest
+  source of automated workflow-run history and bot commit churn. It now runs on
+  the daily schedule (or manually via `workflow_dispatch`) and only reports
+  whether `static/repo_stats.html` has drifted; refresh it locally with
+  `python scripts/generate_repo_stats.py` and commit the result. Dropped the
+  now-unneeded `contents: write` permission (`.github/workflows/update-repo-stats.yml`).
+- The GitHub Pages documentation build now sets `retention-days: 1` on its
+  uploaded Pages artifact so transient build output expires promptly instead of
+  consuming Actions storage (`.github/workflows/docs-pages.yml`).
+
 ## [2.94.0] - 2026-06-15 - Cancelled-alert tracking
 
 ### Added
