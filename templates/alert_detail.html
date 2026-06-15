@@ -503,12 +503,26 @@
                                 </div>
                                 <div class="col-md-4 col-sm-6">
                                     <h6 class="text-muted mb-1 small">Status</h6>
+                                    {% if alert.status == 'Cancelled' or alert.cancelled_at %}
+                                    <span class="badge bg-warning text-dark">
+                                        <i class="fas fa-ban me-1"></i>CANCELLED
+                                    </span>
+                                    {% if alert.cancelled_at %}
+                                    <div class="small text-muted mt-1 text-break-anywhere">
+                                        Lifted {{ alert.cancelled_at | format_local_datetime(false) }}{% if alert.expires and alert.cancelled_at < alert.expires %} &mdash; before the {{ alert.expires | format_local_datetime(false) }} expiry{% endif %}
+                                    </div>
+                                    {% endif %}
+                                    {% elif alert.superseded_by_id %}
+                                    <span class="badge bg-secondary">{{ alert.status }}</span>
+                                    <span class="badge bg-info text-dark">SUPERSEDED</span>
+                                    {% else %}
                                     <span class="badge bg-{% if alert.status == 'Actual' %}success{% else %}secondary{% endif %}">
                                         {{ alert.status }}
                                         {% if alert.expires | is_expired %}
                                         EXPIRED
                                         {% endif %}
                                     </span>
+                                    {% endif %}
                                 </div>
                                 <div class="col-md-4 col-sm-6">
                                     <h6 class="text-muted mb-1 small">Severity</h6>
@@ -728,6 +742,17 @@
                                                 </div>
                                             </div>
                                         </div>
+                                        {% if alert.cancelled_at %}
+                                        <div class="col-sm-6">
+                                            <div class="timing-item">
+                                                <span class="timing-label text-warning"><i class="fas fa-ban"></i> Cancelled:</span>
+                                                <div class="timing-value">
+                                                    {{ alert.cancelled_at | format_local_datetime(false) }}<br>
+                                                    <small class="text-muted">{{ alert.cancelled_at | format_local_time }}</small>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {% endif %}
                                     </div>
                                     <hr>
                                     <small class="text-muted">

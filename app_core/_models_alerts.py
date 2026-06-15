@@ -128,6 +128,12 @@ class CAPAlert(db.Model):
         index=True,
     )
 
+    # Set when an alert is explicitly cancelled (CAP msgType=Cancel or VTEC
+    # action 'CAN') rather than simply reaching its ``expires`` time.  The
+    # original ``expires`` is left untouched so the UI can show that an event
+    # was lifted early.  NULL means the alert was never explicitly cancelled.
+    cancelled_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
     created_at = db.Column(db.DateTime(timezone=True), default=utc_now)
     updated_at = db.Column(
         db.DateTime(timezone=True),

@@ -8,6 +8,36 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.94.0] - 2026-06-15 - Cancelled-alert tracking
+
+### Added
+- **Explicit cancellation tracking for CAP alerts.** When a watch or warning is
+  *cancelled early* (CAP `msgType=Cancel` or VTEC action `CAN`) rather than
+  simply reaching its expiry, the alert is now recorded as **Cancelled** with a
+  new `cancelled_at` timestamp instead of being indistinguishable from a
+  natural expiry. The original `expires` value is preserved so the alert detail
+  page can show that the event was *lifted early* (new `cancelled_at` column on
+  `cap_alerts`, migration `20260615_cap_alert_cancelled_at`;
+  `app_core/_models_alerts.py`).
+- New `is_cancellation()` and `terminal_chain_updates()` helpers in
+  `app_utils/vtec.py` centralise the cancel-vs-expire decision, covered by unit
+  tests in `tests/test_vtec_parsing.py`.
+
+### Changed
+- The CAP poller now flags cancellations whether they arrive as a follow-on
+  VTEC product (handled in `_mark_vtec_chain_superseded`) or as an update to an
+  existing CAP identifier (`_apply_cancellation_status`), in both the insert and
+  update paths (`poller/cap_poller.py`).
+- The alert detail page shows a distinct **CANCELLED** badge (with the lift
+  time) and **SUPERSEDED** badge, instead of always labelling ended events
+  "EXPIRED" (`templates/alert_detail.html`).
+- Cancelled alerts are excluded from the active-alerts query alongside expired
+  ones (`app_core/alerts.py`).
+
+> Display/tracking only — this release does **not** change what is sent to air.
+> Cancellations remain suppressed from broadcast by the existing auto-forward
+> terminal-VTEC guard.
+
 ## [2.93.2] - 2026-06-15 - README screenshot tour
 
 ### Added

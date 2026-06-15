@@ -52,6 +52,52 @@ VTEC_SKIP_ACTIONS = frozenset({'CON', 'ROU', 'COR'})
 # Actions that represent the event ending
 VTEC_TERMINAL_ACTIONS = frozenset({'CAN', 'EXP'})
 
+
+def is_cancellation(
+    message_type: Optional[str],
+    vtec_action: Optional[str],
+) -> bool:
+    """Return ``True`` when an alert is an *explicit cancellation* rather than a
+    natural time-based expiry.
+
+    A product is a cancellation when either the CAP envelope carries
+    ``msgType=Cancel`` or the VTEC action code is ``CAN`` (NWSI 10-1703 §3.1).
+    Distinguishing this from ``EXP`` (or a simple ``expires`` timestamp lapsing)
+    lets the UI show that an event was lifted *early* instead of running its
+    full course.
+    """
+    mt = (message_type or '').strip().lower()
+    va = (vtec_action or '').strip().upper()
+    return mt == 'cancel' or va == 'CAN'
+
+
+def terminal_chain_updates(
+    vtec_action: Optional[str],
+    superseded_by_id: int,
+    now: datetime,
+) -> Dict[str, Any]:
+    """Build the column-update dict applied to *prior* alerts in a VTEC event
+    chain when a follow-on product arrives.
+
+    Every follow-on product links the prior alerts to the new one via
+    ``superseded_by_id``.  Terminal actions additionally close the event:
+
+    * ``CAN`` (cancelled) → ``status='Cancelled'`` and stamp ``cancelled_at``.
+      The original ``expires`` is intentionally **preserved** so the UI can show
+      how early the event was lifted.
+    * ``EXP`` (expired) → ``status='Expired'`` and collapse ``expires`` to now,
+      matching the historical behaviour for a naturally-ending event.
+    """
+    updates: Dict[str, Any] = {'superseded_by_id': superseded_by_id}
+    action = (vtec_action or '').strip().upper()
+    if action == 'CAN':
+        updates['status'] = 'Cancelled'
+        updates['cancelled_at'] = now
+    elif action in VTEC_TERMINAL_ACTIONS:  # 'EXP'
+        updates['expires'] = now
+        updates['status'] = 'Expired'
+    return updates
+
 # Current phenomenon codes (NWS Directive 10-1703 ver 9)
 VTEC_PHENOMENA: Dict[str, str] = {
     'AF': 'Ashfall',

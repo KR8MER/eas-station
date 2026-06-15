@@ -177,7 +177,7 @@ def get_active_alerts_query():
     return CAPAlert.query.filter(
         or_(CAPAlert.expires.is_(None), CAPAlert.expires > now)
     ).filter(
-        CAPAlert.status != "Expired"
+        CAPAlert.status.notin_(("Expired", "Cancelled"))
     ).filter(
         CAPAlert.superseded_by_id.is_(None)
     )
