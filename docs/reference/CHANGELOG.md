@@ -8,6 +8,32 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.97.0] - 2026-06-15 - Traffic analytics: GeoIP upload, graphics, errors & exports
+
+### Added
+- **Upload the GeoIP database from the browser.** Traffic Analytics → Settings
+  now has a file-upload control that accepts a MaxMind GeoLite2 `.mmdb`,
+  validates it by opening it with `maxminddb`, stores it under `data/geoip/`,
+  and points the settings path at it automatically — no shell access required.
+  New `POST /api/traffic/geoip/upload` route; `data/geoip/` is gitignored
+  (MaxMind's license forbids redistribution).
+- **Browser version + User-Agent reporting.** `classify_user_agent()` now parses
+  the browser version (e.g. `Chrome 120`, `Safari 16.1`) into a new
+  `web_request_logs.browser_version` column, and a new **Recent Requests** table
+  surfaces method/path/status/browser and the full User-Agent string.
+- **Graphics for OS & Browser** — Operating Systems is now a doughnut chart
+  alongside Browsers, and OS/Browser tables carry FontAwesome brand icons
+  (Chrome/Firefox/Edge/Safari, Windows/Apple/Linux/Android), awstats-style.
+- **Errors & scanners report** — Top Error URLs (4xx/5xx by path + status) and
+  Top Error Sources (IPs generating the most errors, with hostname/flag), so
+  bot/scanner 404 noise is legible at a glance.
+- **Bandwidth + when-they-visit metrics** — a Bandwidth tile (total + avg/req
+  from `content_length`) plus Hits-by-Hour-of-Day and Hits-by-Day-of-Week
+  histograms.
+- **Export reports to CSV (Excel) and PDF.** A new Export menu produces a
+  multi-section CSV of every report and a multi-page A4 PDF (charts + tables)
+  rendered client-side with the already-vendored jsPDF + html2canvas.
+
 ## [2.96.0] - 2026-06-15 - Traffic analytics: reverse DNS, countries & flags
 
 ### Added

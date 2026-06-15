@@ -75,6 +75,25 @@ def get_summary(days: int = 30) -> Dict[str, Any]:
         .scalar()
     )
 
+    # Bandwidth served (awstats-style): total + average response size.
+    total_bytes = (
+        db.session.query(func.sum(WebRequestLog.content_length))
+        .filter(
+            WebRequestLog.timestamp >= start,
+            WebRequestLog.content_length.isnot(None),
+        )
+        .scalar()
+        or 0
+    )
+    avg_bytes = (
+        db.session.query(func.avg(WebRequestLog.content_length))
+        .filter(
+            WebRequestLog.timestamp >= start,
+            WebRequestLog.content_length.isnot(None),
+        )
+        .scalar()
+    )
+
     # Last 24h activity for an "is it live right now" feel.
     last_24h = WebRequestLog.query.filter(
         WebRequestLog.timestamp >= (utc_now() - timedelta(hours=24))
@@ -89,6 +108,8 @@ def get_summary(days: int = 30) -> Dict[str, Any]:
         "error_hits": error_hits,
         "unique_visitors": int(unique_visitors),
         "avg_response_ms": round(float(avg_response), 1) if avg_response is not None else None,
+        "total_bytes": int(total_bytes),
+        "avg_bytes": int(avg_bytes) if avg_bytes is not None else None,
         "hits_last_24h": last_24h,
     }
 
@@ -299,6 +320,108 @@ def get_recent_requests(limit: int = 50) -> List[Dict[str, Any]]:
     return [r.to_dict() for r in rows]
 
 
+def get_error_pages(days: int = 30, limit: int = 15) -> List[Dict[str, Any]]:
+    """Top URLs returning 4xx/5xx, awstats-style "HTTP errors" report.
+
+    Surfaces the paths most often producing errors (typically 404s from bots
+    probing for files that don't exist) so a scanner is obvious at a glance.
+    """
+    start = _window_start(days)
+    rows = (
+        db.session.query(
+            WebRequestLog.path,
+            WebRequestLog.status_code,
+            func.count(WebRequestLog.id).label("hits"),
+            func.max(WebRequestLog.timestamp).label("last_seen"),
+        )
+        .filter(
+            WebRequestLog.timestamp >= start,
+            WebRequestLog.status_code >= 400,
+        )
+        .group_by(WebRequestLog.path, WebRequestLog.status_code)
+        .order_by(func.count(WebRequestLog.id).desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {
+            "path": r.path,
+            "status_code": int(r.status_code),
+            "hits": int(r.hits),
+            "last_seen": r.last_seen.isoformat() if r.last_seen else None,
+        }
+        for r in rows
+    ]
+
+
+def get_error_sources(days: int = 30, limit: int = 15) -> List[Dict[str, Any]]:
+    """Source IPs generating the most 4xx/5xx responses (likely scanners)."""
+    start = _window_start(days)
+    rows = (
+        db.session.query(
+            WebRequestLog.ip_address,
+            func.count(WebRequestLog.id).label("errors"),
+            func.max(WebRequestLog.hostname).label("hostname"),
+            func.max(WebRequestLog.country_code).label("country_code"),
+        )
+        .filter(
+            WebRequestLog.timestamp >= start,
+            WebRequestLog.status_code >= 400,
+            WebRequestLog.ip_address.isnot(None),
+        )
+        .group_by(WebRequestLog.ip_address)
+        .order_by(func.count(WebRequestLog.id).desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {
+            "ip_address": r.ip_address,
+            "errors": int(r.errors),
+            "hostname": r.hostname,
+            "country_code": r.country_code,
+        }
+        for r in rows
+    ]
+
+
+def get_hourly_distribution(days: int = 30) -> Dict[str, Any]:
+    """Hits per hour-of-day (0–23), awstats' "Hourly" histogram.
+
+    Bucketing happens in Python for cross-database portability.
+    """
+    start = _window_start(days)
+    rows = (
+        db.session.query(WebRequestLog.timestamp)
+        .filter(WebRequestLog.timestamp >= start)
+        .all()
+    )
+    counts = [0] * 24
+    for (ts,) in rows:
+        if ts is not None:
+            counts[ts.hour] += 1
+    return {
+        "labels": [f"{h:02d}" for h in range(24)],
+        "hits": counts,
+    }
+
+
+def get_weekday_distribution(days: int = 30) -> Dict[str, Any]:
+    """Hits per day-of-week (Mon–Sun), awstats' "Days of week" histogram."""
+    start = _window_start(days)
+    rows = (
+        db.session.query(WebRequestLog.timestamp)
+        .filter(WebRequestLog.timestamp >= start)
+        .all()
+    )
+    labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    counts = [0] * 7
+    for (ts,) in rows:
+        if ts is not None:
+            counts[ts.weekday()] += 1
+    return {"labels": labels, "hits": counts}
+
+
 # ---------------------------------------------------------------------------
 # Login / session analytics (sourced from audit_logs + admin_sessions)
 # ---------------------------------------------------------------------------
@@ -454,6 +577,11 @@ def get_full_dashboard(days: int = 30) -> Dict[str, Any]:
         "resolution_breakdown": get_resolution_breakdown(days),
         "country_breakdown": get_country_breakdown(days),
         "language_breakdown": get_language_breakdown(days),
+        "error_pages": get_error_pages(days),
+        "error_sources": get_error_sources(days),
+        "hourly_distribution": get_hourly_distribution(days),
+        "weekday_distribution": get_weekday_distribution(days),
+        "recent_requests": get_recent_requests(limit=25),
         "login_summary": get_login_summary(days),
         "login_timeseries": get_login_timeseries(days),
         "top_login_ips": get_top_login_ips(days),
@@ -474,6 +602,10 @@ __all__ = [
     "get_country_breakdown",
     "get_language_breakdown",
     "get_recent_requests",
+    "get_error_pages",
+    "get_error_sources",
+    "get_hourly_distribution",
+    "get_weekday_distribution",
     "get_login_summary",
     "get_login_timeseries",
     "get_top_login_ips",

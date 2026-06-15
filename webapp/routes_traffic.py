@@ -27,6 +27,7 @@ charts and tables the dashboard renders. Collection settings are read/written
 here so the whole feature is configurable from the web UI.
 """
 
+import os
 from typing import Any, Dict
 
 from flask import Flask, jsonify, render_template, request, session
@@ -35,6 +36,10 @@ from app_core.analytics import traffic_stats
 from app_core.analytics.web_traffic import TrafficAnalyticsSettings
 from app_core.auth import require_permission
 from app_core.extensions import db
+
+# Cap GeoIP uploads — GeoLite2-Country is ~6 MB, GeoLite2-City ~60 MB. 128 MB is
+# a generous ceiling that still rejects obviously-wrong uploads.
+_MAX_GEOIP_BYTES = 128 * 1024 * 1024
 
 # Bounds so a crafted ?days= can't ask for an unbounded scan.
 _MIN_DAYS = 1
@@ -169,6 +174,78 @@ def register(app: Flask, logger) -> None:
         except Exception as exc:  # pragma: no cover - defensive
             db.session.rollback()
             route_logger.error("Failed to update traffic settings: %s", exc)
+            return jsonify({"success": False, "error": str(exc)}), 500
+
+    @app.route("/api/traffic/geoip/upload", methods=["POST"])
+    @require_permission("system.configure")
+    def traffic_upload_geoip():
+        """Upload a MaxMind GeoLite2 ``.mmdb`` file from the browser.
+
+        Saves the database under ``data/geoip/`` and points the Traffic
+        Analytics settings at it — so an operator never needs shell access to
+        enable country/flag resolution. The upload is validated by opening it
+        with the ``maxminddb`` reader before it is accepted.
+        """
+        try:
+            if "file" not in request.files:
+                return jsonify({"success": False, "error": "No file uploaded"}), 400
+            upload = request.files["file"]
+            if not upload.filename:
+                return jsonify({"success": False, "error": "No file selected"}), 400
+            if not upload.filename.lower().endswith(".mmdb"):
+                return jsonify(
+                    {"success": False, "error": "File must be a MaxMind .mmdb database"}
+                ), 400
+
+            data = upload.read()
+            if not data:
+                return jsonify({"success": False, "error": "Uploaded file is empty"}), 400
+            if len(data) > _MAX_GEOIP_BYTES:
+                return jsonify(
+                    {"success": False, "error": "File exceeds the 128 MB limit"}
+                ), 400
+
+            geoip_dir = os.path.join(app.root_path, "data", "geoip")
+            os.makedirs(geoip_dir, exist_ok=True)
+            # Single canonical filename so re-uploads replace the old database.
+            dest_path = os.path.join(geoip_dir, "GeoLite2-Country.mmdb")
+            tmp_path = dest_path + ".tmp"
+            with open(tmp_path, "wb") as fh:
+                fh.write(data)
+
+            # Validate before committing: a corrupt/non-mmdb file must not become
+            # the active database.
+            try:
+                import maxminddb
+
+                with maxminddb.open_database(tmp_path):
+                    pass
+            except Exception as exc:
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
+                return jsonify(
+                    {"success": False, "error": f"Not a valid GeoIP database: {exc}"}
+                ), 400
+
+            os.replace(tmp_path, dest_path)
+
+            # Point settings at the new file and drop cached readers.
+            from app_core.analytics.geo import reset_readers
+
+            settings = TrafficAnalyticsSettings.get_settings()
+            settings.geoip_database_path = dest_path
+            db.session.commit()
+            reset_readers()
+
+            route_logger.info("GeoIP database uploaded to %s", dest_path)
+            return jsonify(
+                {"success": True, "path": dest_path, "settings": settings.to_dict()}
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            db.session.rollback()
+            route_logger.error("Failed to upload GeoIP database: %s", exc)
             return jsonify({"success": False, "error": str(exc)}), 500
 
 

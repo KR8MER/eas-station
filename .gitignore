@@ -35,6 +35,10 @@ dev_data/
 # never belongs in version control.
 data/tile-cache/
 
+# Operator-uploaded MaxMind GeoLite2 databases for Traffic Analytics. These are
+# runtime data and MaxMind's license forbids redistribution — never commit them.
+data/geoip/
+
 # MkDocs documentation build
 site/
 .cache/

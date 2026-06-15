@@ -1322,6 +1322,7 @@ def _record_traffic(response) -> None:
             'is_api': is_api,
             'is_bot': ua['is_bot'],
             'browser': ua['browser'],
+            'browser_version': ua.get('browser_version'),
             'os': ua['os'],
             'screen_resolution': screen_resolution,
             'country': location['label'],

@@ -54,7 +54,7 @@
 
     /* At-a-glance status strip. */
     .traffic-dash-root .health-status-strip {
-        display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
+        display: grid; grid-template-columns: repeat(8, minmax(0, 1fr));
         gap: 8px; margin: 0 0 18px 0;
     }
     .traffic-dash-root .health-status-tile {
@@ -166,6 +166,13 @@
                 <option value="365">Last year</option>
             </select>
             <button class="btn btn-sm btn-outline-light" onclick="loadDashboard()"><i class="fas fa-sync-alt me-1"></i>Refresh</button>
+            <div class="btn-group">
+                <button class="btn btn-sm btn-outline-light dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false"><i class="fas fa-file-export me-1"></i>Export</button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li><a class="dropdown-item" href="#" onclick="exportTrafficCsv(); return false;"><i class="fas fa-file-csv me-2"></i>Excel / CSV</a></li>
+                    <li><a class="dropdown-item" href="#" onclick="exportTrafficPdf(); return false;"><i class="fas fa-file-pdf me-2"></i>PDF report</a></li>
+                </ul>
+            </div>
             <button class="btn btn-sm btn-outline-light" data-bs-toggle="modal" data-bs-target="#trafficSettingsModal"><i class="fas fa-cog me-1"></i>Settings</button>
         </div>
     </div>
@@ -204,6 +211,10 @@
             <div class="lbl"><i class="fas fa-stopwatch"></i> Avg Resp</div>
             <div class="val">—</div><div class="sub">server time</div>
         </div>
+        <div class="health-status-tile" id="hs-bandwidth">
+            <div class="lbl"><i class="fas fa-download"></i> Bandwidth</div>
+            <div class="val">—</div><div class="sub">served</div>
+        </div>
     </section>
 
     <!-- Traffic over time -->
@@ -219,22 +230,45 @@
     <!-- Breakdown charts -->
     <div class="health-section-head"><h2>Breakdowns</h2><span class="rule"></span></div>
     <div class="row g-3">
-        <div class="col-lg-4">
+        <div class="col-lg-3 col-md-6">
             <div class="card h-100">
                 <div class="card-header"><h6><i class="fas fa-traffic-light section-icon"></i>Status Codes</h6></div>
                 <div class="card-body"><div class="chart-container small"><canvas id="statusChart"></canvas></div></div>
             </div>
         </div>
-        <div class="col-lg-4">
+        <div class="col-lg-3 col-md-6">
             <div class="card h-100">
                 <div class="card-header"><h6><i class="fas fa-window-maximize section-icon"></i>Browsers</h6></div>
                 <div class="card-body"><div class="chart-container small"><canvas id="browserChart"></canvas></div></div>
             </div>
         </div>
-        <div class="col-lg-4">
+        <div class="col-lg-3 col-md-6">
+            <div class="card h-100">
+                <div class="card-header"><h6><i class="fas fa-desktop section-icon"></i>Operating Systems</h6></div>
+                <div class="card-body"><div class="chart-container small"><canvas id="osChart"></canvas></div></div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6">
             <div class="card h-100">
                 <div class="card-header"><h6><i class="fas fa-sign-in-alt section-icon"></i>Login Activity</h6></div>
                 <div class="card-body"><div class="chart-container small"><canvas id="loginChart"></canvas></div></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- When-they-visit histograms -->
+    <div class="health-section-head"><h2>When Visitors Come</h2><span class="rule"></span></div>
+    <div class="row g-3">
+        <div class="col-lg-7">
+            <div class="card h-100">
+                <div class="card-header"><h6><i class="fas fa-clock section-icon"></i>Hits by Hour of Day</h6></div>
+                <div class="card-body"><div class="chart-container small"><canvas id="hourlyChart"></canvas></div></div>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="card h-100">
+                <div class="card-header"><h6><i class="fas fa-calendar-week section-icon"></i>Hits by Day of Week</h6></div>
+                <div class="card-body"><div class="chart-container small"><canvas id="weekdayChart"></canvas></div></div>
             </div>
         </div>
     </div>
@@ -303,6 +337,40 @@
         </div>
     </div>
 
+    <!-- Errors (4xx/5xx) -->
+    <div class="health-section-head"><h2>Errors &amp; Scanners</h2><span class="rule"></span></div>
+    <div class="row g-3">
+        <div class="col-lg-7">
+            <div class="card h-100">
+                <div class="card-header"><h6><i class="fas fa-bug section-icon"></i>Top Error URLs (4xx / 5xx)</h6></div>
+                <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
+                    <thead><tr><th>Path</th><th class="text-center">Status</th><th class="text-end">Hits</th></tr></thead>
+                    <tbody id="errorPages"></tbody></table></div></div>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="card h-100">
+                <div class="card-header"><h6><i class="fas fa-user-secret section-icon"></i>Top Error Sources</h6></div>
+                <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
+                    <thead><tr><th>Host / IP</th><th class="text-end">Errors</th></tr></thead>
+                    <tbody id="errorSources"></tbody></table></div></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent requests / user agents -->
+    <div class="health-section-head"><h2>Recent Requests &amp; User Agents</h2><span class="rule"></span></div>
+    <div class="row g-3">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header"><h6><i class="fas fa-stream section-icon"></i>Recent Requests</h6></div>
+                <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
+                    <thead><tr><th>When</th><th>Method</th><th>Path</th><th class="text-center">Status</th><th class="d-none d-md-table-cell">Browser</th><th class="d-none d-lg-table-cell">User Agent</th></tr></thead>
+                    <tbody id="recentRequests"></tbody></table></div></div>
+            </div>
+        </div>
+    </div>
+
     <!-- Login security -->
     <div class="health-section-head"><h2>Login Security</h2><span class="rule"></span></div>
     <div class="row g-3">
@@ -363,8 +431,17 @@
                 </div>
                 <div class="mb-2">
                     <label class="form-label" for="setGeoip">GeoIP database path (optional)</label>
-                    <input type="text" class="form-control" id="setGeoip" placeholder="/opt/eas-station/data/GeoLite2-Country.mmdb">
-                    <div class="form-text">Point at a MaxMind GeoLite2 <code>.mmdb</code> file to resolve public IPs to countries. Leave blank for local-network classification only.</div>
+                    <input type="text" class="form-control" id="setGeoip" placeholder="/opt/eas-station/data/geoip/GeoLite2-Country.mmdb">
+                    <div class="form-text">Point at a MaxMind GeoLite2 <code>.mmdb</code> file to resolve public IPs to countries and flags. Leave blank for local-network classification only.</div>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label" for="setGeoipUpload">…or upload a GeoLite2 database</label>
+                    <div class="input-group">
+                        <input type="file" class="form-control" id="setGeoipUpload" accept=".mmdb">
+                        <button type="button" class="btn btn-outline-primary" onclick="uploadGeoip()" id="geoipUploadBtn">Upload</button>
+                    </div>
+                    <div class="form-text">Get a free <code>GeoLite2-Country.mmdb</code> from <a href="https://www.maxmind.com/en/geolite2/signup" target="_blank" rel="noopener">maxmind.com</a> (free account → license key). The file is validated, stored on the server, and the path above is set automatically — no shell access needed.</div>
+                    <div class="small mt-1" id="geoipUploadStatus"></div>
                 </div>
             </div>
             <div class="modal-footer">
@@ -378,8 +455,11 @@
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='vendor/chartjs/chart-v3.min.js') }}"></script>
+<script src="{{ url_for('static', filename='vendor/jspdf/jspdf.umd.min.js') }}"></script>
+<script src="{{ url_for('static', filename='vendor/jspdf/html2canvas.min.js') }}"></script>
 <script>
     let charts = {};
+    let lastDashboardData = null;  // most recent payload, for CSV/PDF export
 
     function cssVar(name, fallback) {
         const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -405,6 +485,39 @@
         const text = escapeHtml(label || 'Unknown');
         if (flag) return `<span class="me-1" title="${escapeHtml(cc)}">${flag}</span>${text}`;
         return `<i class="fas fa-network-wired text-muted me-1" title="Local / unresolved"></i>${text}`;
+    }
+    // FontAwesome brand/solid icon for a browser name (awstats-style graphics).
+    function browserIcon(name) {
+        const map = { 'Chrome': 'fab fa-chrome', 'Firefox': 'fab fa-firefox-browser',
+            'Edge': 'fab fa-edge', 'Safari': 'fab fa-safari', 'Opera': 'fab fa-opera',
+            'Samsung Internet': 'fas fa-mobile-screen', 'Internet Explorer': 'fab fa-internet-explorer' };
+        return map[name] || 'fas fa-window-maximize';
+    }
+    // FontAwesome brand/solid icon for an operating-system name.
+    function osIcon(name) {
+        if (!name) return 'fas fa-question-circle';
+        if (name.indexOf('Windows') === 0) return 'fab fa-windows';
+        if (name === 'macOS' || name === 'iOS' || name === 'iPadOS') return 'fab fa-apple';
+        if (name === 'Android') return 'fab fa-android';
+        if (name === 'ChromeOS') return 'fab fa-chrome';
+        if (name === 'Linux') return 'fab fa-linux';
+        return 'fas fa-desktop';
+    }
+    function iconLabel(iconClass, label) {
+        return `<i class="${iconClass} me-2 text-secondary"></i>${escapeHtml(label || 'Unknown')}`;
+    }
+    // Human-readable byte size (awstats bandwidth column).
+    function fmtBytes(n) {
+        if (!n) return '0 B';
+        const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        let i = 0, v = n;
+        while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+        return `${v >= 100 || i === 0 ? Math.round(v) : v.toFixed(1)} ${units[i]}`;
+    }
+    function statusBadge(code) {
+        const cls = code >= 500 ? 'bg-danger' : code >= 400 ? 'bg-warning text-dark'
+            : code >= 300 ? 'bg-info text-dark' : 'bg-success';
+        return `<span class="badge ${cls}">${code}</span>`;
     }
     function setTile(id, value, sub) {
         const tile = document.getElementById(id);
@@ -433,11 +546,15 @@
                 return;
             }
             errBox.classList.add('d-none');
+            lastDashboardData = data;
             renderStrip(data.summary, data.login_summary);
             renderTrafficChart(data.timeseries);
             renderStatusChart(data.status_breakdown);
             renderBrowserChart(data.browser_breakdown);
+            renderOsChart(data.os_breakdown);
             renderLoginChart(data.login_timeseries);
+            renderHourlyChart(data.hourly_distribution);
+            renderWeekdayChart(data.weekday_distribution);
             renderTable('topPages', data.top_pages, r => `<td class="text-break-anywhere">${escapeHtml(r.path)}</td><td class="text-end mono">${num(r.hits)}</td><td class="text-end d-none d-sm-table-cell mono">${r.avg_response_ms != null ? r.avg_response_ms : '--'}</td>`, 3);
             renderTable('topVisitors', data.top_visitors, r => {
                 const who = r.username ? ` <span class="badge bg-secondary">${escapeHtml(r.username)}</span>` : '';
@@ -447,11 +564,24 @@
                     : `<span class="text-break-anywhere mono">${flag}${escapeHtml(r.ip_address)}${who}</span>`;
                 return `<td>${host}</td><td class="text-end mono">${num(r.hits)}</td><td class="d-none d-sm-table-cell">${r.last_seen ? new Date(r.last_seen).toLocaleString() : '--'}</td>`;
             }, 3);
-            renderTable('osBreakdown', data.os_breakdown, r => `<td>${escapeHtml(r.os || 'Unknown')}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
+            renderTable('osBreakdown', data.os_breakdown, r => `<td>${iconLabel(osIcon(r.os), r.os)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
             renderTable('resBreakdown', data.resolution_breakdown, r => `<td class="mono">${escapeHtml(r.resolution || 'Unknown')}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
             renderTable('countryBreakdown', data.country_breakdown, r => `<td>${flagLabel(r.country_code, r.country)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
             renderTable('langBreakdown', data.language_breakdown, r => `<td class="mono">${escapeHtml(r.language || 'Unknown')}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
             renderTable('refBreakdown', data.referer_breakdown, r => `<td class="text-break-anywhere">${escapeHtml(r.referer)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
+            renderTable('errorPages', data.error_pages, r => `<td class="text-break-anywhere">${escapeHtml(r.path)}</td><td class="text-center">${statusBadge(r.status_code)}</td><td class="text-end mono">${num(r.hits)}</td>`, 3);
+            renderTable('errorSources', data.error_sources, r => {
+                const flag = r.country_code ? `<span class="me-1">${flagEmoji(r.country_code)}</span>` : '';
+                const host = r.hostname
+                    ? `<div class="text-break-anywhere">${flag}${escapeHtml(r.hostname)}</div><div class="text-muted small mono text-break-anywhere">${escapeHtml(r.ip_address)}</div>`
+                    : `<span class="text-break-anywhere mono">${flag}${escapeHtml(r.ip_address)}</span>`;
+                return `<td>${host}</td><td class="text-end mono text-danger fw-bold">${num(r.errors)}</td>`;
+            }, 2);
+            renderTable('recentRequests', data.recent_requests, r => {
+                const br = r.browser ? `<i class="${browserIcon(r.browser)} me-1 text-secondary"></i>${escapeHtml(r.browser)}${r.browser_version ? ' ' + escapeHtml(r.browser_version) : ''}` : '<span class="text-muted">—</span>';
+                const when = r.timestamp ? new Date(r.timestamp).toLocaleTimeString() : '--';
+                return `<td class="text-nowrap">${when}</td><td><span class="badge bg-light text-dark border">${escapeHtml(r.method)}</span></td><td class="text-break-anywhere">${escapeHtml(r.path)}</td><td class="text-center">${statusBadge(r.status_code)}</td><td class="d-none d-md-table-cell text-nowrap">${br}</td><td class="d-none d-lg-table-cell text-break-anywhere small text-muted">${escapeHtml(r.user_agent || '—')}</td>`;
+            }, 6);
             renderTable('topLoginIps', data.top_login_ips, r => `<td class="text-break-anywhere mono">${escapeHtml(r.ip_address)}</td><td class="text-end mono">${num(r.success)}</td><td class="text-end mono ${r.failure > 0 ? 'text-danger fw-bold' : ''}">${num(r.failure)}</td>`, 3);
             renderTable('recentLogins', data.recent_logins, r => { const badge = r.success ? '<span class="badge bg-success">Success</span>' : '<span class="badge bg-danger">Failed</span>'; return `<td>${r.timestamp ? new Date(r.timestamp).toLocaleString() : '--'}</td><td>${escapeHtml(r.username || '--')}</td><td class="text-break-anywhere mono">${escapeHtml(r.ip_address || '--')}</td><td>${badge}</td>`; }, 4);
             pingLiveDot();
@@ -468,6 +598,7 @@
         setTile('hs-logins', num(l.successful_logins), `${num(l.failed_logins)} failed`);
         setTile('hs-sessions', num(l.active_sessions), 'active now');
         setTile('hs-response', s.avg_response_ms != null ? s.avg_response_ms + ' ms' : '--', `${num(s.error_hits)} errors`);
+        setTile('hs-bandwidth', fmtBytes(s.total_bytes), s.avg_bytes != null ? `~${fmtBytes(s.avg_bytes)}/req` : 'served');
         // Severity tints
         const errTile = document.getElementById('hs-response');
         errTile.classList.toggle('sev-warn', (s.error_hits || 0) > 0);
@@ -507,6 +638,33 @@
             options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } }
         });
     }
+    function renderOsChart(rows) {
+        destroyChart('os');
+        const palette = [cssVar('--primary-color', '#4e73df'), cssVar('--success-color', '#1cc88a'),
+            cssVar('--info-color', '#36b9cc'), cssVar('--warning-color', '#f6c23e'),
+            cssVar('--danger-color', '#e74a3b'), '#845ef7', '#888'];
+        charts.os = new Chart(document.getElementById('osChart').getContext('2d'), {
+            type: 'doughnut',
+            data: { labels: rows.map(r => r.os || 'Unknown'), datasets: [{ data: rows.map(r => r.count), backgroundColor: rows.map((r, i) => palette[i % palette.length]) }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+        });
+    }
+    function renderHourlyChart(d) {
+        destroyChart('hourly');
+        charts.hourly = new Chart(document.getElementById('hourlyChart').getContext('2d'), {
+            type: 'bar',
+            data: { labels: d.labels, datasets: [{ label: 'Hits', data: d.hits, backgroundColor: cssVar('--primary-color', '#4e73df') }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+        });
+    }
+    function renderWeekdayChart(d) {
+        destroyChart('weekday');
+        charts.weekday = new Chart(document.getElementById('weekdayChart').getContext('2d'), {
+            type: 'bar',
+            data: { labels: d.labels, datasets: [{ label: 'Hits', data: d.hits, backgroundColor: cssVar('--info-color', '#36b9cc') }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+        });
+    }
     function renderLoginChart(ts) {
         destroyChart('login');
         charts.login = new Chart(document.getElementById('loginChart').getContext('2d'), {
@@ -543,6 +701,36 @@
         } catch (err) { console.error('Error loading settings:', err); }
     }
 
+    async function uploadGeoip() {
+        const input = document.getElementById('setGeoipUpload');
+        const statusEl = document.getElementById('geoipUploadStatus');
+        const btn = document.getElementById('geoipUploadBtn');
+        if (!input.files || !input.files.length) {
+            statusEl.innerHTML = '<span class="text-warning">Choose a .mmdb file first.</span>';
+            return;
+        }
+        const fd = new FormData();
+        fd.append('file', input.files[0]);
+        btn.disabled = true;
+        statusEl.innerHTML = '<span class="text-muted">Uploading & validating…</span>';
+        try {
+            const resp = await fetch('/api/traffic/geoip/upload', { method: 'POST', body: fd });
+            const data = await resp.json();
+            if (data.success) {
+                statusEl.innerHTML = '<span class="text-success">Database installed. Country flags are now active.</span>';
+                document.getElementById('setGeoip').value = data.path || '';
+                if (typeof showToast === 'function') showToast('GeoIP database installed', 'success');
+            } else {
+                statusEl.innerHTML = `<span class="text-danger">${escapeHtml(data.error || 'Upload failed')}</span>`;
+            }
+        } catch (err) {
+            console.error('GeoIP upload failed:', err);
+            statusEl.innerHTML = '<span class="text-danger">Upload failed.</span>';
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
     async function saveSettings() {
         const payload = {
             enabled: document.getElementById('setEnabled').checked,
@@ -567,6 +755,95 @@
         } catch (err) {
             console.error('Error saving settings:', err);
             showToast('Error saving settings', 'danger');
+        }
+    }
+
+    // ------------------------------------------------------------------ export
+    function rangeText() {
+        const sel = document.getElementById('rangeSelect');
+        return sel.options[sel.selectedIndex].text;
+    }
+
+    // Build a multi-section CSV (opens cleanly in Excel) from the loaded data.
+    function exportTrafficCsv() {
+        if (!lastDashboardData) { if (window.showToast) showToast('No data to export yet', 'warning'); return; }
+        const d = lastDashboardData;
+        const esc = v => `"${String(v === null || v === undefined ? '' : v).replace(/"/g, '""')}"`;
+        const lines = [];
+        const section = (title, headers, rows) => {
+            lines.push(esc(title));
+            lines.push(headers.map(esc).join(','));
+            (rows || []).forEach(r => lines.push(r.map(esc).join(',')));
+            lines.push('');
+        };
+        lines.push(esc(`EAS Station Traffic Analytics — ${rangeText()} — generated ${new Date().toLocaleString()}`));
+        lines.push('');
+        const s = d.summary, l = d.login_summary;
+        section('Summary', ['Metric', 'Value'], [
+            ['Page views', s.page_views], ['Unique visitors', s.unique_visitors],
+            ['Total hits', s.total_hits], ['API hits', s.api_hits], ['Bot hits', s.bot_hits],
+            ['Errors (4xx/5xx)', s.error_hits], ['Hits last 24h', s.hits_last_24h],
+            ['Avg response ms', s.avg_response_ms], ['Total bytes', s.total_bytes],
+            ['Avg bytes/req', s.avg_bytes], ['Successful logins', l.successful_logins],
+            ['Failed logins', l.failed_logins], ['Active sessions', l.active_sessions],
+        ]);
+        section('Top Pages', ['Path', 'Hits', 'Avg ms'], (d.top_pages || []).map(r => [r.path, r.hits, r.avg_response_ms]));
+        section('Top Visitors', ['IP', 'Hostname', 'Country', 'User', 'Hits', 'Last seen'],
+            (d.top_visitors || []).map(r => [r.ip_address, r.hostname, r.country, r.username, r.hits, r.last_seen]));
+        section('Operating Systems', ['OS', 'Hits'], (d.os_breakdown || []).map(r => [r.os, r.count]));
+        section('Browsers', ['Browser', 'Hits'], (d.browser_breakdown || []).map(r => [r.browser, r.count]));
+        section('Countries / Networks', ['Country', 'Code', 'Hits'], (d.country_breakdown || []).map(r => [r.country, r.country_code, r.count]));
+        section('Languages', ['Language', 'Hits'], (d.language_breakdown || []).map(r => [r.language, r.count]));
+        section('Screen Resolutions', ['Resolution', 'Hits'], (d.resolution_breakdown || []).map(r => [r.resolution, r.count]));
+        section('Referrers', ['Referrer', 'Hits'], (d.referer_breakdown || []).map(r => [r.referer, r.count]));
+        section('Top Error URLs', ['Path', 'Status', 'Hits'], (d.error_pages || []).map(r => [r.path, r.status_code, r.hits]));
+        section('Top Error Sources', ['IP', 'Hostname', 'Errors'], (d.error_sources || []).map(r => [r.ip_address, r.hostname, r.errors]));
+        section('Hits by Hour', ['Hour', 'Hits'], (d.hourly_distribution.labels || []).map((h, i) => [h, d.hourly_distribution.hits[i]]));
+        section('Hits by Weekday', ['Day', 'Hits'], (d.weekday_distribution.labels || []).map((w, i) => [w, d.weekday_distribution.hits[i]]));
+        section('Top Login IPs', ['IP', 'Success', 'Failed'], (d.top_login_ips || []).map(r => [r.ip_address, r.success, r.failure]));
+
+        const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `traffic_analytics_${new Date().toISOString().split('T')[0]}.csv`;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        if (window.showToast) showToast('CSV exported', 'success');
+    }
+
+    // Render the whole dashboard to a multi-page A4 PDF (charts + tables).
+    async function exportTrafficPdf() {
+        if (typeof window.jspdf === 'undefined' || !window.jspdf.jsPDF || typeof html2canvas === 'undefined') {
+            if (window.showToast) showToast('PDF libraries failed to load', 'danger');
+            return;
+        }
+        if (window.showToast) showToast('Building PDF…', 'info');
+        const { jsPDF } = window.jspdf;
+        const target = document.querySelector('.traffic-dash-root');
+        try {
+            const canvas = await html2canvas(target, { scale: 2, backgroundColor: getComputedStyle(document.body).backgroundColor || '#ffffff', useCORS: true });
+            const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+            const pageW = doc.internal.pageSize.getWidth();
+            const pageH = doc.internal.pageSize.getHeight();
+            const imgW = pageW;
+            const imgH = canvas.height * imgW / canvas.width;
+            let heightLeft = imgH;
+            let position = 0;
+            const imgData = canvas.toDataURL('image/png');
+            doc.addImage(imgData, 'PNG', 0, position, imgW, imgH);
+            heightLeft -= pageH;
+            while (heightLeft > 0) {
+                position -= pageH;
+                doc.addPage();
+                doc.addImage(imgData, 'PNG', 0, position, imgW, imgH);
+                heightLeft -= pageH;
+            }
+            doc.save(`traffic_analytics_${new Date().toISOString().split('T')[0]}.pdf`);
+            if (window.showToast) showToast('PDF exported', 'success');
+        } catch (err) {
+            console.error('PDF export failed:', err);
+            if (window.showToast) showToast('PDF export failed', 'danger');
         }
     }
 
