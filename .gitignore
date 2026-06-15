@@ -39,6 +39,12 @@ data/tile-cache/
 site/
 .cache/
 
+# Python virtual environments (contributors create `venv` per the README
+# Contributing guide; never commit the interpreter/site-packages tree).
+venv/
+.venv/
+env/
+
 # Pytest
 .pytest_cache/
 tests/logs/*.log
