@@ -173,7 +173,12 @@ from app_utils.location_settings import (
 print(f"[CAP_POLLER] Importing app_utils.optimized_parsing...")
 from app_utils.optimized_parsing import json_loads, json_dumps, parse_xml_string, get_element_tree_module
 from app_utils.ipaws_enrichment import extract_certificate_info, save_ipaws_audio
-from app_utils.vtec import extract_vtec_identity, VTEC_TERMINAL_ACTIONS
+from app_utils.vtec import (
+    extract_vtec_identity,
+    is_cancellation,
+    terminal_chain_updates,
+    VTEC_TERMINAL_ACTIONS,
+)
 from app_utils.eas import load_eas_config
 from app_core.audio.auto_forward import auto_forward_cap_alert
 print(f"[CAP_POLLER] Importing app_core.models...")
@@ -2601,6 +2606,12 @@ class CAPPoller:
                 self.logger.debug("VTEC backfill failed for %s: %s",
                                   existing.identifier, exc)
 
+        # A cancellation can also arrive as an update to the same CAP
+        # identifier rather than a brand-new product; recognise it here so the
+        # alert flips to Cancelled instead of silently keeping its 'Actual'
+        # status until the original expiry lapses.
+        self._apply_cancellation_status(existing)
+
         self.db_session.commit()
 
         # For alerts with no polygon geometry, try building from SAME codes so
@@ -2702,6 +2713,11 @@ class CAPPoller:
         except Exception as exc:
             self.logger.debug("VTEC identity extraction failed for %s: %s",
                               payload.get('identifier', '?'), exc)
+
+        # A cancellation product (msgType=Cancel / VTEC CAN) is itself a notice
+        # that the event is over — label it Cancelled so it is reported as such
+        # and stays out of the active-alerts view.
+        self._apply_cancellation_status(new_alert)
 
         # First commit: Save alert to database to get the ID needed for EAS message linking
         self.db_session.add(new_alert)
@@ -2815,6 +2831,32 @@ class CAPPoller:
         self.logger.info(f"Saved new alert: {new_alert.identifier} - {new_alert.event}")
         return True, new_alert, None
 
+    def _apply_cancellation_status(self, alert: CAPAlert) -> bool:
+        """Mark *alert* as Cancelled when it is an explicit cancellation product.
+
+        Recognises both the CAP ``msgType=Cancel`` envelope and the VTEC ``CAN``
+        action code.  Sets ``status='Cancelled'`` and stamps ``cancelled_at``
+        while leaving ``expires`` untouched, so the alert detail view can show
+        the event was lifted early.  Returns ``True`` when the alert is (now) a
+        cancellation.
+
+        This handles the case where a cancellation arrives as an *update* to the
+        same CAP identifier (the prior-product path is covered by
+        ``_mark_vtec_chain_superseded``).  Air behaviour is unchanged: the
+        auto-forward guard already suppresses terminal VTEC actions and any
+        non-'Actual' status.
+        """
+        if not is_cancellation(
+            getattr(alert, 'message_type', None),
+            getattr(alert, 'vtec_action', None),
+        ):
+            return False
+        if alert.status != 'Cancelled':
+            alert.status = 'Cancelled'
+        if getattr(alert, 'cancelled_at', None) is None:
+            alert.cancelled_at = utc_now()
+        return True
+
     def _mark_vtec_chain_superseded(self, new_alert: CAPAlert) -> int:
         """Mark all un-superseded prior alerts in the same VTEC event chain as
         superseded by *new_alert*.
@@ -2834,13 +2876,12 @@ class CAPPoller:
         ]):
             return 0
 
-        # Build the field update dict.  For terminal VTEC actions (CAN / EXP)
-        # the event is definitively over, so also expire the prior alerts
-        # immediately so they drop out of every active-alerts view.
-        updates: dict = {'superseded_by_id': new_alert.id}
-        if new_alert.vtec_action in VTEC_TERMINAL_ACTIONS:
-            updates['expires'] = utc_now()
-            updates['status'] = 'Expired'
+        # Build the field update dict.  For terminal VTEC actions the event is
+        # definitively over: 'EXP' collapses the prior alerts' expiry to now,
+        # while 'CAN' marks them Cancelled (preserving the original expiry so
+        # the UI can show the event was lifted early).  Either way they drop out
+        # of every active-alerts view.
+        updates = terminal_chain_updates(new_alert.vtec_action, new_alert.id, utc_now())
 
         updated = (
             self.db_session.query(CAPAlert)
@@ -2857,10 +2898,15 @@ class CAPPoller:
         )
         if updated:
             self.db_session.commit()
+            if new_alert.vtec_action == 'CAN':
+                terminal_note = ', cancelled'
+            elif new_alert.vtec_action in VTEC_TERMINAL_ACTIONS:
+                terminal_note = ', expired immediately'
+            else:
+                terminal_note = ''
             self.logger.info(
                 "Marked %d prior VTEC chain alert(s) superseded by %s (action=%s%s)",
-                updated, new_alert.identifier, new_alert.vtec_action,
-                ', expired immediately' if new_alert.vtec_action in VTEC_TERMINAL_ACTIONS else '',
+                updated, new_alert.identifier, new_alert.vtec_action, terminal_note,
             )
         return updated
 

@@ -16,13 +16,17 @@ from __future__ import annotations
 
 import pytest
 
+from datetime import datetime, timezone
+
 from app_utils.vtec import (
     VTEC_BROADCAST_ACTIONS,
     VTEC_SIGNIFICANCE,
     VTEC_SKIP_ACTIONS,
     VTEC_TERMINAL_ACTIONS,
     extract_vtec_identity,
+    is_cancellation,
     parse_vtec_display,
+    terminal_chain_updates,
 )
 
 
@@ -220,3 +224,63 @@ class TestParseVtecDisplay:
     def test_display_unparseable_returns_raw_only(self):
         out = parse_vtec_display('not a vtec string')
         assert out == {'raw': 'not a vtec string'}
+
+
+# ---------------------------------------------------------------------------
+# Cancellation detection (early-lift vs. natural expiry)
+# ---------------------------------------------------------------------------
+
+class TestIsCancellation:
+    def test_vtec_can_action_is_cancellation(self):
+        assert is_cancellation(None, 'CAN') is True
+
+    def test_can_action_lowercase_and_padded(self):
+        assert is_cancellation(None, '  can ') is True
+
+    def test_cap_msgtype_cancel_is_cancellation(self):
+        # A cancellation can arrive via the CAP envelope even when no VTEC
+        # string is present (e.g. some IPAWS products).
+        assert is_cancellation('Cancel', None) is True
+
+    def test_cap_msgtype_cancel_case_insensitive(self):
+        assert is_cancellation('cancel', 'NEW') is True
+
+    def test_expired_action_is_not_cancellation(self):
+        # EXP is a terminal action but it is a natural expiry, not an early lift.
+        assert is_cancellation('Update', 'EXP') is False
+
+    def test_plain_alert_is_not_cancellation(self):
+        assert is_cancellation('Alert', 'NEW') is False
+
+    def test_empty_inputs_are_not_cancellation(self):
+        assert is_cancellation(None, None) is False
+        assert is_cancellation('', '') is False
+
+
+class TestTerminalChainUpdates:
+    NOW = datetime(2026, 6, 14, 17, 35, tzinfo=timezone.utc)
+
+    def test_cancel_marks_cancelled_and_preserves_expiry(self):
+        updates = terminal_chain_updates('CAN', 42, self.NOW)
+        assert updates['superseded_by_id'] == 42
+        assert updates['status'] == 'Cancelled'
+        assert updates['cancelled_at'] == self.NOW
+        # The original expires must NOT be collapsed — the UI needs it to show
+        # the event was lifted early.
+        assert 'expires' not in updates
+
+    def test_expired_collapses_expiry_to_now(self):
+        updates = terminal_chain_updates('EXP', 7, self.NOW)
+        assert updates['superseded_by_id'] == 7
+        assert updates['status'] == 'Expired'
+        assert updates['expires'] == self.NOW
+        assert 'cancelled_at' not in updates
+
+    def test_non_terminal_action_only_links_chain(self):
+        # CON/EXT/etc. just supersede prior products without closing the event.
+        updates = terminal_chain_updates('CON', 99, self.NOW)
+        assert updates == {'superseded_by_id': 99}
+
+    def test_cancel_is_case_insensitive(self):
+        updates = terminal_chain_updates('can', 1, self.NOW)
+        assert updates['status'] == 'Cancelled'
