@@ -8,6 +8,19 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.97.3] - 2026-06-15 - Multicolor browser/OS logos
+
+### Changed
+- Traffic Analytics now renders **true multicolor brand logos** for browsers
+  (Chrome, Firefox, Edge, Safari, Opera) and operating systems (Windows, Apple,
+  Android, Linux/Tux) as bundled SVG assets under
+  `static/img/logos/`, replacing the single-color FontAwesome glyphs. The
+  colored FA glyph remains the automatic fallback for any agent without a
+  dedicated logo (e.g. Samsung Internet, Internet Explorer). Logos appear in the
+  Browsers and Operating Systems tables and the Recent Requests column. The
+  marks are original simplified renditions, so nothing extra is bundled or
+  fetched at runtime.
+
 ## [2.97.2] - 2026-06-15 - Brand-coloured browser/OS logos
 
 ### Changed

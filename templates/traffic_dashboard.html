@@ -144,6 +144,8 @@
         color: var(--text-secondary);
     }
     .traffic-dash-root .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+    /* Multicolor browser/OS logos rendered inline in tables. */
+    .traffic-dash-root .ti-logo { width: 1.15em; height: 1.15em; vertical-align: -0.2em; object-fit: contain; }
 </style>
 {% endblock %}
 
@@ -493,26 +495,26 @@
         if (flag) return `<span class="me-1" title="${escapeHtml(cc)}">${flag}</span>${text}`;
         return `<i class="fas fa-network-wired text-muted me-1" title="Local / unresolved"></i>${text}`;
     }
-    // Brand colours so the logos read like real logos, not grey glyphs. Chosen
-    // to stay legible on both light and dark themes (Apple/Linux/IE use neutral
-    // tones because their true black/multicolour marks vanish on dark).
+    // Multicolor brand logos (SVG assets) with a FontAwesome brand glyph as the
+    // fallback. `color` tints the fallback glyph; `logo` is a true-color image.
+    const LOGO_BASE = "{{ url_for('static', filename='img/logos') }}";
     const BROWSER_META = {
-        'Chrome': { icon: 'fab fa-chrome', color: '#4285F4' },
-        'Firefox': { icon: 'fab fa-firefox-browser', color: '#FF7139' },
-        'Edge': { icon: 'fab fa-edge', color: '#34a3e0' },
-        'Safari': { icon: 'fab fa-safari', color: '#1B9AF7' },
-        'Opera': { icon: 'fab fa-opera', color: '#FF1B2D' },
+        'Chrome': { icon: 'fab fa-chrome', color: '#4285F4', logo: 'chrome.svg' },
+        'Firefox': { icon: 'fab fa-firefox-browser', color: '#FF7139', logo: 'firefox.svg' },
+        'Edge': { icon: 'fab fa-edge', color: '#34a3e0', logo: 'edge.svg' },
+        'Safari': { icon: 'fab fa-safari', color: '#1B9AF7', logo: 'safari.svg' },
+        'Opera': { icon: 'fab fa-opera', color: '#FF1B2D', logo: 'opera.svg' },
         'Samsung Internet': { icon: 'fas fa-mobile-screen', color: '#7b8cff' },
         'Internet Explorer': { icon: 'fab fa-internet-explorer', color: '#34a3e0' },
     };
     const OS_META = {
-        'Windows': { icon: 'fab fa-windows', color: '#2f9be0' },
-        'iOS': { icon: 'fab fa-apple', color: '#adb5bd' },
-        'iPadOS': { icon: 'fab fa-apple', color: '#adb5bd' },
-        'macOS': { icon: 'fab fa-apple', color: '#adb5bd' },
-        'Android': { icon: 'fab fa-android', color: '#3DDC84' },
-        'ChromeOS': { icon: 'fab fa-chrome', color: '#4285F4' },
-        'Linux': { icon: 'fab fa-linux', color: '#f6c343' },
+        'Windows': { icon: 'fab fa-windows', color: '#2f9be0', logo: 'windows.svg' },
+        'iOS': { icon: 'fab fa-apple', color: '#adb5bd', logo: 'apple.svg' },
+        'iPadOS': { icon: 'fab fa-apple', color: '#adb5bd', logo: 'apple.svg' },
+        'macOS': { icon: 'fab fa-apple', color: '#adb5bd', logo: 'apple.svg' },
+        'Android': { icon: 'fab fa-android', color: '#3DDC84', logo: 'android.svg' },
+        'ChromeOS': { icon: 'fab fa-chrome', color: '#4285F4', logo: 'chrome.svg' },
+        'Linux': { icon: 'fab fa-linux', color: '#f6c343', logo: 'linux.svg' },
     };
     function browserMeta(name) {
         return BROWSER_META[name] || { icon: 'fas fa-window-maximize', color: '' };
@@ -521,10 +523,18 @@
         if (name && name.indexOf('Windows') === 0) return OS_META['Windows'];
         return OS_META[name] || { icon: 'fas fa-desktop', color: '' };
     }
-    // Render an icon + label, tinting the icon its brand colour when known.
-    function iconLabel(meta, label) {
+    // HTML for a logo mark: a multicolor SVG when available, else a tinted glyph.
+    function markFor(meta, label, cls) {
+        const sz = cls || 'me-2';
+        if (meta.logo) {
+            return `<img src="${LOGO_BASE}/${meta.logo}" alt="${escapeHtml(label || '')}" class="ti-logo ${sz}">`;
+        }
         const color = meta.color || 'var(--text-secondary, #888)';
-        return `<i class="${meta.icon} me-2" style="color:${color}"></i>${escapeHtml(label || 'Unknown')}`;
+        return `<i class="${meta.icon} ${sz}" style="color:${color}"></i>`;
+    }
+    // Render a logo mark + label.
+    function iconLabel(meta, label) {
+        return `${markFor(meta, label)}${escapeHtml(label || 'Unknown')}`;
     }
     // Human-readable byte size (awstats bandwidth column).
     function fmtBytes(n) {
@@ -599,8 +609,7 @@
                 return `<td>${host}</td><td class="text-end mono text-danger fw-bold">${num(r.errors)}</td>`;
             }, 2);
             renderTable('recentRequests', data.recent_requests, r => {
-                const bm = browserMeta(r.browser);
-                const br = r.browser ? `<i class="${bm.icon} me-1" style="color:${bm.color || 'var(--text-secondary,#888)'}"></i>${escapeHtml(r.browser)}${r.browser_version ? ' ' + escapeHtml(r.browser_version) : ''}` : '<span class="text-muted">—</span>';
+                const br = r.browser ? `${markFor(browserMeta(r.browser), r.browser, 'me-1')}${escapeHtml(r.browser)}${r.browser_version ? ' ' + escapeHtml(r.browser_version) : ''}` : '<span class="text-muted">—</span>';
                 const when = r.timestamp ? new Date(r.timestamp).toLocaleTimeString() : '--';
                 return `<td class="text-nowrap">${when}</td><td><span class="badge bg-light text-dark border">${escapeHtml(r.method)}</span></td><td class="text-break-anywhere">${escapeHtml(r.path)}</td><td class="text-center">${statusBadge(r.status_code)}</td><td class="d-none d-md-table-cell text-nowrap">${br}</td><td class="d-none d-lg-table-cell text-break-anywhere small text-muted">${escapeHtml(r.user_agent || '—')}</td>`;
             }, 6);
