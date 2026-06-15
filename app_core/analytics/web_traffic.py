@@ -34,6 +34,8 @@ recorded entirely from the web UI (no environment variables, no CLI).
 
 from typing import Any, Dict, Optional
 
+import re
+
 from app_core.extensions import db
 from app_utils import utc_now
 
@@ -90,15 +92,27 @@ def is_excluded_path(path: str) -> bool:
     return any(path.startswith(prefix) for prefix in ALWAYS_EXCLUDED_PREFIXES)
 
 
+def _extract_browser_version(user_agent: str, needle: str) -> Optional[str]:
+    """Pull a ``major.minor`` version for the matched browser *needle*.
+
+    Most engines report ``Name/<version>``; Safari is the exception — it carries
+    its user-facing version in a separate ``Version/<x.y>`` token while
+    ``Safari/<build>`` is the (unhelpful) WebKit build number.
+    """
+    token = "Version" if needle == "Safari" else needle
+    match = re.search(re.escape(token) + r"[/ ]?(\d+(?:\.\d+)?)", user_agent)
+    return match.group(1) if match else None
+
+
 def classify_user_agent(user_agent: Optional[str]) -> Dict[str, Any]:
     """Best-effort classification of a User-Agent string.
 
-    Returns a dict with ``browser``, ``os`` and ``is_bot``. Intentionally simple
-    substring matching — adequate for a single-station appliance and avoids a
-    heavyweight UA-parsing dependency.
+    Returns a dict with ``browser``, ``browser_version``, ``os`` and ``is_bot``.
+    Intentionally simple substring matching — adequate for a single-station
+    appliance and avoids a heavyweight UA-parsing dependency.
     """
     if not user_agent:
-        return {"browser": None, "os": None, "is_bot": False}
+        return {"browser": None, "browser_version": None, "os": None, "is_bot": False}
 
     ua = user_agent
     ua_lower = ua.lower()
@@ -106,9 +120,11 @@ def classify_user_agent(user_agent: Optional[str]) -> Dict[str, Any]:
     is_bot = any(needle in ua_lower for needle in _BOT_NEEDLES)
 
     browser: Optional[str] = None
+    browser_version: Optional[str] = None
     for needle, label in _BROWSER_NEEDLES:
         if needle in ua:
             browser = label
+            browser_version = _extract_browser_version(ua, needle)
             break
 
     os_name: Optional[str] = None
@@ -117,7 +133,12 @@ def classify_user_agent(user_agent: Optional[str]) -> Dict[str, Any]:
             os_name = label
             break
 
-    return {"browser": browser, "os": os_name, "is_bot": is_bot}
+    return {
+        "browser": browser,
+        "browser_version": browser_version,
+        "os": os_name,
+        "is_bot": is_bot,
+    }
 
 
 class WebRequestLog(db.Model):
@@ -160,6 +181,8 @@ class WebRequestLog(db.Model):
     is_api = db.Column(db.Boolean, nullable=False, default=False)
     is_bot = db.Column(db.Boolean, nullable=False, default=False, index=True)
     browser = db.Column(db.String(64), nullable=True)
+    # Browser major[.minor] version parsed from the UA (e.g. "120" or "16.1").
+    browser_version = db.Column(db.String(32), nullable=True)
     os = db.Column(db.String(64), nullable=True)
 
     # Extended awstats-style attributes
@@ -201,6 +224,7 @@ class WebRequestLog(db.Model):
             "is_api": bool(self.is_api),
             "is_bot": bool(self.is_bot),
             "browser": self.browser,
+            "browser_version": self.browser_version,
             "os": self.os,
             "screen_resolution": self.screen_resolution,
             "country": self.country,

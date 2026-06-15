@@ -75,8 +75,23 @@ def test_classify_user_agent_chrome_on_windows():
     )
     result = classify_user_agent(ua)
     assert result["browser"] == "Chrome"
+    assert result["browser_version"] == "120.0"
     assert result["os"] == "Windows 10/11"
     assert result["is_bot"] is False
+
+
+def test_classify_user_agent_safari_version_from_version_token():
+    from app_core.analytics.web_traffic import classify_user_agent
+
+    ua = (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 "
+        "(KHTML, like Gecko) Version/16.1 Safari/605.1.15"
+    )
+    result = classify_user_agent(ua)
+    assert result["browser"] == "Safari"
+    # Safari's user-facing version comes from the Version/ token, not Safari/.
+    assert result["browser_version"] == "16.1"
+    assert result["os"] == "macOS"
 
 
 def test_classify_user_agent_detects_bot():
@@ -263,8 +278,9 @@ def test_summary_and_breakdowns(app_with_db):
             "summary", "timeseries", "top_pages", "top_visitors",
             "status_breakdown", "browser_breakdown", "os_breakdown",
             "referer_breakdown", "resolution_breakdown", "country_breakdown",
-            "language_breakdown", "login_summary", "login_timeseries",
-            "top_login_ips", "recent_logins",
+            "language_breakdown", "error_pages", "error_sources",
+            "hourly_distribution", "weekday_distribution", "recent_requests",
+            "login_summary", "login_timeseries", "top_login_ips", "recent_logins",
         ):
             assert key in full
 
@@ -327,6 +343,67 @@ def test_recorder_buffers_and_flushes(app_with_db):
                          "is_api": False, "is_bot": False})
         recorder._flush()
         assert WebRequestLog.query.count() == 1
+
+
+def test_summary_includes_bandwidth(app_with_db):
+    app, db = app_with_db
+    from app_core.analytics import traffic_stats
+
+    with app.app_context():
+        _add_request(db, content_length=1000)
+        _add_request(db, content_length=3000)
+        _add_request(db, content_length=None)  # nulls ignored in averages
+
+        summary = traffic_stats.get_summary(days=30)
+        assert summary["total_bytes"] == 4000
+        assert summary["avg_bytes"] == 2000
+
+
+def test_error_reports(app_with_db):
+    app, db = app_with_db
+    from app_core.analytics import traffic_stats
+
+    with app.app_context():
+        _add_request(db, path="/wp-login.php", status_code=404, ip_address="66.249.0.1")
+        _add_request(db, path="/wp-login.php", status_code=404, ip_address="66.249.0.1")
+        _add_request(db, path="/.env", status_code=404, ip_address="66.249.0.1")
+        _add_request(db, path="/ok", status_code=200, ip_address="192.168.1.10")
+
+        pages = traffic_stats.get_error_pages(days=30)
+        top = pages[0]
+        assert top["path"] == "/wp-login.php"
+        assert top["status_code"] == 404
+        assert top["hits"] == 2
+
+        sources = traffic_stats.get_error_sources(days=30)
+        assert sources[0]["ip_address"] == "66.249.0.1"
+        assert sources[0]["errors"] == 3
+
+
+def test_time_distributions(app_with_db):
+    app, db = app_with_db
+    from app_core.analytics import traffic_stats
+
+    with app.app_context():
+        _add_request(db)
+        hourly = traffic_stats.get_hourly_distribution(days=30)
+        assert len(hourly["labels"]) == 24
+        assert len(hourly["hits"]) == 24
+        assert sum(hourly["hits"]) == 1
+
+        weekday = traffic_stats.get_weekday_distribution(days=30)
+        assert len(weekday["labels"]) == 7
+        assert sum(weekday["hits"]) == 1
+
+
+def test_geoip_upload_route_registered(app_with_db):
+    app, db = app_with_db
+    import logging
+    from webapp import routes_traffic
+
+    routes_traffic.register(app, logging.getLogger("test"))
+    rules = {r.rule for r in app.url_map.iter_rules()}
+    assert "/api/traffic/geoip/upload" in rules
 
 
 def test_top_visitors_include_hostname_and_country(app_with_db):
