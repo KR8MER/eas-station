@@ -121,6 +121,57 @@ def test_classify_ip_local_and_public():
     assert classify_ip("not-an-ip") == "Unknown"
 
 
+def test_classify_location_returns_label_and_code():
+    from app_core.analytics.geo import classify_location
+
+    # Local addresses: label set, no country code (no flag).
+    assert classify_location("192.168.1.50") == {
+        "label": "Local Network",
+        "country_code": None,
+    }
+    assert classify_location("127.0.0.1")["country_code"] is None
+    # Public address with no GeoIP DB -> generic label, still no code.
+    public = classify_location("8.8.8.8")
+    assert public["label"] == "Internet (Public)"
+    assert public["country_code"] is None
+    # Invalid / missing.
+    assert classify_location(None)["label"] == "Unknown"
+
+
+def test_resolve_hostname_caches_and_handles_failure(monkeypatch):
+    import socket as socket_mod
+
+    from app_core.analytics import geo
+
+    # Start from a clean cache so prior tests don't interfere.
+    geo._hostname_cache.clear()
+
+    calls = {"n": 0}
+
+    def fake_gethostbyaddr(ip):
+        calls["n"] += 1
+        if ip == "8.8.8.8":
+            return ("dns.google", [], [ip])
+        raise socket_mod.herror("no PTR")
+
+    monkeypatch.setattr(geo.socket, "gethostbyaddr", fake_gethostbyaddr)
+
+    assert geo.resolve_hostname("8.8.8.8") == "dns.google"
+    # Second call is served from cache (no extra lookup).
+    assert geo.resolve_hostname("8.8.8.8") == "dns.google"
+    assert calls["n"] == 1
+
+    # A failed lookup is negatively cached as None.
+    assert geo.resolve_hostname("1.2.3.4") is None
+    assert geo.resolve_hostname("1.2.3.4") is None
+    assert calls["n"] == 2
+
+    # Bad input never calls the resolver.
+    assert geo.resolve_hostname(None) is None
+    assert geo.resolve_hostname("not-an-ip") is None
+    assert calls["n"] == 2
+
+
 # ---------------------------------------------------------------------------
 # Settings model
 # ---------------------------------------------------------------------------
@@ -136,6 +187,8 @@ def test_settings_defaults_created(app_with_db):
         cfg = settings.as_config()
         assert cfg["log_api_requests"] is True
         assert cfg["geoip_database_path"] is None
+        # Reverse DNS is opt-in (network calls), so it defaults to off.
+        assert cfg["resolve_hostnames"] is False
 
 
 # ---------------------------------------------------------------------------
@@ -202,6 +255,8 @@ def test_summary_and_breakdowns(app_with_db):
 
         countries = traffic_stats.get_country_breakdown(days=30)
         assert any(c["country"] == "Local Network" for c in countries)
+        # Each country row exposes a (possibly null) ISO code for the flag.
+        assert all("country_code" in c for c in countries)
 
         full = traffic_stats.get_full_dashboard(days=30)
         for key in (
@@ -272,6 +327,80 @@ def test_recorder_buffers_and_flushes(app_with_db):
                          "is_api": False, "is_bot": False})
         recorder._flush()
         assert WebRequestLog.query.count() == 1
+
+
+def test_top_visitors_include_hostname_and_country(app_with_db):
+    app, db = app_with_db
+    from app_core.analytics import traffic_stats
+
+    with app.app_context():
+        _add_request(
+            db,
+            ip_address="8.8.8.8",
+            hostname="dns.google",
+            country="United States",
+            country_code="US",
+        )
+        _add_request(db, ip_address="8.8.8.8", hostname="dns.google")
+
+        visitors = traffic_stats.get_top_visitors(days=30)
+        top = next(v for v in visitors if v["ip_address"] == "8.8.8.8")
+        assert top["hits"] == 2
+        assert top["hostname"] == "dns.google"
+        assert top["country_code"] == "US"
+
+
+def test_recorder_resolves_hostnames_when_enabled(app_with_db, monkeypatch):
+    app, db = app_with_db
+    from app_core.analytics import geo
+    from app_core.analytics.traffic_recorder import TrafficRecorder
+    from app_core.analytics.web_traffic import WebRequestLog
+    from app_utils import utc_now
+
+    geo._hostname_cache.clear()
+    monkeypatch.setattr(geo, "resolve_hostname", lambda ip, *a, **k: f"host-for-{ip}")
+
+    with app.app_context():
+        recorder = TrafficRecorder(app)
+        recorder._config["resolve_hostnames"] = True
+        recorder.record({
+            "timestamp": utc_now(), "method": "GET", "path": "/x",
+            "status_code": 200, "ip_address": "8.8.4.4",
+            "is_authenticated": False, "is_api": False, "is_bot": False,
+        })
+        recorder._flush()
+        row = WebRequestLog.query.filter_by(ip_address="8.8.4.4").first()
+        assert row is not None
+        assert row.hostname == "host-for-8.8.4.4"
+
+
+def test_recorder_skips_hostnames_when_disabled(app_with_db, monkeypatch):
+    app, db = app_with_db
+    from app_core.analytics import geo
+    from app_core.analytics.traffic_recorder import TrafficRecorder
+    from app_core.analytics.web_traffic import WebRequestLog
+    from app_utils import utc_now
+
+    called = {"n": 0}
+
+    def boom(ip, *a, **k):
+        called["n"] += 1
+        return "should-not-be-used"
+
+    monkeypatch.setattr(geo, "resolve_hostname", boom)
+
+    with app.app_context():
+        recorder = TrafficRecorder(app)
+        recorder._config["resolve_hostnames"] = False
+        recorder.record({
+            "timestamp": utc_now(), "method": "GET", "path": "/y",
+            "status_code": 200, "ip_address": "8.8.4.4",
+            "is_authenticated": False, "is_api": False, "is_bot": False,
+        })
+        recorder._flush()
+        row = WebRequestLog.query.filter_by(ip_address="8.8.4.4").first()
+        assert row.hostname is None
+        assert called["n"] == 0
 
 
 def test_login_summary_from_audit(app_with_db):

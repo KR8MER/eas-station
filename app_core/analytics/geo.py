@@ -30,15 +30,26 @@ local network. This helper always classifies an address into a human-readable
   is configured (``geoip2`` installed + a ``.mmdb`` path set in the Traffic
   Analytics settings); otherwise the generic label "Internet (Public)".
 
+When a GeoLite2 database resolves a public IP, :func:`classify_location` also
+returns the ISO 3166-1 alpha-2 country code (e.g. ``"US"``) so the dashboard can
+render a flag, mirroring awstats' "Countries" report.
+
 The optional dependency keeps the core install lightweight: country-level
 geolocation lights up automatically when an operator drops in a GeoLite2 DB and
 points the setting at it, with zero code changes.
+
+:func:`resolve_hostname` performs an awstats-style reverse-DNS lookup (PTR
+record) so visitor IPs can be shown as hostnames. Lookups hit the network, so
+they are bounded by a short timeout, cached (positive *and* negative), and are
+only ever called from the background recorder thread — never on the request
+path.
 """
 
 import ipaddress
 import logging
+import socket
 import threading
-from typing import Optional
+from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +59,18 @@ _readers: dict = {}
 _readers_lock = threading.Lock()
 # Paths we already failed to open — don't retry/log on every single request.
 _failed_paths: set = set()
+
+# Reverse-DNS cache: maps an IP string to its resolved hostname, or ``None`` when
+# a previous lookup found no PTR record (negative caching avoids hammering the
+# resolver for the same address). Bounded so a flood of unique IPs can't grow it
+# without limit.
+_hostname_cache: Dict[str, Optional[str]] = {}
+_hostname_lock = threading.Lock()
+_HOSTNAME_CACHE_MAX = 50000
+# Default per-lookup timeout (seconds) for reverse DNS.
+_DEFAULT_DNS_TIMEOUT = 1.5
+# Sentinel distinguishing "not cached" from a cached ``None`` (negative result).
+_SENTINEL = object()
 
 
 def _get_reader(db_path: str):
@@ -74,40 +97,112 @@ def _get_reader(db_path: str):
             return None
 
 
-def classify_ip(ip: Optional[str], geoip_db_path: Optional[str] = None) -> str:
-    """Return a location/network label for *ip*.
+def classify_location(
+    ip: Optional[str], geoip_db_path: Optional[str] = None
+) -> Dict[str, Optional[str]]:
+    """Return ``{"label": <str>, "country_code": <str|None>}`` for *ip*.
 
-    Never raises and never makes a network call. When *geoip_db_path* points at a
-    readable GeoLite2 database (and ``geoip2`` is installed), public addresses
-    resolve to a country name; otherwise they get a generic public label.
+    ``label`` is a human-readable location/network string (the same value
+    :func:`classify_ip` returns). ``country_code`` is the ISO 3166-1 alpha-2
+    code (e.g. ``"US"``) when a GeoLite2 database resolves a public address,
+    otherwise ``None`` — local/loopback/link-local addresses and unresolved
+    public IPs have no flag.
+
+    Never raises and never makes a network call.
     """
     if not ip:
-        return "Unknown"
+        return {"label": "Unknown", "country_code": None}
 
     try:
         addr = ipaddress.ip_address(ip)
     except ValueError:
-        return "Unknown"
+        return {"label": "Unknown", "country_code": None}
 
     if addr.is_loopback:
-        return "Local (loopback)"
+        return {"label": "Local (loopback)", "country_code": None}
     if addr.is_link_local:
-        return "Local (link-local)"
+        return {"label": "Local (link-local)", "country_code": None}
     if addr.is_private:
-        return "Local Network"
+        return {"label": "Local Network", "country_code": None}
 
     # Public address — try optional country resolution.
     if geoip_db_path:
         reader = _get_reader(geoip_db_path)
         if reader is not None:
             try:
-                country = reader.country(ip).country.name
-                if country:
-                    return country
+                response = reader.country(ip)
+                name = response.country.name
+                iso = response.country.iso_code
+                if name:
+                    return {
+                        "label": name,
+                        "country_code": iso.upper() if iso else None,
+                    }
             except Exception:  # pragma: no cover - address not in DB, etc.
                 pass
 
-    return "Internet (Public)"
+    return {"label": "Internet (Public)", "country_code": None}
+
+
+def classify_ip(ip: Optional[str], geoip_db_path: Optional[str] = None) -> str:
+    """Return a location/network label for *ip* (see :func:`classify_location`).
+
+    Thin string-only wrapper retained for backwards compatibility.
+    """
+    return classify_location(ip, geoip_db_path)["label"]
+
+
+def resolve_hostname(
+    ip: Optional[str], timeout: float = _DEFAULT_DNS_TIMEOUT
+) -> Optional[str]:
+    """Reverse-resolve *ip* to a hostname (PTR record), or ``None``.
+
+    awstats-style reverse DNS. Results are cached (positive and negative) so a
+    given address is only looked up once. A short socket timeout bounds the cost
+    of a slow or unreachable resolver. This makes a network call and is intended
+    to run from the background recorder thread, never on the request path.
+    """
+    if not ip:
+        return None
+
+    cached = _hostname_cache.get(ip, _SENTINEL)
+    if cached is not _SENTINEL:
+        return cached  # type: ignore[return-value]
+
+    # Don't attempt reverse DNS for non-addresses.
+    try:
+        ipaddress.ip_address(ip)
+    except ValueError:
+        _cache_hostname(ip, None)
+        return None
+
+    hostname: Optional[str] = None
+    previous_timeout = socket.getdefaulttimeout()
+    try:
+        socket.setdefaulttimeout(max(0.1, float(timeout)))
+        hostname = socket.gethostbyaddr(ip)[0] or None
+        if hostname:
+            hostname = hostname[:255]
+    except Exception:
+        # NXDOMAIN, timeout, no PTR record, etc. — cache the miss.
+        hostname = None
+    finally:
+        try:
+            socket.setdefaulttimeout(previous_timeout)
+        except Exception:  # pragma: no cover - defensive
+            pass
+
+    _cache_hostname(ip, hostname)
+    return hostname
+
+
+def _cache_hostname(ip: str, hostname: Optional[str]) -> None:
+    """Store a reverse-DNS result, bounding the cache size."""
+    with _hostname_lock:
+        if len(_hostname_cache) >= _HOSTNAME_CACHE_MAX:
+            # Cheap eviction: clear the whole cache rather than tracking LRU.
+            _hostname_cache.clear()
+        _hostname_cache[ip] = hostname
 
 
 def reset_readers() -> None:
@@ -122,4 +217,4 @@ def reset_readers() -> None:
         _failed_paths.clear()
 
 
-__all__ = ["classify_ip", "reset_readers"]
+__all__ = ["classify_ip", "classify_location", "resolve_hostname", "reset_readers"]

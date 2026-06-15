@@ -1247,7 +1247,7 @@ def _record_traffic(response) -> None:
     a logging hiccup can never break a user's request.
     """
     try:
-        from app_core.analytics.geo import classify_ip
+        from app_core.analytics.geo import classify_location
         from app_core.analytics.traffic_recorder import get_traffic_recorder
         from app_core.analytics.web_traffic import classify_user_agent, is_excluded_path
 
@@ -1301,7 +1301,9 @@ def _record_traffic(response) -> None:
         except Exception:
             screen_resolution = None
 
-        country = classify_ip(client_ip, config.get('geoip_database_path'))
+        # Country/network label + ISO code (for the flag). Hostname is resolved
+        # later by the background recorder so the request path makes no DNS call.
+        location = classify_location(client_ip, config.get('geoip_database_path'))
 
         recorder.record({
             'timestamp': utc_now(),
@@ -1311,6 +1313,7 @@ def _record_traffic(response) -> None:
             'response_time_ms': response_time_ms,
             'content_length': content_length,
             'ip_address': client_ip,
+            'hostname': None,
             'user_agent': ua_raw[:512] if ua_raw else None,
             'referer': referer[:512] if referer else None,
             'user_id': getattr(user, 'id', None) if is_authenticated else None,
@@ -1321,7 +1324,8 @@ def _record_traffic(response) -> None:
             'browser': ua['browser'],
             'os': ua['os'],
             'screen_resolution': screen_resolution,
-            'country': country,
+            'country': location['label'],
+            'country_code': location['country_code'],
             'language': language,
         })
     except Exception as exc:  # pragma: no cover - defensive: never break a response

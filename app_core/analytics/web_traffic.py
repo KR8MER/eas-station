@@ -144,6 +144,10 @@ class WebRequestLog(db.Model):
 
     # Who / from where
     ip_address = db.Column(db.String(64), nullable=True, index=True)
+    # Reverse-DNS (PTR) hostname for ip_address, resolved by the background
+    # recorder when hostname resolution is enabled (awstats-style). Null when
+    # resolution is disabled, pending, or the address has no PTR record.
+    hostname = db.Column(db.String(255), nullable=True, index=True)
     user_agent = db.Column(db.String(512), nullable=True)
     referer = db.Column(db.String(512), nullable=True)
 
@@ -162,9 +166,12 @@ class WebRequestLog(db.Model):
     # screen_resolution e.g. "1920x1080" — captured client-side via a beacon and
     # carried on subsequent requests in the session cookie.
     screen_resolution = db.Column(db.String(20), nullable=True)
-    # country/network label from geo.classify_ip (e.g. "Local Network", a country
-    # name when a GeoIP DB is configured, or "Internet (Public)").
+    # country/network label from geo.classify_location (e.g. "Local Network", a
+    # country name when a GeoIP DB is configured, or "Internet (Public)").
     country = db.Column(db.String(64), nullable=True)
+    # ISO 3166-1 alpha-2 country code (e.g. "US") when GeoIP resolved a public
+    # address, used to render a flag on the dashboard. Null otherwise.
+    country_code = db.Column(db.String(2), nullable=True)
     # Preferred language parsed from the Accept-Language header (e.g. "en-US").
     language = db.Column(db.String(20), nullable=True)
 
@@ -185,6 +192,7 @@ class WebRequestLog(db.Model):
             "response_time_ms": self.response_time_ms,
             "content_length": self.content_length,
             "ip_address": self.ip_address,
+            "hostname": self.hostname,
             "user_agent": self.user_agent,
             "referer": self.referer,
             "user_id": self.user_id,
@@ -196,6 +204,7 @@ class WebRequestLog(db.Model):
             "os": self.os,
             "screen_resolution": self.screen_resolution,
             "country": self.country,
+            "country_code": self.country_code,
             "language": self.language,
         }
 
@@ -232,6 +241,11 @@ class TrafficAnalyticsSettings(db.Model):
     # on the dashboard. Leave blank for local-network-only classification.
     geoip_database_path = db.Column(db.String(512), nullable=True)
 
+    # Whether the background recorder performs reverse-DNS (PTR) lookups to show
+    # visitor hostnames (awstats-style). Off by default: lookups hit the network
+    # and may leak visitor IPs to the configured DNS resolver.
+    resolve_hostnames = db.Column(db.Boolean, nullable=False, default=False)
+
     updated_at = db.Column(
         db.DateTime(timezone=True),
         default=utc_now,
@@ -246,6 +260,7 @@ class TrafficAnalyticsSettings(db.Model):
         "log_authenticated_only": False,
         "exclude_bots": False,
         "geoip_database_path": None,
+        "resolve_hostnames": False,
     }
 
     @classmethod
@@ -267,6 +282,7 @@ class TrafficAnalyticsSettings(db.Model):
             "log_authenticated_only": bool(self.log_authenticated_only),
             "exclude_bots": bool(self.exclude_bots),
             "geoip_database_path": self.geoip_database_path or None,
+            "resolve_hostnames": bool(self.resolve_hostnames),
         }
 
     def to_dict(self) -> Dict[str, Any]:

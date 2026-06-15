@@ -252,9 +252,9 @@
         </div>
         <div class="col-lg-6">
             <div class="card h-100">
-                <div class="card-header"><h6><i class="fas fa-users section-icon"></i>Top Visitors</h6></div>
+                <div class="card-header"><h6><i class="fas fa-users section-icon"></i>Top Visitors (Hosts)</h6></div>
                 <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
-                    <thead><tr><th>IP Address</th><th class="text-end">Hits</th><th class="d-none d-sm-table-cell">Last Seen</th></tr></thead>
+                    <thead><tr><th>Host / IP Address</th><th class="text-end">Hits</th><th class="d-none d-sm-table-cell">Last Seen</th></tr></thead>
                     <tbody id="topVisitors"></tbody></table></div></div>
             </div>
         </div>
@@ -279,7 +279,7 @@
         </div>
         <div class="col-lg-3 col-md-6">
             <div class="card h-100">
-                <div class="card-header"><h6><i class="fas fa-map-marker-alt section-icon"></i>Locations / Networks</h6></div>
+                <div class="card-header"><h6><i class="fas fa-map-marker-alt section-icon"></i>Countries / Networks</h6></div>
                 <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
                     <thead><tr><th>Location</th><th class="text-end">Hits</th></tr></thead><tbody id="countryBreakdown"></tbody></table></div></div>
             </div>
@@ -351,6 +351,11 @@
                     <input class="form-check-input" type="checkbox" role="switch" id="setExcludeBots">
                     <label class="form-check-label" for="setExcludeBots">Exclude bots/crawlers</label>
                 </div>
+                <div class="form-check form-switch mb-1">
+                    <input class="form-check-input" type="checkbox" role="switch" id="setResolveHostnames">
+                    <label class="form-check-label" for="setResolveHostnames">Resolve hostnames (reverse DNS)</label>
+                </div>
+                <div class="form-text mb-3">Look up the PTR/hostname for each visitor IP (awstats-style). Lookups happen in the background and are cached, but they query your DNS resolver — leave off if you'd rather not send visitor IPs to DNS.</div>
                 <div class="mb-3">
                     <label class="form-label" for="setRetention">Retention (days)</label>
                     <input type="number" class="form-control" id="setRetention" min="1" max="3650" step="1">
@@ -385,6 +390,22 @@
         if (s === null || s === undefined) return '';
         return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
     }
+    // Convert an ISO 3166-1 alpha-2 code (e.g. "US") to its flag emoji using
+    // Unicode regional indicator symbols — no image assets required.
+    function flagEmoji(cc) {
+        if (!cc || cc.length !== 2 || !/^[A-Za-z]{2}$/.test(cc)) return '';
+        const A = 0x1F1E6, base = 'A'.charCodeAt(0);
+        return String.fromCodePoint(A + (cc.toUpperCase().charCodeAt(0) - base),
+                                    A + (cc.toUpperCase().charCodeAt(1) - base));
+    }
+    // Build a "🇺🇸 United States" style label; falls back to a network icon for
+    // local/unresolved labels that have no country code.
+    function flagLabel(cc, label) {
+        const flag = flagEmoji(cc);
+        const text = escapeHtml(label || 'Unknown');
+        if (flag) return `<span class="me-1" title="${escapeHtml(cc)}">${flag}</span>${text}`;
+        return `<i class="fas fa-network-wired text-muted me-1" title="Local / unresolved"></i>${text}`;
+    }
     function setTile(id, value, sub) {
         const tile = document.getElementById(id);
         if (!tile) return;
@@ -418,10 +439,17 @@
             renderBrowserChart(data.browser_breakdown);
             renderLoginChart(data.login_timeseries);
             renderTable('topPages', data.top_pages, r => `<td class="text-break-anywhere">${escapeHtml(r.path)}</td><td class="text-end mono">${num(r.hits)}</td><td class="text-end d-none d-sm-table-cell mono">${r.avg_response_ms != null ? r.avg_response_ms : '--'}</td>`, 3);
-            renderTable('topVisitors', data.top_visitors, r => { const who = r.username ? ` <span class="badge bg-secondary">${escapeHtml(r.username)}</span>` : ''; return `<td class="text-break-anywhere mono">${escapeHtml(r.ip_address)}${who}</td><td class="text-end mono">${num(r.hits)}</td><td class="d-none d-sm-table-cell">${r.last_seen ? new Date(r.last_seen).toLocaleString() : '--'}</td>`; }, 3);
+            renderTable('topVisitors', data.top_visitors, r => {
+                const who = r.username ? ` <span class="badge bg-secondary">${escapeHtml(r.username)}</span>` : '';
+                const flag = r.country_code ? `<span class="me-1" title="${escapeHtml(r.country || r.country_code)}">${flagEmoji(r.country_code)}</span>` : '';
+                const host = r.hostname
+                    ? `<div class="text-break-anywhere">${flag}${escapeHtml(r.hostname)}</div><div class="text-muted small mono text-break-anywhere">${escapeHtml(r.ip_address)}${who}</div>`
+                    : `<span class="text-break-anywhere mono">${flag}${escapeHtml(r.ip_address)}${who}</span>`;
+                return `<td>${host}</td><td class="text-end mono">${num(r.hits)}</td><td class="d-none d-sm-table-cell">${r.last_seen ? new Date(r.last_seen).toLocaleString() : '--'}</td>`;
+            }, 3);
             renderTable('osBreakdown', data.os_breakdown, r => `<td>${escapeHtml(r.os || 'Unknown')}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
             renderTable('resBreakdown', data.resolution_breakdown, r => `<td class="mono">${escapeHtml(r.resolution || 'Unknown')}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
-            renderTable('countryBreakdown', data.country_breakdown, r => `<td>${escapeHtml(r.country || 'Unknown')}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
+            renderTable('countryBreakdown', data.country_breakdown, r => `<td>${flagLabel(r.country_code, r.country)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
             renderTable('langBreakdown', data.language_breakdown, r => `<td class="mono">${escapeHtml(r.language || 'Unknown')}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
             renderTable('refBreakdown', data.referer_breakdown, r => `<td class="text-break-anywhere">${escapeHtml(r.referer)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
             renderTable('topLoginIps', data.top_login_ips, r => `<td class="text-break-anywhere mono">${escapeHtml(r.ip_address)}</td><td class="text-end mono">${num(r.success)}</td><td class="text-end mono ${r.failure > 0 ? 'text-danger fw-bold' : ''}">${num(r.failure)}</td>`, 3);
@@ -508,6 +536,7 @@
                 document.getElementById('setLogApi').checked = s.log_api_requests;
                 document.getElementById('setAuthOnly').checked = s.log_authenticated_only;
                 document.getElementById('setExcludeBots').checked = s.exclude_bots;
+                document.getElementById('setResolveHostnames').checked = s.resolve_hostnames;
                 document.getElementById('setRetention').value = s.retention_days;
                 document.getElementById('setGeoip').value = s.geoip_database_path || '';
             }
@@ -520,6 +549,7 @@
             log_api_requests: document.getElementById('setLogApi').checked,
             log_authenticated_only: document.getElementById('setAuthOnly').checked,
             exclude_bots: document.getElementById('setExcludeBots').checked,
+            resolve_hostnames: document.getElementById('setResolveHostnames').checked,
             retention_days: parseInt(document.getElementById('setRetention').value, 10) || 90,
             geoip_database_path: document.getElementById('setGeoip').value
         };
