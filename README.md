@@ -2,7 +2,7 @@
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue?style=flat-square&logo=gnu&logoColor=white)](https://www.gnu.org/licenses/agpl-3.0)
 [![Commercial License](https://img.shields.io/badge/License-Commercial-green?style=flat-square)](LICENSE-COMMERCIAL)
-[![Version](https://img.shields.io/badge/Version-2.93.1-blueviolet?style=flat-square)](docs/reference/CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-2.93.2-blueviolet?style=flat-square)](docs/reference/CHANGELOG.md)
 [![Support on Ko-fi](https://img.shields.io/badge/Support%20on-Ko--fi-29abe0?style=flat-square&logo=ko-fi&logoColor=white)](https://ko-fi.com/easstation)
 [![Raspberry Pi](https://img.shields.io/badge/Raspberry%20Pi-Compatible-C51A4A?style=flat-square&logo=raspberrypi&logoColor=white)](https://www.raspberrypi.com/)
 [![Python](https://img.shields.io/badge/Python-3.13-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
@@ -49,6 +49,34 @@ The project's long-term goal is to be a credible, auditable, drop-in alternative
 ---
 
 > ⚠️ **Laboratory / Research Use Only** — EAS Station™ generates valid SAME headers and attention tones that will trigger downstream EAS equipment. It is **not FCC-certified** and must only be operated in controlled test environments. Never connect it to on-air RF, an STL path, or a public streaming chain without explicit authorization. See [Legal & Compliance](#-legal--compliance).
+
+---
+
+## 📸 Screenshot Tour
+
+A few of the web dashboards, captured from a running instance with sample alert data (Cosmo light theme — 19 other built-in themes ship in the box).
+
+| Operational Dashboard | Live Alert Timeline |
+|---|---|
+| [![Operational dashboard with PostGIS coverage map and active-alert breakdown](docs/screenshots/dashboard.jpg)](docs/screenshots/dashboard.jpg) | [![Multi-source alert timeline with severity badges, search and filtering](docs/screenshots/alerts.jpg)](docs/screenshots/alerts.jpg) |
+| **Overview** — current alert state, PostGIS coverage map, and live platform-capability status. | **Alerts** — deduplicated NOAA/IPAWS feed with severity, urgency, source and per-alert actions. |
+
+| Analytics & Statistics | EAS Compliance |
+|---|---|
+| [![Statistics dashboard with Chart.js donut, severity bars and activity heatmap](docs/screenshots/stats.jpg)](docs/screenshots/stats.jpg) | [![EAS compliance log showing RWT/RMT cadence](docs/screenshots/compliance.jpg)](docs/screenshots/compliance.jpg) |
+| **Statistics** — Chart.js distribution, temporal patterns, EAS-forwarding funnel and one-click PDF export. | **Compliance** — Required Weekly / Monthly Test cadence surfaced so audit gaps are caught early. |
+
+| Tamper-Evident Audit Ledger | SDR Radio Diagnostics |
+|---|---|
+| [![Audit log viewer with one-click chain-integrity verification](docs/screenshots/audit-log.jpg)](docs/screenshots/audit-log.jpg) | [![SDR diagnostics page showing receiver status and troubleshooting](docs/screenshots/radio-diagnostics.jpg)](docs/screenshots/radio-diagnostics.jpg) |
+| **Audit** — Ed25519-signed, hash-chained log with one-click **Verify Chain Integrity**. | **SDR** — receiver status, off-air verification and IQ-capture tooling for the SoapySDR layer. |
+
+| GPS & Time (Stratum 1) | System Health |
+|---|---|
+| [![GPS dashboard with polar sky plot and chrony tracking](docs/screenshots/gps-dashboard.jpg)](docs/screenshots/gps-dashboard.jpg) | [![System health dashboard with CPU, memory, disk and temperature](docs/screenshots/system-health.jpg)](docs/screenshots/system-health.jpg) |
+| **GPS & Time** — polar sky plot, `chronyc` tracking and per-PRN signal levels for stratum-1 NTP. | **System Health** — CPU / memory / disk / temperature with historical trends. |
+
+> Screenshots are captured from the bundled dashboards; map basemap tiles and live SDR/GPS telemetry depend on network access and attached hardware.
 
 ---
 
