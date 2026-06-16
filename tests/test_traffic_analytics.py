@@ -216,6 +216,80 @@ def test_resolve_hostname_caches_and_handles_failure(monkeypatch):
     assert calls["n"] == 2
 
 
+def test_resolve_hostname_resolves_ipv6(monkeypatch):
+    """IPv6 PTR lookups go through the same path as IPv4 (regression)."""
+    import socket as socket_mod
+
+    from app_core.analytics import geo
+
+    geo._hostname_cache.clear()
+
+    def fake_gethostbyaddr(ip):
+        if ip == "2001:4860:4860::8888":
+            return ("dns.google", [], [ip])
+        raise socket_mod.herror("no PTR")
+
+    monkeypatch.setattr(geo.socket, "gethostbyaddr", fake_gethostbyaddr)
+
+    assert geo.resolve_hostname("2001:4860:4860::8888") == "dns.google"
+    # Authoritative "no PTR" for a v6 address is negatively cached.
+    assert geo.resolve_hostname("2001:db8::1") is None
+    name, status = geo.resolve_hostname("2001:db8::1", return_status=True)
+    assert name is None and status == "no_record"
+
+
+def test_resolve_hostname_transient_failure_not_cached(monkeypatch):
+    """A timeout/temporary failure is retryable: not cached, status 'error'."""
+    import socket as socket_mod
+
+    from app_core.analytics import geo
+
+    geo._hostname_cache.clear()
+    calls = {"n": 0}
+
+    def flaky_gethostbyaddr(ip):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise socket_mod.timeout("timed out")
+        return ("late.example.net", [], [ip])
+
+    monkeypatch.setattr(geo.socket, "gethostbyaddr", flaky_gethostbyaddr)
+
+    # First lookup times out -> None, status 'error', and NOT cached.
+    name, status = geo.resolve_hostname("2001:4860:4860::8888", return_status=True)
+    assert name is None and status == "error"
+    assert "2001:4860:4860::8888" not in geo._hostname_cache
+    # A later pass retries (because it wasn't cached) and now succeeds.
+    assert geo.resolve_hostname("2001:4860:4860::8888") == "late.example.net"
+    assert calls["n"] == 2
+
+
+def test_ip_version_breakdown(app_with_db):
+    app, db = app_with_db
+    from app_core.analytics import traffic_stats
+
+    with app.app_context():
+        # Two distinct IPv4 addresses, one with a resolved hostname.
+        _add_request(db, ip_address="8.8.8.8", hostname="dns.google")
+        _add_request(db, ip_address="8.8.8.8", hostname="dns.google")
+        _add_request(db, ip_address="1.1.1.1")
+        # Two IPv6 addresses inside the same /64 (one visitor), no PTR records.
+        _add_request(db, ip_address="2001:db8:abcd:1::1")
+        _add_request(db, ip_address="2001:db8:abcd:1::2")
+
+        rows = {r["label"]: r for r in traffic_stats.get_ip_version_breakdown(days=30)}
+        assert rows["IPv4"]["count"] == 3
+        assert rows["IPv4"]["ips"] == 2
+        assert rows["IPv4"]["visitors"] == 2
+        assert rows["IPv4"]["resolved"] == 1  # only 8.8.8.8 has a hostname
+
+        assert rows["IPv6"]["count"] == 2
+        assert rows["IPv6"]["ips"] == 2
+        # Both v6 addresses collapse to a single /64 visitor.
+        assert rows["IPv6"]["visitors"] == 1
+        assert rows["IPv6"]["resolved"] == 0
+
+
 # ---------------------------------------------------------------------------
 # Settings model
 # ---------------------------------------------------------------------------
@@ -875,9 +949,11 @@ def test_recorder_backfills_missing_hostnames(app_with_db, monkeypatch):
 
     geo._hostname_cache.clear()
 
-    def fake_resolve(ip, *a, **k):
-        # Only 1.1.1.1 has a PTR record; 9.9.9.9 has none.
-        return "one.one.one.one" if ip == "1.1.1.1" else None
+    def fake_resolve(ip, *a, return_status=False, **k):
+        # Only 1.1.1.1 has a PTR record; 9.9.9.9 has none (authoritative miss).
+        if ip == "1.1.1.1":
+            return ("one.one.one.one", "resolved") if return_status else "one.one.one.one"
+        return (None, "no_record") if return_status else None
 
     monkeypatch.setattr(geo, "resolve_hostname", fake_resolve)
 
@@ -902,6 +978,53 @@ def test_recorder_backfills_missing_hostnames(app_with_db, monkeypatch):
         unresolved = WebRequestLog.query.filter_by(ip_address="9.9.9.9").first()
         assert unresolved.hostname is None
         assert "9.9.9.9" in recorder._hostname_tried
+
+
+def test_recorder_backfill_retries_transient_failure(app_with_db, monkeypatch):
+    """A transient ('error') backfill miss is not blacklisted, so it retries.
+
+    Regression for IPv6: a slow ip6.arpa lookup that times out must not be
+    remembered as a permanent miss the way an authoritative no-PTR result is.
+    """
+    app, db = app_with_db
+    from app_core.analytics import geo
+    from app_core.analytics.traffic_recorder import TrafficRecorder
+    from app_core.analytics.web_traffic import WebRequestLog
+    from app_utils import utc_now
+
+    geo._hostname_cache.clear()
+    attempts = {"n": 0}
+
+    def fake_resolve(ip, *a, return_status=False, **k):
+        attempts["n"] += 1
+        # First attempt times out (transient); a later attempt succeeds.
+        if attempts["n"] == 1:
+            return (None, "error") if return_status else None
+        return ("late.example.net", "resolved") if return_status else "late.example.net"
+
+    monkeypatch.setattr(geo, "resolve_hostname", fake_resolve)
+
+    with app.app_context():
+        db.session.add(WebRequestLog(
+            timestamp=utc_now(), method="GET", path="/x", status_code=200,
+            ip_address="2001:4860:4860::8888", is_authenticated=False,
+            is_api=False, is_bot=False,
+        ))
+        db.session.commit()
+
+        recorder = TrafficRecorder(app)
+        recorder._config["resolve_hostnames"] = True
+
+        # First pass: transient failure -> NULL, and NOT remembered.
+        recorder._last_hostname_backfill_at = -1e9
+        recorder._maybe_backfill_hostnames()
+        assert "2001:4860:4860::8888" not in recorder._hostname_tried
+        assert WebRequestLog.query.first().hostname is None
+
+        # Second pass: retried (because it wasn't blacklisted) and now resolves.
+        recorder._last_hostname_backfill_at = -1e9
+        recorder._maybe_backfill_hostnames()
+        assert WebRequestLog.query.first().hostname == "late.example.net"
 
 
 def test_recorder_backfill_noop_when_disabled(app_with_db, monkeypatch):

@@ -34,6 +34,7 @@ is omitted the legacy trailing-``days`` window is used, keeping existing callers
 working unchanged.
 """
 
+import ipaddress
 from collections import Counter, defaultdict
 from datetime import timedelta
 from typing import Any, Dict, List, Optional
@@ -491,6 +492,65 @@ def get_city_breakdown(days: int = 30, limit: int = 10, filters: Optional[Traffi
 def get_asn_breakdown(days: int = 30, limit: int = 10, filters: Optional[TrafficFilters] = None) -> List[Dict[str, Any]]:
     """Hits grouped by network operator / ISP (requires a GeoLite2 ASN database)."""
     return _simple_breakdown(WebRequestLog.asn_org, days, limit, "asn_org", filters)
+
+
+def get_ip_version_breakdown(days: int = 30, filters: Optional[TrafficFilters] = None) -> List[Dict[str, Any]]:
+    """Split traffic into IPv4 vs IPv6, with reverse-DNS coverage per family.
+
+    Address family is not stored as a column, so it is derived in Python from the
+    distinct visitor IPs (cheap — one grouped row per address). For each family we
+    report total hits, unique visitors (grouped by :func:`network_key` so rotating
+    IPv6 privacy addresses don't over-count a single host), the number of distinct
+    addresses seen, and how many of those addresses have a resolved reverse-DNS
+    hostname. The ``resolved``/``ips`` pair makes rDNS health visible per family —
+    e.g. it surfaces the common case where IPv6 hosts exist but lack PTR records.
+    """
+    flt = _resolve(days, filters)
+    rows = (
+        flt.apply(
+            db.session.query(
+                WebRequestLog.ip_address,
+                func.count(WebRequestLog.id).label("hits"),
+                func.count(WebRequestLog.hostname).label("host_rows"),
+            ).filter(WebRequestLog.ip_address.isnot(None))
+        )
+        .group_by(WebRequestLog.ip_address)
+        .all()
+    )
+
+    buckets: Dict[int, Dict[str, Any]] = {
+        4: {"hits": 0, "ips": 0, "resolved": 0, "networks": set()},
+        6: {"hits": 0, "ips": 0, "resolved": 0, "networks": set()},
+    }
+    for ip, hits, host_rows in rows:
+        try:
+            version = ipaddress.ip_address(ip).version
+        except (ValueError, TypeError):
+            continue
+        bucket = buckets[version]
+        bucket["hits"] += int(hits or 0)
+        bucket["ips"] += 1
+        bucket["networks"].add(network_key(ip))
+        if host_rows:
+            bucket["resolved"] += 1
+
+    result: List[Dict[str, Any]] = []
+    for version, label in ((4, "IPv4"), (6, "IPv6")):
+        bucket = buckets[version]
+        if not bucket["ips"]:
+            continue
+        result.append(
+            {
+                "label": label,
+                "version": version,
+                "count": bucket["hits"],
+                "visitors": len(bucket["networks"]),
+                "ips": bucket["ips"],
+                "resolved": bucket["resolved"],
+            }
+        )
+    result.sort(key=lambda r: r["count"], reverse=True)
+    return result
 
 
 def get_recent_requests(limit: int = 50, filters: Optional[TrafficFilters] = None) -> List[Dict[str, Any]]:
@@ -1023,6 +1083,7 @@ def get_full_dashboard(
         "country_breakdown": get_country_breakdown(filters=flt),
         "city_breakdown": get_city_breakdown(filters=flt),
         "asn_breakdown": get_asn_breakdown(filters=flt),
+        "ip_version_breakdown": get_ip_version_breakdown(filters=flt),
         "language_breakdown": get_language_breakdown(filters=flt),
         "error_pages": get_error_pages(filters=flt),
         "error_sources": get_error_sources(filters=flt),
@@ -1061,6 +1122,7 @@ __all__ = [
     "get_country_breakdown",
     "get_city_breakdown",
     "get_asn_breakdown",
+    "get_ip_version_breakdown",
     "get_language_breakdown",
     "get_recent_requests",
     "get_error_pages",
