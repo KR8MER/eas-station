@@ -1111,6 +1111,7 @@ BASE_PACKAGES=(
     git
     curl
     wget
+    rsync
 )
 
 # Add GPIO packages only if hardware is present
