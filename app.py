@@ -1306,6 +1306,15 @@ def _record_traffic(response) -> None:
         # request.remote_addr is now the real client IP thanks to ProxyFix.
         client_ip = request.remote_addr or None
 
+        # Privacy: when the operator enables IP anonymization, mask the address
+        # before it is ever persisted (IPv4 last octet / IPv6 host bits zeroed).
+        if client_ip and config.get('anonymize_ip', False):
+            try:
+                from app_core.analytics.traffic_privacy import anonymize_value
+                client_ip = anonymize_value(client_ip)
+            except Exception:
+                pass
+
         # Preferred language from Accept-Language (first listed locale).
         accept_language = request.headers.get('Accept-Language', '') or ''
         language = None
