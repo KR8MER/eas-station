@@ -680,6 +680,19 @@
         if (flag) return `${flag}${text}`;
         return `<i class="fas fa-network-wired text-muted me-1" title="Local / unresolved"></i>${text}`;
     }
+    // Two-line IP cell: reverse-DNS hostname on top (with country flag) and the
+    // raw IP beneath. Falls back to just the IP when no PTR record is known.
+    // Shared by the visitor, error-source and login-security tables so every IP
+    // renders identically.
+    function ipHostCell(r) {
+        const ip = r.ip_address || '--';
+        const flag = r.country_code ? flagImg(r.country_code, r.country || r.country_code) : '';
+        if (r.hostname) {
+            return `<div class="text-break-anywhere">${flag}${escapeHtml(r.hostname)}</div>`
+                + `<div class="text-muted small mono text-break-anywhere">${escapeHtml(ip)}</div>`;
+        }
+        return `<span class="text-break-anywhere mono">${flag}${escapeHtml(ip)}</span>`;
+    }
     // Multicolor brand logos (SVG assets) with a FontAwesome brand glyph as the
     // fallback. `color` tints the fallback glyph; `logo` is a true-color image.
     // Strip any ?v= cache-buster the static URL handler appends, so per-file
@@ -752,8 +765,27 @@
         '(page)': ['fas fa-file-lines', 'var(--primary-color, #4e73df)'],
         '(other)': ['fas fa-file', '#90a4ae'],
     };
+    // True-colour brand/language logos (self-hosted SVGs) for the common file
+    // types, matching the browser/OS logo treatment. Anything without a logo
+    // falls back to the coloured FontAwesome glyph in FILETYPE_META.
+    const FILETYPE_LOGO = {
+        'php': 'php.svg',
+        'js': 'javascript.svg', 'mjs': 'javascript.svg', 'cjs': 'javascript.svg',
+        'json': 'json.svg',
+        'py': 'python.svg',
+        'svg': 'svg.svg',
+        'md': 'markdown.svg', 'markdown': 'markdown.svg',
+        'html': 'html.svg', 'htm': 'html.svg',
+        'css': 'css.svg',
+    };
     function fileTypeLabel(ext) {
-        const m = FILETYPE_META[(ext || '').toLowerCase()] || ['fas fa-file', '#90a4ae'];
+        const key = (ext || '').toLowerCase();
+        const logo = FILETYPE_LOGO[key];
+        if (logo) {
+            return `<img src="${LOGO_BASE}/${logo}?v=${LOGO_VER}" alt="${escapeHtml(ext || '')}" class="ti-logo me-2">`
+                + `<span class="mono">${escapeHtml(ext || 'Unknown')}</span>`;
+        }
+        const m = FILETYPE_META[key] || ['fas fa-file', '#90a4ae'];
         return `${glyph(m[0], m[1])}<span class="mono">${escapeHtml(ext || 'Unknown')}</span>`;
     }
     // Known crawler -> brand glyph + colour; substring match on the bot name.
@@ -998,8 +1030,8 @@
             renderTable('botBreakdown', data.bot_breakdown, r => `<td>${botLabel(r.bot)}</td><td class="text-end mono">${num(r.hits)}</td>`, 2);
             renderTable('asnBreakdown', data.asn_breakdown, r => `<td class="text-break-anywhere"><i class="fas fa-building text-muted me-2"></i>${escapeHtml(r.asn_org)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
             renderTable('cityBreakdown', data.city_breakdown, r => `<td><i class="fas fa-location-dot text-muted me-2"></i>${escapeHtml(r.label || r.city)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
-            renderTable('topLoginIps', data.top_login_ips, r => `<td class="text-break-anywhere mono">${escapeHtml(r.ip_address)}</td><td class="text-end mono">${num(r.success)}</td><td class="text-end mono ${r.failure > 0 ? 'text-danger fw-bold' : ''}">${num(r.failure)}</td>`, 3);
-            renderTable('recentLogins', data.recent_logins, r => { const badge = r.success ? '<span class="badge bg-success">Success</span>' : '<span class="badge bg-danger">Failed</span>'; return `<td>${r.timestamp ? new Date(r.timestamp).toLocaleString() : '--'}</td><td>${escapeHtml(r.username || '--')}</td><td class="text-break-anywhere mono">${escapeHtml(r.ip_address || '--')}</td><td>${badge}</td>`; }, 4);
+            renderTable('topLoginIps', data.top_login_ips, r => `<td>${ipHostCell(r)}</td><td class="text-end mono">${num(r.success)}</td><td class="text-end mono ${r.failure > 0 ? 'text-danger fw-bold' : ''}">${num(r.failure)}</td>`, 3);
+            renderTable('recentLogins', data.recent_logins, r => { const badge = r.success ? '<span class="badge bg-success">Success</span>' : '<span class="badge bg-danger">Failed</span>'; return `<td>${r.timestamp ? new Date(r.timestamp).toLocaleString() : '--'}</td><td>${escapeHtml(r.username || '--')}</td><td>${ipHostCell(r)}</td><td>${badge}</td>`; }, 4);
             pingLiveDot();
         } catch (err) {
             console.error('Error loading traffic dashboard:', err);
@@ -1406,7 +1438,22 @@
         const { jsPDF } = window.jspdf;
         const target = document.querySelector('.traffic-dash-root');
         try {
-            const canvas = await html2canvas(target, { scale: 2, backgroundColor: getComputedStyle(document.body).backgroundColor || '#ffffff', useCORS: true });
+            // The Leaflet visitor map paints cross-origin OpenStreetMap tiles,
+            // which taint the html2canvas canvas and make toDataURL() throw a
+            // SecurityError — the original "PDF export failed". Skip the map (and
+            // any Leaflet tiles) during capture; everything else is same-origin.
+            const skipFromPdf = (el) => {
+                if (!el) return false;
+                if (el.id === 'trafficMap') return true;
+                const cl = el.classList;
+                return !!(cl && (cl.contains('leaflet-container') || cl.contains('leaflet-tile-pane')));
+            };
+            const canvas = await html2canvas(target, {
+                scale: 2,
+                backgroundColor: getComputedStyle(document.body).backgroundColor || '#ffffff',
+                useCORS: true,
+                ignoreElements: skipFromPdf,
+            });
             const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
             const pageW = doc.internal.pageSize.getWidth();
             const pageH = doc.internal.pageSize.getHeight();
@@ -1427,7 +1474,8 @@
             if (window.showToast) showToast('PDF exported', 'success');
         } catch (err) {
             console.error('PDF export failed:', err);
-            if (window.showToast) showToast('PDF export failed', 'danger');
+            const detail = err && err.message ? `: ${err.message}` : '';
+            if (window.showToast) showToast(`PDF export failed${detail}`, 'danger');
         }
     }
 

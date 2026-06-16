@@ -972,6 +972,48 @@ def get_login_timeseries(days: int = 30) -> Dict[str, Any]:
     }
 
 
+def _annotate_login_hostnames(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Attach reverse-DNS hostname + country to login records (awstats-style).
+
+    Login IPs come from the audit log, which never stores a hostname. The web
+    request log, however, already carries the background-resolved PTR hostname
+    (and GeoIP country) for most visitor IPs. We reuse those resolutions here so
+    the Login Security tables show the same hostnames/flags as the rest of the
+    dashboard instead of bare IPs. IPs the resolver hasn't seen simply stay as
+    raw addresses.
+    """
+    ips = {r.get("ip_address") for r in records if r.get("ip_address")}
+    if not ips:
+        return records
+    lookup: Dict[str, Dict[str, Any]] = {}
+    try:
+        rows = (
+            db.session.query(
+                WebRequestLog.ip_address,
+                func.max(WebRequestLog.hostname).label("hostname"),
+                func.max(WebRequestLog.country_code).label("country_code"),
+            )
+            .filter(WebRequestLog.ip_address.in_(ips))
+            .group_by(WebRequestLog.ip_address)
+            .all()
+        )
+        lookup = {
+            r.ip_address: {"hostname": r.hostname, "country_code": r.country_code}
+            for r in rows
+        }
+    except Exception:  # pragma: no cover - defensive: enrichment is best-effort
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        lookup = {}
+    for r in records:
+        meta = lookup.get(r.get("ip_address"), {})
+        r["hostname"] = meta.get("hostname")
+        r["country_code"] = meta.get("country_code")
+    return records
+
+
 def get_top_login_ips(days: int = 30, limit: int = 15) -> List[Dict[str, Any]]:
     """Source IPs ranked by login attempts, split by success/failure."""
     from app_core.auth.audit import AuditAction, AuditLog
@@ -1010,7 +1052,7 @@ def get_top_login_ips(days: int = 30, limit: int = 15) -> List[Dict[str, Any]]:
         for ip, vals in by_ip.items()
     ]
     result.sort(key=lambda r: r["total"], reverse=True)
-    return result[:limit]
+    return _annotate_login_hostnames(result[:limit])
 
 
 def get_recent_logins(limit: int = 50) -> List[Dict[str, Any]]:
@@ -1024,16 +1066,18 @@ def get_recent_logins(limit: int = 50) -> List[Dict[str, Any]]:
         .limit(limit)
         .all()
     )
-    return [
-        {
-            "timestamp": r.timestamp.isoformat() if r.timestamp else None,
-            "username": r.username,
-            "ip_address": r.ip_address,
-            "success": bool(r.success),
-            "action": r.action,
-        }
-        for r in rows
-    ]
+    return _annotate_login_hostnames(
+        [
+            {
+                "timestamp": r.timestamp.isoformat() if r.timestamp else None,
+                "username": r.username,
+                "ip_address": r.ip_address,
+                "success": bool(r.success),
+                "action": r.action,
+            }
+            for r in rows
+        ]
+    )
 
 
 def get_full_dashboard(days: int = 30, self_hosts: Optional[set] = None) -> Dict[str, Any]:
