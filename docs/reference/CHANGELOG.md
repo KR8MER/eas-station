@@ -8,6 +8,28 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.99.0] - 2026-06-16 - awstats parity: visits, file types, search, robots + City/ASN GeoIP
+
+### Added
+- **Visits, entry & exit pages.** Non-bot requests are sessionised per host
+  (30-minute inactivity timeout) into "visits", with **Entry Pages**, **Exit
+  Pages**, a **Visits** count and **Avg Visit Duration** tile — awstats'
+  visit/navigation reports.
+- **File Types** report (hits grouped by extension), **Search Keyphrases**
+  (keywords parsed from search-engine referrers), and a **Robots / Spiders**
+  report (bot traffic grouped by friendly name via a new `classify_bot`).
+- **GeoLite2 City & ASN support.** The dashboard now uses City databases
+  (adds **Top Cities**) and ASN databases (adds **Top Organizations / ISPs**).
+  New `web_request_logs.city` / `asn_org` columns, a separate
+  `geoip_asn_database_path` setting, and `geo.resolve_asn()`.
+- **One uploader for all three GeoIP databases.** The upload control
+  auto-detects the database **type** (Country/City/ASN) from its metadata and
+  routes it to the correct slot automatically — Country and City share the
+  location slot; ASN gets its own. The GeoIP status badge reports both.
+- **Open-source attribution surfaced in-app.** The About page's Software Stack
+  now lists `geoip2` + **MaxMind GeoLite2** (with the required attribution) and
+  `flag-icons`; the same MaxMind attribution appears in the Settings dialog.
+
 ## [2.98.0] - 2026-06-16 - Real flag images, referrer accuracy & noise filtering
 
 ### Fixed

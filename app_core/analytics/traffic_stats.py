@@ -340,6 +340,16 @@ def get_language_breakdown(days: int = 30, limit: int = 10) -> List[Dict[str, An
     return _simple_breakdown(WebRequestLog.language, days, limit, "language")
 
 
+def get_city_breakdown(days: int = 30, limit: int = 10) -> List[Dict[str, Any]]:
+    """Hits grouped by city (requires a GeoLite2 City database)."""
+    return _simple_breakdown(WebRequestLog.city, days, limit, "city")
+
+
+def get_asn_breakdown(days: int = 30, limit: int = 10) -> List[Dict[str, Any]]:
+    """Hits grouped by network operator / ISP (requires a GeoLite2 ASN database)."""
+    return _simple_breakdown(WebRequestLog.asn_org, days, limit, "asn_org")
+
+
 def get_recent_requests(limit: int = 50) -> List[Dict[str, Any]]:
     rows = (
         WebRequestLog.query.order_by(WebRequestLog.timestamp.desc())
@@ -449,6 +459,167 @@ def get_weekday_distribution(days: int = 30) -> Dict[str, Any]:
         if ts is not None:
             counts[ts.weekday()] += 1
     return {"labels": labels, "hits": counts}
+
+
+# A "visit" ends after this much inactivity from the same host (awstats groups
+# requests into visits the same way; 30 minutes is the common analytics default).
+VISIT_TIMEOUT_SECONDS = 1800
+
+
+def get_visits(days: int = 30, limit: int = 15) -> Dict[str, Any]:
+    """Sessionise human requests into visits with entry/exit pages + duration.
+
+    Non-bot requests are grouped per host into visits separated by
+    :data:`VISIT_TIMEOUT_SECONDS` of inactivity. Entry/exit pages are the first
+    and last *page* (non-API) views within a visit. Mirrors awstats' "Visits
+    duration", "Entry pages", and "Exit pages" reports.
+    """
+    start = _window_start(days)
+    rows = (
+        db.session.query(
+            WebRequestLog.ip_address,
+            WebRequestLog.timestamp,
+            WebRequestLog.path,
+            WebRequestLog.is_api,
+        )
+        .filter(
+            WebRequestLog.timestamp >= start,
+            WebRequestLog.is_bot.is_(False),
+            WebRequestLog.ip_address.isnot(None),
+        )
+        .order_by(WebRequestLog.ip_address, WebRequestLog.timestamp)
+        .all()
+    )
+
+    entry: Counter = Counter()
+    exit_: Counter = Counter()
+    totals = {"visits": 0, "duration": 0.0}
+    state = {"ip": None, "start": None, "last": None, "entry": None, "exit": None}
+
+    def flush():
+        if state["start"] is None:
+            return
+        totals["visits"] += 1
+        totals["duration"] += (state["last"] - state["start"]).total_seconds()
+        if state["entry"]:
+            entry[state["entry"]] += 1
+        if state["exit"]:
+            exit_[state["exit"]] += 1
+
+    for ip, ts, path, is_api in rows:
+        if ts is None:
+            continue
+        gap = (
+            state["last"] is not None
+            and (ts - state["last"]).total_seconds() > VISIT_TIMEOUT_SECONDS
+        )
+        if ip != state["ip"] or gap:
+            flush()
+            state.update(ip=ip, start=ts, entry=None, exit=None)
+        if not is_api:
+            if state["entry"] is None:
+                state["entry"] = path
+            state["exit"] = path
+        state["last"] = ts
+    flush()
+
+    visits = totals["visits"]
+    avg = totals["duration"] / visits if visits else 0.0
+    return {
+        "visits": visits,
+        "avg_duration_seconds": round(avg, 1),
+        "entry_pages": [{"path": p, "count": c} for p, c in entry.most_common(limit)],
+        "exit_pages": [{"path": p, "count": c} for p, c in exit_.most_common(limit)],
+    }
+
+
+def get_filetype_breakdown(days: int = 30, limit: int = 10) -> List[Dict[str, Any]]:
+    """Hits grouped by file extension (awstats' "File types")."""
+    start = _window_start(days)
+    rows = (
+        db.session.query(WebRequestLog.path)
+        .filter(WebRequestLog.timestamp >= start)
+        .all()
+    )
+    counts: Counter = Counter()
+    for (path,) in rows:
+        if not path:
+            continue
+        segment = path.rsplit("/", 1)[-1]
+        if "." in segment:
+            ext = segment.rsplit(".", 1)[-1].lower()
+            if ext.isalnum() and 1 <= len(ext) <= 5:
+                counts[ext] += 1
+            else:
+                counts["(other)"] += 1
+        else:
+            counts["(page)"] += 1
+    return [{"filetype": k, "count": v} for k, v in counts.most_common(limit)]
+
+
+# host substring -> query parameter that carries the search terms.
+_SEARCH_ENGINES = {
+    "google": "q", "bing": "q", "duckduckgo": "q", "ecosia": "q",
+    "startpage": "q", "brave": "q", "ask": "q", "aol": "q",
+    "yahoo": "p", "yandex": "text", "baidu": "wd",
+}
+
+
+def get_search_terms(days: int = 30, limit: int = 15) -> List[Dict[str, Any]]:
+    """Search keywords/keyphrases parsed from search-engine referrers.
+
+    awstats' "Search Keyphrases" report. Note: most engines now use HTTPS and
+    strip the query from the Referer, so this is often sparse — but anything that
+    does arrive is surfaced here.
+    """
+    from urllib.parse import parse_qs
+
+    start = _window_start(days)
+    rows = (
+        db.session.query(WebRequestLog.referer)
+        .filter(WebRequestLog.timestamp >= start, WebRequestLog.referer.isnot(None))
+        .all()
+    )
+    counts: Counter = Counter()
+    for (ref,) in rows:
+        if not ref:
+            continue
+        parsed = urlparse(ref)
+        host = parsed.netloc.lower()
+        for engine, param in _SEARCH_ENGINES.items():
+            if engine in host:
+                values = parse_qs(parsed.query).get(param)
+                if values and values[0].strip():
+                    counts[values[0].strip().lower()[:120]] += 1
+                break
+    return [{"term": k, "count": v} for k, v in counts.most_common(limit)]
+
+
+def get_bot_breakdown(days: int = 30, limit: int = 15) -> List[Dict[str, Any]]:
+    """Robots/spiders grouped by name (awstats' "Robots/Spiders visitors")."""
+    from app_core.analytics.web_traffic import classify_bot
+
+    start = _window_start(days)
+    rows = (
+        db.session.query(WebRequestLog.user_agent, WebRequestLog.timestamp)
+        .filter(WebRequestLog.timestamp >= start, WebRequestLog.is_bot.is_(True))
+        .all()
+    )
+    counts: Counter = Counter()
+    last_seen: Dict[str, Any] = {}
+    for ua, ts in rows:
+        name = classify_bot(ua)
+        counts[name] += 1
+        if ts is not None and (name not in last_seen or ts > last_seen[name]):
+            last_seen[name] = ts
+    return [
+        {
+            "bot": name,
+            "hits": count,
+            "last_seen": last_seen[name].isoformat() if last_seen.get(name) else None,
+        }
+        for name, count in counts.most_common(limit)
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -609,11 +780,17 @@ def get_full_dashboard(days: int = 30, self_hosts: Optional[set] = None) -> Dict
         "referer_breakdown": get_referer_breakdown(days, self_hosts=self_hosts),
         "resolution_breakdown": get_resolution_breakdown(days),
         "country_breakdown": get_country_breakdown(days),
+        "city_breakdown": get_city_breakdown(days),
+        "asn_breakdown": get_asn_breakdown(days),
         "language_breakdown": get_language_breakdown(days),
         "error_pages": get_error_pages(days),
         "error_sources": get_error_sources(days),
         "hourly_distribution": get_hourly_distribution(days),
         "weekday_distribution": get_weekday_distribution(days),
+        "visits": get_visits(days),
+        "filetype_breakdown": get_filetype_breakdown(days),
+        "search_terms": get_search_terms(days),
+        "bot_breakdown": get_bot_breakdown(days),
         "recent_requests": get_recent_requests(limit=25),
         "login_summary": get_login_summary(days),
         "login_timeseries": get_login_timeseries(days),
@@ -633,12 +810,18 @@ __all__ = [
     "get_referer_breakdown",
     "get_resolution_breakdown",
     "get_country_breakdown",
+    "get_city_breakdown",
+    "get_asn_breakdown",
     "get_language_breakdown",
     "get_recent_requests",
     "get_error_pages",
     "get_error_sources",
     "get_hourly_distribution",
     "get_weekday_distribution",
+    "get_visits",
+    "get_filetype_breakdown",
+    "get_search_terms",
+    "get_bot_breakdown",
     "get_login_summary",
     "get_login_timeseries",
     "get_top_login_ips",

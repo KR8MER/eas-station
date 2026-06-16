@@ -1247,7 +1247,7 @@ def _record_traffic(response) -> None:
     a logging hiccup can never break a user's request.
     """
     try:
-        from app_core.analytics.geo import classify_location
+        from app_core.analytics.geo import classify_location, resolve_asn
         from app_core.analytics.traffic_recorder import get_traffic_recorder
         from app_core.analytics.web_traffic import (
             classify_user_agent,
@@ -1313,9 +1313,12 @@ def _record_traffic(response) -> None:
         except Exception:
             screen_resolution = None
 
-        # Country/network label + ISO code (for the flag). Hostname is resolved
-        # later by the background recorder so the request path makes no DNS call.
+        # Country/network label + ISO code (for the flag) and, with a City DB,
+        # the city. ASN org/ISP comes from the optional ASN database. Hostname is
+        # resolved later by the background recorder so the request path makes no
+        # DNS call.
         location = classify_location(client_ip, config.get('geoip_database_path'))
+        asn_org = resolve_asn(client_ip, config.get('geoip_asn_database_path'))
 
         recorder.record({
             'timestamp': utc_now(),
@@ -1339,6 +1342,8 @@ def _record_traffic(response) -> None:
             'screen_resolution': screen_resolution,
             'country': location['label'],
             'country_code': location['country_code'],
+            'city': location.get('city'),
+            'asn_org': asn_org,
             'language': language,
         })
     except Exception as exc:  # pragma: no cover - defensive: never break a response

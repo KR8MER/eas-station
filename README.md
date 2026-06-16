@@ -2,7 +2,7 @@
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue?style=flat-square&logo=gnu&logoColor=white)](https://www.gnu.org/licenses/agpl-3.0)
 [![Commercial License](https://img.shields.io/badge/License-Commercial-green?style=flat-square)](LICENSE-COMMERCIAL)
-[![Version](https://img.shields.io/badge/Version-2.98.0-blueviolet?style=flat-square)](docs/reference/CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-2.99.0-blueviolet?style=flat-square)](docs/reference/CHANGELOG.md)
 [![Support on Ko-fi](https://img.shields.io/badge/Support%20on-Ko--fi-29abe0?style=flat-square&logo=ko-fi&logoColor=white)](https://ko-fi.com/easstation)
 [![Raspberry Pi](https://img.shields.io/badge/Raspberry%20Pi-Compatible-C51A4A?style=flat-square&logo=raspberrypi&logoColor=white)](https://www.raspberrypi.com/)
 [![Python](https://img.shields.io/badge/Python-3.13-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
@@ -540,6 +540,7 @@ EAS Station™ stands on the shoulders of an enormous open‑source ecosystem. T
 | pyshp | 3.0.3 | MIT | Reads ESRI shapefiles when importing custom county/zone boundaries into PostGIS. | https://github.com/GeospatialPython/pyshp |
 | pyproj | 3.7.1 | MIT | Reprojects shapefile CRSes to WGS84 during boundary import. | https://pyproj4.github.io/pyproj/ |
 | geoip2 | 4.8.0+ | Apache-2.0 | Resolves public visitor IPs to countries/flags on the Traffic Analytics dashboard from an operator-supplied MaxMind GeoLite2 database (pulls in the `maxminddb` reader). | https://github.com/maxmind/GeoIP2-python |
+| MaxMind GeoLite2 (data) | n/a | GeoLite2 EULA (CC BY-SA 4.0) | Optional, operator-supplied IP→country/city/ASN database read by `geoip2`. Not bundled. *This product includes GeoLite2 data created by MaxMind, available from [https://www.maxmind.com](https://www.maxmind.com).* | https://www.maxmind.com |
 
 ### Testing & QA
 

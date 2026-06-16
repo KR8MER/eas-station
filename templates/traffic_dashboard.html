@@ -54,7 +54,7 @@
 
     /* At-a-glance status strip. */
     .traffic-dash-root .health-status-strip {
-        display: grid; grid-template-columns: repeat(8, minmax(0, 1fr));
+        display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
         gap: 8px; margin: 0 0 18px 0;
     }
     .traffic-dash-root .health-status-tile {
@@ -197,6 +197,10 @@
             <div class="lbl"><i class="fas fa-users"></i> Visitors</div>
             <div class="val">—</div><div class="sub">unique IPs</div>
         </div>
+        <div class="health-status-tile" id="hs-visits">
+            <div class="lbl"><i class="fas fa-route"></i> Visits</div>
+            <div class="val">—</div><div class="sub">sessions</div>
+        </div>
         <div class="health-status-tile" id="hs-hits">
             <div class="lbl"><i class="fas fa-server"></i> Total Hits</div>
             <div class="val">—</div><div class="sub">all requests</div>
@@ -220,6 +224,10 @@
         <div class="health-status-tile" id="hs-bandwidth">
             <div class="lbl"><i class="fas fa-download"></i> Bandwidth</div>
             <div class="val">—</div><div class="sub">served</div>
+        </div>
+        <div class="health-status-tile" id="hs-duration">
+            <div class="lbl"><i class="fas fa-hourglass-half"></i> Avg Visit</div>
+            <div class="val">—</div><div class="sub">duration</div>
         </div>
     </section>
 
@@ -300,6 +308,51 @@
         </div>
     </div>
 
+    <!-- Visits & navigation -->
+    <div class="health-section-head"><h2>Visits &amp; Navigation</h2><span class="rule"></span></div>
+    <div class="row g-3">
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-header"><h6><i class="fas fa-right-to-bracket section-icon"></i>Entry Pages</h6></div>
+                <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
+                    <thead><tr><th>Path</th><th class="text-end">Visits</th></tr></thead><tbody id="entryPages"></tbody></table></div></div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-header"><h6><i class="fas fa-right-from-bracket section-icon"></i>Exit Pages</h6></div>
+                <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
+                    <thead><tr><th>Path</th><th class="text-end">Visits</th></tr></thead><tbody id="exitPages"></tbody></table></div></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Content detail & robots -->
+    <div class="health-section-head"><h2>Content Types, Search &amp; Robots</h2><span class="rule"></span></div>
+    <div class="row g-3">
+        <div class="col-lg-4">
+            <div class="card h-100">
+                <div class="card-header"><h6><i class="fas fa-file-code section-icon"></i>File Types</h6></div>
+                <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
+                    <thead><tr><th>Type</th><th class="text-end">Hits</th></tr></thead><tbody id="filetypeBreakdown"></tbody></table></div></div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card h-100">
+                <div class="card-header"><h6><i class="fas fa-magnifying-glass section-icon"></i>Search Keyphrases</h6></div>
+                <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
+                    <thead><tr><th>Keyphrase</th><th class="text-end">Hits</th></tr></thead><tbody id="searchTerms"></tbody></table></div></div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card h-100">
+                <div class="card-header"><h6><i class="fas fa-robot section-icon"></i>Robots / Spiders</h6></div>
+                <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
+                    <thead><tr><th>Bot</th><th class="text-end">Hits</th></tr></thead><tbody id="botBreakdown"></tbody></table></div></div>
+            </div>
+        </div>
+    </div>
+
     <!-- Visitor environment -->
     <div class="health-section-head"><h2>Visitor Environment</h2><span class="rule"></span></div>
     <div class="row g-3">
@@ -346,6 +399,25 @@
                 <div class="card-header"><h6><i class="fas fa-external-link-alt section-icon"></i>Top External Referrers <span class="text-muted" style="text-transform:none;font-weight:400;font-size:0.72rem;">(by domain, excludes this site)</span></h6></div>
                 <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
                     <thead><tr><th>Referring Domain</th><th class="text-end">Hits</th></tr></thead><tbody id="refBreakdown"></tbody></table></div></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Networks & cities (GeoLite2 City / ASN) -->
+    <div class="health-section-head"><h2>Networks &amp; Cities <span class="text-muted" style="text-transform:none;font-weight:400;font-size:0.72rem;">(needs GeoLite2 City / ASN database)</span></h2><span class="rule"></span></div>
+    <div class="row g-3">
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-header"><h6><i class="fas fa-building section-icon"></i>Top Organizations / ISPs</h6></div>
+                <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
+                    <thead><tr><th>Network Operator (ASN)</th><th class="text-end">Hits</th></tr></thead><tbody id="asnBreakdown"></tbody></table></div></div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-header"><h6><i class="fas fa-city section-icon"></i>Top Cities</h6></div>
+                <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
+                    <thead><tr><th>City</th><th class="text-end">Hits</th></tr></thead><tbody id="cityBreakdown"></tbody></table></div></div>
             </div>
         </div>
     </div>
@@ -456,9 +528,14 @@
                     <i class="fas fa-circle-notch fa-spin"></i><span>Checking GeoIP status…</span>
                 </div>
                 <div class="mb-2">
-                    <label class="form-label" for="setGeoip">GeoIP database path (optional)</label>
+                    <label class="form-label" for="setGeoip">Country / City database path (optional)</label>
                     <input type="text" class="form-control" id="setGeoip" placeholder="/opt/eas-station/data/geoip/GeoLite2-Country.mmdb">
-                    <div class="form-text">Point at a MaxMind GeoLite2 <code>.mmdb</code> file to resolve public IPs to countries and flags. Leave blank for local-network classification only.</div>
+                    <div class="form-text">A GeoLite2 <strong>Country</strong> or <strong>City</strong> <code>.mmdb</code> — resolves public IPs to countries/flags (and cities, with a City DB). Leave blank for local-network classification only.</div>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label" for="setGeoipAsn">ASN database path (optional)</label>
+                    <input type="text" class="form-control" id="setGeoipAsn" placeholder="/opt/eas-station/data/geoip/GeoLite2-ASN.mmdb">
+                    <div class="form-text">A GeoLite2 <strong>ASN</strong> <code>.mmdb</code> — resolves public IPs to their network operator / ISP for the Organizations report.</div>
                 </div>
                 <div class="mb-2">
                     <label class="form-label" for="setGeoipUpload">…or upload a GeoLite2 database</label>
@@ -466,8 +543,9 @@
                         <input type="file" class="form-control" id="setGeoipUpload" accept=".mmdb">
                         <button type="button" class="btn btn-outline-primary" onclick="uploadGeoip()" id="geoipUploadBtn">Upload</button>
                     </div>
-                    <div class="form-text">Get a free <code>GeoLite2-Country.mmdb</code> from <a href="https://www.maxmind.com/en/geolite2/signup" target="_blank" rel="noopener">maxmind.com</a> (free account → license key). The file is validated, stored on the server, and the path above is set automatically — no shell access needed.</div>
+                    <div class="form-text">Accepts GeoLite2 <strong>Country</strong>, <strong>City</strong>, or <strong>ASN</strong> <code>.mmdb</code> files — get them free from <a href="https://www.maxmind.com/en/geolite2/signup" target="_blank" rel="noopener">maxmind.com</a> (free account → license key). The file is validated, its type detected, stored on the server, and the right path set automatically — no shell access needed.</div>
                     <div class="small mt-1" id="geoipUploadStatus"></div>
+                    <div class="form-text mt-1"><i class="fas fa-circle-info me-1"></i>This product includes GeoLite2 data created by MaxMind, available from <a href="https://www.maxmind.com" target="_blank" rel="noopener">https://www.maxmind.com</a>.</div>
                 </div>
             </div>
             <div class="modal-footer">
@@ -600,6 +678,10 @@
             errBox.classList.add('d-none');
             lastDashboardData = data;
             renderStrip(data.summary, data.login_summary);
+            if (data.visits) {
+                setTile('hs-visits', num(data.visits.visits), 'sessions');
+                setTile('hs-duration', fmtDuration(data.visits.avg_duration_seconds), 'duration');
+            }
             renderTrafficChart(data.timeseries);
             renderStatusChart(data.status_breakdown);
             renderBrowserChart(data.browser_breakdown);
@@ -635,12 +717,29 @@
                 const when = r.timestamp ? new Date(r.timestamp).toLocaleTimeString() : '--';
                 return `<td class="text-nowrap">${when}</td><td><span class="badge bg-light text-dark border">${escapeHtml(r.method)}</span></td><td class="text-break-anywhere">${escapeHtml(r.path)}</td><td class="text-center">${statusBadge(r.status_code)}</td><td class="d-none d-md-table-cell text-nowrap">${br}</td><td class="d-none d-lg-table-cell text-break-anywhere small text-muted">${escapeHtml(r.user_agent || '—')}</td>`;
             }, 6);
+            const v = data.visits || { entry_pages: [], exit_pages: [] };
+            renderTable('entryPages', v.entry_pages, r => `<td class="text-break-anywhere">${escapeHtml(r.path)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
+            renderTable('exitPages', v.exit_pages, r => `<td class="text-break-anywhere">${escapeHtml(r.path)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
+            renderTable('filetypeBreakdown', data.filetype_breakdown, r => `<td class="mono">${escapeHtml(r.filetype)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
+            renderTable('searchTerms', data.search_terms, r => `<td class="text-break-anywhere">${escapeHtml(r.term)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
+            renderTable('botBreakdown', data.bot_breakdown, r => `<td><i class="fas fa-robot text-muted me-2"></i>${escapeHtml(r.bot)}</td><td class="text-end mono">${num(r.hits)}</td>`, 2);
+            renderTable('asnBreakdown', data.asn_breakdown, r => `<td class="text-break-anywhere"><i class="fas fa-building text-muted me-2"></i>${escapeHtml(r.asn_org)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
+            renderTable('cityBreakdown', data.city_breakdown, r => `<td>${escapeHtml(r.city)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
             renderTable('topLoginIps', data.top_login_ips, r => `<td class="text-break-anywhere mono">${escapeHtml(r.ip_address)}</td><td class="text-end mono">${num(r.success)}</td><td class="text-end mono ${r.failure > 0 ? 'text-danger fw-bold' : ''}">${num(r.failure)}</td>`, 3);
             renderTable('recentLogins', data.recent_logins, r => { const badge = r.success ? '<span class="badge bg-success">Success</span>' : '<span class="badge bg-danger">Failed</span>'; return `<td>${r.timestamp ? new Date(r.timestamp).toLocaleString() : '--'}</td><td>${escapeHtml(r.username || '--')}</td><td class="text-break-anywhere mono">${escapeHtml(r.ip_address || '--')}</td><td>${badge}</td>`; }, 4);
             pingLiveDot();
         } catch (err) {
             console.error('Error loading traffic dashboard:', err);
         }
+    }
+
+    function fmtDuration(sec) {
+        sec = Math.round(sec || 0);
+        if (sec < 60) return sec + 's';
+        const m = Math.floor(sec / 60), s = sec % 60;
+        if (m < 60) return `${m}m ${s}s`;
+        const h = Math.floor(m / 60);
+        return `${h}h ${m % 60}m`;
     }
 
     function renderStrip(s, l) {
@@ -752,6 +851,7 @@
                 document.getElementById('setExcludedPaths').value = s.excluded_paths || '';
                 document.getElementById('setRetention').value = s.retention_days;
                 document.getElementById('setGeoip').value = s.geoip_database_path || '';
+                document.getElementById('setGeoipAsn').value = s.geoip_asn_database_path || '';
                 renderGeoipStatus(data.geoip_status);
             }
         } catch (err) { console.error('Error loading settings:', err); }
@@ -765,9 +865,15 @@
         if (st.resolves) { cls = 'alert-success'; icon = 'fa-check-circle'; }
         else if (!st.reader_installed) { cls = 'alert-danger'; icon = 'fa-triangle-exclamation'; }
         else { cls = 'alert-warning'; icon = 'fa-circle-info'; }
-        box.className = `alert ${cls} py-2 px-3 mb-2 d-flex align-items-center gap-2`;
+        box.className = `alert ${cls} py-2 px-3 mb-2`;
         const sample = st.sample ? ` <span class="text-muted">(${escapeHtml(st.sample)})</span>` : '';
-        box.innerHTML = `<i class="fas ${icon}"></i><span><strong>GeoIP:</strong> ${escapeHtml(st.message || '')}${sample}</span>`;
+        let html = `<div class="d-flex align-items-center gap-2"><i class="fas ${icon}"></i><span><strong>GeoIP:</strong> ${escapeHtml(st.message || '')}${sample}</span></div>`;
+        if (st.asn_configured) {
+            const asnOk = st.asn_resolves;
+            const asnSample = st.asn_sample ? ` <span class="text-muted">(${escapeHtml(st.asn_sample)})</span>` : '';
+            html += `<div class="d-flex align-items-center gap-2 mt-1"><i class="fas ${asnOk ? 'fa-check-circle' : 'fa-circle-info'}"></i><span><strong>ASN:</strong> ${asnOk ? 'Active — IPs resolve to network operators.' : 'Configured but not resolving.'}${asnSample}</span></div>`;
+        }
+        box.innerHTML = html;
     }
 
     async function uploadGeoip() {
@@ -786,14 +892,14 @@
             const resp = await fetch('/api/traffic/geoip/upload', { method: 'POST', body: fd });
             const data = await resp.json();
             if (data.success) {
+                const kind = data.kind ? ` (${escapeHtml(data.kind)})` : '';
                 if (data.note) {
                     statusEl.innerHTML = `<span class="text-warning">${escapeHtml(data.note)}</span>`;
                 } else {
-                    statusEl.innerHTML = '<span class="text-success">Database installed. Country flags are now active.</span>';
+                    statusEl.innerHTML = `<span class="text-success">Database installed${kind}. Resolution is now active.</span>`;
                 }
-                document.getElementById('setGeoip').value = data.path || '';
-                if (typeof showToast === 'function') showToast('GeoIP database installed', 'success');
-                loadSettings();  // refresh the GeoIP status badge
+                if (typeof showToast === 'function') showToast('GeoIP database installed' + kind, 'success');
+                loadSettings();  // refresh the GeoIP status badge + path fields
             } else {
                 statusEl.innerHTML = `<span class="text-danger">${escapeHtml(data.error || 'Upload failed')}</span>`;
             }
@@ -815,7 +921,8 @@
             exclude_loopback: document.getElementById('setExcludeLoopback').checked,
             excluded_paths: document.getElementById('setExcludedPaths').value,
             retention_days: parseInt(document.getElementById('setRetention').value, 10) || 90,
-            geoip_database_path: document.getElementById('setGeoip').value
+            geoip_database_path: document.getElementById('setGeoip').value,
+            geoip_asn_database_path: document.getElementById('setGeoipAsn').value
         };
         try {
             const resp = await fetch('/api/traffic/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
@@ -869,9 +976,19 @@
         section('Operating Systems', ['OS', 'Hits'], (d.os_breakdown || []).map(r => [r.os, r.count]));
         section('Browsers', ['Browser', 'Hits'], (d.browser_breakdown || []).map(r => [r.browser, r.count]));
         section('Countries / Networks', ['Country', 'Code', 'Hits'], (d.country_breakdown || []).map(r => [r.country, r.country_code, r.count]));
+        section('Organizations / ISPs', ['Network Operator', 'Hits'], (d.asn_breakdown || []).map(r => [r.asn_org, r.count]));
+        section('Cities', ['City', 'Hits'], (d.city_breakdown || []).map(r => [r.city, r.count]));
         section('Languages', ['Language', 'Hits'], (d.language_breakdown || []).map(r => [r.language, r.count]));
         section('Screen Resolutions', ['Resolution', 'Hits'], (d.resolution_breakdown || []).map(r => [r.resolution, r.count]));
         section('Referrers', ['Referrer', 'Hits'], (d.referer_breakdown || []).map(r => [r.referer, r.count]));
+        if (d.visits) {
+            section('Visits', ['Metric', 'Value'], [['Visits', d.visits.visits], ['Avg duration (s)', d.visits.avg_duration_seconds]]);
+            section('Entry Pages', ['Path', 'Visits'], (d.visits.entry_pages || []).map(r => [r.path, r.count]));
+            section('Exit Pages', ['Path', 'Visits'], (d.visits.exit_pages || []).map(r => [r.path, r.count]));
+        }
+        section('File Types', ['Type', 'Hits'], (d.filetype_breakdown || []).map(r => [r.filetype, r.count]));
+        section('Search Keyphrases', ['Keyphrase', 'Hits'], (d.search_terms || []).map(r => [r.term, r.count]));
+        section('Robots / Spiders', ['Bot', 'Hits'], (d.bot_breakdown || []).map(r => [r.bot, r.hits]));
         section('Top Error URLs', ['Path', 'Status', 'Hits'], (d.error_pages || []).map(r => [r.path, r.status_code, r.hits]));
         section('Top Error Sources', ['IP', 'Hostname', 'Errors'], (d.error_sources || []).map(r => [r.ip_address, r.hostname, r.errors]));
         section('Hits by Hour', ['Hour', 'Hits'], (d.hourly_distribution.labels || []).map((h, i) => [h, d.hourly_distribution.hits[i]]));
