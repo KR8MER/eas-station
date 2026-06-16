@@ -116,6 +116,7 @@ def register(app: Flask, logger) -> None:
             ("alerts", "hourly", "0.9"),
             ("help_page", "weekly", "0.5"),
             ("about_page", "weekly", "0.5"),
+            ("attribution_page", "monthly", "0.4"),
             ("privacy_page", "yearly", "0.3"),
             ("terms_page", "yearly", "0.3"),
             ("sms_compliance_page", "yearly", "0.3"),
@@ -846,6 +847,19 @@ def register(app: Flask, logger) -> None:
             route_logger.error("Error rendering help page: %s", exc)
             return (
                 "<h1>Help</h1><p>Refer to docs/guides/HELP.md in the repository for the full operations guide.</p>"
+            )
+
+    @app.route("/attribution")
+    def attribution_page():
+        """Dedicated page crediting open-source dependencies, data sources, and licensing."""
+        try:
+            return render_template("attribution.html")
+        except Exception as exc:  # pragma: no cover - fallback content
+            route_logger.error("Error rendering attribution page: %s", exc)
+            return (
+                "<h1>Attribution &amp; Credits</h1>"
+                "<p>EAS Station is built on open-source software. See "
+                "docs/reference/dependency_attribution.md in the repository for the full list.</p>"
             )
 
     @app.route("/support")
