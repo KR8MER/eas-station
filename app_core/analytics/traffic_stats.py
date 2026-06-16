@@ -26,6 +26,12 @@ These functions turn the raw :class:`WebRequestLog` rows (and the existing
 dashboard renders. Date bucketing is done in Python rather than with database
 ``date_trunc``/``strftime`` so the same code runs on PostgreSQL (production) and
 SQLite (tests).
+
+Every section helper accepts an optional ``filters=TrafficFilters(...)`` so the
+dashboard can request a **custom date range** and/or **drill down** on a
+dimension (path, country, status family, browser, OS, method). When ``filters``
+is omitted the legacy trailing-``days`` window is used, keeping existing callers
+working unchanged.
 """
 
 from collections import Counter, defaultdict
@@ -37,6 +43,7 @@ from sqlalchemy import func
 
 from app_core.extensions import db
 from app_core.analytics.geo import network_key
+from app_core.analytics.traffic_filters import TrafficFilters
 from app_core.analytics.web_traffic import WebRequestLog
 from app_utils import utc_now
 
@@ -48,10 +55,16 @@ def _window_start(days: int):
     return utc_now() - timedelta(days=max(int(days), 1))
 
 
-def get_summary(days: int = 30) -> Dict[str, Any]:
+def _resolve(days: int, filters: Optional[TrafficFilters]) -> TrafficFilters:
+    """Return the active filter, building a legacy day-window when absent."""
+    return filters if filters is not None else TrafficFilters(days=days)
+
+
+def get_summary(days: int = 30, filters: Optional[TrafficFilters] = None) -> Dict[str, Any]:
     """High-level counters for the dashboard's metric cards."""
-    start = _window_start(days)
-    base = WebRequestLog.query.filter(WebRequestLog.timestamp >= start)
+    flt = _resolve(days, filters)
+    start, end = flt.window()
+    base = flt.apply(WebRequestLog.query)
 
     total_hits = base.count()
     page_views = base.filter(
@@ -65,48 +78,41 @@ def get_summary(days: int = 30) -> Dict[str, Any]:
     # but IPv6 addresses are collapsed to their /64 prefix so a single device's
     # rotating privacy addresses aren't counted as many visitors. We pull the
     # distinct addresses (a small set) and fold them in Python for portability.
-    distinct_ips = (
-        db.session.query(func.distinct(WebRequestLog.ip_address))
-        .filter(WebRequestLog.timestamp >= start, WebRequestLog.ip_address.isnot(None))
-        .all()
-    )
+    distinct_ips = flt.apply(
+        db.session.query(func.distinct(WebRequestLog.ip_address)).filter(
+            WebRequestLog.ip_address.isnot(None)
+        )
+    ).all()
     unique_visitors = len({network_key(ip) for (ip,) in distinct_ips})
 
-    avg_response = (
-        db.session.query(func.avg(WebRequestLog.response_time_ms))
-        .filter(
-            WebRequestLog.timestamp >= start,
-            WebRequestLog.response_time_ms.isnot(None),
+    avg_response = flt.apply(
+        db.session.query(func.avg(WebRequestLog.response_time_ms)).filter(
+            WebRequestLog.response_time_ms.isnot(None)
         )
-        .scalar()
-    )
+    ).scalar()
 
     # Bandwidth served (awstats-style): total + average response size.
-    total_bytes = (
-        db.session.query(func.sum(WebRequestLog.content_length))
-        .filter(
-            WebRequestLog.timestamp >= start,
-            WebRequestLog.content_length.isnot(None),
+    total_bytes = flt.apply(
+        db.session.query(func.sum(WebRequestLog.content_length)).filter(
+            WebRequestLog.content_length.isnot(None)
         )
-        .scalar()
-        or 0
-    )
-    avg_bytes = (
-        db.session.query(func.avg(WebRequestLog.content_length))
-        .filter(
-            WebRequestLog.timestamp >= start,
-            WebRequestLog.content_length.isnot(None),
+    ).scalar() or 0
+    avg_bytes = flt.apply(
+        db.session.query(func.avg(WebRequestLog.content_length)).filter(
+            WebRequestLog.content_length.isnot(None)
         )
-        .scalar()
-    )
+    ).scalar()
 
-    # Last 24h activity for an "is it live right now" feel.
-    last_24h = WebRequestLog.query.filter(
-        WebRequestLog.timestamp >= (utc_now() - timedelta(hours=24))
+    # Last 24h activity for an "is it live right now" feel. This keeps the same
+    # dimension drill-down but always uses the trailing 24h regardless of window.
+    last_24h = flt.apply_dimensions(
+        WebRequestLog.query.filter(
+            WebRequestLog.timestamp >= (utc_now() - timedelta(hours=24))
+        )
     ).count()
 
     return {
-        "window_days": days,
+        "window_days": flt.days,
         "total_hits": total_hits,
         "page_views": page_views,
         "api_hits": api_hits,
@@ -120,53 +126,35 @@ def get_summary(days: int = 30) -> Dict[str, Any]:
     }
 
 
-def get_summary_previous(days: int = 30) -> Dict[str, Any]:
+def get_summary_previous(days: int = 30, filters: Optional[TrafficFilters] = None) -> Dict[str, Any]:
     """Same counters as :func:`get_summary` for the *preceding* window.
 
     Used to show "vs previous period" deltas on the dashboard's metric tiles.
-    The window is ``[now - 2*days, now - days)`` — the equal-length period
-    immediately before the one shown.
+    The window is the equal-length period immediately before the one shown.
     """
-    now = utc_now()
-    end = now - timedelta(days=max(int(days), 1))
-    start = now - timedelta(days=max(int(days), 1) * 2)
-    base = WebRequestLog.query.filter(
-        WebRequestLog.timestamp >= start, WebRequestLog.timestamp < end
-    )
+    flt = _resolve(days, filters).previous()
+    base = flt.apply(WebRequestLog.query)
 
     page_views = base.filter(
         WebRequestLog.is_api.is_(False), WebRequestLog.is_bot.is_(False)
     ).count()
     error_hits = base.filter(WebRequestLog.status_code >= 400).count()
-    distinct_ips = (
-        db.session.query(func.distinct(WebRequestLog.ip_address))
-        .filter(
-            WebRequestLog.timestamp >= start,
-            WebRequestLog.timestamp < end,
-            WebRequestLog.ip_address.isnot(None),
+    distinct_ips = flt.apply(
+        db.session.query(func.distinct(WebRequestLog.ip_address)).filter(
+            WebRequestLog.ip_address.isnot(None)
         )
-        .all()
-    )
+    ).all()
     unique_visitors = len({network_key(ip) for (ip,) in distinct_ips})
-    avg_response = (
-        db.session.query(func.avg(WebRequestLog.response_time_ms))
-        .filter(
-            WebRequestLog.timestamp >= start,
-            WebRequestLog.timestamp < end,
-            WebRequestLog.response_time_ms.isnot(None),
+    avg_response = flt.apply(
+        db.session.query(func.avg(WebRequestLog.response_time_ms)).filter(
+            WebRequestLog.response_time_ms.isnot(None)
         )
-        .scalar()
-    )
-    total_bytes = (
-        db.session.query(func.sum(WebRequestLog.content_length))
-        .filter(
-            WebRequestLog.timestamp >= start,
-            WebRequestLog.timestamp < end,
-            WebRequestLog.content_length.isnot(None),
+    ).scalar()
+    total_bytes = flt.apply(
+        db.session.query(func.sum(WebRequestLog.content_length)).filter(
+            WebRequestLog.content_length.isnot(None)
         )
-        .scalar()
-        or 0
-    )
+    ).scalar() or 0
     return {
         "total_hits": base.count(),
         "page_views": page_views,
@@ -177,25 +165,24 @@ def get_summary_previous(days: int = 30) -> Dict[str, Any]:
     }
 
 
-def get_timeseries(days: int = 30) -> Dict[str, Any]:
+def get_timeseries(days: int = 30, filters: Optional[TrafficFilters] = None) -> Dict[str, Any]:
     """Per-day series of hits, page views, and unique visitors.
 
     Uses hourly buckets for short windows (<= 2 days) and daily buckets
     otherwise. Bucketing happens in Python for cross-database portability.
     """
-    start = _window_start(days)
-    hourly = days <= 2
+    flt = _resolve(days, filters)
+    start, end = flt.window()
+    hourly = (end - start) <= timedelta(days=2)
 
-    rows = (
+    rows = flt.apply(
         db.session.query(
             WebRequestLog.timestamp,
             WebRequestLog.is_api,
             WebRequestLog.is_bot,
             WebRequestLog.ip_address,
         )
-        .filter(WebRequestLog.timestamp >= start)
-        .all()
-    )
+    ).all()
 
     hits: Counter = Counter()
     pages: Counter = Counter()
@@ -204,10 +191,7 @@ def get_timeseries(days: int = 30) -> Dict[str, Any]:
     for ts, is_api, is_bot, ip in rows:
         if ts is None:
             continue
-        if hourly:
-            bucket = ts.strftime("%Y-%m-%dT%H:00")
-        else:
-            bucket = ts.strftime("%Y-%m-%d")
+        bucket = ts.strftime("%Y-%m-%dT%H:00") if hourly else ts.strftime("%Y-%m-%d")
         hits[bucket] += 1
         if not is_api and not is_bot:
             pages[bucket] += 1
@@ -224,18 +208,16 @@ def get_timeseries(days: int = 30) -> Dict[str, Any]:
     }
 
 
-def get_top_pages(days: int = 30, limit: int = 15) -> List[Dict[str, Any]]:
+def get_top_pages(days: int = 30, limit: int = 15, filters: Optional[TrafficFilters] = None) -> List[Dict[str, Any]]:
     """Most-requested non-API paths."""
-    start = _window_start(days)
+    flt = _resolve(days, filters)
     rows = (
-        db.session.query(
-            WebRequestLog.path,
-            func.count(WebRequestLog.id).label("hits"),
-            func.avg(WebRequestLog.response_time_ms).label("avg_ms"),
-        )
-        .filter(
-            WebRequestLog.timestamp >= start,
-            WebRequestLog.is_api.is_(False),
+        flt.apply(
+            db.session.query(
+                WebRequestLog.path,
+                func.count(WebRequestLog.id).label("hits"),
+                func.avg(WebRequestLog.response_time_ms).label("avg_ms"),
+            ).filter(WebRequestLog.is_api.is_(False))
         )
         .group_by(WebRequestLog.path)
         .order_by(func.count(WebRequestLog.id).desc())
@@ -252,26 +234,20 @@ def get_top_pages(days: int = 30, limit: int = 15) -> List[Dict[str, Any]]:
     ]
 
 
-def get_top_visitors(days: int = 30, limit: int = 15) -> List[Dict[str, Any]]:
-    """Most active source IP addresses (awstats-style "Hosts").
-
-    Each row carries the reverse-DNS hostname and the country/flag (when
-    resolved) so the dashboard can render them alongside the raw IP.
-    """
-    start = _window_start(days)
+def get_top_visitors(days: int = 30, limit: int = 15, filters: Optional[TrafficFilters] = None) -> List[Dict[str, Any]]:
+    """Most active source IP addresses (awstats-style "Hosts")."""
+    flt = _resolve(days, filters)
     rows = (
-        db.session.query(
-            WebRequestLog.ip_address,
-            func.count(WebRequestLog.id).label("hits"),
-            func.max(WebRequestLog.timestamp).label("last_seen"),
-            func.max(WebRequestLog.username).label("username"),
-            func.max(WebRequestLog.hostname).label("hostname"),
-            func.max(WebRequestLog.country).label("country"),
-            func.max(WebRequestLog.country_code).label("country_code"),
-        )
-        .filter(
-            WebRequestLog.timestamp >= start,
-            WebRequestLog.ip_address.isnot(None),
+        flt.apply(
+            db.session.query(
+                WebRequestLog.ip_address,
+                func.count(WebRequestLog.id).label("hits"),
+                func.max(WebRequestLog.timestamp).label("last_seen"),
+                func.max(WebRequestLog.username).label("username"),
+                func.max(WebRequestLog.hostname).label("hostname"),
+                func.max(WebRequestLog.country).label("country"),
+                func.max(WebRequestLog.country_code).label("country_code"),
+            ).filter(WebRequestLog.ip_address.isnot(None))
         )
         .group_by(WebRequestLog.ip_address)
         .order_by(func.count(WebRequestLog.id).desc())
@@ -292,15 +268,16 @@ def get_top_visitors(days: int = 30, limit: int = 15) -> List[Dict[str, Any]]:
     ]
 
 
-def get_status_breakdown(days: int = 30) -> List[Dict[str, Any]]:
+def get_status_breakdown(days: int = 30, filters: Optional[TrafficFilters] = None) -> List[Dict[str, Any]]:
     """Counts grouped into 2xx/3xx/4xx/5xx families."""
-    start = _window_start(days)
+    flt = _resolve(days, filters)
     rows = (
-        db.session.query(
-            WebRequestLog.status_code,
-            func.count(WebRequestLog.id).label("count"),
+        flt.apply(
+            db.session.query(
+                WebRequestLog.status_code,
+                func.count(WebRequestLog.id).label("count"),
+            )
         )
-        .filter(WebRequestLog.timestamp >= start)
         .group_by(WebRequestLog.status_code)
         .all()
     )
@@ -316,11 +293,14 @@ def get_status_breakdown(days: int = 30) -> List[Dict[str, Any]]:
     ]
 
 
-def _simple_breakdown(column, days: int, limit: int, label: str) -> List[Dict[str, Any]]:
-    start = _window_start(days)
+def _simple_breakdown(column, days: int, limit: int, label: str, filters: Optional[TrafficFilters]) -> List[Dict[str, Any]]:
+    flt = _resolve(days, filters)
     rows = (
-        db.session.query(column, func.count(WebRequestLog.id).label("count"))
-        .filter(WebRequestLog.timestamp >= start, column.isnot(None))
+        flt.apply(
+            db.session.query(column, func.count(WebRequestLog.id).label("count")).filter(
+                column.isnot(None)
+            )
+        )
         .group_by(column)
         .order_by(func.count(WebRequestLog.id).desc())
         .limit(limit)
@@ -329,13 +309,13 @@ def _simple_breakdown(column, days: int, limit: int, label: str) -> List[Dict[st
     return [{label: value, "count": int(count)} for value, count in rows]
 
 
-def get_browser_breakdown(days: int = 30, limit: int = 10) -> List[Dict[str, Any]]:
-    return _simple_breakdown(WebRequestLog.browser, days, limit, "browser")
+def get_browser_breakdown(days: int = 30, limit: int = 10, filters: Optional[TrafficFilters] = None) -> List[Dict[str, Any]]:
+    return _simple_breakdown(WebRequestLog.browser, days, limit, "browser", filters)
 
 
-def get_method_breakdown(days: int = 30, limit: int = 10) -> List[Dict[str, Any]]:
+def get_method_breakdown(days: int = 30, limit: int = 10, filters: Optional[TrafficFilters] = None) -> List[Dict[str, Any]]:
     """Hits grouped by HTTP method (GET/POST/PUT/…)."""
-    return _simple_breakdown(WebRequestLog.method, days, limit, "method")
+    return _simple_breakdown(WebRequestLog.method, days, limit, "method", filters)
 
 
 # OS names that imply a touch device. Everything else (Windows, macOS, Linux,
@@ -345,11 +325,7 @@ _TABLET_OS = {"iPadOS"}
 
 
 def _classify_device(os_name: Optional[str], user_agent: Optional[str]) -> str:
-    """Bucket a request into Desktop / Mobile / Tablet from OS + user-agent.
-
-    The ``os`` column already captures the platform; the user-agent is a
-    fallback for the desktop-vs-tablet ambiguity on Android and bare UAs.
-    """
+    """Bucket a request into Desktop / Mobile / Tablet from OS + user-agent."""
     ua = (user_agent or "")
     os_name = os_name or ""
     if os_name in _TABLET_OS or "iPad" in ua or ("Tablet" in ua):
@@ -362,14 +338,14 @@ def _classify_device(os_name: Optional[str], user_agent: Optional[str]) -> str:
     return "Desktop"
 
 
-def get_device_breakdown(days: int = 30) -> List[Dict[str, Any]]:
+def get_device_breakdown(days: int = 30, filters: Optional[TrafficFilters] = None) -> List[Dict[str, Any]]:
     """Human (non-bot) hits grouped into Desktop / Mobile / Tablet."""
-    start = _window_start(days)
-    rows = (
-        db.session.query(WebRequestLog.os, WebRequestLog.user_agent)
-        .filter(WebRequestLog.timestamp >= start, WebRequestLog.is_bot.is_(False))
-        .all()
-    )
+    flt = _resolve(days, filters)
+    rows = flt.apply(
+        db.session.query(WebRequestLog.os, WebRequestLog.user_agent).filter(
+            WebRequestLog.is_bot.is_(False)
+        )
+    ).all()
     counts: Counter = Counter()
     for os_name, ua in rows:
         counts[_classify_device(os_name, ua)] += 1
@@ -377,12 +353,10 @@ def get_device_breakdown(days: int = 30) -> List[Dict[str, Any]]:
     return [{"device": d, "count": counts[d]} for d in order if counts.get(d)]
 
 
-def get_auth_breakdown(days: int = 30) -> List[Dict[str, Any]]:
+def get_auth_breakdown(days: int = 30, filters: Optional[TrafficFilters] = None) -> List[Dict[str, Any]]:
     """Human (non-bot) hits split into authenticated vs anonymous."""
-    start = _window_start(days)
-    base = WebRequestLog.query.filter(
-        WebRequestLog.timestamp >= start, WebRequestLog.is_bot.is_(False)
-    )
+    flt = _resolve(days, filters)
+    base = flt.apply(WebRequestLog.query.filter(WebRequestLog.is_bot.is_(False)))
     authed = base.filter(WebRequestLog.is_authenticated.is_(True)).count()
     anon = base.filter(WebRequestLog.is_authenticated.is_(False)).count()
     result = []
@@ -393,23 +367,17 @@ def get_auth_breakdown(days: int = 30) -> List[Dict[str, Any]]:
     return result
 
 
-def get_slowest_pages(days: int = 30, limit: int = 15, min_hits: int = 3) -> List[Dict[str, Any]]:
-    """Endpoints with the highest average server response time.
-
-    Only paths with at least *min_hits* timed requests are considered, so a
-    single slow outlier doesn't dominate the list.
-    """
-    start = _window_start(days)
+def get_slowest_pages(days: int = 30, limit: int = 15, min_hits: int = 3, filters: Optional[TrafficFilters] = None) -> List[Dict[str, Any]]:
+    """Endpoints with the highest average server response time."""
+    flt = _resolve(days, filters)
     rows = (
-        db.session.query(
-            WebRequestLog.path,
-            func.count(WebRequestLog.id).label("hits"),
-            func.avg(WebRequestLog.response_time_ms).label("avg_ms"),
-            func.max(WebRequestLog.response_time_ms).label("max_ms"),
-        )
-        .filter(
-            WebRequestLog.timestamp >= start,
-            WebRequestLog.response_time_ms.isnot(None),
+        flt.apply(
+            db.session.query(
+                WebRequestLog.path,
+                func.count(WebRequestLog.id).label("hits"),
+                func.avg(WebRequestLog.response_time_ms).label("avg_ms"),
+                func.max(WebRequestLog.response_time_ms).label("max_ms"),
+            ).filter(WebRequestLog.response_time_ms.isnot(None))
         )
         .group_by(WebRequestLog.path)
         .having(func.count(WebRequestLog.id) >= min_hits)
@@ -428,28 +396,19 @@ def get_slowest_pages(days: int = 30, limit: int = 15, min_hits: int = 3) -> Lis
     ]
 
 
-def get_os_breakdown(days: int = 30, limit: int = 10) -> List[Dict[str, Any]]:
-    return _simple_breakdown(WebRequestLog.os, days, limit, "os")
+def get_os_breakdown(days: int = 30, limit: int = 10, filters: Optional[TrafficFilters] = None) -> List[Dict[str, Any]]:
+    return _simple_breakdown(WebRequestLog.os, days, limit, "os", filters)
 
 
 def get_referer_breakdown(
-    days: int = 30, limit: int = 10, self_hosts: Optional[set] = None
+    days: int = 30, limit: int = 10, self_hosts: Optional[set] = None, filters: Optional[TrafficFilters] = None
 ) -> List[Dict[str, Any]]:
-    """External referrers grouped by domain (awstats-style).
-
-    awstats separates "external" referrers from internal navigation. We parse the
-    host out of each Referer URL, drop our own host(s) (so clicking around the app
-    doesn't dominate the list), and group by domain rather than full URL — so
-    ``https://news.example.com/a?x=1`` and ``.../b`` both count under
-    ``news.example.com``.
-    """
+    """External referrers grouped by domain (awstats-style)."""
+    flt = _resolve(days, filters)
     hosts = {h.lower() for h in (self_hosts or set())}
-    start = _window_start(days)
-    rows = (
-        db.session.query(WebRequestLog.referer)
-        .filter(WebRequestLog.timestamp >= start, WebRequestLog.referer.isnot(None))
-        .all()
-    )
+    rows = flt.apply(
+        db.session.query(WebRequestLog.referer).filter(WebRequestLog.referer.isnot(None))
+    ).all()
     counts: Counter = Counter()
     for (ref,) in rows:
         if not ref:
@@ -464,24 +423,21 @@ def get_referer_breakdown(
     return [{"referer": host, "count": count} for host, count in counts.most_common(limit)]
 
 
-def get_resolution_breakdown(days: int = 30, limit: int = 10) -> List[Dict[str, Any]]:
-    return _simple_breakdown(WebRequestLog.screen_resolution, days, limit, "resolution")
+def get_resolution_breakdown(days: int = 30, limit: int = 10, filters: Optional[TrafficFilters] = None) -> List[Dict[str, Any]]:
+    return _simple_breakdown(WebRequestLog.screen_resolution, days, limit, "resolution", filters)
 
 
-def get_country_breakdown(days: int = 30, limit: int = 10) -> List[Dict[str, Any]]:
-    """Hits grouped by country/network, with an ISO code for the flag.
-
-    Mirrors awstats' "Countries" report. ``country_code`` is a representative
-    ISO 3166-1 alpha-2 code (or ``None`` for local/unresolved labels).
-    """
-    start = _window_start(days)
+def get_country_breakdown(days: int = 30, limit: int = 10, filters: Optional[TrafficFilters] = None) -> List[Dict[str, Any]]:
+    """Hits grouped by country/network, with an ISO code for the flag."""
+    flt = _resolve(days, filters)
     rows = (
-        db.session.query(
-            WebRequestLog.country,
-            func.count(WebRequestLog.id).label("count"),
-            func.max(WebRequestLog.country_code).label("country_code"),
+        flt.apply(
+            db.session.query(
+                WebRequestLog.country,
+                func.count(WebRequestLog.id).label("count"),
+                func.max(WebRequestLog.country_code).label("country_code"),
+            ).filter(WebRequestLog.country.isnot(None))
         )
-        .filter(WebRequestLog.timestamp >= start, WebRequestLog.country.isnot(None))
         .group_by(WebRequestLog.country)
         .order_by(func.count(WebRequestLog.id).desc())
         .limit(limit)
@@ -493,26 +449,22 @@ def get_country_breakdown(days: int = 30, limit: int = 10) -> List[Dict[str, Any
     ]
 
 
-def get_language_breakdown(days: int = 30, limit: int = 10) -> List[Dict[str, Any]]:
-    return _simple_breakdown(WebRequestLog.language, days, limit, "language")
+def get_language_breakdown(days: int = 30, limit: int = 10, filters: Optional[TrafficFilters] = None) -> List[Dict[str, Any]]:
+    return _simple_breakdown(WebRequestLog.language, days, limit, "language", filters)
 
 
-def get_city_breakdown(days: int = 30, limit: int = 10) -> List[Dict[str, Any]]:
-    """Hits grouped by city + state/region (requires a GeoLite2 City database).
-
-    Surfaces the subdivision (state/province) alongside the city so same-named
-    cities are distinguishable. ``label`` is a ready-to-display string such as
-    ``"Springfield, IL"`` (falls back to just the city when no region is known).
-    """
-    start = _window_start(days)
+def get_city_breakdown(days: int = 30, limit: int = 10, filters: Optional[TrafficFilters] = None) -> List[Dict[str, Any]]:
+    """Hits grouped by city + state/region (requires a GeoLite2 City database)."""
+    flt = _resolve(days, filters)
     rows = (
-        db.session.query(
-            WebRequestLog.city,
-            WebRequestLog.region,
-            WebRequestLog.region_code,
-            func.count(WebRequestLog.id).label("count"),
+        flt.apply(
+            db.session.query(
+                WebRequestLog.city,
+                WebRequestLog.region,
+                WebRequestLog.region_code,
+                func.count(WebRequestLog.id).label("count"),
+            ).filter(WebRequestLog.city.isnot(None))
         )
-        .filter(WebRequestLog.timestamp >= start, WebRequestLog.city.isnot(None))
         # Group by city *and* region so same-named cities in different
         # states/provinces stay distinct (e.g. Springfield, IL vs Springfield, MO).
         .group_by(WebRequestLog.city, WebRequestLog.region, WebRequestLog.region_code)
@@ -536,37 +488,31 @@ def get_city_breakdown(days: int = 30, limit: int = 10) -> List[Dict[str, Any]]:
     return result
 
 
-def get_asn_breakdown(days: int = 30, limit: int = 10) -> List[Dict[str, Any]]:
+def get_asn_breakdown(days: int = 30, limit: int = 10, filters: Optional[TrafficFilters] = None) -> List[Dict[str, Any]]:
     """Hits grouped by network operator / ISP (requires a GeoLite2 ASN database)."""
-    return _simple_breakdown(WebRequestLog.asn_org, days, limit, "asn_org")
+    return _simple_breakdown(WebRequestLog.asn_org, days, limit, "asn_org", filters)
 
 
-def get_recent_requests(limit: int = 50) -> List[Dict[str, Any]]:
-    rows = (
-        WebRequestLog.query.order_by(WebRequestLog.timestamp.desc())
-        .limit(limit)
-        .all()
-    )
+def get_recent_requests(limit: int = 50, filters: Optional[TrafficFilters] = None) -> List[Dict[str, Any]]:
+    """Most recent recorded requests, optionally scoped to *filters*."""
+    query = WebRequestLog.query
+    if filters is not None:
+        query = filters.apply(query)
+    rows = query.order_by(WebRequestLog.timestamp.desc()).limit(limit).all()
     return [r.to_dict() for r in rows]
 
 
-def get_error_pages(days: int = 30, limit: int = 15) -> List[Dict[str, Any]]:
-    """Top URLs returning 4xx/5xx, awstats-style "HTTP errors" report.
-
-    Surfaces the paths most often producing errors (typically 404s from bots
-    probing for files that don't exist) so a scanner is obvious at a glance.
-    """
-    start = _window_start(days)
+def get_error_pages(days: int = 30, limit: int = 15, filters: Optional[TrafficFilters] = None) -> List[Dict[str, Any]]:
+    """Top URLs returning 4xx/5xx, awstats-style "HTTP errors" report."""
+    flt = _resolve(days, filters)
     rows = (
-        db.session.query(
-            WebRequestLog.path,
-            WebRequestLog.status_code,
-            func.count(WebRequestLog.id).label("hits"),
-            func.max(WebRequestLog.timestamp).label("last_seen"),
-        )
-        .filter(
-            WebRequestLog.timestamp >= start,
-            WebRequestLog.status_code >= 400,
+        flt.apply(
+            db.session.query(
+                WebRequestLog.path,
+                WebRequestLog.status_code,
+                func.count(WebRequestLog.id).label("hits"),
+                func.max(WebRequestLog.timestamp).label("last_seen"),
+            ).filter(WebRequestLog.status_code >= 400)
         )
         .group_by(WebRequestLog.path, WebRequestLog.status_code)
         .order_by(func.count(WebRequestLog.id).desc())
@@ -584,20 +530,20 @@ def get_error_pages(days: int = 30, limit: int = 15) -> List[Dict[str, Any]]:
     ]
 
 
-def get_error_sources(days: int = 30, limit: int = 15) -> List[Dict[str, Any]]:
+def get_error_sources(days: int = 30, limit: int = 15, filters: Optional[TrafficFilters] = None) -> List[Dict[str, Any]]:
     """Source IPs generating the most 4xx/5xx responses (likely scanners)."""
-    start = _window_start(days)
+    flt = _resolve(days, filters)
     rows = (
-        db.session.query(
-            WebRequestLog.ip_address,
-            func.count(WebRequestLog.id).label("errors"),
-            func.max(WebRequestLog.hostname).label("hostname"),
-            func.max(WebRequestLog.country_code).label("country_code"),
-        )
-        .filter(
-            WebRequestLog.timestamp >= start,
-            WebRequestLog.status_code >= 400,
-            WebRequestLog.ip_address.isnot(None),
+        flt.apply(
+            db.session.query(
+                WebRequestLog.ip_address,
+                func.count(WebRequestLog.id).label("errors"),
+                func.max(WebRequestLog.hostname).label("hostname"),
+                func.max(WebRequestLog.country_code).label("country_code"),
+            ).filter(
+                WebRequestLog.status_code >= 400,
+                WebRequestLog.ip_address.isnot(None),
+            )
         )
         .group_by(WebRequestLog.ip_address)
         .order_by(func.count(WebRequestLog.id).desc())
@@ -616,22 +562,21 @@ def get_error_sources(days: int = 30, limit: int = 15) -> List[Dict[str, Any]]:
 
     # Annotate each noisy source with the single path it errors on most, plus
     # that path's status code — so the table answers "what *are* these errors?"
-    # at a glance (a scanner probing /wp-login.php 404s vs. a dashboard hammering
-    # a 500/403 endpoint look very different). One grouped query for just the
-    # already-selected source IPs keeps this cheap.
+    # at a glance. One grouped query for just the already-selected source IPs
+    # keeps this cheap.
     ips = [s["ip_address"] for s in sources]
     if ips:
         detail = (
-            db.session.query(
-                WebRequestLog.ip_address,
-                WebRequestLog.path,
-                WebRequestLog.status_code,
-                func.count(WebRequestLog.id).label("hits"),
-            )
-            .filter(
-                WebRequestLog.timestamp >= start,
-                WebRequestLog.status_code >= 400,
-                WebRequestLog.ip_address.in_(ips),
+            flt.apply(
+                db.session.query(
+                    WebRequestLog.ip_address,
+                    WebRequestLog.path,
+                    WebRequestLog.status_code,
+                    func.count(WebRequestLog.id).label("hits"),
+                ).filter(
+                    WebRequestLog.status_code >= 400,
+                    WebRequestLog.ip_address.in_(ips),
+                )
             )
             .group_by(WebRequestLog.ip_address, WebRequestLog.path, WebRequestLog.status_code)
             .order_by(func.count(WebRequestLog.id).desc())
@@ -656,35 +601,21 @@ def get_error_sources(days: int = 30, limit: int = 15) -> List[Dict[str, Any]]:
     return sources
 
 
-def get_hourly_distribution(days: int = 30) -> Dict[str, Any]:
-    """Hits per hour-of-day (0–23), awstats' "Hourly" histogram.
-
-    Bucketing happens in Python for cross-database portability.
-    """
-    start = _window_start(days)
-    rows = (
-        db.session.query(WebRequestLog.timestamp)
-        .filter(WebRequestLog.timestamp >= start)
-        .all()
-    )
+def get_hourly_distribution(days: int = 30, filters: Optional[TrafficFilters] = None) -> Dict[str, Any]:
+    """Hits per hour-of-day (0–23), awstats' "Hourly" histogram."""
+    flt = _resolve(days, filters)
+    rows = flt.apply(db.session.query(WebRequestLog.timestamp)).all()
     counts = [0] * 24
     for (ts,) in rows:
         if ts is not None:
             counts[ts.hour] += 1
-    return {
-        "labels": [f"{h:02d}" for h in range(24)],
-        "hits": counts,
-    }
+    return {"labels": [f"{h:02d}" for h in range(24)], "hits": counts}
 
 
-def get_weekday_distribution(days: int = 30) -> Dict[str, Any]:
+def get_weekday_distribution(days: int = 30, filters: Optional[TrafficFilters] = None) -> Dict[str, Any]:
     """Hits per day-of-week (Mon–Sun), awstats' "Days of week" histogram."""
-    start = _window_start(days)
-    rows = (
-        db.session.query(WebRequestLog.timestamp)
-        .filter(WebRequestLog.timestamp >= start)
-        .all()
-    )
+    flt = _resolve(days, filters)
+    rows = flt.apply(db.session.query(WebRequestLog.timestamp)).all()
     labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
     counts = [0] * 7
     for (ts,) in rows:
@@ -698,26 +629,20 @@ def get_weekday_distribution(days: int = 30) -> Dict[str, Any]:
 VISIT_TIMEOUT_SECONDS = 1800
 
 
-def get_visits(days: int = 30, limit: int = 15) -> Dict[str, Any]:
-    """Sessionise human requests into visits with entry/exit pages + duration.
-
-    Non-bot requests are grouped per host into visits separated by
-    :data:`VISIT_TIMEOUT_SECONDS` of inactivity. Entry/exit pages are the first
-    and last *page* (non-API) views within a visit. Mirrors awstats' "Visits
-    duration", "Entry pages", and "Exit pages" reports.
-    """
-    start = _window_start(days)
+def get_visits(days: int = 30, limit: int = 15, filters: Optional[TrafficFilters] = None) -> Dict[str, Any]:
+    """Sessionise human requests into visits with entry/exit pages + duration."""
+    flt = _resolve(days, filters)
     rows = (
-        db.session.query(
-            WebRequestLog.ip_address,
-            WebRequestLog.timestamp,
-            WebRequestLog.path,
-            WebRequestLog.is_api,
-        )
-        .filter(
-            WebRequestLog.timestamp >= start,
-            WebRequestLog.is_bot.is_(False),
-            WebRequestLog.ip_address.isnot(None),
+        flt.apply(
+            db.session.query(
+                WebRequestLog.ip_address,
+                WebRequestLog.timestamp,
+                WebRequestLog.path,
+                WebRequestLog.is_api,
+            ).filter(
+                WebRequestLog.is_bot.is_(False),
+                WebRequestLog.ip_address.isnot(None),
+            )
         )
         .order_by(WebRequestLog.ip_address, WebRequestLog.timestamp)
         .all()
@@ -772,14 +697,10 @@ def get_visits(days: int = 30, limit: int = 15) -> Dict[str, Any]:
     }
 
 
-def get_filetype_breakdown(days: int = 30, limit: int = 10) -> List[Dict[str, Any]]:
+def get_filetype_breakdown(days: int = 30, limit: int = 10, filters: Optional[TrafficFilters] = None) -> List[Dict[str, Any]]:
     """Hits grouped by file extension (awstats' "File types")."""
-    start = _window_start(days)
-    rows = (
-        db.session.query(WebRequestLog.path)
-        .filter(WebRequestLog.timestamp >= start)
-        .all()
-    )
+    flt = _resolve(days, filters)
+    rows = flt.apply(db.session.query(WebRequestLog.path)).all()
     counts: Counter = Counter()
     for (path,) in rows:
         if not path:
@@ -804,21 +725,14 @@ _SEARCH_ENGINES = {
 }
 
 
-def get_search_terms(days: int = 30, limit: int = 15) -> List[Dict[str, Any]]:
-    """Search keywords/keyphrases parsed from search-engine referrers.
-
-    awstats' "Search Keyphrases" report. Note: most engines now use HTTPS and
-    strip the query from the Referer, so this is often sparse — but anything that
-    does arrive is surfaced here.
-    """
+def get_search_terms(days: int = 30, limit: int = 15, filters: Optional[TrafficFilters] = None) -> List[Dict[str, Any]]:
+    """Search keywords/keyphrases parsed from search-engine referrers."""
     from urllib.parse import parse_qs
 
-    start = _window_start(days)
-    rows = (
-        db.session.query(WebRequestLog.referer)
-        .filter(WebRequestLog.timestamp >= start, WebRequestLog.referer.isnot(None))
-        .all()
-    )
+    flt = _resolve(days, filters)
+    rows = flt.apply(
+        db.session.query(WebRequestLog.referer).filter(WebRequestLog.referer.isnot(None))
+    ).all()
     counts: Counter = Counter()
     for (ref,) in rows:
         if not ref:
@@ -843,19 +757,12 @@ _SEARCH_ENGINE_NAMES = {
 }
 
 
-def get_search_engine_breakdown(days: int = 30, limit: int = 10) -> List[Dict[str, Any]]:
-    """Referrals grouped by originating search engine (awstats' "Search engines").
-
-    Complements :func:`get_search_terms`: even when an engine strips the query
-    string over HTTPS, the referring host still tells us *which* engine sent the
-    visitor.
-    """
-    start = _window_start(days)
-    rows = (
-        db.session.query(WebRequestLog.referer)
-        .filter(WebRequestLog.timestamp >= start, WebRequestLog.referer.isnot(None))
-        .all()
-    )
+def get_search_engine_breakdown(days: int = 30, limit: int = 10, filters: Optional[TrafficFilters] = None) -> List[Dict[str, Any]]:
+    """Referrals grouped by originating search engine (awstats' "Search engines")."""
+    flt = _resolve(days, filters)
+    rows = flt.apply(
+        db.session.query(WebRequestLog.referer).filter(WebRequestLog.referer.isnot(None))
+    ).all()
     counts: Counter = Counter()
     for (ref,) in rows:
         if not ref:
@@ -868,16 +775,16 @@ def get_search_engine_breakdown(days: int = 30, limit: int = 10) -> List[Dict[st
     return [{"engine": name, "count": count} for name, count in counts.most_common(limit)]
 
 
-def get_bot_breakdown(days: int = 30, limit: int = 15) -> List[Dict[str, Any]]:
+def get_bot_breakdown(days: int = 30, limit: int = 15, filters: Optional[TrafficFilters] = None) -> List[Dict[str, Any]]:
     """Robots/spiders grouped by name (awstats' "Robots/Spiders visitors")."""
     from app_core.analytics.web_traffic import classify_bot
 
-    start = _window_start(days)
-    rows = (
-        db.session.query(WebRequestLog.user_agent, WebRequestLog.timestamp)
-        .filter(WebRequestLog.timestamp >= start, WebRequestLog.is_bot.is_(True))
-        .all()
-    )
+    flt = _resolve(days, filters)
+    rows = flt.apply(
+        db.session.query(WebRequestLog.user_agent, WebRequestLog.timestamp).filter(
+            WebRequestLog.is_bot.is_(True)
+        )
+    ).all()
     counts: Counter = Counter()
     last_seen: Dict[str, Any] = {}
     for ua, ts in rows:
@@ -897,34 +804,43 @@ def get_bot_breakdown(days: int = 30, limit: int = 15) -> List[Dict[str, Any]]:
 
 # ---------------------------------------------------------------------------
 # Login / session analytics (sourced from audit_logs + admin_sessions)
+#
+# These draw from the audit log, which has no path/browser/etc. columns, so the
+# drill-down *dimensions* don't apply — only the time window from the filter is
+# honoured (so a custom date range still scopes login activity correctly).
 # ---------------------------------------------------------------------------
 
-def get_login_summary(days: int = 30) -> Dict[str, Any]:
+def get_login_summary(days: int = 30, filters: Optional[TrafficFilters] = None) -> Dict[str, Any]:
     """Authentication counters drawn from the audit log and active sessions."""
     from app_core.auth.audit import AuditAction, AuditLog
     from app_core.models import AdminSession
 
-    start = _window_start(days)
+    flt = _resolve(days, filters)
     login_actions = (AuditAction.LOGIN_SUCCESS.value, AuditAction.LOGIN_FAILURE.value)
 
-    base = AuditLog.query.filter(
-        AuditLog.timestamp >= start, AuditLog.action.in_(login_actions)
+    base = flt.filter_timestamp(
+        AuditLog.query.filter(AuditLog.action.in_(login_actions)), AuditLog.timestamp
     )
     successes = base.filter(AuditLog.action == AuditAction.LOGIN_SUCCESS.value).count()
     failures = base.filter(AuditLog.action == AuditAction.LOGIN_FAILURE.value).count()
 
     unique_users = (
-        db.session.query(func.count(func.distinct(AuditLog.username)))
-        .filter(
-            AuditLog.timestamp >= start,
-            AuditLog.action == AuditAction.LOGIN_SUCCESS.value,
+        flt.filter_timestamp(
+            db.session.query(func.count(func.distinct(AuditLog.username))).filter(
+                AuditLog.action == AuditAction.LOGIN_SUCCESS.value
+            ),
+            AuditLog.timestamp,
         )
         .scalar()
         or 0
     )
     unique_ips = (
-        db.session.query(func.count(func.distinct(AuditLog.ip_address)))
-        .filter(AuditLog.timestamp >= start, AuditLog.action.in_(login_actions))
+        flt.filter_timestamp(
+            db.session.query(func.count(func.distinct(AuditLog.ip_address))).filter(
+                AuditLog.action.in_(login_actions)
+            ),
+            AuditLog.timestamp,
+        )
         .scalar()
         or 0
     )
@@ -932,7 +848,7 @@ def get_login_summary(days: int = 30) -> Dict[str, Any]:
     active_sessions = AdminSession.query.filter(AdminSession.ended_at.is_(None)).count()
 
     return {
-        "window_days": days,
+        "window_days": flt.days,
         "successful_logins": successes,
         "failed_logins": failures,
         "unique_users": int(unique_users),
@@ -941,17 +857,18 @@ def get_login_summary(days: int = 30) -> Dict[str, Any]:
     }
 
 
-def get_login_timeseries(days: int = 30) -> Dict[str, Any]:
+def get_login_timeseries(days: int = 30, filters: Optional[TrafficFilters] = None) -> Dict[str, Any]:
     """Per-day successful vs. failed login counts."""
     from app_core.auth.audit import AuditAction, AuditLog
 
-    start = _window_start(days)
+    flt = _resolve(days, filters)
     login_actions = (AuditAction.LOGIN_SUCCESS.value, AuditAction.LOGIN_FAILURE.value)
-    rows = (
-        db.session.query(AuditLog.timestamp, AuditLog.action)
-        .filter(AuditLog.timestamp >= start, AuditLog.action.in_(login_actions))
-        .all()
-    )
+    rows = flt.filter_timestamp(
+        db.session.query(AuditLog.timestamp, AuditLog.action).filter(
+            AuditLog.action.in_(login_actions)
+        ),
+        AuditLog.timestamp,
+    ).all()
 
     success: Counter = Counter()
     failure: Counter = Counter()
@@ -973,15 +890,7 @@ def get_login_timeseries(days: int = 30) -> Dict[str, Any]:
 
 
 def _annotate_login_hostnames(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Attach reverse-DNS hostname + country to login records (awstats-style).
-
-    Login IPs come from the audit log, which never stores a hostname. The web
-    request log, however, already carries the background-resolved PTR hostname
-    (and GeoIP country) for most visitor IPs. We reuse those resolutions here so
-    the Login Security tables show the same hostnames/flags as the rest of the
-    dashboard instead of bare IPs. IPs the resolver hasn't seen simply stay as
-    raw addresses.
-    """
+    """Attach reverse-DNS hostname + country to login records (awstats-style)."""
     ips = {r.get("ip_address") for r in records if r.get("ip_address")}
     if not ips:
         return records
@@ -1014,22 +923,23 @@ def _annotate_login_hostnames(records: List[Dict[str, Any]]) -> List[Dict[str, A
     return records
 
 
-def get_top_login_ips(days: int = 30, limit: int = 15) -> List[Dict[str, Any]]:
+def get_top_login_ips(days: int = 30, limit: int = 15, filters: Optional[TrafficFilters] = None) -> List[Dict[str, Any]]:
     """Source IPs ranked by login attempts, split by success/failure."""
     from app_core.auth.audit import AuditAction, AuditLog
 
-    start = _window_start(days)
+    flt = _resolve(days, filters)
     login_actions = (AuditAction.LOGIN_SUCCESS.value, AuditAction.LOGIN_FAILURE.value)
     rows = (
-        db.session.query(
-            AuditLog.ip_address,
-            AuditLog.action,
-            func.count(AuditLog.id).label("count"),
-        )
-        .filter(
-            AuditLog.timestamp >= start,
-            AuditLog.action.in_(login_actions),
-            AuditLog.ip_address.isnot(None),
+        flt.filter_timestamp(
+            db.session.query(
+                AuditLog.ip_address,
+                AuditLog.action,
+                func.count(AuditLog.id).label("count"),
+            ).filter(
+                AuditLog.action.in_(login_actions),
+                AuditLog.ip_address.isnot(None),
+            ),
+            AuditLog.timestamp,
         )
         .group_by(AuditLog.ip_address, AuditLog.action)
         .all()
@@ -1080,45 +990,55 @@ def get_recent_logins(limit: int = 50) -> List[Dict[str, Any]]:
     )
 
 
-def get_full_dashboard(days: int = 30, self_hosts: Optional[set] = None) -> Dict[str, Any]:
+def get_full_dashboard(
+    days: int = 30,
+    self_hosts: Optional[set] = None,
+    filters: Optional[TrafficFilters] = None,
+) -> Dict[str, Any]:
     """Bundle every section the dashboard needs into one payload.
 
     *self_hosts* is the set of hostnames considered "internal" (the station's own
-    host), used to exclude self-referrals from the referrer report.
+    host), used to exclude self-referrals from the referrer report. *filters*
+    carries the active time window and any drill-down dimensions.
     """
+    flt = _resolve(days, filters)
+    from app_core.analytics.traffic_anomalies import detect_anomalies
+
     return {
-        "summary": get_summary(days),
-        "summary_prev": get_summary_previous(days),
-        "timeseries": get_timeseries(days),
-        "top_pages": get_top_pages(days),
-        "slowest_pages": get_slowest_pages(days),
-        "top_visitors": get_top_visitors(days),
-        "status_breakdown": get_status_breakdown(days),
-        "browser_breakdown": get_browser_breakdown(days),
-        "os_breakdown": get_os_breakdown(days),
-        "device_breakdown": get_device_breakdown(days),
-        "method_breakdown": get_method_breakdown(days),
-        "auth_breakdown": get_auth_breakdown(days),
-        "referer_breakdown": get_referer_breakdown(days, self_hosts=self_hosts),
-        "search_engine_breakdown": get_search_engine_breakdown(days),
-        "resolution_breakdown": get_resolution_breakdown(days),
-        "country_breakdown": get_country_breakdown(days),
-        "city_breakdown": get_city_breakdown(days),
-        "asn_breakdown": get_asn_breakdown(days),
-        "language_breakdown": get_language_breakdown(days),
-        "error_pages": get_error_pages(days),
-        "error_sources": get_error_sources(days),
-        "hourly_distribution": get_hourly_distribution(days),
-        "weekday_distribution": get_weekday_distribution(days),
-        "visits": get_visits(days),
-        "filetype_breakdown": get_filetype_breakdown(days),
-        "search_terms": get_search_terms(days),
-        "bot_breakdown": get_bot_breakdown(days),
-        "recent_requests": get_recent_requests(limit=25),
-        "login_summary": get_login_summary(days),
-        "login_timeseries": get_login_timeseries(days),
-        "top_login_ips": get_top_login_ips(days),
+        "summary": get_summary(filters=flt),
+        "summary_prev": get_summary_previous(filters=flt),
+        "timeseries": get_timeseries(filters=flt),
+        "top_pages": get_top_pages(filters=flt),
+        "slowest_pages": get_slowest_pages(filters=flt),
+        "top_visitors": get_top_visitors(filters=flt),
+        "status_breakdown": get_status_breakdown(filters=flt),
+        "browser_breakdown": get_browser_breakdown(filters=flt),
+        "os_breakdown": get_os_breakdown(filters=flt),
+        "device_breakdown": get_device_breakdown(filters=flt),
+        "method_breakdown": get_method_breakdown(filters=flt),
+        "auth_breakdown": get_auth_breakdown(filters=flt),
+        "referer_breakdown": get_referer_breakdown(self_hosts=self_hosts, filters=flt),
+        "search_engine_breakdown": get_search_engine_breakdown(filters=flt),
+        "resolution_breakdown": get_resolution_breakdown(filters=flt),
+        "country_breakdown": get_country_breakdown(filters=flt),
+        "city_breakdown": get_city_breakdown(filters=flt),
+        "asn_breakdown": get_asn_breakdown(filters=flt),
+        "language_breakdown": get_language_breakdown(filters=flt),
+        "error_pages": get_error_pages(filters=flt),
+        "error_sources": get_error_sources(filters=flt),
+        "hourly_distribution": get_hourly_distribution(filters=flt),
+        "weekday_distribution": get_weekday_distribution(filters=flt),
+        "visits": get_visits(filters=flt),
+        "filetype_breakdown": get_filetype_breakdown(filters=flt),
+        "search_terms": get_search_terms(filters=flt),
+        "bot_breakdown": get_bot_breakdown(filters=flt),
+        "recent_requests": get_recent_requests(limit=25, filters=flt),
+        "login_summary": get_login_summary(filters=flt),
+        "login_timeseries": get_login_timeseries(filters=flt),
+        "top_login_ips": get_top_login_ips(filters=flt),
         "recent_logins": get_recent_logins(limit=25),
+        "anomalies": detect_anomalies(filters=flt),
+        "filter_meta": flt.to_query_meta(),
     }
 
 

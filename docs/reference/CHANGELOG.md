@@ -8,6 +8,40 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.105.0] - 2026-06-16 - Traffic Analytics: custom ranges, drill-down, anomaly detection & privacy tools
+
+### Added
+- **Custom date ranges.** The Traffic Analytics window selector gains a
+  **Custom range…** option with start/end date pickers. The dashboard endpoint
+  now accepts `?start=&end=` (ISO dates) in addition to `?days=`.
+- **Drill-down filtering.** Clicking a country, path, status family, browser,
+  OS, HTTP method, or visitor IP — in any table or chart — filters the *entire*
+  dashboard to matching traffic. Active filters render as removable chips, and
+  the larger tables (Top Pages, Top Visitors, Recent Requests, Error URLs) gain
+  a live text-filter box. All powered by a new shared `TrafficFilters`
+  abstraction (`app_core/analytics/traffic_filters.py`) threaded through every
+  aggregation in `traffic_stats`.
+- **Anomaly detection** (`app_core/analytics/traffic_anomalies.py`). A dashboard
+  banner surfaces elevated error rates, 5xx surges, likely vulnerability
+  scanners (many 4xx from one IP), login brute-force bursts, and traffic spikes.
+  Thresholds are tunable from **Settings → Anomaly Detection**; the same data is
+  exposed at `GET /api/traffic/anomalies`. In-app + API only (no coupling to the
+  EAS broadcast notification pipeline).
+- **Privacy / GDPR tools** (`app_core/analytics/traffic_privacy.py`).
+  **Settings → Privacy** adds an *Anonymize visitor IPs* mode (masks addresses
+  at capture time so a raw IP is never stored) and an erase/mask-by-IP tool —
+  **Anonymize** keeps rows but masks the IP/hostname, **Purge** deletes them.
+  New endpoints: `POST /api/traffic/privacy/purge` and `.../anonymize`.
+- New settings columns on `traffic_analytics_settings` (`anonymize_ip`,
+  `anomaly_detection_enabled`, `anomaly_error_rate_pct`, `anomaly_5xx_threshold`,
+  `anomaly_failed_login_threshold`, `anomaly_scanner_threshold`) with migration
+  `20260616_traffic_privacy_anomaly`.
+
+### Changed
+- `traffic_stats` aggregation helpers now accept an optional `filters=` argument
+  (backwards-compatible: the legacy trailing-`days` window still works). The
+  full-dashboard payload includes `anomalies` and `filter_meta`.
+
 ## [2.104.1] - 2026-06-16 - RBAC audit: close unauthorized settings access for demo/viewer roles
 
 ### Security

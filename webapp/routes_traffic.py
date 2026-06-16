@@ -33,6 +33,7 @@ from typing import Any, Dict
 from flask import Flask, jsonify, render_template, request, session
 
 from app_core.analytics import traffic_stats
+from app_core.analytics.traffic_filters import TrafficFilters
 from app_core.analytics.web_traffic import TrafficAnalyticsSettings
 from app_core.auth import require_permission
 from app_core.extensions import db
@@ -81,32 +82,104 @@ def register(app: Flask, logger) -> None:
     @app.route("/api/traffic/dashboard", methods=["GET"])
     @require_permission("logs.view")
     def traffic_dashboard_data():
-        """Return the full dashboard payload for a given window (?days=)."""
+        """Return the full dashboard payload.
+
+        Honours ``?days=`` (preset window) or an explicit ``?start=&end=``
+        custom range, plus any drill-down dimensions (``?path=``, ``?ip=``,
+        ``?country=``, ``?status_family=``, ``?browser=``, ``?os=``,
+        ``?method=``) — see :class:`TrafficFilters`.
+        """
         try:
-            days = _clamp_days()
-            data = traffic_stats.get_full_dashboard(days, self_hosts=_self_hosts())
-            return jsonify({"success": True, "days": days, **data})
+            flt = TrafficFilters.from_request(request.args)
+            data = traffic_stats.get_full_dashboard(self_hosts=_self_hosts(), filters=flt)
+            return jsonify({"success": True, "days": flt.days, **data})
         except Exception as exc:  # pragma: no cover - defensive
             route_logger.error("Failed to build traffic dashboard: %s", exc)
+            db.session.rollback()
+            return jsonify({"success": False, "error": str(exc)}), 500
+
+    @app.route("/api/traffic/anomalies", methods=["GET"])
+    @require_permission("logs.view")
+    def traffic_anomalies():
+        """Return detected traffic anomalies for the active window/filters."""
+        try:
+            from app_core.analytics.traffic_anomalies import detect_anomalies
+
+            flt = TrafficFilters.from_request(request.args)
+            return jsonify(
+                {
+                    "success": True,
+                    "anomalies": detect_anomalies(filters=flt),
+                    "filter_meta": flt.to_query_meta(),
+                }
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            route_logger.error("Failed to detect traffic anomalies: %s", exc)
             db.session.rollback()
             return jsonify({"success": False, "error": str(exc)}), 500
 
     @app.route("/api/traffic/recent", methods=["GET"])
     @require_permission("logs.view")
     def traffic_recent_requests():
-        """Return the most recent recorded requests."""
+        """Return the most recent recorded requests (honouring any filters)."""
         try:
             try:
                 limit = int(request.args.get("limit", 50))
             except (TypeError, ValueError):
                 limit = 50
             limit = max(1, min(limit, 500))
+            flt = TrafficFilters.from_request(request.args)
             return jsonify(
-                {"success": True, "requests": traffic_stats.get_recent_requests(limit)}
+                {
+                    "success": True,
+                    "requests": traffic_stats.get_recent_requests(limit, filters=flt),
+                }
             )
         except Exception as exc:  # pragma: no cover - defensive
             route_logger.error("Failed to load recent requests: %s", exc)
             db.session.rollback()
+            return jsonify({"success": False, "error": str(exc)}), 500
+
+    # ------------------------------------------------------------------ privacy
+    @app.route("/api/traffic/privacy/purge", methods=["POST"])
+    @require_permission("system.configure")
+    def traffic_privacy_purge():
+        """Permanently delete every recorded request for a visitor IP (GDPR)."""
+        try:
+            payload: Dict[str, Any] = request.get_json(silent=True) or {}
+            ip = (payload.get("ip") or "").strip()
+            if not ip:
+                return jsonify({"success": False, "error": "An IP address is required"}), 400
+            from app_core.analytics.traffic_privacy import purge_ip
+
+            result = purge_ip(ip)
+            route_logger.info("Traffic privacy: purged %s rows for %s", result["deleted"], ip)
+            return jsonify({"success": True, "ip": ip, **result})
+        except Exception as exc:  # pragma: no cover - defensive
+            db.session.rollback()
+            route_logger.error("Failed to purge traffic for IP: %s", exc)
+            return jsonify({"success": False, "error": str(exc)}), 500
+
+    @app.route("/api/traffic/privacy/anonymize", methods=["POST"])
+    @require_permission("system.configure")
+    def traffic_privacy_anonymize():
+        """Mask the IP (and clear hostname) on every recorded request for an IP."""
+        try:
+            payload: Dict[str, Any] = request.get_json(silent=True) or {}
+            ip = (payload.get("ip") or "").strip()
+            if not ip:
+                return jsonify({"success": False, "error": "An IP address is required"}), 400
+            from app_core.analytics.traffic_privacy import anonymize_ip
+
+            result = anonymize_ip(ip)
+            route_logger.info(
+                "Traffic privacy: anonymized %s rows for %s -> %s",
+                result["updated"], ip, result["masked"],
+            )
+            return jsonify({"success": True, "ip": ip, **result})
+        except Exception as exc:  # pragma: no cover - defensive
+            db.session.rollback()
+            route_logger.error("Failed to anonymize traffic for IP: %s", exc)
             return jsonify({"success": False, "error": str(exc)}), 500
 
     # ------------------------------------------------------------------ beacon
@@ -172,6 +245,26 @@ def register(app: Flask, logger) -> None:
             if "excluded_paths" in payload:
                 raw = payload.get("excluded_paths")
                 settings.excluded_paths = (raw or "").strip()[:4000] or None
+            if "anonymize_ip" in payload:
+                settings.anonymize_ip = _to_bool(payload["anonymize_ip"])
+            if "anomaly_detection_enabled" in payload:
+                settings.anomaly_detection_enabled = _to_bool(
+                    payload["anomaly_detection_enabled"]
+                )
+            for key, lo, hi in (
+                ("anomaly_error_rate_pct", 1, 100),
+                ("anomaly_5xx_threshold", 1, 100000),
+                ("anomaly_failed_login_threshold", 1, 100000),
+                ("anomaly_scanner_threshold", 1, 100000),
+            ):
+                if key in payload:
+                    try:
+                        value = int(payload[key])
+                    except (TypeError, ValueError):
+                        return jsonify(
+                            {"success": False, "error": f"{key} must be a number"}
+                        ), 400
+                    setattr(settings, key, max(lo, min(value, hi)))
             if "retention_days" in payload:
                 try:
                     retention = int(payload["retention_days"])

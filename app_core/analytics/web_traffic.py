@@ -340,6 +340,22 @@ class TrafficAnalyticsSettings(db.Model):
     # in addition to the always-excluded plumbing (e.g. "/api/audio/,/metrics").
     excluded_paths = db.Column(db.Text, nullable=True)
 
+    # Privacy: when enabled, visitor IPs are irreversibly masked at capture time
+    # (IPv4 last octet / IPv6 host bits zeroed) so a raw address is never stored.
+    anonymize_ip = db.Column(db.Boolean, nullable=False, default=False)
+
+    # Anomaly detection: master switch + operator-tunable thresholds. Surfaced
+    # on the dashboard banner and the /api/traffic/anomalies endpoint.
+    anomaly_detection_enabled = db.Column(db.Boolean, nullable=False, default=True)
+    # Error rate (% of all hits returning 4xx/5xx) that flags an anomaly.
+    anomaly_error_rate_pct = db.Column(db.Integer, nullable=False, default=25)
+    # Absolute 5xx count in the window that flags a server-error surge.
+    anomaly_5xx_threshold = db.Column(db.Integer, nullable=False, default=25)
+    # Failed logins from a single IP that flag a brute-force attempt.
+    anomaly_failed_login_threshold = db.Column(db.Integer, nullable=False, default=10)
+    # 4xx responses from a single IP that flag a likely vulnerability scanner.
+    anomaly_scanner_threshold = db.Column(db.Integer, nullable=False, default=50)
+
     updated_at = db.Column(
         db.DateTime(timezone=True),
         default=utc_now,
@@ -358,6 +374,12 @@ class TrafficAnalyticsSettings(db.Model):
         "resolve_hostnames": False,
         "exclude_loopback": True,
         "excluded_paths": None,
+        "anonymize_ip": False,
+        "anomaly_detection_enabled": True,
+        "anomaly_error_rate_pct": 25,
+        "anomaly_5xx_threshold": 25,
+        "anomaly_failed_login_threshold": 10,
+        "anomaly_scanner_threshold": 50,
     }
 
     @classmethod
@@ -383,6 +405,12 @@ class TrafficAnalyticsSettings(db.Model):
             "resolve_hostnames": bool(self.resolve_hostnames),
             "exclude_loopback": bool(self.exclude_loopback),
             "excluded_paths": self.excluded_paths or None,
+            "anonymize_ip": bool(self.anonymize_ip),
+            "anomaly_detection_enabled": bool(self.anomaly_detection_enabled),
+            "anomaly_error_rate_pct": int(self.anomaly_error_rate_pct or 25),
+            "anomaly_5xx_threshold": int(self.anomaly_5xx_threshold or 25),
+            "anomaly_failed_login_threshold": int(self.anomaly_failed_login_threshold or 10),
+            "anomaly_scanner_threshold": int(self.anomaly_scanner_threshold or 50),
         }
 
     def to_dict(self) -> Dict[str, Any]:

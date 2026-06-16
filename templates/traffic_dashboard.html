@@ -189,6 +189,52 @@
     .traffic-dash-root .traffic-geo-popup .ti-flag { width: 1.6em; height: 1.2em; }
     /* Inline logo glyph sizing for file types / bots / referrers / search engines. */
     .traffic-dash-root .ti-glyph { width: 1.15em; text-align: center; }
+
+    /* Active drill-down filter chips. */
+    .traffic-dash-root .traffic-filter-bar {
+        display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+        margin: 0 0 14px 0; padding: 10px 12px; border-radius: 6px;
+        border: 1px solid var(--border-color, rgba(127,127,127,.25));
+        background: var(--surface-color, rgba(127,127,127,.04));
+    }
+    .traffic-dash-root .traffic-filter-bar .fb-label {
+        font-size: 0.68rem; font-weight: 700; letter-spacing: 0.10em;
+        text-transform: uppercase; color: var(--text-muted, #8b949e);
+    }
+    .traffic-dash-root .filter-chip {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 3px 8px; border-radius: 999px; font-size: 0.74rem;
+        border: 1px solid var(--primary-color, #4e73df);
+        background: rgba(78,115,223,0.12); color: var(--text-color);
+        font-family: var(--font-mono);
+    }
+    .traffic-dash-root .filter-chip .fc-key { color: var(--text-muted, #8b949e); }
+    .traffic-dash-root .filter-chip button {
+        border: none; background: transparent; color: var(--danger-color, #e74a3b);
+        padding: 0; line-height: 1; cursor: pointer; font-size: 0.85rem;
+    }
+    /* A clickable (drill-down) cell. */
+    .traffic-dash-root .drill { cursor: pointer; }
+    .traffic-dash-root .drill:hover { text-decoration: underline; text-underline-offset: 2px; }
+
+    /* Anomaly banner. */
+    .traffic-dash-root .anomaly-list { display: flex; flex-direction: column; gap: 8px; margin: 0 0 18px 0; }
+    .traffic-dash-root .anomaly-item {
+        display: flex; align-items: flex-start; gap: 10px; padding: 10px 14px;
+        border-radius: 6px; border: 1px solid var(--border-color, rgba(127,127,127,.25));
+        border-left-width: 4px; background: var(--surface-color, rgba(127,127,127,.04));
+    }
+    .traffic-dash-root .anomaly-item.sev-critical { border-left-color: #f85149; background: rgba(248,81,73,0.08); }
+    .traffic-dash-root .anomaly-item.sev-warning  { border-left-color: #d29922; background: rgba(210,153,34,0.07); }
+    .traffic-dash-root .anomaly-item.sev-info     { border-left-color: #58a6ff; background: rgba(88,166,255,0.07); }
+    .traffic-dash-root .anomaly-item .ai-icon { font-size: 1.0rem; margin-top: 2px; }
+    .traffic-dash-root .anomaly-item.sev-critical .ai-icon { color: #f85149; }
+    .traffic-dash-root .anomaly-item.sev-warning  .ai-icon { color: #f6c343; }
+    .traffic-dash-root .anomaly-item.sev-info     .ai-icon { color: #58a6ff; }
+    .traffic-dash-root .anomaly-item .ai-title { font-weight: 700; }
+    .traffic-dash-root .anomaly-item .ai-detail { font-size: 0.82rem; color: var(--text-secondary, #8b949e); }
+    /* Per-table search box. */
+    .traffic-dash-root .table-search { max-width: 220px; }
 </style>
 {% endblock %}
 
@@ -209,7 +255,14 @@
                 <option value="30" selected>Last 30 days</option>
                 <option value="90">Last 90 days</option>
                 <option value="365">Last year</option>
+                <option value="custom">Custom range…</option>
             </select>
+            <span id="customRangeControls" class="d-none" style="display:none;gap:6px;align-items:center;">
+                <input type="date" id="rangeStart" class="form-control form-control-sm" aria-label="Start date" style="width:auto;">
+                <span class="text-white-50">→</span>
+                <input type="date" id="rangeEnd" class="form-control form-control-sm" aria-label="End date" style="width:auto;">
+                <button class="btn btn-sm btn-outline-light" onclick="applyCustomRange()"><i class="fas fa-check me-1"></i>Apply</button>
+            </span>
             <button class="btn btn-sm btn-outline-light" onclick="loadDashboard()"><i class="fas fa-sync-alt me-1"></i>Refresh</button>
             <div class="btn-group">
                 <button class="btn btn-sm btn-outline-light dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false"><i class="fas fa-file-export me-1"></i>Export</button>
@@ -225,6 +278,12 @@
 
 <div class="container-fluid mt-3">
     <div class="alert alert-danger d-none" id="traffic-error" role="alert"></div>
+
+    <!-- Active drill-down filters (populated by JS when a filter is applied) -->
+    <div id="activeFilters" class="traffic-filter-bar d-none" role="region" aria-label="Active filters"></div>
+
+    <!-- Detected anomalies banner (populated by JS) -->
+    <div id="anomalyPanel" class="d-none" role="region" aria-label="Traffic anomalies"></div>
 
     <!-- At-a-glance status strip -->
     <section class="health-status-strip" aria-label="Traffic at a glance">
@@ -369,7 +428,7 @@
     <div class="row g-3">
         <div class="col-lg-6">
             <div class="card h-100">
-                <div class="card-header"><h6><i class="fas fa-file-alt section-icon"></i>Top Pages</h6></div>
+                <div class="card-header d-flex justify-content-between align-items-center gap-2"><h6 class="mb-0"><i class="fas fa-file-alt section-icon"></i>Top Pages</h6><input type="search" id="searchTopPages" class="form-control form-control-sm table-search" placeholder="Filter…" aria-label="Filter top pages"></div>
                 <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
                     <thead><tr><th>Path</th><th class="text-end">Hits</th><th class="text-end d-none d-sm-table-cell">Avg ms</th></tr></thead>
                     <tbody id="topPages"></tbody></table></div></div>
@@ -377,7 +436,7 @@
         </div>
         <div class="col-lg-6">
             <div class="card h-100">
-                <div class="card-header"><h6><i class="fas fa-users section-icon"></i>Top Visitors (Hosts)</h6></div>
+                <div class="card-header d-flex justify-content-between align-items-center gap-2"><h6 class="mb-0"><i class="fas fa-users section-icon"></i>Top Visitors (Hosts)</h6><input type="search" id="searchTopVisitors" class="form-control form-control-sm table-search" placeholder="Filter…" aria-label="Filter top visitors"></div>
                 <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
                     <thead><tr><th>Host / IP Address</th><th class="text-end">Hits</th><th class="d-none d-sm-table-cell">Last Seen</th></tr></thead>
                     <tbody id="topVisitors"></tbody></table></div></div>
@@ -514,7 +573,7 @@
     <div class="row g-3">
         <div class="col-lg-7">
             <div class="card h-100">
-                <div class="card-header"><h6><i class="fas fa-bug section-icon"></i>Top Error URLs (4xx / 5xx)</h6></div>
+                <div class="card-header d-flex justify-content-between align-items-center gap-2"><h6 class="mb-0"><i class="fas fa-bug section-icon"></i>Top Error URLs (4xx / 5xx)</h6><input type="search" id="searchErrorPages" class="form-control form-control-sm table-search" placeholder="Filter…" aria-label="Filter error URLs"></div>
                 <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
                     <thead><tr><th>Path</th><th class="text-center">Status</th><th class="text-end">Hits</th></tr></thead>
                     <tbody id="errorPages"></tbody></table></div></div>
@@ -535,7 +594,7 @@
     <div class="row g-3">
         <div class="col-12">
             <div class="card">
-                <div class="card-header"><h6><i class="fas fa-stream section-icon"></i>Recent Requests</h6></div>
+                <div class="card-header d-flex justify-content-between align-items-center gap-2"><h6 class="mb-0"><i class="fas fa-stream section-icon"></i>Recent Requests</h6><input type="search" id="searchRecent" class="form-control form-control-sm table-search" placeholder="Filter…" aria-label="Filter recent requests"></div>
                 <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
                     <thead><tr><th>When</th><th>Method</th><th>Path</th><th class="text-center">Status</th><th class="d-none d-md-table-cell">Browser</th><th class="d-none d-lg-table-cell">User Agent</th></tr></thead>
                     <tbody id="recentRequests"></tbody></table></div></div>
@@ -611,6 +670,52 @@
                     <input type="number" class="form-control" id="setRetention" min="1" max="3650" step="1">
                     <div class="form-text">Records older than this are pruned automatically.</div>
                 </div>
+
+                <hr>
+                <h6 class="text-uppercase small fw-bold text-muted mb-2"><i class="fas fa-user-shield me-1"></i>Privacy</h6>
+                <div class="form-check form-switch mb-1">
+                    <input class="form-check-input" type="checkbox" role="switch" id="setAnonymizeIp">
+                    <label class="form-check-label" for="setAnonymizeIp">Anonymize visitor IPs</label>
+                </div>
+                <div class="form-text mb-3">Mask the address at capture time (IPv4 last octet / IPv6 host bits zeroed) so a raw visitor IP is never stored. Local/loopback addresses are left intact. GDPR-friendly; reduces the precision of the Visitors and Map reports.</div>
+                <div class="mb-3">
+                    <label class="form-label" for="privacyIp">Erase or mask a specific visitor (by IP)</label>
+                    <div class="input-group">
+                        <input type="text" class="form-control" id="privacyIp" placeholder="203.0.113.45">
+                        <button type="button" class="btn btn-outline-warning" onclick="privacyAction('anonymize')">Anonymize</button>
+                        <button type="button" class="btn btn-outline-danger" onclick="privacyAction('purge')">Purge</button>
+                    </div>
+                    <div class="form-text"><strong>Anonymize</strong> keeps the rows but masks the IP &amp; hostname (counts stay intact). <strong>Purge</strong> permanently deletes every recorded request for that IP. Honours data-subject erasure requests without shell access.</div>
+                    <div class="small mt-1" id="privacyStatus"></div>
+                </div>
+
+                <hr>
+                <h6 class="text-uppercase small fw-bold text-muted mb-2"><i class="fas fa-triangle-exclamation me-1"></i>Anomaly Detection</h6>
+                <div class="form-check form-switch mb-1">
+                    <input class="form-check-input" type="checkbox" role="switch" id="setAnomalyEnabled">
+                    <label class="form-check-label" for="setAnomalyEnabled">Detect traffic anomalies</label>
+                </div>
+                <div class="form-text mb-2">Surfaces error spikes, server-error surges, scanners and login brute-force on the dashboard banner (and the <code>/api/traffic/anomalies</code> endpoint). Detection runs over the window you're viewing.</div>
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
+                        <label class="form-label small" for="setAnomalyErrorRate">Error rate (%)</label>
+                        <input type="number" class="form-control form-control-sm" id="setAnomalyErrorRate" min="1" max="100" step="1">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small" for="setAnomaly5xx">5xx surge (count)</label>
+                        <input type="number" class="form-control form-control-sm" id="setAnomaly5xx" min="1" max="100000" step="1">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small" for="setAnomalyLogin">Failed logins / IP</label>
+                        <input type="number" class="form-control form-control-sm" id="setAnomalyLogin" min="1" max="100000" step="1">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small" for="setAnomalyScanner">Scanner 4xx / IP</label>
+                        <input type="number" class="form-control form-control-sm" id="setAnomalyScanner" min="1" max="100000" step="1">
+                    </div>
+                </div>
+
+                <hr>
                 <div class="alert py-2 px-3 mb-2 d-flex align-items-center gap-2" id="geoipStatus" role="status">
                     <i class="fas fa-circle-notch fa-spin"></i><span>Checking GeoIP status…</span>
                 </div>
@@ -653,6 +758,114 @@
 <script>
     let charts = {};
     let lastDashboardData = null;  // most recent payload, for CSV/PDF export
+
+    // ----- Custom date range + drill-down filter state -----
+    // Drill-down dimensions currently applied (key -> value).
+    const activeFilters = {};
+    // Dimension keys the dashboard understands (must match TrafficFilters).
+    const FILTER_KEYS = ['path', 'path_prefix', 'ip', 'country', 'country_code', 'browser', 'os', 'method', 'status_family'];
+    const FILTER_LABELS = {
+        path: 'Path', path_prefix: 'Path starts with', ip: 'IP', country: 'Country',
+        country_code: 'Country', browser: 'Browser', os: 'OS', method: 'Method', status_family: 'Status'
+    };
+
+    // Build the query string for /api/traffic/dashboard from the range + filters.
+    function buildQuery() {
+        const params = new URLSearchParams();
+        const sel = document.getElementById('rangeSelect');
+        if (sel.value === 'custom') {
+            const start = document.getElementById('rangeStart').value;
+            const end = document.getElementById('rangeEnd').value;
+            if (start) params.set('start', start);
+            if (end) params.set('end', end);
+            if (!start && !end) params.set('days', '30');
+        } else {
+            params.set('days', sel.value);
+        }
+        FILTER_KEYS.forEach(k => {
+            if (activeFilters[k] !== undefined && activeFilters[k] !== null && activeFilters[k] !== '') {
+                params.set(k, activeFilters[k]);
+            }
+        });
+        return params.toString();
+    }
+
+    function applyCustomRange() { loadDashboard(); }
+
+    function addFilter(key, value) {
+        if (!key || value === undefined || value === null || value === '') return;
+        // status_family arrives as "4xx" or 4 — normalise to the leading digit.
+        if (key === 'status_family') value = String(value).replace(/[^0-9]/g, '').slice(0, 1);
+        activeFilters[key] = value;
+        loadDashboard();
+    }
+    function removeFilter(key) { delete activeFilters[key]; loadDashboard(); }
+    function clearFilters() { FILTER_KEYS.forEach(k => delete activeFilters[k]); loadDashboard(); }
+
+    // Render the active-filter chip bar from the server's echoed filter_meta
+    // (so the chips always reflect what the data was actually filtered by).
+    function renderFilterChips(meta) {
+        const bar = document.getElementById('activeFilters');
+        if (!bar) return;
+        const chips = (meta && meta.dimensions) || [];
+        if (!chips.length) { bar.classList.add('d-none'); bar.innerHTML = ''; return; }
+        bar.classList.remove('d-none');
+        let html = '<span class="fb-label"><i class="fas fa-filter me-1"></i>Filtered by</span>';
+        chips.forEach(c => {
+            // Map the server dimension key back to our request key (ip_address->ip, country_code->country_code).
+            const reqKey = c.key === 'ip_address' ? 'ip' : c.key;
+            html += `<span class="filter-chip"><span class="fc-key">${escapeHtml(c.label)}:</span> ${escapeHtml(c.value)} `
+                + `<button type="button" title="Remove" onclick="removeFilter('${escapeHtml(reqKey)}')">&times;</button></span>`;
+        });
+        html += `<button type="button" class="btn btn-sm btn-outline-secondary ms-1" onclick="clearFilters()"><i class="fas fa-times me-1"></i>Clear all</button>`;
+        bar.innerHTML = html;
+    }
+
+    // Render the detected-anomalies banner.
+    function renderAnomalies(list) {
+        const panel = document.getElementById('anomalyPanel');
+        if (!panel) return;
+        list = list || [];
+        if (!list.length) { panel.classList.add('d-none'); panel.innerHTML = ''; return; }
+        panel.classList.remove('d-none');
+        const iconFor = { critical: 'fa-circle-exclamation', warning: 'fa-triangle-exclamation', info: 'fa-circle-info' };
+        let html = '<div class="anomaly-list">';
+        list.forEach(a => {
+            const sev = a.severity || 'info';
+            const drill = a.drilldown
+                ? ` <a href="#" class="small" onclick='applyAnomalyDrill(${JSON.stringify(a.drilldown)}); return false;'>Investigate →</a>`
+                : '';
+            html += `<div class="anomaly-item sev-${escapeHtml(sev)}">`
+                + `<i class="fas ${iconFor[sev] || 'fa-circle-info'} ai-icon"></i>`
+                + `<div><div class="ai-title">${escapeHtml(a.title || '')}</div>`
+                + `<div class="ai-detail">${escapeHtml(a.detail || '')}${drill}</div></div></div>`;
+        });
+        html += '</div>';
+        panel.innerHTML = html;
+    }
+    function applyAnomalyDrill(d) {
+        if (!d) return;
+        Object.entries(d).forEach(([k, v]) => { activeFilters[k] = String(v); });
+        loadDashboard();
+    }
+
+    // ----- Per-table client-side search (text filter over rendered rows) -----
+    const TABLE_SEARCHES = {
+        searchTopPages: 'topPages', searchTopVisitors: 'topVisitors',
+        searchRecent: 'recentRequests', searchErrorPages: 'errorPages'
+    };
+    function applyTableSearch(inputId, tbodyId) {
+        const input = document.getElementById(inputId);
+        const tb = document.getElementById(tbodyId);
+        if (!input || !tb) return;
+        const term = (input.value || '').toLowerCase();
+        tb.querySelectorAll('tr').forEach(tr => {
+            tr.style.display = (!term || tr.textContent.toLowerCase().includes(term)) ? '' : 'none';
+        });
+    }
+    function applyAllTableSearches() {
+        Object.entries(TABLE_SEARCHES).forEach(([i, t]) => applyTableSearch(i, t));
+    }
 
     function cssVar(name, fallback) {
         const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -952,11 +1165,8 @@
     }
 
     async function loadDashboard() {
-        const sel = document.getElementById('rangeSelect');
-        const days = sel.value;
-        document.getElementById('range-label').textContent = sel.options[sel.selectedIndex].text.replace('Last ', '');
         try {
-            const resp = await fetch(`/api/traffic/dashboard?days=${days}`);
+            const resp = await fetch('/api/traffic/dashboard?' + buildQuery());
             const data = await resp.json();
             const errBox = document.getElementById('traffic-error');
             if (!data.success) {
@@ -966,6 +1176,11 @@
             }
             errBox.classList.add('d-none');
             lastDashboardData = data;
+            if (data.filter_meta) {
+                document.getElementById('range-label').textContent = data.filter_meta.window_label;
+            }
+            renderFilterChips(data.filter_meta);
+            renderAnomalies(data.anomalies);
             renderStrip(data.summary, data.login_summary, data.summary_prev);
             renderSparklines(data.timeseries);
             if (data.visits) {
@@ -989,22 +1204,22 @@
             renderSearchEngineChart(data.search_engine_breakdown);
             renderTrafficMap(data.country_breakdown);
             renderTable('slowestPages', data.slowest_pages, r => `<td class="text-break-anywhere">${escapeHtml(r.path)}</td><td class="text-end mono fw-bold">${r.avg_response_ms != null ? r.avg_response_ms : '--'}</td><td class="text-end d-none d-sm-table-cell mono text-muted">${r.max_response_ms != null ? r.max_response_ms : '--'}</td><td class="text-end mono">${num(r.hits)}</td>`, 4);
-            renderTable('topPages', data.top_pages, r => `<td class="text-break-anywhere">${escapeHtml(r.path)}</td><td class="text-end mono">${num(r.hits)}</td><td class="text-end d-none d-sm-table-cell mono">${r.avg_response_ms != null ? r.avg_response_ms : '--'}</td>`, 3);
+            renderTable('topPages', data.top_pages, r => `<td class="text-break-anywhere drill" data-fk="path" data-fv="${escapeHtml(r.path)}" title="Filter by this path">${escapeHtml(r.path)}</td><td class="text-end mono">${num(r.hits)}</td><td class="text-end d-none d-sm-table-cell mono">${r.avg_response_ms != null ? r.avg_response_ms : '--'}</td>`, 3);
             renderTable('topVisitors', data.top_visitors, r => {
                 const who = r.username ? ` <span class="badge bg-secondary">${escapeHtml(r.username)}</span>` : '';
                 const flag = r.country_code ? flagImg(r.country_code, r.country || r.country_code) : '';
                 const host = r.hostname
                     ? `<div class="text-break-anywhere">${flag}${escapeHtml(r.hostname)}</div><div class="text-muted small mono text-break-anywhere">${escapeHtml(r.ip_address)}${who}</div>`
                     : `<span class="text-break-anywhere mono">${flag}${escapeHtml(r.ip_address)}${who}</span>`;
-                return `<td>${host}</td><td class="text-end mono">${num(r.hits)}</td><td class="d-none d-sm-table-cell">${r.last_seen ? new Date(r.last_seen).toLocaleString() : '--'}</td>`;
+                return `<td class="drill" data-fk="ip" data-fv="${escapeHtml(r.ip_address)}" title="Filter by this IP">${host}</td><td class="text-end mono">${num(r.hits)}</td><td class="d-none d-sm-table-cell">${r.last_seen ? new Date(r.last_seen).toLocaleString() : '--'}</td>`;
             }, 3);
-            renderTable('osBreakdown', data.os_breakdown, r => `<td>${iconLabel(osMeta(r.os), r.os)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
-            renderTable('browserBreakdown', data.browser_breakdown, r => `<td>${iconLabel(browserMeta(r.browser), r.browser)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
+            renderTable('osBreakdown', data.os_breakdown, r => `<td class="drill" data-fk="os" data-fv="${escapeHtml(r.os || '')}" title="Filter by this OS">${iconLabel(osMeta(r.os), r.os)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
+            renderTable('browserBreakdown', data.browser_breakdown, r => `<td class="drill" data-fk="browser" data-fv="${escapeHtml(r.browser || '')}" title="Filter by this browser">${iconLabel(browserMeta(r.browser), r.browser)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
             renderTable('resBreakdown', data.resolution_breakdown, r => `<td class="mono">${escapeHtml(r.resolution || 'Unknown')}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
-            renderTable('countryBreakdown', data.country_breakdown, r => `<td>${flagLabel(r.country_code, r.country)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
+            renderTable('countryBreakdown', data.country_breakdown, r => `<td class="drill" data-fk="country" data-fv="${escapeHtml(r.country || '')}" title="Filter by this location">${flagLabel(r.country_code, r.country)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
             renderTable('langBreakdown', data.language_breakdown, r => `<td>${langLabel(r.language)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
             renderTable('refBreakdown', data.referer_breakdown, r => `<td>${referrerLabel(r.referer)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
-            renderTable('errorPages', data.error_pages, r => `<td class="text-break-anywhere">${escapeHtml(r.path)}</td><td class="text-center">${statusBadge(r.status_code)}</td><td class="text-end mono">${num(r.hits)}</td>`, 3);
+            renderTable('errorPages', data.error_pages, r => `<td class="text-break-anywhere drill" data-fk="path" data-fv="${escapeHtml(r.path)}" title="Filter by this path">${escapeHtml(r.path)}</td><td class="text-center">${statusBadge(r.status_code)}</td><td class="text-end mono">${num(r.hits)}</td>`, 3);
             renderTable('errorSources', data.error_sources, r => {
                 const flag = r.country_code ? flagImg(r.country_code, r.country || r.country_code) : '';
                 const host = r.hostname
@@ -1015,12 +1230,12 @@
                 const worst = r.top_path
                     ? `<div class="small text-muted mt-1 text-break-anywhere">${statusBadge(r.top_status)} <span class="mono">${escapeHtml(r.top_path)}</span> <span class="text-muted">×${num(r.top_path_hits)}</span></div>`
                     : '';
-                return `<td>${host}${worst}</td><td class="text-end mono text-danger fw-bold">${num(r.errors)}</td>`;
+                return `<td class="drill" data-fk="ip" data-fv="${escapeHtml(r.ip_address)}" title="Filter by this IP">${host}${worst}</td><td class="text-end mono text-danger fw-bold">${num(r.errors)}</td>`;
             }, 2);
             renderTable('recentRequests', data.recent_requests, r => {
                 const br = r.browser ? `${markFor(browserMeta(r.browser), r.browser, 'me-1')}${escapeHtml(r.browser)}${r.browser_version ? ' ' + escapeHtml(r.browser_version) : ''}` : '<span class="text-muted">—</span>';
                 const when = r.timestamp ? new Date(r.timestamp).toLocaleTimeString() : '--';
-                return `<td class="text-nowrap">${when}</td><td><span class="badge bg-light text-dark border">${escapeHtml(r.method)}</span></td><td class="text-break-anywhere">${escapeHtml(r.path)}</td><td class="text-center">${statusBadge(r.status_code)}</td><td class="d-none d-md-table-cell text-nowrap">${br}</td><td class="d-none d-lg-table-cell text-break-anywhere small text-muted">${escapeHtml(r.user_agent || '—')}</td>`;
+                return `<td class="text-nowrap">${when}</td><td><span class="badge bg-light text-dark border drill" data-fk="method" data-fv="${escapeHtml(r.method)}" title="Filter by method">${escapeHtml(r.method)}</span></td><td class="text-break-anywhere drill" data-fk="path" data-fv="${escapeHtml(r.path)}" title="Filter by this path">${escapeHtml(r.path)}</td><td class="text-center">${statusBadge(r.status_code)}</td><td class="d-none d-md-table-cell text-nowrap">${br}</td><td class="d-none d-lg-table-cell text-break-anywhere small text-muted">${escapeHtml(r.user_agent || '—')}</td>`;
             }, 6);
             const v = data.visits || { entry_pages: [], exit_pages: [] };
             renderTable('entryPages', v.entry_pages, r => `<td class="text-break-anywhere">${escapeHtml(r.path)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
@@ -1032,6 +1247,7 @@
             renderTable('cityBreakdown', data.city_breakdown, r => `<td><i class="fas fa-location-dot text-muted me-2"></i>${escapeHtml(r.label || r.city)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
             renderTable('topLoginIps', data.top_login_ips, r => `<td>${ipHostCell(r)}</td><td class="text-end mono">${num(r.success)}</td><td class="text-end mono ${r.failure > 0 ? 'text-danger fw-bold' : ''}">${num(r.failure)}</td>`, 3);
             renderTable('recentLogins', data.recent_logins, r => { const badge = r.success ? '<span class="badge bg-success">Success</span>' : '<span class="badge bg-danger">Failed</span>'; return `<td>${r.timestamp ? new Date(r.timestamp).toLocaleString() : '--'}</td><td>${escapeHtml(r.username || '--')}</td><td>${ipHostCell(r)}</td><td>${badge}</td>`; }, 4);
+            applyAllTableSearches();
             pingLiveDot();
         } catch (err) {
             console.error('Error loading traffic dashboard:', err);
@@ -1086,13 +1302,23 @@
             options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
         });
     }
+    // Build a Chart.js onClick handler that maps the clicked slice/bar back to a
+    // row and applies a drill-down filter.
+    function chartDrill(rows, fn) {
+        return (evt, els) => {
+            if (!els || !els.length) return;
+            const row = rows[els[0].index];
+            if (row) fn(row);
+        };
+    }
     function renderStatusChart(rows) {
         destroyChart('status');
         const palette = { '2xx Success': cssVar('--success-color', '#1cc88a'), '3xx Redirect': cssVar('--info-color', '#36b9cc'), '4xx Client Error': cssVar('--warning-color', '#f6c23e'), '5xx Server Error': cssVar('--danger-color', '#e74a3b'), 'Other': cssVar('--text-muted', '#888') };
         charts.status = new Chart(document.getElementById('statusChart').getContext('2d'), {
             type: 'doughnut',
             data: { labels: rows.map(r => r.family), datasets: [{ data: rows.map(r => r.count), backgroundColor: rows.map(r => palette[r.family] || '#888') }] },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } },
+                onClick: chartDrill(rows, r => { const m = (r.family || '').match(/^(\d)/); if (m) addFilter('status_family', m[1]); }) }
         });
     }
     function renderBrowserChart(rows) {
@@ -1100,7 +1326,8 @@
         charts.browser = new Chart(document.getElementById('browserChart').getContext('2d'), {
             type: 'bar',
             data: { labels: rows.map(r => r.browser || 'Unknown'), datasets: [{ label: 'Requests', data: rows.map(r => r.count), backgroundColor: cssVar('--primary-color', '#4e73df') }] },
-            options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } }
+            options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } },
+                onClick: chartDrill(rows, r => { if (r.browser) addFilter('browser', r.browser); }) }
         });
     }
     function renderOsChart(rows) {
@@ -1111,7 +1338,8 @@
         charts.os = new Chart(document.getElementById('osChart').getContext('2d'), {
             type: 'doughnut',
             data: { labels: rows.map(r => r.os || 'Unknown'), datasets: [{ data: rows.map(r => r.count), backgroundColor: rows.map((r, i) => palette[i % palette.length]) }] },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } },
+                onClick: chartDrill(rows, r => { if (r.os) addFilter('os', r.os); }) }
         });
     }
     function renderHourlyChart(d) {
@@ -1168,7 +1396,8 @@
         charts.method = new Chart(document.getElementById('methodChart').getContext('2d'), {
             type: 'bar',
             data: { labels: rows.map(r => r.method || '—'), datasets: [{ label: 'Requests', data: rows.map(r => r.count), backgroundColor: cssVar('--primary-color', '#4e73df') }] },
-            options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } }
+            options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } },
+                onClick: chartDrill(rows, r => { if (r.method) addFilter('method', r.method); }) }
         });
     }
     function renderAuthChart(rows) {
@@ -1270,6 +1499,12 @@
                 document.getElementById('setRetention').value = s.retention_days;
                 document.getElementById('setGeoip').value = s.geoip_database_path || '';
                 document.getElementById('setGeoipAsn').value = s.geoip_asn_database_path || '';
+                document.getElementById('setAnonymizeIp').checked = s.anonymize_ip;
+                document.getElementById('setAnomalyEnabled').checked = s.anomaly_detection_enabled;
+                document.getElementById('setAnomalyErrorRate').value = s.anomaly_error_rate_pct;
+                document.getElementById('setAnomaly5xx').value = s.anomaly_5xx_threshold;
+                document.getElementById('setAnomalyLogin').value = s.anomaly_failed_login_threshold;
+                document.getElementById('setAnomalyScanner').value = s.anomaly_scanner_threshold;
                 renderGeoipStatus(data.geoip_status);
             }
         } catch (err) { console.error('Error loading settings:', err); }
@@ -1340,7 +1575,13 @@
             excluded_paths: document.getElementById('setExcludedPaths').value,
             retention_days: parseInt(document.getElementById('setRetention').value, 10) || 90,
             geoip_database_path: document.getElementById('setGeoip').value,
-            geoip_asn_database_path: document.getElementById('setGeoipAsn').value
+            geoip_asn_database_path: document.getElementById('setGeoipAsn').value,
+            anonymize_ip: document.getElementById('setAnonymizeIp').checked,
+            anomaly_detection_enabled: document.getElementById('setAnomalyEnabled').checked,
+            anomaly_error_rate_pct: parseInt(document.getElementById('setAnomalyErrorRate').value, 10) || 25,
+            anomaly_5xx_threshold: parseInt(document.getElementById('setAnomaly5xx').value, 10) || 25,
+            anomaly_failed_login_threshold: parseInt(document.getElementById('setAnomalyLogin').value, 10) || 10,
+            anomaly_scanner_threshold: parseInt(document.getElementById('setAnomalyScanner').value, 10) || 50
         };
         try {
             const resp = await fetch('/api/traffic/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
@@ -1359,8 +1600,46 @@
         }
     }
 
+    // Purge or anonymize all recorded requests for a specific visitor IP (GDPR).
+    async function privacyAction(action) {
+        const ip = (document.getElementById('privacyIp').value || '').trim();
+        const statusEl = document.getElementById('privacyStatus');
+        if (!ip) { statusEl.innerHTML = '<span class="text-warning">Enter an IP address first.</span>'; return; }
+        const verb = action === 'purge' ? 'permanently delete' : 'anonymize';
+        if (!window.confirm(`This will ${verb} all recorded requests for ${ip}. Continue?`)) return;
+        statusEl.innerHTML = '<span class="text-muted">Working…</span>';
+        try {
+            const resp = await fetch(`/api/traffic/privacy/${action}`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ip })
+            });
+            const data = await resp.json();
+            if (data.success) {
+                const msg = action === 'purge'
+                    ? `Purged ${num(data.deleted)} row(s) for ${escapeHtml(ip)}.`
+                    : `Anonymized ${num(data.updated)} row(s) for ${escapeHtml(ip)} → ${escapeHtml(data.masked)}.`;
+                statusEl.innerHTML = `<span class="text-success">${msg}</span>`;
+                if (typeof showToast === 'function') showToast('Privacy action applied', 'success');
+                loadDashboard();  // reflect the change in the dashboard
+            } else {
+                statusEl.innerHTML = `<span class="text-danger">${escapeHtml(data.error || 'Failed')}</span>`;
+            }
+        } catch (err) {
+            console.error('Privacy action failed:', err);
+            statusEl.innerHTML = '<span class="text-danger">Request failed.</span>';
+        }
+    }
+
     // ------------------------------------------------------------------ export
     function rangeText() {
+        // Prefer the actual window the data was built for (handles custom ranges).
+        if (lastDashboardData && lastDashboardData.filter_meta) {
+            const m = lastDashboardData.filter_meta;
+            let txt = m.window_label;
+            if (m.dimensions && m.dimensions.length) {
+                txt += ' — ' + m.dimensions.map(d => `${d.label}:${d.value}`).join(', ');
+            }
+            return txt;
+        }
         const sel = document.getElementById('rangeSelect');
         return sel.options[sel.selectedIndex].text;
     }
@@ -1480,8 +1759,39 @@
     }
 
     document.addEventListener('DOMContentLoaded', function () {
-        document.getElementById('rangeSelect').addEventListener('change', loadDashboard);
+        const sel = document.getElementById('rangeSelect');
+        sel.addEventListener('change', function () {
+            const custom = document.getElementById('customRangeControls');
+            if (sel.value === 'custom') {
+                custom.classList.remove('d-none');
+                custom.style.display = 'inline-flex';
+                // Pre-fill sensible defaults (last 30 days) on first switch.
+                const end = document.getElementById('rangeEnd');
+                const start = document.getElementById('rangeStart');
+                if (!end.value) end.value = new Date().toISOString().slice(0, 10);
+                if (!start.value) start.value = new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10);
+                return;  // wait for Apply
+            }
+            custom.classList.add('d-none');
+            custom.style.display = 'none';
+            loadDashboard();
+        });
         document.getElementById('trafficSettingsModal').addEventListener('show.bs.modal', loadSettings);
+
+        // Per-table search inputs (filter live; survive auto-refresh re-renders).
+        Object.entries(TABLE_SEARCHES).forEach(([inputId, tbodyId]) => {
+            const el = document.getElementById(inputId);
+            if (el) el.addEventListener('input', () => applyTableSearch(inputId, tbodyId));
+        });
+
+        // Delegated drill-down: any element with data-fk/data-fv applies a filter.
+        document.querySelector('.traffic-dash-root').addEventListener('click', function (ev) {
+            const el = ev.target.closest('[data-fk]');
+            if (!el) return;
+            ev.preventDefault();
+            addFilter(el.getAttribute('data-fk'), el.getAttribute('data-fv'));
+        });
+
         loadDashboard();
         setInterval(loadDashboard, 60000);
     });
