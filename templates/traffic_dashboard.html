@@ -4,6 +4,7 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}">
 <style>
     /* Appliance-style chrome mirroring the System Health & GNSS dashboards so
        Traffic Analytics reads as part of the same operator UI. */
@@ -150,6 +151,30 @@
        (e.g. JP) stay visible on light backgrounds. */
     .traffic-dash-root .ti-flag { width: 1.33em; height: 1em; vertical-align: -0.12em; object-fit: cover;
         border: 1px solid var(--border-color, rgba(127,127,127,.35)); border-radius: 2px; }
+
+    /* "vs previous period" delta badge on the at-a-glance tiles. */
+    .traffic-dash-root .hs-delta {
+        font-family: var(--font-mono); font-size: 0.66rem; font-weight: 700;
+        letter-spacing: 0.02em; display: inline-flex; align-items: center; gap: 3px;
+        margin-top: 1px;
+    }
+    .traffic-dash-root .hs-delta.up   { color: #3fb950; }
+    .traffic-dash-root .hs-delta.down { color: #f85149; }
+    .traffic-dash-root .hs-delta.flat { color: var(--text-muted, #8b949e); }
+    .traffic-dash-root .hs-delta i { font-size: 0.6rem; }
+    /* Tiny per-tile sparkline canvas. */
+    .traffic-dash-root .hs-spark { width: 100%; height: 26px; margin-top: 2px; display: block; }
+
+    /* Leaflet world map — flag/dot markers sized by traffic share. */
+    .traffic-dash-root #trafficMap { height: 420px; border-radius: 6px; overflow: hidden; z-index: 0; }
+    .traffic-dash-root .leaflet-container { background: var(--surface-color, #0d1117); font-family: inherit; }
+    .traffic-dash-root .traffic-geo-dot {
+        border-radius: 50%; background: rgba(88,166,255,0.55);
+        border: 2px solid #58a6ff; box-shadow: 0 0 0 1px rgba(0,0,0,0.25);
+    }
+    .traffic-dash-root .traffic-geo-popup .ti-flag { width: 1.6em; height: 1.2em; }
+    /* Inline logo glyph sizing for file types / bots / referrers / search engines. */
+    .traffic-dash-root .ti-glyph { width: 1.15em; text-align: center; }
 </style>
 {% endblock %}
 
@@ -229,6 +254,10 @@
             <div class="lbl"><i class="fas fa-hourglass-half"></i> Avg Visit</div>
             <div class="val">—</div><div class="sub">duration</div>
         </div>
+        <div class="health-status-tile" id="hs-bounce">
+            <div class="lbl"><i class="fas fa-arrow-turn-up"></i> Bounce Rate</div>
+            <div class="val">—</div><div class="sub">single-page</div>
+        </div>
     </section>
 
     <!-- Traffic over time -->
@@ -237,6 +266,16 @@
         <div class="col-12">
             <div class="card">
                 <div class="card-body"><div class="chart-container"><canvas id="trafficChart"></canvas></div></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Visitor world map -->
+    <div class="health-section-head"><h2>Visitor Map <span class="text-muted" style="text-transform:none;font-weight:400;font-size:0.72rem;">(needs GeoLite2 Country/City for non-local visitors)</span></h2><span class="rule"></span></div>
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body p-2"><div id="trafficMap"></div></div>
             </div>
         </div>
     </div>
@@ -266,6 +305,30 @@
             <div class="card h-100">
                 <div class="card-header"><h6><i class="fas fa-sign-in-alt section-icon"></i>Login Activity</h6></div>
                 <div class="card-body"><div class="chart-container small"><canvas id="loginChart"></canvas></div></div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6">
+            <div class="card h-100">
+                <div class="card-header"><h6><i class="fas fa-mobile-screen-button section-icon"></i>Device Types</h6></div>
+                <div class="card-body"><div class="chart-container small"><canvas id="deviceChart"></canvas></div></div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6">
+            <div class="card h-100">
+                <div class="card-header"><h6><i class="fas fa-code section-icon"></i>HTTP Methods</h6></div>
+                <div class="card-body"><div class="chart-container small"><canvas id="methodChart"></canvas></div></div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6">
+            <div class="card h-100">
+                <div class="card-header"><h6><i class="fas fa-user-shield section-icon"></i>Authenticated vs Anonymous</h6></div>
+                <div class="card-body"><div class="chart-container small"><canvas id="authChart"></canvas></div></div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6">
+            <div class="card h-100">
+                <div class="card-header"><h6><i class="fas fa-magnifying-glass-location section-icon"></i>Search Engines</h6></div>
+                <div class="card-body"><div class="chart-container small"><canvas id="searchEngineChart"></canvas></div></div>
             </div>
         </div>
     </div>
@@ -304,6 +367,16 @@
                 <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
                     <thead><tr><th>Host / IP Address</th><th class="text-end">Hits</th><th class="d-none d-sm-table-cell">Last Seen</th></tr></thead>
                     <tbody id="topVisitors"></tbody></table></div></div>
+            </div>
+        </div>
+    </div>
+    <div class="row g-3 mt-0">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header"><h6><i class="fas fa-gauge-high section-icon"></i>Slowest Endpoints <span class="text-muted" style="text-transform:none;font-weight:400;font-size:0.72rem;">(avg server response, min 3 hits)</span></h6></div>
+                <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
+                    <thead><tr><th>Path</th><th class="text-end">Avg ms</th><th class="text-end d-none d-sm-table-cell">Max ms</th><th class="text-end">Hits</th></tr></thead>
+                    <tbody id="slowestPages"></tbody></table></div></div>
             </div>
         </div>
     </div>
@@ -559,6 +632,8 @@
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='vendor/chartjs/chart-v3.min.js') }}"></script>
+<script src="{{ url_for('static', filename='vendor/leaflet/leaflet.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/data/country_centroids.js') }}"></script>
 <script src="{{ url_for('static', filename='vendor/jspdf/jspdf.umd.min.js') }}"></script>
 <script src="{{ url_for('static', filename='vendor/jspdf/html2canvas.min.js') }}"></script>
 <script>
@@ -636,6 +711,108 @@
     function iconLabel(meta, label) {
         return `${markFor(meta, label)}${escapeHtml(label || 'Unknown')}`;
     }
+
+    // ----- Logos for file types, bots, languages, referrers, search engines -----
+    // We deliberately use bundled FontAwesome glyphs (no external favicon/CDN
+    // calls) so the page stays fully self-hosted, matching the browser/OS logos.
+    function glyph(icon, color) {
+        const c = color || 'var(--text-secondary, #888)';
+        return `<i class="${icon} ti-glyph me-2" style="color:${c}"></i>`;
+    }
+    // File extension -> coloured FontAwesome file glyph.
+    const FILETYPE_META = {
+        'html': ['fas fa-file-code', '#e44d26'], 'htm': ['fas fa-file-code', '#e44d26'],
+        'css': ['fas fa-file-code', '#2965f1'], 'js': ['fas fa-file-code', '#f0db4f'],
+        'json': ['fas fa-file-code', '#8bc34a'], 'xml': ['fas fa-file-code', '#ff7043'],
+        'png': ['fas fa-file-image', '#26a69a'], 'jpg': ['fas fa-file-image', '#26a69a'],
+        'jpeg': ['fas fa-file-image', '#26a69a'], 'gif': ['fas fa-file-image', '#26a69a'],
+        'svg': ['fas fa-file-image', '#ffb300'], 'webp': ['fas fa-file-image', '#26a69a'],
+        'ico': ['fas fa-file-image', '#90a4ae'], 'pdf': ['fas fa-file-pdf', '#e53935'],
+        'csv': ['fas fa-file-csv', '#43a047'], 'xlsx': ['fas fa-file-excel', '#1d6f42'],
+        'zip': ['fas fa-file-zipper', '#fbc02d'], 'gz': ['fas fa-file-zipper', '#fbc02d'],
+        'mp3': ['fas fa-file-audio', '#7e57c2'], 'wav': ['fas fa-file-audio', '#7e57c2'],
+        'ogg': ['fas fa-file-audio', '#7e57c2'], 'mp4': ['fas fa-file-video', '#5c6bc0'],
+        'woff': ['fas fa-font', '#6d4c41'], 'woff2': ['fas fa-font', '#6d4c41'],
+        'ttf': ['fas fa-font', '#6d4c41'], 'txt': ['fas fa-file-lines', '#90a4ae'],
+        'map': ['fas fa-map', '#90a4ae'],
+        '(page)': ['fas fa-file-lines', 'var(--primary-color, #4e73df)'],
+        '(other)': ['fas fa-file', '#90a4ae'],
+    };
+    function fileTypeLabel(ext) {
+        const m = FILETYPE_META[(ext || '').toLowerCase()] || ['fas fa-file', '#90a4ae'];
+        return `${glyph(m[0], m[1])}<span class="mono">${escapeHtml(ext || 'Unknown')}</span>`;
+    }
+    // Known crawler -> brand glyph + colour; substring match on the bot name.
+    const BOT_META = [
+        ['google', 'fab fa-google', '#4285F4'], ['bing', 'fab fa-microsoft', '#008373'],
+        ['yandex', 'fas fa-y', '#ff0000'], ['baidu', 'fas fa-paw', '#2932e1'],
+        ['duckduck', 'fas fa-duck', '#de5833'], ['apple', 'fab fa-apple', '#adb5bd'],
+        ['facebook', 'fab fa-facebook', '#1877f2'], ['meta', 'fab fa-meta', '#0668E1'],
+        ['twitter', 'fab fa-x-twitter', '#000'], ['x-', 'fab fa-x-twitter', '#000'],
+        ['linkedin', 'fab fa-linkedin', '#0a66c2'], ['slack', 'fab fa-slack', '#4a154b'],
+        ['discord', 'fab fa-discord', '#5865f2'], ['telegram', 'fab fa-telegram', '#26a5e4'],
+        ['amazon', 'fab fa-amazon', '#ff9900'], ['gpt', 'fas fa-robot', '#10a37f'],
+        ['openai', 'fas fa-robot', '#10a37f'], ['claude', 'fas fa-robot', '#d97757'],
+        ['anthropic', 'fas fa-robot', '#d97757'], ['ahrefs', 'fas fa-spider', '#ff8800'],
+        ['semrush', 'fas fa-spider', '#ff642d'], ['uptime', 'fas fa-heart-pulse', '#3fb950'],
+        ['pingdom', 'fas fa-heart-pulse', '#fdb515'], ['curl', 'fas fa-terminal', '#90a4ae'],
+        ['python', 'fab fa-python', '#3776ab'], ['go-http', 'fas fa-terminal', '#00add8'],
+    ];
+    function botLabel(name) {
+        const lc = (name || '').toLowerCase();
+        for (const [needle, icon, color] of BOT_META) {
+            if (lc.indexOf(needle) !== -1) return `${glyph(icon, color)}${escapeHtml(name)}`;
+        }
+        return `${glyph('fas fa-robot', '#8b949e')}${escapeHtml(name || 'Unknown')}`;
+    }
+    // Accept-Language value -> representative country flag. Maps the language's
+    // region (en-US -> US) or a sensible default region for the base language.
+    const LANG_DEFAULT_REGION = {
+        en: 'US', es: 'ES', fr: 'FR', de: 'DE', it: 'IT', pt: 'BR', nl: 'NL',
+        ru: 'RU', zh: 'CN', ja: 'JP', ko: 'KR', ar: 'SA', hi: 'IN', tr: 'TR',
+        pl: 'PL', sv: 'SE', da: 'DK', fi: 'FI', no: 'NO', cs: 'CZ', el: 'GR',
+        he: 'IL', th: 'TH', vi: 'VN', id: 'ID', uk: 'UA', ro: 'RO', hu: 'HU',
+    };
+    function langLabel(language) {
+        if (!language) return `${glyph('fas fa-globe', '#8b949e')}Unknown`;
+        const parts = String(language).split(/[-_]/);
+        const base = (parts[0] || '').toLowerCase();
+        const region = (parts[1] || LANG_DEFAULT_REGION[base] || '').toUpperCase();
+        const flag = /^[A-Z]{2}$/.test(region) ? flagImg(region, language) : '';
+        const mark = flag || glyph('fas fa-language', 'var(--text-secondary,#888)');
+        return `${mark}<span class="mono">${escapeHtml(language)}</span>`;
+    }
+    // Referring domain -> brand glyph (known sites) with a globe fallback. No
+    // external favicon fetch — keeps every visitor's referrer private/local.
+    const REFERRER_META = [
+        ['google', 'fab fa-google', '#4285F4'], ['youtube', 'fab fa-youtube', '#ff0000'],
+        ['bing', 'fab fa-microsoft', '#008373'], ['duckduckgo', 'fas fa-magnifying-glass', '#de5833'],
+        ['facebook', 'fab fa-facebook', '#1877f2'], ['instagram', 'fab fa-instagram', '#e4405f'],
+        ['reddit', 'fab fa-reddit', '#ff4500'], ['github', 'fab fa-github', 'var(--text-color,#888)'],
+        ['twitter', 'fab fa-x-twitter', 'var(--text-color,#000)'], ['t.co', 'fab fa-x-twitter', 'var(--text-color,#000)'],
+        ['linkedin', 'fab fa-linkedin', '#0a66c2'], ['wikipedia', 'fab fa-wikipedia-w', 'var(--text-color,#888)'],
+        ['stackoverflow', 'fab fa-stack-overflow', '#f48024'], ['yahoo', 'fab fa-yahoo', '#6001d2'],
+        ['yandex', 'fas fa-magnifying-glass', '#ff0000'], ['telegram', 'fab fa-telegram', '#26a5e4'],
+        ['discord', 'fab fa-discord', '#5865f2'], ['pinterest', 'fab fa-pinterest', '#e60023'],
+    ];
+    function referrerLabel(domain) {
+        const lc = (domain || '').toLowerCase();
+        for (const [needle, icon, color] of REFERRER_META) {
+            if (lc.indexOf(needle) !== -1) return `${glyph(icon, color)}<span class="text-break-anywhere">${escapeHtml(domain)}</span>`;
+        }
+        return `${glyph('fas fa-globe', '#8b949e')}<span class="text-break-anywhere">${escapeHtml(domain || 'Unknown')}</span>`;
+    }
+    const SEARCH_ENGINE_META = {
+        'Google': ['fab fa-google', '#4285F4'], 'Bing': ['fab fa-microsoft', '#008373'],
+        'DuckDuckGo': ['fas fa-magnifying-glass', '#de5833'], 'Yahoo': ['fab fa-yahoo', '#6001d2'],
+        'Yandex': ['fas fa-magnifying-glass', '#ff0000'], 'Baidu': ['fas fa-paw', '#2932e1'],
+        'Ecosia': ['fas fa-leaf', '#3fb950'], 'Startpage': ['fas fa-shield-halved', '#5c6bc0'],
+        'Brave': ['fab fa-brave', '#fb542b'], 'Ask': ['fas fa-question', '#d50000'],
+        'AOL': ['fas fa-circle', '#0a8dff'],
+    };
+    function searchEngineMeta(name) {
+        return SEARCH_ENGINE_META[name] || ['fas fa-magnifying-glass', '#8b949e'];
+    }
     // Human-readable byte size (awstats bandwidth column).
     function fmtBytes(n) {
         if (!n) return '0 B';
@@ -654,6 +831,63 @@
         if (!tile) return;
         tile.querySelector('.val').textContent = value;
         if (sub !== undefined) tile.querySelector('.sub').textContent = sub;
+    }
+    // Render a "vs previous period" delta badge inside a tile. `invert` flips the
+    // colour for metrics where lower is better (response time, errors).
+    function setDelta(id, cur, prev, invert) {
+        const tile = document.getElementById(id);
+        if (!tile) return;
+        let el = tile.querySelector('.hs-delta');
+        if (!el) {
+            el = document.createElement('div');
+            el.className = 'hs-delta';
+            tile.appendChild(el);
+        }
+        cur = cur || 0; prev = prev || 0;
+        if (!prev) {
+            // No baseline to compare against — show nothing rather than a fake ∞.
+            el.className = 'hs-delta flat';
+            el.innerHTML = '<i class="fas fa-minus"></i> —';
+            return;
+        }
+        const pct = ((cur - prev) / prev) * 100;
+        const rounded = Math.round(pct * 10) / 10;
+        let dir = rounded > 0 ? 'up' : rounded < 0 ? 'down' : 'flat';
+        // Colour by goodness: for "invert" metrics, an increase is bad.
+        let good = invert ? rounded < 0 : rounded > 0;
+        const cls = rounded === 0 ? 'flat' : (good ? 'up' : 'down');
+        const arrow = rounded > 0 ? 'fa-arrow-up' : rounded < 0 ? 'fa-arrow-down' : 'fa-minus';
+        el.className = `hs-delta ${cls}`;
+        el.innerHTML = `<i class="fas ${arrow}"></i> ${rounded > 0 ? '+' : ''}${rounded}% vs prev`;
+    }
+    // Draw a minimal sparkline (no axes/legend) into a canvas appended to a tile.
+    function sparkline(id, series, color) {
+        const tile = document.getElementById(id);
+        if (!tile || !series || !series.length) return;
+        let canvas = tile.querySelector('canvas.hs-spark');
+        if (!canvas) {
+            canvas = document.createElement('canvas');
+            canvas.className = 'hs-spark';
+            tile.appendChild(canvas);
+        }
+        const key = 'spark_' + id;
+        destroyChart(key);
+        const col = color || cssVar('--primary-color', '#4e73df');
+        charts[key] = new Chart(canvas.getContext('2d'), {
+            type: 'line',
+            data: { labels: series.map((_, i) => i), datasets: [{
+                data: series, borderColor: col, borderWidth: 1.5, pointRadius: 0,
+                fill: true, backgroundColor: col + '22', tension: 0.35 }] },
+            options: { responsive: true, maintainAspectRatio: false, animation: false,
+                plugins: { legend: { display: false }, tooltip: { enabled: false } },
+                scales: { x: { display: false }, y: { display: false } } }
+        });
+    }
+    function renderSparklines(ts) {
+        if (!ts) return;
+        sparkline('hs-pageviews', ts.page_views, cssVar('--info-color', '#36b9cc'));
+        sparkline('hs-visitors', ts.visitors, cssVar('--primary-color', '#4e73df'));
+        sparkline('hs-hits', ts.hits, cssVar('--success-color', '#1cc88a'));
     }
     function destroyChart(key) { if (charts[key]) { charts[key].destroy(); delete charts[key]; } }
     function pingLiveDot() {
@@ -677,10 +911,15 @@
             }
             errBox.classList.add('d-none');
             lastDashboardData = data;
-            renderStrip(data.summary, data.login_summary);
+            renderStrip(data.summary, data.login_summary, data.summary_prev);
+            renderSparklines(data.timeseries);
             if (data.visits) {
                 setTile('hs-visits', num(data.visits.visits), 'sessions');
                 setTile('hs-duration', fmtDuration(data.visits.avg_duration_seconds), 'duration');
+                setTile('hs-bounce', (data.visits.bounce_rate != null ? data.visits.bounce_rate + '%' : '--'),
+                    `${num(data.visits.single_page_visits || 0)} single-page`);
+                const bt = document.getElementById('hs-bounce');
+                if (bt) bt.classList.toggle('sev-warn', (data.visits.bounce_rate || 0) >= 70);
             }
             renderTrafficChart(data.timeseries);
             renderStatusChart(data.status_breakdown);
@@ -689,6 +928,12 @@
             renderLoginChart(data.login_timeseries);
             renderHourlyChart(data.hourly_distribution);
             renderWeekdayChart(data.weekday_distribution);
+            renderDeviceChart(data.device_breakdown);
+            renderMethodChart(data.method_breakdown);
+            renderAuthChart(data.auth_breakdown);
+            renderSearchEngineChart(data.search_engine_breakdown);
+            renderTrafficMap(data.country_breakdown);
+            renderTable('slowestPages', data.slowest_pages, r => `<td class="text-break-anywhere">${escapeHtml(r.path)}</td><td class="text-end mono fw-bold">${r.avg_response_ms != null ? r.avg_response_ms : '--'}</td><td class="text-end d-none d-sm-table-cell mono text-muted">${r.max_response_ms != null ? r.max_response_ms : '--'}</td><td class="text-end mono">${num(r.hits)}</td>`, 4);
             renderTable('topPages', data.top_pages, r => `<td class="text-break-anywhere">${escapeHtml(r.path)}</td><td class="text-end mono">${num(r.hits)}</td><td class="text-end d-none d-sm-table-cell mono">${r.avg_response_ms != null ? r.avg_response_ms : '--'}</td>`, 3);
             renderTable('topVisitors', data.top_visitors, r => {
                 const who = r.username ? ` <span class="badge bg-secondary">${escapeHtml(r.username)}</span>` : '';
@@ -702,8 +947,8 @@
             renderTable('browserBreakdown', data.browser_breakdown, r => `<td>${iconLabel(browserMeta(r.browser), r.browser)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
             renderTable('resBreakdown', data.resolution_breakdown, r => `<td class="mono">${escapeHtml(r.resolution || 'Unknown')}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
             renderTable('countryBreakdown', data.country_breakdown, r => `<td>${flagLabel(r.country_code, r.country)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
-            renderTable('langBreakdown', data.language_breakdown, r => `<td class="mono">${escapeHtml(r.language || 'Unknown')}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
-            renderTable('refBreakdown', data.referer_breakdown, r => `<td class="text-break-anywhere">${escapeHtml(r.referer)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
+            renderTable('langBreakdown', data.language_breakdown, r => `<td>${langLabel(r.language)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
+            renderTable('refBreakdown', data.referer_breakdown, r => `<td>${referrerLabel(r.referer)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
             renderTable('errorPages', data.error_pages, r => `<td class="text-break-anywhere">${escapeHtml(r.path)}</td><td class="text-center">${statusBadge(r.status_code)}</td><td class="text-end mono">${num(r.hits)}</td>`, 3);
             renderTable('errorSources', data.error_sources, r => {
                 const flag = r.country_code ? flagImg(r.country_code, r.country || r.country_code) : '';
@@ -720,11 +965,11 @@
             const v = data.visits || { entry_pages: [], exit_pages: [] };
             renderTable('entryPages', v.entry_pages, r => `<td class="text-break-anywhere">${escapeHtml(r.path)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
             renderTable('exitPages', v.exit_pages, r => `<td class="text-break-anywhere">${escapeHtml(r.path)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
-            renderTable('filetypeBreakdown', data.filetype_breakdown, r => `<td class="mono">${escapeHtml(r.filetype)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
+            renderTable('filetypeBreakdown', data.filetype_breakdown, r => `<td>${fileTypeLabel(r.filetype)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
             renderTable('searchTerms', data.search_terms, r => `<td class="text-break-anywhere">${escapeHtml(r.term)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
-            renderTable('botBreakdown', data.bot_breakdown, r => `<td><i class="fas fa-robot text-muted me-2"></i>${escapeHtml(r.bot)}</td><td class="text-end mono">${num(r.hits)}</td>`, 2);
+            renderTable('botBreakdown', data.bot_breakdown, r => `<td>${botLabel(r.bot)}</td><td class="text-end mono">${num(r.hits)}</td>`, 2);
             renderTable('asnBreakdown', data.asn_breakdown, r => `<td class="text-break-anywhere"><i class="fas fa-building text-muted me-2"></i>${escapeHtml(r.asn_org)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
-            renderTable('cityBreakdown', data.city_breakdown, r => `<td>${escapeHtml(r.city)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
+            renderTable('cityBreakdown', data.city_breakdown, r => `<td><i class="fas fa-location-dot text-muted me-2"></i>${escapeHtml(r.label || r.city)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
             renderTable('topLoginIps', data.top_login_ips, r => `<td class="text-break-anywhere mono">${escapeHtml(r.ip_address)}</td><td class="text-end mono">${num(r.success)}</td><td class="text-end mono ${r.failure > 0 ? 'text-danger fw-bold' : ''}">${num(r.failure)}</td>`, 3);
             renderTable('recentLogins', data.recent_logins, r => { const badge = r.success ? '<span class="badge bg-success">Success</span>' : '<span class="badge bg-danger">Failed</span>'; return `<td>${r.timestamp ? new Date(r.timestamp).toLocaleString() : '--'}</td><td>${escapeHtml(r.username || '--')}</td><td class="text-break-anywhere mono">${escapeHtml(r.ip_address || '--')}</td><td>${badge}</td>`; }, 4);
             pingLiveDot();
@@ -742,7 +987,7 @@
         return `${h}h ${m % 60}m`;
     }
 
-    function renderStrip(s, l) {
+    function renderStrip(s, l, prev) {
         setTile('hs-pageviews', num(s.page_views), 'in window');
         setTile('hs-visitors', num(s.unique_visitors), 'unique IPs');
         setTile('hs-hits', num(s.total_hits), `${num(s.bot_hits)} bot hits`);
@@ -751,6 +996,14 @@
         setTile('hs-sessions', num(l.active_sessions), 'active now');
         setTile('hs-response', s.avg_response_ms != null ? s.avg_response_ms + ' ms' : '--', `${num(s.error_hits)} errors`);
         setTile('hs-bandwidth', fmtBytes(s.total_bytes), s.avg_bytes != null ? `~${fmtBytes(s.avg_bytes)}/req` : 'served');
+        // "vs previous period" deltas (where a prior baseline exists).
+        if (prev) {
+            setDelta('hs-pageviews', s.page_views, prev.page_views);
+            setDelta('hs-visitors', s.unique_visitors, prev.unique_visitors);
+            setDelta('hs-hits', s.total_hits, prev.total_hits);
+            setDelta('hs-response', s.avg_response_ms, prev.avg_response_ms, true);
+            setDelta('hs-bandwidth', s.total_bytes, prev.total_bytes);
+        }
         // Severity tints
         const errTile = document.getElementById('hs-response');
         errTile.classList.toggle('sev-warn', (s.error_hits || 0) > 0);
@@ -827,6 +1080,111 @@
             ]},
             options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
         });
+    }
+
+    function doughnutPalette(n) {
+        const base = [cssVar('--primary-color', '#4e73df'), cssVar('--success-color', '#1cc88a'),
+            cssVar('--info-color', '#36b9cc'), cssVar('--warning-color', '#f6c23e'),
+            cssVar('--danger-color', '#e74a3b'), '#845ef7', '#20c997', '#888'];
+        return Array.from({ length: n }, (_, i) => base[i % base.length]);
+    }
+    function renderDoughnut(key, canvasId, labels, values) {
+        destroyChart(key);
+        const el = document.getElementById(canvasId);
+        if (!el) return;
+        charts[key] = new Chart(el.getContext('2d'), {
+            type: 'doughnut',
+            data: { labels: labels, datasets: [{ data: values, backgroundColor: doughnutPalette(labels.length) }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+        });
+    }
+    function renderDeviceChart(rows) {
+        rows = rows || [];
+        renderDoughnut('device', 'deviceChart', rows.map(r => r.device), rows.map(r => r.count));
+    }
+    function renderMethodChart(rows) {
+        rows = rows || [];
+        destroyChart('method');
+        charts.method = new Chart(document.getElementById('methodChart').getContext('2d'), {
+            type: 'bar',
+            data: { labels: rows.map(r => r.method || '—'), datasets: [{ label: 'Requests', data: rows.map(r => r.count), backgroundColor: cssVar('--primary-color', '#4e73df') }] },
+            options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } }
+        });
+    }
+    function renderAuthChart(rows) {
+        rows = rows || [];
+        const colors = rows.map(r => r.label === 'Authenticated' ? cssVar('--success-color', '#1cc88a') : cssVar('--info-color', '#36b9cc'));
+        destroyChart('auth');
+        const el = document.getElementById('authChart');
+        if (!el) return;
+        charts.auth = new Chart(el.getContext('2d'), {
+            type: 'doughnut',
+            data: { labels: rows.map(r => r.label), datasets: [{ data: rows.map(r => r.count), backgroundColor: colors }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+        });
+    }
+    function renderSearchEngineChart(rows) {
+        rows = rows || [];
+        destroyChart('searchEngine');
+        const el = document.getElementById('searchEngineChart');
+        if (!el) return;
+        if (!rows.length) {
+            // Keep the canvas, but show an empty doughnut-style placeholder.
+            charts.searchEngine = new Chart(el.getContext('2d'), {
+                type: 'doughnut',
+                data: { labels: ['No search-engine referrals'], datasets: [{ data: [1], backgroundColor: [cssVar('--text-muted', '#888')] }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' }, tooltip: { enabled: false } } }
+            });
+            return;
+        }
+        charts.searchEngine = new Chart(el.getContext('2d'), {
+            type: 'doughnut',
+            data: { labels: rows.map(r => r.engine), datasets: [{ data: rows.map(r => r.count), backgroundColor: rows.map(r => searchEngineMeta(r.engine)[1]) }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+        });
+    }
+
+    // ----- Visitor world map (Leaflet, flag/dot markers sized by traffic) -----
+    let trafficMap = null;
+    let trafficMapLayer = null;
+    function renderTrafficMap(rows) {
+        rows = rows || [];
+        const centroids = window.COUNTRY_CENTROIDS || {};
+        if (typeof L === 'undefined') return;
+        if (!trafficMap) {
+            trafficMap = L.map('trafficMap', { worldCopyJump: true, minZoom: 1, attributionControl: true })
+                .setView([20, 0], 2);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 8, attribution: '© OpenStreetMap'
+            }).addTo(trafficMap);
+        }
+        if (trafficMapLayer) { trafficMap.removeLayer(trafficMapLayer); trafficMapLayer = null; }
+        // Only countries we can geolocate and that have an ISO code.
+        const located = rows.filter(r => r.country_code && centroids[r.country_code.toUpperCase()]);
+        if (!located.length) {
+            // Nudge the map back to a world view; nothing to plot (likely local-only).
+            trafficMap.setView([20, 0], 2);
+            setTimeout(() => trafficMap.invalidateSize(), 50);
+            return;
+        }
+        const maxCount = Math.max(...located.map(r => r.count));
+        const markers = [];
+        located.forEach(r => {
+            const cc = r.country_code.toUpperCase();
+            const ll = centroids[cc];
+            // Radius scales with sqrt(share) so area ∝ count; clamp to sane bounds.
+            const radius = 6 + 22 * Math.sqrt((r.count || 0) / maxCount);
+            const m = L.circleMarker(ll, {
+                radius, className: 'traffic-geo-dot', color: '#58a6ff',
+                weight: 2, fillColor: '#58a6ff', fillOpacity: 0.45
+            });
+            const flag = flagImg(cc, r.country);
+            m.bindPopup(`<div class="traffic-geo-popup">${flag} <strong>${escapeHtml(r.country || cc)}</strong><br>${num(r.count)} hits</div>`);
+            markers.push(m);
+        });
+        trafficMapLayer = L.layerGroup(markers).addTo(trafficMap);
+        // Leaflet needs a size recalc when the container was hidden/resized.
+        setTimeout(() => trafficMap.invalidateSize(), 50);
     }
 
     function renderTable(id, rows, rowHtml, cols) {
@@ -971,13 +1329,18 @@
             ['Failed logins', l.failed_logins], ['Active sessions', l.active_sessions],
         ]);
         section('Top Pages', ['Path', 'Hits', 'Avg ms'], (d.top_pages || []).map(r => [r.path, r.hits, r.avg_response_ms]));
+        section('Slowest Endpoints', ['Path', 'Avg ms', 'Max ms', 'Hits'], (d.slowest_pages || []).map(r => [r.path, r.avg_response_ms, r.max_response_ms, r.hits]));
+        section('Device Types', ['Device', 'Hits'], (d.device_breakdown || []).map(r => [r.device, r.count]));
+        section('HTTP Methods', ['Method', 'Hits'], (d.method_breakdown || []).map(r => [r.method, r.count]));
+        section('Authenticated vs Anonymous', ['Type', 'Hits'], (d.auth_breakdown || []).map(r => [r.label, r.count]));
+        section('Search Engines', ['Engine', 'Hits'], (d.search_engine_breakdown || []).map(r => [r.engine, r.count]));
         section('Top Visitors', ['IP', 'Hostname', 'Country', 'User', 'Hits', 'Last seen'],
             (d.top_visitors || []).map(r => [r.ip_address, r.hostname, r.country, r.username, r.hits, r.last_seen]));
         section('Operating Systems', ['OS', 'Hits'], (d.os_breakdown || []).map(r => [r.os, r.count]));
         section('Browsers', ['Browser', 'Hits'], (d.browser_breakdown || []).map(r => [r.browser, r.count]));
         section('Countries / Networks', ['Country', 'Code', 'Hits'], (d.country_breakdown || []).map(r => [r.country, r.country_code, r.count]));
         section('Organizations / ISPs', ['Network Operator', 'Hits'], (d.asn_breakdown || []).map(r => [r.asn_org, r.count]));
-        section('Cities', ['City', 'Hits'], (d.city_breakdown || []).map(r => [r.city, r.count]));
+        section('Cities', ['City', 'Region', 'Hits'], (d.city_breakdown || []).map(r => [r.city, r.region_code || r.region || '', r.count]));
         section('Languages', ['Language', 'Hits'], (d.language_breakdown || []).map(r => [r.language, r.count]));
         section('Screen Resolutions', ['Resolution', 'Hits'], (d.resolution_breakdown || []).map(r => [r.resolution, r.count]));
         section('Referrers', ['Referrer', 'Hits'], (d.referer_breakdown || []).map(r => [r.referer, r.count]));

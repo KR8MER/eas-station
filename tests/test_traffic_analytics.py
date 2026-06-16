@@ -663,3 +663,196 @@ def test_login_summary_from_audit(app_with_db):
 
         ips = traffic_stats.get_top_login_ips(days=30)
         assert {r["ip_address"] for r in ips} == {"192.168.1.5", "10.0.0.9"}
+
+
+# ---------------------------------------------------------------------------
+# New dashboard reports: devices, methods, auth, search engines, slowest,
+# bounce rate, and previous-window deltas.
+# ---------------------------------------------------------------------------
+
+def test_device_breakdown_classifies_platforms(app_with_db):
+    app, db = app_with_db
+    from app_core.analytics import traffic_stats
+
+    with app.app_context():
+        _add_request(db, os="Windows 10/11", user_agent="Mozilla/5.0 (Windows NT 10.0)")
+        _add_request(db, os="macOS", user_agent="Mozilla/5.0 (Macintosh)")
+        _add_request(db, os="iOS", user_agent="Mozilla/5.0 (iPhone) Mobile/15E148")
+        _add_request(db, os="Android", user_agent="Mozilla/5.0 (Linux; Android 13) Mobile")
+        _add_request(db, os="iPadOS", user_agent="Mozilla/5.0 (iPad)")
+        # Bot rows must be excluded from the human device split.
+        _add_request(db, os="Linux", is_bot=True, user_agent="Googlebot/2.1")
+
+        devices = {r["device"]: r["count"] for r in traffic_stats.get_device_breakdown(days=30)}
+        assert devices.get("Desktop") == 2   # Windows + macOS
+        assert devices.get("Mobile") == 2     # iOS + Android phone
+        assert devices.get("Tablet") == 1     # iPadOS
+
+
+def test_method_breakdown_counts_verbs(app_with_db):
+    app, db = app_with_db
+    from app_core.analytics import traffic_stats
+
+    with app.app_context():
+        _add_request(db, method="GET")
+        _add_request(db, method="GET")
+        _add_request(db, method="POST")
+
+        methods = {r["method"]: r["count"] for r in traffic_stats.get_method_breakdown(days=30)}
+        assert methods.get("GET") == 2
+        assert methods.get("POST") == 1
+
+
+def test_auth_breakdown_splits_authenticated(app_with_db):
+    app, db = app_with_db
+    from app_core.analytics import traffic_stats
+
+    with app.app_context():
+        _add_request(db, is_authenticated=True)
+        _add_request(db, is_authenticated=False)
+        _add_request(db, is_authenticated=False)
+        _add_request(db, is_authenticated=True, is_bot=True)  # bot excluded
+
+        auth = {r["label"]: r["count"] for r in traffic_stats.get_auth_breakdown(days=30)}
+        assert auth.get("Authenticated") == 1
+        assert auth.get("Anonymous") == 2
+
+
+def test_search_engine_breakdown_from_referrer(app_with_db):
+    app, db = app_with_db
+    from app_core.analytics import traffic_stats
+
+    with app.app_context():
+        _add_request(db, referer="https://www.google.com/search?q=eas")
+        _add_request(db, referer="https://www.bing.com/search?q=eas")
+        _add_request(db, referer="https://duckduckgo.com/?q=eas")
+        _add_request(db, referer="https://example.com/page")  # not a search engine
+
+        engines = {r["engine"]: r["count"] for r in traffic_stats.get_search_engine_breakdown(days=30)}
+        assert engines.get("Google") == 1
+        assert engines.get("Bing") == 1
+        assert engines.get("DuckDuckGo") == 1
+        assert "example.com" not in engines
+
+
+def test_slowest_pages_ranks_by_avg_response(app_with_db):
+    app, db = app_with_db
+    from app_core.analytics import traffic_stats
+
+    with app.app_context():
+        # /slow needs >= min_hits timed requests to qualify.
+        for _ in range(3):
+            _add_request(db, path="/slow", response_time_ms=900)
+        for _ in range(3):
+            _add_request(db, path="/fast", response_time_ms=10)
+        # Below the min-hits threshold -> excluded even though it's slow.
+        _add_request(db, path="/rare", response_time_ms=5000)
+
+        slow = traffic_stats.get_slowest_pages(days=30, min_hits=3)
+        paths = [r["path"] for r in slow]
+        assert paths[0] == "/slow"
+        assert "/rare" not in paths
+        assert slow[0]["avg_response_ms"] == 900
+
+
+def test_visits_report_bounce_rate(app_with_db):
+    app, db = app_with_db
+    from app_core.analytics import traffic_stats
+    from app_utils import utc_now
+
+    base = utc_now()
+    with app.app_context():
+        # Visitor A: single page view -> a bounce.
+        _add_request(db, ip_address="203.0.113.1", path="/landing", timestamp=base)
+        # Visitor B: two page views in one visit -> not a bounce.
+        _add_request(db, ip_address="203.0.113.2", path="/a",
+                     timestamp=base + timedelta(seconds=1))
+        _add_request(db, ip_address="203.0.113.2", path="/b",
+                     timestamp=base + timedelta(seconds=30))
+
+        visits = traffic_stats.get_visits(days=30)
+        assert visits["visits"] == 2
+        assert visits["single_page_visits"] == 1
+        assert visits["bounce_rate"] == 50.0
+
+
+def test_summary_previous_window(app_with_db):
+    app, db = app_with_db
+    from app_core.analytics import traffic_stats
+    from app_utils import utc_now
+
+    now = utc_now()
+    with app.app_context():
+        # Current window (within the last `days`).
+        _add_request(db, timestamp=now - timedelta(days=1))
+        # Previous window (between `days` and `2*days` ago).
+        _add_request(db, timestamp=now - timedelta(days=10))
+        _add_request(db, timestamp=now - timedelta(days=12))
+
+        prev = traffic_stats.get_summary_previous(days=7)
+        # Only the two rows in the preceding 7-day window are counted.
+        assert prev["total_hits"] == 2
+
+
+# ---------------------------------------------------------------------------
+# IPv6 visitor grouping + state/region surfacing
+# ---------------------------------------------------------------------------
+
+def test_network_key_groups_ipv6_by_prefix():
+    from app_core.analytics.geo import network_key
+
+    # IPv4 addresses are their own key.
+    assert network_key("203.0.113.7") == "203.0.113.7"
+    # Two IPv6 privacy addresses in the same /64 collapse to one key.
+    a = network_key("2001:db8:abcd:1234::1")
+    b = network_key("2001:db8:abcd:1234:ffff:ffff:ffff:ffff")
+    assert a == b == "2001:db8:abcd:1234::/64"
+    # A different /64 is a different key.
+    assert network_key("2001:db8:abcd:9999::1") != a
+    # Junk / missing never raises.
+    assert network_key("not-an-ip") == "not-an-ip"
+    assert network_key(None) is None
+
+
+def test_unique_visitors_collapse_ipv6_prefix(app_with_db):
+    app, db = app_with_db
+    from app_core.analytics import traffic_stats
+
+    with app.app_context():
+        # Same household /64, three rotating privacy addresses -> 1 visitor.
+        _add_request(db, ip_address="2001:db8:1:2::a")
+        _add_request(db, ip_address="2001:db8:1:2::b")
+        _add_request(db, ip_address="2001:db8:1:2:dead:beef::c")
+        # A distinct IPv4 visitor.
+        _add_request(db, ip_address="198.51.100.5")
+
+        summary = traffic_stats.get_summary(days=30)
+        assert summary["total_hits"] == 4
+        # 1 IPv6 /64 + 1 IPv4 = 2 unique visitors (not 4).
+        assert summary["unique_visitors"] == 2
+
+
+def test_city_breakdown_includes_region_label(app_with_db):
+    app, db = app_with_db
+    from app_core.analytics import traffic_stats
+
+    with app.app_context():
+        _add_request(db, ip_address="8.8.8.8", city="Springfield",
+                     region="Illinois", region_code="IL")
+        _add_request(db, ip_address="8.8.4.4", city="Springfield",
+                     region="Missouri", region_code="MO")
+
+        rows = {r["region_code"]: r for r in traffic_stats.get_city_breakdown(days=30)}
+        # Same city name, two different states -> two distinguishable rows.
+        assert "Springfield, IL" in {r["label"] for r in rows.values()}
+        assert "Springfield, MO" in {r["label"] for r in rows.values()}
+
+
+def test_classify_location_surfaces_region_keys():
+    from app_core.analytics.geo import classify_location
+
+    # Even without a GeoIP DB, the public-address fallback now carries the
+    # region keys (as None) so the recorder can store them uniformly.
+    public = classify_location("8.8.8.8")
+    assert "region" in public and "region_code" in public
+    assert public["region"] is None

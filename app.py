@@ -1343,6 +1343,8 @@ def _record_traffic(response) -> None:
             'country': location['label'],
             'country_code': location['country_code'],
             'city': location.get('city'),
+            'region': location.get('region'),
+            'region_code': location.get('region_code'),
             'asn_org': asn_org,
             'language': language,
         })

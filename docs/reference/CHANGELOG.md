@@ -8,6 +8,40 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.101.0] - 2026-06-16 - Traffic Analytics: logos everywhere, visitor map, new reports, IPv6 & state
+
+### Added
+- **Self-hosted logos across every report.** Traffic Analytics now renders brand
+  marks for **file types** (coloured FontAwesome file glyphs by extension),
+  **robots/spiders** (Googlebot, Bingbot, GPTBot, AhrefsBot, uptime monitors, …),
+  **languages** (Accept-Language → country flag), **referrers** and **search
+  engines** (Google/Bing/DuckDuckGo/YouTube/Reddit/GitHub/…). All marks use
+  bundled FontAwesome/flag assets — no external favicon or CDN calls, matching
+  the existing browser/OS logos.
+- **Visitor world map.** A new Leaflet map plots a proportionally-sized marker
+  over each country in the breakdown (reuses the bundled flag SVGs; tiles from
+  OpenStreetMap as the other maps already do). Backed by a new
+  `static/js/data/country_centroids.js` lookup.
+- **New breakdown reports:** Device Types (Desktop/Mobile/Tablet), HTTP Methods,
+  Authenticated vs Anonymous, Search Engines, and a **Slowest Endpoints** table
+  (avg/max server response, min-3-hits) — all added to the dashboard, CSV export,
+  and the JSON payload.
+- **Bounce rate** tile (single-page visits) and **"vs previous period" deltas**
+  with **sparklines** on the at-a-glance status tiles, powered by a new
+  `summary_prev` previous-window summary.
+- **State / region for cities.** `classify_location` now reads the most-specific
+  subdivision from a GeoLite2 City database, stored in new
+  `web_request_logs.region` / `region_code` columns (migration
+  `20260616_traffic_region`). "Top Cities" now reads e.g. *"Springfield, IL"* and
+  disambiguates same-named cities.
+
+### Changed
+- **IPv6 visitor counting.** Unique-visitor and time-series visitor counts now
+  group IPv6 addresses by their **/64 prefix** (new `geo.network_key`), so a
+  single device's rotating privacy/temporary addresses are no longer counted as
+  many visitors. IPv4 is unchanged; GeoIP country/city/ASN and reverse-DNS
+  already worked for IPv6 (the `ipaddress` module and GeoLite2 are dual-stack).
+
 ## [2.100.0] - 2026-06-16 - Stream auth + clear 403 reporting
 
 ### Added

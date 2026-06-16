@@ -36,6 +36,7 @@ from urllib.parse import urlparse
 from sqlalchemy import func
 
 from app_core.extensions import db
+from app_core.analytics.geo import network_key
 from app_core.analytics.web_traffic import WebRequestLog
 from app_utils import utc_now
 
@@ -60,12 +61,16 @@ def get_summary(days: int = 30) -> Dict[str, Any]:
     bot_hits = base.filter(WebRequestLog.is_bot.is_(True)).count()
     error_hits = base.filter(WebRequestLog.status_code >= 400).count()
 
-    unique_visitors = (
-        db.session.query(func.count(func.distinct(WebRequestLog.ip_address)))
-        .filter(WebRequestLog.timestamp >= start)
-        .scalar()
-        or 0
+    # Count unique visitors by network key: IPv4 addresses count individually,
+    # but IPv6 addresses are collapsed to their /64 prefix so a single device's
+    # rotating privacy addresses aren't counted as many visitors. We pull the
+    # distinct addresses (a small set) and fold them in Python for portability.
+    distinct_ips = (
+        db.session.query(func.distinct(WebRequestLog.ip_address))
+        .filter(WebRequestLog.timestamp >= start, WebRequestLog.ip_address.isnot(None))
+        .all()
     )
+    unique_visitors = len({network_key(ip) for (ip,) in distinct_ips})
 
     avg_response = (
         db.session.query(func.avg(WebRequestLog.response_time_ms))
@@ -115,6 +120,63 @@ def get_summary(days: int = 30) -> Dict[str, Any]:
     }
 
 
+def get_summary_previous(days: int = 30) -> Dict[str, Any]:
+    """Same counters as :func:`get_summary` for the *preceding* window.
+
+    Used to show "vs previous period" deltas on the dashboard's metric tiles.
+    The window is ``[now - 2*days, now - days)`` — the equal-length period
+    immediately before the one shown.
+    """
+    now = utc_now()
+    end = now - timedelta(days=max(int(days), 1))
+    start = now - timedelta(days=max(int(days), 1) * 2)
+    base = WebRequestLog.query.filter(
+        WebRequestLog.timestamp >= start, WebRequestLog.timestamp < end
+    )
+
+    page_views = base.filter(
+        WebRequestLog.is_api.is_(False), WebRequestLog.is_bot.is_(False)
+    ).count()
+    error_hits = base.filter(WebRequestLog.status_code >= 400).count()
+    distinct_ips = (
+        db.session.query(func.distinct(WebRequestLog.ip_address))
+        .filter(
+            WebRequestLog.timestamp >= start,
+            WebRequestLog.timestamp < end,
+            WebRequestLog.ip_address.isnot(None),
+        )
+        .all()
+    )
+    unique_visitors = len({network_key(ip) for (ip,) in distinct_ips})
+    avg_response = (
+        db.session.query(func.avg(WebRequestLog.response_time_ms))
+        .filter(
+            WebRequestLog.timestamp >= start,
+            WebRequestLog.timestamp < end,
+            WebRequestLog.response_time_ms.isnot(None),
+        )
+        .scalar()
+    )
+    total_bytes = (
+        db.session.query(func.sum(WebRequestLog.content_length))
+        .filter(
+            WebRequestLog.timestamp >= start,
+            WebRequestLog.timestamp < end,
+            WebRequestLog.content_length.isnot(None),
+        )
+        .scalar()
+        or 0
+    )
+    return {
+        "total_hits": base.count(),
+        "page_views": page_views,
+        "error_hits": error_hits,
+        "unique_visitors": int(unique_visitors),
+        "avg_response_ms": round(float(avg_response), 1) if avg_response is not None else None,
+        "total_bytes": int(total_bytes),
+    }
+
+
 def get_timeseries(days: int = 30) -> Dict[str, Any]:
     """Per-day series of hits, page views, and unique visitors.
 
@@ -150,7 +212,7 @@ def get_timeseries(days: int = 30) -> Dict[str, Any]:
         if not is_api and not is_bot:
             pages[bucket] += 1
         if ip:
-            visitors[bucket].add(ip)
+            visitors[bucket].add(network_key(ip))
 
     labels = sorted(set(hits) | set(pages) | set(visitors))
     return {
@@ -271,6 +333,101 @@ def get_browser_breakdown(days: int = 30, limit: int = 10) -> List[Dict[str, Any
     return _simple_breakdown(WebRequestLog.browser, days, limit, "browser")
 
 
+def get_method_breakdown(days: int = 30, limit: int = 10) -> List[Dict[str, Any]]:
+    """Hits grouped by HTTP method (GET/POST/PUT/…)."""
+    return _simple_breakdown(WebRequestLog.method, days, limit, "method")
+
+
+# OS names that imply a touch device. Everything else (Windows, macOS, Linux,
+# ChromeOS, unknown) is treated as a desktop/laptop.
+_MOBILE_OS = {"iOS", "Android"}
+_TABLET_OS = {"iPadOS"}
+
+
+def _classify_device(os_name: Optional[str], user_agent: Optional[str]) -> str:
+    """Bucket a request into Desktop / Mobile / Tablet from OS + user-agent.
+
+    The ``os`` column already captures the platform; the user-agent is a
+    fallback for the desktop-vs-tablet ambiguity on Android and bare UAs.
+    """
+    ua = (user_agent or "")
+    os_name = os_name or ""
+    if os_name in _TABLET_OS or "iPad" in ua or ("Tablet" in ua):
+        return "Tablet"
+    if os_name in _MOBILE_OS or "Mobi" in ua:
+        # Android tablets omit "Mobile" in the UA; treat those as tablets.
+        if os_name == "Android" and "Mobi" not in ua and ua:
+            return "Tablet"
+        return "Mobile"
+    return "Desktop"
+
+
+def get_device_breakdown(days: int = 30) -> List[Dict[str, Any]]:
+    """Human (non-bot) hits grouped into Desktop / Mobile / Tablet."""
+    start = _window_start(days)
+    rows = (
+        db.session.query(WebRequestLog.os, WebRequestLog.user_agent)
+        .filter(WebRequestLog.timestamp >= start, WebRequestLog.is_bot.is_(False))
+        .all()
+    )
+    counts: Counter = Counter()
+    for os_name, ua in rows:
+        counts[_classify_device(os_name, ua)] += 1
+    order = ["Desktop", "Mobile", "Tablet"]
+    return [{"device": d, "count": counts[d]} for d in order if counts.get(d)]
+
+
+def get_auth_breakdown(days: int = 30) -> List[Dict[str, Any]]:
+    """Human (non-bot) hits split into authenticated vs anonymous."""
+    start = _window_start(days)
+    base = WebRequestLog.query.filter(
+        WebRequestLog.timestamp >= start, WebRequestLog.is_bot.is_(False)
+    )
+    authed = base.filter(WebRequestLog.is_authenticated.is_(True)).count()
+    anon = base.filter(WebRequestLog.is_authenticated.is_(False)).count()
+    result = []
+    if authed:
+        result.append({"label": "Authenticated", "count": authed})
+    if anon:
+        result.append({"label": "Anonymous", "count": anon})
+    return result
+
+
+def get_slowest_pages(days: int = 30, limit: int = 15, min_hits: int = 3) -> List[Dict[str, Any]]:
+    """Endpoints with the highest average server response time.
+
+    Only paths with at least *min_hits* timed requests are considered, so a
+    single slow outlier doesn't dominate the list.
+    """
+    start = _window_start(days)
+    rows = (
+        db.session.query(
+            WebRequestLog.path,
+            func.count(WebRequestLog.id).label("hits"),
+            func.avg(WebRequestLog.response_time_ms).label("avg_ms"),
+            func.max(WebRequestLog.response_time_ms).label("max_ms"),
+        )
+        .filter(
+            WebRequestLog.timestamp >= start,
+            WebRequestLog.response_time_ms.isnot(None),
+        )
+        .group_by(WebRequestLog.path)
+        .having(func.count(WebRequestLog.id) >= min_hits)
+        .order_by(func.avg(WebRequestLog.response_time_ms).desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {
+            "path": r.path,
+            "hits": int(r.hits),
+            "avg_response_ms": round(float(r.avg_ms), 1) if r.avg_ms is not None else None,
+            "max_response_ms": int(r.max_ms) if r.max_ms is not None else None,
+        }
+        for r in rows
+    ]
+
+
 def get_os_breakdown(days: int = 30, limit: int = 10) -> List[Dict[str, Any]]:
     return _simple_breakdown(WebRequestLog.os, days, limit, "os")
 
@@ -341,8 +498,42 @@ def get_language_breakdown(days: int = 30, limit: int = 10) -> List[Dict[str, An
 
 
 def get_city_breakdown(days: int = 30, limit: int = 10) -> List[Dict[str, Any]]:
-    """Hits grouped by city (requires a GeoLite2 City database)."""
-    return _simple_breakdown(WebRequestLog.city, days, limit, "city")
+    """Hits grouped by city + state/region (requires a GeoLite2 City database).
+
+    Surfaces the subdivision (state/province) alongside the city so same-named
+    cities are distinguishable. ``label`` is a ready-to-display string such as
+    ``"Springfield, IL"`` (falls back to just the city when no region is known).
+    """
+    start = _window_start(days)
+    rows = (
+        db.session.query(
+            WebRequestLog.city,
+            WebRequestLog.region,
+            WebRequestLog.region_code,
+            func.count(WebRequestLog.id).label("count"),
+        )
+        .filter(WebRequestLog.timestamp >= start, WebRequestLog.city.isnot(None))
+        # Group by city *and* region so same-named cities in different
+        # states/provinces stay distinct (e.g. Springfield, IL vs Springfield, MO).
+        .group_by(WebRequestLog.city, WebRequestLog.region, WebRequestLog.region_code)
+        .order_by(func.count(WebRequestLog.id).desc())
+        .limit(limit)
+        .all()
+    )
+    result = []
+    for r in rows:
+        suffix = r.region_code or r.region
+        label = f"{r.city}, {suffix}" if suffix else r.city
+        result.append(
+            {
+                "city": r.city,
+                "region": r.region,
+                "region_code": r.region_code,
+                "label": label,
+                "count": int(r.count),
+            }
+        )
+    return result
 
 
 def get_asn_breakdown(days: int = 30, limit: int = 10) -> List[Dict[str, Any]]:
@@ -493,14 +684,17 @@ def get_visits(days: int = 30, limit: int = 15) -> Dict[str, Any]:
 
     entry: Counter = Counter()
     exit_: Counter = Counter()
-    totals = {"visits": 0, "duration": 0.0}
-    state = {"ip": None, "start": None, "last": None, "entry": None, "exit": None}
+    totals = {"visits": 0, "duration": 0.0, "bounces": 0}
+    state = {"ip": None, "start": None, "last": None, "entry": None, "exit": None, "pages": 0}
 
     def flush():
         if state["start"] is None:
             return
         totals["visits"] += 1
         totals["duration"] += (state["last"] - state["start"]).total_seconds()
+        # A "bounce" is a visit with a single page view (awstats/GA convention).
+        if state["pages"] <= 1:
+            totals["bounces"] += 1
         if state["entry"]:
             entry[state["entry"]] += 1
         if state["exit"]:
@@ -515,19 +709,23 @@ def get_visits(days: int = 30, limit: int = 15) -> Dict[str, Any]:
         )
         if ip != state["ip"] or gap:
             flush()
-            state.update(ip=ip, start=ts, entry=None, exit=None)
+            state.update(ip=ip, start=ts, entry=None, exit=None, pages=0)
         if not is_api:
             if state["entry"] is None:
                 state["entry"] = path
             state["exit"] = path
+            state["pages"] += 1
         state["last"] = ts
     flush()
 
     visits = totals["visits"]
     avg = totals["duration"] / visits if visits else 0.0
+    bounce_rate = round(100.0 * totals["bounces"] / visits, 1) if visits else 0.0
     return {
         "visits": visits,
         "avg_duration_seconds": round(avg, 1),
+        "bounce_rate": bounce_rate,
+        "single_page_visits": totals["bounces"],
         "entry_pages": [{"path": p, "count": c} for p, c in entry.most_common(limit)],
         "exit_pages": [{"path": p, "count": c} for p, c in exit_.most_common(limit)],
     }
@@ -593,6 +791,40 @@ def get_search_terms(days: int = 30, limit: int = 15) -> List[Dict[str, Any]]:
                     counts[values[0].strip().lower()[:120]] += 1
                 break
     return [{"term": k, "count": v} for k, v in counts.most_common(limit)]
+
+
+# Search-engine referrer host substring -> display name for the breakdown chart.
+_SEARCH_ENGINE_NAMES = {
+    "google": "Google", "bing": "Bing", "duckduckgo": "DuckDuckGo",
+    "ecosia": "Ecosia", "startpage": "Startpage", "brave": "Brave",
+    "ask": "Ask", "aol": "AOL", "yahoo": "Yahoo", "yandex": "Yandex",
+    "baidu": "Baidu",
+}
+
+
+def get_search_engine_breakdown(days: int = 30, limit: int = 10) -> List[Dict[str, Any]]:
+    """Referrals grouped by originating search engine (awstats' "Search engines").
+
+    Complements :func:`get_search_terms`: even when an engine strips the query
+    string over HTTPS, the referring host still tells us *which* engine sent the
+    visitor.
+    """
+    start = _window_start(days)
+    rows = (
+        db.session.query(WebRequestLog.referer)
+        .filter(WebRequestLog.timestamp >= start, WebRequestLog.referer.isnot(None))
+        .all()
+    )
+    counts: Counter = Counter()
+    for (ref,) in rows:
+        if not ref:
+            continue
+        host = urlparse(ref).netloc.lower()
+        for needle, name in _SEARCH_ENGINE_NAMES.items():
+            if needle in host:
+                counts[name] += 1
+                break
+    return [{"engine": name, "count": count} for name, count in counts.most_common(limit)]
 
 
 def get_bot_breakdown(days: int = 30, limit: int = 15) -> List[Dict[str, Any]]:
@@ -771,13 +1003,19 @@ def get_full_dashboard(days: int = 30, self_hosts: Optional[set] = None) -> Dict
     """
     return {
         "summary": get_summary(days),
+        "summary_prev": get_summary_previous(days),
         "timeseries": get_timeseries(days),
         "top_pages": get_top_pages(days),
+        "slowest_pages": get_slowest_pages(days),
         "top_visitors": get_top_visitors(days),
         "status_breakdown": get_status_breakdown(days),
         "browser_breakdown": get_browser_breakdown(days),
         "os_breakdown": get_os_breakdown(days),
+        "device_breakdown": get_device_breakdown(days),
+        "method_breakdown": get_method_breakdown(days),
+        "auth_breakdown": get_auth_breakdown(days),
         "referer_breakdown": get_referer_breakdown(days, self_hosts=self_hosts),
+        "search_engine_breakdown": get_search_engine_breakdown(days),
         "resolution_breakdown": get_resolution_breakdown(days),
         "country_breakdown": get_country_breakdown(days),
         "city_breakdown": get_city_breakdown(days),
@@ -801,13 +1039,19 @@ def get_full_dashboard(days: int = 30, self_hosts: Optional[set] = None) -> Dict
 
 __all__ = [
     "get_summary",
+    "get_summary_previous",
     "get_timeseries",
     "get_top_pages",
+    "get_slowest_pages",
     "get_top_visitors",
     "get_status_breakdown",
     "get_browser_breakdown",
     "get_os_breakdown",
+    "get_device_breakdown",
+    "get_method_breakdown",
+    "get_auth_breakdown",
     "get_referer_breakdown",
+    "get_search_engine_breakdown",
     "get_resolution_breakdown",
     "get_country_breakdown",
     "get_city_breakdown",
