@@ -8,6 +8,32 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.100.0] - 2026-06-16 - Stream auth + clear 403 reporting
+
+### Added
+- **Stream URL preflight test** — a new `POST /api/audio/sources/test-stream`
+  endpoint and a **Test** button next to the Stream URL field on the Audio
+  Monitoring add/edit forms. It actually connects to the stream and reports the
+  real HTTP status, so an authentication-gated stream (e.g.
+  `https://15693.live.streamtheworld.com/WMJVFMAAC.aac`) returns a clear
+  *"403 Forbidden — stream requires authentication or is access restricted"*
+  message instead of a generic error. Adding a stream now runs this preflight
+  automatically and blocks creation on a hard failure (bypassable with
+  `skip_url_check=true`).
+- **Stream authentication** — stream sources accept optional credentials via new
+  `device_params`: `auth_username`/`auth_password` (HTTP Basic) or a raw
+  `auth_header` value (e.g. `Bearer <token>`), exposed as optional fields on the
+  add/edit forms. Credentials are applied to the FFmpeg request headers, playlist
+  resolution, ICY-metadata polling, and the preflight test. Stored passwords are
+  redacted from API responses (`auth_password_set` boolean) and preserved on edit
+  when the password field is left blank.
+
+### Changed
+- Stream sources no longer retry forever on HTTP `401/403/404`. FFmpeg now only
+  auto-reconnects on transient `5xx` errors; auth/availability failures are
+  marked fatal, stop the restart loop, and surface the HTTP status as the
+  source's `error_message` in the UI status card.
+
 ## [2.99.0] - 2026-06-16 - awstats parity: visits, file types, search, robots + City/ASN GeoIP
 
 ### Added
