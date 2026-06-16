@@ -67,8 +67,12 @@ _failed_paths: set = set()
 _hostname_cache: Dict[str, Optional[str]] = {}
 _hostname_lock = threading.Lock()
 _HOSTNAME_CACHE_MAX = 50000
-# Default per-lookup timeout (seconds) for reverse DNS.
+# Default per-lookup timeout (seconds) for reverse DNS. IPv6 ``ip6.arpa`` PTR
+# lookups walk a far longer (nibble-reversed) name and routinely answer slower
+# than IPv4 ``in-addr.arpa``, so give v6 a more generous budget — otherwise v6
+# lookups time out where the equivalent v4 lookup would have succeeded.
 _DEFAULT_DNS_TIMEOUT = 1.5
+_DEFAULT_DNS_TIMEOUT_V6 = 3.0
 # Sentinel distinguishing "not cached" from a cached ``None`` (negative result).
 _SENTINEL = object()
 
@@ -243,47 +247,81 @@ def resolve_asn(ip: Optional[str], asn_db_path: Optional[str] = None) -> Optiona
 
 
 def resolve_hostname(
-    ip: Optional[str], timeout: float = _DEFAULT_DNS_TIMEOUT
-) -> Optional[str]:
+    ip: Optional[str],
+    timeout: Optional[float] = None,
+    *,
+    return_status: bool = False,
+):
     """Reverse-resolve *ip* to a hostname (PTR record), or ``None``.
 
-    awstats-style reverse DNS. Results are cached (positive and negative) so a
-    given address is only looked up once. A short socket timeout bounds the cost
-    of a slow or unreachable resolver. This makes a network call and is intended
-    to run from the background recorder thread, never on the request path.
+    awstats-style reverse DNS. This makes a network call and is intended to run
+    from the background recorder thread, never on the request path.
+
+    A short socket timeout bounds the cost of a slow or unreachable resolver.
+    When *timeout* is ``None`` an address-family-aware default is used (IPv6 gets
+    a longer budget — see :data:`_DEFAULT_DNS_TIMEOUT_V6`).
+
+    Caching is **outcome-aware**: a resolved hostname and an *authoritative*
+    "no PTR record" miss (``herror``/NXDOMAIN) are cached so the address is only
+    looked up once. A **transient** failure (timeout, temporary resolver error)
+    is *not* cached, so a later pass can retry — this matters most for IPv6,
+    whose slower ``ip6.arpa`` lookups would otherwise lose a one-shot race to a
+    short timeout and be remembered as a permanent miss.
+
+    Returns the hostname (or ``None``). When ``return_status=True`` returns a
+    ``(hostname, status)`` tuple where *status* is one of ``"resolved"``,
+    ``"no_record"``, ``"error"`` (transient), or ``"invalid"`` (not an IP). The
+    status lets the caller distinguish a definitive miss from a retryable one.
     """
+
+    def _ret(name: Optional[str], status: str):
+        return (name, status) if return_status else name
+
     if not ip:
-        return None
+        return _ret(None, "invalid")
 
     cached = _hostname_cache.get(ip, _SENTINEL)
     if cached is not _SENTINEL:
-        return cached  # type: ignore[return-value]
+        return _ret(cached, "resolved" if cached else "no_record")  # type: ignore[arg-type]
 
     # Don't attempt reverse DNS for non-addresses.
     try:
-        ipaddress.ip_address(ip)
+        addr = ipaddress.ip_address(ip)
     except ValueError:
         _cache_hostname(ip, None)
-        return None
+        return _ret(None, "invalid")
+
+    if timeout is None:
+        timeout = _DEFAULT_DNS_TIMEOUT_V6 if addr.version == 6 else _DEFAULT_DNS_TIMEOUT
 
     hostname: Optional[str] = None
+    status = "no_record"
     previous_timeout = socket.getdefaulttimeout()
     try:
         socket.setdefaulttimeout(max(0.1, float(timeout)))
         hostname = socket.gethostbyaddr(ip)[0] or None
         if hostname:
             hostname = hostname[:255]
-    except Exception:
-        # NXDOMAIN, timeout, no PTR record, etc. — cache the miss.
-        hostname = None
+            status = "resolved"
+    except socket.herror:
+        # Authoritative "host not found" — the resolver answered: no PTR record.
+        hostname, status = None, "no_record"
+    except (socket.timeout, socket.gaierror, OSError):
+        # Slow/unreachable/temporary resolver failure — retryable, don't cache.
+        hostname, status = None, "error"
+    except Exception:  # pragma: no cover - defensive: treat unknown as retryable
+        hostname, status = None, "error"
     finally:
         try:
             socket.setdefaulttimeout(previous_timeout)
         except Exception:  # pragma: no cover - defensive
             pass
 
-    _cache_hostname(ip, hostname)
-    return hostname
+    # Cache definitive outcomes only; transient errors stay uncached so a future
+    # pass retries the address instead of locking in a one-shot failure.
+    if status != "error":
+        _cache_hostname(ip, hostname)
+    return _ret(hostname, status)
 
 
 def _cache_hostname(ip: str, hostname: Optional[str]) -> None:

@@ -8,6 +8,36 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.106.0] - 2026-06-16 - Traffic Analytics: IPv6 reverse-DNS reliability + IPv4/IPv6 breakdown
+
+### Added
+- **IPv4 vs IPv6 breakdown panel** on the Traffic Analytics dashboard
+  (`get_ip_version_breakdown` in `app_core/analytics/traffic_stats.py`, surfaced
+  as `ip_version_breakdown` in the dashboard payload and a new card in
+  `templates/traffic_dashboard.html`). For each address family it reports total
+  hits, unique visitors (IPv6 grouped by /64 so rotating privacy addresses don't
+  over-count), distinct addresses, and **reverse-DNS coverage** (`resolved / ips`)
+  — making it obvious at a glance that IPv6 hosts are being seen even when most
+  publish no PTR record. The panel is also included in the CSV export.
+
+### Fixed
+- **IPv6 reverse-DNS lookups no longer get stuck unresolved.** `resolve_hostname`
+  (`app_core/analytics/geo.py`) now distinguishes an *authoritative* "no PTR
+  record" miss (`herror`/NXDOMAIN, cached) from a *transient* failure (timeout /
+  temporary resolver error, **not** cached). The background backfill loop
+  (`app_core/analytics/traffic_recorder.py`) only adds an IP to its permanent
+  "already tried" set on a definitive outcome, so a slow `ip6.arpa` lookup that
+  times out once is retried on a later pass instead of being remembered as a
+  permanent miss. IPv6 PTR lookups also get a longer default timeout (3.0s vs
+  1.5s for IPv4) to reflect their slower nibble-reversed resolution. The function
+  gained an optional `return_status=True` mode exposing the
+  `resolved`/`no_record`/`error`/`invalid` outcome.
+
+### Tests
+- Added IPv6 reverse-DNS regression coverage to `tests/test_traffic_analytics.py`
+  (successful v6 PTR, authoritative v6 miss, transient-failure retry semantics,
+  backfill retry-not-blacklist behaviour, and the IPv4/IPv6 breakdown aggregation).
+
 ## [2.105.0] - 2026-06-16 - Traffic Analytics: custom ranges, drill-down, anomaly detection & privacy tools
 
 ### Added

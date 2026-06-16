@@ -291,11 +291,16 @@ class TrafficRecorder:
 
         updated = 0
         for ip in candidates:
-            self._hostname_tried.add(ip)
             try:
-                name = resolve_hostname(ip)
+                name, status = resolve_hostname(ip, return_status=True)
             except Exception:  # pragma: no cover - defensive
-                name = None
+                name, status = None, "error"
+            # Only remember IPs whose outcome was *definitive* (resolved or an
+            # authoritative "no PTR record"). A transient failure — most often a
+            # slow IPv6 ip6.arpa lookup — is left out of the tried-set so the next
+            # backfill pass retries it instead of locking in a one-shot miss.
+            if status != "error":
+                self._hostname_tried.add(ip)
             if not name:
                 continue
             try:

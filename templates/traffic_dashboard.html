@@ -568,6 +568,29 @@
         </div>
     </div>
 
+    <!-- IP version (IPv4 vs IPv6) + reverse-DNS coverage -->
+    <div class="health-section-head"><h2>IP Version &amp; Reverse DNS</h2><span class="rule"></span></div>
+    <div class="row g-3">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header"><h6><i class="fas fa-network-wired section-icon"></i>IPv4 vs IPv6</h6></div>
+                <div class="card-body">
+                    <div class="table-responsive"><table class="table eas-table mb-0">
+                        <thead><tr>
+                            <th>Family</th>
+                            <th class="text-end">Hits</th>
+                            <th class="text-end">Visitors</th>
+                            <th class="text-end">Addresses</th>
+                            <th class="text-end">rDNS resolved</th>
+                        </tr></thead>
+                        <tbody id="ipVersionBreakdown"></tbody>
+                    </table></div>
+                    <div class="form-text mt-2">Visitors group IPv6 by /64 (rotating privacy addresses count once). <strong>rDNS resolved</strong> shows how many distinct addresses have a PTR hostname — IPv6 commonly lags because most IPv6 hosts publish no reverse-DNS record. Enable <em>Resolve hostnames</em> in Settings to populate it.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Errors (4xx/5xx) -->
     <div class="health-section-head"><h2>Errors &amp; Scanners</h2><span class="rule"></span></div>
     <div class="row g-3">
@@ -1245,6 +1268,12 @@
             renderTable('botBreakdown', data.bot_breakdown, r => `<td>${botLabel(r.bot)}</td><td class="text-end mono">${num(r.hits)}</td>`, 2);
             renderTable('asnBreakdown', data.asn_breakdown, r => `<td class="text-break-anywhere"><i class="fas fa-building text-muted me-2"></i>${escapeHtml(r.asn_org)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
             renderTable('cityBreakdown', data.city_breakdown, r => `<td><i class="fas fa-location-dot text-muted me-2"></i>${escapeHtml(r.label || r.city)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
+            renderTable('ipVersionBreakdown', data.ip_version_breakdown, r => {
+                const icon = r.version === 6 ? 'fa-6' : 'fa-4';
+                const pct = r.ips ? Math.round((r.resolved / r.ips) * 100) : 0;
+                const cov = r.ips ? `${num(r.resolved)} / ${num(r.ips)} <span class="text-muted">(${pct}%)</span>` : '--';
+                return `<td><i class="fas ${icon} text-muted me-2"></i>${escapeHtml(r.label)}</td><td class="text-end mono">${num(r.count)}</td><td class="text-end mono">${num(r.visitors)}</td><td class="text-end mono">${num(r.ips)}</td><td class="text-end mono">${cov}</td>`;
+            }, 5);
             renderTable('topLoginIps', data.top_login_ips, r => `<td>${ipHostCell(r)}</td><td class="text-end mono">${num(r.success)}</td><td class="text-end mono ${r.failure > 0 ? 'text-danger fw-bold' : ''}">${num(r.failure)}</td>`, 3);
             renderTable('recentLogins', data.recent_logins, r => { const badge = r.success ? '<span class="badge bg-success">Success</span>' : '<span class="badge bg-danger">Failed</span>'; return `<td>${r.timestamp ? new Date(r.timestamp).toLocaleString() : '--'}</td><td>${escapeHtml(r.username || '--')}</td><td>${ipHostCell(r)}</td><td>${badge}</td>`; }, 4);
             applyAllTableSearches();
@@ -1680,6 +1709,7 @@
         section('Countries / Networks', ['Country', 'Code', 'Hits'], (d.country_breakdown || []).map(r => [r.country, r.country_code, r.count]));
         section('Organizations / ISPs', ['Network Operator', 'Hits'], (d.asn_breakdown || []).map(r => [r.asn_org, r.count]));
         section('Cities', ['City', 'Region', 'Hits'], (d.city_breakdown || []).map(r => [r.city, r.region_code || r.region || '', r.count]));
+        section('IP Versions', ['Family', 'Hits', 'Visitors', 'Addresses', 'rDNS resolved'], (d.ip_version_breakdown || []).map(r => [r.label, r.count, r.visitors, r.ips, r.resolved]));
         section('Languages', ['Language', 'Hits'], (d.language_breakdown || []).map(r => [r.language, r.count]));
         section('Screen Resolutions', ['Resolution', 'Hits'], (d.resolution_breakdown || []).map(r => [r.resolution, r.count]));
         section('Referrers', ['Referrer', 'Hits'], (d.referer_breakdown || []).map(r => [r.referer, r.count]));
