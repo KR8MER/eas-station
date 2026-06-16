@@ -39,6 +39,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from flask import Flask, jsonify, render_template
 
 from app_core.config.services import get_eas_services
+from app_core.auth.roles import require_permission
 
 logger = logging.getLogger(__name__)
 
@@ -454,6 +455,7 @@ def register(app: Flask, route_logger: logging.Logger) -> None:
         )
 
     @app.route("/api/diagnostics/validate", methods=["POST"])
+    @require_permission('system.configure')
     def validate_installation() -> Tuple[Any, int]:
         all_results = _empty_result()
         per_check: List[Dict[str, Any]] = []

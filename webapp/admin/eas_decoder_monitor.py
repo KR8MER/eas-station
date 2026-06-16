@@ -12,6 +12,7 @@ import logging
 
 from app_core import db
 from app_core.models import EASDecoderMonitorSettings
+from app_core.auth.roles import require_permission
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,7 @@ def get_eas_decoder_monitor_settings():
 
 
 @eas_decoder_monitor_bp.route('/api/admin/eas_decoder_monitor/settings', methods=['PUT'])
+@require_permission('system.configure')
 def update_eas_decoder_monitor_settings():
     """Update EAS decoder monitor settings."""
     try:
@@ -81,6 +83,7 @@ def update_eas_decoder_monitor_settings():
 
 
 @eas_decoder_monitor_bp.route('/api/admin/eas_decoder_monitor/test_signal', methods=['POST'])
+@require_permission('system.configure')
 def inject_eas_test_signal():
     """Inject a SAME RWT test signal into the EAS decoder pipeline.
 

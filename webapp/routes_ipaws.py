@@ -573,7 +573,7 @@ def api_noaa_configure():
 
 
 @ipaws_bp.route('/api/ipaws/configure-custom-sources', methods=['POST'])
-@require_permission('system.edit_config')
+@require_permission('system.configure')
 def api_configure_custom_sources():
     """Configure custom CAP alert sources."""
     try:

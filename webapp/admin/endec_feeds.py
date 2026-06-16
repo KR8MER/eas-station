@@ -32,6 +32,7 @@ from werkzeug.exceptions import BadRequest
 
 from app_core import db
 from app_core.models import EASSettings
+from app_core.auth.roles import require_permission
 from app_utils.endec_feeds import FEED_FORMATS
 
 logger = logging.getLogger(__name__)
@@ -100,6 +101,7 @@ def get_endec_feeds_settings():
 
 
 @endec_feeds_bp.route('/api/admin/endec_feeds/settings', methods=['PUT'])
+@require_permission('system.configure')
 def update_endec_feeds_settings():
     """Persist the ENDEC feed configuration and hot-reload the service."""
     try:

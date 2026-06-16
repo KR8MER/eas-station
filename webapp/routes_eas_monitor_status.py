@@ -30,6 +30,7 @@ Provides real-time status of continuous EAS monitoring including:
 import logging
 from typing import Any, Dict
 from flask import Flask, jsonify, request
+from app_core.auth.roles import require_permission
 
 logger = logging.getLogger(__name__)
 
@@ -308,6 +309,7 @@ def register_eas_monitor_routes(app: Flask, logger_instance) -> None:
             }), 500
 
     @app.route("/api/eas-monitor/control", methods=["POST"])
+    @require_permission('system.configure')
     def api_eas_monitor_control() -> Any:
         """Start or stop the EAS monitor.
 

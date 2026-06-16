@@ -140,7 +140,7 @@ def register(app: Flask, logger) -> None:
             return jsonify({"success": False, "error": str(exc)}), 500
 
     @app.route("/api/analytics/metrics/aggregate", methods=["POST"])
-    @require_permission("analytics_manage")
+    @require_permission("system.configure")
     def aggregate_metrics():
         """Manually trigger metrics aggregation.
 
@@ -213,7 +213,7 @@ def register(app: Flask, logger) -> None:
             return jsonify({"success": False, "error": str(exc)}), 500
 
     @app.route("/api/analytics/trends/analyze", methods=["POST"])
-    @require_permission("analytics_manage")
+    @require_permission("system.configure")
     def analyze_trends():
         """Manually trigger trend analysis.
 
@@ -325,7 +325,7 @@ def register(app: Flask, logger) -> None:
             return jsonify({"success": False, "error": str(exc)}), 500
 
     @app.route("/api/analytics/anomalies/detect", methods=["POST"])
-    @require_permission("analytics_manage")
+    @require_permission("system.configure")
     def detect_anomalies():
         """Manually trigger anomaly detection.
 
@@ -378,7 +378,7 @@ def register(app: Flask, logger) -> None:
             return jsonify({"success": False, "error": str(exc)}), 500
 
     @app.route("/api/analytics/anomalies/<int:anomaly_id>/acknowledge", methods=["POST"])
-    @require_permission("analytics_manage")
+    @require_permission("system.configure")
     def acknowledge_anomaly(anomaly_id: int):
         """Acknowledge an anomaly.
 
@@ -407,7 +407,7 @@ def register(app: Flask, logger) -> None:
             return jsonify({"success": False, "error": str(exc)}), 500
 
     @app.route("/api/analytics/anomalies/<int:anomaly_id>/resolve", methods=["POST"])
-    @require_permission("analytics_manage")
+    @require_permission("system.configure")
     def resolve_anomaly(anomaly_id: int):
         """Resolve an anomaly.
 
@@ -440,7 +440,7 @@ def register(app: Flask, logger) -> None:
             return jsonify({"success": False, "error": str(exc)}), 500
 
     @app.route("/api/analytics/anomalies/<int:anomaly_id>/false-positive", methods=["POST"])
-    @require_permission("analytics_manage")
+    @require_permission("system.configure")
     def mark_false_positive(anomaly_id: int):
         """Mark an anomaly as a false positive.
 

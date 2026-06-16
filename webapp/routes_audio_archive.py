@@ -64,6 +64,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from flask import Flask, jsonify, render_template, request, send_file
+from app_core.auth.roles import require_permission
 
 logger = logging.getLogger(__name__)
 
@@ -403,6 +404,7 @@ def register(app: Flask, logger_arg, archive_dir: str = _DEFAULT_ARCHIVE_DIR) ->
     # ------------------------------------------------------------------
 
     @app.route("/api/audio/archives/<source_name>/settings", methods=["POST"])
+    @require_permission('system.configure')
     def api_audio_archive_save_settings(source_name: str):
         body: Dict[str, Any] = request.get_json(silent=True) or {}
         if not _save_archive_config(source_name, body):
@@ -415,6 +417,7 @@ def register(app: Flask, logger_arg, archive_dir: str = _DEFAULT_ARCHIVE_DIR) ->
     # ------------------------------------------------------------------
 
     @app.route("/api/audio/archives/<source_name>/start", methods=["POST"])
+    @require_permission('system.configure')
     def api_audio_archive_start(source_name: str):
         body: Dict[str, Any] = request.get_json(silent=True) or {}
 
@@ -447,6 +450,7 @@ def register(app: Flask, logger_arg, archive_dir: str = _DEFAULT_ARCHIVE_DIR) ->
     # ------------------------------------------------------------------
 
     @app.route("/api/audio/archives/<source_name>/stop", methods=["POST"])
+    @require_permission('system.configure')
     def api_audio_archive_stop(source_name: str):
         # Persist disabled state to DB
         _save_archive_config(source_name, {"enabled": False})
@@ -468,6 +472,7 @@ def register(app: Flask, logger_arg, archive_dir: str = _DEFAULT_ARCHIVE_DIR) ->
     # ------------------------------------------------------------------
 
     @app.route("/api/audio/archives/<source_name>/purge", methods=["POST"])
+    @require_permission('system.configure')
     def api_audio_archive_purge(source_name: str):
         source_dir = archive_root / Path(source_name).name  # prevent path traversal
         body: Dict[str, Any] = request.get_json(silent=True) or {}
@@ -766,6 +771,7 @@ def register(app: Flask, logger_arg, archive_dir: str = _DEFAULT_ARCHIVE_DIR) ->
     # ------------------------------------------------------------------
 
     @app.route("/api/audio/archives/<source_name>/metadata-log", methods=["DELETE"])
+    @require_permission('system.configure')
     def api_audio_archive_metadata_log_clear(source_name: str):
         try:
             from app_core.extensions import db
@@ -787,6 +793,7 @@ def register(app: Flask, logger_arg, archive_dir: str = _DEFAULT_ARCHIVE_DIR) ->
     # ------------------------------------------------------------------
 
     @app.route("/api/audio/archives/<source_name>/metadata-log/clean-junk", methods=["POST"])
+    @require_permission('system.configure')
     def api_audio_archive_metadata_log_clean_junk(source_name: str):
         """Delete base64-blob junk entries from the metadata log for one source."""
         try:
@@ -825,6 +832,7 @@ def register(app: Flask, logger_arg, archive_dir: str = _DEFAULT_ARCHIVE_DIR) ->
     # ------------------------------------------------------------------
 
     @app.route("/api/audio/archives/resolve-stream-url", methods=["POST"])
+    @require_permission('system.configure')
     def api_audio_archive_resolve_stream_url():
         """Fetch a stream URL and resolve it to a direct playable audio URL.
 

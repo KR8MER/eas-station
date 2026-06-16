@@ -37,6 +37,7 @@ from typing import Any, Dict, Tuple
 
 from flask import Flask, jsonify, render_template, request
 
+from app_core.auth.roles import require_permission
 from app_core.audio.stream_profiles import (
     StreamProfile,
     StreamProfileManager,
@@ -102,6 +103,7 @@ def register(app: Flask, route_logger: logging.Logger) -> None:
             }), 500
     
     @app.route("/api/stream-profiles", methods=["POST"])
+    @require_permission('system.configure')
     def create_stream_profile() -> Tuple[Any, int]:
         """Create a new stream profile."""
         try:
@@ -162,6 +164,7 @@ def register(app: Flask, route_logger: logging.Logger) -> None:
             }), 500
     
     @app.route("/api/stream-profiles/<name>", methods=["PUT"])
+    @require_permission('system.configure')
     def update_stream_profile(name: str) -> Tuple[Any, int]:
         """Update an existing stream profile."""
         try:
@@ -213,6 +216,7 @@ def register(app: Flask, route_logger: logging.Logger) -> None:
             }), 500
     
     @app.route("/api/stream-profiles/<name>", methods=["DELETE"])
+    @require_permission('system.configure')
     def delete_stream_profile(name: str) -> Tuple[Any, int]:
         """Delete a stream profile."""
         try:
@@ -237,6 +241,7 @@ def register(app: Flask, route_logger: logging.Logger) -> None:
             }), 500
     
     @app.route("/api/stream-profiles/<name>/enable", methods=["POST"])
+    @require_permission('system.configure')
     def enable_stream_profile(name: str) -> Tuple[Any, int]:
         """Enable a stream profile."""
         try:
@@ -261,6 +266,7 @@ def register(app: Flask, route_logger: logging.Logger) -> None:
             }), 500
     
     @app.route("/api/stream-profiles/<name>/disable", methods=["POST"])
+    @require_permission('system.configure')
     def disable_stream_profile(name: str) -> Tuple[Any, int]:
         """Disable a stream profile."""
         try:

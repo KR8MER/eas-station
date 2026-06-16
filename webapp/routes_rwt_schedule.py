@@ -27,6 +27,7 @@ from typing import List, Optional
 from flask import jsonify, render_template, request
 from app_core.extensions import db
 from app_core.models import RWTScheduleConfig, SystemLog
+from app_core.auth.roles import require_permission
 from app_utils.fips_codes import get_us_state_county_tree, get_extended_same_lookup
 
 
@@ -129,6 +130,7 @@ def register_routes(app, logger):
             return jsonify({'success': False, 'error': 'Failed to load configuration'}), 500
 
     @app.route('/api/rwt-schedule/config', methods=['POST'])
+    @require_permission('system.configure')
     def save_rwt_schedule_config():
         """Save RWT schedule configuration."""
         try:
@@ -227,6 +229,7 @@ def register_routes(app, logger):
             return jsonify({'success': False, 'error': 'Failed to save configuration'}), 500
 
     @app.route('/api/rwt-schedule/skip-week', methods=['POST'])
+    @require_permission('system.configure')
     def skip_rwt_week():
         """Skip the upcoming scheduled RWT broadcast(s).
 
@@ -286,6 +289,7 @@ def register_routes(app, logger):
             return jsonify({'success': False, 'error': 'Failed to skip week'}), 500
 
     @app.route('/api/rwt-schedule/skip-week', methods=['DELETE'])
+    @require_permission('system.configure')
     def clear_rwt_skip():
         """Clear ``skip_until`` so the scheduler resumes immediately."""
         try:
@@ -321,6 +325,7 @@ def register_routes(app, logger):
             return jsonify({'success': False, 'error': 'Failed to clear skip'}), 500
 
     @app.route('/api/rwt-schedule/test', methods=['POST'])
+    @require_permission('eas.broadcast')
     def test_rwt_schedule():
         """Manually trigger a test RWT broadcast."""
         try:

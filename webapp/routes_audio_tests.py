@@ -42,6 +42,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from flask import Flask, jsonify, render_template, request
 
 from app_utils import utc_now
+from app_core.auth.roles import require_permission
 
 
 # Test files belonging to the audio pipeline. Anything matching the patterns
@@ -378,6 +379,7 @@ def register(app: Flask, logger) -> None:
             return jsonify({"success": False, "error": str(exc)}), 500
 
     @app.route("/api/audio/tests/run", methods=["POST"])
+    @require_permission('system.configure')
     def run_audio_tests():
         """Run audio pipeline tests and return structured JUnit-parsed results."""
         try:

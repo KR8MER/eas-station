@@ -38,6 +38,7 @@ from app_core.boundaries import (
 )
 from app_core.extensions import db
 from app_core.models import Boundary, SystemLog
+from app_core.auth.roles import require_permission
 from app_utils import (
     ALERT_SOURCE_NOAA,
     ALERT_SOURCE_UNKNOWN,
@@ -560,6 +561,7 @@ def register_boundary_routes(app: Flask, logger) -> None:
 # Route definitions
 
 @boundaries_bp.route("/admin/preview_geojson", methods=["POST"])
+@require_permission('system.configure')
 def preview_geojson():
     """Preview GeoJSON contents and extract useful metadata without persisting."""
 
@@ -663,6 +665,7 @@ def preview_geojson():
         return jsonify({"error": f"Failed to preview GeoJSON: {exc}"}), 500
 
 @boundaries_bp.route("/admin/upload_boundaries", methods=["POST"])
+@require_permission('system.configure')
 def upload_boundaries():
     """Upload GeoJSON boundary file with enhanced processing."""
 
@@ -812,6 +815,7 @@ def list_shapefiles():
         return jsonify({"error": f"Failed to list shapefiles: {exc}"}), 500
 
 @boundaries_bp.route("/admin/upload_shapefile", methods=["POST"])
+@require_permission('system.configure')
 def upload_shapefile():
     """Upload shapefile (with companion files) and convert to boundaries."""
     try:
@@ -963,6 +967,7 @@ def upload_shapefile():
         return jsonify({"error": f"Shapefile upload failed: {exc}"}), 500
 
 @boundaries_bp.route("/admin/clear_boundaries/<boundary_type>", methods=["DELETE"])
+@require_permission('system.configure')
 def clear_boundaries(boundary_type: str):
     """Clear all boundaries of a specific type."""
 
@@ -1010,6 +1015,7 @@ def clear_boundaries(boundary_type: str):
         return jsonify({"error": f"Failed to clear boundaries: {exc}"}), 500
 
 @boundaries_bp.route("/admin/clear_all_boundaries", methods=["DELETE"])
+@require_permission('system.configure')
 def clear_all_boundaries():
     """Clear all boundaries (requires confirmation)."""
 

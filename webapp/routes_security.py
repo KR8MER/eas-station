@@ -719,7 +719,7 @@ def view_malicious_logins():
 # ============================================================================
 
 @security_bp.route('/ip-filters', methods=['GET'])
-@require_permission('security.manage')
+@require_permission('system.manage_users')
 def list_ip_filters():
     """List all IP filters (allowlist and blocklist)."""
     filter_type = request.args.get('type')  # allowlist or blocklist
@@ -744,7 +744,7 @@ def list_ip_filters():
 
 
 @security_bp.route('/ip-filters', methods=['POST'])
-@require_permission('security.manage')
+@require_permission('system.manage_users')
 def add_ip_filter():
     """Add a new IP filter."""
     data = request.get_json()
@@ -794,7 +794,7 @@ def add_ip_filter():
 
 
 @security_bp.route('/ip-filters/<int:filter_id>', methods=['DELETE'])
-@require_permission('security.manage')
+@require_permission('system.manage_users')
 def delete_ip_filter(filter_id):
     """Delete an IP filter."""
     user_id = session.get('user_id')
@@ -823,7 +823,7 @@ def delete_ip_filter(filter_id):
 
 
 @security_bp.route('/ip-filters/<int:filter_id>/toggle', methods=['POST'])
-@require_permission('security.manage')
+@require_permission('system.manage_users')
 def toggle_ip_filter(filter_id):
     """Toggle an IP filter active/inactive."""
     user_id = session.get('user_id')
@@ -851,7 +851,7 @@ def toggle_ip_filter(filter_id):
 
 
 @security_bp.route('/ip-filters/cleanup', methods=['POST'])
-@require_permission('security.manage')
+@require_permission('system.manage_users')
 def cleanup_expired_filters():
     """Clean up expired IP filters."""
     count = IPFilter.cleanup_expired()
@@ -871,7 +871,7 @@ def cleanup_expired_filters():
 # ============================================================================
 
 @security_bp.route('/ssl-certificate', methods=['GET'])
-@require_permission('system.view')
+@require_permission('system.view_config')
 def get_ssl_certificate_info():
     """Get SSL certificate information and renewal status."""
     from app_core.ssl_utils import get_ssl_certificate_info, get_certificate_renewal_status
