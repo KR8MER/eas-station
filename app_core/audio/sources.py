@@ -1079,6 +1079,17 @@ class StreamSourceAdapter(AudioSourceAdapter):
         super().__init__(config)
         # Support both 'url' (new) and 'stream_url' (legacy) parameter names
         self._stream_url = self.config.device_params.get('url') or self.config.device_params.get('stream_url', '')
+        # Optional authentication for protected streams (see _build_http_headers).
+        self._auth_username = (self.config.device_params.get('auth_username') or '').strip()
+        self._auth_password = self.config.device_params.get('auth_password') or ''
+        self._auth_header = (self.config.device_params.get('auth_header') or '').strip()
+        # Last HTTP error captured from FFmpeg stderr (e.g. "403 Forbidden"), used to
+        # surface authentication failures to the UI instead of generic messages.
+        self._last_http_error: Optional[str] = None
+        # Set when the stream returns an unrecoverable auth/availability error
+        # (401/403/404). These do not fix themselves on retry, so we stop the
+        # restart loop and report ERROR instead of looping every few seconds.
+        self._fatal_auth_error = False
         self._resolved_stream_url: Optional[str] = None
         self._ffmpeg_process: Optional[subprocess.Popen] = None
         self._stderr_thread: Optional[threading.Thread] = None
@@ -1096,6 +1107,50 @@ class StreamSourceAdapter(AudioSourceAdapter):
         self._connection_attempts = 0
         self._successful_connections = 0
         self._last_connection_time: Optional[float] = None
+
+    def _build_http_headers(self) -> Tuple[str, Dict[str, str]]:
+        """Build HTTP headers for protected streams.
+
+        Returns a tuple of (ffmpeg_header_string, requests_headers_dict). The
+        FFmpeg string is the CRLF-separated value passed to ``-headers``; the dict
+        is for the ``requests`` calls used to resolve playlists and read ICY
+        metadata. Supports HTTP Basic auth (username/password) and an explicit
+        raw ``Authorization`` value (e.g. a bearer token) via auth_header.
+        """
+        headers: Dict[str, str] = {'Icy-MetaData': '1'}
+        if self._auth_header:
+            # Allow either a bare value ("Bearer abc") or a full "Name: value".
+            if ':' in self._auth_header and not self._auth_header.lower().startswith(('bearer ', 'basic ')):
+                name, _, value = self._auth_header.partition(':')
+                headers[name.strip()] = value.strip()
+            else:
+                headers['Authorization'] = self._auth_header
+        elif self._auth_username or self._auth_password:
+            token = base64.b64encode(
+                f"{self._auth_username}:{self._auth_password}".encode('utf-8')
+            ).decode('ascii')
+            headers['Authorization'] = f"Basic {token}"
+
+        ffmpeg_header = ''.join(f"{name}: {value}\r\n" for name, value in headers.items())
+        return ffmpeg_header, headers
+
+    @staticmethod
+    def _describe_http_error(code: int) -> str:
+        """Map an HTTP status code from the stream into a user-facing message."""
+        if code == 401:
+            return "401 Unauthorized — stream requires authentication credentials."
+        if code == 403:
+            return ("403 Forbidden — stream requires authentication or is access "
+                    "restricted (token, referrer, or geo/IP lock).")
+        if code == 404:
+            return "404 Not Found — stream URL does not exist."
+        if code == 429:
+            return "429 Too Many Requests — stream server is rate-limiting."
+        if 400 <= code < 500:
+            return f"HTTP {code} — stream server rejected the request."
+        if 500 <= code < 600:
+            return f"HTTP {code} — stream server error."
+        return f"HTTP {code} — unexpected stream response."
 
     def _resolve_stream_url(self, url: str) -> str:
         """Validate the configured URL and resolve playlists when needed."""
@@ -1117,8 +1172,13 @@ class StreamSourceAdapter(AudioSourceAdapter):
                 raise RuntimeError("Requests library not available to resolve playlist URLs")
 
             try:
-                # Disable proxy to allow direct connections to external streams
-                response = requests.get(url, timeout=10, proxies={'http': None, 'https': None})
+                # Disable proxy to allow direct connections to external streams.
+                # Include auth headers so protected playlists resolve correctly.
+                _, req_headers = self._build_http_headers()
+                response = requests.get(
+                    url, timeout=10, headers=req_headers,
+                    proxies={'http': None, 'https': None},
+                )
                 response.raise_for_status()
             except Exception as exc:
                 raise RuntimeError(f"Failed to fetch playlist {url}: {exc}") from exc
@@ -1156,18 +1216,24 @@ class StreamSourceAdapter(AudioSourceAdapter):
         # Check if we should preserve stream's native sample rate (default for HTTP streams)
         preserve_native_rate = self.config.device_params.get('preserve_native_rate', True)
         
+        # Build request headers (Icy-MetaData plus any auth) for FFmpeg.
+        header_string, _ = self._build_http_headers()
+
         cmd = [
             'ffmpeg',
             '-hide_banner',
             '-loglevel', 'info',  # Need 'info' level to detect stream sample rate from metadata
             '-nostdin',
             '-user_agent', 'EAS-Station/2.0',  # Updated user agent
-            '-headers', 'Icy-MetaData:1\r\n',
+            '-headers', header_string,
             # 24/7 RELIABILITY: Enhanced reconnection parameters for network resilience
             '-reconnect', '1',
             '-reconnect_streamed', '1',
             '-reconnect_on_network_error', '1',
-            '-reconnect_on_http_error', '4xx,5xx',  # Retry on HTTP errors
+            # Retry only on transient server (5xx) errors. Auth/availability errors
+            # (401/403/404) are not retried so FFmpeg exits and the failure is
+            # surfaced to the UI instead of looping forever on a 403.
+            '-reconnect_on_http_error', '5xx',
             '-reconnect_delay_max', '10',  # Increased from 5 for better backoff
             '-timeout', '30000000',  # 30 seconds in microseconds (FFmpeg expects microseconds: 30 × 1,000,000 = 30,000,000 µs)
             '-fflags', '+genpts+discardcorrupt',  # Generate PTS and discard corrupt packets
@@ -1307,10 +1373,19 @@ class StreamSourceAdapter(AudioSourceAdapter):
         
         24/7 RELIABILITY: Implements exponential backoff and tracks restart patterns.
         """
+        # A protected stream returned an unrecoverable auth/availability error.
+        # Stop restarting and keep the failure visible until the user fixes the
+        # URL/credentials and restarts the source.
+        if self._fatal_auth_error:
+            self.status = AudioSourceStatus.ERROR
+            if self._last_http_error:
+                self.error_message = self._last_http_error
+            return
+
         now = time.time()
         if now - self._last_restart < self._restart_delay_seconds:
             return
-        
+
         # Reset connection tracking for new attempt
         self._last_connection_time = None
 
@@ -1397,6 +1472,22 @@ class StreamSourceAdapter(AudioSourceAdapter):
                                 # Update metrics to reflect actual sample rate
                                 self.metrics.sample_rate = rate
                 
+                # Detect HTTP status errors so authentication/availability problems
+                # surface in the UI instead of being buried as generic warnings.
+                http_match = _re.search(r'(?:Server returned|HTTP error)\s+(\d{3})', text)
+                if http_match:
+                    code = int(http_match.group(1))
+                    friendly = self._describe_http_error(code)
+                    self._last_http_error = friendly
+                    self.error_message = friendly
+                    # Auth/availability errors won't recover on retry — mark fatal
+                    # so the restart loop stops instead of hammering the server.
+                    if code in (401, 403, 404):
+                        self._fatal_auth_error = True
+                        self.status = AudioSourceStatus.ERROR
+                    logger.warning(f"{self.config.name}: stream HTTP {code}: {friendly}")
+                    continue
+
                 # Log errors and warnings, but debug for normal info
                 if 'error' in text.lower() or 'warning' in text.lower():
                     logger.warning(f"{self.config.name}: FFmpeg: {text}")
@@ -1407,6 +1498,9 @@ class StreamSourceAdapter(AudioSourceAdapter):
 
     def _start_capture(self) -> None:
         """Resolve the stream URL and start FFmpeg decoding."""
+        # Clear any prior fatal auth state so a user-initiated (re)start retries.
+        self._fatal_auth_error = False
+        self._last_http_error = None
         resolved = self._resolve_stream_url(self._stream_url)
         self._resolved_stream_url = resolved
 
@@ -1542,9 +1636,10 @@ class StreamSourceAdapter(AudioSourceAdapter):
             return
 
         session = requests.Session()
+        _, auth_headers = self._build_http_headers()
         session.headers.update({
             'User-Agent': 'EAS-Station/1.0',
-            'Icy-MetaData': '1',
+            **auth_headers,
         })
         # CRITICAL: Disable proxy to allow direct connections to external streams
         # Bare metal deployments may inherit HTTP_PROXY from environment (e.g., Claude Code)

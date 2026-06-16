@@ -27,6 +27,8 @@
             Even if you pause or stop web playback, the system continues monitoring for alerts 24/7.
             <br>
             <strong>Real-Time Streaming:</strong> The monitor uses a streaming decoder that processes audio samples immediately as they arrive — no buffering, no batching, no delays. Every sample is analyzed in real-time for SAME headers, matching commercial EAS decoder behavior (sub-second detection latency).
+            <br>
+            <strong>Protected Streams:</strong> When adding or editing a stream source, use the <i class="fas fa-plug"></i> <strong>Test</strong> button to verify the URL before saving — a stream that requires authentication reports a clear <em>403 Forbidden</em> message instead of failing silently. For credentialed streams, fill in the optional <strong>Authentication</strong> fields (username/password for HTTP Basic, or a raw <code>Authorization</code> value such as <code>Bearer &lt;token&gt;</code>).
         </div>
     </div>
 </div>

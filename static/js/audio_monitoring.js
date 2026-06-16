@@ -1128,8 +1128,15 @@ function updateSourceTypeConfig() {
             html = `
                 <div class="mb-3">
                     <label for="streamUrl" class="form-label">Stream URL <span class="text-danger">*</span></label>
-                    <input type="url" class="form-control" id="streamUrl"
-                           placeholder="https://stream.revma.ihrhls.com/zc####" required>
+                    <div class="input-group">
+                        <input type="url" class="form-control" id="streamUrl"
+                               placeholder="https://stream.revma.ihrhls.com/zc####" required>
+                        <button class="btn btn-outline-secondary" type="button"
+                                onclick="testStreamUrl('streamUrl', 'streamTestResult')">
+                            <i class="fas fa-plug"></i> Test
+                        </button>
+                    </div>
+                    <div id="streamTestResult" class="mt-2"></div>
                     <small class="form-text text-muted">
                         <strong>Examples:</strong><br>
                         • iHeartRadio: https://stream.revma.ihrhls.com/zc####<br>
@@ -1147,6 +1154,25 @@ function updateSourceTypeConfig() {
                         <option value="raw">Raw PCM</option>
                     </select>
                     <small class="form-text text-muted">Format will be auto-detected from HTTP Content-Type header</small>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Authentication <span class="text-muted">(optional)</span></label>
+                    <div class="row g-2">
+                        <div class="col-sm-6">
+                            <input type="text" class="form-control" id="streamAuthUsername"
+                                   placeholder="Username" autocomplete="off">
+                        </div>
+                        <div class="col-sm-6">
+                            <input type="password" class="form-control" id="streamAuthPassword"
+                                   placeholder="Password" autocomplete="new-password">
+                        </div>
+                    </div>
+                    <input type="text" class="form-control mt-2" id="streamAuthHeader"
+                           placeholder="Or a raw Authorization value, e.g. Bearer &lt;token&gt;" autocomplete="off">
+                    <small class="form-text text-muted">
+                        For protected streams. Username/password use HTTP Basic auth; the raw value
+                        (if set) is sent as the <code>Authorization</code> header and takes precedence.
+                    </small>
                 </div>
             `;
             break;
@@ -1229,6 +1255,12 @@ async function addAudioSource() {
             if (streamFormat && streamFormat !== 'mp3') {
                 deviceParams.format = streamFormat;
             }
+            const authUsername = document.getElementById('streamAuthUsername')?.value?.trim();
+            const authPassword = document.getElementById('streamAuthPassword')?.value;
+            const authHeader = document.getElementById('streamAuthHeader')?.value?.trim();
+            if (authUsername) deviceParams.auth_username = authUsername;
+            if (authPassword) deviceParams.auth_password = authPassword;
+            if (authHeader) deviceParams.auth_header = authHeader;
             break;
         case 'alsa':
             const deviceName = document.getElementById('deviceName')?.value || 'default';
@@ -1288,6 +1320,61 @@ async function addAudioSource() {
     } catch (error) {
         console.error('Error adding audio source:', error);
         showError(`Failed to add audio source: ${error.message || 'Network or connection error'}`);
+    }
+}
+
+/**
+ * Preflight-test a stream URL (with any entered credentials) and show the result.
+ * Surfaces authentication-required streams (HTTP 401/403) with a clear message
+ * instead of letting them fail silently after the source is added.
+ *
+ * @param {string} urlInputId  ID of the URL <input> ('streamUrl' or 'editStreamUrl')
+ * @param {string} resultElId  ID of the element to render the result into
+ */
+async function testStreamUrl(urlInputId, resultElId) {
+    const urlEl = document.getElementById(urlInputId);
+    const resultEl = document.getElementById(resultElId);
+    const url = urlEl?.value?.trim();
+    if (!resultEl) return;
+
+    if (!url) {
+        resultEl.innerHTML = '<div class="alert alert-warning py-2 mb-0">Enter a stream URL first.</div>';
+        return;
+    }
+
+    // Auth field IDs differ between the add form and the edit form.
+    const editing = urlInputId === 'editStreamUrl';
+    const prefix = editing ? 'editStream' : 'stream';
+    const authUsername = document.getElementById(`${prefix}AuthUsername`)?.value?.trim() || '';
+    const authPassword = document.getElementById(`${prefix}AuthPassword`)?.value || '';
+    const authHeader = document.getElementById(`${prefix}AuthHeader`)?.value?.trim() || '';
+
+    resultEl.innerHTML = '<div class="text-muted py-1"><i class="fas fa-spinner fa-spin"></i> Testing stream…</div>';
+
+    try {
+        const response = await fetch('/api/audio/sources/test-stream', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                url,
+                auth_username: authUsername,
+                auth_password: authPassword,
+                auth_header: authHeader,
+            }),
+        });
+        const result = await response.json().catch(() => ({ ok: false, message: 'Invalid response from server.' }));
+
+        if (result.ok) {
+            const ct = result.content_type ? ` <span class="text-muted">(${escapeHtml(result.content_type)})</span>` : '';
+            resultEl.innerHTML = `<div class="alert alert-success py-2 mb-0">
+                <i class="fas fa-check-circle"></i> ${escapeHtml(result.message)}${ct}</div>`;
+        } else {
+            resultEl.innerHTML = `<div class="alert alert-danger py-2 mb-0">
+                <i class="fas fa-exclamation-triangle"></i> ${escapeHtml(result.message || 'Stream test failed.')}</div>`;
+        }
+    } catch (error) {
+        resultEl.innerHTML = `<div class="alert alert-danger py-2 mb-0">
+            <i class="fas fa-exclamation-triangle"></i> ${escapeHtml(error.message || 'Network error while testing stream.')}</div>`;
     }
 }
 
@@ -1379,12 +1466,22 @@ function updateEditSourceTypeConfig(sourceType, deviceParams) {
         case 'stream':
             const streamUrl = deviceParams?.url || '';
             const streamFormat = deviceParams?.format || 'mp3';
+            const editAuthUsername = deviceParams?.auth_username || '';
+            const editAuthHeader = deviceParams?.auth_header || '';
+            const hasStoredPassword = !!(deviceParams?.auth_password_set || deviceParams?.auth_password);
             html = `
                 <div class="mb-3">
                     <label for="editStreamUrl" class="form-label">Stream URL <span class="text-danger">*</span></label>
-                    <input type="url" class="form-control" id="editStreamUrl"
-                           value="${escapeHtml(streamUrl)}"
-                           placeholder="https://stream.revma.ihrhls.com/zc####" required>
+                    <div class="input-group">
+                        <input type="url" class="form-control" id="editStreamUrl"
+                               value="${escapeHtml(streamUrl)}"
+                               placeholder="https://stream.revma.ihrhls.com/zc####" required>
+                        <button class="btn btn-outline-secondary" type="button"
+                                onclick="testStreamUrl('editStreamUrl', 'editStreamTestResult')">
+                            <i class="fas fa-plug"></i> Test
+                        </button>
+                    </div>
+                    <div id="editStreamTestResult" class="mt-2"></div>
                     <small class="form-text text-muted">
                         <strong>Examples:</strong><br>
                         • iHeartRadio: https://stream.revma.ihrhls.com/zc####<br>
@@ -1402,6 +1499,26 @@ function updateEditSourceTypeConfig(sourceType, deviceParams) {
                         <option value="raw" ${streamFormat === 'raw' ? 'selected' : ''}>Raw PCM</option>
                     </select>
                     <small class="form-text text-muted">Format will be auto-detected from HTTP Content-Type header</small>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Authentication <span class="text-muted">(optional)</span></label>
+                    <div class="row g-2">
+                        <div class="col-sm-6">
+                            <input type="text" class="form-control" id="editStreamAuthUsername"
+                                   value="${escapeHtml(editAuthUsername)}" placeholder="Username" autocomplete="off">
+                        </div>
+                        <div class="col-sm-6">
+                            <input type="password" class="form-control" id="editStreamAuthPassword"
+                                   placeholder="${hasStoredPassword ? 'Leave blank to keep current' : 'Password'}" autocomplete="new-password">
+                        </div>
+                    </div>
+                    <input type="text" class="form-control mt-2" id="editStreamAuthHeader"
+                           value="${escapeHtml(editAuthHeader)}"
+                           placeholder="Or a raw Authorization value, e.g. Bearer &lt;token&gt;" autocomplete="off">
+                    <small class="form-text text-muted">
+                        For protected streams. Username/password use HTTP Basic auth; the raw value
+                        (if set) is sent as the <code>Authorization</code> header and takes precedence.
+                    </small>
                 </div>
             `;
             break;
@@ -1556,6 +1673,15 @@ async function saveEditedSource() {
                 deviceParams.url = streamUrl;
                 if (streamFormat && streamFormat !== 'mp3') {
                     deviceParams.format = streamFormat;
+                }
+                // Auth fields are merged server-side; always send username/header so
+                // they can be updated or cleared. Only send the password when the
+                // user typed one (blank keeps the stored credential).
+                deviceParams.auth_username = document.getElementById('editStreamAuthUsername')?.value?.trim() || '';
+                deviceParams.auth_header = document.getElementById('editStreamAuthHeader')?.value?.trim() || '';
+                const editPassword = document.getElementById('editStreamAuthPassword')?.value;
+                if (editPassword) {
+                    deviceParams.auth_password = editPassword;
                 }
                 hasDeviceParams = true;
                 break;
