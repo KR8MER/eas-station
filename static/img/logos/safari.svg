@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="Safari">
+  <circle cx="24" cy="24" r="20" fill="#1B9DF0"/>
+  <circle cx="24" cy="24" r="16" fill="#fff"/>
+  <circle cx="24" cy="24" r="16" fill="none" stroke="#D8E6F0" stroke-width="1"/>
+  <polygon points="24,24 33,15 27,27" fill="#F2453D"/>
+  <polygon points="24,24 15,33 21,21" fill="#C9D4DC"/>
+  <circle cx="24" cy="24" r="2" fill="#7A8A96"/>
+</svg>

@@ -406,6 +406,18 @@ def test_geoip_upload_route_registered(app_with_db):
     assert "/api/traffic/geoip/upload" in rules
 
 
+def test_maxmind_magic_detection():
+    from webapp.routes_traffic import _has_maxmind_magic
+
+    # The metadata marker near the end identifies a real .mmdb even without the
+    # maxminddb reader installed.
+    valid = b"\x00" * 5000 + b"\xab\xcd\xefMaxMind.com" + b"metadata-bytes"
+    assert _has_maxmind_magic(valid) is True
+    # Arbitrary content (e.g. a PNG or text file) is rejected.
+    assert _has_maxmind_magic(b"not a database, just some bytes") is False
+    assert _has_maxmind_magic(b"") is False
+
+
 def test_top_visitors_include_hostname_and_country(app_with_db):
     app, db = app_with_db
     from app_core.analytics import traffic_stats

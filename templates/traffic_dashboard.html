@@ -144,6 +144,8 @@
         color: var(--text-secondary);
     }
     .traffic-dash-root .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+    /* Multicolor browser/OS logos rendered inline in tables. */
+    .traffic-dash-root .ti-logo { width: 1.15em; height: 1.15em; vertical-align: -0.2em; object-fit: contain; }
 </style>
 {% endblock %}
 
@@ -297,6 +299,13 @@
     <!-- Visitor environment -->
     <div class="health-section-head"><h2>Visitor Environment</h2><span class="rule"></span></div>
     <div class="row g-3">
+        <div class="col-lg-3 col-md-6">
+            <div class="card h-100">
+                <div class="card-header"><h6><i class="fas fa-window-maximize section-icon"></i>Browsers</h6></div>
+                <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
+                    <thead><tr><th>Browser</th><th class="text-end">Hits</th></tr></thead><tbody id="browserBreakdown"></tbody></table></div></div>
+            </div>
+        </div>
         <div class="col-lg-3 col-md-6">
             <div class="card h-100">
                 <div class="card-header"><h6><i class="fas fa-desktop section-icon"></i>Operating Systems</h6></div>
@@ -486,25 +495,46 @@
         if (flag) return `<span class="me-1" title="${escapeHtml(cc)}">${flag}</span>${text}`;
         return `<i class="fas fa-network-wired text-muted me-1" title="Local / unresolved"></i>${text}`;
     }
-    // FontAwesome brand/solid icon for a browser name (awstats-style graphics).
-    function browserIcon(name) {
-        const map = { 'Chrome': 'fab fa-chrome', 'Firefox': 'fab fa-firefox-browser',
-            'Edge': 'fab fa-edge', 'Safari': 'fab fa-safari', 'Opera': 'fab fa-opera',
-            'Samsung Internet': 'fas fa-mobile-screen', 'Internet Explorer': 'fab fa-internet-explorer' };
-        return map[name] || 'fas fa-window-maximize';
+    // Multicolor brand logos (SVG assets) with a FontAwesome brand glyph as the
+    // fallback. `color` tints the fallback glyph; `logo` is a true-color image.
+    const LOGO_BASE = "{{ url_for('static', filename='img/logos') }}";
+    const BROWSER_META = {
+        'Chrome': { icon: 'fab fa-chrome', color: '#4285F4', logo: 'chrome.svg' },
+        'Firefox': { icon: 'fab fa-firefox-browser', color: '#FF7139', logo: 'firefox.svg' },
+        'Edge': { icon: 'fab fa-edge', color: '#34a3e0', logo: 'edge.svg' },
+        'Safari': { icon: 'fab fa-safari', color: '#1B9AF7', logo: 'safari.svg' },
+        'Opera': { icon: 'fab fa-opera', color: '#FF1B2D', logo: 'opera.svg' },
+        'Samsung Internet': { icon: 'fas fa-mobile-screen', color: '#7b8cff' },
+        'Internet Explorer': { icon: 'fab fa-internet-explorer', color: '#34a3e0' },
+    };
+    const OS_META = {
+        'Windows': { icon: 'fab fa-windows', color: '#2f9be0', logo: 'windows.svg' },
+        'iOS': { icon: 'fab fa-apple', color: '#adb5bd', logo: 'apple.svg' },
+        'iPadOS': { icon: 'fab fa-apple', color: '#adb5bd', logo: 'apple.svg' },
+        'macOS': { icon: 'fab fa-apple', color: '#adb5bd', logo: 'apple.svg' },
+        'Android': { icon: 'fab fa-android', color: '#3DDC84', logo: 'android.svg' },
+        'ChromeOS': { icon: 'fab fa-chrome', color: '#4285F4', logo: 'chrome.svg' },
+        'Linux': { icon: 'fab fa-linux', color: '#f6c343', logo: 'linux.svg' },
+    };
+    function browserMeta(name) {
+        return BROWSER_META[name] || { icon: 'fas fa-window-maximize', color: '' };
     }
-    // FontAwesome brand/solid icon for an operating-system name.
-    function osIcon(name) {
-        if (!name) return 'fas fa-question-circle';
-        if (name.indexOf('Windows') === 0) return 'fab fa-windows';
-        if (name === 'macOS' || name === 'iOS' || name === 'iPadOS') return 'fab fa-apple';
-        if (name === 'Android') return 'fab fa-android';
-        if (name === 'ChromeOS') return 'fab fa-chrome';
-        if (name === 'Linux') return 'fab fa-linux';
-        return 'fas fa-desktop';
+    function osMeta(name) {
+        if (name && name.indexOf('Windows') === 0) return OS_META['Windows'];
+        return OS_META[name] || { icon: 'fas fa-desktop', color: '' };
     }
-    function iconLabel(iconClass, label) {
-        return `<i class="${iconClass} me-2 text-secondary"></i>${escapeHtml(label || 'Unknown')}`;
+    // HTML for a logo mark: a multicolor SVG when available, else a tinted glyph.
+    function markFor(meta, label, cls) {
+        const sz = cls || 'me-2';
+        if (meta.logo) {
+            return `<img src="${LOGO_BASE}/${meta.logo}" alt="${escapeHtml(label || '')}" class="ti-logo ${sz}">`;
+        }
+        const color = meta.color || 'var(--text-secondary, #888)';
+        return `<i class="${meta.icon} ${sz}" style="color:${color}"></i>`;
+    }
+    // Render a logo mark + label.
+    function iconLabel(meta, label) {
+        return `${markFor(meta, label)}${escapeHtml(label || 'Unknown')}`;
     }
     // Human-readable byte size (awstats bandwidth column).
     function fmtBytes(n) {
@@ -564,7 +594,8 @@
                     : `<span class="text-break-anywhere mono">${flag}${escapeHtml(r.ip_address)}${who}</span>`;
                 return `<td>${host}</td><td class="text-end mono">${num(r.hits)}</td><td class="d-none d-sm-table-cell">${r.last_seen ? new Date(r.last_seen).toLocaleString() : '--'}</td>`;
             }, 3);
-            renderTable('osBreakdown', data.os_breakdown, r => `<td>${iconLabel(osIcon(r.os), r.os)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
+            renderTable('osBreakdown', data.os_breakdown, r => `<td>${iconLabel(osMeta(r.os), r.os)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
+            renderTable('browserBreakdown', data.browser_breakdown, r => `<td>${iconLabel(browserMeta(r.browser), r.browser)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
             renderTable('resBreakdown', data.resolution_breakdown, r => `<td class="mono">${escapeHtml(r.resolution || 'Unknown')}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
             renderTable('countryBreakdown', data.country_breakdown, r => `<td>${flagLabel(r.country_code, r.country)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
             renderTable('langBreakdown', data.language_breakdown, r => `<td class="mono">${escapeHtml(r.language || 'Unknown')}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
@@ -578,7 +609,7 @@
                 return `<td>${host}</td><td class="text-end mono text-danger fw-bold">${num(r.errors)}</td>`;
             }, 2);
             renderTable('recentRequests', data.recent_requests, r => {
-                const br = r.browser ? `<i class="${browserIcon(r.browser)} me-1 text-secondary"></i>${escapeHtml(r.browser)}${r.browser_version ? ' ' + escapeHtml(r.browser_version) : ''}` : '<span class="text-muted">—</span>';
+                const br = r.browser ? `${markFor(browserMeta(r.browser), r.browser, 'me-1')}${escapeHtml(r.browser)}${r.browser_version ? ' ' + escapeHtml(r.browser_version) : ''}` : '<span class="text-muted">—</span>';
                 const when = r.timestamp ? new Date(r.timestamp).toLocaleTimeString() : '--';
                 return `<td class="text-nowrap">${when}</td><td><span class="badge bg-light text-dark border">${escapeHtml(r.method)}</span></td><td class="text-break-anywhere">${escapeHtml(r.path)}</td><td class="text-center">${statusBadge(r.status_code)}</td><td class="d-none d-md-table-cell text-nowrap">${br}</td><td class="d-none d-lg-table-cell text-break-anywhere small text-muted">${escapeHtml(r.user_agent || '—')}</td>`;
             }, 6);
@@ -717,7 +748,11 @@
             const resp = await fetch('/api/traffic/geoip/upload', { method: 'POST', body: fd });
             const data = await resp.json();
             if (data.success) {
-                statusEl.innerHTML = '<span class="text-success">Database installed. Country flags are now active.</span>';
+                if (data.note) {
+                    statusEl.innerHTML = `<span class="text-warning">${escapeHtml(data.note)}</span>`;
+                } else {
+                    statusEl.innerHTML = '<span class="text-success">Database installed. Country flags are now active.</span>';
+                }
                 document.getElementById('setGeoip').value = data.path || '';
                 if (typeof showToast === 'function') showToast('GeoIP database installed', 'success');
             } else {

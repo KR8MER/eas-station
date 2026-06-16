@@ -8,6 +8,45 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.97.3] - 2026-06-15 - Multicolor browser/OS logos
+
+### Changed
+- Traffic Analytics now renders **true multicolor brand logos** for browsers
+  (Chrome, Firefox, Edge, Safari, Opera) and operating systems (Windows, Apple,
+  Android, Linux/Tux) as bundled SVG assets under
+  `static/img/logos/`, replacing the single-color FontAwesome glyphs. The
+  colored FA glyph remains the automatic fallback for any agent without a
+  dedicated logo (e.g. Samsung Internet, Internet Explorer). Logos appear in the
+  Browsers and Operating Systems tables and the Recent Requests column. The
+  marks are original simplified renditions, so nothing extra is bundled or
+  fetched at runtime.
+
+## [2.97.2] - 2026-06-15 - Brand-coloured browser/OS logos
+
+### Changed
+- Traffic Analytics now tints the browser and operating-system logos their
+  official brand colours (Chrome blue, Firefox orange, Android green, Windows
+  blue, etc.; Apple/Linux use neutral tones so they stay legible on dark
+  themes) instead of rendering them as flat grey glyphs. Confirmed the
+  FontAwesome brand webfont (`fa-brands-400`) ships locally so the logos render
+  offline.
+- Added a **Browsers** table (with logos) to the Visitor Environment section so
+  browser logos have a home alongside the existing bar chart; the Recent
+  Requests browser column is brand-coloured too.
+
+## [2.97.1] - 2026-06-15 - GeoIP database dependency & resilient upload
+
+### Fixed
+- **GeoIP upload failed with "No module named 'maxminddb'".** `geoip2` (which
+  provides the `maxminddb` reader) was an optional, commented-out dependency, so
+  on a default install the upload validation hard-failed and country/flag
+  resolution could never work. `geoip2>=4.8.0` is now a first-class requirement.
+- **Upload no longer hard-fails when the reader is missing.** The upload route
+  validates with the `maxminddb` reader when available and otherwise falls back
+  to the MaxMind DB magic-marker check, so a valid `.mmdb` is accepted and
+  stored even before the package is installed — with a clear note that
+  `pip install -r requirements.txt` + restart is needed for flags to resolve.
+
 ## [2.97.0] - 2026-06-15 - Traffic analytics: GeoIP upload, graphics, errors & exports
 
 ### Added

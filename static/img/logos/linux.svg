@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-label="Linux">
+  <ellipse cx="18.5" cy="40" rx="5" ry="2.6" fill="#F5A623"/>
+  <ellipse cx="29.5" cy="40" rx="5" ry="2.6" fill="#F5A623"/>
+  <path d="M24 7c-6 0-10 5-10 12 0 5-3 8-3 13 0 4 6 7 13 7s13-3 13-7c0-5-3-8-3-13 0-7-4-12-10-12z" fill="#1b1b1b"/>
+  <ellipse cx="24" cy="29" rx="7" ry="9" fill="#fff"/>
+  <ellipse cx="24" cy="16" rx="6.5" ry="5.5" fill="#fff"/>
+  <circle cx="21" cy="16" r="1.5" fill="#1b1b1b"/>
+  <circle cx="27" cy="16" r="1.5" fill="#1b1b1b"/>
+  <path d="M24 17 l3 3.4 l-6 0 z" fill="#F5A623"/>
+</svg>
