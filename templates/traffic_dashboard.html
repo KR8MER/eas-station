@@ -162,8 +162,15 @@
     .traffic-dash-root .hs-delta.down { color: #f85149; }
     .traffic-dash-root .hs-delta.flat { color: var(--text-muted, #8b949e); }
     .traffic-dash-root .hs-delta i { font-size: 0.6rem; }
-    /* Tiny per-tile sparkline canvas. */
-    .traffic-dash-root .hs-spark { width: 100%; height: 26px; margin-top: 2px; display: block; }
+    /* Tiny per-tile sparkline. The canvas MUST live in a fixed-height,
+       position:relative wrapper — a responsive Chart.js canvas with
+       maintainAspectRatio:false grows unbounded if its parent has no set
+       height (it feeds its own height back into the layout). */
+    .traffic-dash-root .hs-spark-wrap { position: relative; width: 100%; height: 26px; margin-top: 2px; }
+    .traffic-dash-root .hs-spark { display: block; }
+    /* Hard safety net: nothing inside an at-a-glance tile may ever exceed this
+       height, so a misbehaving chart can never stretch the page again. */
+    .traffic-dash-root .health-status-tile canvas { max-height: 30px; }
 
     /* Leaflet world map — flag/dot markers sized by traffic share. */
     .traffic-dash-root #trafficMap { height: 420px; border-radius: 6px; overflow: hidden; z-index: 0; }
@@ -864,11 +871,20 @@
     function sparkline(id, series, color) {
         const tile = document.getElementById(id);
         if (!tile || !series || !series.length) return;
-        let canvas = tile.querySelector('canvas.hs-spark');
-        if (!canvas) {
+        // Canvas lives inside a fixed-height wrapper so Chart.js has a bounded
+        // parent — otherwise a responsive/maintainAspectRatio:false canvas grows
+        // its own height every layout pass and stretches the page indefinitely.
+        let wrap = tile.querySelector('.hs-spark-wrap');
+        let canvas;
+        if (!wrap) {
+            wrap = document.createElement('div');
+            wrap.className = 'hs-spark-wrap';
             canvas = document.createElement('canvas');
             canvas.className = 'hs-spark';
-            tile.appendChild(canvas);
+            wrap.appendChild(canvas);
+            tile.appendChild(wrap);
+        } else {
+            canvas = wrap.querySelector('canvas.hs-spark');
         }
         const key = 'spark_' + id;
         destroyChart(key);
