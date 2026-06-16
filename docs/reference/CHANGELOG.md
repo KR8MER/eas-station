@@ -8,6 +8,35 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.104.0] - 2026-06-16 - Traffic Analytics: fix PDF export, file-type logos, login-IP reverse DNS
+
+### Fixed
+- **"Export → PDF report" failed with "PDF export failed".** The export renders
+  the dashboard with html2canvas, but the Leaflet visitor map paints
+  cross-origin OpenStreetMap tiles, which taint the capture canvas and make
+  `toDataURL()` throw a `SecurityError`. html2canvas now skips the map (and any
+  Leaflet tile panes) during capture via `ignoreElements`; everything else on
+  the page is same-origin, so the multi-page A4 PDF builds cleanly. The failure
+  toast now also includes the underlying error message for easier diagnosis.
+- **README "Stratum 1 — GPS/PPS" badge linked to a dead anchor.** The badge
+  pointed at `#a-broadcast-grade-time-source-built-in`, but the heading is
+  "Timekeeping — A Broadcast-Grade Time Source Built In", so GitHub's anchor is
+  `#timekeeping--a-broadcast-grade-time-source-built-in`. Updated the link.
+
+### Added
+- **True-colour brand/language logos for file types.** The Traffic Analytics
+  "File Types" table previously showed generic FontAwesome file glyphs. Common
+  developer file types now render their real brand marks (PHP, JavaScript,
+  Python, JSON, SVG, Markdown, HTML, CSS) from self-hosted SVGs under
+  `static/img/logos/`, matching the existing browser/OS logo treatment. Types
+  without a dedicated logo keep the coloured glyph fallback.
+- **Reverse-DNS hostnames + country flags in the Login Security tables.** "Top
+  Login Source IPs" and "Recent Logins" came from the audit log (which has no
+  hostname) and so always showed bare IPs while the rest of the dashboard showed
+  resolved hostnames. Those login IPs are now enriched with the PTR hostname and
+  GeoIP country already resolved for the same address in the web-request log, so
+  every IP across the dashboard renders consistently.
+
 ## [2.103.2] - 2026-06-16 - Fix Traffic Analytics Export dropdown clipped to one item
 
 ### Fixed
