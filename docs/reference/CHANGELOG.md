@@ -8,6 +8,26 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.102.0] - 2026-06-16 - Traffic Analytics: reverse-DNS backfill + self-diagnosing error sources
+
+### Added
+- **Top Error Sources now shows *what* each noisy IP errors on.** Every row in
+  the Errors &amp; Scanners → Top Error Sources table (and the CSV export) is
+  annotated with that source's single most-frequent error path, its status code,
+  and the hit count — so a scanner probing `/wp-login.php` (404) is instantly
+  distinguishable from a dashboard hammering a `403`/`500` endpoint, without
+  cross-referencing the Top Error URLs table.
+
+### Changed
+- **Reverse-DNS hostnames now backfill over time.** Hostnames were resolved only
+  once, at insert; rows captured before "Resolve hostnames" was enabled, during
+  a transient DNS hiccup, or for an IP that only later published a PTR record
+  stayed a bare IP forever. A background pass (every 10 min, when the setting is
+  on) now retries the most-recently-active unresolved IPs in bounded batches and
+  fills in their hostname, while remembering no-PTR addresses so they aren't
+  re-queried each pass. IPs that genuinely have no PTR record still show as a
+  bare address (expected).
+
 ## [2.101.1] - 2026-06-16 - Fix Traffic Analytics sparklines stretching the page
 
 ### Fixed

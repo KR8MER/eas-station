@@ -604,7 +604,7 @@ def get_error_sources(days: int = 30, limit: int = 15) -> List[Dict[str, Any]]:
         .limit(limit)
         .all()
     )
-    return [
+    sources = [
         {
             "ip_address": r.ip_address,
             "errors": int(r.errors),
@@ -613,6 +613,47 @@ def get_error_sources(days: int = 30, limit: int = 15) -> List[Dict[str, Any]]:
         }
         for r in rows
     ]
+
+    # Annotate each noisy source with the single path it errors on most, plus
+    # that path's status code — so the table answers "what *are* these errors?"
+    # at a glance (a scanner probing /wp-login.php 404s vs. a dashboard hammering
+    # a 500/403 endpoint look very different). One grouped query for just the
+    # already-selected source IPs keeps this cheap.
+    ips = [s["ip_address"] for s in sources]
+    if ips:
+        detail = (
+            db.session.query(
+                WebRequestLog.ip_address,
+                WebRequestLog.path,
+                WebRequestLog.status_code,
+                func.count(WebRequestLog.id).label("hits"),
+            )
+            .filter(
+                WebRequestLog.timestamp >= start,
+                WebRequestLog.status_code >= 400,
+                WebRequestLog.ip_address.in_(ips),
+            )
+            .group_by(WebRequestLog.ip_address, WebRequestLog.path, WebRequestLog.status_code)
+            .order_by(func.count(WebRequestLog.id).desc())
+            .all()
+        )
+        top_by_ip: Dict[str, Dict[str, Any]] = {}
+        for ip, path, status, hits in detail:
+            # Rows are ordered by count desc, so the first seen per IP is its worst.
+            if ip not in top_by_ip:
+                top_by_ip[ip] = {
+                    "top_path": path,
+                    "top_status": int(status),
+                    "top_path_hits": int(hits),
+                }
+        for s in sources:
+            s.update(
+                top_by_ip.get(
+                    s["ip_address"],
+                    {"top_path": None, "top_status": None, "top_path_hits": 0},
+                )
+            )
+    return sources
 
 
 def get_hourly_distribution(days: int = 30) -> Dict[str, Any]:
