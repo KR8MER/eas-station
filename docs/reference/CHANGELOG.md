@@ -8,6 +8,16 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.101.1] - 2026-06-16 - Fix Traffic Analytics sparklines stretching the page
+
+### Fixed
+- **Traffic Analytics page rendered as tall vertical streaks.** The new per-tile
+  sparklines were responsive Chart.js canvases (`maintainAspectRatio:false`)
+  appended directly into a status tile with no fixed height, so each canvas grew
+  its own height every layout pass and stretched the whole page. Sparkline
+  canvases now live in a fixed-height (`26px`) `position:relative` wrapper, with
+  a hard `max-height` safety net on any canvas inside an at-a-glance tile.
+
 ## [2.101.0] - 2026-06-16 - Traffic Analytics: logos everywhere, visitor map, new reports, IPv6 & state
 
 ### Added
