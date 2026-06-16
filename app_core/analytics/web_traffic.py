@@ -240,6 +240,11 @@ class WebRequestLog(db.Model):
     country_code = db.Column(db.String(2), nullable=True)
     # City name when a GeoLite2 City database is configured (null for Country DBs).
     city = db.Column(db.String(128), nullable=True)
+    # State / province (most-specific subdivision) and its short ISO code
+    # (e.g. "Ohio"/"OH") — also from a GeoLite2 City database. Lets the dashboard
+    # disambiguate same-named cities ("Springfield, IL" vs "Springfield, MO").
+    region = db.Column(db.String(96), nullable=True)
+    region_code = db.Column(db.String(8), nullable=True)
     # Autonomous System organisation / ISP when a GeoLite2 ASN database is set.
     asn_org = db.Column(db.String(128), nullable=True)
     # Preferred language parsed from the Accept-Language header (e.g. "en-US").
@@ -277,6 +282,8 @@ class WebRequestLog(db.Model):
             "country": self.country,
             "country_code": self.country_code,
             "city": self.city,
+            "region": self.region,
+            "region_code": self.region_code,
             "asn_org": self.asn_org,
             "language": self.language,
         }

@@ -137,15 +137,28 @@ def classify_location(
     if addr.is_private:
         return {"label": "Local Network", "country_code": None}
 
-    # Public address — try optional country (and city) resolution.
+    # Public address — try optional country (and city/region) resolution.
     if geoip_db_path:
         reader = _get_reader(geoip_db_path)
         if reader is not None:
             db_type = _db_types.get(geoip_db_path, "")
             try:
+                region = None
+                region_code = None
                 if "City" in db_type:
                     response = reader.city(ip)
                     city = response.city.name
+                    # The most-specific subdivision is the state/province
+                    # (e.g. "Ohio"/"OH" in the US, "England" in the UK). A City
+                    # DB carries these even though we previously ignored them.
+                    subdiv = None
+                    try:
+                        subdiv = response.subdivisions.most_specific
+                    except Exception:  # pragma: no cover - no subdivisions
+                        subdiv = None
+                    if subdiv is not None:
+                        region = subdiv.name
+                        region_code = subdiv.iso_code
                 else:
                     response = reader.country(ip)
                     city = None
@@ -156,11 +169,19 @@ def classify_location(
                         "label": name,
                         "country_code": iso.upper() if iso else None,
                         "city": city,
+                        "region": region,
+                        "region_code": region_code.upper() if region_code else None,
                     }
             except Exception:  # pragma: no cover - address not in DB, etc.
                 pass
 
-    return {"label": "Internet (Public)", "country_code": None, "city": None}
+    return {
+        "label": "Internet (Public)",
+        "country_code": None,
+        "city": None,
+        "region": None,
+        "region_code": None,
+    }
 
 
 def classify_ip(ip: Optional[str], geoip_db_path: Optional[str] = None) -> str:
@@ -169,6 +190,31 @@ def classify_ip(ip: Optional[str], geoip_db_path: Optional[str] = None) -> str:
     Thin string-only wrapper retained for backwards compatibility.
     """
     return classify_location(ip, geoip_db_path)["label"]
+
+
+def network_key(ip: Optional[str]) -> Optional[str]:
+    """Return a visitor-grouping key for *ip*.
+
+    IPv4 addresses map to themselves. IPv6 addresses map to their **/64 network
+    prefix**: privacy/temporary IPv6 addresses (RFC 4941) rotate frequently
+    *within* a device's /64, so counting each full address as a distinct visitor
+    badly over-counts a single household or device. Grouping by /64 — the
+    smallest network a site is reliably assigned — gives a far more honest
+    visitor/host count. Never raises.
+    """
+    if not ip:
+        return ip
+    try:
+        addr = ipaddress.ip_address(ip)
+    except (ValueError, TypeError):
+        return ip
+    if addr.version == 6:
+        try:
+            net = ipaddress.ip_network(f"{addr}/64", strict=False)
+            return f"{net.network_address}/64"
+        except ValueError:  # pragma: no cover - defensive
+            return ip
+    return str(addr)
 
 
 def resolve_asn(ip: Optional[str], asn_db_path: Optional[str] = None) -> Optional[str]:
@@ -265,6 +311,7 @@ def reset_readers() -> None:
 __all__ = [
     "classify_ip",
     "classify_location",
+    "network_key",
     "resolve_asn",
     "resolve_hostname",
     "reset_readers",
