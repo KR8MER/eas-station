@@ -8,6 +8,15 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.103.2] - 2026-06-16 - Fix Traffic Analytics Export dropdown clipped to one item
+
+### Fixed
+- **Export dropdown only showed "Excel / CSV"; the "PDF report" item was hidden.**
+  The global `.page-header` uses `overflow: hidden` to clip its decorative glow,
+  which also clipped the Export menu that opens inside the Traffic Analytics
+  header. The appliance-style header doesn't use that glow, so it now drops the
+  `::before` decoration and allows overflow, letting the full menu show.
+
 ## [2.103.1] - 2026-06-16 - Stop /api/broadcast/state flooding logs with 401s
 
 ### Fixed

@@ -14,6 +14,13 @@
 
     /* App-bar style header (title / pills / live-dot / controls inline). */
     .traffic-dash-root .traffic-dash-header { padding-top: 14px; padding-bottom: 14px; }
+    /* The global .page-header sets overflow:hidden to clip its decorative glow,
+       which also clipped the Export dropdown menu (only the first item showed).
+       This appliance-style header doesn't use that glow, so drop it and let the
+       menu overflow the header box. */
+    .traffic-dash-root .traffic-dash-header { overflow: visible; }
+    .traffic-dash-root .traffic-dash-header::before { display: none; }
+    .traffic-dash-root .traffic-dash-header .dropdown-menu { z-index: 1030; }
     .traffic-dash-root .traffic-dash-header .header-flex {
         display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center;
     }
