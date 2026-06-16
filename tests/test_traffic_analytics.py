@@ -204,6 +204,42 @@ def test_settings_defaults_created(app_with_db):
         assert cfg["geoip_database_path"] is None
         # Reverse DNS is opt-in (network calls), so it defaults to off.
         assert cfg["resolve_hostnames"] is False
+        # Internal (loopback) traffic is excluded from visitor analytics by default.
+        assert cfg["exclude_loopback"] is True
+        assert cfg["excluded_paths"] is None
+
+
+def test_excluded_paths_parsing_and_matching():
+    from app_core.analytics.web_traffic import is_excluded_path, parse_excluded_paths
+
+    extra = parse_excluded_paths("/api/audio/, /metrics\n/debug")
+    assert extra == ("/api/audio/", "/metrics", "/debug")
+    # Built-in plumbing is always excluded.
+    assert is_excluded_path("/static/app.css") is True
+    # Operator skip-list adds to it.
+    assert is_excluded_path("/api/audio/metrics", extra) is True
+    assert is_excluded_path("/metrics", extra) is True
+    # A normal page is still recorded.
+    assert is_excluded_path("/dashboard", extra) is False
+
+
+def test_referer_breakdown_groups_by_domain_and_excludes_self(app_with_db):
+    app, db = app_with_db
+    from app_core.analytics import traffic_stats
+
+    with app.app_context():
+        _add_request(db, referer="https://news.example.com/article?id=1")
+        _add_request(db, referer="https://news.example.com/other")
+        _add_request(db, referer="https://t.co/abc")
+        _add_request(db, referer="https://easstation.com/dashboard")  # self-referral
+
+        refs = traffic_stats.get_referer_breakdown(days=30, self_hosts={"easstation.com"})
+        by_host = {r["referer"]: r["count"] for r in refs}
+        # Grouped by domain; the two example.com URLs collapse to one row.
+        assert by_host.get("news.example.com") == 2
+        assert by_host.get("t.co") == 1
+        # The self-referral is excluded.
+        assert "easstation.com" not in by_host
 
 
 # ---------------------------------------------------------------------------

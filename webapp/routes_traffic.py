@@ -84,7 +84,7 @@ def register(app: Flask, logger) -> None:
         """Return the full dashboard payload for a given window (?days=)."""
         try:
             days = _clamp_days()
-            data = traffic_stats.get_full_dashboard(days)
+            data = traffic_stats.get_full_dashboard(days, self_hosts=_self_hosts())
             return jsonify({"success": True, "days": days, **data})
         except Exception as exc:  # pragma: no cover - defensive
             route_logger.error("Failed to build traffic dashboard: %s", exc)
@@ -137,7 +137,13 @@ def register(app: Flask, logger) -> None:
         """Return the current traffic-collection settings."""
         try:
             settings = TrafficAnalyticsSettings.get_settings()
-            return jsonify({"success": True, "settings": settings.to_dict()})
+            return jsonify(
+                {
+                    "success": True,
+                    "settings": settings.to_dict(),
+                    "geoip_status": _geoip_status(settings),
+                }
+            )
         except Exception as exc:  # pragma: no cover - defensive
             route_logger.error("Failed to load traffic settings: %s", exc)
             db.session.rollback()
@@ -161,6 +167,11 @@ def register(app: Flask, logger) -> None:
                 settings.exclude_bots = _to_bool(payload["exclude_bots"])
             if "resolve_hostnames" in payload:
                 settings.resolve_hostnames = _to_bool(payload["resolve_hostnames"])
+            if "exclude_loopback" in payload:
+                settings.exclude_loopback = _to_bool(payload["exclude_loopback"])
+            if "excluded_paths" in payload:
+                raw = payload.get("excluded_paths")
+                settings.excluded_paths = (raw or "").strip()[:4000] or None
             if "retention_days" in payload:
                 try:
                     retention = int(payload["retention_days"])
@@ -277,6 +288,69 @@ def register(app: Flask, logger) -> None:
             db.session.rollback()
             route_logger.error("Failed to upload GeoIP database: %s", exc)
             return jsonify({"success": False, "error": str(exc)}), 500
+
+
+def _self_hosts() -> set:
+    """Hostnames to treat as 'internal' for referrer filtering (own host ± www)."""
+    from flask import request
+
+    hosts = set()
+    try:
+        host = (request.host or "").split(":")[0].lower()
+        if host:
+            hosts.add(host)
+            hosts.add("www." + host if not host.startswith("www.") else host[4:])
+    except Exception:
+        pass
+    return hosts
+
+
+def _geoip_status(settings) -> Dict[str, Any]:
+    """Report whether country/flag resolution is actually working.
+
+    Surfaces three facts so the operator can diagnose missing flags from the UI:
+    the reader package is importable, a database file is configured & present,
+    and a sample public-IP lookup resolves to a country.
+    """
+    status: Dict[str, Any] = {
+        "reader_installed": False,
+        "database_configured": bool(settings.geoip_database_path),
+        "database_present": False,
+        "resolves": False,
+        "sample": None,
+        "message": "",
+    }
+    try:
+        import geoip2  # noqa: F401
+        import maxminddb  # noqa: F401
+
+        status["reader_installed"] = True
+    except Exception:
+        status["message"] = "geoip2 not installed — run pip install -r requirements.txt and restart."
+        return status
+
+    path = settings.geoip_database_path
+    if not path:
+        status["message"] = "No GeoIP database configured — upload a GeoLite2 .mmdb above."
+        return status
+    if not os.path.exists(path):
+        status["message"] = f"Database path not found: {path}"
+        return status
+    status["database_present"] = True
+
+    try:
+        from app_core.analytics.geo import classify_location
+
+        result = classify_location("8.8.8.8", path)
+        if result.get("country_code"):
+            status["resolves"] = True
+            status["sample"] = f"8.8.8.8 → {result['label']} ({result['country_code']})"
+            status["message"] = "Active — public IPs resolve to countries/flags."
+        else:
+            status["message"] = "Database loaded but did not resolve a sample IP (is it a Country/City DB?)."
+    except Exception as exc:  # pragma: no cover - defensive
+        status["message"] = f"Lookup failed: {exc}"
+    return status
 
 
 def _safe_remove(path: str) -> None:

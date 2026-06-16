@@ -8,6 +8,29 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.98.0] - 2026-06-16 - Real flag images, referrer accuracy & noise filtering
+
+### Fixed
+- **Country flags now render on every OS.** They were emitted as Unicode emoji,
+  which Windows/Edge does not display as flags (it shows the two letters). Flags
+  are now real **images** served locally from bundled `flag-icons` SVGs
+  (`static/vendor/flags/`, MIT-licensed, ~250 countries) — no emoji, no CDN
+  calls. Used in Countries, Top Visitors, and Top Error Sources.
+- **Referrers are now meaningful.** The Top Referrers report grouped raw full
+  URLs and was dominated by internal navigation. It now groups by **domain** and
+  **excludes self-referrals** (the station's own host), matching awstats'
+  external-referrer report.
+
+### Added
+- **Internal-traffic noise filtering (awstats-style SkipHosts/SkipFiles).** New
+  settings: **Exclude internal (loopback) traffic** (on by default — drops
+  server-internal `127.0.0.1`/`::1` service calls that aren't real visitors) and
+  a **Skip paths** list for ignoring additional path prefixes.
+- **GeoIP status indicator** in Settings — shows at a glance whether the reader
+  package is installed, a database is loaded, and a sample public-IP lookup
+  resolves, so missing flags are easy to diagnose (e.g. "geoip2 not installed",
+  "no database configured", or "Active — 8.8.8.8 → United States (US)").
+
 ## [2.97.4] - 2026-06-16 - Fix broken logo URLs (cache-buster in path)
 
 ### Fixed

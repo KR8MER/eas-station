@@ -2,7 +2,7 @@
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue?style=flat-square&logo=gnu&logoColor=white)](https://www.gnu.org/licenses/agpl-3.0)
 [![Commercial License](https://img.shields.io/badge/License-Commercial-green?style=flat-square)](LICENSE-COMMERCIAL)
-[![Version](https://img.shields.io/badge/Version-2.97.4-blueviolet?style=flat-square)](docs/reference/CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-2.98.0-blueviolet?style=flat-square)](docs/reference/CHANGELOG.md)
 [![Support on Ko-fi](https://img.shields.io/badge/Support%20on-Ko--fi-29abe0?style=flat-square&logo=ko-fi&logoColor=white)](https://ko-fi.com/easstation)
 [![Raspberry Pi](https://img.shields.io/badge/Raspberry%20Pi-Compatible-C51A4A?style=flat-square&logo=raspberrypi&logoColor=white)](https://www.raspberrypi.com/)
 [![Python](https://img.shields.io/badge/Python-3.13-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
@@ -558,6 +558,7 @@ EAS Station™ stands on the shoulders of an enormous open‑source ecosystem. T
 | Chart.js | 3.9.1 | MIT | Time‑series charts on the Analytics, System Health, and GPS dashboards. | https://www.chartjs.org/ |
 | Socket.IO client | 4.5.4 | MIT | Browser WebSocket client that receives the live alert / radio / GPS push updates. | https://socket.io/ |
 | jsPDF + html2canvas | latest | MIT | Client‑side PDF export of the full Statistics dashboard. | https://github.com/parallax/jsPDF |
+| flag-icons | latest | MIT | Country flag SVGs (served locally) for the Traffic Analytics country/visitor reports. | https://github.com/lipis/flag-icons |
 | Mermaid | latest | MIT | In‑browser rendering of architecture and data‑flow diagrams in the docs viewer. | https://mermaid.js.org/ |
 
 ### Data sources & boundary data

@@ -85,11 +85,25 @@ _OS_NEEDLES = (
 )
 
 
-def is_excluded_path(path: str) -> bool:
-    """Return ``True`` when *path* should never be recorded for analytics."""
+def parse_excluded_paths(raw: Optional[str]) -> tuple:
+    """Split an operator's newline/comma-separated skip-path list into prefixes."""
+    if not raw:
+        return ()
+    parts = (p.strip() for chunk in raw.split("\n") for p in chunk.split(","))
+    return tuple(p for p in parts if p)
+
+
+def is_excluded_path(path: str, extra_prefixes: tuple = ()) -> bool:
+    """Return ``True`` when *path* should never be recorded for analytics.
+
+    Always rejects the built-in plumbing prefixes; *extra_prefixes* adds any
+    operator-configured skip paths (awstats-style "SkipFiles").
+    """
     if not path:
         return True
-    return any(path.startswith(prefix) for prefix in ALWAYS_EXCLUDED_PREFIXES)
+    if any(path.startswith(prefix) for prefix in ALWAYS_EXCLUDED_PREFIXES):
+        return True
+    return any(path.startswith(prefix) for prefix in extra_prefixes if prefix)
 
 
 def _extract_browser_version(user_agent: str, needle: str) -> Optional[str]:
@@ -270,6 +284,16 @@ class TrafficAnalyticsSettings(db.Model):
     # and may leak visitor IPs to the configured DNS resolver.
     resolve_hostnames = db.Column(db.Boolean, nullable=False, default=False)
 
+    # Drop requests coming from the loopback interface (127.0.0.1/::1). These are
+    # server-internal service-to-service calls (poller, hardware services, health
+    # probes) rather than real visitors, so excluding them keeps the analytics
+    # focused on actual web traffic. Real LAN/Internet clients are unaffected.
+    exclude_loopback = db.Column(db.Boolean, nullable=False, default=True)
+
+    # awstats-style "SkipFiles": newline/comma-separated path prefixes to ignore
+    # in addition to the always-excluded plumbing (e.g. "/api/audio/,/metrics").
+    excluded_paths = db.Column(db.Text, nullable=True)
+
     updated_at = db.Column(
         db.DateTime(timezone=True),
         default=utc_now,
@@ -285,6 +309,8 @@ class TrafficAnalyticsSettings(db.Model):
         "exclude_bots": False,
         "geoip_database_path": None,
         "resolve_hostnames": False,
+        "exclude_loopback": True,
+        "excluded_paths": None,
     }
 
     @classmethod
@@ -307,6 +333,8 @@ class TrafficAnalyticsSettings(db.Model):
             "exclude_bots": bool(self.exclude_bots),
             "geoip_database_path": self.geoip_database_path or None,
             "resolve_hostnames": bool(self.resolve_hostnames),
+            "exclude_loopback": bool(self.exclude_loopback),
+            "excluded_paths": self.excluded_paths or None,
         }
 
     def to_dict(self) -> Dict[str, Any]:
@@ -321,5 +349,6 @@ __all__ = [
     "TrafficAnalyticsSettings",
     "classify_user_agent",
     "is_excluded_path",
+    "parse_excluded_paths",
     "ALWAYS_EXCLUDED_PREFIXES",
 ]

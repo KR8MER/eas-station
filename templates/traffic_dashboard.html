@@ -146,6 +146,10 @@
     .traffic-dash-root .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
     /* Multicolor browser/OS logos rendered inline in tables. */
     .traffic-dash-root .ti-logo { width: 1.15em; height: 1.15em; vertical-align: -0.2em; object-fit: contain; }
+    /* Country flag images (4x3) — small, with a hairline border so white flags
+       (e.g. JP) stay visible on light backgrounds. */
+    .traffic-dash-root .ti-flag { width: 1.33em; height: 1em; vertical-align: -0.12em; object-fit: cover;
+        border: 1px solid var(--border-color, rgba(127,127,127,.35)); border-radius: 2px; }
 </style>
 {% endblock %}
 
@@ -339,9 +343,9 @@
     <div class="row g-3 mt-0">
         <div class="col-12">
             <div class="card">
-                <div class="card-header"><h6><i class="fas fa-external-link-alt section-icon"></i>Top Referrers</h6></div>
+                <div class="card-header"><h6><i class="fas fa-external-link-alt section-icon"></i>Top External Referrers <span class="text-muted" style="text-transform:none;font-weight:400;font-size:0.72rem;">(by domain, excludes this site)</span></h6></div>
                 <div class="card-body"><div class="table-responsive"><table class="table eas-table mb-0">
-                    <thead><tr><th>Referrer</th><th class="text-end">Hits</th></tr></thead><tbody id="refBreakdown"></tbody></table></div></div>
+                    <thead><tr><th>Referring Domain</th><th class="text-end">Hits</th></tr></thead><tbody id="refBreakdown"></tbody></table></div></div>
             </div>
         </div>
     </div>
@@ -433,10 +437,23 @@
                     <label class="form-check-label" for="setResolveHostnames">Resolve hostnames (reverse DNS)</label>
                 </div>
                 <div class="form-text mb-3">Look up the PTR/hostname for each visitor IP (awstats-style). Lookups happen in the background and are cached, but they query your DNS resolver — leave off if you'd rather not send visitor IPs to DNS.</div>
+                <div class="form-check form-switch mb-1">
+                    <input class="form-check-input" type="checkbox" role="switch" id="setExcludeLoopback">
+                    <label class="form-check-label" for="setExcludeLoopback">Exclude internal (loopback) traffic</label>
+                </div>
+                <div class="form-text mb-3">Drops requests from <code>127.0.0.1</code>/<code>::1</code> — server-internal service calls (poller, hardware services, health probes), not real visitors. Real LAN/Internet clients are unaffected.</div>
+                <div class="mb-3">
+                    <label class="form-label" for="setExcludedPaths">Skip these paths (one per line)</label>
+                    <textarea class="form-control" id="setExcludedPaths" rows="2" placeholder="/api/audio/&#10;/metrics"></textarea>
+                    <div class="form-text">awstats-style skip list. Any request whose path starts with one of these is ignored (in addition to static assets, health probes, and the dashboard's own polling, which are always skipped).</div>
+                </div>
                 <div class="mb-3">
                     <label class="form-label" for="setRetention">Retention (days)</label>
                     <input type="number" class="form-control" id="setRetention" min="1" max="3650" step="1">
                     <div class="form-text">Records older than this are pruned automatically.</div>
+                </div>
+                <div class="alert py-2 px-3 mb-2 d-flex align-items-center gap-2" id="geoipStatus" role="status">
+                    <i class="fas fa-circle-notch fa-spin"></i><span>Checking GeoIP status…</span>
                 </div>
                 <div class="mb-2">
                     <label class="form-label" for="setGeoip">GeoIP database path (optional)</label>
@@ -479,20 +496,21 @@
         if (s === null || s === undefined) return '';
         return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
     }
-    // Convert an ISO 3166-1 alpha-2 code (e.g. "US") to its flag emoji using
-    // Unicode regional indicator symbols — no image assets required.
-    function flagEmoji(cc) {
-        if (!cc || cc.length !== 2 || !/^[A-Za-z]{2}$/.test(cc)) return '';
-        const A = 0x1F1E6, base = 'A'.charCodeAt(0);
-        return String.fromCodePoint(A + (cc.toUpperCase().charCodeAt(0) - base),
-                                    A + (cc.toUpperCase().charCodeAt(1) - base));
+    // Real flag IMAGE for an ISO 3166-1 alpha-2 code. Emoji flags don't render on
+    // Windows (it shows the letters instead), so we use bundled flag-icons SVGs
+    // served locally — works on every OS, no external/CDN calls.
+    const FLAG_BASE = "{{ url_for('static', filename='vendor/flags') }}".split('?')[0];
+    function flagImg(cc, title) {
+        if (!cc || !/^[A-Za-z]{2}$/.test(cc)) return '';
+        const c = cc.toLowerCase();
+        return `<img src="${FLAG_BASE}/${c}.svg" alt="${escapeHtml(cc.toUpperCase())}" title="${escapeHtml(title || cc.toUpperCase())}" class="ti-flag me-1" loading="lazy">`;
     }
     // Build a "🇺🇸 United States" style label; falls back to a network icon for
     // local/unresolved labels that have no country code.
     function flagLabel(cc, label) {
-        const flag = flagEmoji(cc);
         const text = escapeHtml(label || 'Unknown');
-        if (flag) return `<span class="me-1" title="${escapeHtml(cc)}">${flag}</span>${text}`;
+        const flag = flagImg(cc, label);
+        if (flag) return `${flag}${text}`;
         return `<i class="fas fa-network-wired text-muted me-1" title="Local / unresolved"></i>${text}`;
     }
     // Multicolor brand logos (SVG assets) with a FontAwesome brand glyph as the
@@ -592,7 +610,7 @@
             renderTable('topPages', data.top_pages, r => `<td class="text-break-anywhere">${escapeHtml(r.path)}</td><td class="text-end mono">${num(r.hits)}</td><td class="text-end d-none d-sm-table-cell mono">${r.avg_response_ms != null ? r.avg_response_ms : '--'}</td>`, 3);
             renderTable('topVisitors', data.top_visitors, r => {
                 const who = r.username ? ` <span class="badge bg-secondary">${escapeHtml(r.username)}</span>` : '';
-                const flag = r.country_code ? `<span class="me-1" title="${escapeHtml(r.country || r.country_code)}">${flagEmoji(r.country_code)}</span>` : '';
+                const flag = r.country_code ? flagImg(r.country_code, r.country || r.country_code) : '';
                 const host = r.hostname
                     ? `<div class="text-break-anywhere">${flag}${escapeHtml(r.hostname)}</div><div class="text-muted small mono text-break-anywhere">${escapeHtml(r.ip_address)}${who}</div>`
                     : `<span class="text-break-anywhere mono">${flag}${escapeHtml(r.ip_address)}${who}</span>`;
@@ -606,7 +624,7 @@
             renderTable('refBreakdown', data.referer_breakdown, r => `<td class="text-break-anywhere">${escapeHtml(r.referer)}</td><td class="text-end mono">${num(r.count)}</td>`, 2);
             renderTable('errorPages', data.error_pages, r => `<td class="text-break-anywhere">${escapeHtml(r.path)}</td><td class="text-center">${statusBadge(r.status_code)}</td><td class="text-end mono">${num(r.hits)}</td>`, 3);
             renderTable('errorSources', data.error_sources, r => {
-                const flag = r.country_code ? `<span class="me-1">${flagEmoji(r.country_code)}</span>` : '';
+                const flag = r.country_code ? flagImg(r.country_code, r.country || r.country_code) : '';
                 const host = r.hostname
                     ? `<div class="text-break-anywhere">${flag}${escapeHtml(r.hostname)}</div><div class="text-muted small mono text-break-anywhere">${escapeHtml(r.ip_address)}</div>`
                     : `<span class="text-break-anywhere mono">${flag}${escapeHtml(r.ip_address)}</span>`;
@@ -730,10 +748,26 @@
                 document.getElementById('setAuthOnly').checked = s.log_authenticated_only;
                 document.getElementById('setExcludeBots').checked = s.exclude_bots;
                 document.getElementById('setResolveHostnames').checked = s.resolve_hostnames;
+                document.getElementById('setExcludeLoopback').checked = s.exclude_loopback;
+                document.getElementById('setExcludedPaths').value = s.excluded_paths || '';
                 document.getElementById('setRetention').value = s.retention_days;
                 document.getElementById('setGeoip').value = s.geoip_database_path || '';
+                renderGeoipStatus(data.geoip_status);
             }
         } catch (err) { console.error('Error loading settings:', err); }
+    }
+
+    function renderGeoipStatus(st) {
+        const box = document.getElementById('geoipStatus');
+        if (!box) return;
+        if (!st) { box.className = 'alert alert-secondary py-2 px-3 mb-2'; box.textContent = ''; return; }
+        let cls, icon;
+        if (st.resolves) { cls = 'alert-success'; icon = 'fa-check-circle'; }
+        else if (!st.reader_installed) { cls = 'alert-danger'; icon = 'fa-triangle-exclamation'; }
+        else { cls = 'alert-warning'; icon = 'fa-circle-info'; }
+        box.className = `alert ${cls} py-2 px-3 mb-2 d-flex align-items-center gap-2`;
+        const sample = st.sample ? ` <span class="text-muted">(${escapeHtml(st.sample)})</span>` : '';
+        box.innerHTML = `<i class="fas ${icon}"></i><span><strong>GeoIP:</strong> ${escapeHtml(st.message || '')}${sample}</span>`;
     }
 
     async function uploadGeoip() {
@@ -759,6 +793,7 @@
                 }
                 document.getElementById('setGeoip').value = data.path || '';
                 if (typeof showToast === 'function') showToast('GeoIP database installed', 'success');
+                loadSettings();  // refresh the GeoIP status badge
             } else {
                 statusEl.innerHTML = `<span class="text-danger">${escapeHtml(data.error || 'Upload failed')}</span>`;
             }
@@ -777,6 +812,8 @@
             log_authenticated_only: document.getElementById('setAuthOnly').checked,
             exclude_bots: document.getElementById('setExcludeBots').checked,
             resolve_hostnames: document.getElementById('setResolveHostnames').checked,
+            exclude_loopback: document.getElementById('setExcludeLoopback').checked,
+            excluded_paths: document.getElementById('setExcludedPaths').value,
             retention_days: parseInt(document.getElementById('setRetention').value, 10) || 90,
             geoip_database_path: document.getElementById('setGeoip').value
         };

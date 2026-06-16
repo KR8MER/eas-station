@@ -1249,7 +1249,11 @@ def _record_traffic(response) -> None:
     try:
         from app_core.analytics.geo import classify_location
         from app_core.analytics.traffic_recorder import get_traffic_recorder
-        from app_core.analytics.web_traffic import classify_user_agent, is_excluded_path
+        from app_core.analytics.web_traffic import (
+            classify_user_agent,
+            is_excluded_path,
+            parse_excluded_paths,
+        )
 
         recorder = get_traffic_recorder()
         if recorder is None:
@@ -1259,8 +1263,16 @@ def _record_traffic(response) -> None:
             return
 
         path = request.path or '/'
-        if is_excluded_path(path):
+        if is_excluded_path(path, parse_excluded_paths(config.get('excluded_paths'))):
             return
+
+        # Drop server-internal (loopback) traffic when configured — these are
+        # service-to-service calls, not visitors. request.remote_addr is the real
+        # client IP thanks to ProxyFix, so genuine LAN/Internet users are kept.
+        if config.get('exclude_loopback', True):
+            remote = request.remote_addr or ''
+            if remote in ('127.0.0.1', '::1') or remote.startswith('127.'):
+                return
 
         is_api = path.startswith('/api/')
         if is_api and not config.get('log_api_requests', True):

@@ -30,7 +30,8 @@ SQLite (tests).
 
 from collections import Counter, defaultdict
 from datetime import timedelta
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 
 from sqlalchemy import func
 
@@ -274,8 +275,36 @@ def get_os_breakdown(days: int = 30, limit: int = 10) -> List[Dict[str, Any]]:
     return _simple_breakdown(WebRequestLog.os, days, limit, "os")
 
 
-def get_referer_breakdown(days: int = 30, limit: int = 10) -> List[Dict[str, Any]]:
-    return _simple_breakdown(WebRequestLog.referer, days, limit, "referer")
+def get_referer_breakdown(
+    days: int = 30, limit: int = 10, self_hosts: Optional[set] = None
+) -> List[Dict[str, Any]]:
+    """External referrers grouped by domain (awstats-style).
+
+    awstats separates "external" referrers from internal navigation. We parse the
+    host out of each Referer URL, drop our own host(s) (so clicking around the app
+    doesn't dominate the list), and group by domain rather than full URL — so
+    ``https://news.example.com/a?x=1`` and ``.../b`` both count under
+    ``news.example.com``.
+    """
+    hosts = {h.lower() for h in (self_hosts or set())}
+    start = _window_start(days)
+    rows = (
+        db.session.query(WebRequestLog.referer)
+        .filter(WebRequestLog.timestamp >= start, WebRequestLog.referer.isnot(None))
+        .all()
+    )
+    counts: Counter = Counter()
+    for (ref,) in rows:
+        if not ref:
+            continue
+        host = urlparse(ref).netloc.lower()
+        if not host:
+            continue
+        host = host.split("@")[-1].split(":")[0]  # strip any user-info / port
+        if host in hosts:
+            continue  # internal self-referral
+        counts[host] += 1
+    return [{"referer": host, "count": count} for host, count in counts.most_common(limit)]
 
 
 def get_resolution_breakdown(days: int = 30, limit: int = 10) -> List[Dict[str, Any]]:
@@ -563,8 +592,12 @@ def get_recent_logins(limit: int = 50) -> List[Dict[str, Any]]:
     ]
 
 
-def get_full_dashboard(days: int = 30) -> Dict[str, Any]:
-    """Bundle every section the dashboard needs into one payload."""
+def get_full_dashboard(days: int = 30, self_hosts: Optional[set] = None) -> Dict[str, Any]:
+    """Bundle every section the dashboard needs into one payload.
+
+    *self_hosts* is the set of hostnames considered "internal" (the station's own
+    host), used to exclude self-referrals from the referrer report.
+    """
     return {
         "summary": get_summary(days),
         "timeseries": get_timeseries(days),
@@ -573,7 +606,7 @@ def get_full_dashboard(days: int = 30) -> Dict[str, Any]:
         "status_breakdown": get_status_breakdown(days),
         "browser_breakdown": get_browser_breakdown(days),
         "os_breakdown": get_os_breakdown(days),
-        "referer_breakdown": get_referer_breakdown(days),
+        "referer_breakdown": get_referer_breakdown(days, self_hosts=self_hosts),
         "resolution_breakdown": get_resolution_breakdown(days),
         "country_breakdown": get_country_breakdown(days),
         "language_breakdown": get_language_breakdown(days),
