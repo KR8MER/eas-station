@@ -8,6 +8,26 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.102.0] - 2026-06-16 - Dedicated Attribution & Credits page
+
+### Added
+- **Dedicated, branded `/attribution` page** consolidating all open-source
+  credits in one predominantly-linked place: the project's own AGPL-3.0 /
+  Commercial dual license and required attribution string, the full Python
+  dependency stack, infrastructure & system packages, frontend assets, and
+  public data sources & standards. Surfaced from the Help dropdown
+  (Help → Attribution & Credits) and the footer's Legal & Info column.
+- **Canonical `docs/reference/dependency_attribution.md`** reference document.
+  This file was referenced throughout the codebase (CLAUDE.md, the About page)
+  but had never actually been created, leaving a broken link on `/about`. It is
+  now the authoritative, version-pinned attribution record and ships in the docs
+  site (viewable in-app at `/docs/reference/dependency_attribution`).
+
+### Fixed
+- **Broken attribution link on the About page.** The "dependency attribution
+  documentation" callout pointed at a GitHub file that did not exist; it now
+  links to the new in-app Attribution & Credits page.
+
 ## [2.101.1] - 2026-06-16 - Fix Traffic Analytics sparklines stretching the page
 
 ### Fixed

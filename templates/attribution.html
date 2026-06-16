@@ -1,0 +1,265 @@
+{% extends 'base.html' %}
+{% block title %}Attribution &amp; Credits | EAS Station™{% endblock %}
+{% block extra_css %}
+{# Reuses the shared EAS visual system (.about-* / .eas-* classes) defined in
+   static/css/styles.css. No page-specific CSS required. #}
+{% endblock %}
+{% block content %}
+<div class="about-page container py-4">
+    <div class="row justify-content-center">
+        <div class="col-12 col-lg-10 col-xl-9">
+
+            <!-- Hero -->
+            <section class="about-hero">
+                <div class="about-hero-inner">
+                    {% with logo_classes='about-hero-logo', logo_style='' %}
+                        {% include 'partials/logo_wordmark.html' %}
+                    {% endwith %}
+                    <h1 class="about-hero-title">Built on the shoulders of open source.</h1>
+                    <p class="about-hero-lead">EAS Station™ is assembled from dozens of open-source libraries, public government data feeds, and community standards. This page credits every one of them — and explains how EAS Station™ itself is licensed.</p>
+                    <div class="about-chip-row">
+                        <span class="about-chip"><i class="fas fa-scale-balanced"></i> Dual-Licensed</span>
+                        <span class="about-chip"><i class="fas fa-cubes"></i> 60+ Dependencies</span>
+                        <span class="about-chip"><i class="fas fa-database"></i> Public Data</span>
+                        <span class="about-chip"><i class="fas fa-heart"></i> Community Built</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- EAS Station's own license & attribution -->
+            <section class="about-card" aria-labelledby="license-heading">
+                <div class="about-section-head">
+                    <span class="about-section-icon ico-primary"><i class="fas fa-certificate"></i></span>
+                    <div>
+                        <h2 id="license-heading" class="about-section-title">How EAS Station™ Is Licensed</h2>
+                        <p class="about-section-sub">Dual-licensed software — attribution and notices must be preserved.</p>
+                    </div>
+                </div>
+                <div class="row g-4">
+                    <div class="col-md-7">
+                        <p class="mb-3">EAS Station™ is <strong>dual-licensed</strong>. You may use it under the
+                        <strong>GNU Affero General Public License v3 (AGPL-3.0)</strong> or, for proprietary/closed-source
+                        deployments, under a <strong>Commercial License</strong>.</p>
+                        <p class="mb-3">When using the software under the AGPL you <strong>must preserve the copyright and
+                        license notices</strong> and may not rebrand the software or remove attribution. The
+                        recommended attribution string is:</p>
+                        <p class="mb-3"><code class="text-break-anywhere">Powered by EAS Station — Copyright (c) 2025–2026 Timothy Kramer (KR8MER)</code></p>
+                        <p class="mb-0 small text-muted">"EAS Station", its logos, and wordmarks are trademarks and are
+                        <strong>not</strong> covered by the software licenses — their use is governed by the
+                        <a href="https://github.com/KR8MER/eas-station/blob/main/docs/policies/TRADEMARK_POLICY.md" target="_blank" rel="noopener">Trademark Policy</a>.</p>
+                    </div>
+                    <div class="col-md-5">
+                        <div class="ack-group">
+                            <h6>License Files</h6>
+                            <div class="ack-item">
+                                <strong>AGPL-3.0</strong>
+                                <span class="muted">Open-source use · see <code>LICENSE</code></span>
+                            </div>
+                            <div class="ack-item">
+                                <strong>Commercial</strong>
+                                <span class="muted">Proprietary use · see <code>LICENSE-COMMERCIAL</code></span>
+                            </div>
+                            <div class="ack-item">
+                                <strong>NOTICE</strong>
+                                <span class="muted">Attribution &amp; trademark terms</span>
+                            </div>
+                            <div class="ack-item">
+                                <strong>© 2025–2026</strong>
+                                <span class="muted">Timothy Kramer (KR8MER)</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Open-source software -->
+            <section class="about-card" aria-labelledby="oss-heading">
+                <div class="about-section-head">
+                    <span class="about-section-icon ico-success"><i class="fas fa-cubes"></i></span>
+                    <div>
+                        <h2 id="oss-heading" class="about-section-title">Open-Source Software</h2>
+                        <p class="about-section-sub">The Python libraries that make every feature work.</p>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th scope="col">Project</th>
+                                <th scope="col" class="d-none d-sm-table-cell">What it does for EAS Station™</th>
+                                <th scope="col">License</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td><strong>Flask</strong> · Werkzeug · Jinja2</td><td class="d-none d-sm-table-cell">Web framework, routing, and templating for every page &amp; API</td><td class="text-break-anywhere">BSD-3-Clause</td></tr>
+                            <tr><td><strong>Flask-SocketIO</strong> · python-socketio</td><td class="d-none d-sm-table-cell">Live WebSocket updates for alerts, radio &amp; GPS</td><td class="text-break-anywhere">MIT</td></tr>
+                            <tr><td><strong>Flask-WTF</strong> · Flask-Limiter · Flask-Compress</td><td class="d-none d-sm-table-cell">CSRF protection, rate limiting, response compression</td><td class="text-break-anywhere">BSD / MIT</td></tr>
+                            <tr><td><strong>gunicorn</strong> · gevent · greenlet</td><td class="d-none d-sm-table-cell">Production WSGI server and async workers</td><td class="text-break-anywhere">MIT</td></tr>
+                            <tr><td><strong>SQLAlchemy</strong> · GeoAlchemy2 · Alembic</td><td class="d-none d-sm-table-cell">ORM, PostGIS spatial extensions, schema migrations</td><td class="text-break-anywhere">MIT</td></tr>
+                            <tr><td><strong>psycopg2</strong></td><td class="d-none d-sm-table-cell">PostgreSQL database driver</td><td class="text-break-anywhere">LGPL-3.0</td></tr>
+                            <tr><td><strong>pyshp</strong> · pyproj</td><td class="d-none d-sm-table-cell">Shapefile reading &amp; CRS reprojection for boundaries</td><td class="text-break-anywhere">MIT</td></tr>
+                            <tr><td><strong>requests</strong> · httpx · certifi</td><td class="d-none d-sm-table-cell">HTTP clients &amp; CA bundle for CAP/IPAWS polling</td><td class="text-break-anywhere">Apache-2.0 / BSD / MPL-2.0</td></tr>
+                            <tr><td><strong>lxml</strong> · BeautifulSoup4 · feedparser</td><td class="d-none d-sm-table-cell">XML/HTML/RSS parsing for CAP messages &amp; tickers</td><td class="text-break-anywhere">BSD / MIT</td></tr>
+                            <tr><td><strong>numpy</strong> · scipy · numba</td><td class="d-none d-sm-table-cell">Sample processing &amp; real-time FM/RBDS demodulation</td><td class="text-break-anywhere">BSD</td></tr>
+                            <tr><td><strong>pydub</strong> · audioop-lts · pyttsx3</td><td class="d-none d-sm-table-cell">Audio decoding, resampling &amp; offline text-to-speech</td><td class="text-break-anywhere">MIT / Python-2.0</td></tr>
+                            <tr><td><strong>pyserial</strong> · pynmea2 · Pillow · luma.oled</td><td class="d-none d-sm-table-cell">VFD/OLED displays, GPS HAT &amp; graphics rendering</td><td class="text-break-anywhere">BSD / MIT</td></tr>
+                            <tr><td><strong>gpiozero</strong> · rpi-ws281x · zigpy</td><td class="d-none d-sm-table-cell">GPIO relays, NeoPixel LEDs &amp; Zigbee coordinator</td><td class="text-break-anywhere">BSD / GPL-3.0</td></tr>
+                            <tr><td><strong>cryptography</strong> · pyotp · qrcode</td><td class="d-none d-sm-table-cell">Audit-log signatures &amp; multi-factor authentication</td><td class="text-break-anywhere">Apache-2.0 / MIT</td></tr>
+                            <tr><td><strong>twilio</strong> · pysnmp</td><td class="d-none d-sm-table-cell">SMS alert delivery &amp; SNMP trap notifications</td><td class="text-break-anywhere">MIT / BSD</td></tr>
+                            <tr><td><strong>redis</strong> · hiredis · psutil</td><td class="d-none d-sm-table-cell">State management, pub/sub &amp; system monitoring</td><td class="text-break-anywhere">MIT / BSD</td></tr>
+                            <tr><td><strong>geoip2</strong> · maxminddb</td><td class="d-none d-sm-table-cell">Country-level visitor geolocation (Traffic Analytics)</td><td class="text-break-anywhere">Apache-2.0 / MIT</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Infrastructure -->
+            <section class="about-card" aria-labelledby="infra-heading">
+                <div class="about-section-head">
+                    <span class="about-section-icon ico-info"><i class="fas fa-server"></i></span>
+                    <div>
+                        <h2 id="infra-heading" class="about-section-title">Infrastructure &amp; System Packages</h2>
+                        <p class="about-section-sub">The platform services running underneath the application.</p>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th scope="col">Component</th>
+                                <th scope="col" class="d-none d-sm-table-cell">Purpose</th>
+                                <th scope="col">License</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td><strong>PostgreSQL + PostGIS</strong></td><td class="d-none d-sm-table-cell">Spatial database &amp; geographic alert filtering</td><td class="text-break-anywhere">PostgreSQL / GPL-2.0</td></tr>
+                            <tr><td><strong>Redis</strong></td><td class="d-none d-sm-table-cell">Metrics cache &amp; inter-service messaging</td><td class="text-break-anywhere">BSD-3-Clause</td></tr>
+                            <tr><td><strong>nginx</strong></td><td class="d-none d-sm-table-cell">Reverse proxy &amp; TLS termination</td><td class="text-break-anywhere">BSD-2-Clause</td></tr>
+                            <tr><td><strong>certbot</strong></td><td class="d-none d-sm-table-cell">Automated Let's Encrypt certificate management</td><td class="text-break-anywhere">Apache-2.0</td></tr>
+                            <tr><td><strong>Icecast</strong> · ffmpeg</td><td class="d-none d-sm-table-cell">Audio streaming server &amp; transcoding</td><td class="text-break-anywhere">GPL-2.0 / LGPL-2.1</td></tr>
+                            <tr><td><strong>systemd</strong></td><td class="d-none d-sm-table-cell">Native service orchestration</td><td class="text-break-anywhere">LGPL-2.1</td></tr>
+                            <tr><td><strong>chrony</strong> · gpsd</td><td class="d-none d-sm-table-cell">Stratum-1 timekeeping &amp; GPS daemon</td><td class="text-break-anywhere">GPL-2.0 / BSD-3-Clause</td></tr>
+                            <tr><td><strong>SoapySDR</strong></td><td class="d-none d-sm-table-cell">SDR receiver abstraction (system binding)</td><td class="text-break-anywhere">Boost-1.0</td></tr>
+                            <tr><td><strong>espeak-ng</strong></td><td class="d-none d-sm-table-cell">Offline speech backend for pyttsx3</td><td class="text-break-anywhere">GPL-3.0</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Frontend assets -->
+            <section class="about-card" aria-labelledby="frontend-heading">
+                <div class="about-section-head">
+                    <span class="about-section-icon ico-warning"><i class="fas fa-palette"></i></span>
+                    <div>
+                        <h2 id="frontend-heading" class="about-section-title">Frontend Assets</h2>
+                        <p class="about-section-sub">Self-hosted UI frameworks, icons &amp; brand marks.</p>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th scope="col">Asset</th>
+                                <th scope="col" class="d-none d-sm-table-cell">Use</th>
+                                <th scope="col">License</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td><strong>Bootstrap 5</strong></td><td class="d-none d-sm-table-cell">Mobile-first responsive UI framework</td><td class="text-break-anywhere">MIT</td></tr>
+                            <tr><td><strong>Font Awesome (Free)</strong></td><td class="d-none d-sm-table-cell">UI iconography</td><td class="text-break-anywhere">CC BY 4.0 / OFL / MIT</td></tr>
+                            <tr><td><strong>Chart.js</strong></td><td class="d-none d-sm-table-cell">Analytics charts &amp; sparklines</td><td class="text-break-anywhere">MIT</td></tr>
+                            <tr><td><strong>Socket.IO client</strong></td><td class="d-none d-sm-table-cell">Browser WebSocket client</td><td class="text-break-anywhere">MIT</td></tr>
+                            <tr><td><strong>simple-icons</strong></td><td class="d-none d-sm-table-cell">Brand marks for the tech-stack badges</td><td class="text-break-anywhere">CC0-1.0</td></tr>
+                            <tr><td><strong>Flag assets</strong></td><td class="d-none d-sm-table-cell">Country flags for Traffic Analytics</td><td class="text-break-anywhere">Public domain / CC0</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Data sources -->
+            <section class="about-card" aria-labelledby="data-heading">
+                <div class="about-section-head">
+                    <span class="about-section-icon ico-primary"><i class="fas fa-database"></i></span>
+                    <div>
+                        <h2 id="data-heading" class="about-section-title">Data Sources &amp; Standards</h2>
+                        <p class="about-section-sub">Public feeds and published standards the system is built around.</p>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th scope="col">Source</th>
+                                <th scope="col" class="d-none d-sm-table-cell">Use</th>
+                                <th scope="col">Terms</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td><strong>NOAA / NWS CAP feeds</strong></td><td class="d-none d-sm-table-cell">Primary alert ingestion</td><td class="text-break-anywhere">U.S. Gov. public data</td></tr>
+                            <tr><td><strong>FEMA IPAWS / IPAWS-OPEN</strong></td><td class="d-none d-sm-table-cell">Authenticated alert aggregation</td><td class="text-break-anywhere">U.S. Gov. public data</td></tr>
+                            <tr><td><strong>U.S. Census TIGER/Line</strong></td><td class="d-none d-sm-table-cell">County/zone boundary geometry</td><td class="text-break-anywhere">Public domain</td></tr>
+                            <tr><td><strong>FIPS / SAME location codes</strong></td><td class="d-none d-sm-table-cell">Geographic alert targeting</td><td class="text-break-anywhere">Public domain</td></tr>
+                            <tr><td><strong>MaxMind GeoLite2</strong></td><td class="d-none d-sm-table-cell">Visitor geolocation (operator-supplied DB)</td><td class="text-break-anywhere">CC BY-SA 4.0</td></tr>
+                            <tr><td><strong>NRSC-4-B · VTEC · RBDS</strong></td><td class="d-none d-sm-table-cell">Protocol implementation references</td><td class="text-break-anywhere">Industry standards</td></tr>
+                            <tr><td><strong>multimon-ng</strong></td><td class="d-none d-sm-table-cell">Decoding-parity cross-check (not bundled)</td><td class="text-break-anywhere">GPL-2.0</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <p class="small text-muted mt-3 mb-0"><i class="fas fa-circle-info me-1"></i>GeoLite2 data is <strong>not</strong> distributed with EAS Station — operators supply their own MaxMind database.</p>
+            </section>
+
+            <!-- Acknowledgments -->
+            <section class="about-card" aria-labelledby="ack-heading">
+                <div class="about-section-head">
+                    <span class="about-section-icon ico-success"><i class="fas fa-hands-clapping"></i></span>
+                    <div>
+                        <h2 id="ack-heading" class="about-section-title">Acknowledgments</h2>
+                        <p class="about-section-sub">Thank you to the communities behind this work.</p>
+                    </div>
+                </div>
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <div class="ack-group">
+                            <h6>Upstream Projects</h6>
+                            <div class="ack-item">
+                                <strong>The Pallets Projects</strong>
+                                <span class="muted">Flask, Jinja2, Werkzeug, itsdangerous</span>
+                            </div>
+                            <div class="ack-item">
+                                <strong>PostgreSQL &amp; PostGIS Teams</strong>
+                                <span class="muted">Spatial database technology</span>
+                            </div>
+                            <div class="ack-item">
+                                <strong>RTL-SDR &amp; SoapySDR</strong>
+                                <span class="muted">Accessible software-defined radio</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="ack-group">
+                            <h6>Community</h6>
+                            <div class="ack-item">
+                                <strong>Amateur Radio Community</strong>
+                                <span class="muted">Testing, feedback, and field validation</span>
+                            </div>
+                            <div class="ack-item">
+                                <strong>Every Upstream Maintainer</strong>
+                                <span class="muted">Whose work is credited on this page</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="alert alert-info d-flex align-items-start mt-3 mb-0" role="alert">
+                    <i class="fas fa-circle-info me-2 mt-1"></i>
+                    <div class="small">For the complete, version-pinned list with full license details, see the
+                        <a href="/docs/reference/dependency_attribution" class="alert-link">canonical attribution documentation</a>.
+                        Something missing or mis-licensed?
+                        <a href="https://github.com/KR8MER/eas-station/issues" target="_blank" rel="noopener" class="alert-link">Open an issue</a>
+                        so we can correct the record.</div>
+                </div>
+            </section>
+
+        </div>
+    </div>
+</div>
+{% endblock %}
