@@ -136,6 +136,35 @@ def test_classify_ip_local_and_public():
     assert classify_ip("not-an-ip") == "Unknown"
 
 
+def test_resolve_asn_skips_local_and_unconfigured():
+    from app_core.analytics.geo import resolve_asn
+
+    # No ASN database configured -> None, never raises.
+    assert resolve_asn("8.8.8.8", None) is None
+    # Local/private addresses are never looked up.
+    assert resolve_asn("192.168.1.5", "/nonexistent.mmdb") is None
+    assert resolve_asn("127.0.0.1", "/nonexistent.mmdb") is None
+    assert resolve_asn(None, "/nonexistent.mmdb") is None
+
+
+def test_city_and_asn_breakdowns(app_with_db):
+    app, db = app_with_db
+    from app_core.analytics import traffic_stats
+
+    with app.app_context():
+        _add_request(db, ip_address="8.8.8.8", city="Mountain View", asn_org="Google LLC")
+        _add_request(db, ip_address="8.8.4.4", city="Mountain View", asn_org="Google LLC")
+        _add_request(db, ip_address="1.1.1.1", city="Sydney", asn_org="Cloudflare")
+
+        cities = {c["city"]: c["count"] for c in traffic_stats.get_city_breakdown(days=30)}
+        assert cities.get("Mountain View") == 2
+        assert cities.get("Sydney") == 1
+
+        orgs = {o["asn_org"]: o["count"] for o in traffic_stats.get_asn_breakdown(days=30)}
+        assert orgs.get("Google LLC") == 2
+        assert orgs.get("Cloudflare") == 1
+
+
 def test_classify_location_returns_label_and_code():
     from app_core.analytics.geo import classify_location
 
@@ -204,6 +233,44 @@ def test_settings_defaults_created(app_with_db):
         assert cfg["geoip_database_path"] is None
         # Reverse DNS is opt-in (network calls), so it defaults to off.
         assert cfg["resolve_hostnames"] is False
+        # Internal (loopback) traffic is excluded from visitor analytics by default.
+        assert cfg["exclude_loopback"] is True
+        assert cfg["excluded_paths"] is None
+        # ASN database is a separate, optional slot.
+        assert cfg["geoip_asn_database_path"] is None
+
+
+def test_excluded_paths_parsing_and_matching():
+    from app_core.analytics.web_traffic import is_excluded_path, parse_excluded_paths
+
+    extra = parse_excluded_paths("/api/audio/, /metrics\n/debug")
+    assert extra == ("/api/audio/", "/metrics", "/debug")
+    # Built-in plumbing is always excluded.
+    assert is_excluded_path("/static/app.css") is True
+    # Operator skip-list adds to it.
+    assert is_excluded_path("/api/audio/metrics", extra) is True
+    assert is_excluded_path("/metrics", extra) is True
+    # A normal page is still recorded.
+    assert is_excluded_path("/dashboard", extra) is False
+
+
+def test_referer_breakdown_groups_by_domain_and_excludes_self(app_with_db):
+    app, db = app_with_db
+    from app_core.analytics import traffic_stats
+
+    with app.app_context():
+        _add_request(db, referer="https://news.example.com/article?id=1")
+        _add_request(db, referer="https://news.example.com/other")
+        _add_request(db, referer="https://t.co/abc")
+        _add_request(db, referer="https://easstation.com/dashboard")  # self-referral
+
+        refs = traffic_stats.get_referer_breakdown(days=30, self_hosts={"easstation.com"})
+        by_host = {r["referer"]: r["count"] for r in refs}
+        # Grouped by domain; the two example.com URLs collapse to one row.
+        assert by_host.get("news.example.com") == 2
+        assert by_host.get("t.co") == 1
+        # The self-referral is excluded.
+        assert "easstation.com" not in by_host
 
 
 # ---------------------------------------------------------------------------
@@ -378,6 +445,87 @@ def test_error_reports(app_with_db):
         sources = traffic_stats.get_error_sources(days=30)
         assert sources[0]["ip_address"] == "66.249.0.1"
         assert sources[0]["errors"] == 3
+
+
+def test_visits_entry_exit_and_duration(app_with_db):
+    app, db = app_with_db
+    from datetime import timedelta
+
+    from app_core.analytics import traffic_stats
+    from app_utils import utc_now
+
+    base = utc_now() - timedelta(hours=2)
+    with app.app_context():
+        # One visit by .10: /landing -> /alerts, 5 minutes apart.
+        _add_request(db, ip_address="203.0.113.10", path="/landing", timestamp=base)
+        _add_request(db, ip_address="203.0.113.10", path="/alerts",
+                     timestamp=base + timedelta(minutes=5))
+        # A second, separate visit by .10 an hour later (> 30 min gap).
+        _add_request(db, ip_address="203.0.113.10", path="/dashboard",
+                     timestamp=base + timedelta(minutes=90))
+        # A bot hit must not count as a visit.
+        _add_request(db, ip_address="66.249.0.1", path="/x", is_bot=True,
+                     timestamp=base)
+
+        v = traffic_stats.get_visits(days=30)
+        assert v["visits"] == 2  # two human sessions, bot excluded
+        entries = {e["path"]: e["count"] for e in v["entry_pages"]}
+        exits = {e["path"]: e["count"] for e in v["exit_pages"]}
+        assert entries.get("/landing") == 1
+        assert exits.get("/alerts") == 1
+        assert v["avg_duration_seconds"] >= 0
+
+
+def test_filetype_breakdown(app_with_db):
+    app, db = app_with_db
+    from app_core.analytics import traffic_stats
+
+    with app.app_context():
+        _add_request(db, path="/dashboard")          # page (no ext)
+        _add_request(db, path="/robots.txt")          # txt
+        _add_request(db, path="/data/report.json")    # json
+
+        types = {r["filetype"]: r["count"] for r in traffic_stats.get_filetype_breakdown(days=30)}
+        assert types.get("(page)") == 1
+        assert types.get("txt") == 1
+        assert types.get("json") == 1
+
+
+def test_search_terms_from_referrer(app_with_db):
+    app, db = app_with_db
+    from app_core.analytics import traffic_stats
+
+    with app.app_context():
+        _add_request(db, referer="https://www.google.com/search?q=emergency+alerts")
+        _add_request(db, referer="https://duckduckgo.com/?q=eas+station")
+        _add_request(db, referer="https://news.example.com/article")  # not a search engine
+
+        terms = {t["term"]: t["count"] for t in traffic_stats.get_search_terms(days=30)}
+        assert terms.get("emergency alerts") == 1
+        assert terms.get("eas station") == 1
+
+
+def test_bot_breakdown(app_with_db):
+    app, db = app_with_db
+    from app_core.analytics import traffic_stats
+
+    with app.app_context():
+        _add_request(db, is_bot=True, user_agent="Mozilla/5.0 (compatible; Googlebot/2.1)")
+        _add_request(db, is_bot=True, user_agent="Mozilla/5.0 (compatible; Googlebot/2.1)")
+        _add_request(db, is_bot=True, user_agent="Mozilla/5.0 (compatible; bingbot/2.0)")
+
+        bots = {b["bot"]: b["hits"] for b in traffic_stats.get_bot_breakdown(days=30)}
+        assert bots.get("Googlebot") == 2
+        assert bots.get("Bingbot") == 1
+
+
+def test_classify_bot():
+    from app_core.analytics.web_traffic import classify_bot
+
+    assert classify_bot("Mozilla/5.0 (compatible; Googlebot/2.1)") == "Googlebot"
+    assert classify_bot("AhrefsBot/7.0") == "AhrefsBot"
+    assert classify_bot("Mozilla/5.0 Firefox/120") == "Other bot"
+    assert classify_bot(None) == "Unknown bot"
 
 
 def test_time_distributions(app_with_db):

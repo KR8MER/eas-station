@@ -84,7 +84,7 @@ def register(app: Flask, logger) -> None:
         """Return the full dashboard payload for a given window (?days=)."""
         try:
             days = _clamp_days()
-            data = traffic_stats.get_full_dashboard(days)
+            data = traffic_stats.get_full_dashboard(days, self_hosts=_self_hosts())
             return jsonify({"success": True, "days": days, **data})
         except Exception as exc:  # pragma: no cover - defensive
             route_logger.error("Failed to build traffic dashboard: %s", exc)
@@ -137,7 +137,13 @@ def register(app: Flask, logger) -> None:
         """Return the current traffic-collection settings."""
         try:
             settings = TrafficAnalyticsSettings.get_settings()
-            return jsonify({"success": True, "settings": settings.to_dict()})
+            return jsonify(
+                {
+                    "success": True,
+                    "settings": settings.to_dict(),
+                    "geoip_status": _geoip_status(settings),
+                }
+            )
         except Exception as exc:  # pragma: no cover - defensive
             route_logger.error("Failed to load traffic settings: %s", exc)
             db.session.rollback()
@@ -161,6 +167,11 @@ def register(app: Flask, logger) -> None:
                 settings.exclude_bots = _to_bool(payload["exclude_bots"])
             if "resolve_hostnames" in payload:
                 settings.resolve_hostnames = _to_bool(payload["resolve_hostnames"])
+            if "exclude_loopback" in payload:
+                settings.exclude_loopback = _to_bool(payload["exclude_loopback"])
+            if "excluded_paths" in payload:
+                raw = payload.get("excluded_paths")
+                settings.excluded_paths = (raw or "").strip()[:4000] or None
             if "retention_days" in payload:
                 try:
                     retention = int(payload["retention_days"])
@@ -178,6 +189,14 @@ def register(app: Flask, logger) -> None:
 
                     reset_readers()
                 settings.geoip_database_path = new_path
+            if "geoip_asn_database_path" in payload:
+                raw_path = payload.get("geoip_asn_database_path")
+                new_path = (raw_path or "").strip()[:512] or None
+                if new_path != settings.geoip_asn_database_path:
+                    from app_core.analytics.geo import reset_readers
+
+                    reset_readers()
+                settings.geoip_asn_database_path = new_path
 
             db.session.commit()
             route_logger.info("Traffic analytics settings updated")
@@ -218,24 +237,22 @@ def register(app: Flask, logger) -> None:
 
             geoip_dir = os.path.join(app.root_path, "data", "geoip")
             os.makedirs(geoip_dir, exist_ok=True)
-            # Single canonical filename so re-uploads replace the old database.
-            dest_path = os.path.join(geoip_dir, "GeoLite2-Country.mmdb")
-            tmp_path = dest_path + ".tmp"
+            tmp_path = os.path.join(geoip_dir, "_upload.mmdb.tmp")
             with open(tmp_path, "wb") as fh:
                 fh.write(data)
 
-            # Validate before committing: a corrupt/non-mmdb file must not become
-            # the active database. Prefer the real `maxminddb` reader; if that
+            # Validate + detect the database TYPE before committing. Prefer the
+            # real `maxminddb` reader (which exposes the type via metadata); if the
             # package isn't installed yet, fall back to the file's magic marker so
-            # the upload still works (resolution lights up once the package is
-            # present).
+            # the upload still works (assuming Country — the common case).
             reader_available = True
             note = None
+            db_type = "GeoLite2-Country"
             try:
                 import maxminddb
 
-                with maxminddb.open_database(tmp_path):
-                    pass
+                with maxminddb.open_database(tmp_path) as r:
+                    db_type = r.metadata().database_type or db_type
             except ImportError:
                 reader_available = False
                 if not _has_maxmind_magic(data):
@@ -244,9 +261,9 @@ def register(app: Flask, logger) -> None:
                         {"success": False, "error": "File is not a MaxMind .mmdb database"}
                     ), 400
                 note = (
-                    "Database stored, but the 'geoip2' package is not installed "
-                    "yet — run pip install -r requirements.txt and restart for "
-                    "flags to resolve."
+                    "Database stored (assumed Country — type can't be detected "
+                    "until 'geoip2' is installed). Run pip install -r "
+                    "requirements.txt and restart for resolution to work."
                 )
             except Exception as exc:
                 _safe_remove(tmp_path)
@@ -254,22 +271,44 @@ def register(app: Flask, logger) -> None:
                     {"success": False, "error": f"Not a valid GeoIP database: {exc}"}
                 ), 400
 
+            # Route the file to a canonical name + the matching setting based on
+            # its type, so Country/City share the location DB slot and ASN gets
+            # its own slot. Re-uploads of the same type replace the old file.
+            settings = TrafficAnalyticsSettings.get_settings()
+            if "ASN" in db_type:
+                dest_path = os.path.join(geoip_dir, "GeoLite2-ASN.mmdb")
+                kind = "ASN (network operator / ISP)"
+            elif "City" in db_type:
+                dest_path = os.path.join(geoip_dir, "GeoLite2-City.mmdb")
+                kind = "City (country, region, city)"
+            else:
+                dest_path = os.path.join(geoip_dir, "GeoLite2-Country.mmdb")
+                kind = "Country"
             os.replace(tmp_path, dest_path)
 
-            # Point settings at the new file and drop cached readers.
+            if "ASN" in db_type:
+                settings.geoip_asn_database_path = dest_path
+            else:
+                settings.geoip_database_path = dest_path
+
+            # Drop cached readers so the new database is picked up.
             from app_core.analytics.geo import reset_readers
 
-            settings = TrafficAnalyticsSettings.get_settings()
-            settings.geoip_database_path = dest_path
             db.session.commit()
             reset_readers()
 
             route_logger.info(
-                "GeoIP database uploaded to %s (reader_available=%s)",
+                "GeoIP database uploaded to %s (type=%s, reader_available=%s)",
                 dest_path,
+                db_type,
                 reader_available,
             )
-            payload = {"success": True, "path": dest_path, "settings": settings.to_dict()}
+            payload = {
+                "success": True,
+                "path": dest_path,
+                "kind": kind,
+                "settings": settings.to_dict(),
+            }
             if note:
                 payload["note"] = note
             return jsonify(payload)
@@ -277,6 +316,85 @@ def register(app: Flask, logger) -> None:
             db.session.rollback()
             route_logger.error("Failed to upload GeoIP database: %s", exc)
             return jsonify({"success": False, "error": str(exc)}), 500
+
+
+def _self_hosts() -> set:
+    """Hostnames to treat as 'internal' for referrer filtering (own host ± www)."""
+    from flask import request
+
+    hosts = set()
+    try:
+        host = (request.host or "").split(":")[0].lower()
+        if host:
+            hosts.add(host)
+            hosts.add("www." + host if not host.startswith("www.") else host[4:])
+    except Exception:
+        pass
+    return hosts
+
+
+def _geoip_status(settings) -> Dict[str, Any]:
+    """Report whether country/flag resolution is actually working.
+
+    Surfaces three facts so the operator can diagnose missing flags from the UI:
+    the reader package is importable, a database file is configured & present,
+    and a sample public-IP lookup resolves to a country.
+    """
+    status: Dict[str, Any] = {
+        "reader_installed": False,
+        "database_configured": bool(settings.geoip_database_path),
+        "database_present": False,
+        "resolves": False,
+        "sample": None,
+        "message": "",
+    }
+    try:
+        import geoip2  # noqa: F401
+        import maxminddb  # noqa: F401
+
+        status["reader_installed"] = True
+    except Exception:
+        status["message"] = "geoip2 not installed — run pip install -r requirements.txt and restart."
+        return status
+
+    path = settings.geoip_database_path
+    if not path:
+        status["message"] = "No GeoIP database configured — upload a GeoLite2 .mmdb above."
+        return status
+    if not os.path.exists(path):
+        status["message"] = f"Database path not found: {path}"
+        return status
+    status["database_present"] = True
+
+    try:
+        from app_core.analytics.geo import classify_location, resolve_asn
+
+        result = classify_location("8.8.8.8", path)
+        if result.get("country_code"):
+            status["resolves"] = True
+            city = result.get("city")
+            sample = f"8.8.8.8 → {result['label']} ({result['country_code']})"
+            if city:
+                sample += f", {city}"
+            status["sample"] = sample
+            status["message"] = (
+                "Active — public IPs resolve to "
+                + ("country/city/flags." if city else "countries/flags.")
+            )
+        else:
+            status["message"] = "Database loaded but did not resolve a sample IP (is it a Country/City DB?)."
+
+        # ASN status (separate database).
+        asn_path = settings.geoip_asn_database_path
+        status["asn_configured"] = bool(asn_path)
+        if asn_path and os.path.exists(asn_path):
+            org = resolve_asn("8.8.8.8", asn_path)
+            if org:
+                status["asn_resolves"] = True
+                status["asn_sample"] = f"8.8.8.8 → {org}"
+    except Exception as exc:  # pragma: no cover - defensive
+        status["message"] = f"Lookup failed: {exc}"
+    return status
 
 
 def _safe_remove(path: str) -> None:

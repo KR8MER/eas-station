@@ -8,6 +8,61 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.99.0] - 2026-06-16 - awstats parity: visits, file types, search, robots + City/ASN GeoIP
+
+### Added
+- **Visits, entry & exit pages.** Non-bot requests are sessionised per host
+  (30-minute inactivity timeout) into "visits", with **Entry Pages**, **Exit
+  Pages**, a **Visits** count and **Avg Visit Duration** tile — awstats'
+  visit/navigation reports.
+- **File Types** report (hits grouped by extension), **Search Keyphrases**
+  (keywords parsed from search-engine referrers), and a **Robots / Spiders**
+  report (bot traffic grouped by friendly name via a new `classify_bot`).
+- **GeoLite2 City & ASN support.** The dashboard now uses City databases
+  (adds **Top Cities**) and ASN databases (adds **Top Organizations / ISPs**).
+  New `web_request_logs.city` / `asn_org` columns, a separate
+  `geoip_asn_database_path` setting, and `geo.resolve_asn()`.
+- **One uploader for all three GeoIP databases.** The upload control
+  auto-detects the database **type** (Country/City/ASN) from its metadata and
+  routes it to the correct slot automatically — Country and City share the
+  location slot; ASN gets its own. The GeoIP status badge reports both.
+- **Open-source attribution surfaced in-app.** The About page's Software Stack
+  now lists `geoip2` + **MaxMind GeoLite2** (with the required attribution) and
+  `flag-icons`; the same MaxMind attribution appears in the Settings dialog.
+
+## [2.98.0] - 2026-06-16 - Real flag images, referrer accuracy & noise filtering
+
+### Fixed
+- **Country flags now render on every OS.** They were emitted as Unicode emoji,
+  which Windows/Edge does not display as flags (it shows the two letters). Flags
+  are now real **images** served locally from bundled `flag-icons` SVGs
+  (`static/vendor/flags/`, MIT-licensed, ~250 countries) — no emoji, no CDN
+  calls. Used in Countries, Top Visitors, and Top Error Sources.
+- **Referrers are now meaningful.** The Top Referrers report grouped raw full
+  URLs and was dominated by internal navigation. It now groups by **domain** and
+  **excludes self-referrals** (the station's own host), matching awstats'
+  external-referrer report.
+
+### Added
+- **Internal-traffic noise filtering (awstats-style SkipHosts/SkipFiles).** New
+  settings: **Exclude internal (loopback) traffic** (on by default — drops
+  server-internal `127.0.0.1`/`::1` service calls that aren't real visitors) and
+  a **Skip paths** list for ignoring additional path prefixes.
+- **GeoIP status indicator** in Settings — shows at a glance whether the reader
+  package is installed, a database is loaded, and a sample public-IP lookup
+  resolves, so missing flags are easy to diagnose (e.g. "geoip2 not installed",
+  "no database configured", or "Active — 8.8.8.8 → United States (US)").
+
+## [2.97.4] - 2026-06-16 - Fix broken logo URLs (cache-buster in path)
+
+### Fixed
+- Traffic Analytics browser/OS logos 404'd/403'd because the static URL helper
+  appends a `?v=<version>` cache-buster to `LOGO_BASE`; appending the per-file
+  name produced `…/logos?v=2.97.3/chrome.svg` (the filename landed in the query
+  string, so the browser requested the directory → 403). The base now strips the
+  cache-buster and re-appends `?v=` after the filename, yielding correct
+  `…/logos/chrome.svg?v=2.97.3` URLs.
+
 ## [2.97.3] - 2026-06-15 - Multicolor browser/OS logos
 
 ### Changed

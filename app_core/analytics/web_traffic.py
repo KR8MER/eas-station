@@ -85,11 +85,54 @@ _OS_NEEDLES = (
 )
 
 
-def is_excluded_path(path: str) -> bool:
-    """Return ``True`` when *path* should never be recorded for analytics."""
+def parse_excluded_paths(raw: Optional[str]) -> tuple:
+    """Split an operator's newline/comma-separated skip-path list into prefixes."""
+    if not raw:
+        return ()
+    parts = (p.strip() for chunk in raw.split("\n") for p in chunk.split(","))
+    return tuple(p for p in parts if p)
+
+
+def is_excluded_path(path: str, extra_prefixes: tuple = ()) -> bool:
+    """Return ``True`` when *path* should never be recorded for analytics.
+
+    Always rejects the built-in plumbing prefixes; *extra_prefixes* adds any
+    operator-configured skip paths (awstats-style "SkipFiles").
+    """
     if not path:
         return True
-    return any(path.startswith(prefix) for prefix in ALWAYS_EXCLUDED_PREFIXES)
+    if any(path.startswith(prefix) for prefix in ALWAYS_EXCLUDED_PREFIXES):
+        return True
+    return any(path.startswith(prefix) for prefix in extra_prefixes if prefix)
+
+
+# Friendly names for common robots/spiders, matched against the lowercased UA.
+# Order matters only for overlapping tokens; first match wins.
+_BOT_NAMES = (
+    ("googlebot", "Googlebot"), ("bingbot", "Bingbot"), ("yandexbot", "YandexBot"),
+    ("duckduckbot", "DuckDuckBot"), ("baiduspider", "Baidu Spider"),
+    ("applebot", "Applebot"), ("petalbot", "PetalBot"), ("bytespider", "Bytespider"),
+    ("ahrefsbot", "AhrefsBot"), ("semrushbot", "SemrushBot"), ("mj12bot", "Majestic"),
+    ("dotbot", "DotBot"), ("facebookexternalhit", "Facebook"), ("twitterbot", "Twitterbot"),
+    ("slackbot", "Slackbot"), ("telegrambot", "TelegramBot"), ("discordbot", "Discordbot"),
+    ("gptbot", "GPTBot"), ("claudebot", "ClaudeBot"), ("anthropic", "ClaudeBot"),
+    ("ccbot", "CCBot"), ("perplexitybot", "PerplexityBot"), ("amazonbot", "Amazonbot"),
+    ("uptimerobot", "UptimeRobot"), ("pingdom", "Pingdom"), ("statuscake", "StatusCake"),
+    ("bingpreview", "Bing Preview"), ("slurp", "Yahoo Slurp"),
+    ("curl", "curl"), ("wget", "Wget"), ("python-requests", "python-requests"),
+    ("httpx", "httpx"), ("go-http-client", "Go HTTP client"), ("headlesschrome", "HeadlessChrome"),
+)
+
+
+def classify_bot(user_agent: Optional[str]) -> str:
+    """Return a friendly robot/spider name for a bot User-Agent string."""
+    if not user_agent:
+        return "Unknown bot"
+    low = user_agent.lower()
+    for needle, label in _BOT_NAMES:
+        if needle in low:
+            return label
+    return "Other bot"
 
 
 def _extract_browser_version(user_agent: str, needle: str) -> Optional[str]:
@@ -195,6 +238,10 @@ class WebRequestLog(db.Model):
     # ISO 3166-1 alpha-2 country code (e.g. "US") when GeoIP resolved a public
     # address, used to render a flag on the dashboard. Null otherwise.
     country_code = db.Column(db.String(2), nullable=True)
+    # City name when a GeoLite2 City database is configured (null for Country DBs).
+    city = db.Column(db.String(128), nullable=True)
+    # Autonomous System organisation / ISP when a GeoLite2 ASN database is set.
+    asn_org = db.Column(db.String(128), nullable=True)
     # Preferred language parsed from the Accept-Language header (e.g. "en-US").
     language = db.Column(db.String(20), nullable=True)
 
@@ -229,6 +276,8 @@ class WebRequestLog(db.Model):
             "screen_resolution": self.screen_resolution,
             "country": self.country,
             "country_code": self.country_code,
+            "city": self.city,
+            "asn_org": self.asn_org,
             "language": self.language,
         }
 
@@ -265,10 +314,24 @@ class TrafficAnalyticsSettings(db.Model):
     # on the dashboard. Leave blank for local-network-only classification.
     geoip_database_path = db.Column(db.String(512), nullable=True)
 
+    # Optional path to a MaxMind GeoLite2-ASN .mmdb. When set, public visitor IPs
+    # resolve to their network operator / ISP (autonomous-system organisation).
+    geoip_asn_database_path = db.Column(db.String(512), nullable=True)
+
     # Whether the background recorder performs reverse-DNS (PTR) lookups to show
     # visitor hostnames (awstats-style). Off by default: lookups hit the network
     # and may leak visitor IPs to the configured DNS resolver.
     resolve_hostnames = db.Column(db.Boolean, nullable=False, default=False)
+
+    # Drop requests coming from the loopback interface (127.0.0.1/::1). These are
+    # server-internal service-to-service calls (poller, hardware services, health
+    # probes) rather than real visitors, so excluding them keeps the analytics
+    # focused on actual web traffic. Real LAN/Internet clients are unaffected.
+    exclude_loopback = db.Column(db.Boolean, nullable=False, default=True)
+
+    # awstats-style "SkipFiles": newline/comma-separated path prefixes to ignore
+    # in addition to the always-excluded plumbing (e.g. "/api/audio/,/metrics").
+    excluded_paths = db.Column(db.Text, nullable=True)
 
     updated_at = db.Column(
         db.DateTime(timezone=True),
@@ -284,7 +347,10 @@ class TrafficAnalyticsSettings(db.Model):
         "log_authenticated_only": False,
         "exclude_bots": False,
         "geoip_database_path": None,
+        "geoip_asn_database_path": None,
         "resolve_hostnames": False,
+        "exclude_loopback": True,
+        "excluded_paths": None,
     }
 
     @classmethod
@@ -306,7 +372,10 @@ class TrafficAnalyticsSettings(db.Model):
             "log_authenticated_only": bool(self.log_authenticated_only),
             "exclude_bots": bool(self.exclude_bots),
             "geoip_database_path": self.geoip_database_path or None,
+            "geoip_asn_database_path": self.geoip_asn_database_path or None,
             "resolve_hostnames": bool(self.resolve_hostnames),
+            "exclude_loopback": bool(self.exclude_loopback),
+            "excluded_paths": self.excluded_paths or None,
         }
 
     def to_dict(self) -> Dict[str, Any]:
@@ -320,6 +389,8 @@ __all__ = [
     "WebRequestLog",
     "TrafficAnalyticsSettings",
     "classify_user_agent",
+    "classify_bot",
     "is_excluded_path",
+    "parse_excluded_paths",
     "ALWAYS_EXCLUDED_PREFIXES",
 ]

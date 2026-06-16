@@ -1247,9 +1247,13 @@ def _record_traffic(response) -> None:
     a logging hiccup can never break a user's request.
     """
     try:
-        from app_core.analytics.geo import classify_location
+        from app_core.analytics.geo import classify_location, resolve_asn
         from app_core.analytics.traffic_recorder import get_traffic_recorder
-        from app_core.analytics.web_traffic import classify_user_agent, is_excluded_path
+        from app_core.analytics.web_traffic import (
+            classify_user_agent,
+            is_excluded_path,
+            parse_excluded_paths,
+        )
 
         recorder = get_traffic_recorder()
         if recorder is None:
@@ -1259,8 +1263,16 @@ def _record_traffic(response) -> None:
             return
 
         path = request.path or '/'
-        if is_excluded_path(path):
+        if is_excluded_path(path, parse_excluded_paths(config.get('excluded_paths'))):
             return
+
+        # Drop server-internal (loopback) traffic when configured — these are
+        # service-to-service calls, not visitors. request.remote_addr is the real
+        # client IP thanks to ProxyFix, so genuine LAN/Internet users are kept.
+        if config.get('exclude_loopback', True):
+            remote = request.remote_addr or ''
+            if remote in ('127.0.0.1', '::1') or remote.startswith('127.'):
+                return
 
         is_api = path.startswith('/api/')
         if is_api and not config.get('log_api_requests', True):
@@ -1301,9 +1313,12 @@ def _record_traffic(response) -> None:
         except Exception:
             screen_resolution = None
 
-        # Country/network label + ISO code (for the flag). Hostname is resolved
-        # later by the background recorder so the request path makes no DNS call.
+        # Country/network label + ISO code (for the flag) and, with a City DB,
+        # the city. ASN org/ISP comes from the optional ASN database. Hostname is
+        # resolved later by the background recorder so the request path makes no
+        # DNS call.
         location = classify_location(client_ip, config.get('geoip_database_path'))
+        asn_org = resolve_asn(client_ip, config.get('geoip_asn_database_path'))
 
         recorder.record({
             'timestamp': utc_now(),
@@ -1327,6 +1342,8 @@ def _record_traffic(response) -> None:
             'screen_resolution': screen_resolution,
             'country': location['label'],
             'country_code': location['country_code'],
+            'city': location.get('city'),
+            'asn_org': asn_org,
             'language': language,
         })
     except Exception as exc:  # pragma: no cover - defensive: never break a response

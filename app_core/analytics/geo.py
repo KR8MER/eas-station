@@ -73,6 +73,10 @@ _DEFAULT_DNS_TIMEOUT = 1.5
 _SENTINEL = object()
 
 
+# Cache of database types keyed by path (e.g. "GeoLite2-City", "GeoLite2-ASN").
+_db_types: dict = {}
+
+
 def _get_reader(db_path: str):
     """Return a cached geoip2 reader for *db_path*, or ``None`` if unavailable."""
     if not db_path or db_path in _failed_paths:
@@ -89,7 +93,15 @@ def _get_reader(db_path: str):
 
             reader = geoip2.database.Reader(db_path)
             _readers[db_path] = reader
-            logger.info("GeoIP database loaded from %s", db_path)
+            try:
+                _db_types[db_path] = reader.metadata().database_type
+            except Exception:  # pragma: no cover - defensive
+                _db_types[db_path] = ""
+            logger.info(
+                "GeoIP database loaded from %s (%s)",
+                db_path,
+                _db_types.get(db_path, "?"),
+            )
             return reader
         except Exception as exc:  # pragma: no cover - optional dependency/path
             logger.warning("GeoIP database unavailable (%s): %s", db_path, exc)
@@ -125,23 +137,30 @@ def classify_location(
     if addr.is_private:
         return {"label": "Local Network", "country_code": None}
 
-    # Public address — try optional country resolution.
+    # Public address — try optional country (and city) resolution.
     if geoip_db_path:
         reader = _get_reader(geoip_db_path)
         if reader is not None:
+            db_type = _db_types.get(geoip_db_path, "")
             try:
-                response = reader.country(ip)
+                if "City" in db_type:
+                    response = reader.city(ip)
+                    city = response.city.name
+                else:
+                    response = reader.country(ip)
+                    city = None
                 name = response.country.name
                 iso = response.country.iso_code
                 if name:
                     return {
                         "label": name,
                         "country_code": iso.upper() if iso else None,
+                        "city": city,
                     }
             except Exception:  # pragma: no cover - address not in DB, etc.
                 pass
 
-    return {"label": "Internet (Public)", "country_code": None}
+    return {"label": "Internet (Public)", "country_code": None, "city": None}
 
 
 def classify_ip(ip: Optional[str], geoip_db_path: Optional[str] = None) -> str:
@@ -150,6 +169,31 @@ def classify_ip(ip: Optional[str], geoip_db_path: Optional[str] = None) -> str:
     Thin string-only wrapper retained for backwards compatibility.
     """
     return classify_location(ip, geoip_db_path)["label"]
+
+
+def resolve_asn(ip: Optional[str], asn_db_path: Optional[str] = None) -> Optional[str]:
+    """Return the network operator / ISP (AS organisation) for a public *ip*.
+
+    Requires a MaxMind GeoLite2-ASN database. Returns ``None`` for private/local
+    addresses, when no ASN database is configured, or when the lookup misses.
+    Never raises and never makes a network call.
+    """
+    if not ip or not asn_db_path:
+        return None
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return None
+    if addr.is_loopback or addr.is_link_local or addr.is_private:
+        return None
+    reader = _get_reader(asn_db_path)
+    if reader is None:
+        return None
+    try:
+        org = reader.asn(ip).autonomous_system_organization
+        return org[:128] if org else None
+    except Exception:  # pragma: no cover - address not in DB, etc.
+        return None
 
 
 def resolve_hostname(
@@ -214,7 +258,14 @@ def reset_readers() -> None:
             except Exception:
                 pass
         _readers.clear()
+        _db_types.clear()
         _failed_paths.clear()
 
 
-__all__ = ["classify_ip", "classify_location", "resolve_hostname", "reset_readers"]
+__all__ = [
+    "classify_ip",
+    "classify_location",
+    "resolve_asn",
+    "resolve_hostname",
+    "reset_readers",
+]
