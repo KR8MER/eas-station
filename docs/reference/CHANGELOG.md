@@ -8,6 +8,20 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.102.1] - 2026-06-16 - Stop /api/broadcast/state flooding logs with 401s
+
+### Fixed
+- **`/api/broadcast/state` returned 401 on every unauthenticated poll.**
+  `base.html` and the navbar poll this endpoint on every page (a 1.5s
+  WebSocket-fallback) to drive the global air-chain broadcast overlay —
+  including the login page and after a session expires. It was missing from the
+  deny-by-default public GET allowlist, so each poll hit the auth gate and
+  logged a 401, accumulating tens of thousands of errors from any browser tab
+  left open pre-login or on an expired session. Added it to
+  `PUBLIC_API_GET_PATHS` (the payload — active flag, active-alert count,
+  timestamp — is non-sensitive and less revealing than the already-public
+  `/api/alerts` and `/api/system_status`).
+
 ## [2.102.0] - 2026-06-16 - Traffic Analytics: reverse-DNS backfill + self-diagnosing error sources
 
 ### Added

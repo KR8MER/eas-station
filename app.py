@@ -451,6 +451,13 @@ PUBLIC_API_GET_PATHS = {
     '/api/eas-monitor/status',
     '/api/system_health',
     '/api/monitoring/radio',
+    # Air-chain broadcast state. base.html + the navbar poll this on every page
+    # (a 1.5s WebSocket-fallback) to drive the global broadcast overlay — including
+    # the login page and after a session expires. Without this exemption those
+    # polls hit the deny-by-default gate and flood the logs with 401s. The payload
+    # (active flag, active-alert count, timestamp) is non-sensitive and less
+    # revealing than /api/alerts and /api/system_status, which are already public.
+    '/api/broadcast/state',
     # Monitoring endpoints (for health checks and version tracking)
     '/api/health',
     '/api/release-manifest',
