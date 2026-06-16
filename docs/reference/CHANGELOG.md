@@ -8,6 +8,16 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.97.4] - 2026-06-16 - Fix broken logo URLs (cache-buster in path)
+
+### Fixed
+- Traffic Analytics browser/OS logos 404'd/403'd because the static URL helper
+  appends a `?v=<version>` cache-buster to `LOGO_BASE`; appending the per-file
+  name produced `…/logos?v=2.97.3/chrome.svg` (the filename landed in the query
+  string, so the browser requested the directory → 403). The base now strips the
+  cache-buster and re-appends `?v=` after the filename, yielding correct
+  `…/logos/chrome.svg?v=2.97.3` URLs.
+
 ## [2.97.3] - 2026-06-15 - Multicolor browser/OS logos
 
 ### Changed

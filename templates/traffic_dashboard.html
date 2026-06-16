@@ -497,7 +497,11 @@
     }
     // Multicolor brand logos (SVG assets) with a FontAwesome brand glyph as the
     // fallback. `color` tints the fallback glyph; `logo` is a true-color image.
-    const LOGO_BASE = "{{ url_for('static', filename='img/logos') }}";
+    // Strip any ?v= cache-buster the static URL handler appends, so per-file
+    // names append to the path cleanly (…/logos/chrome.svg) instead of landing
+    // in the query string (…/logos?v=X/chrome.svg → 403).
+    const LOGO_BASE = "{{ url_for('static', filename='img/logos') }}".split('?')[0];
+    const LOGO_VER = "{{ static_asset_version }}";
     const BROWSER_META = {
         'Chrome': { icon: 'fab fa-chrome', color: '#4285F4', logo: 'chrome.svg' },
         'Firefox': { icon: 'fab fa-firefox-browser', color: '#FF7139', logo: 'firefox.svg' },
@@ -527,7 +531,7 @@
     function markFor(meta, label, cls) {
         const sz = cls || 'me-2';
         if (meta.logo) {
-            return `<img src="${LOGO_BASE}/${meta.logo}" alt="${escapeHtml(label || '')}" class="ti-logo ${sz}">`;
+            return `<img src="${LOGO_BASE}/${meta.logo}?v=${LOGO_VER}" alt="${escapeHtml(label || '')}" class="ti-logo ${sz}">`;
         }
         const color = meta.color || 'var(--text-secondary, #888)';
         return `<i class="${meta.icon} ${sz}" style="color:${color}"></i>`;
