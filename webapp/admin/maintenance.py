@@ -40,6 +40,7 @@ from app_core.alerts import (
     calculate_alert_intersections,
     parse_noaa_cap_alert,
 )
+from app_core.auth.roles import require_permission
 from app_core.extensions import db
 from app_core.led import ensure_led_tables
 from app_core.location import (
@@ -483,6 +484,7 @@ def get_operation_status():
     return jsonify({"operations": _serialize_all_operations()})
 
 @maintenance_bp.route("/admin/operations/backup", methods=["POST"])
+@require_permission('system.configure')
 def run_one_click_backup():
     payload = request.get_json(silent=True) or {}
     label_value = payload.get("label", "")
@@ -530,6 +532,7 @@ def run_one_click_backup():
     return jsonify({"message": message, "operation": _serialize_operation_state("backup")})
 
 @maintenance_bp.route("/admin/operations/upgrade", methods=["POST"])
+@require_permission('system.configure')
 def run_one_click_upgrade():
     payload = request.get_json(silent=True) or {}
     python_executable = sys.executable or "python3"
@@ -623,6 +626,7 @@ def check_db_health():
     )
 
 @maintenance_bp.route("/admin/optimize_db", methods=["POST"])
+@require_permission('system.configure')
 def optimize_database():
     """Optimize database performance using VACUUM and ANALYZE."""
 
@@ -686,6 +690,7 @@ def optimize_database():
         return jsonify({"error": f"Database optimization failed: {str(exc)}"}), 500
 
 @maintenance_bp.route("/admin/env_config", methods=["GET", "POST"])
+@require_permission('system.configure')
 def env_config():
     """Read or update the environment configuration file (.env)."""
 
@@ -772,6 +777,7 @@ def env_config():
         return jsonify({"error": f"Failed to update configuration: {exc}"}), 500
 
 @maintenance_bp.route("/admin/trigger_poll", methods=["POST"])
+@require_permission('system.configure')
 def trigger_poll():
     try:
         log_entry = SystemLog(
@@ -792,6 +798,7 @@ def trigger_poll():
         return jsonify({"error": str(exc)}), 500
 
 @maintenance_bp.route("/admin/location_settings", methods=["GET", "PUT"])
+@require_permission('system.configure')
 def admin_location_settings():
     """GET or update location settings."""
     try:
@@ -822,6 +829,7 @@ def admin_location_settings():
 
 
 @maintenance_bp.route("/admin/alert_filtering", methods=["GET", "POST"])
+@require_permission('system.configure')
 def admin_alert_filtering():
     """GET or update alert filtering settings."""
     try:
@@ -856,6 +864,7 @@ def admin_location_reference():
         )
 
 @maintenance_bp.route("/admin/lookup_county_fips", methods=["POST"])
+@require_permission('system.configure')
 def admin_lookup_county_fips():
     """Look up FIPS codes for counties by state and county name."""
     try:
@@ -912,6 +921,7 @@ def admin_lookup_county_fips():
         return jsonify({"error": f"Failed to lookup FIPS codes: {str(exc)}"}), 500
 
 @maintenance_bp.route("/admin/import_alert", methods=["POST"])
+@require_permission('system.configure')
 def import_specific_alert():
     data = request.get_json(silent=True) or request.form or {}
 
@@ -1162,6 +1172,7 @@ def admin_list_alerts():
         return jsonify({"error": "Failed to load alerts."}), 500
 
 @maintenance_bp.route("/admin/alerts/<int:alert_id>", methods=["GET", "PATCH", "DELETE"])
+@require_permission('system.configure')
 def admin_alert_detail(alert_id: int):
     alert = CAPAlert.query.get(alert_id)
     if not alert:
@@ -1339,6 +1350,7 @@ def admin_alert_detail(alert_id: int):
         return jsonify({"error": "Failed to update alert."}), 500
 
 @maintenance_bp.route("/admin/mark_expired", methods=["POST"])
+@require_permission('system.configure')
 def mark_expired():
     try:
         now = utc_now()
@@ -1386,6 +1398,7 @@ def mark_expired():
 
 
 @maintenance_bp.route("/admin/clear_expired", methods=["POST"])
+@require_permission('system.configure')
 def clear_expired():
     try:
         now = utc_now()
@@ -1505,6 +1518,7 @@ def _ensure_eas_settings_record() -> EASSettings:
 
 
 @maintenance_bp.route("/admin/eas_settings", methods=["GET", "PUT"])
+@require_permission('system.configure')
 def admin_eas_settings():
     """Get or update EAS broadcast settings."""
     try:

@@ -44,6 +44,7 @@ from flask import (
     url_for,
 )
 
+from app_core.auth.roles import require_permission
 from app_core.extensions import db
 from app_core.models import AdminUser, EASMessage, LocalAuthority, ManualEASActivation, SystemLog
 from werkzeug.utils import secure_filename
@@ -283,6 +284,7 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
         return samples
 
     @bp.route('/manual/generate', methods=['POST'])
+    @require_permission('eas.broadcast')
     def manual_eas_generate():
         auth_response = _auth_redirect(json_mode=True)
         if auth_response is not None:
@@ -1192,6 +1194,7 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
         )
 
     @bp.route('/manual/events/<int:event_id>', methods=['DELETE'])
+    @require_permission('eas.broadcast')
     def manual_eas_delete(event_id: int):
         auth_response = _auth_redirect(json_mode=True)
         if auth_response is not None:
@@ -1226,6 +1229,7 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
         return jsonify({'message': 'Manual EAS activation deleted.', 'id': event_id})
 
     @bp.route('/manual/events/<int:event_id>/send', methods=['POST'])
+    @require_permission('eas.broadcast')
     def manual_eas_send(event_id: int):
         """Send a previously generated manual EAS activation.
 
@@ -1507,6 +1511,7 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
         return jsonify(send_result)
 
     @bp.route('/manual/events/purge', methods=['POST'])
+    @require_permission('eas.broadcast')
     def manual_eas_purge():
         auth_response = _auth_redirect(json_mode=True)
         if auth_response is not None:

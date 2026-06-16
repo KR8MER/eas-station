@@ -41,6 +41,7 @@ from app_core.radio import (
     validate_sample_rate_for_driver,
     SDR_PRESETS,
 )
+from app_core.auth.roles import require_permission
 from app_core.radio.service_config import (
     get_service_config,
     validate_frequency,
@@ -688,6 +689,7 @@ def register(app: Flask, logger) -> None:
         return jsonify({"receivers": [_receiver_to_dict(receiver) for receiver in receivers]})
 
     @app.route("/api/radio/receivers", methods=["POST"])
+    @require_permission('receivers.configure')
     def api_create_receiver() -> Any:
         try:
             ensure_radio_tables(route_logger)
@@ -750,6 +752,7 @@ def register(app: Flask, logger) -> None:
             }), 500
 
     @app.route("/api/radio/receivers/<int:receiver_id>", methods=["PUT", "PATCH"])
+    @require_permission('receivers.configure')
     def api_update_receiver(receiver_id: int) -> Any:
         try:
             ensure_radio_tables(route_logger)
@@ -861,6 +864,7 @@ def register(app: Flask, logger) -> None:
             }), 500
 
     @app.route("/api/radio/receivers/<int:receiver_id>", methods=["DELETE"])
+    @require_permission('receivers.configure')
     def api_delete_receiver(receiver_id: int) -> Any:
         ensure_radio_tables(route_logger)
         receiver = RadioReceiver.query.get_or_404(receiver_id)
@@ -890,6 +894,7 @@ def register(app: Flask, logger) -> None:
         return jsonify({"success": True, "radio_manager": manager_state})
 
     @app.route("/api/radio/receivers/<int:receiver_id>/restart", methods=["POST"])
+    @require_permission('receivers.configure')
     def api_restart_receiver(receiver_id: int) -> Any:
         """Restart a receiver to recover from errors.
 
@@ -1004,6 +1009,7 @@ def register(app: Flask, logger) -> None:
             }), 500
 
     @app.route("/api/radio/receivers/<int:receiver_id>/audio-monitor", methods=["POST"])
+    @require_permission('receivers.configure')
     def api_ensure_audio_monitor(receiver_id: int) -> Any:
         """Ensure an SDR audio monitor exists for the receiver and optionally start it."""
 
@@ -1158,6 +1164,7 @@ def register(app: Flask, logger) -> None:
             return jsonify({"error": str(exc), "devices": []}), 500
 
     @app.route("/api/radio/validate-frequency", methods=["POST"])
+    @require_permission('receivers.configure')
     def api_validate_frequency() -> Any:
         """Validate frequency input based on service type."""
         payload: Dict[str, Any] = {}
@@ -1921,6 +1928,7 @@ def register(app: Flask, logger) -> None:
     @app.route(
         "/api/radio/diagnostics/capture/<int:receiver_id>", methods=["POST"]
     )
+    @require_permission('receivers.configure')
     def api_radio_diagnostics_capture(receiver_id: int) -> Any:
         """Trigger an IQ capture-to-disk for a receiver.
 
@@ -2150,6 +2158,7 @@ def register(app: Flask, logger) -> None:
     @app.route(
         "/api/radio/diagnostics/waterfall/<int:receiver_id>", methods=["POST"]
     )
+    @require_permission('receivers.configure')
     def api_radio_diagnostics_waterfall(receiver_id: int) -> Any:
         """Capture a short IQ window and return a spectrogram + clipping stats.
 
@@ -2420,6 +2429,7 @@ def register(app: Flask, logger) -> None:
     @app.route(
         "/api/radio/diagnostics/analyze/<int:receiver_id>", methods=["POST"]
     )
+    @require_permission('receivers.configure')
     def api_radio_diagnostics_analyze(receiver_id: int) -> Any:
         """Capture a short IQ window and return a full diagnostic report.
 
@@ -2612,6 +2622,7 @@ def register(app: Flask, logger) -> None:
     @app.route(
         "/api/radio/diagnostics/auto_gain/<int:receiver_id>", methods=["POST"]
     )
+    @require_permission('receivers.configure')
     def api_radio_diagnostics_auto_gain(receiver_id: int) -> Any:
         """Run runtime auto-gain calibration for a receiver.
 

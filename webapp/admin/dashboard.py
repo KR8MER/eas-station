@@ -33,6 +33,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app_core.extensions import db
 from app_core.models import AdminSession, AdminUser, ApplicationSettings, Boundary, CAPAlert, EASMessage, SystemLog
 from app_core.auth.roles import Role
+from app_core.auth.roles import require_permission
 from app_core.alerts import get_active_alerts_query, get_expired_alerts_query
 from app_core.location import get_location_settings
 from app_core.zones import build_county_forecast_zone_map
@@ -221,6 +222,7 @@ def admin():
     
 
 @dashboard_bp.route('/admin/users', methods=['GET', 'POST'])
+@require_permission('system.manage_users')
 def admin_users():
     if request.method == 'GET':
         users = AdminUser.query.order_by(AdminUser.username.asc()).all()
@@ -282,6 +284,7 @@ def admin_users():
     return jsonify({'message': 'User created successfully.', 'user': new_user.to_safe_dict()}), 201
 
 @dashboard_bp.route('/admin/users/<int:user_id>', methods=['PATCH', 'DELETE'])
+@require_permission('system.manage_users')
 def admin_user_detail(user_id: int):
     user = AdminUser.query.get_or_404(user_id)
 
@@ -360,6 +363,7 @@ def api_admin_sessions():
 
 
 @dashboard_bp.route('/api/admin/sessions/<int:session_id>', methods=['DELETE'])
+@require_permission('system.manage_users')
 def api_terminate_admin_session(session_id: int):
     """Terminate (force-end) an active administrator session."""
     sess = AdminSession.query.get_or_404(session_id)
@@ -382,6 +386,7 @@ def api_terminate_admin_session(session_id: int):
 
 
 @dashboard_bp.route('/api/admin/sessions/terminate-bulk', methods=['POST'])
+@require_permission('system.manage_users')
 def api_terminate_admin_sessions_bulk():
     """Force-end many active sessions at once.
 

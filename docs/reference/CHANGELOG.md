@@ -8,6 +8,48 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.104.1] - 2026-06-16 - RBAC audit: close unauthorized settings access for demo/viewer roles
+
+### Security
+- **80 state-changing routes had no authorization check and were reachable by
+  any signed-in account — including the read-only `demo` and `viewer` roles.**
+  The app enforces authentication globally (`app.before_request`) but
+  authorization is opt-in per route, and these routes carried neither a
+  `@require_permission` nor a `@require_role` decorator. Added the appropriate
+  permission decorator to each. Notable exposures now closed:
+  - **User & session management** (`/admin/users` create/update/delete,
+    `/api/admin/sessions/*`) → `system.manage_users`. Previously any logged-in
+    user could create admin accounts, reset passwords, or delete users
+    (privilege escalation).
+  - **Manual EAS** (`/manual/generate`, `/manual/events/<id>/send`, purge,
+    `/messages/*` resend/delete/purge, `/admin/eas/manual_generate`) →
+    `eas.broadcast`.
+  - **System maintenance** (`/admin/operations/backup`, `/admin/operations/upgrade`,
+    `/admin/optimize_db`, `/admin/env_config`, `/admin/trigger_poll`,
+    `/admin/location_settings`, `/admin/eas_settings`, `/admin/alert_filtering`,
+    `/admin/import_alert`, `/admin/mark_expired`, `/admin/clear_expired`,
+    `/admin/alerts/<id>` PATCH/DELETE), **boundaries** (upload/clear/preview),
+    and **intersection** recalculation → `system.configure`.
+  - **Radio receivers** (`/api/radio/receivers/*` CRUD/restart/diagnostics) and
+    **audio sources** (`/api/audio/sources/*`) → `receivers.configure`; Icecast,
+    audio archives, audio-source acknowledge/resolve, stream profiles, RWT
+    schedule, EAS-monitor control, ENDEC/decoder-monitor settings, and
+    diagnostics → `system.configure` (RWT *test* → `eas.broadcast`).
+- **Four permission decorators referenced permissions that do not exist** in
+  `PermissionDefinition`, so the routes were unreachable by everyone, including
+  admins. Remapped to defined permissions: `security.manage` →
+  `system.manage_users` (RBAC management API, `routes_security.py`),
+  `system.view` → `system.view_config`, `analytics_manage` → `system.configure`
+  (`routes_analytics.py`), and `system.edit_config` → `system.configure`
+  (`routes_ipaws.py`).
+
+### Added
+- **`tests/test_rbac_route_coverage.py`** — a static-analysis regression test
+  that fails if any state-changing route (`POST`/`PUT`/`DELETE`/`PATCH`) lacks an
+  authorization decorator (`@require_permission` or `@require_role`; bare
+  `@require_auth` does not count), or if any decorator references a permission
+  not defined in `PermissionDefinition`.
+
 ## [2.104.0] - 2026-06-16 - Traffic Analytics: fix PDF export, file-type logos, login-IP reverse DNS
 
 ### Fixed

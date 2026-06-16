@@ -32,6 +32,7 @@ from app_core.alerts import calculate_alert_intersections
 from .coverage import try_build_geometry_from_same_codes
 from app_core.extensions import db
 from app_core.models import Boundary, CAPAlert, Intersection, SystemLog
+from app_core.auth.roles import require_permission
 from app_utils import utc_now
 
 
@@ -49,6 +50,7 @@ def register_intersection_routes(app: Flask, logger) -> None:
 # Route definitions
 
 @intersections_bp.route("/admin/fix_county_intersections", methods=["POST"])
+@require_permission('system.configure')
 def fix_county_intersections():
     """Recalculate intersection areas for all alerts with geometry."""
 
@@ -91,6 +93,7 @@ def fix_county_intersections():
         return jsonify({"error": f"Failed to fix intersections: {exc}"}), 500
 
 @intersections_bp.route("/admin/recalculate_intersections", methods=["POST"])
+@require_permission('system.configure')
 def recalculate_intersections():
     """Recalculate all alert-boundary intersections."""
 
@@ -139,6 +142,7 @@ def recalculate_intersections():
         return jsonify({"error": f"Failed to recalculate intersections: {exc}"}), 500
 
 @intersections_bp.route("/admin/calculate_intersections/<int:alert_id>", methods=["POST"])
+@require_permission('system.configure')
 def calculate_intersections_for_alert(alert_id: int):
     """Calculate and store intersections for a specific alert."""
 
@@ -215,6 +219,7 @@ def calculate_intersections_for_alert(alert_id: int):
         return jsonify({"error": str(exc)}), 500
 
 @intersections_bp.route("/admin/calculate_all_intersections", methods=["POST"])
+@require_permission('system.configure')
 def calculate_all_intersections():
     """Calculate intersections for every alert with geometry."""
 
@@ -293,6 +298,7 @@ def calculate_all_intersections():
         return jsonify({"error": str(exc)}), 500
 
 @intersections_bp.route("/admin/calculate_single_alert/<int:alert_id>", methods=["POST"])
+@require_permission('system.configure')
 def calculate_single_alert(alert_id: int):
     """Calculate intersections for a single alert."""
 

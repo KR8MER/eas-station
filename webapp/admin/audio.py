@@ -49,6 +49,7 @@ from sqlalchemy import or_
 
 from app_core.extensions import db
 from app_core.models import AdminUser, CAPAlert, EASMessage, ManualEASActivation, ReceivedEASAlert, SystemLog
+from app_core.auth.roles import require_permission
 from app_core.eas_storage import (
     get_eas_static_prefix,
     load_or_cache_audio_data,
@@ -605,6 +606,7 @@ def admin_eas_messages():
         return jsonify({'error': 'Unable to load EAS messages'}), 500
 
 @audio_bp.route('/admin/eas_messages/<int:message_id>', methods=['DELETE'])
+@require_permission('eas.broadcast')
 def admin_delete_eas_message(message_id: int):
     message = EASMessage.query.get_or_404(message_id)
 
@@ -629,6 +631,7 @@ def admin_delete_eas_message(message_id: int):
     return jsonify({'message': 'EAS message deleted.', 'id': message_id})
 
 @audio_bp.route('/admin/eas_messages/purge', methods=['POST'])
+@require_permission('eas.broadcast')
 def admin_purge_eas_messages():
     if g.current_user is None:
         return jsonify({'error': 'Authentication required.'}), 401
@@ -698,6 +701,7 @@ def admin_purge_eas_messages():
     return jsonify({'message': f'Deleted {len(deleted_ids)} EAS messages.', 'deleted': len(deleted_ids), 'ids': deleted_ids})
 
 @audio_bp.route('/admin/eas/manual_generate', methods=['POST'])
+@require_permission('eas.broadcast')
 def admin_manual_eas_generate():
     creating_first_user = AdminUser.query.count() == 0
     if g.current_user is None and not creating_first_user:

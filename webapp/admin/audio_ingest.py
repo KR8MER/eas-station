@@ -48,6 +48,7 @@ from app_core.audio.ingest import AudioSourceConfig, AudioSourceType, AudioSourc
 from app_core.audio.sources import create_audio_source
 from app_core.audio.redis_commands import get_audio_command_publisher
 from app_core.audio.mount_points import generate_mount_point, StreamFormat
+from app_core.auth.roles import require_permission
 from app_utils import utc_now
 
 logger = logging.getLogger(__name__)
@@ -1710,6 +1711,7 @@ def _probe_stream_url(url: str, username: str = '', password: str = '',
 
 
 @audio_ingest_bp.route('/api/audio/sources/test-stream', methods=['POST'])
+@require_permission('receivers.configure')
 def api_test_stream_url():
     """Preflight a stream URL and report whether it is reachable.
 
@@ -1739,6 +1741,7 @@ def api_test_stream_url():
 
 
 @audio_ingest_bp.route('/api/audio/sources', methods=['POST'])
+@require_permission('receivers.configure')
 def api_create_audio_source():
     """Create a new audio source."""
     try:
@@ -2033,6 +2036,7 @@ def api_get_rbds_history(source_name: str):
 
 
 @audio_ingest_bp.route('/api/audio/sources/<path:source_name>', methods=['PATCH'])
+@require_permission('receivers.configure')
 def api_update_audio_source(source_name: str):
     """Update audio source configuration.
 
@@ -2124,6 +2128,7 @@ def api_update_audio_source(source_name: str):
         return jsonify({'error': str(exc)}), 500
 
 @audio_ingest_bp.route('/api/audio/sources/<path:source_name>', methods=['DELETE'])
+@require_permission('receivers.configure')
 def api_delete_audio_source(source_name: str):
     """Delete an audio source.
 
@@ -2210,6 +2215,7 @@ def api_delete_audio_source(source_name: str):
         return jsonify({'error': str(exc)}), 500
 
 @audio_ingest_bp.route('/api/audio/sources/<path:source_name>/start', methods=['POST'])
+@require_permission('receivers.configure')
 def api_start_audio_source(source_name: str):
     """
     Start audio ingestion from a source.
@@ -2255,6 +2261,7 @@ def api_start_audio_source(source_name: str):
         return jsonify({'error': str(exc)}), 500
 
 @audio_ingest_bp.route('/api/audio/sources/<path:source_name>/stop', methods=['POST'])
+@require_permission('receivers.configure')
 def api_stop_audio_source(source_name: str):
     """
     Stop audio ingestion from a source.
@@ -2620,6 +2627,7 @@ def api_get_audio_alerts():
         return jsonify({'error': str(exc)}), 500
 
 @audio_ingest_bp.route('/api/audio/alerts/<int:alert_id>/acknowledge', methods=['POST'])
+@require_permission('system.configure')
 def api_acknowledge_alert(alert_id: int):
     """Acknowledge an audio alert."""
     try:
@@ -2647,6 +2655,7 @@ def api_acknowledge_alert(alert_id: int):
         return jsonify({'error': str(exc)}), 500
 
 @audio_ingest_bp.route('/api/audio/alerts/<int:alert_id>/resolve', methods=['POST'])
+@require_permission('system.configure')
 def api_resolve_alert(alert_id: int):
     """Resolve an audio alert."""
     try:
@@ -2975,6 +2984,7 @@ def api_get_icecast_config():
         return jsonify({'error': str(exc)}), 500
 
 @audio_ingest_bp.route('/api/audio/icecast/config', methods=['POST'])
+@require_permission('system.configure')
 def api_update_icecast_config():
     """Update Icecast rebroadcast configuration."""
     try:
@@ -3081,6 +3091,7 @@ def api_update_icecast_config():
 
 
 @audio_ingest_bp.route('/api/audio/icecast/start', methods=['POST'])
+@require_permission('system.configure')
 def api_start_icecast_stream():
     """Start the Icecast auto-streaming service."""
 
@@ -3097,6 +3108,7 @@ def api_start_icecast_stream():
 
 
 @audio_ingest_bp.route('/api/audio/icecast/stop', methods=['POST'])
+@require_permission('system.configure')
 def api_stop_icecast_stream():
     """Stop the Icecast auto-streaming service."""
 

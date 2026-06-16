@@ -29,6 +29,7 @@ from flask import current_app, g, jsonify, request, url_for
 from app_core.extensions import db
 from app_core.models import EASMessage, SystemLog
 from app_core.eas_storage import get_eas_static_prefix, remove_eas_files
+from app_core.auth.roles import require_permission
 from app_utils import utc_now
 
 
@@ -70,6 +71,7 @@ def register_message_routes(bp, logger) -> None:
             return jsonify({'error': 'Unable to load EAS messages'}), 500
 
     @bp.route('/messages/<int:message_id>', methods=['DELETE'])
+    @require_permission('eas.broadcast')
     def delete_eas_message(message_id: int):
         message = EASMessage.query.get_or_404(message_id)
 
@@ -96,6 +98,7 @@ def register_message_routes(bp, logger) -> None:
         return jsonify({'message': 'EAS message deleted.', 'id': message_id})
 
     @bp.route('/messages/purge', methods=['POST'])
+    @require_permission('eas.broadcast')
     def purge_eas_messages():
         if g.current_user is None:
             return jsonify({'error': 'Authentication required.'}), 401
@@ -177,6 +180,7 @@ def register_message_routes(bp, logger) -> None:
 
 
     @bp.route('/messages/<int:message_id>/resend', methods=['POST'])
+    @require_permission('eas.broadcast')
     def resend_eas_message(message_id: int):
         """Re-broadcast a previously generated EAS message.
 
