@@ -38,6 +38,8 @@ from collections import deque
 from datetime import timedelta
 from typing import Any, Deque, Dict, Optional
 
+from sqlalchemy import func
+
 from app_core.extensions import db
 from app_core.analytics.web_traffic import TrafficAnalyticsSettings, WebRequestLog
 from app_utils import utc_now
@@ -49,6 +51,15 @@ DEFAULT_BATCH_SIZE = 500
 DEFAULT_BUFFER_MAX = 10000
 CONFIG_REFRESH_SECONDS = 30
 PRUNE_INTERVAL_SECONDS = 3600
+# How often the background thread retries reverse-DNS for rows that still have no
+# hostname, and how many fresh IPs to resolve per pass. Hostnames are recorded
+# once at insert time, so rows captured before "Resolve hostnames" was enabled —
+# or during a transient DNS hiccup, or for an IP that only later published a PTR
+# record — would otherwise stay a bare IP forever. This backfills them.
+HOSTNAME_BACKFILL_INTERVAL_SECONDS = 600
+HOSTNAME_BACKFILL_BATCH = 50          # unique IPs resolved per pass
+HOSTNAME_BACKFILL_SCAN = 500          # distinct unresolved IPs scanned per pass
+HOSTNAME_TRIED_MAX = 100000           # cap on the in-memory "already attempted" set
 
 
 class TrafficRecorder:
@@ -73,6 +84,12 @@ class TrafficRecorder:
         self._logger = logger
         self._last_prune_at = 0.0
         self._last_config_at = 0.0
+        self._last_hostname_backfill_at = 0.0
+        # IPs we've already attempted to reverse-resolve this process, so we don't
+        # repeatedly re-query a host that has no PTR record. Cleared if it grows
+        # unbounded; a process restart naturally retries (recovering from any
+        # earlier transient resolver failures).
+        self._hostname_tried: set = set()
         self._config: Dict[str, Any] = dict(TrafficAnalyticsSettings.DEFAULTS)
 
     # ------------------------------------------------------------------ config
@@ -144,6 +161,7 @@ class TrafficRecorder:
                 with self._app.app_context():
                     self._maybe_refresh_config()
                     self._flush()
+                    self._maybe_backfill_hostnames()
                     self._maybe_prune()
             except Exception as exc:  # pragma: no cover - defensive logging
                 self._logger.error(
@@ -212,6 +230,99 @@ class TrafficRecorder:
                 except Exception:  # pragma: no cover - defensive
                     resolved[ip] = None
             row["hostname"] = resolved[ip]
+
+    def _maybe_backfill_hostnames(self) -> None:
+        """Reverse-resolve rows that still have a NULL hostname (awstats-style).
+
+        Only runs when "Resolve hostnames" is enabled. Picks the most-recently
+        active unresolved IPs first (real visitors over stale scanner noise),
+        resolves a bounded batch per pass off the request path, and writes the
+        hostname back onto every row for that IP. IPs with no PTR record are
+        attempted once and remembered so they aren't re-queried each pass.
+        """
+        if not self._config.get("resolve_hostnames", False):
+            return
+        now = time.monotonic()
+        if (now - self._last_hostname_backfill_at) < HOSTNAME_BACKFILL_INTERVAL_SECONDS:
+            return
+        self._last_hostname_backfill_at = now
+
+        try:
+            from app_core.analytics.geo import resolve_hostname
+        except Exception:  # pragma: no cover - defensive
+            return
+
+        try:
+            rows = (
+                db.session.query(
+                    WebRequestLog.ip_address,
+                    func.max(WebRequestLog.timestamp).label("last_seen"),
+                )
+                .filter(
+                    WebRequestLog.hostname.is_(None),
+                    WebRequestLog.ip_address.isnot(None),
+                )
+                .group_by(WebRequestLog.ip_address)
+                .order_by(func.max(WebRequestLog.timestamp).desc())
+                .limit(HOSTNAME_BACKFILL_SCAN)
+                .all()
+            )
+        except Exception as exc:  # pragma: no cover - defensive logging
+            self._logger.debug("Hostname backfill scan failed: %s", exc)
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
+            return
+
+        # Take the first batch of IPs we haven't already attempted this process.
+        candidates = []
+        for ip, _ in rows:
+            if ip in self._hostname_tried:
+                continue
+            candidates.append(ip)
+            if len(candidates) >= HOSTNAME_BACKFILL_BATCH:
+                break
+        if not candidates:
+            return
+
+        if len(self._hostname_tried) > HOSTNAME_TRIED_MAX:
+            self._hostname_tried.clear()
+
+        updated = 0
+        for ip in candidates:
+            self._hostname_tried.add(ip)
+            try:
+                name = resolve_hostname(ip)
+            except Exception:  # pragma: no cover - defensive
+                name = None
+            if not name:
+                continue
+            try:
+                updated += (
+                    db.session.query(WebRequestLog)
+                    .filter(
+                        WebRequestLog.ip_address == ip,
+                        WebRequestLog.hostname.is_(None),
+                    )
+                    .update({WebRequestLog.hostname: name}, synchronize_session=False)
+                )
+            except Exception as exc:  # pragma: no cover - defensive logging
+                self._logger.debug("Hostname backfill update failed for %s: %s", ip, exc)
+                try:
+                    db.session.rollback()
+                except Exception:
+                    pass
+        if updated:
+            try:
+                db.session.commit()
+                self._logger.info("Backfilled reverse-DNS hostnames for %d rows", updated)
+            except Exception as exc:  # pragma: no cover - defensive logging
+                self._logger.warning("Failed to commit hostname backfill: %s", exc)
+                try:
+                    db.session.rollback()
+                except Exception:
+                    pass
 
     def _maybe_prune(self) -> None:
         now = time.monotonic()

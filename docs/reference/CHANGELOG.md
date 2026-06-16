@@ -8,6 +8,49 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.103.2] - 2026-06-16 - Fix Traffic Analytics Export dropdown clipped to one item
+
+### Fixed
+- **Export dropdown only showed "Excel / CSV"; the "PDF report" item was hidden.**
+  The global `.page-header` uses `overflow: hidden` to clip its decorative glow,
+  which also clipped the Export menu that opens inside the Traffic Analytics
+  header. The appliance-style header doesn't use that glow, so it now drops the
+  `::before` decoration and allows overflow, letting the full menu show.
+
+## [2.103.1] - 2026-06-16 - Stop /api/broadcast/state flooding logs with 401s
+
+### Fixed
+- **`/api/broadcast/state` returned 401 on every unauthenticated poll.**
+  `base.html` and the navbar poll this endpoint on every page (a 1.5s
+  WebSocket-fallback) to drive the global air-chain broadcast overlay —
+  including the login page and after a session expires. It was missing from the
+  deny-by-default public GET allowlist, so each poll hit the auth gate and
+  logged a 401, accumulating tens of thousands of errors from any browser tab
+  left open pre-login or on an expired session. Added it to
+  `PUBLIC_API_GET_PATHS` (the payload — active flag, active-alert count,
+  timestamp — is non-sensitive and less revealing than the already-public
+  `/api/alerts` and `/api/system_status`).
+
+## [2.103.0] - 2026-06-16 - Traffic Analytics: reverse-DNS backfill + self-diagnosing error sources
+
+### Added
+- **Top Error Sources now shows *what* each noisy IP errors on.** Every row in
+  the Errors &amp; Scanners → Top Error Sources table (and the CSV export) is
+  annotated with that source's single most-frequent error path, its status code,
+  and the hit count — so a scanner probing `/wp-login.php` (404) is instantly
+  distinguishable from a dashboard hammering a `403`/`500` endpoint, without
+  cross-referencing the Top Error URLs table.
+
+### Changed
+- **Reverse-DNS hostnames now backfill over time.** Hostnames were resolved only
+  once, at insert; rows captured before "Resolve hostnames" was enabled, during
+  a transient DNS hiccup, or for an IP that only later published a PTR record
+  stayed a bare IP forever. A background pass (every 10 min, when the setting is
+  on) now retries the most-recently-active unresolved IPs in bounded batches and
+  fills in their hostname, while remembering no-PTR addresses so they aren't
+  re-queried each pass. IPs that genuinely have no PTR record still show as a
+  bare address (expected).
+
 ## [2.102.0] - 2026-06-16 - Dedicated Attribution & Credits page
 
 ### Added

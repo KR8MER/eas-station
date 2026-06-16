@@ -445,6 +445,10 @@ def test_error_reports(app_with_db):
         sources = traffic_stats.get_error_sources(days=30)
         assert sources[0]["ip_address"] == "66.249.0.1"
         assert sources[0]["errors"] == 3
+        # Each source is annotated with the path it errors on most + that status.
+        assert sources[0]["top_path"] == "/wp-login.php"
+        assert sources[0]["top_status"] == 404
+        assert sources[0]["top_path_hits"] == 2
 
 
 def test_visits_entry_exit_and_duration(app_with_db):
@@ -856,3 +860,70 @@ def test_classify_location_surfaces_region_keys():
     public = classify_location("8.8.8.8")
     assert "region" in public and "region_code" in public
     assert public["region"] is None
+
+
+# ---------------------------------------------------------------------------
+# Reverse-DNS hostname backfill (fills NULL hostnames over time)
+# ---------------------------------------------------------------------------
+
+def test_recorder_backfills_missing_hostnames(app_with_db, monkeypatch):
+    app, db = app_with_db
+    from app_core.analytics import geo
+    from app_core.analytics.traffic_recorder import TrafficRecorder
+    from app_core.analytics.web_traffic import WebRequestLog
+    from app_utils import utc_now
+
+    geo._hostname_cache.clear()
+
+    def fake_resolve(ip, *a, **k):
+        # Only 1.1.1.1 has a PTR record; 9.9.9.9 has none.
+        return "one.one.one.one" if ip == "1.1.1.1" else None
+
+    monkeypatch.setattr(geo, "resolve_hostname", fake_resolve)
+
+    with app.app_context():
+        # Rows captured with NULL hostname (e.g. before "Resolve hostnames" was on).
+        for ip in ("1.1.1.1", "1.1.1.1", "9.9.9.9"):
+            db.session.add(WebRequestLog(
+                timestamp=utc_now(), method="GET", path="/x", status_code=200,
+                ip_address=ip, is_authenticated=False, is_api=False, is_bot=False,
+            ))
+        db.session.commit()
+
+        recorder = TrafficRecorder(app)
+        recorder._config["resolve_hostnames"] = True
+        recorder._last_hostname_backfill_at = -1e9  # force the interval gate open
+        recorder._maybe_backfill_hostnames()
+
+        # Resolvable IP: every NULL row for it is filled in.
+        resolved = WebRequestLog.query.filter_by(ip_address="1.1.1.1").all()
+        assert resolved and all(r.hostname == "one.one.one.one" for r in resolved)
+        # No-PTR IP stays NULL but is remembered so it isn't re-queried each pass.
+        unresolved = WebRequestLog.query.filter_by(ip_address="9.9.9.9").first()
+        assert unresolved.hostname is None
+        assert "9.9.9.9" in recorder._hostname_tried
+
+
+def test_recorder_backfill_noop_when_disabled(app_with_db, monkeypatch):
+    app, db = app_with_db
+    from app_core.analytics import geo
+    from app_core.analytics.traffic_recorder import TrafficRecorder
+    from app_core.analytics.web_traffic import WebRequestLog
+    from app_utils import utc_now
+
+    monkeypatch.setattr(geo, "resolve_hostname", lambda ip, *a, **k: "should-not-be-used")
+
+    with app.app_context():
+        db.session.add(WebRequestLog(
+            timestamp=utc_now(), method="GET", path="/x", status_code=200,
+            ip_address="1.1.1.1", is_authenticated=False, is_api=False, is_bot=False,
+        ))
+        db.session.commit()
+
+        recorder = TrafficRecorder(app)
+        recorder._config["resolve_hostnames"] = False
+        recorder._last_hostname_backfill_at = -1e9
+        recorder._maybe_backfill_hostnames()
+
+        row = WebRequestLog.query.filter_by(ip_address="1.1.1.1").first()
+        assert row.hostname is None

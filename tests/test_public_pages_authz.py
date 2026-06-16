@@ -6,7 +6,7 @@ deny-by-default ``before_request`` allowlists in ``app.py``; if someone removes 
 path from those allowlists this test fails loudly.
 """
 
-from app import _PUBLIC_PAGE_PATHS, _PUBLIC_PAGE_PREFIXES
+from app import _PUBLIC_PAGE_PATHS, _PUBLIC_PAGE_PREFIXES, PUBLIC_API_GET_PATHS
 
 
 def _is_public(path: str) -> bool:
@@ -33,3 +33,11 @@ def test_help_files_are_public():
 
 def test_support_page_is_public():
     assert _is_public("/support")
+
+
+def test_broadcast_state_api_is_public():
+    # base.html + the navbar poll /api/broadcast/state on every page (a 1.5s
+    # WebSocket-fallback) to drive the air-chain overlay — including the login
+    # page and after a session expires. It must stay in the public GET allowlist
+    # or those polls flood the logs with 401s.
+    assert "/api/broadcast/state" in PUBLIC_API_GET_PATHS

@@ -14,6 +14,13 @@
 
     /* App-bar style header (title / pills / live-dot / controls inline). */
     .traffic-dash-root .traffic-dash-header { padding-top: 14px; padding-bottom: 14px; }
+    /* The global .page-header sets overflow:hidden to clip its decorative glow,
+       which also clipped the Export dropdown menu (only the first item showed).
+       This appliance-style header doesn't use that glow, so drop it and let the
+       menu overflow the header box. */
+    .traffic-dash-root .traffic-dash-header { overflow: visible; }
+    .traffic-dash-root .traffic-dash-header::before { display: none; }
+    .traffic-dash-root .traffic-dash-header .dropdown-menu { z-index: 1030; }
     .traffic-dash-root .traffic-dash-header .header-flex {
         display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center;
     }
@@ -971,7 +978,12 @@
                 const host = r.hostname
                     ? `<div class="text-break-anywhere">${flag}${escapeHtml(r.hostname)}</div><div class="text-muted small mono text-break-anywhere">${escapeHtml(r.ip_address)}</div>`
                     : `<span class="text-break-anywhere mono">${flag}${escapeHtml(r.ip_address)}</span>`;
-                return `<td>${host}</td><td class="text-end mono text-danger fw-bold">${num(r.errors)}</td>`;
+                // What this source errors on most — turns a bare count into a
+                // diagnosis (scanner 404 on /wp-login.php vs. a 500/403 the UI hammers).
+                const worst = r.top_path
+                    ? `<div class="small text-muted mt-1 text-break-anywhere">${statusBadge(r.top_status)} <span class="mono">${escapeHtml(r.top_path)}</span> <span class="text-muted">×${num(r.top_path_hits)}</span></div>`
+                    : '';
+                return `<td>${host}${worst}</td><td class="text-end mono text-danger fw-bold">${num(r.errors)}</td>`;
             }, 2);
             renderTable('recentRequests', data.recent_requests, r => {
                 const br = r.browser ? `${markFor(browserMeta(r.browser), r.browser, 'me-1')}${escapeHtml(r.browser)}${r.browser_version ? ' ' + escapeHtml(r.browser_version) : ''}` : '<span class="text-muted">—</span>';
@@ -1369,7 +1381,7 @@
         section('Search Keyphrases', ['Keyphrase', 'Hits'], (d.search_terms || []).map(r => [r.term, r.count]));
         section('Robots / Spiders', ['Bot', 'Hits'], (d.bot_breakdown || []).map(r => [r.bot, r.hits]));
         section('Top Error URLs', ['Path', 'Status', 'Hits'], (d.error_pages || []).map(r => [r.path, r.status_code, r.hits]));
-        section('Top Error Sources', ['IP', 'Hostname', 'Errors'], (d.error_sources || []).map(r => [r.ip_address, r.hostname, r.errors]));
+        section('Top Error Sources', ['IP', 'Hostname', 'Errors', 'Top Error Path', 'Top Status'], (d.error_sources || []).map(r => [r.ip_address, r.hostname, r.errors, r.top_path, r.top_status]));
         section('Hits by Hour', ['Hour', 'Hits'], (d.hourly_distribution.labels || []).map((h, i) => [h, d.hourly_distribution.hits[i]]));
         section('Hits by Weekday', ['Day', 'Hits'], (d.weekday_distribution.labels || []).map((w, i) => [w, d.weekday_distribution.hits[i]]));
         section('Top Login IPs', ['IP', 'Success', 'Failed'], (d.top_login_ips || []).map(r => [r.ip_address, r.success, r.failure]));
