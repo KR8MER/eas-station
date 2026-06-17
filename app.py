@@ -98,6 +98,7 @@ from app_core.radio import (
 )
 from app_core.zones import ensure_zone_catalog
 from app_core.auth.roles import initialize_default_roles_and_permissions, Role
+from app_core.auth.ip_filter import IPFilter
 from webapp import register_routes
 from webapp.admin.boundaries import (
     ensure_alert_source_columns,
@@ -1112,6 +1113,37 @@ def before_request():
         except Exception:
             db.session.rollback()
             g.admin_setup_mode = False
+
+        # Global IP-ban enforcement. A blocklisted IP must be denied access to
+        # the ENTIRE application, not merely the login form — otherwise a "ban"
+        # only stops sign-in while the attacker keeps browsing every page and
+        # API. Static assets and loopback (the appliance itself / local health
+        # probes) are always exempted so an over-broad ban can never brick the
+        # box or its own monitoring.
+        remote_addr = request.remote_addr
+        if (
+            remote_addr not in ('127.0.0.1', '::1', 'localhost')
+            and not request.path.startswith('/static/')
+        ):
+            try:
+                is_blocked, block_reason = IPFilter.is_ip_blocked(remote_addr)
+            except Exception:
+                db.session.rollback()
+                is_blocked, block_reason = False, None
+            if is_blocked:
+                logger.warning(
+                    "Blocked request from banned IP %s (%s) to %s",
+                    remote_addr, block_reason, request.path
+                )
+                if request.path.startswith('/api/') or request.is_json or \
+                        'application/json' in (request.headers.get('Accept', '') or ''):
+                    return jsonify({'error': 'Your IP address has been blocked.'}), 403
+                return (
+                    "<h1>Access Denied</h1><p>Your IP address has been blocked "
+                    "by the system administrator.</p>",
+                    403,
+                    {'Content-Type': 'text/html; charset=utf-8'},
+                )
 
     # Allow authentication endpoints without CSRF or other checks.
     if (request.endpoint in CSRF_EXEMPT_ENDPOINTS) or (request.path in CSRF_EXEMPT_PATHS):

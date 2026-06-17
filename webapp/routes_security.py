@@ -705,13 +705,33 @@ def security_settings():
     )
 
 
+@security_bp.route('/center', methods=['GET'])
+@require_permission('logs.view')
+def view_security_center():
+    """Unified Security Center.
+
+    Combines four previously-separate areas into one tabbed page:
+      * Traffic analytics (embedded dashboard)
+      * Malicious login attempts
+      * Banned IPs / IP filter management (allowlist + blocklist)
+      * fail2ban configuration
+    """
+    from flask import render_template
+
+    return render_template('security/security_center.html')
+
+
 @security_bp.route('/malicious-logins', methods=['GET'])
 @require_permission('logs.view')
 def view_malicious_logins():
-    """Web page to view and manage malicious login attempts and IP filters."""
-    from flask import render_template
+    """Legacy route — superseded by the unified Security Center.
 
-    return render_template('admin/malicious_logins.html')
+    Kept as a redirect so existing bookmarks/links land on the new combined
+    page (Malicious Logins tab) instead of 404-ing.
+    """
+    from flask import redirect, url_for
+
+    return redirect(url_for('security.view_security_center') + '#malicious')
 
 
 # ============================================================================
