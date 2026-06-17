@@ -660,6 +660,41 @@ class AuditLogger:
         )
 
     @staticmethod
+    def log_config_change(
+        resource_type: str,
+        resource_id: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+        success: bool = True,
+    ) -> 'AuditLog':
+        """Record a configuration/settings change to the audit trail.
+
+        This is the canonical entry point for the various settings save
+        routes (environment, application, hardware, TTS, poller, icecast,
+        ...) so the audit table answers "who changed which setting, when,
+        and from where".  User, IP, and user-agent are auto-detected from
+        the request context by ``log``.
+
+        Args:
+            resource_type: Which settings group changed (e.g. 'environment',
+                'application_settings', 'hardware_settings').
+            resource_id: Optional identifier of the affected record.
+            details: Additional context, typically the list of changed field
+                names.  Callers MUST redact secret values before passing them
+                here -- this dict is stored verbatim and is hash-protected.
+            success: Whether the change was applied successfully.
+
+        Returns:
+            Created AuditLog instance.
+        """
+        return AuditLogger.log(
+            action=AuditAction.CONFIG_UPDATED,
+            success=success,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            details=details,
+        )
+
+    @staticmethod
     def cleanup_old_logs(days: int = 90):
         """
         Delete audit logs older than specified days.

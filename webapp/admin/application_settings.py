@@ -29,6 +29,7 @@ from app_core.extensions import db
 from app_core.models import ApplicationSettings
 from app_core.auth.decorators import require_auth
 from app_core.auth.roles import require_permission
+from app_core.auth.audit import AuditLogger
 
 logger = logging.getLogger(__name__)
 
@@ -208,6 +209,24 @@ def update_application_settings():
             settings.password_require_special,
         )
 
+        # Audit: record who changed application settings, when, and from where.
+        AuditLogger.log_config_change(
+            resource_type='application_settings',
+            resource_id=str(settings.id) if settings.id is not None else None,
+            details={
+                'log_level': settings.log_level,
+                'log_file': settings.log_file,
+                'upload_folder': settings.upload_folder,
+                'backup_dir': settings.backup_dir,
+                'password_min_length': settings.password_min_length,
+                'password_require_uppercase': settings.password_require_uppercase,
+                'password_require_lowercase': settings.password_require_lowercase,
+                'password_require_digits': settings.password_require_digits,
+                'password_require_special': settings.password_require_special,
+                'password_expiration_days': settings.password_expiration_days,
+            },
+        )
+
         message = 'Application settings updated successfully. Log level applied immediately.'
         if backup_dir_warning:
             message = f"{message} {backup_dir_warning}"
@@ -249,6 +268,10 @@ def retention_settings():
             return jsonify({'success': False, 'error': str(exc)}), 400
 
         logger.info("Retention settings updated: %s", updated)
+        AuditLogger.log_config_change(
+            resource_type='retention_settings',
+            details={'settings': updated},
+        )
         return jsonify({
             'success': True,
             'message': 'Retention settings updated. Changes apply on the next sweep (within 6 hours).',

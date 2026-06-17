@@ -41,6 +41,7 @@ from app_core.alerts import (
     parse_noaa_cap_alert,
 )
 from app_core.auth.roles import require_permission
+from app_core.auth.audit import AuditLogger
 from app_core.extensions import db
 from app_core.led import ensure_led_tables
 from app_core.location import (
@@ -822,6 +823,10 @@ def admin_location_settings():
                 "map_default_zoom": payload.get("map_default_zoom"),
             }
         )
+        AuditLogger.log_config_change(
+            resource_type='location_settings',
+            details={'changed_fields': sorted(k for k, v in payload.items() if v is not None)},
+        )
         return jsonify({"success": "Location settings updated", "settings": updated})
     except Exception as exc:
         current_app.logger.error("Error processing location settings update: %s", exc)
@@ -841,6 +846,10 @@ def admin_alert_filtering():
 
         payload = request.get_json(silent=True) or {}
         updated = update_alert_filter_settings(payload)
+        AuditLogger.log_config_change(
+            resource_type='alert_filter_settings',
+            details={'changed_fields': sorted(payload.keys())},
+        )
         return jsonify({"success": "Alert filtering settings updated", "settings": updated})
     except Exception as exc:
         current_app.logger.error("Error processing alert filtering update: %s", exc)

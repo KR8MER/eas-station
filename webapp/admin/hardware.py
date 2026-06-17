@@ -33,6 +33,7 @@ from flask import Blueprint, flash, jsonify, redirect, render_template, request,
 from werkzeug.exceptions import BadRequest
 
 from app_core.auth.roles import require_permission
+from app_core.auth.audit import AuditLogger
 from app_core.extensions import db
 from app_core.hardware_settings import (
     get_gps_settings,
@@ -615,6 +616,15 @@ def update_hardware():
         # Update settings
         settings = update_hardware_settings(data)
         invalidate_hardware_settings_cache()
+
+        # Audit: record who changed hardware settings and which fields were
+        # submitted. Hardware settings carry no secrets, so field names are
+        # sufficient for the trail.
+        AuditLogger.log_config_change(
+            resource_type='hardware_settings',
+            resource_id=str(settings.id) if getattr(settings, 'id', None) is not None else None,
+            details={'changed_fields': sorted(data.keys())},
+        )
 
         flash("Hardware settings updated successfully! Restart services for changes to take effect.", "success")
 

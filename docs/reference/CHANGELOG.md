@@ -8,6 +8,46 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.108.0] - 2026-06-17 - Audit configuration changes and EAS transmissions
+
+### Added
+- **Settings changes are now audited.** Every settings-save route writes a
+  tamper-evident `config.updated` row to the audit ledger (`audit_logs`)
+  recording **who** changed the configuration, **when**, and **from which IP** —
+  answering "who changed this setting?". Wired into:
+  - Environment variables (`webapp/admin/environment.py`,
+    `PUT /api/environment/variables`) — records the list of changed variable
+    **names** only; secret values are never written to the trail.
+  - Application settings, including the password policy and retention policy
+    (`webapp/admin/application_settings.py`).
+  - Hardware settings (`webapp/admin/hardware.py`).
+  - TTS settings (`webapp/admin/tts.py`) — API keys/passwords redacted to field
+    names.
+  - Poller settings (`webapp/admin/poller.py`).
+  - Icecast settings and password regeneration (`webapp/admin/icecast.py`) —
+    credentials redacted; password rotation recorded as an action only.
+  - Certbot/SSL settings (`webapp/admin/certbot.py`).
+  - EAS decoder monitor settings (`webapp/admin/eas_decoder_monitor.py`).
+  - ENDEC feed settings (`webapp/admin/endec_feeds.py`).
+  - Location settings and alert-filtering settings (`webapp/admin/maintenance.py`).
+- New `AuditLogger.log_config_change(...)` helper (`app_core/auth/audit.py`) as
+  the canonical entry point for settings-change auditing (auto-detects the
+  acting user, IP, and user-agent from the request context).
+
+### Changed
+- **EAS transmissions and purges now land in the tamper-evident audit ledger.**
+  Sending a manual EAS activation (`POST /eas/manual/events/<id>/send`) records
+  an `eas.broadcast` audit row, and purging activations
+  (`POST /eas/manual/events/purge`) records an `alert.deleted` row — both in
+  addition to the existing `system_logs` entries — so the most consequential
+  operator actions are captured alongside every other security event with full
+  user attribution (`webapp/eas/workflow.py`).
+
+### Tests
+- `tests/test_audit_config_changes.py` — covers `log_config_change` chaining,
+  signing, session-user capture, failure recording, and the new EAS
+  broadcast/delete audit actions.
+
 ## [2.107.0] - 2026-06-17 - Unified Security Center + real IP-ban enforcement
 
 ### Added

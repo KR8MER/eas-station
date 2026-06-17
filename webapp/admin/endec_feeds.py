@@ -33,6 +33,7 @@ from werkzeug.exceptions import BadRequest
 from app_core import db
 from app_core.models import EASSettings
 from app_core.auth.roles import require_permission
+from app_core.auth.audit import AuditLogger
 from app_utils.endec_feeds import FEED_FORMATS
 
 logger = logging.getLogger(__name__)
@@ -117,6 +118,12 @@ def update_endec_feeds_settings():
             settings.endec_feeds = _validate_feeds(data['feeds'])
 
         db.session.commit()
+
+        AuditLogger.log_config_change(
+            resource_type='endec_feeds_settings',
+            resource_id=str(settings.id) if getattr(settings, 'id', None) is not None else None,
+            details={'changed_fields': sorted(data.keys())},
+        )
 
         # Tell the running feed service to pick up the new config immediately.
         try:

@@ -32,6 +32,7 @@ from flask import Blueprint, flash, jsonify, redirect, render_template, request,
 from werkzeug.exceptions import BadRequest
 
 from app_core.auth.roles import require_permission
+from app_core.auth.audit import AuditLogger
 from app_core.extensions import db
 from app_core.tts_settings import (
     get_tts_settings,
@@ -117,6 +118,20 @@ def update_settings():
         settings = update_tts_settings(data)
 
         logger.info(f"TTS settings updated successfully")
+
+        # Audit: record who changed TTS settings. Only field names are stored
+        # for secret-bearing fields (api keys, passwords) so secrets never
+        # land in the audit trail.
+        _sensitive = ('key', 'password', 'secret', 'token')
+        audit_details: Dict[str, Any] = {'changed_fields': sorted(data.keys())}
+        for _k, _v in data.items():
+            if not any(_s in _k.lower() for _s in _sensitive):
+                audit_details[_k] = _v
+        AuditLogger.log_config_change(
+            resource_type='tts_settings',
+            resource_id=str(settings.id) if getattr(settings, 'id', None) is not None else None,
+            details=audit_details,
+        )
 
         return jsonify({
             "success": True,

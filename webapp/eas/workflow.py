@@ -45,6 +45,7 @@ from flask import (
 )
 
 from app_core.auth.roles import require_permission
+from app_core.auth.audit import AuditLogger, AuditAction
 from app_core.extensions import db
 from app_core.models import AdminUser, EASMessage, LocalAuthority, ManualEASActivation, SystemLog
 from werkzeug.utils import secure_filename
@@ -1507,6 +1508,23 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
             trigger_ip,
         )
 
+        # Audit: a transmission is the most consequential operator action in
+        # the system. Record it in the tamper-evident audit ledger (in
+        # addition to the SystemLog entry above) so "who sent which alert,
+        # when, from where" is captured alongside every other security event.
+        AuditLogger.log(
+            action=AuditAction.EAS_BROADCAST,
+            resource_type='manual_eas_activation',
+            resource_id=str(event_id),
+            details={
+                'identifier': activation.identifier,
+                'event_code': activation.event_code,
+                'audio_played': send_result.get('audio_played'),
+                'gpio_activated': send_result.get('gpio_activated'),
+                'triggered_by': triggered_by_user,
+            },
+        )
+
         send_result['triggered_at'] = now.isoformat()
         return jsonify(send_result)
 
@@ -1585,6 +1603,17 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
             workflow_logger.error('Failed to purge manual EAS activations: %s', exc)
             db.session.rollback()
             return jsonify({'error': 'Failed to purge manual EAS activations.'}), 500
+
+        # Audit: deleting compliance records is a sensitive data operation;
+        # record who purged which activations in the tamper-evident ledger.
+        AuditLogger.log(
+            action=AuditAction.ALERT_DELETED,
+            resource_type='manual_eas_activation',
+            details={
+                'deleted_ids': deleted_ids,
+                'deleted_count': len(deleted_ids),
+            },
+        )
 
         return jsonify(
             {
