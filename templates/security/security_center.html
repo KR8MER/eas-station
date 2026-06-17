@@ -48,9 +48,46 @@
         color: var(--primary-color);
         font-weight: 600;
     }
-    /* The Traffic tab embeds the full dashboard, which renders its own hero
-       header — drop the tab pane's top padding so it sits flush. */
+    /* The Traffic tab embeds the full dashboard — keep it flush under the tabs. */
     #traffic-pane { padding-top: .5rem; }
+
+    /* Slim traffic control toolbar (replaces the old full-width dark hero). */
+    .traffic-toolbar {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: .5rem;
+        padding: .6rem .85rem;
+        margin-bottom: .25rem;
+        background: var(--surface-color);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md, 6px);
+    }
+    .traffic-toolbar-label {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        color: var(--text-secondary);
+        font-size: .9rem;
+    }
+    .traffic-toolbar-spacer { flex: 1 1 auto; }
+
+    /* Country vs US-state legend on the visitor map. */
+    .traffic-map-legend {
+        background: var(--surface-color);
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        padding: 4px 8px;
+        font-size: .75rem;
+        color: var(--text-color);
+        display: flex;
+        gap: .75rem;
+        box-shadow: 0 1px 4px var(--shadow-color);
+    }
+    .traffic-map-legend span { display: inline-flex; align-items: center; gap: .3rem; }
+    .traffic-map-legend i {
+        width: 11px; height: 11px; border-radius: 50%; display: inline-block;
+    }
 </style>
 {% endblock %}
 

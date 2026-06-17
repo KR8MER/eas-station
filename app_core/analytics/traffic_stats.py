@@ -489,6 +489,44 @@ def get_city_breakdown(days: int = 30, limit: int = 10, filters: Optional[Traffi
     return result
 
 
+def get_region_breakdown(days: int = 30, limit: int = 60, filters: Optional[TrafficFilters] = None) -> List[Dict[str, Any]]:
+    """Hits grouped by state/region within each country.
+
+    Requires a GeoLite2 City database (country-only databases do not resolve
+    subdivisions). Powers the per-state markers on the visitor map. The limit is
+    generous so all US states can be plotted; rows whose ``region_code`` has no
+    centroid are simply skipped client-side.
+    """
+    flt = _resolve(days, filters)
+    rows = (
+        flt.apply(
+            db.session.query(
+                WebRequestLog.country_code,
+                WebRequestLog.region,
+                WebRequestLog.region_code,
+                func.count(WebRequestLog.id).label("count"),
+            ).filter(WebRequestLog.region_code.isnot(None))
+        )
+        .group_by(
+            WebRequestLog.country_code,
+            WebRequestLog.region,
+            WebRequestLog.region_code,
+        )
+        .order_by(func.count(WebRequestLog.id).desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {
+            "country_code": r.country_code,
+            "region": r.region,
+            "region_code": r.region_code,
+            "count": int(r.count),
+        }
+        for r in rows
+    ]
+
+
 def get_asn_breakdown(days: int = 30, limit: int = 10, filters: Optional[TrafficFilters] = None) -> List[Dict[str, Any]]:
     """Hits grouped by network operator / ISP (requires a GeoLite2 ASN database)."""
     return _simple_breakdown(WebRequestLog.asn_org, days, limit, "asn_org", filters)
@@ -1082,6 +1120,7 @@ def get_full_dashboard(
         "resolution_breakdown": get_resolution_breakdown(filters=flt),
         "country_breakdown": get_country_breakdown(filters=flt),
         "city_breakdown": get_city_breakdown(filters=flt),
+        "region_breakdown": get_region_breakdown(filters=flt),
         "asn_breakdown": get_asn_breakdown(filters=flt),
         "ip_version_breakdown": get_ip_version_breakdown(filters=flt),
         "language_breakdown": get_language_breakdown(filters=flt),
@@ -1121,6 +1160,7 @@ __all__ = [
     "get_resolution_breakdown",
     "get_country_breakdown",
     "get_city_breakdown",
+    "get_region_breakdown",
     "get_asn_breakdown",
     "get_ip_version_breakdown",
     "get_language_breakdown",

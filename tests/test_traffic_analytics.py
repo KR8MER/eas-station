@@ -926,6 +926,46 @@ def test_city_breakdown_includes_region_label(app_with_db):
         assert "Springfield, MO" in {r["label"] for r in rows.values()}
 
 
+def test_region_breakdown_groups_states_for_map(app_with_db):
+    app, db = app_with_db
+    from app_core.analytics import traffic_stats
+
+    with app.app_context():
+        # Two hits from Ohio, one from California, one from a non-US country.
+        _add_request(db, ip_address="8.8.8.8", country="United States",
+                     country_code="US", region="Ohio", region_code="OH")
+        _add_request(db, ip_address="8.8.8.9", country="United States",
+                     country_code="US", region="Ohio", region_code="OH")
+        _add_request(db, ip_address="8.8.4.4", country="United States",
+                     country_code="US", region="California", region_code="CA")
+        _add_request(db, ip_address="1.1.1.1", country="Australia",
+                     country_code="AU", region="New South Wales", region_code="NSW")
+        # No region at all -> must be excluded from the breakdown.
+        _add_request(db, ip_address="9.9.9.9", country="United States",
+                     country_code="US")
+
+        rows = traffic_stats.get_region_breakdown(days=30)
+        by_code = {(r["country_code"], r["region_code"]): r["count"] for r in rows}
+
+        assert by_code[("US", "OH")] == 2
+        assert by_code[("US", "CA")] == 1
+        assert by_code[("AU", "NSW")] == 1
+        # Rows without a region_code are not included.
+        assert all(r["region_code"] is not None for r in rows)
+
+
+def test_region_breakdown_in_dashboard_payload(app_with_db):
+    app, db = app_with_db
+    from app_core.analytics import traffic_stats
+
+    with app.app_context():
+        _add_request(db, ip_address="8.8.8.8", country="United States",
+                     country_code="US", region="Texas", region_code="TX")
+        payload = traffic_stats.get_full_dashboard()
+        assert "region_breakdown" in payload
+        assert any(r["region_code"] == "TX" for r in payload["region_breakdown"])
+
+
 def test_classify_location_surfaces_region_keys():
     from app_core.analytics.geo import classify_location
 

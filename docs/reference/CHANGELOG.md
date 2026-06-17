@@ -24,6 +24,16 @@ tracks releases under the 2.x series.
   `_traffic_scripts.html`, `_traffic_styles.html`) that the Security Center
   includes directly; the page's JS is wrapped in an IIFE exporting only
   `window.SC.*` handlers so it can never collide with the dashboard's globals.
+- **Visitor map now plots US states, not just countries.** A new
+  `get_region_breakdown` (`app_core/analytics/traffic_stats.py`, surfaced as
+  `region_breakdown` in the dashboard payload) groups hits by state/region, and
+  the map draws an amber per-state marker (sized by hits) over the blue
+  country markers using a new `static/js/data/us_state_centroids.js` centroid
+  table, with a Country / US-state legend. Requires a GeoLite2 **City**
+  database (country-only databases cannot resolve states).
+- The Traffic tab's heavy full-width dark hero header was replaced with a slim
+  control toolbar (range / refresh / export / settings) so it sits flush under
+  the Security Center tab strip instead of stacking a second header.
 
 ### Fixed
 - **Banning now actually blocks access.** Previously `IPFilter.is_ip_allowed`

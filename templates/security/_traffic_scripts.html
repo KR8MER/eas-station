@@ -4,6 +4,7 @@
 <script src="{{ url_for('static', filename='vendor/chartjs/chart-v3.min.js') }}"></script>
 <script src="{{ url_for('static', filename='vendor/leaflet/leaflet.min.js') }}"></script>
 <script src="{{ url_for('static', filename='js/data/country_centroids.js') }}"></script>
+<script src="{{ url_for('static', filename='js/data/us_state_centroids.js') }}"></script>
 <script src="{{ url_for('static', filename='vendor/jspdf/jspdf.umd.min.js') }}"></script>
 <script src="{{ url_for('static', filename='vendor/jspdf/html2canvas.min.js') }}"></script>
 <script>
@@ -453,7 +454,7 @@
             renderMethodChart(data.method_breakdown);
             renderAuthChart(data.auth_breakdown);
             renderSearchEngineChart(data.search_engine_breakdown);
-            renderTrafficMap(data.country_breakdown);
+            renderTrafficMap(data.country_breakdown, data.region_breakdown);
             renderTable('slowestPages', data.slowest_pages, r => `<td class="text-break-anywhere">${escapeHtml(r.path)}</td><td class="text-end mono fw-bold">${r.avg_response_ms != null ? r.avg_response_ms : '--'}</td><td class="text-end d-none d-sm-table-cell mono text-muted">${r.max_response_ms != null ? r.max_response_ms : '--'}</td><td class="text-end mono">${num(r.hits)}</td>`, 4);
             renderTable('topPages', data.top_pages, r => `<td class="text-break-anywhere drill" data-fk="path" data-fv="${escapeHtml(r.path)}" title="Filter by this path">${escapeHtml(r.path)}</td><td class="text-end mono">${num(r.hits)}</td><td class="text-end d-none d-sm-table-cell mono">${r.avg_response_ms != null ? r.avg_response_ms : '--'}</td>`, 3);
             renderTable('topVisitors', data.top_visitors, r => {
@@ -542,9 +543,11 @@
         errTile.classList.toggle('sev-warn', (s.error_hits || 0) > 0);
         const loginTile = document.getElementById('hs-logins');
         loginTile.classList.toggle('sev-fault', (l.failed_logins || 0) > 0 && (l.successful_logins || 0) === 0);
-        // Header pills
-        document.querySelector('#pill-pageviews span').textContent = num(s.page_views);
-        document.querySelector('#pill-visitors span').textContent = num(s.unique_visitors);
+        // Header pills (optional — only present in the legacy header layout)
+        const pvPill = document.querySelector('#pill-pageviews span');
+        if (pvPill) pvPill.textContent = num(s.page_views);
+        const uvPill = document.querySelector('#pill-visitors span');
+        if (uvPill) uvPill.textContent = num(s.unique_visitors);
     }
 
     function renderTrafficChart(ts) {
@@ -693,9 +696,34 @@
     // ----- Visitor world map (Leaflet, flag/dot markers sized by traffic) -----
     let trafficMap = null;
     let trafficMapLayer = null;
-    function renderTrafficMap(rows) {
-        rows = rows || [];
+    // Blue = countries, amber = US states. A small legend explains the two.
+    const GEO_COUNTRY_COLOR = '#58a6ff';
+    const GEO_STATE_COLOR = '#f0883e';
+
+    function _radiusFor(count, maxCount) {
+        // Radius scales with sqrt(share) so area ∝ count; clamp to sane bounds.
+        return 6 + 22 * Math.sqrt((count || 0) / (maxCount || 1));
+    }
+
+    function _ensureMapLegend() {
+        if (trafficMap._geoLegend) return;
+        const legend = L.control({ position: 'bottomleft' });
+        legend.onAdd = function () {
+            const div = L.DomUtil.create('div', 'traffic-map-legend');
+            div.innerHTML =
+                `<span><i style="background:${GEO_COUNTRY_COLOR}"></i> Country</span>` +
+                `<span><i style="background:${GEO_STATE_COLOR}"></i> US state</span>`;
+            return div;
+        };
+        legend.addTo(trafficMap);
+        trafficMap._geoLegend = legend;
+    }
+
+    function renderTrafficMap(countryRows, regionRows) {
+        countryRows = countryRows || [];
+        regionRows = regionRows || [];
         const centroids = window.COUNTRY_CENTROIDS || {};
+        const stateCentroids = window.US_STATE_CENTROIDS || {};
         if (typeof L === 'undefined') return;
         if (!trafficMap) {
             trafficMap = L.map('trafficMap', { worldCopyJump: true, minZoom: 1, attributionControl: true })
@@ -704,30 +732,47 @@
                 maxZoom: 8, attribution: '© OpenStreetMap'
             }).addTo(trafficMap);
         }
+        _ensureMapLegend();
         if (trafficMapLayer) { trafficMap.removeLayer(trafficMapLayer); trafficMapLayer = null; }
-        // Only countries we can geolocate and that have an ISO code.
-        const located = rows.filter(r => r.country_code && centroids[r.country_code.toUpperCase()]);
-        if (!located.length) {
-            // Nudge the map back to a world view; nothing to plot (likely local-only).
-            trafficMap.setView([20, 0], 2);
-            setTimeout(() => trafficMap.invalidateSize(), 50);
-            return;
-        }
-        const maxCount = Math.max(...located.map(r => r.count));
+
         const markers = [];
-        located.forEach(r => {
+
+        // ----- Country markers (blue) -----
+        const locatedCountries = countryRows.filter(r => r.country_code && centroids[r.country_code.toUpperCase()]);
+        const maxCountry = locatedCountries.length ? Math.max(...locatedCountries.map(r => r.count)) : 0;
+        locatedCountries.forEach(r => {
             const cc = r.country_code.toUpperCase();
-            const ll = centroids[cc];
-            // Radius scales with sqrt(share) so area ∝ count; clamp to sane bounds.
-            const radius = 6 + 22 * Math.sqrt((r.count || 0) / maxCount);
-            const m = L.circleMarker(ll, {
-                radius, className: 'traffic-geo-dot', color: '#58a6ff',
-                weight: 2, fillColor: '#58a6ff', fillOpacity: 0.45
+            const m = L.circleMarker(centroids[cc], {
+                radius: _radiusFor(r.count, maxCountry), className: 'traffic-geo-dot',
+                color: GEO_COUNTRY_COLOR, weight: 2, fillColor: GEO_COUNTRY_COLOR, fillOpacity: 0.40
             });
             const flag = flagImg(cc, r.country);
             m.bindPopup(`<div class="traffic-geo-popup">${flag} <strong>${escapeHtml(r.country || cc)}</strong><br>${num(r.count)} hits</div>`);
             markers.push(m);
         });
+
+        // ----- US state markers (amber), drawn on top of the country dots -----
+        const locatedStates = regionRows.filter(r =>
+            (r.country_code || '').toUpperCase() === 'US' &&
+            r.region_code && stateCentroids[r.region_code.toUpperCase()]
+        );
+        const maxState = locatedStates.length ? Math.max(...locatedStates.map(r => r.count)) : 0;
+        locatedStates.forEach(r => {
+            const sc = r.region_code.toUpperCase();
+            const m = L.circleMarker(stateCentroids[sc], {
+                radius: _radiusFor(r.count, maxState), className: 'traffic-geo-dot',
+                color: GEO_STATE_COLOR, weight: 2, fillColor: GEO_STATE_COLOR, fillOpacity: 0.55
+            });
+            m.bindPopup(`<div class="traffic-geo-popup">🇺🇸 <strong>${escapeHtml(r.region || sc)}</strong> (${escapeHtml(sc)})<br>${num(r.count)} hits</div>`);
+            markers.push(m);
+        });
+
+        if (!markers.length) {
+            // Nothing to plot (likely local-only traffic / no GeoIP DB).
+            trafficMap.setView([20, 0], 2);
+            setTimeout(() => trafficMap.invalidateSize(), 50);
+            return;
+        }
         trafficMapLayer = L.layerGroup(markers).addTo(trafficMap);
         // Leaflet needs a size recalc when the container was hidden/resized.
         setTimeout(() => trafficMap.invalidateSize(), 50);
