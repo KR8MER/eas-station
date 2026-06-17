@@ -823,9 +823,17 @@ def admin_location_settings():
                 "map_default_zoom": payload.get("map_default_zoom"),
             }
         )
+        # Record only the keys this route actually applies. Use ``k in payload``
+        # (not ``v is not None``) so an explicit null — an intentional clear —
+        # is still captured in the audit trail.
+        location_fields = {
+            "county_name", "state_code", "timezone", "fips_codes", "zone_codes",
+            "storage_zone_codes", "area_terms", "led_default_lines",
+            "map_center_lat", "map_center_lng", "map_default_zoom",
+        }
         AuditLogger.log_config_change(
             resource_type='location_settings',
-            details={'changed_fields': sorted(k for k, v in payload.items() if v is not None)},
+            details={'changed_fields': sorted(k for k in location_fields if k in payload)},
         )
         return jsonify({"success": "Location settings updated", "settings": updated})
     except Exception as exc:
@@ -846,9 +854,15 @@ def admin_alert_filtering():
 
         payload = request.get_json(silent=True) or {}
         updated = update_alert_filter_settings(payload)
+        # When the updater echoes the applied settings, constrain the audit
+        # entry to keys that were actually recognised/persisted.
+        if isinstance(updated, dict):
+            changed_fields = sorted(k for k in payload if k in updated)
+        else:
+            changed_fields = sorted(payload.keys())
         AuditLogger.log_config_change(
             resource_type='alert_filter_settings',
-            details={'changed_fields': sorted(payload.keys())},
+            details={'changed_fields': changed_fields},
         )
         return jsonify({"success": "Alert filtering settings updated", "settings": updated})
     except Exception as exc:

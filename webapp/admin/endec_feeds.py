@@ -119,10 +119,12 @@ def update_endec_feeds_settings():
 
         db.session.commit()
 
+        # Only record fields this handler actually processes/persists.
+        allowed_keys = {'enabled', 'feeds'}
         AuditLogger.log_config_change(
             resource_type='endec_feeds_settings',
             resource_id=str(settings.id) if getattr(settings, 'id', None) is not None else None,
-            details={'changed_fields': sorted(data.keys())},
+            details={'changed_fields': sorted(k for k in data if k in allowed_keys)},
         )
 
         # Tell the running feed service to pick up the new config immediately.

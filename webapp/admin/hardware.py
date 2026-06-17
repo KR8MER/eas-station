@@ -469,6 +469,10 @@ def update_hardware():
     """Update hardware settings from form submission."""
     try:
         data = request.get_json() if request.is_json else request.form.to_dict()
+        # Capture the keys the user actually submitted before synthetic checkbox
+        # defaults (unchecked boxes => False) are injected below, so the audit
+        # entry reflects what was submitted rather than the full field set.
+        raw_submitted_keys = set(data.keys())
 
         # Parse JSON fields
         if 'gpio_pin_map' in data and isinstance(data['gpio_pin_map'], str):
@@ -623,7 +627,7 @@ def update_hardware():
         AuditLogger.log_config_change(
             resource_type='hardware_settings',
             resource_id=str(settings.id) if getattr(settings, 'id', None) is not None else None,
-            details={'changed_fields': sorted(data.keys())},
+            details={'changed_fields': sorted(raw_submitted_keys)},
         )
 
         flash("Hardware settings updated successfully! Restart services for changes to take effect.", "success")

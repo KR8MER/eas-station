@@ -73,10 +73,13 @@ def update_eas_decoder_monitor_settings():
         
         db.session.commit()
 
+        # Only record fields this handler actually processes/persists, so the
+        # tamper-evident entry can't misstate what changed from raw client input.
+        allowed_keys = {'enabled', 'stream_name'}
         AuditLogger.log_config_change(
             resource_type='eas_decoder_monitor_settings',
             resource_id=str(settings.id) if getattr(settings, 'id', None) is not None else None,
-            details={'changed_fields': sorted(data.keys())},
+            details={'changed_fields': sorted(k for k in data if k in allowed_keys)},
         )
 
         return jsonify({

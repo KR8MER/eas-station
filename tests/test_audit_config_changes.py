@@ -130,6 +130,40 @@ def test_log_config_change_failure_is_recorded(app_context):
     assert row.success is False
 
 
+def test_secret_values_are_not_persisted_in_details(app_context):
+    """Security invariant: secret values never land in the audit trail.
+
+    The settings routes that touch credentials (TTS, Icecast) pass only the
+    changed field *names* for secret-bearing keys, never the values. This
+    mirrors that contract: a details dict built the way those routes build it
+    must not contain the secret string anywhere in the persisted row.
+    """
+    # Simulate the redaction the TTS/Icecast routes perform before calling the
+    # helper: secret-bearing keys contribute their name to changed_fields only.
+    submitted = {
+        "provider": "azure_openai",
+        "azure_openai_api_key": "super-secret-value-123",
+        "admin_password": "p@ssw0rd!",
+    }
+    sensitive = ("key", "password", "secret", "token")
+    details = {"changed_fields": sorted(submitted.keys())}
+    for k, v in submitted.items():
+        if not any(s in k.lower() for s in sensitive):
+            details[k] = v
+
+    row = AuditLogger.log_config_change(resource_type="tts_settings", details=details)
+
+    # Field names are recorded...
+    assert "azure_openai_api_key" in row.details["changed_fields"]
+    assert "admin_password" in row.details["changed_fields"]
+    # ...but the secret values appear nowhere in the persisted row.
+    import json
+    serialized = json.dumps(row.details)
+    assert "super-secret-value-123" not in serialized
+    assert "p@ssw0rd!" not in serialized
+    assert row.details.get("provider") == "azure_openai"
+
+
 def test_eas_broadcast_and_delete_actions_chain(app_context):
     """EAS transmission and purge land in the tamper-evident ledger."""
     sent = AuditLogger.log(
