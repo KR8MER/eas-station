@@ -1578,10 +1578,34 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
             return jsonify({'message': 'No manual EAS activations matched the purge criteria.', 'deleted': 0})
 
         output_root = str(current_app.config.get('EAS_OUTPUT_DIR') or '').strip()
-        deleted_ids: List[int] = []
+        deleted_ids: List[int] = [activation.id for activation in activations]
+
+        # Fail-closed audit: deleting compliance records is irreversible, so
+        # write the tamper-evident ledger entry BEFORE removing anything. If
+        # the audit write fails we abort the purge entirely -- a missing audit
+        # row must never accompany a real deletion. (The send path is not
+        # fail-closed because by the time it audits the alert has already
+        # physically aired and cannot be un-broadcast.)
+        try:
+            AuditLogger.log(
+                action=AuditAction.ALERT_DELETED,
+                resource_type='manual_eas_activation',
+                details={
+                    'deleted_ids': deleted_ids,
+                    'deleted_count': len(deleted_ids),
+                },
+                raise_on_error=True,
+            )
+        except Exception as exc:
+            workflow_logger.critical(
+                'Aborting manual EAS purge: tamper-evident audit write failed: %s', exc
+            )
+            db.session.rollback()
+            return jsonify(
+                {'error': 'Audit log write failed; purge aborted to preserve the audit trail.'}
+            ), 500
 
         for activation in activations:
-            deleted_ids.append(activation.id)
             if output_root:
                 _remove_manual_eas_files(activation, output_root, workflow_logger)
             db.session.delete(activation)
@@ -1603,17 +1627,6 @@ def register_workflow_routes(bp, logger, eas_config) -> None:
             workflow_logger.error('Failed to purge manual EAS activations: %s', exc)
             db.session.rollback()
             return jsonify({'error': 'Failed to purge manual EAS activations.'}), 500
-
-        # Audit: deleting compliance records is a sensitive data operation;
-        # record who purged which activations in the tamper-evident ledger.
-        AuditLogger.log(
-            action=AuditAction.ALERT_DELETED,
-            resource_type='manual_eas_activation',
-            details={
-                'deleted_ids': deleted_ids,
-                'deleted_count': len(deleted_ids),
-            },
-        )
 
         return jsonify(
             {

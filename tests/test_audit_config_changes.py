@@ -164,6 +164,35 @@ def test_secret_values_are_not_persisted_in_details(app_context):
     assert row.details.get("provider") == "azure_openai"
 
 
+def test_raise_on_error_propagates_write_failure(app_context, monkeypatch):
+    """raise_on_error=True surfaces a failed ledger write; default swallows it.
+
+    This backs the fail-closed manual-EAS purge: if the tamper-evident row
+    cannot be written, the caller must be able to abort instead of silently
+    deleting compliance records with no audit trail.
+    """
+    def _boom(_entry):
+        raise RuntimeError("simulated signing failure")
+
+    monkeypatch.setattr(AuditLogger, "_chain_and_sign", staticmethod(_boom))
+
+    # Default behavior: failure is logged and swallowed (returns the entry).
+    AuditLogger.log(
+        action=AuditAction.ALERT_DELETED,
+        resource_type="manual_eas_activation",
+        details={"deleted_ids": [1]},
+    )
+
+    # Fail-closed behavior: the failure propagates so the caller can abort.
+    with pytest.raises(RuntimeError, match="simulated signing failure"):
+        AuditLogger.log(
+            action=AuditAction.ALERT_DELETED,
+            resource_type="manual_eas_activation",
+            details={"deleted_ids": [1]},
+            raise_on_error=True,
+        )
+
+
 def test_eas_broadcast_and_delete_actions_chain(app_context):
     """EAS transmission and purge land in the tamper-evident ledger."""
     sent = AuditLogger.log(
