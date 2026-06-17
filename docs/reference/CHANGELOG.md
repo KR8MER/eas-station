@@ -8,6 +8,25 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.108.1] - 2026-06-17 - Fail-closed audit for manual EAS purge
+
+### Changed
+- **Purging manual EAS activations is now fail-closed on the audit write.**
+  The `alert.deleted` audit row is written *before* any activation is removed,
+  and the purge aborts with a 500 if the tamper-evident ledger write fails —
+  a missing audit row can never accompany a real deletion of compliance
+  records (`webapp/eas/workflow.py`). The send path remains non-blocking by
+  design: by the time it audits, the alert has already physically aired and
+  cannot be un-broadcast.
+- `AuditLogger.log()` gained a `raise_on_error` flag (default `False`) so
+  callers that must be fail-closed can propagate ledger-write failures, and a
+  failed audit write is now logged at **critical** level so a missing
+  tamper-evident row is never silent (`app_core/auth/audit.py`).
+
+### Tests
+- `tests/test_audit_config_changes.py` — added coverage for `raise_on_error`
+  propagation vs. the default swallow-and-log behavior.
+
 ## [2.108.0] - 2026-06-17 - Audit configuration changes and EAS transmissions
 
 ### Added

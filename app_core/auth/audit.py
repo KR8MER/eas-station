@@ -248,6 +248,7 @@ class AuditLogger:
         details: Optional[Dict[str, Any]] = None,
         ip_address: Optional[str] = None,
         user_agent: Optional[str] = None,
+        raise_on_error: bool = False,
     ) -> AuditLog:
         """
         Create an audit log entry.
@@ -262,6 +263,11 @@ class AuditLogger:
             details: Additional context as dictionary
             ip_address: IP address (auto-detected if None)
             user_agent: User agent (auto-detected if None)
+            raise_on_error: When True, re-raise any failure to persist/sign the
+                row instead of swallowing it. Callers that must be fail-closed
+                on a missing audit entry (e.g. deleting compliance records)
+                pass this so they can abort the operation when the tamper-
+                evident ledger cannot be written.
 
         Returns:
             Created AuditLog instance
@@ -335,13 +341,17 @@ class AuditLogger:
             AuditLogger._chain_and_sign(log_entry)
             db.session.commit()
         except Exception as e:
+            # A failed audit write is a compliance concern -- log it loudly
+            # (critical) so a missing tamper-evident row is never silent.
             try:
-                current_app.logger.error(f"Failed to write audit log: {e}")
+                current_app.logger.critical(f"Failed to write audit log: {e}")
             except RuntimeError:
                 # Out-of-app-context callers (e.g. background workers) still
                 # need a usable logger; fall back to the module logger.
-                _module_logger.error("Failed to write audit log: %s", e)
+                _module_logger.critical("Failed to write audit log: %s", e)
             db.session.rollback()
+            if raise_on_error:
+                raise
 
         return log_entry
 
