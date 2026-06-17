@@ -1,0 +1,236 @@
+{# Traffic Analytics dashboard styles — extracted from the former
+   traffic_dashboard.html so the dashboard can be embedded natively as a
+   tab in the Security Center. #}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}">
+<style>
+    /* Appliance-style chrome mirroring the System Health & GNSS dashboards so
+       Traffic Analytics reads as part of the same operator UI. */
+    .traffic-dash-root {
+        --font-mono: 'JetBrains Mono', 'Roboto Mono', 'SFMono-Regular', ui-monospace, 'Courier New', monospace;
+    }
+
+    /* App-bar style header (title / pills / live-dot / controls inline). */
+    .traffic-dash-root .traffic-dash-header { padding-top: 14px; padding-bottom: 14px; }
+    /* The global .page-header sets overflow:hidden to clip its decorative glow,
+       which also clipped the Export dropdown menu (only the first item showed).
+       This appliance-style header doesn't use that glow, so drop it and let the
+       menu overflow the header box. */
+    .traffic-dash-root .traffic-dash-header { overflow: visible; }
+    .traffic-dash-root .traffic-dash-header::before { display: none; }
+    .traffic-dash-root .traffic-dash-header .dropdown-menu { z-index: 1030; }
+    .traffic-dash-root .traffic-dash-header .header-flex {
+        display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center;
+    }
+    .traffic-dash-root .traffic-dash-header .title {
+        font-size: 1.0rem; font-weight: 700; letter-spacing: 0.10em;
+        text-transform: uppercase; display: inline-flex; align-items: center;
+        gap: 10px; color: #fff;
+    }
+    .traffic-dash-root .traffic-dash-header .title i { font-size: 1.1rem; }
+    .traffic-dash-root .traffic-dash-header .node {
+        color: rgba(255,255,255,0.78);
+        font-family: var(--font-mono); font-size: 0.82rem;
+    }
+    .traffic-dash-root .traffic-dash-header .spacer { flex: 1 1 auto; }
+    .traffic-dash-root .traffic-dash-header select.form-select-sm { width: auto; }
+
+    .traffic-dash-root .health-pill {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 3px 10px; border-radius: 999px;
+        font-size: 0.74rem; font-weight: 600; letter-spacing: 0.04em;
+        border: 1px solid currentColor; background: rgba(0,0,0,0.22);
+        font-family: var(--font-mono);
+    }
+    .traffic-dash-root .health-pill.ok    { color: #6ee07a; }
+    .traffic-dash-root .health-pill.info  { color: #79c0ff; }
+    .traffic-dash-root .health-pill.muted { color: rgba(255,255,255,0.78); }
+    .traffic-dash-root .health-pill i { font-size: 0.72rem; opacity: 0.85; }
+
+    .traffic-dash-root .health-live-dot {
+        display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+        background: rgba(255,255,255,0.45); flex-shrink: 0;
+    }
+    @keyframes traffic-data-ping {
+        0%   { box-shadow: 0 0 0 0   rgba(63,185,80,0.80); background: #3fb950; }
+        70%  { box-shadow: 0 0 0 8px rgba(63,185,80,0);    background: #3fb950; }
+        100% { box-shadow: 0 0 0 0   rgba(63,185,80,0);    background: rgba(255,255,255,0.45); }
+    }
+    .traffic-dash-root .health-live-dot.ping { animation: traffic-data-ping 0.75s ease forwards; }
+
+    /* At-a-glance status strip. */
+    .traffic-dash-root .health-status-strip {
+        display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 8px; margin: 0 0 18px 0;
+    }
+    .traffic-dash-root .health-status-tile {
+        position: relative; padding: 10px 12px;
+        border: 1px solid var(--border-color, rgba(127,127,127,.22));
+        border-left: 3px solid var(--text-muted, #8b949e);
+        border-radius: 6px; background: var(--surface-color, rgba(127,127,127,.04));
+        display: flex; flex-direction: column; gap: 4px; min-width: 0;
+        animation: traffic-tile-in 0.35s ease both;
+    }
+    @keyframes traffic-tile-in {
+        from { opacity: 0; transform: translateY(6px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+    .traffic-dash-root .health-status-tile .lbl {
+        font-size: 0.66rem; font-weight: 700; letter-spacing: 0.10em;
+        text-transform: uppercase; color: var(--text-muted, #8b949e);
+        display: flex; align-items: center; gap: 5px;
+    }
+    .traffic-dash-root .health-status-tile .lbl i { font-size: 0.74rem; opacity: 0.7; }
+    .traffic-dash-root .health-status-tile .val {
+        font-family: var(--font-mono); font-size: 1.18rem; font-weight: 700;
+        line-height: 1.05; color: var(--text-color);
+        font-variant-numeric: tabular-nums; letter-spacing: 0.02em;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .traffic-dash-root .health-status-tile .sub {
+        font-size: 0.68rem; color: var(--text-muted, #8b949e);
+        font-family: var(--font-mono);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .traffic-dash-root .health-status-tile.sev-ok    { border-left-color: #3fb950; }
+    .traffic-dash-root .health-status-tile.sev-ok    .val { color: #3fb950; }
+    .traffic-dash-root .health-status-tile.sev-info  { border-left-color: #58a6ff; }
+    .traffic-dash-root .health-status-tile.sev-info  .val { color: #58a6ff; }
+    .traffic-dash-root .health-status-tile.sev-warn  { border-left-color: #d29922; background: rgba(210,153,34,0.06); }
+    .traffic-dash-root .health-status-tile.sev-warn  .val { color: #f6c343; }
+    .traffic-dash-root .health-status-tile.sev-fault { border-left-color: #f85149; background: rgba(248,81,73,0.07); }
+    .traffic-dash-root .health-status-tile.sev-fault .val { color: #f85149; }
+    @media (max-width: 1180px) {
+        .traffic-dash-root .health-status-strip { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    }
+    @media (max-width: 720px) {
+        .traffic-dash-root .health-status-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+    }
+
+    /* Section dividers: tiny-caps title + horizontal rule. */
+    .traffic-dash-root .health-section-head {
+        display: flex; align-items: center; gap: 12px; margin: 22px 0 10px 0;
+    }
+    .traffic-dash-root .health-section-head h2 {
+        font-size: 0.78rem; font-weight: 700; letter-spacing: 0.14em;
+        text-transform: uppercase; color: var(--text-muted, #8b949e);
+        margin: 0; white-space: nowrap;
+    }
+    .traffic-dash-root .health-section-head .rule {
+        flex: 1 1 auto; height: 1px;
+        background: linear-gradient(90deg, var(--border-color, rgba(127,127,127,.30)), transparent);
+    }
+
+    /* Card chrome: thin border, dense padding, tiny-caps header. */
+    .traffic-dash-root .card {
+        border: 1px solid var(--border-color, rgba(127,127,127,.25));
+        background: var(--surface-color, rgba(127,127,127,.04));
+        border-radius: 8px; box-shadow: none;
+    }
+    .traffic-dash-root .card > .card-header {
+        background: transparent;
+        border-bottom: 1px solid var(--border-color, rgba(127,127,127,.18));
+        padding: 10px 14px;
+    }
+    .traffic-dash-root .card > .card-header h5,
+    .traffic-dash-root .card > .card-header h6 {
+        margin: 0; font-size: 0.80rem; font-weight: 700; letter-spacing: 0.12em;
+        text-transform: uppercase; color: var(--text-color);
+        display: inline-flex; align-items: center; gap: 8px;
+    }
+    .traffic-dash-root .card > .card-header .section-icon {
+        color: var(--primary-color); font-size: 0.85rem; margin-right: 2px;
+    }
+    .traffic-dash-root .card > .card-body { padding: 14px 16px; }
+
+    .traffic-dash-root .chart-container { position: relative; height: 300px; }
+    .traffic-dash-root .chart-container.small { height: 250px; }
+    .traffic-dash-root .eas-table th {
+        text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.05em;
+        color: var(--text-secondary);
+    }
+    .traffic-dash-root .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+    /* Multicolor browser/OS logos rendered inline in tables. */
+    .traffic-dash-root .ti-logo { width: 1.15em; height: 1.15em; vertical-align: -0.2em; object-fit: contain; }
+    /* Country flag images (4x3) — small, with a hairline border so white flags
+       (e.g. JP) stay visible on light backgrounds. */
+    .traffic-dash-root .ti-flag { width: 1.33em; height: 1em; vertical-align: -0.12em; object-fit: cover;
+        border: 1px solid var(--border-color, rgba(127,127,127,.35)); border-radius: 2px; }
+
+    /* "vs previous period" delta badge on the at-a-glance tiles. */
+    .traffic-dash-root .hs-delta {
+        font-family: var(--font-mono); font-size: 0.66rem; font-weight: 700;
+        letter-spacing: 0.02em; display: inline-flex; align-items: center; gap: 3px;
+        margin-top: 1px;
+    }
+    .traffic-dash-root .hs-delta.up   { color: #3fb950; }
+    .traffic-dash-root .hs-delta.down { color: #f85149; }
+    .traffic-dash-root .hs-delta.flat { color: var(--text-muted, #8b949e); }
+    .traffic-dash-root .hs-delta i { font-size: 0.6rem; }
+    /* Tiny per-tile sparkline. The canvas MUST live in a fixed-height,
+       position:relative wrapper — a responsive Chart.js canvas with
+       maintainAspectRatio:false grows unbounded if its parent has no set
+       height (it feeds its own height back into the layout). */
+    .traffic-dash-root .hs-spark-wrap { position: relative; width: 100%; height: 26px; margin-top: 2px; }
+    .traffic-dash-root .hs-spark { display: block; }
+    /* Hard safety net: nothing inside an at-a-glance tile may ever exceed this
+       height, so a misbehaving chart can never stretch the page again. */
+    .traffic-dash-root .health-status-tile canvas { max-height: 30px; }
+
+    /* Leaflet world map — flag/dot markers sized by traffic share. */
+    .traffic-dash-root #trafficMap { height: 420px; border-radius: 6px; overflow: hidden; z-index: 0; }
+    .traffic-dash-root .leaflet-container { background: var(--surface-color, #0d1117); font-family: inherit; }
+    .traffic-dash-root .traffic-geo-dot {
+        border-radius: 50%; background: rgba(88,166,255,0.55);
+        border: 2px solid #58a6ff; box-shadow: 0 0 0 1px rgba(0,0,0,0.25);
+    }
+    .traffic-dash-root .traffic-geo-popup .ti-flag { width: 1.6em; height: 1.2em; }
+    /* Inline logo glyph sizing for file types / bots / referrers / search engines. */
+    .traffic-dash-root .ti-glyph { width: 1.15em; text-align: center; }
+
+    /* Active drill-down filter chips. */
+    .traffic-dash-root .traffic-filter-bar {
+        display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+        margin: 0 0 14px 0; padding: 10px 12px; border-radius: 6px;
+        border: 1px solid var(--border-color, rgba(127,127,127,.25));
+        background: var(--surface-color, rgba(127,127,127,.04));
+    }
+    .traffic-dash-root .traffic-filter-bar .fb-label {
+        font-size: 0.68rem; font-weight: 700; letter-spacing: 0.10em;
+        text-transform: uppercase; color: var(--text-muted, #8b949e);
+    }
+    .traffic-dash-root .filter-chip {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 3px 8px; border-radius: 999px; font-size: 0.74rem;
+        border: 1px solid var(--primary-color, #4e73df);
+        background: rgba(78,115,223,0.12); color: var(--text-color);
+        font-family: var(--font-mono);
+    }
+    .traffic-dash-root .filter-chip .fc-key { color: var(--text-muted, #8b949e); }
+    .traffic-dash-root .filter-chip button {
+        border: none; background: transparent; color: var(--danger-color, #e74a3b);
+        padding: 0; line-height: 1; cursor: pointer; font-size: 0.85rem;
+    }
+    /* A clickable (drill-down) cell. */
+    .traffic-dash-root .drill { cursor: pointer; }
+    .traffic-dash-root .drill:hover { text-decoration: underline; text-underline-offset: 2px; }
+
+    /* Anomaly banner. */
+    .traffic-dash-root .anomaly-list { display: flex; flex-direction: column; gap: 8px; margin: 0 0 18px 0; }
+    .traffic-dash-root .anomaly-item {
+        display: flex; align-items: flex-start; gap: 10px; padding: 10px 14px;
+        border-radius: 6px; border: 1px solid var(--border-color, rgba(127,127,127,.25));
+        border-left-width: 4px; background: var(--surface-color, rgba(127,127,127,.04));
+    }
+    .traffic-dash-root .anomaly-item.sev-critical { border-left-color: #f85149; background: rgba(248,81,73,0.08); }
+    .traffic-dash-root .anomaly-item.sev-warning  { border-left-color: #d29922; background: rgba(210,153,34,0.07); }
+    .traffic-dash-root .anomaly-item.sev-info     { border-left-color: #58a6ff; background: rgba(88,166,255,0.07); }
+    .traffic-dash-root .anomaly-item .ai-icon { font-size: 1.0rem; margin-top: 2px; }
+    .traffic-dash-root .anomaly-item.sev-critical .ai-icon { color: #f85149; }
+    .traffic-dash-root .anomaly-item.sev-warning  .ai-icon { color: #f6c343; }
+    .traffic-dash-root .anomaly-item.sev-info     .ai-icon { color: #58a6ff; }
+    .traffic-dash-root .anomaly-item .ai-title { font-weight: 700; }
+    .traffic-dash-root .anomaly-item .ai-detail { font-size: 0.82rem; color: var(--text-secondary, #8b949e); }
+    /* Per-table search box. */
+    .traffic-dash-root .table-search { max-width: 220px; }
+</style>

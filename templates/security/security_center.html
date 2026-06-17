@@ -4,6 +4,8 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/admin.css') }}">
+{# Traffic dashboard styles (the Traffic tab embeds the full dashboard) #}
+{% include 'security/_traffic_styles.html' %}
 <style>
     /* IP statistics list rows */
     .ip-stat-item {
@@ -41,20 +43,14 @@
         border: 1px solid var(--border-color);
     }
 
-    /* Traffic tab iframe fills the viewport area beneath the tabs */
-    .traffic-frame {
-        width: 100%;
-        min-height: 80vh;
-        border: 1px solid var(--border-color);
-        border-radius: var(--radius-md, 6px);
-        background: var(--surface-color);
-    }
-
     .security-tabs .nav-link { color: var(--text-color); }
     .security-tabs .nav-link.active {
         color: var(--primary-color);
         font-weight: 600;
     }
+    /* The Traffic tab embeds the full dashboard, which renders its own hero
+       header — drop the tab pane's top padding so it sits flush. */
+    #traffic-pane { padding-top: .5rem; }
 </style>
 {% endblock %}
 
@@ -66,7 +62,7 @@
     </div>
 </div>
 
-<div class="container">
+<div class="container-fluid">
     <!-- Tab navigation -->
     <ul class="nav nav-tabs security-tabs mb-3" id="securityTabs" role="tablist">
         <li class="nav-item" role="presentation">
@@ -96,148 +92,153 @@
     </ul>
 
     <div class="tab-content" id="securityTabsContent">
-        <!-- ============ TRAFFIC TAB (lazy iframe) ============ -->
+        <!-- ============ TRAFFIC TAB (native dashboard) ============ -->
         <div class="tab-pane fade show active" id="traffic-pane" role="tabpanel" aria-labelledby="traffic-tab">
-            <iframe id="trafficFrame" class="traffic-frame" title="Traffic Analytics"
-                    data-src="/traffic?embed=1" loading="lazy"></iframe>
+            {% include 'security/_traffic_content.html' %}
         </div>
 
         <!-- ============ MALICIOUS LOGINS TAB ============ -->
         <div class="tab-pane fade" id="malicious-pane" role="tabpanel" aria-labelledby="malicious-tab">
-            <div class="alert-danger-custom">
-                <h5><i class="bi bi-exclamation-triangle-fill"></i> Security Alert</h5>
-                <p class="mb-0">These login attempts were automatically flagged as malicious due to SQL injection or command injection patterns. Attacking IPs are auto-banned and logged for fail2ban integration.</p>
-            </div>
+            <div class="container">
+                <div class="alert-danger-custom">
+                    <h5><i class="bi bi-exclamation-triangle-fill"></i> Security Alert</h5>
+                    <p class="mb-0">These login attempts were automatically flagged as malicious due to SQL injection or command injection patterns. Attacking IPs are auto-banned and logged for fail2ban integration.</p>
+                </div>
 
-            <div class="stats-grid">
-                <div class="admin-stat-card stat-danger">
-                    <div class="stat-label">Total Attempts</div>
-                    <div class="stat-number" id="total-attempts">0</div>
-                    <small class="text-muted">Selected range</small>
-                </div>
-                <div class="admin-stat-card stat-danger">
-                    <div class="stat-label">Unique IPs</div>
-                    <div class="stat-number" id="unique-ips">0</div>
-                    <small class="text-muted">Attacking sources</small>
-                </div>
-                <div class="admin-stat-card stat-danger">
-                    <div class="stat-label">Today</div>
-                    <div class="stat-number" id="today-attempts">0</div>
-                    <small class="text-muted">Last 24h</small>
-                </div>
-            </div>
-
-            <div class="admin-filter-card">
-                <div class="row g-2">
-                    <div class="col-md-4">
-                        <label>Time Range</label>
-                        <select class="form-select" id="days-filter">
-                            <option value="1">Last 24 hours</option>
-                            <option value="7" selected>Last 7 days</option>
-                            <option value="30">Last 30 days</option>
-                            <option value="90">Last 90 days</option>
-                        </select>
+                <div class="stats-grid">
+                    <div class="admin-stat-card stat-danger">
+                        <div class="stat-label">Total Attempts</div>
+                        <div class="stat-number" id="total-attempts">0</div>
+                        <small class="text-muted">Selected range</small>
                     </div>
-                    <div class="col-md-4">
-                        <label>Per Page</label>
-                        <select class="form-select" id="per-page-filter">
-                            <option value="25">25</option>
-                            <option value="50" selected>50</option>
-                            <option value="100">100</option>
-                        </select>
+                    <div class="admin-stat-card stat-danger">
+                        <div class="stat-label">Unique IPs</div>
+                        <div class="stat-number" id="unique-ips">0</div>
+                        <small class="text-muted">Attacking sources</small>
                     </div>
-                    <div class="col-md-4 d-flex align-items-end">
-                        <button class="btn btn-primary w-100" onclick="loadAttempts()">
-                            <i class="bi bi-arrow-clockwise"></i> Refresh
-                        </button>
+                    <div class="admin-stat-card stat-danger">
+                        <div class="stat-label">Today</div>
+                        <div class="stat-number" id="today-attempts">0</div>
+                        <small class="text-muted">Last 24h</small>
                     </div>
                 </div>
-            </div>
 
-            <div class="admin-accent-card accent-danger mb-3">
-                <h4 class="mb-3"><i class="bi bi-globe"></i> Top Attacking IP Addresses</h4>
-                <div id="ip-statistics">
-                    <p class="text-center text-muted">Loading statistics...</p>
+                <div class="admin-filter-card">
+                    <div class="row g-2">
+                        <div class="col-md-4">
+                            <label>Time Range</label>
+                            <select class="form-select" id="days-filter">
+                                <option value="1">Last 24 hours</option>
+                                <option value="7" selected>Last 7 days</option>
+                                <option value="30">Last 30 days</option>
+                                <option value="90">Last 90 days</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label>Per Page</label>
+                            <select class="form-select" id="per-page-filter">
+                                <option value="25">25</option>
+                                <option value="50" selected>50</option>
+                                <option value="100">100</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 d-flex align-items-end">
+                            <button class="btn btn-primary w-100" onclick="SC.loadAttempts()">
+                                <i class="bi bi-arrow-clockwise"></i> Refresh
+                            </button>
+                        </div>
+                    </div>
                 </div>
-            </div>
 
-            <div class="admin-table-card">
-                <div class="table-responsive">
-                    <table class="table eas-table mb-0">
-                        <thead>
-                            <tr>
-                                <th>Timestamp</th>
-                                <th>IP Address</th>
-                                <th>Username Attempted</th>
-                                <th>Type</th>
-                                <th>Details</th>
-                            </tr>
-                        </thead>
-                        <tbody id="attempts-tbody">
-                            <tr><td colspan="5" class="text-center text-muted">Loading attempts...</td></tr>
-                        </tbody>
-                    </table>
+                <div class="admin-accent-card accent-danger mb-3">
+                    <h4 class="mb-3"><i class="bi bi-globe"></i> Top Attacking IP Addresses</h4>
+                    <div id="ip-statistics">
+                        <p class="text-center text-muted">Loading statistics...</p>
+                    </div>
                 </div>
-                <div class="pagination-container">
-                    <div id="pagination-info">Showing 0 of 0 attempts</div>
-                    <div id="pagination-controls"></div>
+
+                <div class="admin-table-card">
+                    <div class="table-responsive">
+                        <table class="table eas-table mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Timestamp</th>
+                                    <th>IP Address</th>
+                                    <th>Username Attempted</th>
+                                    <th>Type</th>
+                                    <th>Details</th>
+                                </tr>
+                            </thead>
+                            <tbody id="attempts-tbody">
+                                <tr><td colspan="5" class="text-center text-muted">Loading attempts...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="pagination-container">
+                        <div id="pagination-info">Showing 0 of 0 attempts</div>
+                        <div id="pagination-controls"></div>
+                    </div>
                 </div>
             </div>
         </div>
 
         <!-- ============ BANNED IPS TAB ============ -->
         <div class="tab-pane fade" id="bans-pane" role="tabpanel" aria-labelledby="bans-tab">
-            <div class="admin-accent-card accent-danger mb-4">
-                <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-                    <h4 class="mb-0"><i class="bi bi-shield-lock"></i> IP Filter Management</h4>
-                    <div>
-                        <button class="btn btn-success btn-sm" onclick="showAddFilterModal('allowlist')">
-                            <i class="bi bi-plus-circle"></i> Add Allowlist
-                        </button>
-                        <button class="btn btn-danger btn-sm" onclick="showAddFilterModal('blocklist')">
-                            <i class="bi bi-ban"></i> Ban IP
-                        </button>
-                        <button class="btn btn-secondary btn-sm" onclick="loadIPFilters()">
-                            <i class="bi bi-arrow-clockwise"></i> Refresh
-                        </button>
-                        <button class="btn btn-outline-secondary btn-sm" onclick="cleanupExpiredFilters()">
-                            <i class="bi bi-trash3"></i> Clean Expired
-                        </button>
+            <div class="container">
+                <div class="admin-accent-card accent-danger mb-4">
+                    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                        <h4 class="mb-0"><i class="bi bi-shield-lock"></i> IP Filter Management</h4>
+                        <div>
+                            <button class="btn btn-success btn-sm" onclick="SC.showAddFilterModal('allowlist')">
+                                <i class="bi bi-plus-circle"></i> Add Allowlist
+                            </button>
+                            <button class="btn btn-danger btn-sm" onclick="SC.showAddFilterModal('blocklist')">
+                                <i class="bi bi-ban"></i> Ban IP
+                            </button>
+                            <button class="btn btn-secondary btn-sm" onclick="SC.loadIPFilters()">
+                                <i class="bi bi-arrow-clockwise"></i> Refresh
+                            </button>
+                            <button class="btn btn-outline-secondary btn-sm" onclick="SC.cleanupExpiredFilters()">
+                                <i class="bi bi-trash3"></i> Clean Expired
+                            </button>
+                        </div>
                     </div>
-                </div>
-                <p class="text-muted small">
-                    <i class="bi bi-info-circle"></i> Banned IPs are blocked from the <strong>entire</strong>
-                    application, not just the login page. Loopback (127.0.0.1) is always exempt so you can never
-                    lock the appliance out of itself.
-                </p>
-                <div id="ip-filters-list">
-                    <p class="text-center text-muted">Loading IP filters...</p>
+                    <p class="text-muted small">
+                        <i class="bi bi-info-circle"></i> Banned IPs are blocked from the <strong>entire</strong>
+                        application, not just the login page. Loopback (127.0.0.1) is always exempt so you can never
+                        lock the appliance out of itself.
+                    </p>
+                    <div id="ip-filters-list">
+                        <p class="text-center text-muted">Loading IP filters...</p>
+                    </div>
                 </div>
             </div>
         </div>
 
         <!-- ============ FAIL2BAN TAB ============ -->
         <div class="tab-pane fade" id="fail2ban-pane" role="tabpanel" aria-labelledby="fail2ban-tab">
-            <div class="admin-warning-box mb-3">
-                <h5><i class="bi bi-info-circle-fill"></i> fail2ban Integration</h5>
-                <p class="mb-0">Malicious and failed login attempts are written to the security log in a
-                fail2ban-parseable format. Deploy the configuration below on the host to have fail2ban
-                automatically ban attacking IPs at the firewall level (in addition to the application-level
-                bans managed on the <strong>Banned IPs</strong> tab).</p>
-            </div>
+            <div class="container">
+                <div class="admin-warning-box mb-3">
+                    <h5><i class="bi bi-info-circle-fill"></i> fail2ban Integration</h5>
+                    <p class="mb-0">Malicious and failed login attempts are written to the security log in a
+                    fail2ban-parseable format. Deploy the configuration below on the host to have fail2ban
+                    automatically ban attacking IPs at the firewall level (in addition to the application-level
+                    bans managed on the <strong>Banned IPs</strong> tab).</p>
+                </div>
 
-            <div class="admin-accent-card accent-danger">
-                <h6>1. Jail Configuration <code>/etc/fail2ban/jail.local</code></h6>
-                <div class="code-block" id="jail-config"></div>
-                <button class="btn btn-sm btn-secondary" onclick="copyToClipboard('jail-config')">
-                    <i class="bi bi-clipboard"></i> Copy Jail Config
-                </button>
+                <div class="admin-accent-card accent-danger">
+                    <h6>1. Jail Configuration <code>/etc/fail2ban/jail.local</code></h6>
+                    <div class="code-block" id="jail-config"></div>
+                    <button class="btn btn-sm btn-secondary" onclick="SC.copyToClipboard('jail-config')">
+                        <i class="bi bi-clipboard"></i> Copy Jail Config
+                    </button>
 
-                <h6 class="mt-4">2. Filter Configuration <code>/etc/fail2ban/filter.d/eas-station-malicious.conf</code></h6>
-                <div class="code-block" id="filter-config"></div>
-                <button class="btn btn-sm btn-secondary" onclick="copyToClipboard('filter-config')">
-                    <i class="bi bi-clipboard"></i> Copy Filter Config
-                </button>
+                    <h6 class="mt-4">2. Filter Configuration <code>/etc/fail2ban/filter.d/eas-station-malicious.conf</code></h6>
+                    <div class="code-block" id="filter-config"></div>
+                    <button class="btn btn-sm btn-secondary" onclick="SC.copyToClipboard('filter-config')">
+                        <i class="bi bi-clipboard"></i> Copy Filter Config
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -275,7 +276,7 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" onclick="submitIPFilter()">Save</button>
+                <button type="button" class="btn btn-primary" onclick="SC.submitIPFilter()">Save</button>
             </div>
         </div>
     </div>
@@ -283,5 +284,9 @@
 {% endblock %}
 
 {% block scripts %}
+{# Traffic dashboard scripts (Chart.js / Leaflet / jsPDF + dashboard logic). #}
+{% include 'security/_traffic_scripts.html' %}
+{# Security Center tab controller — namespaced under window.SC to avoid any
+   collision with the traffic dashboard's globals above. #}
 <script src="{{ url_for('static', filename='js/pages/security_center.js') }}?v={{ static_asset_version }}"></script>
 {% endblock %}
