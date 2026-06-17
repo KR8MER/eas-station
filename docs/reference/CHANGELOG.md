@@ -13,15 +13,17 @@ tracks releases under the 2.x series.
 ### Added
 - **Security Center** (`/security/center`, `templates/security/security_center.html`,
   `static/js/pages/security_center.js`) — a single tabbed page combining four
-  previously-scattered areas: **Traffic** (the existing analytics dashboard,
-  embedded via a chrome-free iframe), **Malicious Logins**, **Banned IPs** (IP
-  allowlist/blocklist management with an explicit "Ban IP" action and one-click
-  ban from the attacking-IP stats), and **fail2ban** configuration. Reachable
-  from Tools → Analytics → *Security Center* (replacing the standalone Traffic
-  Analytics link) and from the Admin and Settings hubs.
-- **Embed mode for any page** — appending `?embed=1` renders a template without
-  the navbar, system banner, and footer (`templates/base.html`), enabling clean
-  iframe embedding (used by the Security Center's Traffic tab).
+  previously-scattered areas: **Traffic**, **Malicious Logins**, **Banned IPs**
+  (IP allowlist/blocklist management with an explicit "Ban IP" action and
+  one-click ban from the attacking-IP stats), and **fail2ban** configuration.
+  Reachable from Tools → Analytics → *Security Center* (replacing the standalone
+  Traffic Analytics link) and from the Admin and Settings hubs.
+- The full Traffic Analytics dashboard is rendered **natively** in the Traffic
+  tab (not in an iframe). The former `traffic_dashboard.html` was split into
+  reusable partials (`templates/security/_traffic_content.html`,
+  `_traffic_scripts.html`, `_traffic_styles.html`) that the Security Center
+  includes directly; the page's JS is wrapped in an IIFE exporting only
+  `window.SC.*` handlers so it can never collide with the dashboard's globals.
 
 ### Fixed
 - **Banning now actually blocks access.** Previously `IPFilter.is_ip_allowed`
@@ -36,9 +38,11 @@ tracks releases under the 2.x series.
   values so it can never raise inside the per-request gate.
 
 ### Changed
-- The legacy `/security/malicious-logins` route now redirects to the Security
-  Center (Malicious Logins tab); the standalone `templates/admin/malicious_logins.html`
-  page was removed (superseded by the unified page).
+- The legacy `/security/malicious-logins` and `/traffic` routes now redirect to
+  the Security Center (Malicious Logins / Traffic tabs) so traffic has exactly
+  one home; the standalone `templates/admin/malicious_logins.html` and
+  `templates/traffic_dashboard.html` pages were removed (superseded by the
+  unified page and its traffic partials).
 
 ### Tests
 - Added `tests/test_ip_ban_enforcement.py` covering `IPFilter.is_ip_blocked`

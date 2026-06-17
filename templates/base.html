@@ -84,15 +84,8 @@
     <!-- Toast Container -->
     <div class="toast-container"></div>
 
-    {# `?embed=1` renders the page chrome-free (no navbar/banner/footer) so it
-       can be embedded in an iframe — e.g. the Traffic tab of the Security
-       Center. The set captures the flag once for reuse below. #}
-    {% set embed_mode = request.args.get('embed') %}
-
     <!-- Navigation -->
-    {% if not embed_mode %}
     {% include 'components/navbar.html' %}
-    {% endif %}
 
 
     <div id="system-status-banner" class="system-status-banner alert alert-warning d-none" role="alert" aria-live="polite">
@@ -149,7 +142,6 @@
     </main>
 
     <!-- Footer -->
-    {% if not embed_mode %}
     <footer class="footer">
         <div class="container-fluid">
             <!-- Main Footer Content -->
@@ -264,7 +256,6 @@
             </div>
         </div>
     </footer>
-    {% endif %}
 
     <!-- SCRIPTS - Load order is important!
          All scripts use `defer` so they download in parallel during HTML

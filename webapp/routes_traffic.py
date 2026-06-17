@@ -30,7 +30,7 @@ here so the whole feature is configurable from the web UI.
 import os
 from typing import Any, Dict
 
-from flask import Flask, jsonify, render_template, request, session
+from flask import Flask, jsonify, redirect, render_template, request, session, url_for
 
 from app_core.analytics import traffic_stats
 from app_core.analytics.traffic_filters import TrafficFilters
@@ -75,8 +75,10 @@ def register(app: Flask, logger) -> None:
     @app.route("/traffic")
     @require_permission("logs.view")
     def traffic_dashboard_page():
-        """Render the Traffic Analytics dashboard."""
-        return render_template("traffic_dashboard.html")
+        """Legacy route — the dashboard now lives in the unified Security
+        Center (Traffic tab). Redirect so old links/bookmarks keep working
+        and traffic has exactly one home."""
+        return redirect(url_for("security.view_security_center") + "#traffic")
 
     # ------------------------------------------------------------------ data
     @app.route("/api/traffic/dashboard", methods=["GET"])
