@@ -28,7 +28,7 @@ Provides:
 """
 
 import ipaddress
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Tuple
 from enum import Enum
 
@@ -134,6 +134,53 @@ class IPFilter(db.Model):
         # No allowlist, not blocked
         return True, None
     
+    @staticmethod
+    def is_ip_blocked(ip_address: str) -> Tuple[bool, Optional[str]]:
+        """
+        Check whether an IP address is on the active blocklist.
+
+        Unlike :meth:`is_ip_allowed`, this checks ONLY the blocklist and never
+        applies allowlist-exclusivity ("deny everything not explicitly
+        allowed"). It is intended for the global per-request ban gate, where
+        accidentally enabling allowlist-only mode for every visitor would lock
+        the entire site out. Expired blocklist entries are deactivated as a
+        side effect, mirroring :meth:`is_ip_allowed`.
+
+        Returns:
+            Tuple of (is_blocked, reason_if_blocked)
+        """
+        if not ip_address:
+            return False, None
+
+        try:
+            ipaddress.ip_address(ip_address)
+        except ValueError:
+            return False, None  # Invalid IP, let other systems handle it
+
+        blocked_filters = IPFilter.query.filter_by(
+            filter_type=IPFilterType.BLOCKLIST.value,
+            is_active=True
+        ).all()
+
+        for filter_entry in blocked_filters:
+            # Deactivate expired bans so they stop matching. Coerce naive
+            # timestamps (e.g. from SQLite, which drops tzinfo) to UTC so the
+            # comparison can never raise inside the per-request ban gate.
+            expires_at = filter_entry.expires_at
+            if expires_at is not None:
+                if expires_at.tzinfo is None:
+                    expires_at = expires_at.replace(tzinfo=timezone.utc)
+                if utc_now() > expires_at:
+                    filter_entry.is_active = False
+                    db.session.add(filter_entry)
+                    db.session.commit()
+                    continue
+
+            if IPFilter._ip_matches(ip_address, filter_entry.ip_address):
+                return True, filter_entry.reason
+
+        return False, None
+
     @staticmethod
     def _ip_matches(ip_address: str, filter_pattern: str) -> bool:
         """

@@ -396,16 +396,24 @@
                             </div>
                         </div>
 
-                        <!-- Traffic Analytics -->
+                        <!-- Security Center -->
                         <div class="accordion-item">
-                            <h2 class="accordion-header" id="trafficAnalyticsHeading">
-                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#trafficAnalyticsCollapse">
-                                    <i class="fas fa-chart-area me-2"></i>Traffic Analytics (Web Stats)
+                            <h2 class="accordion-header" id="securityCenterHeading">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#securityCenterCollapse">
+                                    <i class="fas fa-shield-halved me-2"></i>Security Center (Traffic, Logins, IP Bans &amp; fail2ban)
                                 </button>
                             </h2>
-                            <div id="trafficAnalyticsCollapse" class="accordion-collapse collapse" data-bs-parent="#operationsAccordion">
+                            <div id="securityCenterCollapse" class="accordion-collapse collapse" data-bs-parent="#operationsAccordion">
                                 <div class="accordion-body">
-                                    <p>A webalizer/awstats-style dashboard for the station's web traffic. Navigate to <strong>Tools → Analytics → Traffic Analytics</strong> (<code>/traffic</code>), or use the time-range selector in the header to switch between the last 24 hours and the last year, or pick <strong>Custom range…</strong> to choose explicit start/end dates.</p>
+                                    <p>The <strong>Security Center</strong> (<strong>Tools → Analytics → Security Center</strong>, <code>/security/center</code>) brings four related security views together on one tabbed page:</p>
+                                    <ul>
+                                        <li><strong>Traffic</strong> — the full Traffic Analytics dashboard (described below), embedded inline.</li>
+                                        <li><strong>Malicious Logins</strong> — SQL/command-injection login attempts, with per-IP attack statistics and a one-click <strong>Ban</strong> button for any attacking source.</li>
+                                        <li><strong>Banned IPs</strong> — manage the IP <strong>allowlist</strong> and <strong>blocklist</strong>: ban an IP or CIDR range (permanently or for a set number of hours), toggle entries on/off, and clean up expired bans. <strong>A ban now blocks the banned IP from the entire application — not just the login page.</strong> Loopback (<code>127.0.0.1</code>) is always exempt so you can never lock the appliance out of itself.</li>
+                                        <li><strong>fail2ban</strong> — copy-paste-ready jail and filter configuration for host-level banning at the firewall, complementing the application-level bans.</li>
+                                    </ul>
+                                    <p>The remainder of this section describes the <strong>Traffic</strong> tab in detail.</p>
+                                    <p>A webalizer/awstats-style dashboard for the station's web traffic. Use the time-range selector in the header to switch between the last 24 hours and the last year, or pick <strong>Custom range…</strong> to choose explicit start/end dates.</p>
                                     <ul>
                                         <li><strong>Custom date ranges &amp; drill-down:</strong> pick a custom start/end window, then <strong>click any country, path, status code, browser, OS, HTTP method, or visitor IP</strong> to filter the entire dashboard to matching traffic. Active filters appear as removable chips at the top; click ✕ on a chip (or "Clear all") to remove them. The big tables (Top Pages, Top Visitors, Recent Requests, Error URLs) also have a <strong>live text filter</strong> box.</li>
                                         <li><strong>Anomaly detection:</strong> a banner highlights operationally interesting deviations — elevated error rate, 5xx surges, likely vulnerability scanners (many 4xx from one IP), login brute-force bursts, and traffic spikes. Thresholds are tunable under <strong>Settings → Anomaly Detection</strong>, and the same data is available at <code>/api/traffic/anomalies</code>.</li>

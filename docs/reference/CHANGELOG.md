@@ -8,6 +8,43 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.107.0] - 2026-06-17 - Unified Security Center + real IP-ban enforcement
+
+### Added
+- **Security Center** (`/security/center`, `templates/security/security_center.html`,
+  `static/js/pages/security_center.js`) — a single tabbed page combining four
+  previously-scattered areas: **Traffic** (the existing analytics dashboard,
+  embedded via a chrome-free iframe), **Malicious Logins**, **Banned IPs** (IP
+  allowlist/blocklist management with an explicit "Ban IP" action and one-click
+  ban from the attacking-IP stats), and **fail2ban** configuration. Reachable
+  from Tools → Analytics → *Security Center* (replacing the standalone Traffic
+  Analytics link) and from the Admin and Settings hubs.
+- **Embed mode for any page** — appending `?embed=1` renders a template without
+  the navbar, system banner, and footer (`templates/base.html`), enabling clean
+  iframe embedding (used by the Security Center's Traffic tab).
+
+### Fixed
+- **Banning now actually blocks access.** Previously `IPFilter.is_ip_allowed`
+  was only consulted inside the login POST handler, so a "banned" IP was merely
+  prevented from signing in while it could still browse every page and call
+  every API. A global `before_request` gate in `app.py` now denies blocklisted
+  IPs (HTTP 403) across the entire application. Loopback (`127.0.0.1`/`::1`) and
+  `/static/` assets are always exempt so an over-broad ban can never lock the
+  appliance out of itself. Backed by a new `IPFilter.is_ip_blocked` helper
+  (`app_core/auth/ip_filter.py`) that checks only the blocklist — it never
+  applies allowlist-exclusivity — and tolerates timezone-naive `expires_at`
+  values so it can never raise inside the per-request gate.
+
+### Changed
+- The legacy `/security/malicious-logins` route now redirects to the Security
+  Center (Malicious Logins tab); the standalone `templates/admin/malicious_logins.html`
+  page was removed (superseded by the unified page).
+
+### Tests
+- Added `tests/test_ip_ban_enforcement.py` covering `IPFilter.is_ip_blocked`
+  (exact + CIDR matches, expired-ban deactivation, inactive entries, and the
+  safety property that an allowlist entry must not turn the gate into deny-all).
+
 ## [2.106.0] - 2026-06-16 - Traffic Analytics: IPv6 reverse-DNS reliability + IPv4/IPv6 breakdown
 
 ### Added
