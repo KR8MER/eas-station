@@ -35,6 +35,7 @@ from werkzeug.exceptions import BadRequest
 
 from app_core.location import get_location_settings
 from app_core.auth.roles import require_permission
+from app_core.auth.audit import AuditLogger
 
 logger = logging.getLogger(__name__)
 
@@ -457,13 +458,18 @@ def update_environment_variables():
 
         # Update variables
         updates = data['variables']
+        # Track which keys actually changed (with secret values redacted) so
+        # the audit trail records who changed what without leaking secrets.
+        changed_fields: List[str] = []
         for key, value in updates.items():
             # Validate key exists in our configuration
             found = False
+            matched_config: Dict[str, Any] | None = None
             for cat_data in ENV_CATEGORIES.values():
                 for var_config in cat_data['variables']:
                     if var_config['key'] == key:
                         found = True
+                        matched_config = var_config
                         logger.debug(f'Found variable {key} in category configuration')
 
                         # Don't update if it's a masked sensitive value
@@ -508,14 +514,27 @@ def update_environment_variables():
 
             # Update value
             old_value = env_vars.get(key, '')
-            env_vars[key] = str(value)
-            logger.debug(f'Updated {key}: {len(old_value)} chars -> {len(str(value))} chars')
+            new_value = str(value)
+            if new_value != old_value:
+                changed_fields.append(key)
+            env_vars[key] = new_value
+            logger.debug(f'Updated {key}: {len(old_value)} chars -> {len(new_value)} chars')
 
         # Write to .env file
         env_path = get_env_file_path()
         logger.info(f'Writing environment variables to {env_path}')
         write_env_file(env_vars)
         logger.info(f'Successfully updated {len(updates)} environment variables and wrote to {env_path}')
+
+        # Audit: record who changed which environment variables (names only,
+        # never values, so secrets stay out of the audit trail).
+        AuditLogger.log_config_change(
+            resource_type='environment',
+            details={
+                'changed_fields': changed_fields,
+                'submitted_count': len(updates),
+            },
+        )
 
         return jsonify({
             'success': True,

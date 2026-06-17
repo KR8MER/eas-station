@@ -36,6 +36,7 @@ from werkzeug.exceptions import BadRequest
 
 from app_core.auth.decorators import require_auth
 from app_core.auth.roles import require_permission
+from app_core.auth.audit import AuditLogger
 from app_core.extensions import db
 from app_core.certbot_settings import (
     get_certbot_settings,
@@ -739,6 +740,12 @@ def update_settings():
         settings = update_certbot_settings(data)
 
         logger.info(f"Certbot settings updated successfully")
+
+        AuditLogger.log_config_change(
+            resource_type='certbot_settings',
+            resource_id=str(settings.id) if getattr(settings, 'id', None) is not None else None,
+            details={'changed_fields': sorted(data.keys())},
+        )
 
         return jsonify({
             "success": True,

@@ -36,6 +36,7 @@ from flask import Blueprint, flash, jsonify, redirect, render_template, request,
 from werkzeug.exceptions import BadRequest
 
 from app_core.auth.roles import require_permission
+from app_core.auth.audit import AuditLogger
 from app_core.extensions import db
 from app_core.icecast_settings import (
     get_icecast_settings,
@@ -278,6 +279,19 @@ def update_settings():
 
         logger.info(f"Icecast settings updated successfully. Config update: {config_message}")
 
+        # Audit: record who changed Icecast settings. Passwords are stored as
+        # field names only so credentials never enter the audit trail.
+        _sensitive = ('password', 'secret', 'token')
+        audit_details: Dict[str, Any] = {'changed_fields': sorted(data.keys())}
+        for _k, _v in data.items():
+            if not any(_s in _k.lower() for _s in _sensitive):
+                audit_details[_k] = _v
+        AuditLogger.log_config_change(
+            resource_type='icecast_settings',
+            resource_id=str(settings.id) if getattr(settings, 'id', None) is not None else None,
+            details=audit_details,
+        )
+
         if config_success:
             message = "Icecast settings updated and service restarted successfully."
         else:
@@ -496,7 +510,14 @@ def regenerate_passwords():
         invalidate_icecast_settings_cache()
         
         logger.info(f"Icecast passwords regenerated successfully. Config update: {config_message}")
-        
+
+        # Audit: record the credential rotation (never the new passwords).
+        AuditLogger.log_config_change(
+            resource_type='icecast_settings',
+            resource_id=str(settings.id) if getattr(settings, 'id', None) is not None else None,
+            details={'action': 'regenerated_passwords', 'config_updated': config_success},
+        )
+
         # Build response message
         if config_success:
             message = "Passwords regenerated and Icecast server updated successfully."

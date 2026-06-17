@@ -27,6 +27,7 @@ from app_core.extensions import db
 from app_core.models import PollerSettings
 from app_core.auth.decorators import require_auth
 from app_core.auth.roles import require_permission
+from app_core.auth.audit import AuditLogger
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +119,21 @@ def update_poller_settings():
             "cap_endpoints=%d, ipaws_urls=%d",
             settings.enabled, settings.poll_interval_sec, settings.cap_timeout,
             len(settings.cap_endpoints), len(settings.ipaws_feed_urls),
+        )
+
+        AuditLogger.log_config_change(
+            resource_type='poller_settings',
+            resource_id=str(settings.id) if settings.id is not None else None,
+            details={
+                'enabled': settings.enabled,
+                'poll_interval_sec': settings.poll_interval_sec,
+                'cap_timeout': settings.cap_timeout,
+                'noaa_user_agent': settings.noaa_user_agent,
+                'cap_endpoint_count': len(settings.cap_endpoints),
+                'ipaws_feed_url_count': len(settings.ipaws_feed_urls),
+                'ipaws_default_lookback_hours': settings.ipaws_default_lookback_hours,
+                'log_fetched_alerts': settings.log_fetched_alerts,
+            },
         )
 
         return jsonify({'success': True, 'message': 'Poller settings updated successfully',

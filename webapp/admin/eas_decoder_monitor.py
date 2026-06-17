@@ -13,6 +13,7 @@ import logging
 from app_core import db
 from app_core.models import EASDecoderMonitorSettings
 from app_core.auth.roles import require_permission
+from app_core.auth.audit import AuditLogger
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +72,16 @@ def update_eas_decoder_monitor_settings():
             settings.stream_name = stream_name
         
         db.session.commit()
-        
+
+        # Only record fields this handler actually processes/persists, so the
+        # tamper-evident entry can't misstate what changed from raw client input.
+        allowed_keys = {'enabled', 'stream_name'}
+        AuditLogger.log_config_change(
+            resource_type='eas_decoder_monitor_settings',
+            resource_id=str(settings.id) if getattr(settings, 'id', None) is not None else None,
+            details={'changed_fields': sorted(k for k in data if k in allowed_keys)},
+        )
+
         return jsonify({
             'message': 'EAS decoder monitor settings updated',
             'settings': settings.to_dict()
