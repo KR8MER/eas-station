@@ -2,40 +2,38 @@
    traffic_dashboard.html content block, now rendered inside the Security
    Center's Traffic tab. #}
 <div class="traffic-dash-root">
-<div class="page-header traffic-dash-header" role="region" aria-label="Traffic analytics header">
-    <div class="container-fluid">
-        <div class="header-flex">
-            <span class="title"><i class="fas fa-chart-area"></i> Traffic Analytics</span>
-            <span class="node">Window:&nbsp;<span id="range-label">30 days</span></span>
-            <span class="health-pill ok" id="pill-pageviews" title="Page views in window"><i class="fas fa-eye"></i> <span>—</span> views</span>
-            <span class="health-pill info" id="pill-visitors" title="Unique visitors in window"><i class="fas fa-users"></i> <span>—</span> visitors</span>
-            <span class="health-live-dot" id="traffic-live-dot" title="Last data received"></span>
-            <span class="spacer"></span>
-            <select id="rangeSelect" class="form-select form-select-sm" aria-label="Time range">
-                <option value="1">Last 24 hours</option>
-                <option value="7">Last 7 days</option>
-                <option value="30" selected>Last 30 days</option>
-                <option value="90">Last 90 days</option>
-                <option value="365">Last year</option>
-                <option value="custom">Custom range…</option>
-            </select>
-            <span id="customRangeControls" class="d-none" style="display:none;gap:6px;align-items:center;">
-                <input type="date" id="rangeStart" class="form-control form-control-sm" aria-label="Start date" style="width:auto;">
-                <span class="text-white-50">→</span>
-                <input type="date" id="rangeEnd" class="form-control form-control-sm" aria-label="End date" style="width:auto;">
-                <button class="btn btn-sm btn-outline-light" onclick="applyCustomRange()"><i class="fas fa-check me-1"></i>Apply</button>
-            </span>
-            <button class="btn btn-sm btn-outline-light" onclick="loadDashboard()"><i class="fas fa-sync-alt me-1"></i>Refresh</button>
-            <div class="btn-group">
-                <button class="btn btn-sm btn-outline-light dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false"><i class="fas fa-file-export me-1"></i>Export</button>
-                <ul class="dropdown-menu dropdown-menu-end">
-                    <li><a class="dropdown-item" href="#" onclick="exportTrafficCsv(); return false;"><i class="fas fa-file-csv me-2"></i>Excel / CSV</a></li>
-                    <li><a class="dropdown-item" href="#" onclick="exportTrafficPdf(); return false;"><i class="fas fa-file-pdf me-2"></i>PDF report</a></li>
-                </ul>
-            </div>
-            <button class="btn btn-sm btn-outline-light" data-bs-toggle="modal" data-bs-target="#trafficSettingsModal"><i class="fas fa-cog me-1"></i>Settings</button>
-        </div>
+{# Slim control toolbar — replaces the former full-width dark hero header so the
+   dashboard sits flush under the Security Center tab strip (no double header).
+   Every id/handler the dashboard JS relies on is preserved. #}
+<div class="traffic-toolbar">
+    <span class="traffic-toolbar-label">
+        <span class="health-live-dot" id="traffic-live-dot" title="Last data received"></span>
+        <i class="fas fa-chart-area me-1"></i>Window:&nbsp;<strong id="range-label">30 days</strong>
+    </span>
+    <span class="traffic-toolbar-spacer"></span>
+    <select id="rangeSelect" class="form-select form-select-sm w-auto" aria-label="Time range">
+        <option value="1">Last 24 hours</option>
+        <option value="7">Last 7 days</option>
+        <option value="30" selected>Last 30 days</option>
+        <option value="90">Last 90 days</option>
+        <option value="365">Last year</option>
+        <option value="custom">Custom range…</option>
+    </select>
+    <span id="customRangeControls" class="d-none" style="display:none;gap:6px;align-items:center;">
+        <input type="date" id="rangeStart" class="form-control form-control-sm" aria-label="Start date" style="width:auto;">
+        <span class="text-muted">→</span>
+        <input type="date" id="rangeEnd" class="form-control form-control-sm" aria-label="End date" style="width:auto;">
+        <button class="btn btn-sm btn-outline-secondary" onclick="applyCustomRange()"><i class="fas fa-check me-1"></i>Apply</button>
+    </span>
+    <button class="btn btn-sm btn-outline-secondary" onclick="loadDashboard()"><i class="fas fa-sync-alt me-1"></i>Refresh</button>
+    <div class="btn-group">
+        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false"><i class="fas fa-file-export me-1"></i>Export</button>
+        <ul class="dropdown-menu dropdown-menu-end">
+            <li><a class="dropdown-item" href="#" onclick="exportTrafficCsv(); return false;"><i class="fas fa-file-csv me-2"></i>Excel / CSV</a></li>
+            <li><a class="dropdown-item" href="#" onclick="exportTrafficPdf(); return false;"><i class="fas fa-file-pdf me-2"></i>PDF report</a></li>
+        </ul>
     </div>
+    <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#trafficSettingsModal"><i class="fas fa-cog me-1"></i>Settings</button>
 </div>
 
 <div class="container-fluid mt-3">
