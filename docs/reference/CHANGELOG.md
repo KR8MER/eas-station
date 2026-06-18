@@ -8,6 +8,23 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.112.0] - 2026-06-18 - Attribution page redesigned to match the About page
+
+### Changed
+- **The Attribution page now uses the same polished "stack list" layout as the
+  About page** instead of generic license tables (`templates/attribution.html`).
+  The Open-Source Software, Infrastructure, and Frontend Assets sections are
+  grouped into labeled categories (Application Framework, Data Layer, Networking
+  & Parsing, Signal & Audio, Hardware & Displays, Security & Notifications,
+  Runtime & Ops, …). Each entry is a row with a colored gradient icon chip
+  showing the real project brand mark (self-hosted, white-tinted via the shared
+  `.stack-item-ico` styling), the project name, a one-line description of what it
+  does for EAS Station™, and a compact license pill. Reuses the shared
+  `stack_icon` macro pattern and `.stack-*` components — no new dependencies and
+  no external requests. The previous flat logo wall and plain `<table>` credit
+  lists were removed in favor of this. The Data Sources and Acknowledgments
+  sections are unchanged.
+
 ## [2.111.0] - 2026-06-18 - Project logos on the Attribution page
 
 ### Added
