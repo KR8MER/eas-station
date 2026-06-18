@@ -203,6 +203,66 @@ def _import_ssh_bans() -> int:
     return added
 
 
+def _ssh_bans_detailed() -> list:
+    """Return sshd-jail bans as rich records mirroring the Banned IPs list.
+
+    Each entry: ``{ip_address, reason, description, created_at, is_active,
+    location:{country_code,country,city,region}}``. SSH offenders are imported
+    into ip_filters, so we reuse that record (and the same MaxMind geolocation)
+    when present, falling back to sensible defaults for an IP fail2ban just
+    banned but that hasn't been imported yet.
+    """
+    ips = _jail_banned_ips("sshd")
+    if not ips:
+        return []
+
+    classify_location = None
+    db_path = None
+    try:
+        from app_core.analytics.geo import classify_location as _cl
+        from app_core.analytics.web_traffic import TrafficAnalyticsSettings
+        classify_location = _cl
+        db_path = TrafficAnalyticsSettings.get_settings().geoip_database_path
+    except Exception:
+        pass
+
+    records = {}
+    try:
+        from app_core.auth.ip_filter import IPFilter, IPFilterType
+        for rec in IPFilter.query.filter_by(
+            filter_type=IPFilterType.BLOCKLIST.value, is_active=True,
+        ).filter(IPFilter.ip_address.in_(ips)).all():
+            records[rec.ip_address] = rec
+    except Exception:
+        pass
+
+    out = []
+    for ip in ips:
+        loc = {"country_code": None, "country": None, "city": None, "region": None}
+        if classify_location is not None:
+            try:
+                info = classify_location(ip, db_path)
+                loc = {
+                    "country_code": info.get("country_code"),
+                    "country": info.get("label") if info.get("country_code") else None,
+                    "city": info.get("city"),
+                    "region": info.get("region"),
+                }
+            except Exception:
+                pass
+        rec = records.get(ip)
+        out.append({
+            "ip_address": ip,
+            "reason": rec.reason if rec else "auto_brute_force",
+            "description": (rec.description if rec and rec.description
+                            else "SSH brute-force detected by fail2ban (sshd jail)"),
+            "created_at": rec.created_at.isoformat() if rec and rec.created_at else None,
+            "is_active": True,
+            "location": loc,
+        })
+    return out
+
+
 def _status() -> dict:
     installed = _fail2ban_installed()
     active = _fail2ban_active() if installed else False
@@ -214,7 +274,7 @@ def _status() -> dict:
         enforced = _jail_banned_ips(EAS_JAIL)
 
     ssh_loaded = "sshd" in loaded
-    ssh_banned = _jail_banned_ips("sshd") if ssh_loaded else []
+    ssh_banned = _ssh_bans_detailed() if ssh_loaded else []
 
     return {
         "installed": installed,

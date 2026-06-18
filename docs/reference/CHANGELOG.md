@@ -8,7 +8,21 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
-## [2.115.0] - 2026-06-18 - Country/city geolocation on the ban list
+## [2.115.1] - 2026-06-18 - Readable ban-list actions + matching SSH-ban table
+
+### Fixed
+- **The Banned IPs action buttons were unreadable** — they were icon-only and
+  rendered as near-blank colored bars (especially on mobile). They now carry
+  text labels: **Enable/Disable** (toggle) and **Remove/Delete**
+  (`static/js/pages/security_center.js`).
+
+### Changed
+- **The fail2ban tab's "SSH Jail Bans" list now uses the same card/table layout
+  as the Banned IPs list** — IP/Range, Reason, Location (country flag + city),
+  Description, Created, Status, and a labeled Unban action — instead of a bare
+  IP + button. The backend (`webapp/admin/fail2ban.py`) returns rich records by
+  reusing each offender's imported `ip_filters` entry and the same MaxMind
+  geolocation.
 
 ### Added
 - **The Banned IPs list now shows where each IP is from** — country flag, city,
