@@ -388,6 +388,17 @@
             html += '<p class="text-muted small mb-0 mt-2">' +
                 `Application ban list: <strong>${data.app_ban_count}</strong> active. ` +
                 `Mirrored to host firewall: <strong>${data.firewall_ban_count}</strong>.</p>`;
+            // The common "Mirrored: 0 while enforcement is On" case: the actuator
+            // jail failed to load, so nothing reaches the firewall.
+            if (data.enforcement_enabled && !data.actuator_jail_loaded) {
+                html += '<div class="alert alert-warning small mb-0 mt-2">' +
+                    '<i class="bi bi-exclamation-triangle-fill"></i> Firewall enforcement is on, but the ' +
+                    '<code>eas-station</code> firewall jail isn\'t loaded — so bans aren\'t reaching the host ' +
+                    'firewall. Click <strong>Save &amp; Apply Configuration</strong> below to (re)create it.</div>';
+            } else if (data.enforcement_enabled && data.app_ban_count > data.firewall_ban_count) {
+                html += '<div class="text-muted small mb-0 mt-1">' +
+                    'Some bans aren\'t mirrored yet — click <strong>Resync bans</strong> to push them now.</div>';
+            }
         } else {
             html += '<div class="alert alert-warning small mb-0 mt-2">' +
                 '<i class="bi bi-exclamation-triangle-fill"></i> fail2ban ships pre-installed, but ' +

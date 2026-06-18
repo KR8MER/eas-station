@@ -8,7 +8,28 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
-## [2.115.1] - 2026-06-18 - Readable ban-list actions + matching SSH-ban table
+## [2.115.2] - 2026-06-18 - Fix "Mirrored to firewall: 0" and clarify ban counts
+
+### Fixed
+- **App bans weren't reaching the host firewall (showed "Mirrored to host
+  firewall: 0" with enforcement on).** Root cause: the `eas-station` actuator
+  jail declares `logpath = /var/log/eas-station/security.log`, and if that file
+  didn't exist yet, fail2ban refused to start the jail — so every mirror/resync
+  targeted a jail that wasn't loaded. `configure()` now ensures the log file
+  exists before restarting fail2ban (`_ensure_security_log()` in
+  `webapp/admin/fail2ban.py`).
+- **Self-heal:** the status endpoint now re-pushes the ban list into the
+  firewall when enforcement is on, the actuator jail is loaded, and not all
+  active bans are mirrored — so the count corrects itself on refresh instead of
+  requiring another Save & Apply.
+
+### Changed
+- The fail2ban tab now **warns** when enforcement is on but the `eas-station`
+  jail isn't loaded (the real cause of a 0 count), and explains why the **SSH
+  Jail Bans** list can be shorter than the Banned IPs list: fail2ban's `sshd`
+  bans expire after the SSH ban time, while each offender is copied into the
+  ban list permanently. That divergence is expected, not a mismatch
+  (`static/js/pages/security_center.js`, `templates/security/security_center.html`).
 
 ### Fixed
 - **The Banned IPs action buttons were unreadable** — they were icon-only and
