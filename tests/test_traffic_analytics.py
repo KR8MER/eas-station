@@ -452,6 +452,67 @@ def test_routes_registered(app_with_db):
     assert "/api/traffic/dashboard" in rules
     assert "/api/traffic/settings" in rules
     assert "/api/traffic/client" in rules
+    # Purge-all (full reset) endpoint is registered.
+    assert "/api/traffic/purge-all" in rules
+
+
+def test_purge_all_deletes_every_row(app_with_db):
+    app, db = app_with_db
+    from app_core.analytics import traffic_stats
+    from app_core.analytics.traffic_privacy import purge_all
+    from app_core.analytics.web_traffic import WebRequestLog
+
+    with app.app_context():
+        _add_request(db, ip_address="192.168.1.10")
+        _add_request(db, ip_address="203.0.113.7")
+        _add_request(db, ip_address="198.51.100.4")
+        assert WebRequestLog.query.count() == 3
+
+        result = purge_all()
+        assert result["deleted"] == 3
+        assert WebRequestLog.query.count() == 0
+        # A fresh dashboard reflects the empty dataset.
+        assert traffic_stats.get_summary(days=30)["total_hits"] == 0
+
+
+def test_dashboard_cache_returns_fresh_when_disabled(app_with_db):
+    """use_cache=False (default) must always reflect the current rows."""
+    app, db = app_with_db
+    from app_core.analytics import traffic_stats
+
+    with app.app_context():
+        traffic_stats.invalidate_dashboard_cache()
+        _add_request(db, path="/dashboard")
+        first = traffic_stats.get_full_dashboard(days=30)
+        assert first["summary"]["total_hits"] == 1
+
+        _add_request(db, path="/alerts")
+        # Without caching, the second call sees the new row immediately.
+        second = traffic_stats.get_full_dashboard(days=30)
+        assert second["summary"]["total_hits"] == 2
+
+
+def test_dashboard_cache_serves_then_invalidates(app_with_db):
+    """use_cache=True serves a cached payload until it's invalidated."""
+    app, db = app_with_db
+    from app_core.analytics import traffic_stats
+
+    with app.app_context():
+        traffic_stats.invalidate_dashboard_cache()
+        _add_request(db, path="/dashboard")
+        first = traffic_stats.get_full_dashboard(days=30, use_cache=True)
+        assert first["summary"]["total_hits"] == 1
+
+        # A new row is hidden by the still-warm cache (same preset key).
+        _add_request(db, path="/alerts")
+        cached = traffic_stats.get_full_dashboard(days=30, use_cache=True)
+        assert cached["summary"]["total_hits"] == 1
+
+        # Invalidation (as a purge/anonymize would trigger) forces a recompute.
+        traffic_stats.invalidate_dashboard_cache()
+        fresh = traffic_stats.get_full_dashboard(days=30, use_cache=True)
+        assert fresh["summary"]["total_hits"] == 2
+        traffic_stats.invalidate_dashboard_cache()
 
 
 def test_recorder_buffers_and_flushes(app_with_db):

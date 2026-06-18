@@ -449,9 +449,9 @@
                     <div class="form-text">awstats-style skip list. Any request whose path starts with one of these is ignored (in addition to static assets, health probes, and the dashboard's own polling, which are always skipped).</div>
                 </div>
                 <div class="mb-3">
-                    <label class="form-label" for="setRetention">Retention (days)</label>
+                    <label class="form-label" for="setRetention">Auto-purge records older than (days)</label>
                     <input type="number" class="form-control" id="setRetention" min="1" max="3650" step="1">
-                    <div class="form-text">Records older than this are pruned automatically.</div>
+                    <div class="form-text">Records older than this are deleted automatically — the background recorder prunes the table once an hour. Lower this to keep the table small and the dashboard fast (e.g. <code>30</code>); raise it to retain more history.</div>
                 </div>
 
                 <hr>
@@ -521,6 +521,14 @@
                     <div class="form-text">Accepts GeoLite2 <strong>Country</strong>, <strong>City</strong>, or <strong>ASN</strong> <code>.mmdb</code> files — get them free from <a href="https://www.maxmind.com/en/geolite2/signup" target="_blank" rel="noopener">maxmind.com</a> (free account → license key). The file is validated, its type detected, stored on the server, and the right path set automatically — no shell access needed.</div>
                     <div class="small mt-1" id="geoipUploadStatus"></div>
                     <div class="form-text mt-1"><i class="fas fa-circle-info me-1"></i>This product includes GeoLite2 data created by MaxMind, available from <a href="https://www.maxmind.com" target="_blank" rel="noopener">https://www.maxmind.com</a>.</div>
+                </div>
+
+                <hr>
+                <h6 class="text-uppercase small fw-bold text-danger mb-2"><i class="fas fa-trash-can me-1"></i>Danger Zone</h6>
+                <div class="mb-1">
+                    <button type="button" class="btn btn-outline-danger" id="purgeAllBtn" onclick="purgeAllTraffic()"><i class="fas fa-trash-can me-1"></i>Purge all traffic data</button>
+                    <div class="form-text">Permanently deletes <strong>every</strong> recorded request from the database, resetting all reports to zero. Your settings and GeoIP databases are kept. Use this to reclaim space and speed up a slow dashboard. <strong>This cannot be undone.</strong></div>
+                    <div class="small mt-1" id="purgeAllStatus"></div>
                 </div>
             </div>
             <div class="modal-footer">

@@ -35,6 +35,8 @@ working unchanged.
 """
 
 import ipaddress
+import threading
+import time as _time
 from collections import Counter, defaultdict
 from datetime import timedelta
 from typing import Any, Dict, List, Optional
@@ -50,6 +52,47 @@ from app_utils import utc_now
 
 # Status families used for the response-code breakdown chart.
 _STATUS_FAMILIES = {2: "2xx Success", 3: "3xx Redirect", 4: "4xx Client Error", 5: "5xx Server Error"}
+
+# ---------------------------------------------------------------- dashboard cache
+# Building the dashboard fires ~35 aggregation queries over web_request_logs. The
+# page auto-refreshes every 60s and is frequently opened by more than one admin
+# at once, so the same expensive payload gets recomputed back-to-back. A short
+# in-process TTL cache collapses those repeat/concurrent loads into a single set
+# of queries. Analytics tolerate a few seconds of staleness, and the cache is
+# invalidated immediately on any data-changing action (purge / anonymize).
+_DASHBOARD_CACHE_TTL_SECONDS = 30
+_DASHBOARD_CACHE_MAX = 64
+_dashboard_cache: Dict[Any, tuple] = {}
+_dashboard_cache_lock = threading.Lock()
+
+
+def _dashboard_cache_key(flt: TrafficFilters, self_hosts: Optional[set]):
+    """Build a stable cache key for a resolved filter + self-host set.
+
+    Preset trailing windows are keyed on ``days`` (not the live now-based
+    start/end, which moves every call) so successive loads share an entry; the
+    TTL bounds how far the window can slide. Custom ranges key on their explicit
+    start/end so distinct ranges never collide.
+    """
+    dims = tuple(
+        sorted((k, v) for k, v in flt._dimension_kwargs().items() if v is not None)
+    )
+    hosts = tuple(sorted(self_hosts)) if self_hosts else ()
+    if flt.start is None and flt.end is None:
+        return ("preset", int(flt.days), dims, hosts)
+    start, end = flt.window()
+    return ("custom", start.isoformat(), end.isoformat(), dims, hosts)
+
+
+def invalidate_dashboard_cache() -> None:
+    """Drop every cached dashboard payload.
+
+    Called after any action that changes the underlying rows (purge-all,
+    per-IP purge/anonymize) so the dashboard reflects the change immediately
+    instead of waiting out the TTL.
+    """
+    with _dashboard_cache_lock:
+        _dashboard_cache.clear()
 
 
 def _window_start(days: int):
@@ -1092,17 +1135,32 @@ def get_full_dashboard(
     days: int = 30,
     self_hosts: Optional[set] = None,
     filters: Optional[TrafficFilters] = None,
+    use_cache: bool = False,
 ) -> Dict[str, Any]:
     """Bundle every section the dashboard needs into one payload.
 
     *self_hosts* is the set of hostnames considered "internal" (the station's own
     host), used to exclude self-referrals from the referrer report. *filters*
     carries the active time window and any drill-down dimensions.
+
+    *use_cache* opts into the short-TTL in-process cache. It's enabled only on
+    the live dashboard route (the hot path that re-runs ~35 aggregations on every
+    auto-refresh); every other caller — and the test suite — gets a freshly
+    computed payload so results always reflect the current rows.
     """
     flt = _resolve(days, filters)
+
+    cache_key = _dashboard_cache_key(flt, self_hosts) if use_cache else None
+    if use_cache:
+        now = _time.monotonic()
+        with _dashboard_cache_lock:
+            cached = _dashboard_cache.get(cache_key)
+            if cached is not None and (now - cached[0]) < _DASHBOARD_CACHE_TTL_SECONDS:
+                return cached[1]
+
     from app_core.analytics.traffic_anomalies import detect_anomalies
 
-    return {
+    payload = {
         "summary": get_summary(filters=flt),
         "summary_prev": get_summary_previous(filters=flt),
         "timeseries": get_timeseries(filters=flt),
@@ -1141,8 +1199,20 @@ def get_full_dashboard(
         "filter_meta": flt.to_query_meta(),
     }
 
+    if use_cache:
+        with _dashboard_cache_lock:
+            _dashboard_cache[cache_key] = (_time.monotonic(), payload)
+            # Bound the cache so an attacker cycling distinct custom ranges can't
+            # grow it without limit — evict the oldest entry past the ceiling.
+            if len(_dashboard_cache) > _DASHBOARD_CACHE_MAX:
+                oldest = min(_dashboard_cache.items(), key=lambda kv: kv[1][0])[0]
+                _dashboard_cache.pop(oldest, None)
+
+    return payload
+
 
 __all__ = [
+    "invalidate_dashboard_cache",
     "get_summary",
     "get_summary_previous",
     "get_timeseries",
