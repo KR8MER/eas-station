@@ -24,6 +24,8 @@ tracks releases under the 2.x series.
     bundled flag-icons SVG (no CDN) plus "City, Region, Country"
     (`static/js/pages/security_center.js`, `templates/security/security_center.html`).
   - Works for IPv4 and IPv6, matching the rest of the ban pipeline.
+  - Documented in `templates/help.html`, `templates/about.html`, and
+    `docs/security/SECURITY.md`.
 
 ### Added
 - **SSH (`sshd`) jail offenders are now automatically added to the unified ban

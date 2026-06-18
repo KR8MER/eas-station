@@ -910,6 +910,10 @@ sudo fail2ban-client set eas-station-malicious unbanip 192.168.1.1
 - Toggle active/inactive
 - Delete filters
 - View reason and description
+- **Geolocation**: each entry shows a country flag, city, region and country
+  (IPv4 and IPv6) when a MaxMind GeoLite2 database is configured under Settings →
+  Traffic Analytics. Resolution is best-effort and offline — no database means a
+  blank location and no network calls; CIDR ranges and local addresses show none.
 
 **Example Allowlist Entries**:
 - `192.168.1.0/24` - Internal network
