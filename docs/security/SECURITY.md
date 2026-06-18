@@ -724,15 +724,28 @@ Features:
 
 Detects and automatically bans IPs making rapid-fire login attempts.
 
-### 4. IP Filtering (Allowlist/Blocklist)
+### 4. Global Ban List (Allowlist/Blocklist)
 
 **Location**: `app_core/auth/ip_filter.py`
 
 **Database Table**: `ip_filters`
 
+The `ip_filters` table is the **single source of truth** ("Global Ban List").
+Bans arrive from several detectors and are acted on by multiple **enforcement
+layers** — the application `before_request` gate, the host firewall (via
+fail2ban), and fail2ban integration. Administrators manage everything in one
+place; there is no separate "fail2ban ban list".
+
+Each blocklist row carries a **`source`** (`IPFilterSource`): `manual`,
+`login_brute_force`, `ssh_brute_force`, `malicious_request`, `flood`,
+`api_abuse`, `stream_abuse` — surfaced as a badge in the UI. The Security
+Center's **Global Ban List** tab also shows an Enforcement Status card, Security
+Metrics, and a firewall-sync indicator with one-click Resync (`/security/overview`).
+
 Features:
 - **Allowlist**: Trusted IPs/ranges that bypass all checks
 - **Blocklist**: Banned IPs/ranges that cannot access the system
+- **Source tracking**: which detector/operator added each ban (badged in the UI)
 - CIDR range support (e.g., `192.168.1.0/24`)
 - Optional expiration times
 - Active/inactive toggle

@@ -8,6 +8,50 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.116.1] - 2026-06-18 - Carry fail2ban SSH ban expiration into the Global Ban List
+
+### Fixed
+- **SSH bans imported from fail2ban became permanent instead of inheriting the
+  jail's expiration.** `_import_ssh_bans()` called `add_to_blocklist` with no
+  expiry, so an offender that fail2ban would unban after `ssh_bantime` stayed in
+  the Global Ban List forever. The import now sets `expires_at` to the SSH ban
+  time (from import, which tracks the jail's own expiry), so the Global Ban List
+  entry and the sshd jail expire together (`webapp/admin/fail2ban.py`). Updated
+  the SSH Jail Bans card copy accordingly. Existing permanent SSH entries from
+  before this fix are unchanged — remove them from the Global Ban List if needed.
+
+## [2.116.0] - 2026-06-18 - Unified Global Ban List with enforcement layers
+
+### Changed
+- **Refactored the Security Center around one ban list with multiple enforcement
+  layers**, replacing the "app bans vs fail2ban bans" mental model. The
+  `ip_filters` table is the single source of truth; the application gate, host
+  firewall, and fail2ban act on it.
+  - The **Banned IPs** tab is now the **Global Ban List**, and the **fail2ban**
+    tab is now **Host Firewall** (an enforcement layer). Terminology updated
+    across the UI, `help.html`, `about.html`, and `docs/security/SECURITY.md`.
+
+### Added
+- **Ban `source` field + badges** (`IPFilterSource`): Manual, Login Brute Force,
+  SSH Brute Force, Malicious Request, Flood, API Abuse, Stream Abuse. New
+  `source` column on `ip_filters` (migration `20260618_ip_filter_source`,
+  backfilled from existing `reason`/`description`). Every ban-creation site now
+  stamps a source; `to_dict()` exposes `source` + `source_label`; the Global Ban
+  List and SSH tables show a colored source badge.
+- **Enforcement Status card** — application gate, host firewall, fail2ban
+  service, and firewall-sync state at a glance.
+- **Security Metrics** — failed logins (24h), IPs banned (24h), active bans, SSH
+  attacks blocked, and mirrored-to-firewall counts.
+- **Firewall synchronization health** — detects "N active bans, M mirrored"
+  drift and offers one-click **Resync firewall enforcement**.
+- New read-only endpoint `GET /security/overview` (`webapp/routes_security.py`)
+  backing the cards above.
+
+### Notes
+- Preserves all existing functionality: manual bans, allowlist, SSH/login
+  brute-force detection, GeoIP display, expiration, removal, and service
+  controls.
+
 ## [2.115.2] - 2026-06-18 - Fix "Mirrored to firewall: 0" and clarify ban counts
 
 ### Fixed

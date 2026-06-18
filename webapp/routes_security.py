@@ -45,7 +45,7 @@ from app_core.auth.mfa import (
     MFAManager, enroll_user_mfa, disable_user_mfa, verify_user_mfa
 )
 from app_core.auth.audit import AuditLog, AuditLogger, AuditAction
-from app_core.auth.ip_filter import IPFilter, IPFilterType, IPFilterReason
+from app_core.auth.ip_filter import IPFilter, IPFilterType, IPFilterReason, IPFilterSource
 
 # Constants for malicious login reasons
 MALICIOUS_LOGIN_REASONS = ['malicious_input', 'sql_injection', 'command_injection']
@@ -807,6 +807,85 @@ def _attach_geo(filter_dicts):
         entry['location'] = loc
 
 
+@security_bp.route('/overview', methods=['GET'])
+@require_permission('system.manage_users')
+def security_overview():
+    """Unified security overview: enforcement layers + metrics + sync health.
+
+    Powers the Security Center "Enforcement Status" and "Security Metrics" cards.
+    The Global Ban List (ip_filters) is the single source of truth; the
+    enforcement layers (application gate, host firewall via fail2ban) act on it.
+    """
+    now = utc_now()
+    day_ago = now - timedelta(hours=24)
+
+    def _active_q():
+        return IPFilter.query.filter_by(
+            filter_type=IPFilterType.BLOCKLIST.value, is_active=True,
+        ).filter((IPFilter.expires_at.is_(None)) | (IPFilter.expires_at > now))
+
+    active_bans = _active_q().count()
+    ssh_blocked = _active_q().filter(
+        IPFilter.source == IPFilterSource.SSH_BRUTE_FORCE.value).count()
+    banned_24h = IPFilter.query.filter(
+        IPFilter.filter_type == IPFilterType.BLOCKLIST.value,
+        IPFilter.created_at >= day_ago,
+    ).count()
+
+    failed_logins_24h = 0
+    try:
+        failed_logins_24h = AuditLog.query.filter(
+            AuditLog.action == 'auth.login.failure',
+            AuditLog.timestamp >= day_ago,
+        ).count()
+    except Exception as e:
+        logger.debug(f"failed_logins_24h metric unavailable: {e}")
+
+    # fail2ban / host-firewall status (read-only). Imported lazily to avoid a
+    # circular import at module load.
+    f2b = {}
+    try:
+        from webapp.admin.fail2ban import _status as _f2b_status
+        f2b = _f2b_status()
+    except Exception as e:
+        logger.debug(f"fail2ban status unavailable for overview: {e}")
+
+    enforcement_on = bool(f2b.get('enforcement_enabled'))
+    jail_loaded = bool(f2b.get('actuator_jail_loaded'))
+    mirrored = int(f2b.get('firewall_ban_count', 0) or 0)
+
+    if not enforcement_on:
+        sync = {'status': 'disabled',
+                'message': 'Host firewall enforcement is off — bans are enforced at the application layer only.'}
+    elif not jail_loaded:
+        sync = {'status': 'error',
+                'message': f'{active_bans} active ban(s), but the host firewall jail is not loaded — 0 mirrored. '
+                           'Open Host Firewall Enforcement and click Save & Apply Configuration.'}
+    elif mirrored < active_bans:
+        sync = {'status': 'degraded',
+                'message': f'{active_bans} active ban(s), {mirrored} mirrored to the host firewall. Click Resync.'}
+    else:
+        sync = {'status': 'ok',
+                'message': f'All {active_bans} active ban(s) mirrored to the host firewall.'}
+
+    return jsonify({
+        'enforcement': {
+            'application': True,  # the global before_request gate is always active
+            'host_firewall': enforcement_on and jail_loaded,
+            'fail2ban_service': bool(f2b.get('active')),
+            'fail2ban_installed': bool(f2b.get('installed')),
+        },
+        'metrics': {
+            'failed_logins_24h': failed_logins_24h,
+            'ips_banned_24h': banned_24h,
+            'active_bans': active_bans,
+            'ssh_attacks_blocked': ssh_blocked,
+            'mirrored_to_firewall': mirrored,
+        },
+        'sync': sync,
+    })
+
+
 @security_bp.route('/ip-filters', methods=['POST'])
 @require_permission('system.manage_users')
 def add_ip_filter():
@@ -839,7 +918,8 @@ def add_ip_filter():
                 reason=IPFilterReason.MANUAL.value,
                 description=description,
                 created_by=user_id,
-                expires_in_hours=expires_in_hours
+                expires_in_hours=expires_in_hours,
+                source=IPFilterSource.MANUAL.value
             )
         
         # Log the action

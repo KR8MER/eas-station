@@ -171,9 +171,20 @@ def _import_ssh_bans() -> int:
         return 0
 
     try:
-        from app_core.auth.ip_filter import IPFilter, IPFilterType, IPFilterReason
+        from app_core.auth.ip_filter import IPFilter, IPFilterType, IPFilterReason, IPFilterSource
     except Exception:
         return 0
+
+    # Carry over the sshd jail's ban time so the imported entry expires when the
+    # fail2ban ban would — rather than becoming a permanent ban. The import runs
+    # shortly after fail2ban bans the IP, so "now + ssh_bantime" closely tracks
+    # the jail's own expiry. A non-positive bantime means permanent.
+    ban_seconds = settings.ssh_bantime or 0
+    expires_in_hours = (ban_seconds / 3600.0) if ban_seconds and ban_seconds > 0 else None
+    if expires_in_hours is not None:
+        expiry_note = f"; expires with the sshd jail ban (~{ban_seconds}s)"
+    else:
+        expiry_note = " (permanent)"
 
     added = 0
     for ip in banned:
@@ -192,7 +203,9 @@ def _import_ssh_bans() -> int:
             IPFilter.add_to_blocklist(
                 ip_address=ip,
                 reason=IPFilterReason.AUTO_BRUTE_FORCE.value,
-                description="SSH brute-force detected by fail2ban (sshd jail)",
+                description="SSH brute-force detected by fail2ban (sshd jail)" + expiry_note,
+                source=IPFilterSource.SSH_BRUTE_FORCE.value,
+                expires_in_hours=expires_in_hours,
             )
             added += 1
         except Exception as exc:
@@ -254,6 +267,8 @@ def _ssh_bans_detailed() -> list:
         out.append({
             "ip_address": ip,
             "reason": rec.reason if rec else "auto_brute_force",
+            "source": "ssh_brute_force",
+            "source_label": "SSH Brute Force",
             "description": (rec.description if rec and rec.description
                             else "SSH brute-force detected by fail2ban (sshd jail)"),
             "created_at": rec.created_at.isoformat() if rec and rec.created_at else None,
