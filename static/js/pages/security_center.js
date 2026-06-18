@@ -407,18 +407,42 @@
     }
 
     function installFail2ban() {
+        const btn = document.getElementById('f2b-install-btn');
+        const statusEl = document.getElementById('f2b-status');
+        const originalBtn = btn ? btn.innerHTML : '';
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Installing…';
+        }
+        if (statusEl) {
+            statusEl.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> ' +
+                'Installing fail2ban — this can take a minute. Please wait…';
+        }
         notify('Installing fail2ban… this may take a minute.');
+
+        const restoreBtn = () => {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = originalBtn;
+            }
+        };
+
         fetch(`${F2B_API}/install`, { method: 'POST' })
             .then(r => r.json())
             .then(data => {
                 if (data.success) {
                     notify(data.message || 'fail2ban installed.');
-                    loadFail2banStatus();
                 } else {
                     notify(data.error || 'Install failed', true);
                 }
+                restoreBtn();
+                loadFail2banStatus();   // refreshes the status panel either way
             })
-            .catch(error => notify('Error installing fail2ban: ' + error, true));
+            .catch(error => {
+                notify('Error installing fail2ban: ' + error, true);
+                restoreBtn();
+                loadFail2banStatus();
+            });
     }
 
     function serviceAction(action) {

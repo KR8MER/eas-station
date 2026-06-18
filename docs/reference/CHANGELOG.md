@@ -8,6 +8,16 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.113.1] - 2026-06-18 - fail2ban install button feedback
+
+### Fixed
+- **Clicking "Install fail2ban" now shows progress.** The install runs
+  `apt-get` (up to ~3 minutes) but the button gave no visible feedback, so it
+  appeared dead. The button now immediately switches to a disabled spinner
+  ("Installing…") and the status panel shows a persistent "Installing fail2ban —
+  this can take a minute" message; both are restored and the status refreshed
+  on success or failure (`static/js/pages/security_center.js`).
+
 ## [2.113.0] - 2026-06-18 - fail2ban as a UI-managed firewall enforcer for the ban list
 
 ### Added
