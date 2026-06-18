@@ -931,6 +931,33 @@
         }
     }
 
+    // Permanently delete EVERY recorded request (full analytics reset).
+    async function purgeAllTraffic() {
+        const statusEl = document.getElementById('purgeAllStatus');
+        const btn = document.getElementById('purgeAllBtn');
+        if (!window.confirm('Permanently delete ALL recorded traffic data?\n\nEvery report resets to zero. Your settings and GeoIP databases are kept. This cannot be undone.')) return;
+        if (btn) btn.disabled = true;
+        statusEl.innerHTML = '<span class="text-muted">Purging…</span>';
+        try {
+            const resp = await fetch('/api/traffic/purge-all', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }
+            });
+            const data = await resp.json();
+            if (data.success) {
+                statusEl.innerHTML = `<span class="text-success">Deleted ${num(data.deleted)} row(s). All reports reset.</span>`;
+                if (typeof showToast === 'function') showToast('All traffic data purged', 'success');
+                loadDashboard();  // reflect the empty dataset
+            } else {
+                statusEl.innerHTML = `<span class="text-danger">${escapeHtml(data.error || 'Failed')}</span>`;
+            }
+        } catch (err) {
+            console.error('Purge-all failed:', err);
+            statusEl.innerHTML = '<span class="text-danger">Request failed.</span>';
+        } finally {
+            if (btn) btn.disabled = false;
+        }
+    }
+
     // ------------------------------------------------------------------ export
     function rangeText() {
         // Prefer the actual window the data was built for (handles custom ranges).

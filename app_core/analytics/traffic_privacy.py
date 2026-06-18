@@ -67,6 +67,21 @@ def anonymize_value(ip: Optional[str]) -> Optional[str]:
         return ip
 
 
+def _invalidate_dashboard_cache() -> None:
+    """Drop the cached dashboard payload after a data-changing action.
+
+    Imported lazily to avoid a circular import (``traffic_stats`` imports this
+    module's :func:`anonymize_value`). Best-effort: a stale cache is corrected on
+    the next TTL expiry, so a failure here must never break the purge itself.
+    """
+    try:
+        from app_core.analytics.traffic_stats import invalidate_dashboard_cache
+
+        invalidate_dashboard_cache()
+    except Exception:  # pragma: no cover - defensive
+        pass
+
+
 def purge_ip(ip: str) -> Dict[str, int]:
     """Permanently delete every recorded request for *ip*.
 
@@ -78,6 +93,20 @@ def purge_ip(ip: str) -> Dict[str, int]:
         .delete(synchronize_session=False)
     )
     db.session.commit()
+    _invalidate_dashboard_cache()
+    return {"deleted": int(deleted or 0)}
+
+
+def purge_all() -> Dict[str, int]:
+    """Permanently delete **every** recorded request (full analytics reset).
+
+    Settings (and any configured GeoIP databases) are untouched — only the
+    ``web_request_logs`` rows are removed. Returns ``{"deleted": <rows>}``.
+    Raises on database error (caller rolls back).
+    """
+    deleted = db.session.query(WebRequestLog).delete(synchronize_session=False)
+    db.session.commit()
+    _invalidate_dashboard_cache()
     return {"deleted": int(deleted or 0)}
 
 
@@ -97,7 +126,8 @@ def anonymize_ip(ip: str) -> Dict[str, object]:
         )
     )
     db.session.commit()
+    _invalidate_dashboard_cache()
     return {"updated": int(updated or 0), "masked": masked}
 
 
-__all__ = ["anonymize_value", "purge_ip", "anonymize_ip"]
+__all__ = ["anonymize_value", "purge_ip", "purge_all", "anonymize_ip"]

@@ -8,6 +8,38 @@ tracks releases under the 2.x series.
 
 - Nothing yet. Document changes here as they land; the next release cut moves them into a version heading.
 
+## [2.109.0] - 2026-06-18 - Traffic analytics: purge-all, faster dashboard, clearer auto-purge
+
+### Added
+- **"Purge all traffic data" control.** A new Danger Zone in Security Center →
+  Traffic → Settings wipes the entire `web_request_logs` table in one click,
+  resetting every report to zero while keeping your collection settings and
+  GeoIP databases. Backed by `POST /api/traffic/purge-all`
+  (`system.configure`) → `traffic_privacy.purge_all()`
+  (`webapp/routes_traffic.py`, `app_core/analytics/traffic_privacy.py`,
+  `templates/security/_traffic_content.html`,
+  `templates/security/_traffic_scripts.html`). Use it to reclaim space and
+  speed up a dashboard slowed by a huge log table.
+
+### Changed
+- **Faster dashboard loads.** The Traffic dashboard endpoint assembles ~35
+  aggregation queries per request and auto-refreshes every 60s / is often open
+  in several admin tabs at once. `get_full_dashboard()` now has an opt-in,
+  short-TTL (30s) in-process cache that collapses those repeat and concurrent
+  loads into a single set of queries. Caching is enabled only on the live
+  dashboard route (`use_cache=True`); every other caller and the test suite
+  still computes fresh, and the cache is invalidated immediately whenever rows
+  change (purge-all, per-IP purge/anonymize) — `app_core/analytics/traffic_stats.py`.
+- **Clearer automatic purge-by-age.** The retention setting (which already
+  prunes old rows hourly in the background recorder) is relabeled
+  "Auto-purge records older than (days)" with guidance to lower it for a
+  smaller, faster table — `templates/security/_traffic_content.html`.
+
+### Tests
+- `tests/test_traffic_analytics.py` — added coverage for the purge-all route +
+  helper, and the opt-in dashboard cache (fresh when disabled; serves-then-
+  invalidates when enabled).
+
 ## [2.108.1] - 2026-06-17 - Fail-closed audit for manual EAS purge
 
 ### Changed

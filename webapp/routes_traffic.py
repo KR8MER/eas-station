@@ -93,7 +93,9 @@ def register(app: Flask, logger) -> None:
         """
         try:
             flt = TrafficFilters.from_request(request.args)
-            data = traffic_stats.get_full_dashboard(self_hosts=_self_hosts(), filters=flt)
+            data = traffic_stats.get_full_dashboard(
+                self_hosts=_self_hosts(), filters=flt, use_cache=True
+            )
             return jsonify({"success": True, "days": flt.days, **data})
         except Exception as exc:  # pragma: no cover - defensive
             route_logger.error("Failed to build traffic dashboard: %s", exc)
@@ -182,6 +184,30 @@ def register(app: Flask, logger) -> None:
         except Exception as exc:  # pragma: no cover - defensive
             db.session.rollback()
             route_logger.error("Failed to anonymize traffic for IP: %s", exc)
+            return jsonify({"success": False, "error": str(exc)}), 500
+
+    # ------------------------------------------------------------------ purge all
+    @app.route("/api/traffic/purge-all", methods=["POST"])
+    @require_permission("system.configure")
+    def traffic_purge_all():
+        """Permanently delete EVERY recorded request (full analytics reset).
+
+        Wipes the ``web_request_logs`` table to reclaim space and speed up the
+        dashboard. Collection settings and any GeoIP databases are preserved —
+        only the recorded rows are removed. There is no undo.
+        """
+        try:
+            from app_core.analytics.traffic_privacy import purge_all
+
+            result = purge_all()
+            route_logger.warning(
+                "Traffic analytics: purged ALL recorded rows (%s deleted)",
+                result["deleted"],
+            )
+            return jsonify({"success": True, **result})
+        except Exception as exc:  # pragma: no cover - defensive
+            db.session.rollback()
+            route_logger.error("Failed to purge all traffic: %s", exc)
             return jsonify({"success": False, "error": str(exc)}), 500
 
     # ------------------------------------------------------------------ beacon
